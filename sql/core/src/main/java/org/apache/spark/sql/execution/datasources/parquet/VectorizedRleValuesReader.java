@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import org.apache.parquet.Preconditions;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesUtils;
@@ -26,11 +29,7 @@ import org.apache.parquet.column.values.bitpacking.Packer;
 import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 
-import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
 
 /**
  * A values reader for Parquet's run-length encoded data. This is based off of the version in
@@ -211,7 +210,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) throws IOException {
+      VectorizedValuesReader data,
+      final boolean failIfRebase) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -219,7 +219,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       switch (mode) {
         case RLE:
           if (currentValue == level) {
-            data.readIntegersWithRebase(n, c, rowId);
+            data.readIntegersWithRebase(n, c, rowId, failIfRebase);
           } else {
             c.putNulls(rowId, n);
           }
@@ -227,8 +227,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
         case PACKED:
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
-              c.putInt(rowId + i,
-                RebaseDateTime.rebaseJulianToGregorianDays(data.readInteger()));
+              int julianDays = data.readInteger();
+              c.putInt(rowId + i, VectorizedColumnReader.rebaseDays(julianDays, failIfRebase));
             } else {
               c.putNull(rowId + i);
             }
@@ -387,7 +387,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) throws IOException {
+      VectorizedValuesReader data,
+      final boolean failIfRebase) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -395,7 +396,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       switch (mode) {
         case RLE:
           if (currentValue == level) {
-            data.readLongsWithRebase(n, c, rowId);
+            data.readLongsWithRebase(n, c, rowId, failIfRebase);
           } else {
             c.putNulls(rowId, n);
           }
@@ -403,8 +404,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
         case PACKED:
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
-              c.putLong(rowId + i,
-                RebaseDateTime.rebaseJulianToGregorianMicros(data.readLong()));
+              long julianMicros = data.readLong();
+              c.putLong(rowId + i, VectorizedColumnReader.rebaseMicros(julianMicros, failIfRebase));
             } else {
               c.putNull(rowId + i);
             }
@@ -584,7 +585,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
-  public void readIntegersWithRebase(int total, WritableColumnVector c, int rowId) {
+  public void readIntegersWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
@@ -604,7 +606,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
-  public void readLongsWithRebase(int total, WritableColumnVector c, int rowId) {
+  public void readLongsWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 

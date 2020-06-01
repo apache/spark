@@ -48,12 +48,12 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
   private def addCase(
       benchmark: Benchmark,
       inputPath: String,
-      enableNestedPD: Boolean,
+      enableNestedPD: String,
       name: String,
       withFilter: DataFrame => DataFrame): Unit = {
     val loadDF = spark.read.parquet(inputPath)
     benchmark.addCase(name) { _ =>
-      withSQLConf((SQLConf.NESTED_PREDICATE_PUSHDOWN_ENABLED.key, enableNestedPD.toString)) {
+      withSQLConf((SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST.key, enableNestedPD)) {
         withFilter(loadDF).noop()
       }
     }
@@ -67,13 +67,13 @@ object ParquetNestedPredicatePushDownBenchmark extends SqlBasedBenchmark {
       addCase(
         benchmark,
         outputPath,
-        enableNestedPD = false,
+        enableNestedPD = "",
         "Without nested predicate Pushdown",
         withFilter)
       addCase(
         benchmark,
         outputPath,
-        enableNestedPD = true,
+        enableNestedPD = "parquet",
         "With nested predicate Pushdown",
         withFilter)
       benchmark.run()

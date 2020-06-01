@@ -27,41 +27,34 @@ An identifier is a string used to identify a database object such as a table, vi
 
 #### Regular Identifier
 
-{% highlight sql %}
+```sql
 { letter | digit | '_' } [ , ... ]
-{% endhighlight %}
-Note: If `spark.sql.ansi.enabled` is set to true, ANSI SQL reserved keywords cannot be used as identifiers. For more details, please refer to [ANSI Compliance](sql-ref-ansi-compliance.html).
+```
+**Note:** If `spark.sql.ansi.enabled` is set to true, ANSI SQL reserved keywords cannot be used as identifiers. For more details, please refer to [ANSI Compliance](sql-ref-ansi-compliance.html).
 
 #### Delimited Identifier
 
-{% highlight sql %}
+```sql
 `c [ ... ]`
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>letter</em></code></dt>
-  <dd>
+* **letter**
+
     Any letter from A-Z or a-z.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>digit</em></code></dt>
-  <dd>
+
+* **digit**
+
     Any numeral from 0 to 9.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>c</em></code></dt>
-  <dd>
+
+* **c**
+
     Any character from the character set. Use <code>`</code> to escape special characters (e.g., <code>`</code>).
-  </dd>
-</dl>
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- This CREATE TABLE fails with ParseException because of the illegal identifier name a.b
 CREATE TABLE test (a.b int);
 org.apache.spark.sql.catalyst.parser.ParseException:
@@ -77,4 +70,4 @@ no viable alternative at input 'CREATE TABLE test (`a`b`'(line 1, pos 23)
 
 -- This CREATE TABLE works
 CREATE TABLE test (`a``b` int);
-{% endhighlight %}
+```

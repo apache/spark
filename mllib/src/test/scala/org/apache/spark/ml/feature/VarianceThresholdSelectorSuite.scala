@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
 
@@ -55,7 +55,8 @@ class VarianceThresholdSelectorSuite extends MLTest with DefaultReadWriteTest {
 
   test("Test VarianceThresholdSelector: varainceThreshold not set") {
     val selector = new VarianceThresholdSelector().setOutputCol("filtered")
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test VarianceThresholdSelector: set varianceThreshold") {
@@ -76,7 +77,8 @@ class VarianceThresholdSelectorSuite extends MLTest with DefaultReadWriteTest {
     val selector = new VarianceThresholdSelector()
       .setVarianceThreshold(8.2)
       .setOutputCol("filtered")
-    testSelector(selector, df)
+    val model = testSelector(selector, df)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test VarianceThresholdSelector: sparse vector") {
@@ -97,7 +99,8 @@ class VarianceThresholdSelectorSuite extends MLTest with DefaultReadWriteTest {
     val selector = new VarianceThresholdSelector()
       .setVarianceThreshold(8.1)
       .setOutputCol("filtered")
-    testSelector(selector, df)
+    val model = testSelector(selector, df)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("read/write") {

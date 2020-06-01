@@ -24,11 +24,12 @@ import org.apache.log4j.Level
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
+import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -71,12 +72,15 @@ class AdaptiveQueryExecSuite
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
+    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
 
     spark.sparkContext.listenerBus.waitUntilEmpty()
-    assert(finalPlanCnt == 1)
+    // AQE will post `SparkListenerSQLAdaptiveExecutionUpdate` twice in case of subqueries that
+    // exist out of query stages.
+    val expectedFinalPlanCnt = adaptivePlan.find(_.subqueries.nonEmpty).map(_ => 2).getOrElse(1)
+    assert(finalPlanCnt == expectedFinalPlanCnt)
     spark.sparkContext.removeSparkListener(listener)
 
-    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
     val exchanges = adaptivePlan.collect {
       case e: Exchange => e
     }
@@ -644,79 +648,65 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  // TODO: we need a way to customize data distribution after shuffle, to improve test coverage
-  //       of this case.
   test("SPARK-29544: adaptive skew join with different join types") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "2000",
-      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000") {
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
       withTempView("skewData1", "skewData2") {
         spark
           .range(0, 1000, 1, 10)
-          .selectExpr("id % 2 as key1", "id as value1")
+          .select(
+            when('id < 250, 249)
+              .when('id >= 750, 1000)
+              .otherwise('id).as("key1"),
+            'id as "value1")
           .createOrReplaceTempView("skewData1")
         spark
           .range(0, 1000, 1, 10)
-          .selectExpr("id % 1 as key2", "id as value2")
+          .select(
+            when('id < 250, 249)
+              .otherwise('id).as("key2"),
+            'id as "value2")
           .createOrReplaceTempView("skewData2")
 
-        def checkSkewJoin(joins: Seq[SortMergeJoinExec], expectedNumPartitions: Int): Unit = {
+        def checkSkewJoin(
+            joins: Seq[SortMergeJoinExec],
+            leftSkewNum: Int,
+            rightSkewNum: Int): Unit = {
           assert(joins.size == 1 && joins.head.isSkewJoin)
           assert(joins.head.left.collect {
             case r: CustomShuffleReaderExec => r
-          }.head.partitionSpecs.length == expectedNumPartitions)
+          }.head.partitionSpecs.collect {
+            case p: PartialReducerPartitionSpec => p.reducerIndex
+          }.distinct.length == leftSkewNum)
           assert(joins.head.right.collect {
             case r: CustomShuffleReaderExec => r
-          }.head.partitionSpecs.length == expectedNumPartitions)
+          }.head.partitionSpecs.collect {
+            case p: PartialReducerPartitionSpec => p.reducerIndex
+          }.distinct.length == rightSkewNum)
         }
 
         // skewed inner join optimization
         val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
           "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
-        // left stats: [3496, 0, 0, 0, 4014]
-        // right stats:[6292, 0, 0, 0, 0]
-        // Partition 0: both left and right sides are skewed, left side is divided
-        //              into 2 splits and right side is divided into 4 splits, so
-        //              2 x 4 sub-partitions.
-        // Partition 1, 2, 3: not skewed, and coalesced into 1 partition, but it's ignored as the
-        //                    size is 0.
-        // Partition 4: only left side is skewed, and divide into 2 splits, so
-        //              2 sub-partitions.
-        // So total (8 + 0 + 2) partitions.
         val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        checkSkewJoin(innerSmj, 8 + 0 + 2)
+        checkSkewJoin(innerSmj, 2, 1)
 
         // skewed left outer join optimization
         val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
           "SELECT * FROM skewData1 left outer join skewData2 ON key1 = key2")
-        // left stats: [3496, 0, 0, 0, 4014]
-        // right stats:[6292, 0, 0, 0, 0]
-        // Partition 0: both left and right sides are skewed, but left join can't split right side,
-        //              so only left side is divided into 2 splits, and thus 2 sub-partitions.
-        // Partition 1, 2, 3: not skewed, and coalesced into 1 partition, but it's ignored as the
-        //                    size is 0.
-        // Partition 4: only left side is skewed, and divide into 2 splits, so
-        //              2 sub-partitions.
-        // So total (2 + 0 + 2) partitions.
         val leftSmj = findTopLevelSortMergeJoin(leftAdaptivePlan)
-        checkSkewJoin(leftSmj, 2 + 0 + 2)
+        checkSkewJoin(leftSmj, 2, 0)
 
         // skewed right outer join optimization
         val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
           "SELECT * FROM skewData1 right outer join skewData2 ON key1 = key2")
-        // left stats: [3496, 0, 0, 0, 4014]
-        // right stats:[6292, 0, 0, 0, 0]
-        // Partition 0: both left and right sides are skewed, but right join can't split left side,
-        //              so only right side is divided into 4 splits, and thus 4 sub-partitions.
-        // Partition 1, 2, 3: not skewed, and coalesced into 1 partition, but it's ignored as the
-        //                    size is 0.
-        // Partition 4: only left side is skewed, but right join can't split left side, so just
-        //              1 partition.
-        // So total (4 + 0 + 1) partitions.
         val rightSmj = findTopLevelSortMergeJoin(rightAdaptivePlan)
-        checkSkewJoin(rightSmj, 4 + 0 + 1)
+        checkSkewJoin(rightSmj, 0, 1)
       }
     }
   }
@@ -737,7 +727,7 @@ class AdaptiveQueryExecSuite
         val error = intercept[Exception] {
           agged.count()
         }
-        assert(error.getCause().toString contains "Early failed query stage found")
+        assert(error.getCause().toString contains "Invalid bucket file")
         assert(error.getSuppressed.size === 0)
       }
     }
@@ -870,28 +860,40 @@ class AdaptiveQueryExecSuite
 
       withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000",
-        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "2000") {
+        SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
         withTempView("skewData1", "skewData2") {
           spark
             .range(0, 1000, 1, 10)
-            .selectExpr("id % 2 as key1", "id as value1")
+            .select(
+              when('id < 250, 249)
+                .when('id >= 750, 1000)
+                .otherwise('id).as("key1"),
+              'id as "value1")
             .createOrReplaceTempView("skewData1")
           spark
             .range(0, 1000, 1, 10)
-            .selectExpr("id % 1 as key2", "id as value2")
+            .select(
+              when('id < 250, 249)
+                .otherwise('id).as("key2"),
+              'id as "value2")
             .createOrReplaceTempView("skewData2")
           val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
             "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
-          val reader = collect(adaptivePlan) {
+          val readers = collect(adaptivePlan) {
             case r: CustomShuffleReaderExec => r
-          }.head
-          assert(!reader.isLocalReader)
-          assert(reader.hasSkewedPartition)
-          assert(!reader.hasCoalescedPartition) // 0-size partitions are ignored.
-          assert(reader.metrics.contains("numSkewedPartitions"))
-          assert(reader.metrics("numSkewedPartitions").value > 0)
-          assert(reader.metrics("numSkewedSplits").value > 0)
+          }
+          readers.foreach { reader =>
+            assert(!reader.isLocalReader)
+            assert(reader.hasCoalescedPartition)
+            assert(reader.hasSkewedPartition)
+            assert(reader.metrics.contains("numSkewedPartitions"))
+          }
+          assert(readers(0).metrics("numSkewedPartitions").value == 2)
+          assert(readers(0).metrics("numSkewedSplits").value == 15)
+          assert(readers(1).metrics("numSkewedPartitions").value == 1)
+          assert(readers(1).metrics("numSkewedSplits").value == 12)
         }
       }
     }
@@ -940,9 +942,11 @@ class AdaptiveQueryExecSuite
   test("SPARK-30953: InsertAdaptiveSparkPlan should apply AQE on child plan of write commands") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
-      val plan = sql("CREATE TABLE t1 AS SELECT 1 col").queryExecution.executedPlan
-      assert(plan.isInstanceOf[DataWritingCommandExec])
-      assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
+      withTable("t1") {
+        val plan = sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").queryExecution.executedPlan
+        assert(plan.isInstanceOf[DataWritingCommandExec])
+        assert(plan.asInstanceOf[DataWritingCommandExec].child.isInstanceOf[AdaptiveSparkPlanExec])
+      }
     }
   }
 
@@ -979,6 +983,33 @@ class AdaptiveQueryExecSuite
         df.collect()
       } finally {
         spark.experimental.extraStrategies = Nil
+      }
+    }
+  }
+
+  test("SPARK-31658: SQL UI should show write commands") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      withTable("t1") {
+        var checkDone = false
+        val listener = new SparkListener {
+          override def onOtherEvent(event: SparkListenerEvent): Unit = {
+            event match {
+              case SparkListenerSQLAdaptiveExecutionUpdate(_, _, planInfo) =>
+                assert(planInfo.nodeName == "Execute CreateDataSourceTableAsSelectCommand")
+                checkDone = true
+              case _ => // ignore other events
+            }
+          }
+        }
+        spark.sparkContext.addSparkListener(listener)
+        try {
+          sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").collect()
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+          assert(checkDone)
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
+        }
       }
     }
   }

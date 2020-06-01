@@ -28,33 +28,28 @@ current database.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 SHOW TABLES [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>{ FROM | IN } database_name</em></code></dt>
-  <dd>
+* **{ FROM `|` IN } database_name**
+
      Specifies the database name from which tables are listed.
-  </dd>
-  <dt><code><em>regex_pattern</em></code></dt>
-  <dd>
+
+* **regex_pattern**
+
      Specifies the regular expression pattern that is used to filter out unwanted tables. 
-     <ul> 
-          <li> Except for <code>*</code> and <code>|</code> character, the pattern works like a regular expression.</li>
-          <li> <code>*</code> alone matches 0 or more characters and <code>|</code> is used to separate multiple different regular expressions,
-           any of which can match. </li>
-          <li> The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.</li>
-     </ul>
-    
-  </dd>
-</dl>
+
+     * Except for `*` and `|` character, the pattern works like a regular expression.
+     * `*` alone matches 0 or more characters and `|` is used to separate multiple different regular expressions,
+       any of which can match.
+     * The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- List all tables in default database
 SHOW TABLES;
 +--------+---------+-----------+
@@ -101,11 +96,11 @@ SHOW TABLES LIKE 'sam*|suj';
 | default|     sam1|      false|
 | default|      suj|      false|
 +--------+---------+-----------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
- * [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
- * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
- * [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+* [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+* [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
+* [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+* [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)

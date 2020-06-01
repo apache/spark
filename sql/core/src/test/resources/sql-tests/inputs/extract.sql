@@ -123,3 +123,8 @@ select extract('doy', c) from t;
 select extract('hour', c) from t;
 select extract('minute', c) from t;
 select extract('second', c) from t;
+
+select c - i from t;
+select year(c - i) from t;
+select extract(year from c - i) from t;
+select extract(month from to_timestamp(c) - i) from t;

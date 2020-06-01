@@ -2138,7 +2138,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @ignore_unicode_prefix
     def toDF(self, *cols):
-        """Returns a new class:`DataFrame` that with new specified column names
+        """Returns a new :class:`DataFrame` that with new specified column names
 
         :param cols: list of new column names (string)
 
@@ -2150,9 +2150,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @since(3.0)
     def transform(self, func):
-        """Returns a new class:`DataFrame`. Concise syntax for chaining custom transformations.
+        """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
-        :param func: a function that takes and returns a class:`DataFrame`.
+        :param func: a function that takes and returns a :class:`DataFrame`.
 
         >>> from pyspark.sql.functions import col
         >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
@@ -2218,6 +2218,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         1855039936
         """
         return self._jdf.semanticHash()
+
+    @since(3.1)
+    def inputFiles(self):
+        """
+        Returns a best-effort snapshot of the files that compose this :class:`DataFrame`.
+        This method simply asks each constituent BaseRelation for its respective files and
+        takes the union of all results. Depending on the source relations, this may not find
+        all input files. Duplicates are removed.
+
+        >>> df = spark.read.load("examples/src/main/resources/people.json", format="json")
+        >>> len(df.inputFiles())
+        1
+        """
+        return list(self._jdf.inputFiles())
 
     where = copy_func(
         filter,
