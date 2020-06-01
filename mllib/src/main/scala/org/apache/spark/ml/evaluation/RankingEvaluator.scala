@@ -95,6 +95,25 @@ class RankingEvaluator @Since("3.0.0") (@Since("3.0.0") override val uid: String
 
   @Since("3.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
+    val metrics = getMetrics(dataset)
+    $(metricName) match {
+      case "meanAveragePrecision" => metrics.meanAveragePrecision
+      case "meanAveragePrecisionAtK" => metrics.meanAveragePrecisionAt($(k))
+      case "precisionAtK" => metrics.precisionAt($(k))
+      case "ndcgAtK" => metrics.ndcgAt($(k))
+      case "recallAtK" => metrics.recallAt($(k))
+    }
+  }
+
+  /**
+   * Get a RankingMetrics, which can be used to get ranking metrics
+   * such as meanAveragePrecision, meanAveragePrecisionAtK, etc.
+   *
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @return RankingMetrics
+   */
+  @Since("3.1.0")
+  def getMetrics(dataset: Dataset[_]): RankingMetrics[Double] = {
     val schema = dataset.schema
     SchemaUtils.checkColumnTypes(schema, $(predictionCol),
       Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
@@ -106,14 +125,7 @@ class RankingEvaluator @Since("3.0.0") (@Since("3.0.0") override val uid: String
         .rdd.map { row =>
         (row.getSeq[Double](0).toArray, row.getSeq[Double](1).toArray)
       }
-    val metrics = new RankingMetrics[Double](predictionAndLabels)
-    $(metricName) match {
-      case "meanAveragePrecision" => metrics.meanAveragePrecision
-      case "meanAveragePrecisionAtK" => metrics.meanAveragePrecisionAt($(k))
-      case "precisionAtK" => metrics.precisionAt($(k))
-      case "ndcgAtK" => metrics.ndcgAt($(k))
-      case "recallAtK" => metrics.recallAt($(k))
-    }
+    new RankingMetrics[Double](predictionAndLabels)
   }
 
   @Since("3.0.0")

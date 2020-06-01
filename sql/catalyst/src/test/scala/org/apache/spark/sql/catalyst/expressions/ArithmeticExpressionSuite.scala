@@ -173,13 +173,8 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
-  test("/ (Divide) for integral type") {
-    checkEvaluation(IntegralDivide(Literal(1.toByte), Literal(2.toByte)), 0L)
-    checkEvaluation(IntegralDivide(Literal(1.toShort), Literal(2.toShort)), 0L)
-    checkEvaluation(IntegralDivide(Literal(1), Literal(2)), 0L)
+  test("/ (Divide) for Long type") {
     checkEvaluation(IntegralDivide(Literal(1.toLong), Literal(2.toLong)), 0L)
-    checkEvaluation(IntegralDivide(positiveShortLit, negativeShortLit), 0L)
-    checkEvaluation(IntegralDivide(positiveIntLit, negativeIntLit), 0L)
     checkEvaluation(IntegralDivide(positiveLongLit, negativeLongLit), 0L)
   }
 

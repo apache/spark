@@ -38,7 +38,18 @@ object MimaExcludes {
   lazy val v31excludes = v30excludes ++ Seq(
     // [SPARK-31077] Remove ChiSqSelector dependency on mllib.ChiSqSelectorModel
     // private constructor
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel.this")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel.this"),
+    // [SPARK-31127] Implement abstract Selector
+    // org.apache.spark.ml.feature.ChiSqSelectorModel type hierarchy change
+    // before: class ChiSqSelector extends Estimator with ChiSqSelectorParams
+    // after: class ChiSqSelector extends PSelector
+    // false positive, no binary incompatibility
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelector"),
+
+    //[SPARK-31840] Add instance weight support in LogisticRegressionSummary
+    // weightCol in org.apache.spark.ml.classification.LogisticRegressionSummary is present only in current version
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.weightCol")
   )
 
   // Exclude rules for 3.0.x

@@ -49,18 +49,18 @@ other `SQL` constructs.
 </style>
 
 The following illustrates the schema layout and data of a table named `person`. The data contains `NULL` values in
-the `age` column and this table will be used in various examples in the sections below.
+the `age` column and this table will be used in various examples in the sections below.<br/>
 **<u>TABLE: person</u>**
-<table class="tsclass" border="1">
-<tr><th>Id</th><th>Name</th><th>Age</th></tr>
-<tr><td>100</td><td>Joe</td><td>30</td></tr>
-<tr><td>200</td><td>Marry</td><td>NULL</td></tr>
-<tr><td>300</td><td>Mike</td><td>18</td></tr>
-<tr><td>400</td><td>Fred</td><td>50</td></tr>
-<tr><td>500</td><td>Albert</td><td>NULL</td></tr>
-<tr><td>600</td><td>Michelle</td><td>30</td></tr>
-<tr><td>700</td><td>Dan</td><td>50</td></tr>
-</table>
+
+|Id |Name|Age|
+|---|----|---|
+|100|Joe|30|
+|200|Marry|NULL|
+|300|Mike|18|
+|400|Fred|50|
+|500|Albert|NULL|
+|600|Michelle|30|
+|700|Dan|50|
 
 ### Comparison Operators <a name="comp-operators"></a>
 
@@ -71,52 +71,15 @@ equal operator ('<=>'), which returns `False` when one of the operand is `NULL` 
 both the operands are `NULL`. The following table illustrates the behaviour of comparison operators when
 one or both operands are `NULL`:
 
-<table class="tsclass" border="1">
-  <tr>
-    <th>Left Operand</th>
-    <th>Right  Operand</th>
-    <th>></th>
-    <th>>=</th>
-    <th>=</th>
-    <th><</th>
-    <th><=</th>
-    <th><=></th>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>Any value</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>False</td>
-  </tr>
-  <tr>
-    <td>Any value</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>False</td>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>True</td>
-  </tr>
-</table>
+|Left Operand|Right  Operand|>  |>= |=  |<  |<= |<=>|
+|------------|--------------|---|---|---|---|---|---|
+|NULL|Any value|NULL|NULL|NULL|NULL|NULL|False|
+|Any value|NULL|NULL|NULL|NULL|NULL|NULL|False|
+|NULL|NULL|NULL|NULL|NULL|NULL|NULL|True|
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Normal comparison operators return `NULL` when one of the operand is `NULL`.
 SELECT 5 > null AS expression_output;
 +-----------------+
@@ -148,7 +111,7 @@ SELECT NULL <=> NULL;
 +-----------------+
 |             true|
 +-----------------+
-{% endhighlight %}
+```
 
 ### Logical Operators <a name="logical-operators"></a>
 
@@ -157,59 +120,21 @@ as the arguments and return a `Boolean` value.
 
 The following tables illustrate the behavior of logical operators when one or both operands are `NULL`.
 
-<table class="tsclass" border="1">
-  <tr>
-    <th>Left Operand</th>
-    <th>Right Operand</th>
-    <th>OR</th>
-    <th>AND</th>
-  </tr>
-  <tr>
-    <td>True</td>
-    <td>NULL</td>
-    <td>True</td>
-    <td>NULL</td>
-  </tr>
-  <tr>
-    <td>False</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>False</td>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>True</td>
-    <td>True</td>
-    <td>NULL</td>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>False</td>
-    <td>NULL</td>
-    <td>NULL</td>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-    <td>NULL</td>
-  </tr>
-</table>
-<br>
-<table class="tsclass" border="1">
-  <tr>
-    <th>operand</th>
-    <th>NOT</th>
-  </tr>
-  <tr>
-    <td>NULL</td>
-    <td>NULL</td>
-  </tr>
-</table>
+|Left Operand|Right Operand|OR |AND|
+|------------|-------------|---|---|
+|True|NULL|True|NULL|
+|False|NULL|NULL|False|
+|NULL|True|True|NULL|
+|NULL|False|NULL|NULL|
+|NULL|NULL|NULL|NULL|
+
+|operand|NOT|
+|-------|---|
+|NULL|NULL|
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Normal comparison operators return `NULL` when one of the operands is `NULL`.
 SELECT (true OR null) AS expression_output;
 +-----------------+
@@ -233,7 +158,7 @@ SELECT NOT(null) AS expression_output;
 +-----------------+
 |             null|
 +-----------------+
-{% endhighlight %}
+```
 
 ### Expressions <a name="expressions"></a>
 
@@ -252,7 +177,7 @@ expression are `NULL` and most of the expressions fall in this category.
 
 ##### Examples
 
-{% highlight sql %}
+```sql
 SELECT concat('John', null) AS expression_output;
 +-----------------+
 |expression_output|
@@ -273,7 +198,7 @@ SELECT to_date(null) AS expression_output;
 +-----------------+
 |             null|
 +-----------------+
-{% endhighlight %}
+```
 
 #### Expressions That Can Process Null Value Operands <a name="can-process-null"></a>
 
@@ -296,7 +221,7 @@ returns the first non `NULL` value in its list of operands. However, `coalesce` 
 
 ##### Examples
 
-{% highlight sql %}
+```sql
 SELECT isnull(null) AS expression_output;
 +-----------------+
 |expression_output|
@@ -326,7 +251,7 @@ SELECT isnan(null) AS expression_output;
 +-----------------+
 |            false|
 +-----------------+
-{% endhighlight %}
+```
 
 #### Builtin Aggregate Expressions <a name="built-in-aggregate"></a>
 
@@ -335,7 +260,7 @@ the rules of how `NULL` values are handled by aggregate functions.
 - `NULL` values are ignored from processing by all the aggregate functions.
   - Only exception to this rule is COUNT(*) function.
 - Some aggregate functions return `NULL` when all input values are `NULL` or the input data set
-  is empty.<br> The list of these functions is:
+  is empty.<br/> The list of these functions is:
   - MAX
   - MIN
   - SUM
@@ -346,7 +271,7 @@ the rules of how `NULL` values are handled by aggregate functions.
    
 #### Examples
 
-{% highlight sql %}
+```sql
 -- `count(*)` does not skip `NULL` values.
 SELECT count(*) FROM person;
 +--------+
@@ -387,7 +312,7 @@ SELECT max(age) FROM person where 1 = 0;
 +--------+
 |    null|
 +--------+
-{% endhighlight %}
+```
 
 ### Condition Expressions in WHERE, HAVING and JOIN Clauses <a name="condition-expressions"></a>
 
@@ -398,7 +323,7 @@ For all the three operators, a condition expression is a boolean expression and 
 
 #### Examples
 
-{% highlight sql %}
+```sql
 -- Persons whose age is unknown (`NULL`) are filtered out from the result set.
 SELECT * FROM person WHERE age > 0;
 +--------+---+
@@ -466,7 +391,7 @@ SELECT * FROM person p1, person p2
 |   Marry|null|   Marry|null|
 |     Joe|  30|     Joe|  30|
 +--------+----+--------+----+
-{% endhighlight %}
+```
 
 ### Aggregate Operator (GROUP BY, DISTINCT) <a name="aggregate-operator"></a>
 
@@ -477,7 +402,7 @@ standard and with other enterprise database management systems.
 
 #### Examples
 
-{% highlight sql %}
+```sql
 -- `NULL` values are put in one bucket in `GROUP BY` processing.
 SELECT age, count(*) FROM person GROUP BY age;
 +----+--------+
@@ -499,7 +424,7 @@ SELECT DISTINCT age FROM person;
 |  30|
 |  18|
 +----+
-{% endhighlight %}
+```
 
 ### Sort Operator (ORDER BY Clause) <a name="order-by"></a>
 
@@ -509,7 +434,7 @@ the `NULL` values are placed at first.
 
 #### Examples
 
-{% highlight sql %}
+```sql
 -- `NULL` values are shown at first and other values
 -- are sorted in ascending way.
 SELECT age, name FROM person ORDER BY age;
@@ -554,7 +479,7 @@ SELECT age, name FROM person ORDER BY age DESC NULLS LAST;
 |null|   Marry|
 |null|  Albert|
 +----+--------+
-{% endhighlight %}
+```
 
 ### Set Operators (UNION, INTERSECT, EXCEPT) <a name="set-operators"></a>
 
@@ -564,7 +489,7 @@ equal unlike the regular `EqualTo`(`=`) operator.
 
 #### Examples
 
-{% highlight sql %}
+```sql
 CREATE VIEW unknown_age SELECT * FROM person WHERE age IS NULL;
 
 -- Only common rows between two legs of `INTERSECT` are in the 
@@ -612,7 +537,7 @@ SELECT name, age FROM person
 |    Mike|  18|
 |     Dan|  50|
 +--------+----+
-{% endhighlight %}
+```
 
 ### EXISTS/NOT EXISTS Subquery <a name="exists-not-exists"></a>
 
@@ -629,7 +554,7 @@ semijoins / anti-semijoins without special provisions for null awareness.
 
 #### Examples
 
-{% highlight sql %}
+```sql
 -- Even if subquery produces rows with `NULL` values, the `EXISTS` expression
 -- evaluates to `TRUE` as the subquery produces 1 row.
 SELECT * FROM person WHERE EXISTS (SELECT null);
@@ -666,7 +591,7 @@ SELECT * FROM person WHERE NOT EXISTS (SELECT 1 WHERE 1 = 0);
 |   Marry|null|
 |     Joe|  30|
 +--------+----+
-{% endhighlight %}
+```
 
 ### IN/NOT IN Subquery <a name="in-not-in"></a>
 
@@ -692,7 +617,7 @@ and because NOT UNKNOWN is again UNKNOWN.
  
 #### Examples
 
-{% highlight sql %}
+```sql
 -- The subquery has only `NULL` value in its result set. Therefore,
 -- the result of `IN` predicate is UNKNOWN.
 SELECT * FROM person WHERE age IN (SELECT null);
@@ -721,4 +646,4 @@ SELECT * FROM person
 |name|age|
 +----+---+
 +----+---+
-{% endhighlight %}
+```

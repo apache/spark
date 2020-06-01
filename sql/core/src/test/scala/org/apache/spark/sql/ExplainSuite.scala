@@ -214,9 +214,9 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val df = sql("select ifnull(id, 'x'), nullif(id, 'x'), nvl(id, 'x'), nvl2(id, 'x', 'y') " +
       "from range(2)")
     checkKeywordsExistsInExplain(df,
-      "Project [coalesce(cast(id#xL as string), x) AS ifnull(`id`, 'x')#x, " +
-        "id#xL AS nullif(`id`, 'x')#xL, coalesce(cast(id#xL as string), x) AS nvl(`id`, 'x')#x, " +
-        "x AS nvl2(`id`, 'x', 'y')#x]")
+      "Project [coalesce(cast(id#xL as string), x) AS ifnull(id, x)#x, " +
+        "id#xL AS nullif(id, x)#xL, coalesce(cast(id#xL as string), x) AS nvl(id, x)#x, " +
+        "x AS nvl2(id, x, y)#x]")
   }
 
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {

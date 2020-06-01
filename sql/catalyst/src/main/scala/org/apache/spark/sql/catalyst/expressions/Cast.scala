@@ -511,7 +511,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType if ansiEnabled =>
-      buildCast[Long](_, t => LongExactNumeric.toInt(timestampToLong(t)))
+      buildCast[Long](_, t => {
+        val longValue = timestampToLong(t)
+        if (longValue == longValue.toInt) {
+          longValue.toInt
+        } else {
+          throw new ArithmeticException(s"Casting $t to int causes overflow")
+        }
+      })
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType if ansiEnabled =>
@@ -1735,8 +1742,16 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
 /**
  * Cast the child expression to the target data type, but will throw error if the cast might
  * truncate, e.g. long -> int, timestamp -> data.
+ *
+ * Note: `target` is `AbstractDataType`, so that we can put `object DecimalType`, which means
+ * we accept `DecimalType` with any valid precision/scale.
  */
-case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String] = Nil)
+case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
+
+  def dataType: DataType = target match {
+    case DecimalType => DecimalType.SYSTEM_DEFAULT
+    case _ => target.asInstanceOf[DataType]
+  }
 }
