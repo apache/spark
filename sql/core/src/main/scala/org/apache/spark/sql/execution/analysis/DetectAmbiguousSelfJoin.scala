@@ -137,6 +137,9 @@ class DetectAmbiguousSelfJoin(conf: SQLConf) extends Rule[LogicalPlan] {
           }
           condition.toSeq.flatMap(getAmbiguousAttrs)
 
+        case _ if plan.find(_.isInstanceOf[Join]).isEmpty =>
+          Nil  // If there's no join, there's no self-join.
+
         case _ => ambiguousColRefs.toSeq.map { ref =>
           colRefAttrs.find(attr => toColumnReference(attr) == ref).get
         }
