@@ -69,9 +69,7 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   protected def withParquetDataFrame(df: DataFrame, testVectorized: Boolean = true)
       (f: DataFrame => Unit): Unit = {
     withTempPath { file =>
-      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
-        df.write.format(dataSourceName).save(file.getCanonicalPath)
-      }
+      df.write.format(dataSourceName).save(file.getCanonicalPath)
       readFile(file.getCanonicalPath, testVectorized)(f)
     }
   }
