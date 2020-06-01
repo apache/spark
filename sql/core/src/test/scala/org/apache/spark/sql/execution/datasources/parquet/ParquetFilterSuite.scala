@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.LocalDate
+import java.time.{LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
@@ -143,7 +143,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-  private def testTimestampPushdown(data: Seq[Timestamp]): Unit = {
+  private def testTimestampPushdown(data: Seq[String], java8Api: Boolean): Unit = {
+    implicit class StringToTs(s: String) {
+      def ts: Timestamp = Timestamp.valueOf(s)
+    }
     assert(data.size === 4)
     val ts1 = data.head
     val ts2 = data(1)
@@ -151,7 +154,18 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     val ts4 = data(3)
 
     import testImplicits._
-    withNestedDataFrame(data.map(i => Tuple1(i)).toDF()) { case (inputDF, colName, resultFun) =>
+    val df = data.map(i => Tuple1(Timestamp.valueOf(i))).toDF()
+    withNestedDataFrame(df) { case (inputDF, colName, fun) =>
+      def resultFun(tsStr: String): Any = {
+        val parsed = if (java8Api) {
+          LocalDateTime.parse(tsStr.replace(" ", "T"))
+            .atZone(ZoneId.systemDefault())
+            .toInstant
+        } else {
+          Timestamp.valueOf(tsStr)
+        }
+        fun(parsed)
+      }
       withParquetDataFrame(inputDF) { implicit df =>
         val tsAttr = df(colName).expr
         assert(df(colName).expr.dataType === TimestampType)
@@ -160,26 +174,26 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         checkFilterPredicate(tsAttr.isNotNull, classOf[NotEq[_]],
           data.map(i => Row.apply(resultFun(i))))
 
-        checkFilterPredicate(tsAttr === ts1, classOf[Eq[_]], resultFun(ts1))
-        checkFilterPredicate(tsAttr <=> ts1, classOf[Eq[_]], resultFun(ts1))
-        checkFilterPredicate(tsAttr =!= ts1, classOf[NotEq[_]],
+        checkFilterPredicate(tsAttr === ts1.ts, classOf[Eq[_]], resultFun(ts1))
+        checkFilterPredicate(tsAttr <=> ts1.ts, classOf[Eq[_]], resultFun(ts1))
+        checkFilterPredicate(tsAttr =!= ts1.ts, classOf[NotEq[_]],
           Seq(ts2, ts3, ts4).map(i => Row.apply(resultFun(i))))
 
-        checkFilterPredicate(tsAttr < ts2, classOf[Lt[_]], resultFun(ts1))
-        checkFilterPredicate(tsAttr > ts1, classOf[Gt[_]],
+        checkFilterPredicate(tsAttr < ts2.ts, classOf[Lt[_]], resultFun(ts1))
+        checkFilterPredicate(tsAttr > ts1.ts, classOf[Gt[_]],
           Seq(ts2, ts3, ts4).map(i => Row.apply(resultFun(i))))
-        checkFilterPredicate(tsAttr <= ts1, classOf[LtEq[_]], resultFun(ts1))
-        checkFilterPredicate(tsAttr >= ts4, classOf[GtEq[_]], resultFun(ts4))
+        checkFilterPredicate(tsAttr <= ts1.ts, classOf[LtEq[_]], resultFun(ts1))
+        checkFilterPredicate(tsAttr >= ts4.ts, classOf[GtEq[_]], resultFun(ts4))
 
-        checkFilterPredicate(Literal(ts1) === tsAttr, classOf[Eq[_]], resultFun(ts1))
-        checkFilterPredicate(Literal(ts1) <=> tsAttr, classOf[Eq[_]], resultFun(ts1))
-        checkFilterPredicate(Literal(ts2) > tsAttr, classOf[Lt[_]], resultFun(ts1))
-        checkFilterPredicate(Literal(ts3) < tsAttr, classOf[Gt[_]], resultFun(ts4))
-        checkFilterPredicate(Literal(ts1) >= tsAttr, classOf[LtEq[_]], resultFun(ts1))
-        checkFilterPredicate(Literal(ts4) <= tsAttr, classOf[GtEq[_]], resultFun(ts4))
+        checkFilterPredicate(Literal(ts1.ts) === tsAttr, classOf[Eq[_]], resultFun(ts1))
+        checkFilterPredicate(Literal(ts1.ts) <=> tsAttr, classOf[Eq[_]], resultFun(ts1))
+        checkFilterPredicate(Literal(ts2.ts) > tsAttr, classOf[Lt[_]], resultFun(ts1))
+        checkFilterPredicate(Literal(ts3.ts) < tsAttr, classOf[Gt[_]], resultFun(ts4))
+        checkFilterPredicate(Literal(ts1.ts) >= tsAttr, classOf[LtEq[_]], resultFun(ts1))
+        checkFilterPredicate(Literal(ts4.ts) <= tsAttr, classOf[GtEq[_]], resultFun(ts4))
 
-        checkFilterPredicate(!(tsAttr < ts4), classOf[GtEq[_]], resultFun(ts4))
-        checkFilterPredicate(tsAttr < ts2 || tsAttr > ts3, classOf[Operators.Or],
+        checkFilterPredicate(!(tsAttr < ts4.ts), classOf[GtEq[_]], resultFun(ts4))
+        checkFilterPredicate(tsAttr < ts2.ts || tsAttr > ts3.ts, classOf[Operators.Or],
           Seq(Row(resultFun(ts1)), Row(resultFun(ts4))))
       }
     }
@@ -588,36 +602,41 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
   test("filter pushdown - timestamp") {
-    // spark.sql.parquet.outputTimestampType = TIMESTAMP_MILLIS
-    val millisData = Seq(
-      Timestamp.valueOf("1000-06-14 08:28:53.123"),
-      Timestamp.valueOf("1582-06-15 08:28:53.001"),
-      Timestamp.valueOf("1900-06-16 08:28:53.0"),
-      Timestamp.valueOf("2018-06-17 08:28:53.999"))
-    withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-      ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString) {
-      testTimestampPushdown(millisData)
-    }
+    Seq(true).foreach { java8Api =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+        // spark.sql.parquet.outputTimestampType = TIMESTAMP_MILLIS
+        val millisData = Seq(
+          "1000-06-14 08:28:53.123",
+          "1582-06-15 08:28:53.001",
+          "1900-06-16 08:28:53.0",
+          "2018-06-17 08:28:53.999")
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+          ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString) {
+          testTimestampPushdown(millisData, java8Api)
+        }
 
-    // spark.sql.parquet.outputTimestampType = TIMESTAMP_MICROS
-    val microsData = Seq(
-      Timestamp.valueOf("1000-06-14 08:28:53.123456"),
-      Timestamp.valueOf("1582-06-15 08:28:53.123456"),
-      Timestamp.valueOf("1900-06-16 08:28:53.123456"),
-      Timestamp.valueOf("2018-06-17 08:28:53.123456"))
-    withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-      ParquetOutputTimestampType.TIMESTAMP_MICROS.toString) {
-      testTimestampPushdown(microsData)
-    }
+        // spark.sql.parquet.outputTimestampType = TIMESTAMP_MICROS
+        val microsData = Seq(
+          "1000-06-14 08:28:53.123456",
+          "1582-06-15 08:28:53.123456",
+          "1900-06-16 08:28:53.123456",
+          "2018-06-17 08:28:53.123456")
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+          ParquetOutputTimestampType.TIMESTAMP_MICROS.toString) {
+          testTimestampPushdown(microsData, java8Api)
+        }
 
-    // spark.sql.parquet.outputTimestampType = INT96 doesn't support pushdown
-    withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-      ParquetOutputTimestampType.INT96.toString) {
-      import testImplicits._
-      withParquetDataFrame(millisData.map(i => Tuple1(i)).toDF()) { implicit df =>
-        val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
-        assertResult(None) {
-          createParquetFilters(schema).createFilter(sources.IsNull("_1"))
+        // spark.sql.parquet.outputTimestampType = INT96 doesn't support pushdown
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+          ParquetOutputTimestampType.INT96.toString) {
+          import testImplicits._
+          withParquetDataFrame(
+            millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF()) { implicit df =>
+            val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
+            assertResult(None) {
+              createParquetFilters(schema).createFilter(sources.IsNull("_1"))
+            }
+          }
         }
       }
     }
