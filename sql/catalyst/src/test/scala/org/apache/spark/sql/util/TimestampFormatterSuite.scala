@@ -406,8 +406,9 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       intercept[IllegalArgumentException](TimestampFormatter(pattern, UTC).format(0))
     }
     // supported by the legacy one, then we will suggest users with SparkUpgradeException
-    Seq("GGGGG", "MMMMM", "LLLLL", "EEEEE", "uuuuu", "aa", "aaa").foreach { pattern =>
-      intercept[SparkUpgradeException](TimestampFormatter(pattern, UTC).format(0))
+    Seq("GGGGG", "MMMMM", "LLLLL", "EEEEE", "uuuuu", "aa", "aaa", "y" * 11, "y" * 11)
+      .foreach { pattern =>
+        intercept[SparkUpgradeException](TimestampFormatter(pattern, UTC).format(0))
     }
   }
 }
