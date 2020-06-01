@@ -589,21 +589,19 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   test("filter pushdown - timestamp") {
     // spark.sql.parquet.outputTimestampType = TIMESTAMP_MILLIS
-    val millisData = Seq(
-      Timestamp.valueOf("1000-06-14 08:28:53.123"),
-      Timestamp.valueOf("1582-06-15 08:28:53.001"),
-      Timestamp.valueOf("1900-06-16 08:28:53.0"),
-      Timestamp.valueOf("2018-06-17 08:28:53.999"))
+    val millisData = Seq(Timestamp.valueOf("2018-06-14 08:28:53.123"),
+      Timestamp.valueOf("2018-06-15 08:28:53.123"),
+      Timestamp.valueOf("2018-06-16 08:28:53.123"),
+      Timestamp.valueOf("2018-06-17 08:28:53.123"))
     withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
       ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString) {
       testTimestampPushdown(millisData)
     }
 
     // spark.sql.parquet.outputTimestampType = TIMESTAMP_MICROS
-    val microsData = Seq(
-      Timestamp.valueOf("1000-06-14 08:28:53.123456"),
-      Timestamp.valueOf("1582-06-15 08:28:53.123456"),
-      Timestamp.valueOf("1900-06-16 08:28:53.123456"),
+    val microsData = Seq(Timestamp.valueOf("2018-06-14 08:28:53.123456"),
+      Timestamp.valueOf("2018-06-15 08:28:53.123456"),
+      Timestamp.valueOf("2018-06-16 08:28:53.123456"),
       Timestamp.valueOf("2018-06-17 08:28:53.123456"))
     withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
       ParquetOutputTimestampType.TIMESTAMP_MICROS.toString) {
