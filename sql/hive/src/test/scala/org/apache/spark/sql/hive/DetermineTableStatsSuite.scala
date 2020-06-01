@@ -45,30 +45,30 @@ class DetermineTableStatsSuite extends QueryTest
   }
 
   test("SPARK-31850: Test if table size retrieved from cache") {
+    withSQLConf((SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, "true"),
+      (HiveUtils.CONVERT_METASTORE_PARQUET.key, "false")) {
+      val catalog = spark.sessionState.catalog
+      val cacheMethod = classOf[SessionCatalog].getDeclaredMethod("tableRelationCache")
+      cacheMethod.setAccessible(true)
+      val cache = cacheMethod.invoke(catalog)
+        .asInstanceOf[Cache[QualifiedTableName, LogicalPlan]]
 
+      def getStats: CacheStats = {
+        cache.stats()
+      }
+      
+      val df = catalog.lookupRelation(TableIdentifier(tName))
+      catalog.invalidateAllCachedTables()
+      val baseStats: CacheStats = getStats
 
-    spark.sql(s"set ${SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key}=true")
-    spark.sql(s"set ${HiveUtils.CONVERT_METASTORE_PARQUET.key}=false")
-    val catalog = spark.sessionState.catalog
-    val cacheMethod = classOf[SessionCatalog].getDeclaredMethod("tableRelationCache")
-    cacheMethod.setAccessible(true)
-    val cache = cacheMethod.invoke(catalog)
-      .asInstanceOf[Cache[QualifiedTableName, LogicalPlan]]
+      Analyzer.execute(df.queryExecution.logical)
+      var stats = getStats
+      assert(stats.missCount() == baseStats.missCount() + 1)
 
-    def getStats: CacheStats = {
-      cache.stats()
+      Analyzer.execute(df.queryExecution.logical)
+      stats = getStats
+      assert(stats.missCount() == baseStats.missCount() + 1)
     }
-    val df = catalog.lookupRelation(TableIdentifier(tName))
-    catalog.invalidateAllCachedTables()
-    val baseStats: CacheStats = getStats
-
-    Analyzer.execute(df.queryExecution.logical)
-    var stats = getStats
-    assert(stats.missCount() == baseStats.missCount() + 1)
-
-    Analyzer.execute(df.queryExecution.logical)
-    stats = getStats
-    assert(stats.missCount() == baseStats.missCount() + 1)
   }
 
   object Analyzer extends RuleExecutor[LogicalPlan] {
