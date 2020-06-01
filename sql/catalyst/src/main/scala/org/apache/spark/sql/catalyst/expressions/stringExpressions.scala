@@ -365,6 +365,9 @@ case class Lower(child: Expression) extends UnaryExpression with String2StringEx
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
   }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("lower")
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
@@ -1182,7 +1185,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
      """)
   }
 
-  override def prettyName: String = "locate"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("locate")
 }
 
 /**

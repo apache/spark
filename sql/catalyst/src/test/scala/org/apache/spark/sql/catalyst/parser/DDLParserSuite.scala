@@ -2196,21 +2196,20 @@ class DDLParserSuite extends AnalysisTest {
       CommentOnTable(UnresolvedTable(Seq("a", "b", "c")), "xYz"))
   }
 
-  test("create table - without using") {
-    withSQLConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "false") {
-      val sql = "CREATE TABLE 1m.2g(a INT)"
-      val expectedTableSpec = TableSpec(
-        Seq("1m", "2g"),
-        Some(new StructType().add("a", IntegerType)),
-        Seq.empty[Transform],
-        None,
-        Map.empty[String, String],
-        None,
-        Map.empty[String, String],
-        None,
-        None)
+  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
+  ignore("create table - without using") {
+    val sql = "CREATE TABLE 1m.2g(a INT)"
+    val expectedTableSpec = TableSpec(
+      Seq("1m", "2g"),
+      Some(new StructType().add("a", IntegerType)),
+      Seq.empty[Transform],
+      None,
+      Map.empty[String, String],
+      None,
+      Map.empty[String, String],
+      None,
+      None)
 
-      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
-    }
+    testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
   }
 }

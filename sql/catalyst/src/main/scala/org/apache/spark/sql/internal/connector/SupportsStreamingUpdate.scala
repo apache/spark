@@ -15,17 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.internal.connector
 
-/**
- * Physical execution operators for join operations.
- */
-package object joins {
+import org.apache.spark.sql.connector.write.WriteBuilder
 
-  sealed abstract class BuildSide
-
-  case object BuildRight extends BuildSide
-
-  case object BuildLeft extends BuildSide
-
+// An internal `WriteBuilder` mixin to support UPDATE streaming output mode.
+// TODO: design an official API for streaming output mode UPDATE.
+trait SupportsStreamingUpdate extends WriteBuilder {
+  def update(): WriteBuilder
 }
