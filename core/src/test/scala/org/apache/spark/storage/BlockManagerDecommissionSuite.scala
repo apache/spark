@@ -130,7 +130,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // Wait for the first executor to start
     TestUtils.waitUntilExecutorsUp(sc = sc,
       numExecutors = 1,
-      timeout = 10000) // 10s
+      timeout = 20000) // 20s
 
     // Start the computation of RDD - this step will also cache the RDD
     val asyncCount = testRdd.countAsync()
@@ -138,7 +138,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // Wait for all of the executors to start
     TestUtils.waitUntilExecutorsUp(sc = sc,
       numExecutors = numExecs,
-      timeout = 10000) // 10s
+      timeout = 30000) // 30s
 
     // Wait for the job to have started.
     taskStartSem.acquire(1)
