@@ -78,7 +78,6 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
     }
   }
 
-
   test("SPARK-31886: Color barrier execution mode RDD correctly") {
     withSpark(newSparkContext()) { sc =>
       sc.parallelize(1 to 10).barrier.mapPartitions(identity).repartition(1).collect()
