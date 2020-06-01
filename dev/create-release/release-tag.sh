@@ -101,7 +101,6 @@ sed -i".tmp7" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$R_NEXT_VERSION"
 
 git commit -a -m "Preparing development version $NEXT_VERSION"
 
-cd ..
 if is_dry_run; then
   cd ..
   mv spark spark.tag
