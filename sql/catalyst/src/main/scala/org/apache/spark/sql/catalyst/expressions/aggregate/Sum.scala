@@ -96,15 +96,15 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
 
   /**
    * For decimal type:
-   * If isEmpty is false and if sum is null, then it means we have an overflow.
+   * If isEmpty is false and if sum is null, then it means we have had an overflow.
    *
    * update of the sum is as follows:
    * Check if either portion of the left.sum or right.sum has overflowed
    * If it has, then the sum value will remain null.
-   * If it did not have overflow, then add the sum.left and sum.right and check for overflow.
+   * If it did not have overflow, then add the sum.left and sum.right
    *
    * isEmpty:  Set to false if either one of the left or right is set to false. This
-   * means we have seen atleast a row that was not null.
+   * means we have seen atleast a value that was not null.
    */
   override lazy val mergeExpressions: Seq[Expression] = {
     val mergeSumExpr = coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
@@ -120,8 +120,8 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   }
 
   /**
-   * If the isEmpty is true, then it means either there are no rows, or all the rows were
-   * null, so the result will be null.
+   * If the isEmpty is true, then it means there were no values to begin with or all the values
+   * were null, so the result will be null.
    * If the isEmpty is false, then if sum is null that means an overflow has happened.
    * So now, if ansi is enabled, then throw exception, if not then return null.
    * If sum is not null, then return the sum.
