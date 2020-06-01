@@ -151,7 +151,7 @@ class ParquetFilters(
   private def timestampToMillis(v: Any): JLong = {
     val timestamp = v.asInstanceOf[Timestamp]
     val micros = DateTimeUtils.fromJavaTimestamp(timestamp)
-    val millis = DateTimeUtils.microsToMillis(micros)
+    val millis = DateTimeUtils.toMillis(micros)
     millis.asInstanceOf[JLong]
   }
 
