@@ -137,7 +137,9 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
 
     // Wait for all of the executors to start
     TestUtils.waitUntilExecutorsUp(sc = sc,
-      numExecutors = numExecs,
+      // We need to make sure there is the original plus one exec to migrate too, we don't need
+      // the full set.
+      numExecutors = 2,
       timeout = 30000) // 30s
 
     // Wait for the job to have started.
