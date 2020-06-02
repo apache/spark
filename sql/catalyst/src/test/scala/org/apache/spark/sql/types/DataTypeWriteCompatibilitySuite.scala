@@ -80,7 +80,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
   test("Check NullType is incompatible with all other types") {
     allNonNullTypes.foreach { t =>
       assertSingleError(NullType, t, "nulls", s"Should not allow writing None to type $t") { err =>
-        assert(err.contains(s"incompatible with ${t.simpleString}"))
+        assert(err.contains(s"incompatible with ${t.catalogString}"))
       }
     }
   }
@@ -209,8 +209,8 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
             s"Should not allow writing $w to $r because cast is not safe") { err =>
             assert(err.contains("'t'"), "Should include the field name context")
             assert(err.contains("Cannot safely cast"), "Should identify unsafe cast")
-            assert(err.contains(s"${w.simpleString}"), "Should include write type")
-            assert(err.contains(s"${r.simpleString}"), "Should include read type")
+            assert(err.contains(s"${w.catalogString}"), "Should include write type")
+            assert(err.contains(s"${r.catalogString}"), "Should include read type")
           }
         }
       }
