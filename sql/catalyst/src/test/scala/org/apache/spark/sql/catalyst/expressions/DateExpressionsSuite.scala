@@ -1168,4 +1168,22 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[ArithmeticException](
       MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
   }
+
+  test("Disable week-based date filed for parsing") {
+
+    def checkSparkUpgrade(c: Char): Unit = {
+      checkExceptionInExpression[SparkUpgradeException](
+        new ParseToTimestamp(Literal("1"), Literal(c.toString)).child, "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        new ParseToDate(Literal("1"), Literal(c.toString)).child, "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        ToUnixTimestamp(Literal("1"), Literal(c.toString)), "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        UnixTimestamp(Literal("1"), Literal(c.toString)), "3.0")
+    }
+
+    Seq('Y', 'W', 'w', 'E', 'u', 'F').foreach { l =>
+      checkSparkUpgrade(l)
+    }
+  }
 }

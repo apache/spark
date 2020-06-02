@@ -89,9 +89,9 @@ trait DateTimeFormatterHelper {
   protected def getOrCreateFormatter(
       pattern: String,
       locale: Locale,
-      needVarLengthSecondFraction: Boolean = false): DateTimeFormatter = {
-    val newPattern = convertIncompatiblePattern(pattern)
-    val useVarLen = needVarLengthSecondFraction && newPattern.contains('S')
+      isParsing: Boolean = false): DateTimeFormatter = {
+    val newPattern = convertIncompatiblePattern(pattern, isParsing)
+    val useVarLen = isParsing && newPattern.contains('S')
     val key = (newPattern, locale, useVarLen)
     var formatter = cache.getIfPresent(key)
     if (formatter == null) {
@@ -227,6 +227,11 @@ private object DateTimeFormatterHelper {
     formatter.format(LocalDate.of(2000, 1, 1)) == "1 1"
   }
   final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
+  // SPARK-31892: The week-based date fields are rarely used and really confusing for parsing values
+  // to timestamp, especially when they are mixed with other non-week-based ones. we have tried our
+  // best to restore the behavior change between 2.4 and 3.0 and failed, see
+  // https://github.com/apache/spark/pull/28674
+  final val unsupportedLettersForParsing = Set('Y', 'W', 'w', 'E', 'u', 'F')
   final val unsupportedPatternLengths = {
     // SPARK-31771: Disable Narrow-form TextStyle to avoid silent data change, as it is Full-form in
     // 2.4
@@ -246,7 +251,7 @@ private object DateTimeFormatterHelper {
    * @param pattern The input pattern.
    * @return The pattern for new parser
    */
-  def convertIncompatiblePattern(pattern: String): String = {
+  def convertIncompatiblePattern(pattern: String, isParsing: Boolean = false): String = {
     val eraDesignatorContained = pattern.split("'").zipWithIndex.exists {
       case (patternPart, index) =>
         // Text can be quoted using single quotes, we only check the non-quote parts.
@@ -255,7 +260,8 @@ private object DateTimeFormatterHelper {
     (pattern + " ").split("'").zipWithIndex.map {
       case (patternPart, index) =>
         if (index % 2 == 0) {
-          for (c <- patternPart if unsupportedLetters.contains(c)) {
+          for (c <- patternPart if unsupportedLetters.contains(c) ||
+            (isParsing && unsupportedLettersForParsing.contains(c))) {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")
           }
           for (style <- unsupportedPatternLengths if patternPart.contains(style)) {

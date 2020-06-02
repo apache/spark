@@ -61,12 +61,13 @@ class JacksonParser(
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    needVarLengthSecondFraction = true)
+    isParsing = true)
   private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
