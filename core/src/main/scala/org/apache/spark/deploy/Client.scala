@@ -149,10 +149,13 @@ private class ClientEndpoint(
    * waitAppCompletion is set to false, else reports the driver status
    * if debug logs are enabled.
    */
-  def reportDriverStatus(found: Boolean, state: Option[DriverState],
-                         workerId: Option[String],
-                         workerHostPort: Option[String],
-                         exception: Option[Exception]): Unit = {
+
+  def reportDriverStatus(
+                          found: Boolean,
+                          state: Option[DriverState],
+                          workerId: Option[String],
+                          workerHostPort: Option[String],
+                          exception: Option[Exception]): Unit = {
     if (found) {
       // Using driverStatusReported to avoid writing following
       // logs again when waitAppCompletion is set to true
