@@ -197,20 +197,20 @@ trait BinaryClassificationSummary extends ClassificationSummary {
 
   /** Field in "predictions" which gives the probability of each class as a vector. */
   @Since("3.1.0")
-  def probabilityCol: String
+  def scoreCol: String
 
   // TODO: Allow the user to vary the number of bins using a setBins method in
   // BinaryClassificationMetrics. For now the default is set to 100.
   @transient private val binaryMetrics = if (predictions.schema.fieldNames.contains(weightCol)) {
     new BinaryClassificationMetrics(
-      predictions.select(col(probabilityCol), col(labelCol).cast(DoubleType),
+      predictions.select(col(scoreCol), col(labelCol).cast(DoubleType),
         checkNonNegativeWeight(col(weightCol).cast(DoubleType))).rdd.map {
         case Row(score: Vector, label: Double, weight: Double) => (score(1), label, weight)
       }, 100
     )
   } else {
     new BinaryClassificationMetrics(
-      predictions.select(col(probabilityCol), col(labelCol).cast(DoubleType),
+      predictions.select(col(scoreCol), col(labelCol).cast(DoubleType),
         lit(1.0)).rdd.map {
         case Row(score: Vector, label: Double, weight: Double) => (score(1), label, weight)
       }, 100

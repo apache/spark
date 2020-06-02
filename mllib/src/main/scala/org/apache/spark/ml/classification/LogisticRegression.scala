@@ -1461,7 +1461,7 @@ private class LogisticRegressionSummaryImpl(
  * Binary logistic regression training results.
  *
  * @param predictions dataframe output by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the probability of
+ * @param scoreCol field in "predictions" which gives the probability of
  *                       each class as a vector.
  * @param predictionCol field in "predictions" which gives the prediction for a data instance as a
  *                      double.
@@ -1472,21 +1472,21 @@ private class LogisticRegressionSummaryImpl(
  */
 private class BinaryLogisticRegressionTrainingSummaryImpl(
     predictions: DataFrame,
-    probabilityCol: String,
+    scoreCol: String,
     predictionCol: String,
     labelCol: String,
     featuresCol: String,
     weightCol: String,
     override val objectiveHistory: Array[Double])
   extends BinaryLogisticRegressionSummaryImpl(
-    predictions, probabilityCol, predictionCol, labelCol, featuresCol, weightCol)
+    predictions, scoreCol, predictionCol, labelCol, featuresCol, weightCol)
   with BinaryLogisticRegressionTrainingSummary
 
 /**
  * Binary logistic regression results for a given model.
  *
  * @param predictions dataframe output by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the probability of
+ * @param scoreCol field in "predictions" which gives the probability of
  *                       each class as a vector.
  * @param predictionCol field in "predictions" which gives the prediction of
  *                      each class as a double.
@@ -1496,7 +1496,7 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
  */
 private class BinaryLogisticRegressionSummaryImpl(
     predictions: DataFrame,
-    override val probabilityCol: String,
+    override val scoreCol: String,
     predictionCol: String,
     labelCol: String,
     featuresCol: String,
