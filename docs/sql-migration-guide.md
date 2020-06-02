@@ -30,8 +30,6 @@ license: |
   
   - In Spark 3.1, casting numeric to timestamp and  will be forbidden by default, user can enable it by setting spark.sql.legacy.allowCastNumericToTimestamp to true, and functions(TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS) are strongly recommended to avoid possible inaccurate scenes, [SPARK-31710](https://issues.apache.org/jira/browse/SPARK-31710) for more details.
   
-  - In Spark 3.1, to_date function with date format as the second parameter will be forbidden by default, user can enable it by setting spark.sql.legacy.allowCastNumericToTimestamp to true, [SPARK-31710](https://issues.apache.org/jira/browse/SPARK-31710) for more details.
-
 ## Upgrading from Spark SQL 2.4 to 3.0
 
 ### Dataset/DataFrame APIs

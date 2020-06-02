@@ -1631,6 +1631,8 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_('2009-07-30 04:17:52');
        2009-07-30
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       2016-12-31
   """,
   group = "datetime_funcs",
   since = "1.5.0")
@@ -1640,7 +1642,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 
   def this(left: Expression, format: Expression) {
       this(left, Option(format),
-        Cast(Cast(UnixTimestamp(left, format), TimestampType), DateType))
+        Cast(SecondsToTimestamp(UnixTimestamp(left, format)), DateType))
   }
 
   def this(left: Expression) = {
