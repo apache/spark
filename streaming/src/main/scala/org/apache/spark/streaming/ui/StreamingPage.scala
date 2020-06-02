@@ -439,12 +439,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val interval: Long = listener.batchDuration
     val streamingPage = Option(request.getParameter(s"$tableTag.page")).map(_.toInt).getOrElse(1)
 
-    val tableType = tableTag match {
-      case "runningBatches" => (true, false, false)
-      case "waitingBatches" => (false, true, false)
-      case "completedBatches" => (false, false, true)
-    }
-
     try {
       new StreamingPagedTable(
         request,
@@ -452,9 +446,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
         batches,
         SparkUIUtils.prependBaseUri(request, parent.basePath),
         "streaming",
-        tableType._1,
-        tableType._2,
-        tableType._3,
         interval
       ).table(streamingPage)
     } catch {

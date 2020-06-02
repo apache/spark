@@ -31,9 +31,6 @@ private[ui] class StreamingPagedTable(
     batches: Seq[BatchUIData],
     basePath: String,
     subPath: String,
-    isRunningTable: Boolean,
-    isWaitingTable: Boolean,
-    isCompletedTable: Boolean,
     batchInterval: Long) extends PagedTable[BatchUIData] {
 
   private val(sortColumn, desc, pageSize) = getTableParameters(request, tableTag, "Batch Time")
@@ -41,7 +38,7 @@ private[ui] class StreamingPagedTable(
   private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
 
   private val firstFailureReason: Option[String] =
-    if (!isWaitingTable) {
+    if (!tableTag.equals("waitingBatches")) {
       getFirstFailureReason(batches)
     } else {
       None
@@ -64,13 +61,17 @@ private[ui] class StreamingPagedTable(
   }
 
   private def createOutputOperationProgressBar(batch: BatchUIData): Seq[Node] = {
-    SparkUIUtils.makeProgressBar(
-      started = batch.numActiveOutputOp,
-      completed = batch.numCompletedOutputOp,
-      failed = batch.numFailedOutputOp,
-      skipped = 0,
-      reasonToNumKilled = Map.empty,
-      total = batch.outputOperations.size)
+    <td class="progress-cell">
+      {
+        SparkUIUtils.makeProgressBar(
+          started = batch.numActiveOutputOp,
+          completed = batch.numCompletedOutputOp,
+          failed = batch.numFailedOutputOp,
+          skipped = 0,
+          reasonToNumKilled = Map.empty,
+          total = batch.outputOperations.size)
+      }
+    </td>
   }
 
   override def tableId: String = s"$tableTag-table"
@@ -98,19 +99,17 @@ private[ui] class StreamingPagedTable(
     new StreamingDataSource(batches, pageSize, sortColumn, desc)
 
   override def headers: Seq[Node] = {
-    // tuple containing tooltips for header fields
-    val tooltips = ("Time taken by Streaming scheduler to submit jobs of a batch",
-      "Time taken to process all jobs of a batch", "Total time taken to handle a batch")
     // headers, sortable and tooltips
     val headersAndCssClasses: Seq[(String, Boolean, Option[String])] = {
       Seq(
         ("Batch Time", true, None),
         ("Records", true, None),
-        ("Scheduling Delay", true, Some(tooltips._1)),
-        ("Processing Time", true, Some(tooltips._2))) ++ {
-        if (isCompletedTable) {
+        ("Scheduling Delay", true, Some("Time taken by Streaming scheduler to submit jobs " +
+          "of a batch")),
+        ("Processing Time", true, Some("Time taken to process all jobs of a batch"))) ++ {
+        if (tableTag.equals("completedBatches")) {
           Seq(
-            ("Total Delay", true, Some(tooltips._3)),
+            ("Total Delay", true, Some("Total time taken to handle a batch")),
             ("Output Ops: Succeeded/Total", false, None))
         } else {
           Seq(
@@ -144,26 +143,26 @@ private[ui] class StreamingPagedTable(
     val formattedTotalDelay = totalDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
 
     <tr>
-      <td id = {batchTimeId} isFailed = {batch.isFailed.toString}>
+      <td id={batchTimeId} isFailed={batch.isFailed.toString}>
         <a href={s"batch?id=$batchTime"}>
           {formattedBatchTime}
         </a>
       </td>
-      <td> {numRecords.toString} Records </td>
+      <td> {numRecords.toString} records </td>
       <td> {formattedSchedulingDelay} </td>
       <td> {formattedProcessingTime} </td>
       {
-        if (isCompletedTable) {
-          <td> {formattedTotalDelay} </td>
-          <td class="progress-cell"> {createOutputOperationProgressBar(batch)} </td> ++ {
+        if (tableTag.equals("completedBatches")) {
+          <td> {formattedTotalDelay} </td> ++
+          createOutputOperationProgressBar(batch) ++ {
             if (firstFailureReason.nonEmpty) {
               getFirstFailureTableCell(batch)
             } else {
               Nil
             }
           }
-        } else if (isRunningTable) {
-          <td class="progress-cell"> {createOutputOperationProgressBar(batch)} </td>
+        } else if (tableTag.equals("runningBatches")) {
+          createOutputOperationProgressBar(batch) ++
           <td> processing </td>  ++ {
             if (firstFailureReason.nonEmpty) {
               getFirstFailureTableCell(batch)
@@ -172,7 +171,7 @@ private[ui] class StreamingPagedTable(
             }
           }
         } else {
-          <td class="progress-cell"> {createOutputOperationProgressBar(batch)} </td>
+          createOutputOperationProgressBar(batch) ++
           <td> queued </td> ++ {
             if (firstFailureReason.nonEmpty) {
               // Waiting batches have not run yet, so must have no failure reasons.
