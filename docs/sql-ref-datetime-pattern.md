@@ -136,6 +136,8 @@ The count of pattern letters determines the format.
   During formatting, all valid data will be output even it is in the optional section.
   During parsing, the whole section may be missing from the parsed string.
   An optional section is started by `[` and ended using `]` (or at the end of the pattern).
+  
+- Symbols of 'Y', 'W', 'w', 'E', 'u', 'F' can only be used for datetime formatting, e.g. `date_format`.
 
 More details for the text style:
 
