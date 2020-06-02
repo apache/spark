@@ -844,8 +844,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
 
         // total files restriction
-        withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key -> "3",
-          SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key -> "3") {
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key -> "2") {
           sql(
             """
               |create table dynamic_partition_bucket(i int, part1 int, part2 int) using parquet
