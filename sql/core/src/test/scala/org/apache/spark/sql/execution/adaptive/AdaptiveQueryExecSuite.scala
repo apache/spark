@@ -597,21 +597,29 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "700") {
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
       withTempView("skewData1", "skewData2") {
         spark
           .range(0, 1000, 1, 10)
-          .selectExpr("id % 2 as key1", "id as value1")
+          .selectExpr("id % 3 as key1", "id as value1")
           .createOrReplaceTempView("skewData1")
         spark
           .range(0, 1000, 1, 10)
           .selectExpr("id % 1 as key2", "id as value2")
           .createOrReplaceTempView("skewData2")
-        val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
-          "SELECT key1 FROM skewData1 join skewData2 ON key1 = key2 group by key1")
+
+        def checkSkewJoin(query: String, optimizeSkewJoin: Boolean): Unit = {
+          val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(query)
+          val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
+          assert(innerSmj.size == 1 && innerSmj.head.isSkewJoin == optimizeSkewJoin)
+        }
+
+        checkSkewJoin(
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2", true)
         // Additional shuffle introduced, so disable the "OptimizeSkewedJoin" optimization
-        val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        assert(innerSmj.size == 1 && !innerSmj.head.isSkewJoin)
+        checkSkewJoin(
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1", false)
       }
     }
   }
