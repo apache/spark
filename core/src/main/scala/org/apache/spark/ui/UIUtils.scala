@@ -289,6 +289,7 @@ private[spark] object UIUtils extends Logging {
     <html>
       <head>
         {commonHeaderNodes(request)}
+        <script>setAppBasePath('{activeTab.basePath}')</script>
         {if (showVisualization) vizHeaderNodes(request) else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
