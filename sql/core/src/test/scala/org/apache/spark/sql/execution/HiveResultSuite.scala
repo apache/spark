@@ -17,34 +17,53 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.connector.InMemoryTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 
 class HiveResultSuite extends SharedSparkSession {
   import testImplicits._
 
+  private def withOutstandingZoneIds(f: => Unit): Unit = {
+    for {
+      jvmZoneId <- outstandingZoneIds
+      sessionZoneId <- outstandingZoneIds
+    } {
+      withDefaultTimeZone(jvmZoneId) {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionZoneId.getId) {
+          f
+        }
+      }
+    }
+  }
+
   test("date formatting in hive result") {
-    val dates = Seq("2018-12-28", "1582-10-03", "1582-10-04", "1582-10-15")
-    val df = dates.toDF("a").selectExpr("cast(a as date) as b")
-    val result = HiveResult.hiveResultString(df)
-    assert(result == dates)
-    val df2 = df.selectExpr("array(b)")
-    val result2 = HiveResult.hiveResultString(df2)
-    assert(result2 == dates.map(x => s"[$x]"))
+    withOutstandingZoneIds {
+      val dates = Seq("2018-12-28", "1582-10-03", "1582-10-04", "1582-10-15")
+      val df = dates.toDF("a").selectExpr("cast(a as date) as b")
+      val result = HiveResult.hiveResultString(df)
+      assert(result == dates)
+      val df2 = df.selectExpr("array(b)")
+      val result2 = HiveResult.hiveResultString(df2)
+      assert(result2 == dates.map(x => s"[$x]"))
+    }
   }
 
   test("timestamp formatting in hive result") {
-    val timestamps = Seq(
-      "2018-12-28 01:02:03",
-      "1582-10-03 01:02:03",
-      "1582-10-04 01:02:03",
-      "1582-10-15 01:02:03")
-    val df = timestamps.toDF("a").selectExpr("cast(a as timestamp) as b")
-    val result = HiveResult.hiveResultString(df)
-    assert(result == timestamps)
-    val df2 = df.selectExpr("array(b)")
-    val result2 = HiveResult.hiveResultString(df2)
-    assert(result2 == timestamps.map(x => s"[$x]"))
+    withOutstandingZoneIds {
+      val timestamps = Seq(
+        "2018-12-28 01:02:03",
+        "1582-10-03 01:02:03",
+        "1582-10-04 01:02:03",
+        "1582-10-15 01:02:03")
+      val df = timestamps.toDF("a").selectExpr("cast(a as timestamp) as b")
+      val result = HiveResult.hiveResultString(df)
+      assert(result == timestamps)
+      val df2 = df.selectExpr("array(b)")
+      val result2 = HiveResult.hiveResultString(df2)
+      assert(result2 == timestamps.map(x => s"[$x]"))
+    }
   }
 
   test("toHiveString correctly handles UDTs") {
