@@ -38,15 +38,25 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  * - Entire partition: The frame is the entire partition, i.e.
  *   UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING. For this case, window function will take all
  *   rows as inputs and be evaluated once.
- * - Growing frame: We only add new rows into the frame, i.e. UNBOUNDED PRECEDING AND ....
+ * - Growing frame: We only add new rows into the frame, Examples are:
+ *     1. UNBOUNDED PRECEDING AND 1 PRECEDING
+ *     2. UNBOUNDED PRECEDING AND CURRENT ROW
+ *     3. UNBOUNDED PRECEDING AND 1 FOLLOWING
  *   Every time we move to a new row to process, we add some rows to the frame. We do not remove
  *   rows from this frame.
- * - Shrinking frame: We only remove rows from the frame, i.e. ... AND UNBOUNDED FOLLOWING.
+ * - Shrinking frame: We only remove rows from the frame, Examples are:
+ *     1. 1 PRECEDING AND UNBOUNDED FOLLOWING
+ *     2. CURRENT ROW AND UNBOUNDED FOLLOWING
+ *     3. 1 FOLLOWING AND UNBOUNDED FOLLOWING
  *   Every time we move to a new row to process, we remove some rows from the frame. We do not add
  *   rows to this frame.
  * - Moving frame: Every time we move to a new row to process, we remove some rows from the frame
  *   and we add some rows to the frame. Examples are:
- *     1 PRECEDING AND CURRENT ROW and 1 FOLLOWING AND 2 FOLLOWING.
+ *     1. 2 PRECEDING AND 1 PRECEDING
+ *     2. 1 PRECEDING AND CURRENT ROW
+ *     3. CURRENT ROW AND 1 FOLLOWING
+ *     4. 1 PRECEDING AND 1 FOLLOWING
+ *     5. 1 FOLLOWING AND 2 FOLLOWING
  * - Offset frame: The frame consist of one row, which is an offset number of rows away from the
  *   current row. Only [[OffsetWindowFunction]]s can be processed in an offset frame.
  *
@@ -83,7 +93,7 @@ case class WindowExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends WindowExecBase(windowExpression, partitionSpec, orderSpec, child) {
+  extends WindowExecBase {
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpression.map(_.toAttribute)
@@ -105,7 +115,7 @@ case class WindowExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Unwrap the expressions and factories from the map.
+    // Unwrap the window expressions and window frame factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
     val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold

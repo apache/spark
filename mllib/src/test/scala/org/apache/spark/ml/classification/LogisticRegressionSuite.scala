@@ -30,6 +30,7 @@ import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix, Vector, Vectors}
 import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
+import org.apache.spark.ml.stat.MultiClassSummarizer
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
@@ -287,6 +288,67 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val mlorSummary = mlorModel.evaluate(smallMultinomialDataset)
     assert(blorSummary.isInstanceOf[BinaryLogisticRegressionSummary])
     assert(mlorSummary.isInstanceOf[LogisticRegressionSummary])
+
+    // verify instance weight works
+    val lr2 = new LogisticRegression()
+      .setFamily("binomial")
+      .setMaxIter(1)
+      .setWeightCol("weight")
+
+    val smallBinaryDatasetWithWeight =
+      smallBinaryDataset.select(col("label"), col("features"), lit(2.5).as("weight"))
+
+    val smallMultinomialDatasetWithWeight =
+      smallMultinomialDataset.select(col("label"), col("features"), lit(10.0).as("weight"))
+
+    val blorModel2 = lr2.fit(smallBinaryDatasetWithWeight)
+    assert(blorModel2.summary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+    assert(blorModel2.summary.asBinary.isInstanceOf[BinaryLogisticRegressionSummary])
+    assert(blorModel2.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+
+    val mlorModel2 = lr2.setFamily("multinomial").fit(smallMultinomialDatasetWithWeight)
+    assert(mlorModel2.summary.isInstanceOf[LogisticRegressionTrainingSummary])
+    withClue("cannot get binary summary for multiclass model") {
+      intercept[RuntimeException] {
+        mlorModel.binarySummary
+      }
+    }
+    withClue("cannot cast summary to binary summary multiclass model") {
+      intercept[RuntimeException] {
+        mlorModel.summary.asBinary
+      }
+    }
+
+    val mlorBinaryModel2 = lr2.setFamily("multinomial").fit(smallBinaryDatasetWithWeight)
+    assert(mlorBinaryModel2.summary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+    assert(mlorBinaryModel2.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+
+    val blorSummary2 = blorModel2.evaluate(smallBinaryDatasetWithWeight)
+    val mlorSummary2 = mlorModel2.evaluate(smallMultinomialDatasetWithWeight)
+    assert(blorSummary2.isInstanceOf[BinaryLogisticRegressionSummary])
+    assert(mlorSummary2.isInstanceOf[LogisticRegressionSummary])
+
+    assert(blorSummary.accuracy ~== blorSummary2.accuracy relTol 1e-6)
+    assert(blorSummary.weightedPrecision ~== blorSummary2.weightedPrecision relTol 1e-6)
+    assert(blorSummary.weightedRecall ~== blorSummary2.weightedRecall relTol 1e-6)
+    assert(blorSummary.asBinary.areaUnderROC ~== blorSummary2.asBinary.areaUnderROC relTol 1e-6)
+
+    assert(blorModel.summary.asBinary.accuracy ~==
+      blorModel2.summary.asBinary.accuracy relTol 1e-6)
+    assert(blorModel.summary.asBinary.weightedPrecision ~==
+      blorModel2.summary.asBinary.weightedPrecision relTol 1e-6)
+    assert(blorModel.summary.asBinary.weightedRecall ~==
+      blorModel2.summary.asBinary.weightedRecall relTol 1e-6)
+    assert(blorModel.summary.asBinary.asBinary.areaUnderROC ~==
+      blorModel2.summary.asBinary.areaUnderROC relTol 1e-6)
+
+    assert(mlorSummary.accuracy ~== mlorSummary2.accuracy relTol 1e-6)
+    assert(mlorSummary.weightedPrecision ~== mlorSummary2.weightedPrecision relTol 1e-6)
+    assert(mlorSummary.weightedRecall ~== mlorSummary2.weightedRecall relTol 1e-6)
+
+    assert(mlorModel.summary.accuracy ~== mlorModel2.summary.accuracy relTol 1e-6)
+    assert(mlorModel.summary.weightedPrecision ~== mlorModel2.summary.weightedPrecision relTol 1e-6)
+    assert(mlorModel.summary.weightedRecall ~==mlorModel2.summary.weightedRecall relTol 1e-6)
   }
 
   test("setThreshold, getThreshold") {
@@ -521,6 +583,35 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     testProbClassificationModelSingleProbPrediction(mlorModel, smallMultinomialDataset)
   }
 
+  test("LogisticRegression on blocks") {
+    for (dataset <- Seq(smallBinaryDataset, smallMultinomialDataset, binaryDataset,
+      multinomialDataset, multinomialDatasetWithZeroVar); fitIntercept <- Seq(true, false)) {
+      val mlor = new LogisticRegression()
+        .setFitIntercept(fitIntercept)
+        .setMaxIter(5)
+        .setFamily("multinomial")
+      val model = mlor.fit(dataset)
+      Seq(4, 16, 64).foreach { blockSize =>
+        val model2 = mlor.setBlockSize(blockSize).fit(dataset)
+        assert(model.interceptVector ~== model2.interceptVector relTol 1e-6)
+        assert(model.coefficientMatrix ~== model2.coefficientMatrix relTol 1e-6)
+      }
+    }
+
+    for (dataset <- Seq(smallBinaryDataset, binaryDataset); fitIntercept <- Seq(true, false)) {
+      val blor = new LogisticRegression()
+        .setFitIntercept(fitIntercept)
+        .setMaxIter(5)
+        .setFamily("binomial")
+      val model = blor.fit(dataset)
+      Seq(4, 16, 64).foreach { blockSize =>
+        val model2 = blor.setBlockSize(blockSize).fit(dataset)
+        assert(model.intercept ~== model2.intercept relTol 1e-6)
+        assert(model.coefficients ~== model2.coefficients relTol 1e-6)
+      }
+    }
+  }
+
   test("coefficients and intercept methods") {
     val mlr = new LogisticRegression().setMaxIter(1).setFamily("multinomial")
     val mlrModel = mlr.fit(smallMultinomialDataset)
@@ -588,72 +679,6 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
         assert(raw2 === Vectors.dense(-1.0, -2.0, -3.0))
         assert(prob2 ~== Vectors.dense(0.66524096, 0.24472847, 0.09003057) relTol eps)
     }
-  }
-
-  test("MultiClassSummarizer") {
-    val summarizer1 = (new MultiClassSummarizer)
-      .add(0.0).add(3.0).add(4.0).add(3.0).add(6.0)
-    assert(summarizer1.histogram === Array[Double](1, 0, 0, 2, 1, 0, 1))
-    assert(summarizer1.countInvalid === 0)
-    assert(summarizer1.numClasses === 7)
-
-    val summarizer2 = (new MultiClassSummarizer)
-      .add(1.0).add(5.0).add(3.0).add(0.0).add(4.0).add(1.0)
-    assert(summarizer2.histogram === Array[Double](1, 2, 0, 1, 1, 1))
-    assert(summarizer2.countInvalid === 0)
-    assert(summarizer2.numClasses === 6)
-
-    val summarizer3 = (new MultiClassSummarizer)
-      .add(0.0).add(1.3).add(5.2).add(2.5).add(2.0).add(4.0).add(4.0).add(4.0).add(1.0)
-    assert(summarizer3.histogram === Array[Double](1, 1, 1, 0, 3))
-    assert(summarizer3.countInvalid === 3)
-    assert(summarizer3.numClasses === 5)
-
-    val summarizer4 = (new MultiClassSummarizer)
-      .add(3.1).add(4.3).add(2.0).add(1.0).add(3.0)
-    assert(summarizer4.histogram === Array[Double](0, 1, 1, 1))
-    assert(summarizer4.countInvalid === 2)
-    assert(summarizer4.numClasses === 4)
-
-    val summarizer5 = new MultiClassSummarizer
-    assert(summarizer5.histogram.isEmpty)
-    assert(summarizer5.numClasses === 0)
-
-    // small map merges large one
-    val summarizerA = summarizer1.merge(summarizer2)
-    assert(summarizerA.hashCode() === summarizer2.hashCode())
-    assert(summarizerA.histogram === Array[Double](2, 2, 0, 3, 2, 1, 1))
-    assert(summarizerA.countInvalid === 0)
-    assert(summarizerA.numClasses === 7)
-
-    // large map merges small one
-    val summarizerB = summarizer3.merge(summarizer4)
-    assert(summarizerB.hashCode() === summarizer3.hashCode())
-    assert(summarizerB.histogram === Array[Double](1, 2, 2, 1, 3))
-    assert(summarizerB.countInvalid === 5)
-    assert(summarizerB.numClasses === 5)
-  }
-
-  test("MultiClassSummarizer with weighted samples") {
-    val summarizer1 = (new MultiClassSummarizer)
-      .add(label = 0.0, weight = 0.2).add(3.0, 0.8).add(4.0, 3.2).add(3.0, 1.3).add(6.0, 3.1)
-    assert(Vectors.dense(summarizer1.histogram) ~==
-      Vectors.dense(Array(0.2, 0, 0, 2.1, 3.2, 0, 3.1)) absTol 1E-10)
-    assert(summarizer1.countInvalid === 0)
-    assert(summarizer1.numClasses === 7)
-
-    val summarizer2 = (new MultiClassSummarizer)
-      .add(1.0, 1.1).add(5.0, 2.3).add(3.0).add(0.0).add(4.0).add(1.0).add(2, 0.0)
-    assert(Vectors.dense(summarizer2.histogram) ~==
-      Vectors.dense(Array[Double](1.0, 2.1, 0.0, 1, 1, 2.3)) absTol 1E-10)
-    assert(summarizer2.countInvalid === 0)
-    assert(summarizer2.numClasses === 6)
-
-    val summarizer = summarizer1.merge(summarizer2)
-    assert(Vectors.dense(summarizer.histogram) ~==
-      Vectors.dense(Array(1.2, 2.1, 0.0, 3.1, 4.2, 2.3, 3.1)) absTol 1E-10)
-    assert(summarizer.countInvalid === 0)
-    assert(summarizer.numClasses === 7)
   }
 
   test("binary logistic regression with intercept without regularization") {

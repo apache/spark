@@ -450,7 +450,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
   var jobs = Map[Int, JobExecutionStatus]()
   var stages = Set[Int]()
-  var driverAccumUpdates = Map[Long, Long]()
+  var driverAccumUpdates = Seq[(Long, Long)]()
 
   @volatile var metricsValues: Map[Long, String] = null
 

@@ -46,14 +46,14 @@ sparsity. Since the training data is only used once, it is not necessary to cach
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[NaiveBayes](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes$) implements
+[NaiveBayes](api/scala/org/apache/spark/mllib/classification/NaiveBayes$.html) implements
 multinomial naive Bayes. It takes an RDD of
-[LabeledPoint](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) and an optional
+[LabeledPoint](api/scala/org/apache/spark/mllib/regression/LabeledPoint.html) and an optional
 smoothing parameter `lambda` as input, an optional model type parameter (default is "multinomial"), and outputs a
-[NaiveBayesModel](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel), which
+[NaiveBayesModel](api/scala/org/apache/spark/mllib/classification/NaiveBayesModel.html), which
 can be used for evaluation and prediction.
 
-Refer to the [`NaiveBayes` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayes) and [`NaiveBayesModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.NaiveBayesModel) for details on the API.
+Refer to the [`NaiveBayes` Scala docs](api/scala/org/apache/spark/mllib/classification/NaiveBayes$.html) and [`NaiveBayesModel` Scala docs](api/scala/org/apache/spark/mllib/classification/NaiveBayesModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/NaiveBayesExample.scala %}
 </div>

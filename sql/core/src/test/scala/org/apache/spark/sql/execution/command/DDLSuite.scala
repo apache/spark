@@ -473,17 +473,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withEmptyDirInTablePath("tab1") { tableLoc =>
         val hiddenGarbageFile = new File(tableLoc.getCanonicalPath, ".garbage")
         hiddenGarbageFile.createNewFile()
-        val exMsg = "Can not create the managed table('`tab1`'). The associated location"
         val exMsgWithDefaultDB =
           "Can not create the managed table('`default`.`tab1`'). The associated location"
         var ex = intercept[AnalysisException] {
           sql(s"CREATE TABLE tab1 USING ${dataSource} AS SELECT 1, 'a'")
         }.getMessage
-        if (isUsingHiveMetastore) {
-          assert(ex.contains(exMsgWithDefaultDB))
-        } else {
-          assert(ex.contains(exMsg))
-        }
+        assert(ex.contains(exMsgWithDefaultDB))
 
         ex = intercept[AnalysisException] {
           sql(s"CREATE TABLE tab1 (col1 int, col2 string) USING ${dataSource}")
@@ -509,8 +504,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val ex = intercept[AnalysisException] {
           sql("ALTER TABLE tab1 RENAME TO tab2")
         }.getMessage
-        val expectedMsg = "Can not rename the managed table('`tab1`'). The associated location"
-        assert(ex.contains(expectedMsg))
+        assert(ex.contains(
+          "Can not rename the managed table('`default`.`tab1`'). The associated location"))
       }
     }
   }
@@ -640,7 +635,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val errMsg = intercept[AnalysisException] {
           sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING parquet")
         }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the table definition of `t`"))
+        assert(errMsg.contains(
+          "Found duplicate column(s) in the table definition of `default`.`t`"))
       }
     }
   }
@@ -649,7 +645,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
     }
-    assert(e.message == "partition column c is not defined in table tbl, " +
+    assert(e.message == "partition column c is not defined in table default.tbl, " +
       "defined table columns are: a, b")
   }
 
@@ -657,7 +653,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
     }
-    assert(e.message == "bucket column c is not defined in table tbl, " +
+    assert(e.message == "bucket column c is not defined in table default.tbl, " +
       "defined table columns are: a, b")
   }
 
@@ -1037,7 +1033,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     df.write.insertInto("students")
     spark.catalog.cacheTable("students")
     checkAnswer(spark.table("students"), df)
-    assume(spark.catalog.isCached("students"), "bad test: table was not cached in the first place")
+    assert(spark.catalog.isCached("students"), "bad test: table was not cached in the first place")
     sql("ALTER TABLE students RENAME TO teachers")
     sql("CREATE TABLE students (age INT, name STRING) USING parquet")
     // Now we have both students and teachers.
@@ -1207,14 +1203,24 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("alter table: recover partitions (sequential)") {
-    withSQLConf(RDD_PARALLEL_LISTING_THRESHOLD.key -> "10") {
+    val oldRddParallelListingThreshold = spark.sparkContext.conf.get(
+      RDD_PARALLEL_LISTING_THRESHOLD)
+    try {
+      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD.key, "10")
       testRecoverPartitions()
+    } finally {
+      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD, oldRddParallelListingThreshold)
     }
   }
 
   test("alter table: recover partition (parallel)") {
-    withSQLConf(RDD_PARALLEL_LISTING_THRESHOLD.key -> "0") {
+    val oldRddParallelListingThreshold = spark.sparkContext.conf.get(
+      RDD_PARALLEL_LISTING_THRESHOLD)
+    try {
+      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD.key, "0")
       testRecoverPartitions()
+    } finally {
+      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD, oldRddParallelListingThreshold)
     }
   }
 
@@ -1963,7 +1969,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     Seq("json", "parquet").foreach { format =>
       withTable("rectangles") {
         data.write.format(format).saveAsTable("rectangles")
-        assume(spark.table("rectangles").collect().nonEmpty,
+        assert(spark.table("rectangles").collect().nonEmpty,
           "bad test; table was empty to begin with")
 
         sql("TRUNCATE TABLE rectangles")
@@ -2084,6 +2090,27 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             assert(aclEntries.get(3) == other)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-31163: acl/permission should handle non-existed path when truncating table") {
+    withSQLConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL.key -> "false") {
+      withTable("tab1") {
+        sql("CREATE TABLE tab1 (col1 STRING, col2 INT) USING parquet PARTITIONED BY (col2)")
+        sql("INSERT INTO tab1 SELECT 'one', 1")
+        checkAnswer(spark.table("tab1"), Row("one", 1))
+        val part = spark.sessionState.catalog.listPartitions(TableIdentifier("tab1")).head
+        val path = new File(part.location.getPath)
+        sql("TRUNCATE TABLE tab1")
+        // simulate incomplete/unsuccessful truncate
+        assert(path.exists())
+        path.delete()
+        assert(!path.exists())
+        // execute without java.io.FileNotFoundException
+        sql("TRUNCATE TABLE tab1")
+        // partition path should be re-created
+        assert(path.exists())
       }
     }
   }
@@ -2986,16 +3013,16 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Add a directory when spark.sql.legacy.addDirectory.recursive.enabled set to true") {
+  test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to false") {
     val directoryToAdd = Utils.createTempDir("/tmp/spark/addDirectory/")
     val testFile = File.createTempFile("testFile", "1", directoryToAdd)
     spark.sql(s"ADD FILE $directoryToAdd")
     assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
   }
 
-  test("Add a directory when spark.sql.legacy.addDirectory.recursive.enabled not set to true") {
+  test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to true") {
     withTempDir { testDir =>
-      withSQLConf(SQLConf.LEGACY_ADD_DIRECTORY_USING_RECURSIVE.key -> "false") {
+      withSQLConf(SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key -> "true") {
         val msg = intercept[SparkException] {
           spark.sql(s"ADD FILE $testDir")
         }.getMessage

@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
  * Note: this expression is internal and created only by the optimizer,
  * we don't need to do type check for it.
  */
-case class UnscaledValue(child: Expression) extends UnaryExpression {
+case class UnscaledValue(child: Expression) extends UnaryExpression with NullIntolerant {
 
   override def dataType: DataType = LongType
   override def toString: String = s"UnscaledValue($child)"
@@ -45,9 +45,15 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
  * Note: this expression is internal and created only by the optimizer,
  * we don't need to do type check for it.
  */
-case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
+case class MakeDecimal(
+    child: Expression,
+    precision: Int,
+    scale: Int,
+    nullOnOverflow: Boolean) extends UnaryExpression with NullIntolerant {
 
-  private val nullOnOverflow = !SQLConf.get.ansiEnabled
+  def this(child: Expression, precision: Int, scale: Int) = {
+    this(child, precision, scale, !SQLConf.get.ansiEnabled)
+  }
 
   override def dataType: DataType = DecimalType(precision, scale)
   override def nullable: Boolean = child.nullable || nullOnOverflow
@@ -80,6 +86,12 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
          |$setNull
          |""".stripMargin
     })
+  }
+}
+
+object MakeDecimal {
+  def apply(child: Expression, precision: Int, scale: Int): MakeDecimal = {
+    new MakeDecimal(child, precision, scale)
   }
 }
 

@@ -200,10 +200,6 @@ trait CheckAnalysis extends PredicateHelper {
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.catalogString} is not a boolean.")
 
-          case Filter(condition, _) if hasNullAwarePredicateWithinNot(condition) =>
-            failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
-              s"conditions: $condition")
-
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
@@ -440,12 +436,16 @@ trait CheckAnalysis extends PredicateHelper {
               }
               field.get._2
             }
-            def positionArgumentExists(position: ColumnPosition, struct: StructType): Unit = {
+            def positionArgumentExists(
+                position: ColumnPosition,
+                struct: StructType,
+                fieldsAdded: Seq[String]): Unit = {
               position match {
                 case after: After =>
-                  if (!struct.fieldNames.contains(after.column())) {
+                  val allFields = struct.fieldNames ++ fieldsAdded
+                  if (!allFields.contains(after.column())) {
                     alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
-                      s"${struct.fieldNames.mkString("[", ", ", "]")}")
+                      s"${allFields.mkString("[", ", ", "]")}")
                   }
                 case _ =>
               }
@@ -474,6 +474,11 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
             val colsToDelete = mutable.Set.empty[Seq[String]]
+            // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a parent
+            // name of fields to field names that belong to the parent. For example, if we add
+            // columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
+            // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
+            val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
 
             alter.changes.foreach {
               case add: AddColumn =>
@@ -483,8 +488,11 @@ trait CheckAnalysis extends PredicateHelper {
                   checkColumnNotExists("add", add.fieldNames(), table.schema)
                 }
                 val parent = findParentStruct("add", add.fieldNames())
-                positionArgumentExists(add.position(), parent)
+                val parentName = add.fieldNames().init
+                val fieldsAdded = colsToAdd.getOrElse(parentName, Nil)
+                positionArgumentExists(add.position(), parent, fieldsAdded)
                 TypeUtils.failWithIntervalType(add.dataType())
+                colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
               case update: UpdateColumnType =>
                 val field = findField("update", update.fieldNames)
                 val fieldName = update.fieldNames.quoted
@@ -523,7 +531,11 @@ trait CheckAnalysis extends PredicateHelper {
               case updatePos: UpdateColumnPosition =>
                 findField("update", updatePos.fieldNames)
                 val parent = findParentStruct("update", updatePos.fieldNames())
-                positionArgumentExists(updatePos.position(), parent)
+                val parentName = updatePos.fieldNames().init
+                positionArgumentExists(
+                  updatePos.position(),
+                  parent,
+                  colsToAdd.getOrElse(parentName, Nil))
               case rename: RenameColumn =>
                 findField("rename", rename.fieldNames)
                 checkColumnNotExists(

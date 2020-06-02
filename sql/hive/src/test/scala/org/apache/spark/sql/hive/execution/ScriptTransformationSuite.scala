@@ -212,9 +212,8 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
           |FROM v
         """.stripMargin)
 
-      // In Hive1.2, it does not do well on Decimal conversion. For example, in this case,
-      // it converts a decimal value's type from Decimal(38, 18) to Decimal(1, 0). So we need
-      // do extra cast here for Hive1.2. But in Hive2.3, it still keeps the original Decimal type.
+      // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
+      // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
       val decimalToString: Column => Column = if (HiveUtils.isHive23) {
         c => c.cast("string")
       } else {
@@ -227,6 +226,42 @@ class ScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with Tes
         decimalToString('d),
         'e.cast("string")).collect())
     }
+  }
+
+  test("SPARK-30973: TRANSFORM should wait for the termination of the script (no serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+    val e = intercept[SparkException] {
+      val plan =
+        new ScriptTransformationExec(
+          input = Seq(rowsDf.col("a").expr),
+          script = "some_non_existent_command",
+          output = Seq(AttributeReference("a", StringType)()),
+          child = rowsDf.queryExecution.sparkPlan,
+          ioschema = noSerdeIOSchema)
+      SparkPlanTest.executePlan(plan, hiveContext)
+    }
+    assert(e.getMessage.contains("Subprocess exited with status"))
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-30973: TRANSFORM should wait for the termination of the script (with serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+    val e = intercept[SparkException] {
+      val plan =
+        new ScriptTransformationExec(
+          input = Seq(rowsDf.col("a").expr),
+          script = "some_non_existent_command",
+          output = Seq(AttributeReference("a", StringType)()),
+          child = rowsDf.queryExecution.sparkPlan,
+          ioschema = serdeIOSchema)
+      SparkPlanTest.executePlan(plan, hiveContext)
+    }
+    assert(e.getMessage.contains("Subprocess exited with status"))
+    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 }
 

@@ -32,7 +32,7 @@ from pyspark.sql.types import IntegerType, Row, StringType
 from pyspark.sql.udf import UDFRegistration
 from pyspark.sql.utils import install_exception_handler
 
-__all__ = ["SQLContext"]
+__all__ = ["SQLContext", "HiveContext"]
 
 
 class SQLContext(object):
@@ -56,6 +56,8 @@ class SQLContext(object):
     def __init__(self, sparkContext, sparkSession=None, jsqlContext=None):
         """Creates a new SQLContext.
 
+        .. note:: Deprecated in 3.0.0. Use :func:`SparkSession.builder.getOrCreate()` instead.
+
         >>> from datetime import datetime
         >>> sqlContext = SQLContext(sc)
         >>> allTypes = sc.parallelize([Row(i=1, s="string", d=1.0, l=1,
@@ -70,6 +72,10 @@ class SQLContext(object):
         >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
         [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
+        warnings.warn(
+            "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
+            DeprecationWarning)
+
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
@@ -81,7 +87,8 @@ class SQLContext(object):
         self._jsqlContext = jsqlContext
         _monkey_patch_RDD(self.sparkSession)
         install_exception_handler()
-        if SQLContext._instantiatedContext is None:
+        if (SQLContext._instantiatedContext is None
+                or SQLContext._instantiatedContext._sc._jsc is None):
             SQLContext._instantiatedContext = self
 
     @property
@@ -105,9 +112,17 @@ class SQLContext(object):
         Get the existing SQLContext or create a new one with given SparkContext.
 
         :param sc: SparkContext
+
+        .. note:: Deprecated in 3.0.0. Use :func:`SparkSession.builder.getOrCreate()` instead.
         """
-        if cls._instantiatedContext is None:
-            jsqlContext = sc._jvm.SQLContext.getOrCreate(sc._jsc.sc())
+        warnings.warn(
+            "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
+            DeprecationWarning)
+
+        if (cls._instantiatedContext is None
+                or SQLContext._instantiatedContext._sc._jsc is None):
+            jsqlContext = sc._jvm.SparkSession.builder().sparkContext(
+                sc._jsc.sc()).getOrCreate().sqlContext()
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
             cls(sc, sparkSession, jsqlContext)
         return cls._instantiatedContext
@@ -325,6 +340,24 @@ class SQLContext(object):
         """
         self.sparkSession.catalog.dropTempView(tableName)
 
+    @since(1.3)
+    def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
+        """Creates an external table based on the dataset in a data source.
+
+        It returns the DataFrame associated with the external table.
+
+        The data source is specified by the ``source`` and a set of ``options``.
+        If ``source`` is not specified, the default data source configured by
+        ``spark.sql.sources.default`` will be used.
+
+        Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
+        created external table.
+
+        :return: :class:`DataFrame`
+        """
+        return self.sparkSession.catalog.createExternalTable(
+            tableName, path, source, schema, **options)
+
     @ignore_unicode_prefix
     @since(1.0)
     def sql(self, sqlQuery):
@@ -446,6 +479,53 @@ class SQLContext(object):
         """
         from pyspark.sql.streaming import StreamingQueryManager
         return StreamingQueryManager(self._ssql_ctx.streams())
+
+
+class HiveContext(SQLContext):
+    """A variant of Spark SQL that integrates with data stored in Hive.
+
+    Configuration for Hive is read from ``hive-site.xml`` on the classpath.
+    It supports running both SQL and HiveQL commands.
+
+    :param sparkContext: The SparkContext to wrap.
+    :param jhiveContext: An optional JVM Scala HiveContext. If set, we do not instantiate a new
+        :class:`HiveContext` in the JVM, instead we make all calls to this object.
+
+    .. note:: Deprecated in 2.0.0. Use SparkSession.builder.enableHiveSupport().getOrCreate().
+    """
+
+    def __init__(self, sparkContext, jhiveContext=None):
+        warnings.warn(
+            "HiveContext is deprecated in Spark 2.0.0. Please use " +
+            "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
+            DeprecationWarning)
+        if jhiveContext is None:
+            sparkContext._conf.set("spark.sql.catalogImplementation", "hive")
+            sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()
+        else:
+            sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
+        SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
+
+    @classmethod
+    def _createForTesting(cls, sparkContext):
+        """(Internal use only) Create a new HiveContext for testing.
+
+        All test code that touches HiveContext *must* go through this method. Otherwise,
+        you may end up launching multiple derby instances and encounter with incredibly
+        confusing error messages.
+        """
+        jsc = sparkContext._jsc.sc()
+        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
+        return cls(sparkContext, jtestHive)
+
+    def refreshTable(self, tableName):
+        """Invalidate and refresh all the cached the metadata of the given
+        table. For performance reasons, Spark SQL or the external data source
+        library it uses might cache certain metadata about a table, such as the
+        location of blocks. When those change outside of Spark SQL, users should
+        call this function to invalidate the cache.
+        """
+        self._ssql_ctx.refreshTable(tableName)
 
 
 def _test():

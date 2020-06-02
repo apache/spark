@@ -34,6 +34,8 @@ import org.apache.spark.sql.connector.catalog.TableCapability;
  * implemented, if the {@link Table} that creates this {@link Scan} returns
  * {@link TableCapability#BATCH_READ} support in its {@link Table#capabilities()}.
  * </p>
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface Scan {

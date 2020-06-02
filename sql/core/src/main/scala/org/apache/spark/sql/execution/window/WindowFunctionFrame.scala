@@ -47,14 +47,14 @@ abstract class WindowFunctionFrame {
   /**
    * The current lower window bound in the row array (inclusive).
    *
-   * This should be called after the current row is updated via [[write]]
+   * This should be called after the current row is updated via `write`.
    */
   def currentLowerBound(): Int
 
   /**
    * The current row index of the upper window bound in the row array (exclusive)
    *
-   * This should be called after the current row is updated via [[write]]
+   * This should be called after the current row is updated via `write`.
    */
   def currentUpperBound(): Int
 }
@@ -277,6 +277,8 @@ final class UnboundedWindowFunctionFrame(
       while (iterator.hasNext) {
         processor.update(iterator.next())
       }
+
+      processor.evaluate(target)
     }
 
     upperBound = rows.length
@@ -284,11 +286,8 @@ final class UnboundedWindowFunctionFrame(
 
   /** Write the frame columns for the current row to the given target row. */
   override def write(index: Int, current: InternalRow): Unit = {
-    // Unfortunately we cannot assume that evaluation is deterministic. So we need to re-evaluate
-    // for each row.
-    if (processor != null) {
-      processor.evaluate(target)
-    }
+    // The results are the same for each row in the partition, and have been evaluated in prepare.
+    // Don't need to recalculate here.
   }
 
   override def currentLowerBound(): Int = lowerBound

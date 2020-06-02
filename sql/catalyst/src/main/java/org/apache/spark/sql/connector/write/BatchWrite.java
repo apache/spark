@@ -36,6 +36,8 @@ import org.apache.spark.annotation.Evolving;
  * do it manually in their Spark applications if they want to retry.
  *
  * Please refer to the documentation of commit/abort methods for detailed specifications.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface BatchWrite {

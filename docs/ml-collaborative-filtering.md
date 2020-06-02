@@ -115,7 +115,7 @@ explicit (`implicitPrefs` is `false`).
 We evaluate the recommendation model by measuring the root-mean-square error of
 rating prediction.
 
-Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.ml.recommendation.ALS)
+Refer to the [`ALS` Scala docs](api/scala/org/apache/spark/ml/recommendation/ALS.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ALSExample.scala %}

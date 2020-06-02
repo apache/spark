@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import com.univocity.parsers.csv.CsvParser
 
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
@@ -84,12 +85,13 @@ class UnivocityParser(
   // We preallocate it avoid unnecessary allocations.
   private val noRows = None
 
-  private val timestampFormatter = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
-  private val dateFormatter = DateFormatter(
+    legacyFormat = FAST_DATE_FORMAT,
+    needVarLengthSecondFraction = true)
+  private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
@@ -99,7 +101,8 @@ class UnivocityParser(
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
-    UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
+    val currentContent = tokenizer.getContext.currentParsedContent()
+    if (currentContent == null) null else UTF8String.fromString(currentContent.stripLineEnd)
   }
 
   // This parser first picks some tokens from the input tokens, according to the required schema,
@@ -175,10 +178,30 @@ class UnivocityParser(
       }
 
     case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(timestampFormatter.parse)
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          timestampFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
+        }
+      }
 
     case _: DateType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(dateFormatter.parse)
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          dateFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility.
+            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
+            DateTimeUtils.stringToDate(str, options.zoneId).getOrElse(throw e)
+        }
+      }
 
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
@@ -265,6 +288,7 @@ class UnivocityParser(
           }
         }
       } catch {
+        case e: SparkUpgradeException => throw e
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
           row.setNullAt(i)

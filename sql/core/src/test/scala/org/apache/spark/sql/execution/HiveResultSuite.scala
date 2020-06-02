@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 
 class HiveResultSuite extends SharedSparkSession {
   import testImplicits._
 
   test("date formatting in hive result") {
-    val dates = Seq("2018-12-28", "1582-10-13", "1582-10-14", "1582-10-15")
+    val dates = Seq("2018-12-28", "1582-10-03", "1582-10-04", "1582-10-15")
     val df = dates.toDF("a").selectExpr("cast(a as date) as b")
     val executedPlan1 = df.queryExecution.executedPlan
     val result = HiveResult.hiveResultString(executedPlan1)
@@ -36,8 +37,8 @@ class HiveResultSuite extends SharedSparkSession {
   test("timestamp formatting in hive result") {
     val timestamps = Seq(
       "2018-12-28 01:02:03",
-      "1582-10-13 01:02:03",
-      "1582-10-14 01:02:03",
+      "1582-10-03 01:02:03",
+      "1582-10-04 01:02:03",
       "1582-10-15 01:02:03")
     val df = timestamps.toDF("a").selectExpr("cast(a as timestamp) as b")
     val executedPlan1 = df.queryExecution.executedPlan
@@ -67,5 +68,36 @@ class HiveResultSuite extends SharedSparkSession {
       .selectExpr(s"CAST(value AS decimal(38, 8))").queryExecution.executedPlan
     val result = HiveResult.hiveResultString(executedPlan)
     assert(result.head === "0.00000000")
+  }
+
+  test("SHOW TABLES in hive result") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      Seq(("testcat.ns", "tbl", "foo"), ("spark_catalog.default", "tbl", "csv")).foreach {
+        case (ns, tbl, source) =>
+          withTable(s"$ns.$tbl") {
+            spark.sql(s"CREATE TABLE $ns.$tbl (id bigint) USING $source")
+            val df = spark.sql(s"SHOW TABLES FROM $ns")
+            val executedPlan = df.queryExecution.executedPlan
+            assert(HiveResult.hiveResultString(executedPlan).head == tbl)
+          }
+      }
+    }
+  }
+
+  test("DESCRIBE TABLE in hive result") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      Seq(("testcat.ns", "tbl", "foo"), ("spark_catalog.default", "tbl", "csv")).foreach {
+        case (ns, tbl, source) =>
+          withTable(s"$ns.$tbl") {
+            spark.sql(s"CREATE TABLE $ns.$tbl (id bigint COMMENT 'col1') USING $source")
+            val df = spark.sql(s"DESCRIBE $ns.$tbl")
+            val executedPlan = df.queryExecution.executedPlan
+            val expected = "id                  " +
+              "\tbigint              " +
+              "\tcol1                "
+            assert(HiveResult.hiveResultString(executedPlan).head == expected)
+          }
+      }
+    }
   }
 }

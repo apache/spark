@@ -58,46 +58,49 @@ private[ui] class ExecutorThreadDumpPage(
           <td id={s"${threadId}_td_name"}>{thread.threadName}</td>
           <td id={s"${threadId}_td_state"}>{thread.threadState}</td>
           <td id={s"${threadId}_td_locking"}>{blockedBy}{heldLocks}</td>
-          <td id={s"${threadId}_td_stacktrace"} class="hidden">{thread.stackTrace.html}</td>
+          <td id={s"${threadId}_td_stacktrace"} class="d-none">{thread.stackTrace.html}</td>
         </tr>
       }
 
-    <div class="row-fluid">
-      <p>Updated at {UIUtils.formatDate(time)}</p>
-      {
-        // scalastyle:off
-        <p><a class="expandbutton" onClick="expandAllThreadStackTrace(true)">
-          Expand All
-        </a></p>
-        <p><a class="expandbutton hidden" onClick="collapseAllThreadStackTrace(true)">
-          Collapse All
-        </a></p>
-        <div class="form-inline">
-        <div class="bs-example" data-example-id="simple-form-inline">
-          <div class="form-group">
-            <div class="input-group">
-              Search: <input type="text" class="form-control" id="search" oninput="onSearchStringChange()"></input>
+    <div class="row">
+      <div class="col-12">
+        <p>Updated at {UIUtils.formatDate(time)}</p>
+        {
+          // scalastyle:off
+          <p><a class="expandbutton" onClick="expandAllThreadStackTrace(true)">
+            Expand All
+          </a></p>
+          <p><a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">
+            Collapse All
+          </a></p>
+          <div class="form-inline">
+            <div class="bs-example" data-example-id="simple-form-inline">
+              <div class="form-group">
+                <div class="input-group">
+                  <label class="mr-2" for="search">Search:</label>
+                  <input type="text" class="form-control" id="search" oninput="onSearchStringChange()"></input>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-        </div>
-        <p></p>
-        // scalastyle:on
-      }
-      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
-        <thead>
-          <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
-          <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>
-          <th onClick="collapseAllThreadStackTrace(false)">Thread State</th>
-          <th onClick="collapseAllThreadStackTrace(false)">
-            <span data-toggle="tooltip" data-placement="top"
-                  title="Objects whose lock the thread currently holds">
-              Thread Locks
-            </span>
-          </th>
-        </thead>
-        <tbody>{dumpRows}</tbody>
-      </table>
+          <p></p>
+          // scalastyle:on
+        }
+        <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
+          <thead>
+            <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
+            <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>
+            <th onClick="collapseAllThreadStackTrace(false)">Thread State</th>
+            <th onClick="collapseAllThreadStackTrace(false)">
+              <span data-toggle="tooltip" data-placement="top"
+                    title="Objects whose lock the thread currently holds">
+                Thread Locks
+              </span>
+            </th>
+          </thead>
+          <tbody>{dumpRows}</tbody>
+        </table>
+      </div>
     </div>
     }.getOrElse(Text("Error fetching thread dump"))
     UIUtils.headerSparkPage(request, s"Thread dump for executor $executorId", content, parent)

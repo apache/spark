@@ -324,7 +324,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       testProjection(originalExpr = expr, expectedExpr = expr)
     }
     withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "false") {
-      testHigherOrderFunc('a, ArrayExists, Seq(lv('e)))
+      testHigherOrderFunc('a, ArrayExists.apply, Seq(lv('e)))
     }
   }
 
