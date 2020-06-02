@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.MapOutputStatistics
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -26,8 +26,8 @@ import org.apache.spark.sql.internal.SQLConf
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-case class CoalesceShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
-  import CoalesceShufflePartitions._
+case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPlan] {
+  private def conf = session.sessionState.conf
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.coalesceShufflePartitionsEnabled) {
@@ -52,26 +52,24 @@ case class CoalesceShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
     if (!shuffleStages.forall(_.shuffle.canChangeNumPartitions)) {
       plan
     } else {
-      val shuffleMetrics = shuffleStages.map { stage =>
-        assert(stage.resultOption.isDefined, "ShuffleQueryStageExec should already be ready")
-        stage.resultOption.get.asInstanceOf[MapOutputStatistics]
-      }
-
-      // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD has 0 partitions,
+      // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
       // we should skip it when calculating the `partitionStartIndices`.
-      val validMetrics = shuffleMetrics.filter(_ != null)
+      val validMetrics = shuffleStages.flatMap(_.mapStats)
+
       // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
       // in that case. For example when we union fully aggregated data (data is arranged to a single
       // partition) and a result of a SortMergeJoin (multiple partitions).
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
       if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
-        val partitionSpecs = ShufflePartitionsCoalescer.coalescePartitions(
+        // We fall back to Spark default parallelism if the minimum number of coalesced partitions
+        // is not set, so to avoid perf regressions compared to no coalescing.
+        val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+          .getOrElse(session.sparkContext.defaultParallelism)
+        val partitionSpecs = ShufflePartitionsUtil.coalescePartitions(
           validMetrics.toArray,
-          firstPartitionIndex = 0,
-          lastPartitionIndex = distinctNumPreShufflePartitions.head,
           advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
-          minNumPartitions = conf.minShufflePartitionNum)
+          minNumPartitions = minPartitionNum)
         // This transformation adds new nodes, so we must use `transformUp` here.
         val stageIds = shuffleStages.map(_.id).toSet
         plan.transformUp {
@@ -79,15 +77,11 @@ case class CoalesceShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
           // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
           // number of output partitions.
           case stage: ShuffleQueryStageExec if stageIds.contains(stage.id) =>
-            CustomShuffleReaderExec(stage, partitionSpecs, COALESCED_SHUFFLE_READER_DESCRIPTION)
+            CustomShuffleReaderExec(stage, partitionSpecs)
         }
       } else {
         plan
       }
     }
   }
-}
-
-object CoalesceShufflePartitions {
-  val COALESCED_SHUFFLE_READER_DESCRIPTION = "coalesced"
 }

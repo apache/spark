@@ -469,14 +469,17 @@ case class ScalaAggregator[IN, BUF, OUT](
   with ImplicitCastInputTypes
   with Logging {
 
-  private[this] lazy val inputEncoder = inputEncoderNR.resolveAndBind()
+  private[this] lazy val inputDeserializer = inputEncoderNR.resolveAndBind().createDeserializer()
   private[this] lazy val bufferEncoder =
     agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]].resolveAndBind()
+  private[this] lazy val bufferSerializer = bufferEncoder.createSerializer()
+  private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
   private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
+  private[this] lazy val outputSerializer = outputEncoder.createSerializer()
 
   def dataType: DataType = outputEncoder.objSerializer.dataType
 
-  def inputTypes: Seq[DataType] = inputEncoder.schema.map(_.dataType)
+  def inputTypes: Seq[DataType] = inputEncoderNR.schema.map(_.dataType)
 
   override lazy val deterministic: Boolean = isDeterministic
 
@@ -491,23 +494,23 @@ case class ScalaAggregator[IN, BUF, OUT](
   def createAggregationBuffer(): BUF = agg.zero
 
   def update(buffer: BUF, input: InternalRow): BUF =
-    agg.reduce(buffer, inputEncoder.fromRow(inputProjection(input)))
+    agg.reduce(buffer, inputDeserializer(inputProjection(input)))
 
   def merge(buffer: BUF, input: BUF): BUF = agg.merge(buffer, input)
 
   def eval(buffer: BUF): Any = {
-    val row = outputEncoder.toRow(agg.finish(buffer))
+    val row = outputSerializer(agg.finish(buffer))
     if (outputEncoder.isSerializedAsStruct) row else row.get(0, dataType)
   }
 
   private[this] lazy val bufferRow = new UnsafeRow(bufferEncoder.namedExpressions.length)
 
   def serialize(agg: BUF): Array[Byte] =
-    bufferEncoder.toRow(agg).asInstanceOf[UnsafeRow].getBytes()
+    bufferSerializer(agg).asInstanceOf[UnsafeRow].getBytes()
 
   def deserialize(storageFormat: Array[Byte]): BUF = {
     bufferRow.pointTo(storageFormat, storageFormat.length)
-    bufferEncoder.fromRow(bufferRow)
+    bufferDeserializer(bufferRow)
   }
 
   override def toString: String = s"""${nodeName}(${children.mkString(",")})"""

@@ -246,8 +246,7 @@ To run the example,
 	</div>
 	<div data-lang="python" markdown="1">
 
-        ./bin/spark-submit --jars external/kinesis-asl/target/scala-*/\
-            spark-streaming-kinesis-asl-assembly_*.jar \
+        ./bin/spark-submit --jars 'external/kinesis-asl-assembly/target/spark-streaming-kinesis-asl-assembly_*.jar' \
             external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
             [Kinesis app name] [Kinesis stream name] [endpoint URL] [region name]
 

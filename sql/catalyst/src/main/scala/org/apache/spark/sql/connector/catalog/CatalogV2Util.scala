@@ -22,11 +22,13 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.AlterTable
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, HIVE_TYPE_STRING, HiveStringType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -328,5 +330,20 @@ private[sql] object CatalogV2Util {
       .map(catalogManager.catalog)
       .getOrElse(catalogManager.v2SessionCatalog)
       .asTableCatalog
+  }
+
+  def failCharType(dt: DataType): Unit = {
+    if (HiveStringType.containsCharType(dt)) {
+      throw new AnalysisException(
+        "Cannot use CHAR type in non-Hive-Serde tables, please use STRING type instead.")
+    }
+  }
+
+  def assertNoCharTypeInSchema(schema: StructType): Unit = {
+    schema.foreach { f =>
+      if (f.metadata.contains(HIVE_TYPE_STRING)) {
+        failCharType(CatalystSqlParser.parseRawDataType(f.metadata.getString(HIVE_TYPE_STRING)))
+      }
+    }
   }
 }

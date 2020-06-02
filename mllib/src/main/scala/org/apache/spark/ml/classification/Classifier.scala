@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -62,8 +62,6 @@ private[spark] trait ClassifierParams
 }
 
 /**
- * :: DeveloperApi ::
- *
  * Single-label binary or multiclass classification.
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
@@ -71,7 +69,6 @@ private[spark] trait ClassifierParams
  * @tparam E  Concrete Estimator type
  * @tparam M  Concrete Model type
  */
-@DeveloperApi
 abstract class Classifier[
     FeaturesType,
     E <: Classifier[FeaturesType, E, M],
@@ -166,15 +163,12 @@ abstract class Classifier[
 }
 
 /**
- * :: DeveloperApi ::
- *
  * Model produced by a [[Classifier]].
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
  * @tparam FeaturesType  Type of input features.  E.g., `Vector`
  * @tparam M  Concrete Model type
  */
-@DeveloperApi
 abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[FeaturesType, M]]
   extends PredictionModel[FeaturesType, M] with ClassifierParams {
 

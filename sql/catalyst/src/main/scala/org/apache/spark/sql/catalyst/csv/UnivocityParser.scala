@@ -85,12 +85,13 @@ class UnivocityParser(
   // We preallocate it avoid unnecessary allocations.
   private val noRows = None
 
-  private val timestampFormatter = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
-  private val dateFormatter = DateFormatter(
+    legacyFormat = FAST_DATE_FORMAT,
+    needVarLengthSecondFraction = true)
+  private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
@@ -100,7 +101,8 @@ class UnivocityParser(
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
-    UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
+    val currentContent = tokenizer.getContext.currentParsedContent()
+    if (currentContent == null) null else UTF8String.fromString(currentContent.stripLineEnd)
   }
 
   // This parser first picks some tokens from the input tokens, according to the required schema,

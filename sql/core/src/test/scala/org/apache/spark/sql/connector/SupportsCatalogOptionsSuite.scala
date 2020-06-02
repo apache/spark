@@ -216,7 +216,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         plan = qe.analyzed
       }
-      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
 
     spark.listenerManager.register(listener)

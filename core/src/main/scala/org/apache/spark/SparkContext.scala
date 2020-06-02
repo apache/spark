@@ -435,7 +435,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     _listenerBus = new LiveListenerBus(_conf)
-    _resourceProfileManager = new ResourceProfileManager(_conf)
+    _resourceProfileManager = new ResourceProfileManager(_conf, _listenerBus)
 
     // Initialize the app status store and listener before SparkEnv is created so that it gets
     // all events.
@@ -1597,13 +1597,17 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Get the max number of tasks that can be concurrent launched currently.
+   * Get the max number of tasks that can be concurrent launched based on the ResourceProfile
+   * being used.
    * Note that please don't cache the value returned by this method, because the number can change
    * due to add/remove executors.
    *
+   * @param rp ResourceProfile which to use to calculate max concurrent tasks.
    * @return The max number of tasks that can be concurrent launched currently.
    */
-  private[spark] def maxNumConcurrentTasks(): Int = schedulerBackend.maxNumConcurrentTasks()
+  private[spark] def maxNumConcurrentTasks(rp: ResourceProfile): Int = {
+    schedulerBackend.maxNumConcurrentTasks(rp)
+  }
 
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
@@ -2736,7 +2740,7 @@ object SparkContext extends Logging {
       case "local" => 1
       case SparkMasterRegex.LOCAL_N_REGEX(threads) => convertToInt(threads)
       case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
-      case "yarn" =>
+      case "yarn" | SparkMasterRegex.KUBERNETES_REGEX(_) =>
         if (conf != null && conf.get(SUBMIT_DEPLOY_MODE) == "cluster") {
           conf.getInt(DRIVER_CORES.key, 0)
         } else {
@@ -2764,23 +2768,10 @@ object SparkContext extends Logging {
     // others its checked in ResourceProfile.
     def checkResourcesPerTask(executorCores: Int): Unit = {
       val taskCores = sc.conf.get(CPUS_PER_TASK)
-      validateTaskCpusLargeEnough(executorCores, taskCores)
-      val defaultProf = sc.resourceProfileManager.defaultResourceProfile
-      // TODO - this is temporary until all of stage level scheduling feature is integrated,
-      // fail if any other resource limiting due to dynamic allocation and scheduler using
-      // slots based on cores
-      val cpuSlots = executorCores/taskCores
-      val limitingResource = defaultProf.limitingResource(sc.conf)
-      if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS) &&
-        defaultProf.maxTasksPerExecutor(sc.conf) < cpuSlots) {
-        throw new IllegalArgumentException("The number of slots on an executor has to be " +
-          "limited by the number of cores, otherwise you waste resources and " +
-          "some scheduling doesn't work properly. Your configuration has " +
-          s"core/task cpu slots = ${cpuSlots} and " +
-          s"${limitingResource} = " +
-          s"${defaultProf.maxTasksPerExecutor(sc.conf)}. Please adjust your configuration " +
-          "so that all resources require same number of executor slots.")
+      if (!sc.conf.get(SKIP_VALIDATE_CORES_TESTING)) {
+        validateTaskCpusLargeEnough(sc.conf, executorCores, taskCores)
       }
+      val defaultProf = sc.resourceProfileManager.defaultResourceProfile
       ResourceUtils.warnOnWastedResources(defaultProf, sc.conf, Some(executorCores))
     }
 
@@ -2894,6 +2885,8 @@ private object SparkMasterRegex {
   val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
   // Regular expression for connecting to Spark deploy clusters
   val SPARK_REGEX = """spark://(.*)""".r
+  // Regular expression for connecting to kubernetes clusters
+  val KUBERNETES_REGEX = """k8s://(.*)""".r
 }
 
 /**

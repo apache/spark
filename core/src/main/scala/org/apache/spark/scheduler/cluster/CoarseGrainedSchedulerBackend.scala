@@ -145,7 +145,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
-              executorInfo.freeCores += scheduler.CPUS_PER_TASK
+              val rpId = executorInfo.resourceProfileId
+              val prof = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
+              val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
+              executorInfo.freeCores += taskCpus
               resources.foreach { case (k, v) =>
                 executorInfo.resourcesInfo.get(k).foreach { r =>
                   r.release(v.addresses)
@@ -231,7 +234,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val resourcesInfo = resources.map { case (rName, info) =>
-            // tell the executor it can schedule resources up to numParts times,
+            // tell the executor it can schedule resources up to numSlotsPerAddress times,
             // as configured by the user, or set to 1 as that is the default (1 task/resource)
             val numParts = scheduler.sc.resourceProfileManager
               .resourceProfileFromId(resourceProfileId).getNumSlotsPerAddress(rName, conf)
@@ -248,10 +251,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               currentExecutorIdCounter = executorId.toInt
             }
           }
-          // Note: some tests expect the reply to come after we put the executor in the map
-          context.reply(true)
           listenerBus.post(
             SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
+          // Note: some tests expect the reply to come after we put the executor in the map
+          context.reply(true)
         }
 
       case StopDriver =>
@@ -298,9 +301,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               Some(executorData.executorAddress.hostPort),
               executorData.resourcesInfo.map { case (rName, rInfo) =>
                 (rName, rInfo.availableAddrs.toBuffer)
-              })
+              }, executorData.resourceProfileId)
         }.toIndexedSeq
-        scheduler.resourceOffers(workOffers)
+        scheduler.resourceOffers(workOffers, true)
       }
       if (taskDescs.nonEmpty) {
         launchTasks(taskDescs)
@@ -327,8 +330,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               Some(executorData.executorAddress.hostPort),
               executorData.resourcesInfo.map { case (rName, rInfo) =>
                 (rName, rInfo.availableAddrs.toBuffer)
-              }))
-          scheduler.resourceOffers(workOffers)
+              }, executorData.resourceProfileId))
+          scheduler.resourceOffers(workOffers, false)
         } else {
           Seq.empty
         }
@@ -359,7 +362,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val executorData = executorDataMap(task.executorId)
           // Do resources allocation here. The allocated resources will get released after the task
           // finishes.
-          executorData.freeCores -= scheduler.CPUS_PER_TASK
+          val rpId = executorData.resourceProfileId
+          val prof = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
+          val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
+          executorData.freeCores -= taskCpus
           task.resources.foreach { case (rName, rInfo) =>
             assert(executorData.resourcesInfo.contains(rName))
             executorData.resourcesInfo(rName).acquire(rInfo.addresses)
@@ -432,6 +438,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             logError(s"Unexpected error during decommissioning ${e.toString}", e)
         }
         logInfo(s"Finished decommissioning executor $executorId.")
+
+        if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+          try {
+            logInfo("Starting decommissioning block manager corresponding to " +
+              s"executor $executorId.")
+            scheduler.sc.env.blockManager.master.decommissionBlockManagers(Seq(executorId))
+          } catch {
+            case e: Exception =>
+              logError("Unexpected error during block manager " +
+                s"decommissioning for executor $executorId: ${e.toString}", e)
+          }
+          logInfo(s"Acknowledged decommissioning block manager corresponding to $executorId.")
+        }
       } else {
         logInfo(s"Skipping decommissioning of executor $executorId.")
       }
@@ -568,7 +587,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   private[spark] def decommissionExecutor(executorId: String): Unit = {
     if (driverEndpoint != null) {
-      logInfo("Propegating executor decommission to driver.")
+      logInfo("Propagating executor decommission to driver.")
       driverEndpoint.send(DecommissionExecutor(executorId))
     }
   }
@@ -606,10 +625,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   }
 
-  override def maxNumConcurrentTasks(): Int = synchronized {
-    executorDataMap.values.map { executor =>
-      executor.totalCores / scheduler.CPUS_PER_TASK
-    }.sum
+  override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
+    val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, conf)
+    val executorsWithResourceProfile = executorDataMap.values.filter(_.resourceProfileId == rp.id)
+    executorsWithResourceProfile.map(_.totalCores / cpusPerTask).sum
   }
 
   // this function is for testing only
@@ -652,7 +671,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
-   * @param resourceProfileToNumExecutors The total number of executors we'd like to have per
+   * @param resourceProfileIdToNumExecutors The total number of executors we'd like to have per
    *                                      ResourceProfile. The cluster manager shouldn't kill any
    *                                      running executor to reach this number, but, if all
    *                                      existing executors were to die, this is the number

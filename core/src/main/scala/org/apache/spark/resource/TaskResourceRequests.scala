@@ -17,6 +17,7 @@
 
 package org.apache.spark.resource
 
+import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -24,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.resource.ResourceProfile._
 
 /**
- * A set of task resource requests. This is used in conjuntion with the ResourceProfile to
+ * A set of task resource requests. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
  *
@@ -36,6 +37,8 @@ private[spark] class TaskResourceRequests() extends Serializable {
   private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
 
   def requests: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
+
+  def requestsJMap: JMap[String, TaskResourceRequest] = requests.asJava
 
   /**
    * Specify number of cpus per Task.

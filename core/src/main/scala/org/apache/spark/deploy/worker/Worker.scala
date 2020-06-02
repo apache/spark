@@ -69,7 +69,8 @@ private[deploy] class Worker(
   // If worker decommissioning is enabled register a handler on PWR to shutdown.
   if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
     logInfo("Registering SIGPWR handler to trigger decommissioning.")
-    SignalUtils.register("PWR")(decommissionSelf)
+    SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
+      "disabling worker decommission feature.")(decommissionSelf)
   } else {
     logInfo("Worker decommissioning not enabled, SIGPWR will result in exiting.")
   }

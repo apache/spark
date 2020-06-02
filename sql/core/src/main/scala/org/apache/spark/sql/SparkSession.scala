@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.util.concurrent.TimeUnit._
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
@@ -48,7 +48,6 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{CallSite, Utils}
-
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -345,7 +344,8 @@ class SparkSession private(
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val encoder = RowEncoder(schema)
-    val catalystRows = rowRDD.map(encoder.toRow)
+    val toRow = encoder.createSerializer()
+    val catalystRows = rowRDD.map(toRow)
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
@@ -459,10 +459,10 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
-    // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
-    val enc = encoderFor[T].copy()
+    val enc = encoderFor[T]
+    val toRow = enc.createSerializer()
     val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => enc.toRow(d).copy())
+    val encoded = data.map(d => toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
     Dataset[T](self, plan)
   }
@@ -894,7 +894,7 @@ object SparkSession extends Logging {
      * SparkSession exists, the method creates a new SparkSession and assigns the
      * newly created SparkSession as the global default.
      *
-     * In case an existing SparkSession is returned, the config options specified in
+     * In case an existing SparkSession is returned, the non-static config options specified in
      * this builder will be applied to the existing SparkSession.
      *
      * @since 2.0.0
@@ -904,10 +904,7 @@ object SparkSession extends Logging {
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
-        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
-        if (options.nonEmpty) {
-          logWarning("Using an existing SparkSession; some configuration may not take effect.")
-        }
+        applyModifiableSettings(session)
         return session
       }
 
@@ -916,10 +913,7 @@ object SparkSession extends Logging {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
-          options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
-          if (options.nonEmpty) {
-            logWarning("Using an existing SparkSession; some configuration may not take effect.")
-          }
+          applyModifiableSettings(session)
           return session
         }
 
@@ -945,18 +939,26 @@ object SparkSession extends Logging {
         options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
         setDefaultSession(session)
         setActiveSession(session)
-
-        // Register a successfully instantiated context to the singleton. This should be at the
-        // end of the class definition so that the singleton is updated only if there is no
-        // exception in the construction of the instance.
-        sparkContext.addSparkListener(new SparkListener {
-          override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-            defaultSession.set(null)
-          }
-        })
+        registerContextListener(sparkContext)
       }
 
       return session
+    }
+
+    private def applyModifiableSettings(session: SparkSession): Unit = {
+      val (staticConfs, otherConfs) =
+        options.partition(kv => SQLConf.staticConfKeys.contains(kv._1))
+
+      otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+
+      if (staticConfs.nonEmpty) {
+        logWarning("Using an existing SparkSession; the static sql configurations will not take" +
+          " effect.")
+      }
+      if (otherConfs.nonEmpty) {
+        logWarning("Using an existing SparkSession; some spark core configurations may not take" +
+          " effect.")
+      }
     }
   }
 
@@ -1052,6 +1054,20 @@ object SparkSession extends Logging {
   ////////////////////////////////////////////////////////////////////////////////////////
   // Private methods from now on
   ////////////////////////////////////////////////////////////////////////////////////////
+
+  private val listenerRegistered: AtomicBoolean = new AtomicBoolean(false)
+
+  /** Register the AppEnd listener onto the Context  */
+  private def registerContextListener(sparkContext: SparkContext): Unit = {
+    if (!listenerRegistered.get()) {
+      sparkContext.addSparkListener(new SparkListener {
+        override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+          defaultSession.set(null)
+        }
+      })
+      listenerRegistered.set(true)
+    }
+  }
 
   /** The active SparkSession for the current thread. */
   private val activeThreadSession = new InheritableThreadLocal[SparkSession]

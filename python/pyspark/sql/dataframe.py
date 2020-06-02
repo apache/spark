@@ -122,6 +122,25 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
+    @since(1.3)
+    def registerTempTable(self, name):
+        """Registers this DataFrame as a temporary table using the given name.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+
+        >>> df.registerTempTable("people")
+        >>> df2 = spark.sql("select * from people")
+        >>> sorted(df.collect()) == sorted(df2.collect())
+        True
+        >>> spark.catalog.dropTempView("people")
+
+        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
+        """
+        warnings.warn(
+            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
+        self._jdf.createOrReplaceTempView(name)
+
     @since(2.0)
     def createTempView(self, name):
         """Creates a local temporary view with this :class:`DataFrame`.
@@ -2119,7 +2138,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @ignore_unicode_prefix
     def toDF(self, *cols):
-        """Returns a new class:`DataFrame` that with new specified column names
+        """Returns a new :class:`DataFrame` that with new specified column names
 
         :param cols: list of new column names (string)
 
@@ -2131,9 +2150,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @since(3.0)
     def transform(self, func):
-        """Returns a new class:`DataFrame`. Concise syntax for chaining custom transformations.
+        """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
-        :param func: a function that takes and returns a class:`DataFrame`.
+        :param func: a function that takes and returns a :class:`DataFrame`.
 
         >>> from pyspark.sql.functions import col
         >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
@@ -2199,6 +2218,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         1855039936
         """
         return self._jdf.semanticHash()
+
+    @since(3.1)
+    def inputFiles(self):
+        """
+        Returns a best-effort snapshot of the files that compose this :class:`DataFrame`.
+        This method simply asks each constituent BaseRelation for its respective files and
+        takes the union of all results. Depending on the source relations, this may not find
+        all input files. Duplicates are removed.
+
+        >>> df = spark.read.load("examples/src/main/resources/people.json", format="json")
+        >>> len(df.inputFiles())
+        1
+        """
+        return list(self._jdf.inputFiles())
 
     where = copy_func(
         filter,

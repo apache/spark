@@ -21,39 +21,16 @@ license: |
 
 Since Spark 3.0, Spark SQL introduces two experimental options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
 
-When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, and SQL parsing).
+When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, SQL functions and SQL parsing).
 Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
 The casting behaviours are defined as store assignment rules in the standard.
 
 When `spark.sql.storeAssignmentPolicy` is set to `ANSI`, Spark SQL complies with the ANSI store assignment rules. This is a separate configuration because its default value is `ANSI`, while the configuration `spark.sql.ansi.enabled` is disabled by default.
 
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
-<tr>
-  <td><code>spark.sql.ansi.enabled</code></td>
-  <td>false</td>
-  <td>
-    (Experimental) When true, Spark tries to conform to the ANSI SQL specification:
-    1. Spark will throw a runtime exception if an overflow occurs in any operation on integral/decimal field.
-    2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in the SQL parser.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.sql.storeAssignmentPolicy</code></td>
-  <td>ANSI</td>
-  <td>
-    (Experimental) When inserting a value into a column with different data type, Spark will perform type coercion.
-    Currently, we support 3 policies for the type coercion rules: ANSI, legacy and strict. With ANSI policy,
-    Spark performs the type coercion as per ANSI SQL. In practice, the behavior is mostly the same as PostgreSQL.
-    It disallows certain unreasonable type conversions such as converting string to int or double to boolean.
-    With legacy policy, Spark allows the type coercion as long as it is a valid Cast, which is very loose.
-    e.g. converting string to int or double to boolean is allowed.
-    It is also the only behavior in Spark 2.x and it is compatible with Hive.
-    With strict policy, Spark doesn't allow any possible precision loss or data truncation in type coercion,
-    e.g. converting double to int or decimal to double is not allowed.
-  </td>
-</tr>
-</table>
+|Property Name|Default|Meaning|Since Version|
+|-------------|-------|-------|-------------|
+|`spark.sql.ansi.enabled`|false|(Experimental) When true, Spark tries to conform to the ANSI SQL specification: <br/> 1. Spark will throw a runtime exception if an overflow occurs in any operation on integral/decimal field. <br/> 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in the SQL parser.|3.0.0|
+|`spark.sql.storeAssignmentPolicy`|ANSI|(Experimental) When inserting a value into a column with different data type, Spark will perform type coercion.  Currently, we support 3 policies for the type coercion rules: ANSI, legacy and strict. With ANSI policy, Spark performs the type coercion as per ANSI SQL. In practice, the behavior is mostly the same as PostgreSQL.  It disallows certain unreasonable type conversions such as converting string to int or double to boolean.  With legacy policy, Spark allows the type coercion as long as it is a valid Cast, which is very loose.  e.g. converting string to int or double to boolean is allowed.  It is also the only behavior in Spark 2.x and it is compatible with Hive.  With strict policy, Spark doesn't allow any possible precision loss or data truncation in type coercion, e.g. converting double to int or decimal to double is not allowed.|3.0.0|
 
 The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled.
 
@@ -64,22 +41,19 @@ This means that in case an operation causes overflows, the result is the same wi
 On the other hand, Spark SQL returns null for decimal overflows.
 When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric and interval arithmetic operations, it throws an arithmetic exception at runtime.
 
-{% highlight sql %}
+```sql
 -- `spark.sql.ansi.enabled=true`
 SELECT 2147483647 + 1;
-
-  java.lang.ArithmeticException: integer overflow
+java.lang.ArithmeticException: integer overflow
 
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
-
-  +----------------+
-  |(2147483647 + 1)|
-  +----------------+
-  |     -2147483648|
-  +----------------+
-
-{% endhighlight %}
++----------------+
+|(2147483647 + 1)|
++----------------+
+|     -2147483648|
++----------------+
+```
 
 ### Type Conversion
 
@@ -90,55 +64,53 @@ On the other hand, `INSERT INTO` syntax throws an analysis exception when the AN
 Currently, the ANSI mode affects explicit casting and assignment casting only.
 In future releases, the behaviour of type coercion might change along with the other two type conversion rules.
 
-{% highlight sql %}
+```sql
 -- Examples of explicit casting
 
 -- `spark.sql.ansi.enabled=true`
 SELECT CAST('a' AS INT);
-
-  java.lang.NumberFormatException: invalid input syntax for type numeric: a
+java.lang.NumberFormatException: invalid input syntax for type numeric: a
 
 SELECT CAST(2147483648L AS INT);
-
-  java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
 
 -- `spark.sql.ansi.enabled=false` (This is a default behaviour)
 SELECT CAST('a' AS INT);
-
-  +--------------+
-  |CAST(a AS INT)|
-  +--------------+
-  |          null|
-  +--------------+
++--------------+
+|CAST(a AS INT)|
++--------------+
+|          null|
++--------------+
 
 SELECT CAST(2147483648L AS INT);
-
-  +-----------------------+
-  |CAST(2147483648 AS INT)|
-  +-----------------------+
-  |            -2147483648|
-  +-----------------------+
++-----------------------+
+|CAST(2147483648 AS INT)|
++-----------------------+
+|            -2147483648|
++-----------------------+
 
 -- Examples of store assignment rules
 CREATE TABLE t (v INT);
 
 -- `spark.sql.storeAssignmentPolicy=ANSI`
 INSERT INTO t VALUES ('1');
-
-  org.apache.spark.sql.AnalysisException: Cannot write incompatible data to table '`default`.`t`':
-  - Cannot safely cast 'v': StringType to IntegerType;
+org.apache.spark.sql.AnalysisException: Cannot write incompatible data to table '`default`.`t`':
+- Cannot safely cast 'v': StringType to IntegerType;
 
 -- `spark.sql.storeAssignmentPolicy=LEGACY` (This is a legacy behaviour until Spark 2.x)
 INSERT INTO t VALUES ('1');
 SELECT * FROM t;
++---+
+|  v|
++---+
+|  1|
++---+
+```
 
-  +---+
-  |  v|
-  +---+
-  |  1|
-  +---+
+### SQL Functions
 
-{% endhighlight %}
+The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
+  - `size`: This function returns null for null input under ANSI mode.
 
 ### SQL Keywords
 
@@ -155,258 +127,256 @@ By default `spark.sql.ansi.enabled` is false.
 
 Below is a list of all the keywords in Spark SQL.
 
-<table class="table">
-  <tr><th rowspan="2" style="vertical-align: middle;"><b>Keyword</b></th><th colspan="2"><b>Spark SQL</b></th><th rowspan="2" style="vertical-align: middle;"><b>SQL-2011</b></th></tr>
-  <tr><th><b>ANSI mode</b></th><th><b>default mode</b></th></tr>
-  <tr><td>ADD</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>AFTER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>ALL</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ALTER</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ANALYZE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>AND</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ANTI</td><td>reserved</td><td>strict-non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>ANY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ARCHIVE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>ARRAY</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>AS</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ASC</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>AT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>AUTHORIZATION</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>BETWEEN</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>BOTH</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>BUCKET</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>BUCKETS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>BY</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CACHE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>CASCADE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CASE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CAST</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CHANGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>CHECK</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CLEAR</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>CLUSTER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>CLUSTERED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>CODEGEN</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>COLLATE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>COLLECTION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>COLUMN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>COLUMNS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>COMMENT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>COMMIT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>COMPACT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>COMPACTIONS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>COMPUTE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>CONCATENATE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>CONSTRAINT</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>COST</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>CREATE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CROSS</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>CUBE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CURRENT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CURRENT_DATE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CURRENT_TIME</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CURRENT_TIMESTAMP</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CURRENT_USER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>DATA</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DATABASE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DATABASES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DAY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>DBPROPERTIES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DEFINED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DELETE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>DELIMITED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DESC</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DESCRIBE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>DFS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DIRECTORIES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DIRECTORY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DISTINCT</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>DISTRIBUTE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DIV</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>DROP</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ELSE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>END</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ESCAPE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ESCAPED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>EXCEPT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>EXCHANGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>EXISTS</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>EXPLAIN</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>EXPORT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>EXTENDED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>EXTERNAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>EXTRACT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>FALSE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>FETCH</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>FIELDS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>FILTER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>FILEFORMAT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>FIRST</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>FOLLOWING</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>FOR</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>FOREIGN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>FORMAT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>FORMATTED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>FROM</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>FULL</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>FUNCTION</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>FUNCTIONS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>GLOBAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>GRANT</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>GROUP</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>GROUPING</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>HAVING</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>HOUR</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>IF</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>IGNORE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>IMPORT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>IN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>INDEX</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>INDEXES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>INNER</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>INPATH</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>INPUTFORMAT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>INSERT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>INTERSECT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>INTERVAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>INTO</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>IS</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ITEMS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>JOIN</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>KEYS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LAST</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LATERAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>LAZY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LEADING</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>LEFT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>LIKE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>LIMIT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LINES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LIST</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LOAD</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LOCAL</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>LOCATION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LOCK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LOCKS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>LOGICAL</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>MACRO</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>MAP</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>MATCHED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>MERGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>MINUS</td><td>reserved</td><td>strict-non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>MINUTE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>MONTH</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>MSCK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>NAMESPACE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>NAMESPACES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>NATURAL</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>NO</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>NOT</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>NULL</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>NULLS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>OF</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ON</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>ONLY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>OPTION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>OPTIONS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>OR</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ORDER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>OUT</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>OUTER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>OUTPUTFORMAT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>OVER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>OVERLAPS</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>OVERLAY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>OVERWRITE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>PARTITION</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>PARTITIONED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>PARTITIONS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>PERCENT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>PIVOT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>PLACING</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>POSITION</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>PRECEDING</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>PRIMARY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>PRINCIPALS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>PROPERTIES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>PURGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>QUERY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>RANGE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>RECORDREADER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>RECORDWRITER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>RECOVER</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>REDUCE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>REFERENCES</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>REFRESH</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>RENAME</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>REPAIR</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>REPLACE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>RESET</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>RESTRICT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>REVOKE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>RIGHT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>RLIKE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>ROLE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>ROLES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>ROLLBACK</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ROLLUP</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ROW</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ROWS</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>SCHEMA</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SECOND</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>SELECT</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>SEMI</td><td>reserved</td><td>strict-non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SEPARATED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SERDE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SERDEPROPERTIES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SESSION_USER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>SET</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>SETS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SHOW</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SKEWED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SOME</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>SORT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SORTED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>START</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>STATISTICS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>STORED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>STRATIFY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>STRUCT</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SUBSTR</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>SUBSTRING</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>TABLE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>TABLES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>TABLESAMPLE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>TBLPROPERTIES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>TEMPORARY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>TERMINATED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>THEN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>TO</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>TOUCH</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>TRAILING</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>TRANSACTION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>TRANSACTIONS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>TRANSFORM</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>TRIM</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>TRUE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>TRUNCATE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>UNARCHIVE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>UNBOUNDED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>UNCACHE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>UNION</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>UNIQUE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>UNKNOWN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>UNLOCK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>UNSET</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>UPDATE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>USE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>USER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>USING</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
-  <tr><td>VALUES</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>VIEW</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
-  <tr><td>WHEN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>WHERE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>WINDOW</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>WITH</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>YEAR</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-</table>
+|Keyword|Spark SQL<br/>ANSI Mode|Spark SQL<br/>Default Mode|SQL-2011|
+|-------|----------------------|-------------------------|--------|
+|ADD|non-reserved|non-reserved|non-reserved|
+|AFTER|non-reserved|non-reserved|non-reserved|
+|ALL|reserved|non-reserved|reserved|
+|ALTER|non-reserved|non-reserved|reserved|
+|ANALYZE|non-reserved|non-reserved|non-reserved|
+|AND|reserved|non-reserved|reserved|
+|ANTI|reserved|strict-non-reserved|non-reserved|
+|ANY|reserved|non-reserved|reserved|
+|ARCHIVE|non-reserved|non-reserved|non-reserved|
+|ARRAY|non-reserved|non-reserved|reserved|
+|AS|reserved|non-reserved|reserved|
+|ASC|non-reserved|non-reserved|non-reserved|
+|AT|non-reserved|non-reserved|reserved|
+|AUTHORIZATION|reserved|non-reserved|reserved|
+|BETWEEN|non-reserved|non-reserved|reserved|
+|BOTH|reserved|non-reserved|reserved|
+|BUCKET|non-reserved|non-reserved|non-reserved|
+|BUCKETS|non-reserved|non-reserved|non-reserved|
+|BY|non-reserved|non-reserved|reserved|
+|CACHE|non-reserved|non-reserved|non-reserved|
+|CASCADE|non-reserved|non-reserved|reserved|
+|CASE|reserved|non-reserved|reserved|
+|CAST|reserved|non-reserved|reserved|
+|CHANGE|non-reserved|non-reserved|non-reserved|
+|CHECK|reserved|non-reserved|reserved|
+|CLEAR|non-reserved|non-reserved|non-reserved|
+|CLUSTER|non-reserved|non-reserved|non-reserved|
+|CLUSTERED|non-reserved|non-reserved|non-reserved|
+|CODEGEN|non-reserved|non-reserved|non-reserved|
+|COLLATE|reserved|non-reserved|reserved|
+|COLLECTION|non-reserved|non-reserved|non-reserved|
+|COLUMN|reserved|non-reserved|reserved|
+|COLUMNS|non-reserved|non-reserved|non-reserved|
+|COMMENT|non-reserved|non-reserved|non-reserved|
+|COMMIT|non-reserved|non-reserved|reserved|
+|COMPACT|non-reserved|non-reserved|non-reserved|
+|COMPACTIONS|non-reserved|non-reserved|non-reserved|
+|COMPUTE|non-reserved|non-reserved|non-reserved|
+|CONCATENATE|non-reserved|non-reserved|non-reserved|
+|CONSTRAINT|reserved|non-reserved|reserved|
+|COST|non-reserved|non-reserved|non-reserved|
+|CREATE|reserved|non-reserved|reserved|
+|CROSS|reserved|strict-non-reserved|reserved|
+|CUBE|non-reserved|non-reserved|reserved|
+|CURRENT|non-reserved|non-reserved|reserved|
+|CURRENT_DATE|reserved|non-reserved|reserved|
+|CURRENT_TIME|reserved|non-reserved|reserved|
+|CURRENT_TIMESTAMP|reserved|non-reserved|reserved|
+|CURRENT_USER|reserved|non-reserved|reserved|
+|DATA|non-reserved|non-reserved|non-reserved|
+|DATABASE|non-reserved|non-reserved|non-reserved|
+|DATABASES|non-reserved|non-reserved|non-reserved|
+|DAY|reserved|non-reserved|reserved|
+|DBPROPERTIES|non-reserved|non-reserved|non-reserved|
+|DEFINED|non-reserved|non-reserved|non-reserved|
+|DELETE|non-reserved|non-reserved|reserved|
+|DELIMITED|non-reserved|non-reserved|non-reserved|
+|DESC|non-reserved|non-reserved|non-reserved|
+|DESCRIBE|non-reserved|non-reserved|reserved|
+|DFS|non-reserved|non-reserved|non-reserved|
+|DIRECTORIES|non-reserved|non-reserved|non-reserved|
+|DIRECTORY|non-reserved|non-reserved|non-reserved|
+|DISTINCT|reserved|non-reserved|reserved|
+|DISTRIBUTE|non-reserved|non-reserved|non-reserved|
+|DIV|non-reserved|non-reserved|non-reserved|
+|DROP|non-reserved|non-reserved|reserved|
+|ELSE|reserved|non-reserved|reserved|
+|END|reserved|non-reserved|reserved|
+|ESCAPE|reserved|non-reserved|reserved|
+|ESCAPED|non-reserved|non-reserved|non-reserved|
+|EXCEPT|reserved|strict-non-reserved|reserved|
+|EXCHANGE|non-reserved|non-reserved|non-reserved|
+|EXISTS|non-reserved|non-reserved|reserved|
+|EXPLAIN|non-reserved|non-reserved|non-reserved|
+|EXPORT|non-reserved|non-reserved|non-reserved|
+|EXTENDED|non-reserved|non-reserved|non-reserved|
+|EXTERNAL|non-reserved|non-reserved|reserved|
+|EXTRACT|non-reserved|non-reserved|reserved|
+|FALSE|reserved|non-reserved|reserved|
+|FETCH|reserved|non-reserved|reserved|
+|FIELDS|non-reserved|non-reserved|non-reserved|
+|FILTER|reserved|non-reserved|reserved|
+|FILEFORMAT|non-reserved|non-reserved|non-reserved|
+|FIRST|non-reserved|non-reserved|non-reserved|
+|FOLLOWING|non-reserved|non-reserved|non-reserved|
+|FOR|reserved|non-reserved|reserved|
+|FOREIGN|reserved|non-reserved|reserved|
+|FORMAT|non-reserved|non-reserved|non-reserved|
+|FORMATTED|non-reserved|non-reserved|non-reserved|
+|FROM|reserved|non-reserved|reserved|
+|FULL|reserved|strict-non-reserved|reserved|
+|FUNCTION|non-reserved|non-reserved|reserved|
+|FUNCTIONS|non-reserved|non-reserved|non-reserved|
+|GLOBAL|non-reserved|non-reserved|reserved|
+|GRANT|reserved|non-reserved|reserved|
+|GROUP|reserved|non-reserved|reserved|
+|GROUPING|non-reserved|non-reserved|reserved|
+|HAVING|reserved|non-reserved|reserved|
+|HOUR|reserved|non-reserved|reserved|
+|IF|non-reserved|non-reserved|reserved|
+|IGNORE|non-reserved|non-reserved|non-reserved|
+|IMPORT|non-reserved|non-reserved|non-reserved|
+|IN|reserved|non-reserved|reserved|
+|INDEX|non-reserved|non-reserved|non-reserved|
+|INDEXES|non-reserved|non-reserved|non-reserved|
+|INNER|reserved|strict-non-reserved|reserved|
+|INPATH|non-reserved|non-reserved|non-reserved|
+|INPUTFORMAT|non-reserved|non-reserved|non-reserved|
+|INSERT|non-reserved|non-reserved|reserved|
+|INTERSECT|reserved|strict-non-reserved|reserved|
+|INTERVAL|non-reserved|non-reserved|reserved|
+|INTO|reserved|non-reserved|reserved|
+|IS|reserved|non-reserved|reserved|
+|ITEMS|non-reserved|non-reserved|non-reserved|
+|JOIN|reserved|strict-non-reserved|reserved|
+|KEYS|non-reserved|non-reserved|non-reserved|
+|LAST|non-reserved|non-reserved|non-reserved|
+|LATERAL|non-reserved|non-reserved|reserved|
+|LAZY|non-reserved|non-reserved|non-reserved|
+|LEADING|reserved|non-reserved|reserved|
+|LEFT|reserved|strict-non-reserved|reserved|
+|LIKE|non-reserved|non-reserved|reserved|
+|LIMIT|non-reserved|non-reserved|non-reserved|
+|LINES|non-reserved|non-reserved|non-reserved|
+|LIST|non-reserved|non-reserved|non-reserved|
+|LOAD|non-reserved|non-reserved|non-reserved|
+|LOCAL|non-reserved|non-reserved|reserved|
+|LOCATION|non-reserved|non-reserved|non-reserved|
+|LOCK|non-reserved|non-reserved|non-reserved|
+|LOCKS|non-reserved|non-reserved|non-reserved|
+|LOGICAL|non-reserved|non-reserved|non-reserved|
+|MACRO|non-reserved|non-reserved|non-reserved|
+|MAP|non-reserved|non-reserved|non-reserved|
+|MATCHED|non-reserved|non-reserved|non-reserved|
+|MERGE|non-reserved|non-reserved|non-reserved|
+|MINUS|reserved|strict-non-reserved|non-reserved|
+|MINUTE|reserved|non-reserved|reserved|
+|MONTH|reserved|non-reserved|reserved|
+|MSCK|non-reserved|non-reserved|non-reserved|
+|NAMESPACE|non-reserved|non-reserved|non-reserved|
+|NAMESPACES|non-reserved|non-reserved|non-reserved|
+|NATURAL|reserved|strict-non-reserved|reserved|
+|NO|non-reserved|non-reserved|reserved|
+|NOT|reserved|non-reserved|reserved|
+|NULL|reserved|non-reserved|reserved|
+|NULLS|non-reserved|non-reserved|non-reserved|
+|OF|non-reserved|non-reserved|reserved|
+|ON|reserved|strict-non-reserved|reserved|
+|ONLY|reserved|non-reserved|reserved|
+|OPTION|non-reserved|non-reserved|non-reserved|
+|OPTIONS|non-reserved|non-reserved|non-reserved|
+|OR|reserved|non-reserved|reserved|
+|ORDER|reserved|non-reserved|reserved|
+|OUT|non-reserved|non-reserved|reserved|
+|OUTER|reserved|non-reserved|reserved|
+|OUTPUTFORMAT|non-reserved|non-reserved|non-reserved|
+|OVER|non-reserved|non-reserved|non-reserved|
+|OVERLAPS|reserved|non-reserved|reserved|
+|OVERLAY|non-reserved|non-reserved|non-reserved|
+|OVERWRITE|non-reserved|non-reserved|non-reserved|
+|PARTITION|non-reserved|non-reserved|reserved|
+|PARTITIONED|non-reserved|non-reserved|non-reserved|
+|PARTITIONS|non-reserved|non-reserved|non-reserved|
+|PERCENT|non-reserved|non-reserved|non-reserved|
+|PIVOT|non-reserved|non-reserved|non-reserved|
+|PLACING|non-reserved|non-reserved|non-reserved|
+|POSITION|non-reserved|non-reserved|reserved|
+|PRECEDING|non-reserved|non-reserved|non-reserved|
+|PRIMARY|reserved|non-reserved|reserved|
+|PRINCIPALS|non-reserved|non-reserved|non-reserved|
+|PROPERTIES|non-reserved|non-reserved|non-reserved|
+|PURGE|non-reserved|non-reserved|non-reserved|
+|QUERY|non-reserved|non-reserved|non-reserved|
+|RECORDREADER|non-reserved|non-reserved|non-reserved|
+|RECORDWRITER|non-reserved|non-reserved|non-reserved|
+|RECOVER|non-reserved|non-reserved|non-reserved|
+|REDUCE|non-reserved|non-reserved|non-reserved|
+|REFERENCES|reserved|non-reserved|reserved|
+|REFRESH|non-reserved|non-reserved|non-reserved|
+|RENAME|non-reserved|non-reserved|non-reserved|
+|REPAIR|non-reserved|non-reserved|non-reserved|
+|REPLACE|non-reserved|non-reserved|non-reserved|
+|RESET|non-reserved|non-reserved|non-reserved|
+|RESTRICT|non-reserved|non-reserved|non-reserved|
+|REVOKE|non-reserved|non-reserved|reserved|
+|RIGHT|reserved|strict-non-reserved|reserved|
+|RLIKE|non-reserved|non-reserved|non-reserved|
+|ROLE|non-reserved|non-reserved|non-reserved|
+|ROLES|non-reserved|non-reserved|non-reserved|
+|ROLLBACK|non-reserved|non-reserved|reserved|
+|ROLLUP|non-reserved|non-reserved|reserved|
+|ROW|non-reserved|non-reserved|reserved|
+|ROWS|non-reserved|non-reserved|reserved|
+|SCHEMA|non-reserved|non-reserved|non-reserved|
+|SECOND|reserved|non-reserved|reserved|
+|SELECT|reserved|non-reserved|reserved|
+|SEMI|reserved|strict-non-reserved|non-reserved|
+|SEPARATED|non-reserved|non-reserved|non-reserved|
+|SERDE|non-reserved|non-reserved|non-reserved|
+|SERDEPROPERTIES|non-reserved|non-reserved|non-reserved|
+|SESSION_USER|reserved|non-reserved|reserved|
+|SET|non-reserved|non-reserved|reserved|
+|SETS|non-reserved|non-reserved|non-reserved|
+|SHOW|non-reserved|non-reserved|non-reserved|
+|SKEWED|non-reserved|non-reserved|non-reserved|
+|SOME|reserved|non-reserved|reserved|
+|SORT|non-reserved|non-reserved|non-reserved|
+|SORTED|non-reserved|non-reserved|non-reserved|
+|START|non-reserved|non-reserved|reserved|
+|STATISTICS|non-reserved|non-reserved|non-reserved|
+|STORED|non-reserved|non-reserved|non-reserved|
+|STRATIFY|non-reserved|non-reserved|non-reserved|
+|STRUCT|non-reserved|non-reserved|non-reserved|
+|SUBSTR|non-reserved|non-reserved|non-reserved|
+|SUBSTRING|non-reserved|non-reserved|non-reserved|
+|TABLE|reserved|non-reserved|reserved|
+|TABLES|non-reserved|non-reserved|non-reserved|
+|TABLESAMPLE|non-reserved|non-reserved|reserved|
+|TBLPROPERTIES|non-reserved|non-reserved|non-reserved|
+|TEMPORARY|non-reserved|non-reserved|non-reserved|
+|TERMINATED|non-reserved|non-reserved|non-reserved|
+|THEN|reserved|non-reserved|reserved|
+|TO|reserved|non-reserved|reserved|
+|TOUCH|non-reserved|non-reserved|non-reserved|
+|TRAILING|reserved|non-reserved|reserved|
+|TRANSACTION|non-reserved|non-reserved|non-reserved|
+|TRANSACTIONS|non-reserved|non-reserved|non-reserved|
+|TRANSFORM|non-reserved|non-reserved|non-reserved|
+|TRIM|non-reserved|non-reserved|non-reserved|
+|TRUE|non-reserved|non-reserved|reserved|
+|TRUNCATE|non-reserved|non-reserved|reserved|
+|UNARCHIVE|non-reserved|non-reserved|non-reserved|
+|UNBOUNDED|non-reserved|non-reserved|non-reserved|
+|UNCACHE|non-reserved|non-reserved|non-reserved|
+|UNION|reserved|strict-non-reserved|reserved|
+|UNIQUE|reserved|non-reserved|reserved|
+|UNKNOWN|reserved|non-reserved|reserved|
+|UNLOCK|non-reserved|non-reserved|non-reserved|
+|UNSET|non-reserved|non-reserved|non-reserved|
+|UPDATE|non-reserved|non-reserved|reserved|
+|USE|non-reserved|non-reserved|non-reserved|
+|USER|reserved|non-reserved|reserved|
+|USING|reserved|strict-non-reserved|reserved|
+|VALUES|non-reserved|non-reserved|reserved|
+|VIEW|non-reserved|non-reserved|non-reserved|
+|VIEWS|non-reserved|non-reserved|non-reserved|
+|WHEN|reserved|non-reserved|reserved|
+|WHERE|reserved|non-reserved|reserved|
+|WINDOW|non-reserved|non-reserved|reserved|
+|WITH|reserved|non-reserved|reserved|
+|YEAR|reserved|non-reserved|reserved|

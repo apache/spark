@@ -181,15 +181,6 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  test("check distributed decomposition") {
-    val k = 5
-    val d = decompositionData.head.size
-    assert(GaussianMixture.shouldDistributeGaussians(k, d))
-
-    val gmm = new GaussianMixture().setK(k).setSeed(seed).fit(decompositionDataset)
-    assert(gmm.getK === k)
-  }
-
   test("multivariate data and check againt R mvnormalmixEM") {
     /*
       Using the following R code to generate data and train the model using mixtools package.
@@ -293,6 +284,17 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
     testClusteringModelSingleProbabilisticPrediction(model, model.predictProbability, dataset,
       model.getFeaturesCol, model.getProbabilityCol)
+  }
+
+  test("GMM on blocks") {
+    Seq(dataset, sparseDataset, denseDataset, rDataset).foreach { dataset =>
+      val gmm = new GaussianMixture().setK(k).setMaxIter(20).setBlockSize(1).setSeed(seed)
+      val model = gmm.fit(dataset)
+      Seq(2, 4, 8, 16, 32).foreach { blockSize =>
+        val model2 = gmm.setBlockSize(blockSize).fit(dataset)
+        modelEquals(model, model2)
+      }
+    }
   }
 }
 

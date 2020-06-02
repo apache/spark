@@ -52,7 +52,7 @@ DROP TABLE desc_complex_col_table;
 
 --Test case insensitive
 
-CREATE TABLE customer(CName STRING);
+CREATE TABLE customer(CName STRING) USING PARQUET;
 
 INSERT INTO customer VALUES('Maria');
 

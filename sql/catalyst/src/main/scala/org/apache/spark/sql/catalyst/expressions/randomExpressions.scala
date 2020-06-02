@@ -83,9 +83,12 @@ trait ExpressionWithRandomSeed {
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Rand(child: Expression) extends RDG with ExpressionWithRandomSeed {
+case class Rand(child: Expression, hideSeed: Boolean = false)
+  extends RDG with ExpressionWithRandomSeed {
 
-  def this() = this(Literal(Utils.random.nextLong(), LongType))
+  def this() = this(Literal(Utils.random.nextLong(), LongType), true)
+
+  def this(child: Expression) = this(child, false)
 
   override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType))
 
@@ -101,7 +104,12 @@ case class Rand(child: Expression) extends RDG with ExpressionWithRandomSeed {
       isNull = FalseLiteral)
   }
 
-  override def freshCopy(): Rand = Rand(child)
+  override def freshCopy(): Rand = Rand(child, hideSeed)
+
+  override def flatArguments: Iterator[Any] = Iterator(child)
+  override def sql: String = {
+    s"rand(${if (hideSeed) "" else child.sql})"
+  }
 }
 
 object Rand {
@@ -126,9 +134,12 @@ object Rand {
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Randn(child: Expression) extends RDG with ExpressionWithRandomSeed {
+case class Randn(child: Expression, hideSeed: Boolean = false)
+  extends RDG with ExpressionWithRandomSeed {
 
-  def this() = this(Literal(Utils.random.nextLong(), LongType))
+  def this() = this(Literal(Utils.random.nextLong(), LongType), true)
+
+  def this(child: Expression) = this(child, false)
 
   override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType))
 
@@ -144,7 +155,12 @@ case class Randn(child: Expression) extends RDG with ExpressionWithRandomSeed {
       isNull = FalseLiteral)
   }
 
-  override def freshCopy(): Randn = Randn(child)
+  override def freshCopy(): Randn = Randn(child, hideSeed)
+
+  override def flatArguments: Iterator[Any] = Iterator(child)
+  override def sql: String = {
+    s"randn(${if (hideSeed) "" else child.sql})"
+  }
 }
 
 object Randn {

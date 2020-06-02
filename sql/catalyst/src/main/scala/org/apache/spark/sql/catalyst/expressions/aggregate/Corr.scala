@@ -99,6 +99,7 @@ abstract class PearsonCorrelation(x: Expression, y: Expression)
       > SELECT _FUNC_(c1, c2) FROM VALUES (3, 2), (3, 3), (6, 4) as tab(c1, c2);
        0.8660254037844387
   """,
+  group = "agg_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit
 case class Corr(x: Expression, y: Expression)

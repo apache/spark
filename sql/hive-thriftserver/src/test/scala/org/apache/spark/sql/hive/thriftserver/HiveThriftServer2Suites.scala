@@ -545,7 +545,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       if (HiveUtils.isHive23) {
-        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.6"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.7"))
       } else {
         assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
       }
@@ -562,7 +562,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       if (HiveUtils.isHive23) {
-        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.6"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.7"))
       } else {
         assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
       }
@@ -771,6 +771,101 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       client.closeSession(sessionHandle)
     }
   }
+
+  test("SPARK-29492: use add jar in sync mode") {
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+      withJdbcStatement("smallKV", "addJar") { statement =>
+        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+        val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+
+        Seq(s"ADD JAR $jarFile",
+          "CREATE TABLE smallKV(key INT, val STRING) USING hive",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV")
+          .foreach(query => client.executeStatement(sessionHandle, query, confOverlay))
+
+        client.executeStatement(sessionHandle,
+          """CREATE TABLE addJar(key string)
+            |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
+          """.stripMargin, confOverlay)
+
+        client.executeStatement(sessionHandle,
+          "INSERT INTO TABLE addJar SELECT 'k1' as key FROM smallKV limit 1", confOverlay)
+
+        val operationHandle = client.executeStatement(
+          sessionHandle,
+          "SELECT key FROM addJar",
+          confOverlay)
+
+        // Fetch result first time
+        assertResult(1, "Fetching result first time from next row") {
+
+          val rows_next = client.fetchResults(
+            operationHandle,
+            FetchOrientation.FETCH_NEXT,
+            1000,
+            FetchType.QUERY_OUTPUT)
+          rows_next.numRows()
+        }
+      }
+    }
+  }
+
+  test("SPARK-31859 Thriftserver works with spark.sql.datetime.java8API.enabled=true") {
+    withJdbcStatement() { statement =>
+      withJdbcStatement() { st =>
+        st.execute("set spark.sql.datetime.java8API.enabled=true")
+        val rs = st.executeQuery("select date '2020-05-28', timestamp '2020-05-28 00:00:00'")
+        rs.next()
+        assert(rs.getDate(1).toString() == "2020-05-28")
+        assert(rs.getTimestamp(2).toString() == "2020-05-28 00:00:00.0")
+      }
+    }
+  }
+
+  test("SPARK-31861 Thriftserver respects spark.sql.session.timeZone") {
+    withJdbcStatement() { statement =>
+      withJdbcStatement() { st =>
+        st.execute("set spark.sql.session.timeZone=+03:15") // different than Thriftserver's JVM tz
+      val rs = st.executeQuery("select timestamp '2020-05-28 10:00:00'")
+        rs.next()
+        // The timestamp as string is the same as the literal
+        assert(rs.getString(1) == "2020-05-28 10:00:00.0")
+        // Parsing it to java.sql.Timestamp in the client will always result in a timestamp
+        // in client default JVM timezone. The string value of the Timestamp will match the literal,
+        // but if the JDBC application cares about the internal timezone and UTC offset of the
+        // Timestamp object, it should set spark.sql.session.timeZone to match its client JVM tz.
+        assert(rs.getTimestamp(1).toString() == "2020-05-28 10:00:00.0")
+      }
+    }
+  }
+
+  test("SPARK-31863 Session conf should persist between Thriftserver worker threads") {
+    val iter = 20
+    withJdbcStatement() { statement =>
+      // date 'now' is resolved during parsing, and relies on SQLConf.get to
+      // obtain the current set timezone. We exploit this to run this test.
+      // If the timezones are set correctly to 25 hours apart across threads,
+      // the dates should reflect this.
+
+      // iterate a few times for the odd chance the same thread is selected
+      for (_ <- 0 until iter) {
+        statement.execute("SET spark.sql.session.timeZone=GMT-12")
+        val firstResult = statement.executeQuery("SELECT date 'now'")
+        firstResult.next()
+        val beyondDateLineWest = firstResult.getDate(1)
+
+        statement.execute("SET spark.sql.session.timeZone=GMT+13")
+        val secondResult = statement.executeQuery("SELECT date 'now'")
+        secondResult.next()
+        val dateLineEast = secondResult.getDate(1)
+        assert(
+          dateLineEast after beyondDateLineWest,
+          "SQLConf changes should persist across execution threads")
+      }
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
@@ -881,6 +976,39 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
         statement.execute("DROP DATABASE db1 CASCADE")
       }
     )
+  }
+}
+
+class HiveThriftCleanUpScratchDirSuite extends HiveThriftJdbcTest{
+  var tempScratchDir: File = _
+
+  override protected def beforeAll(): Unit = {
+    tempScratchDir = Utils.createTempDir()
+    tempScratchDir.setWritable(true, false)
+    assert(tempScratchDir.list().isEmpty)
+    new File(tempScratchDir.getAbsolutePath + File.separator + "SPARK-31626").createNewFile()
+    assert(tempScratchDir.list().nonEmpty)
+    super.beforeAll()
+  }
+
+  override def mode: ServerMode.Value = ServerMode.binary
+
+  override protected def extraConf: Seq[String] =
+    s" --hiveconf ${ConfVars.HIVE_START_CLEANUP_SCRATCHDIR}=true " ::
+       s"--hiveconf ${ConfVars.SCRATCHDIR}=${tempScratchDir.getAbsolutePath}" :: Nil
+
+  test("Cleanup the Hive scratchdir when starting the Hive Server") {
+    assert(!tempScratchDir.exists())
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT id FROM range(1)")
+      assert(rs.next())
+      assert(rs.getLong(1) === 0L)
+    }
+  }
+
+  override protected def afterAll(): Unit = {
+    Utils.deleteRecursively(tempScratchDir)
+    super.afterAll()
   }
 }
 

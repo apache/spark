@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
@@ -326,20 +327,21 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     // non-primitive parameters do not need special null handling
-    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil, false :: Nil)
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil,
+      Option(ExpressionEncoder[String]()) :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
-      false :: true :: Nil)
+      Option(ExpressionEncoder[String]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
     val expected2 =
       If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
     val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
-      true :: true :: Nil)
+      Option(ExpressionEncoder[Short]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
@@ -351,7 +353,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       (s: Short, d: Double) => "x",
       StringType,
       short :: nonNullableDouble :: Nil,
-      true :: true :: Nil)
+      Option(ExpressionEncoder[Short]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
@@ -362,8 +364,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
     val a = testRelation.output(0)
     val func = (x: Int, y: Int) => x + y
-    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil, false :: false :: Nil)
-    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil, false :: false :: Nil)
+    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil,
+      Option(ExpressionEncoder[java.lang.Integer]()) ::
+        Option(ExpressionEncoder[java.lang.Integer]()) :: Nil)
+    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil,
+      Option(ExpressionEncoder[java.lang.Integer]()) ::
+        Option(ExpressionEncoder[java.lang.Integer]()) :: Nil)
     val plan = Project(Alias(udf2, "")() :: Nil, testRelation)
     comparePlans(plan.analyze, plan.analyze.analyze)
   }

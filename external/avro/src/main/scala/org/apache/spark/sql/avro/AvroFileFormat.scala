@@ -34,7 +34,8 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -123,8 +124,12 @@ private[sql] class AvroFileFormat extends FileFormat
         reader.sync(file.start)
         val stop = file.start + file.length
 
-        val deserializer =
-          new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), requiredSchema)
+        val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+          reader.asInstanceOf[DataFileReader[_]].getMetaString,
+          SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
+
+        val deserializer = new AvroDeserializer(
+          userProvidedSchema.getOrElse(reader.getSchema), requiredSchema, datetimeRebaseMode)
 
         new Iterator[InternalRow] {
           private[this] var completed = false

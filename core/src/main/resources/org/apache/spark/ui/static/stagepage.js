@@ -282,11 +282,11 @@ $(document).ready(function () {
     setDataTableDefaults();
 
     $("#showAdditionalMetrics").append(
-        "<div><a id='additionalMetrics'>" +
+        "<div><a id='additionalMetrics' class='collapse-table'>" +
         "<span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle1'></span>" +
         " Show Additional Metrics" +
         "</a></div>" +
-        "<div class='container-fluid container-fluid-div' id='toggle-metrics' hidden>" +
+        "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
         "<div id='select_all' class='select-all-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
         "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11'> Scheduler Delay</div>" +
         "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12'> Task Deserialization Time</div>" +
@@ -336,7 +336,7 @@ $(document).ready(function () {
 
           $("#additionalMetrics").click(function(){
               $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
-              $("#toggle-metrics").toggle();
+              $("#toggle-metrics").toggleClass("d-none");
               if (window.localStorage) {
                   window.localStorage.setItem("arrowtoggle1class", $("#arrowtoggle1").attr('class'));
               }
@@ -344,7 +344,7 @@ $(document).ready(function () {
 
           $("#aggregatedMetrics").click(function(){
               $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
-              $("#toggle-aggregatedMetrics").toggle();
+              $("#toggle-aggregatedMetrics").toggleClass("d-none");
               if (window.localStorage) {
                   window.localStorage.setItem("arrowtoggle2class", $("#arrowtoggle2").attr('class'));
               }
@@ -363,15 +363,24 @@ $(document).ready(function () {
             dataToShow.showBytesSpilledData =
                 (responseBody.diskBytesSpilled > 0 || responseBody.memoryBytesSpilled > 0);
 
+            var columnIndicesToRemove = [];
             if (!dataToShow.showShuffleReadData) {
                 $('#shuffle_read_blocked_time').remove();
                 $('#shuffle_remote_reads').remove();
-                optionalColumns.splice(2, 2);
+                columnIndicesToRemove.push(2);
+                columnIndicesToRemove.push(3);
             }
 
             if (!dataToShow.showShuffleWriteData) {
                 $('#shuffle_write_time').remove();
-                optionalColumns.splice(7, 1)
+                columnIndicesToRemove.push(7);
+            }
+
+            if (columnIndicesToRemove.length > 0) {
+                columnIndicesToRemove.sort(function(a, b) { return b - a; });
+                columnIndicesToRemove.forEach(function(idx) {
+                   optionalColumns.splice(idx, 1);
+                });
             }
 
             // prepare data for executor summary table
@@ -965,12 +974,12 @@ $(document).ready(function () {
                     if (window.localStorage.getItem("arrowtoggle1class") !== null &&
                         window.localStorage.getItem("arrowtoggle1class").includes("arrow-open")) {
                         $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
-                        $("#toggle-metrics").toggle();
+                        $("#toggle-metrics").toggleClass("d-none");
                     }
                     if (window.localStorage.getItem("arrowtoggle2class") !== null &&
                         window.localStorage.getItem("arrowtoggle2class").includes("arrow-open")) {
                         $("#arrowtoggle2").toggleClass("arrow-open arrow-closed");
-                        $("#toggle-aggregatedMetrics").toggle();
+                        $("#toggle-aggregatedMetrics").toggleClass("d-none");
                     }
                 }
             });

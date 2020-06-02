@@ -95,7 +95,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
@@ -2908,6 +2908,24 @@ private[spark] object Utils extends Logging {
   @tailrec
   def findFirstCause(t: Throwable): Throwable = {
     if (t.getCause == null) t else findFirstCause(t.getCause)
+  }
+
+  /**
+   * Convert a sequence of `Path`s to a metadata string. When the length of metadata string
+   * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
+   */
+  def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
+    val metadata = new StringBuilder("[")
+    var index: Int = 0
+    while (index < paths.length && metadata.length < stopAppendingThreshold) {
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append(paths(index).toString)
+      index += 1
+    }
+    metadata.append("]")
+    metadata.toString
   }
 }
 

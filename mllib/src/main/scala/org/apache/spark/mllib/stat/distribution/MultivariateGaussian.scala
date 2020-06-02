@@ -19,12 +19,11 @@ package org.apache.spark.mllib.stat.distribution
 
 import breeze.linalg.{diag, eigSym, max, DenseMatrix => DBM, DenseVector => DBV, Vector => BV}
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 
 /**
- * :: DeveloperApi ::
  * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution. In
  * the event that the covariance matrix is singular, the density will be computed in a
  * reduced dimensional subspace under which the distribution is supported.
@@ -35,7 +34,6 @@ import org.apache.spark.mllib.util.MLUtils
  * @param sigma The covariance matrix of the distribution
  */
 @Since("1.3.0")
-@DeveloperApi
 class MultivariateGaussian @Since("1.3.0") (
     @Since("1.3.0") val mu: Vector,
     @Since("1.3.0") val sigma: Matrix) extends Serializable {

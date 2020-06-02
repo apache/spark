@@ -842,6 +842,46 @@ class FileBasedDataSourceSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-31116: Select nested schema with case insensitive mode") {
+    // This test case failed at only Parquet. ORC is added for test coverage parity.
+    Seq("orc", "parquet").foreach { format =>
+      Seq("true", "false").foreach { nestedSchemaPruningEnabled =>
+        withSQLConf(
+          SQLConf.CASE_SENSITIVE.key -> "false",
+          SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedSchemaPruningEnabled) {
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+
+            // Prepare values for testing nested parquet data
+            spark
+              .range(1L)
+              .selectExpr("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn")
+              .write
+              .format(format)
+              .save(path)
+
+            val exactSchema = "StructColumn struct<lowercase: LONG, camelCase: LONG>"
+
+            checkAnswer(spark.read.schema(exactSchema).format(format).load(path), Row(Row(0, 1)))
+
+            // In case insensitive manner, parquet's column cases are ignored
+            val innerColumnCaseInsensitiveSchema =
+              "StructColumn struct<Lowercase: LONG, camelcase: LONG>"
+            checkAnswer(
+              spark.read.schema(innerColumnCaseInsensitiveSchema).format(format).load(path),
+              Row(Row(0, 1)))
+
+            val rootColumnCaseInsensitiveSchema =
+              "structColumn struct<lowercase: LONG, camelCase: LONG>"
+            checkAnswer(
+              spark.read.schema(rootColumnCaseInsensitiveSchema).format(format).load(path),
+              Row(Row(0, 1)))
+          }
+        }
+      }
+    }
+  }
 }
 
 object TestingUDT {
