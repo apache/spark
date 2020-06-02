@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.streaming.StreamTest
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class StreamingAggregationStateManagerSuite extends StreamTest {
   // ============================ fields and method for test data ============================
@@ -122,5 +122,25 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
 
     // state manager should return row which is same as input row regardless of format version
     assert(inputRow === stateManager.get(memoryStateStore, keyRow))
+  }
+
+  test("UnsafeRow format invalidation") {
+    // Pass the checking
+    val stateManager0 = StreamingAggregationStateManager.createStateManager(testKeyAttributes,
+      testOutputAttributes, 2)
+    stateManager0.unsafeRowFormatValidation(testRow, testOutputSchema)
+    // Fail for fields number not match
+    val stateManager1 = StreamingAggregationStateManager.createStateManager(testKeyAttributes,
+      testOutputAttributes, 2)
+    assertThrows[InvalidUnsafeRowException](stateManager1.unsafeRowFormatValidation(
+      testRow, StructType(testKeys.map(createIntegerField))))
+    // Fail for invalid schema
+    val stateManager2 = StreamingAggregationStateManager.createStateManager(testKeyAttributes,
+      testOutputAttributes, 2)
+    val invalidSchema = StructType(testKeys.map(createIntegerField) ++
+      Seq(StructField("struct", StructType(Seq(StructField("value1", StringType, true))), true),
+      StructField("value2", IntegerType, false)))
+    assertThrows[InvalidUnsafeRowException](stateManager2.unsafeRowFormatValidation(
+      testRow, invalidSchema))
   }
 }
