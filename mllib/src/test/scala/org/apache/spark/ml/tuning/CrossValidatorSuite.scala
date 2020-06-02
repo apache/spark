@@ -32,7 +32,7 @@ import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
 class CrossValidatorSuite
@@ -46,17 +46,9 @@ class CrossValidatorSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
     dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
-    val foldCol = udf { () =>
-      val r = Math.random()
-      if (r < 0.33) {
-        0
-      } else if (r < 0.66) {
-        1
-      } else {
-        2
-      }
-    }
-    datasetWithFold = dataset.withColumn("fold", foldCol())
+    val dfWithRandom = dataset.repartition(1).withColumn("random", rand(100L))
+    val foldCol = when(col("random") < 0.33, 0).when(col("random") < 0.66, 1).otherwise(2)
+    datasetWithFold = dfWithRandom.withColumn("fold", foldCol).drop("random").repartition(2)
   }
 
   test("cross validation with logistic regression") {

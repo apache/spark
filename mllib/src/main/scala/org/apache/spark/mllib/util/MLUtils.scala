@@ -254,8 +254,10 @@ object MLUtils extends Logging {
   @Since("3.1.0")
   def kFold(df: DataFrame, numFolds: Int, foldColName: String): Array[(RDD[Row], RDD[Row])] = {
     val foldCol = df.col(foldColName)
+    val dfWithMod = df.withColumn(foldColName, pmod(foldCol, lit(numFolds)))
     (0 until numFolds).map { fold =>
-      (df.filter(foldCol =!= fold).drop(foldCol).rdd, df.filter(foldCol === fold).drop(foldCol).rdd)
+      (dfWithMod.filter(col(foldColName) =!= fold).drop(foldColName).rdd,
+        dfWithMod.filter(col(foldColName) === fold).drop(foldColName).rdd)
     }.toArray
   }
 

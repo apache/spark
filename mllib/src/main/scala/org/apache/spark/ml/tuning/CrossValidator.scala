@@ -60,8 +60,8 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
   /**
    * Param for the column name of user specified fold number. Once this is specified,
    * `CrossValidator` won't do random k-fold split. Note that this column should be
-   * integer type with range [0, numFolds) and Spark won't do sanity-check for this
-   * user-specified fold numbers.
+   * integer type with range [0, numFolds) and Spark will also mod the user-specified
+   * fold values with the value of `numFolds` param.
    */
   val foldCol: Param[String] = new Param[String](this, "foldCol",
     "the column name of user specified fold number")
