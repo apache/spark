@@ -228,10 +228,11 @@ private object DateTimeFormatterHelper {
   }
   final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
   // SPARK-31892: The week-based date fields are rarely used and really confusing for parsing values
-  // to timestamp, especially when they are mixed with other non-week-based ones. we have tried our
-  // best to restore the behavior change between 2.4 and 3.0 and failed, see
-  // https://github.com/apache/spark/pull/28674
-  final val unsupportedLettersForParsing = Set('Y', 'W', 'w', 'E', 'u', 'F')
+  // to datetime, especially when they are mixed with other non-week-based ones
+  // The quarter fields will also be parsed strangely, e.g. when the pattern contains `yMd` and can
+  // be directly resolved then the `q` do check for whether the month is valid, but if the date
+  // fields is incomplete, e.g. `yM`, the checking will be bypassed.
+  final val unsupportedLettersForParsing = Set('Y', 'W', 'w', 'E', 'u', 'F', 'q', 'Q')
   final val unsupportedPatternLengths = {
     // SPARK-31771: Disable Narrow-form TextStyle to avoid silent data change, as it is Full-form in
     // 2.4
