@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.text.SimpleDateFormat
 import java.time.{LocalDate, ZoneId}
-import java.time.format.DateTimeFormatter
-import java.util.{Date, Locale}
+import java.util.{Date, Locale, TimeZone}
 
 import org.apache.commons.lang3.time.FastDateFormat
 
@@ -83,13 +82,14 @@ class Iso8601DateFormatter(
 
 trait LegacyDateFormatter extends DateFormatter {
   def parseToDate(s: String): Date
+  def zoneId: ZoneId
 
   override def parse(s: String): Int = {
-    fromJavaDate(new java.sql.Date(parseToDate(s).getTime))
+    fromJavaDate(new java.sql.Date(parseToDate(s).getTime), TimeZone.getTimeZone(zoneId))
   }
 
   override def format(days: Int): String = {
-    format(DateTimeUtils.toJavaDate(days))
+    format(DateTimeUtils.toJavaDate(days, TimeZone.getTimeZone(zoneId)))
   }
 
   override def format(localDate: LocalDate): String = {
@@ -97,17 +97,27 @@ trait LegacyDateFormatter extends DateFormatter {
   }
 }
 
-class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
+class LegacyFastDateFormatter(
+    pattern: String,
+    override val zoneId: ZoneId,
+    locale: Locale) extends LegacyDateFormatter {
   @transient
-  private lazy val fdf = FastDateFormat.getInstance(pattern, locale)
+  private lazy val fdf = FastDateFormat.getInstance(pattern, TimeZone.getTimeZone(zoneId), locale)
   override def parseToDate(s: String): Date = fdf.parse(s)
   override def format(d: Date): String = fdf.format(d)
   override def validatePatternString(): Unit = fdf
 }
 
-class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
+class LegacySimpleDateFormatter(
+    pattern: String,
+    override val zoneId: ZoneId,
+    locale: Locale) extends LegacyDateFormatter {
   @transient
-  private lazy val sdf = new SimpleDateFormat(pattern, locale)
+  private lazy val sdf = {
+    val formatter = new SimpleDateFormat(pattern, locale)
+    formatter.setTimeZone(TimeZone.getTimeZone(zoneId))
+    formatter
+  }
   override def parseToDate(s: String): Date = sdf.parse(s)
   override def format(d: Date): String = sdf.format(d)
   override def validatePatternString(): Unit = sdf
@@ -143,9 +153,9 @@ object DateFormatter {
       legacyFormat: LegacyDateFormat): DateFormatter = {
     legacyFormat match {
       case FAST_DATE_FORMAT =>
-        new LegacyFastDateFormatter(pattern, locale)
+        new LegacyFastDateFormatter(pattern, zoneId, locale)
       case SIMPLE_DATE_FORMAT | LENIENT_SIMPLE_DATE_FORMAT =>
-        new LegacySimpleDateFormatter(pattern, locale)
+        new LegacySimpleDateFormatter(pattern, zoneId, locale)
     }
   }
 

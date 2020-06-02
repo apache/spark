@@ -103,8 +103,12 @@ object DateTimeUtils {
    * @return The number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
+    fromJavaDate(date, TimeZone.getDefault)
+  }
+
+  def fromJavaDate(date: Date, timeZone: TimeZone): SQLDate = {
     val millisUtc = date.getTime
-    val millisLocal = millisUtc + TimeZone.getDefault.getOffset(millisUtc)
+    val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
     val julianDays = Math.toIntExact(Math.floorDiv(millisLocal, MILLIS_PER_DAY))
     rebaseJulianToGregorianDays(julianDays)
   }
@@ -123,9 +127,13 @@ object DateTimeUtils {
    * @return A `java.sql.Date` from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
+    toJavaDate(daysSinceEpoch, TimeZone.getDefault)
+  }
+
+  def toJavaDate(daysSinceEpoch: SQLDate, timeZone: TimeZone): Date = {
     val rebasedDays = rebaseGregorianToJulianDays(daysSinceEpoch)
     val localMillis = Math.multiplyExact(rebasedDays, MILLIS_PER_DAY)
-    val timeZoneOffset = TimeZone.getDefault match {
+    val timeZoneOffset = timeZone match {
       case zoneInfo: ZoneInfo => zoneInfo.getOffsetsByWall(localMillis, null)
       case timeZone: TimeZone => timeZone.getOffset(localMillis - timeZone.getRawOffset)
     }
