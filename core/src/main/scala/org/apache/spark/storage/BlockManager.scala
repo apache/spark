@@ -24,6 +24,7 @@ import java.nio.channels.Channels
 import java.util.Collections
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
@@ -53,6 +54,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
+import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.shuffle.{ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.storage.memory._
@@ -253,6 +255,10 @@ private[spark] class BlockManager(
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
   var hostLocalDirManager: Option[HostLocalDirManager] = None
+
+  private lazy val migratableResolver: MigratableResolver = {
+    shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
+  }
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
@@ -617,6 +623,7 @@ private[spark] class BlockManager(
    */
   override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
+      logInfo(s"Getting local shuffle block ${blockId}")
       shuffleManager.shuffleBlockResolver.getBlockData(blockId)
     } else {
       getLocalBytes(blockId) match {
@@ -650,6 +657,19 @@ private[spark] class BlockManager(
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[_]): StreamCallbackWithID = {
+    // Delegate shuffle blocks here to resolver if supported
+    if (blockId.isShuffle || blockId.isInternalShuffle) {
+      logInfo(s"Putting shuffle block ${blockId}")
+      try {
+        return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
+      } catch {
+        case e: ClassCastException => throw new Exception(
+          s"Unexpected shuffle block ${blockId} with unsupported shuffle " +
+          s"resolver ${shuffleManager.shuffleBlockResolver}")
+      }
+    }
+    logInfo(s"Putting regular block ${blockId}")
+    // All other blocks
     val (_, tmpFile) = diskBlockManager.createTempLocalBlock()
     val channel = new CountingWritableChannel(
       Channels.newChannel(serializerManager.wrapForEncryption(new FileOutputStream(tmpFile))))
@@ -720,7 +740,7 @@ private[spark] class BlockManager(
    * it is still valid). This ensures that update in master will compensate for the increase in
    * memory on slave.
    */
-  private def reportBlockStatus(
+  private[spark] def reportBlockStatus(
       blockId: BlockId,
       status: BlockStatus,
       droppedMemorySize: Long = 0L): Unit = {
@@ -1285,6 +1305,9 @@ private[spark] class BlockManager(
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
+    if (blockManagerDecommissioning && blockId.isRDD) {
+      throw new RDDBlockSavedOnDecommissionedBlockManagerException(blockId.asRDDId.get)
+    }
 
     val putBlockInfo = {
       val newInfo = new BlockInfo(level, classTag, tellMaster)
@@ -1781,12 +1804,113 @@ private[spark] class BlockManager(
 
   def decommissionBlockManager(): Unit = {
     if (!blockManagerDecommissioning) {
-      logInfo("Starting block manager decommissioning process")
+      logInfo("Starting block manager decommissioning process...")
       blockManagerDecommissioning = true
       decommissionManager = Some(new BlockManagerDecommissionManager(conf))
       decommissionManager.foreach(_.start())
     } else {
       logDebug("Block manager already in decommissioning state")
+    }
+  }
+
+
+  // Shuffles which are either in queue for migrations or migrated
+  private val migratingShuffles = mutable.HashSet[(Int, Long)]()
+  // Shuffles which are queued for migration
+  private val shufflesToMigrate = new java.util.concurrent.ConcurrentLinkedQueue[(Int, Long)]()
+
+
+  private class ShuffleMigrationRunnable(peer: BlockManagerId) extends Runnable {
+    @volatile var running = true
+    override def run(): Unit = {
+      var migrating: Option[(Int, Long)] = None
+      val storageLevel = StorageLevel(
+        useDisk = true,
+        useMemory = false,
+        useOffHeap = false,
+        deserialized = false,
+        replication = 1)
+      logInfo(s"Starting migration thread for ${peer}")
+      // Once a block fails to transfer to an executor stop trying to transfer more blocks
+      try {
+        while (running) {
+          val migrating = Option(shufflesToMigrate.poll())
+          migrating match {
+            case None =>
+              logInfo("Nothing to migrate")
+              // Nothing to do right now, but maybe a transfer will fail or a new block
+              // will finish being committed.
+              val SLEEP_TIME_SECS = 1
+              Thread.sleep(SLEEP_TIME_SECS * 1000L)
+            case Some((shuffleId, mapId)) =>
+              logInfo(s"Trying to migrate shuffle ${shuffleId},${mapId} to ${peer}")
+              val blocks =
+                migratableResolver.getMigrationBlocks(shuffleId, mapId)
+              logInfo(s"Got migration sub-blocks ${blocks}")
+              blocks.foreach { case (blockId, buffer) =>
+                logInfo(s"Migrating sub-block ${blockId}")
+                blockTransferService.uploadBlockSync(
+                  peer.host,
+                  peer.port,
+                  peer.executorId,
+                  blockId,
+                  buffer,
+                  storageLevel,
+                  null)// class tag, we don't need for shuffle
+                logInfo(s"Migrated sub block ${blockId}")
+              }
+              logInfo(s"Migrated ${shuffleId},${mapId} to ${peer}")
+          }
+        }
+        // This catch is intentionally outside of the while running block.
+        // if we encounter errors migrating to an executor we want to stop.
+      } catch {
+        case e: Exception =>
+          migrating match {
+            case Some(shuffleMap) =>
+              logError("Error ${e} during migration, adding ${shuffleMap} back to migration queue")
+              shufflesToMigrate.add(shuffleMap)
+            case None =>
+              logError("Error ${e} while waiting for block to migrate")
+          }
+      }
+    }
+  }
+
+  private val migrationPeers = mutable.HashMap[BlockManagerId, ShuffleMigrationRunnable]()
+
+  /**
+   * Tries to offload all shuffle blocks that are registered with the shuffle service locally.
+   * Note: this does not delete the shuffle files in-case there is an in-progress fetch
+   * but rather shadows them.
+   * Requires an Indexed based shuffle resolver.
+   */
+  def offloadShuffleBlocks(): Unit = {
+    // Update the queue of shuffles to be migrated
+    logInfo("Offloading shuffle blocks")
+    val localShuffles = migratableResolver.getStoredShuffles()
+    logInfo(s"My local shuffles are ${localShuffles.toList}")
+    val newShufflesToMigrate = localShuffles.&~(migratingShuffles).toSeq
+    logInfo(s"My new shuffles to migrate ${newShufflesToMigrate.toList}")
+    shufflesToMigrate.addAll(newShufflesToMigrate.asJava)
+    migratingShuffles ++= newShufflesToMigrate
+
+    // Update the threads doing migrations
+    // TODO: Sort & only start as many threads as min(||blocks||, ||targets||) using location pref
+    val livePeerSet = getPeers(false).toSet
+    val currentPeerSet = migrationPeers.keys.toSet
+    val deadPeers = currentPeerSet.&~(livePeerSet)
+    val newPeers = livePeerSet.&~(currentPeerSet)
+    migrationPeers ++= newPeers.map{peer =>
+      logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
+      val executor = ThreadUtils.newDaemonSingleThreadExecutor(s"migrate-shuffle-to-${peer}")
+      val runnable = new ShuffleMigrationRunnable(peer)
+      executor.submit(runnable)
+      (peer, runnable)
+    }
+    // A peer may have entered a decommissioning state, don't transfer any new blocks
+    deadPeers.foreach{peer =>
+        migrationPeers.get(peer).foreach(_.running = false)
     }
   }
 
@@ -1798,7 +1922,7 @@ private[spark] class BlockManager(
     val replicateBlocksInfo = master.getReplicateInfoForRDDBlocks(blockManagerId)
 
     if (replicateBlocksInfo.nonEmpty) {
-      logInfo(s"Need to replicate ${replicateBlocksInfo.size} blocks " +
+      logInfo(s"Need to replicate ${replicateBlocksInfo.size} RDD blocks " +
         "for block manager decommissioning")
     } else {
       logWarning(s"Asked to decommission RDD cache blocks, but no blocks to migrate")
@@ -1907,23 +2031,39 @@ private[spark] class BlockManager(
    */
   private class BlockManagerDecommissionManager(conf: SparkConf) {
     @volatile private var stopped = false
-    private val sleepInterval = conf.get(
-      config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
+    private val blockMigrationThread = new Thread {
+      val sleepInterval = conf.get(
+        config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
 
-    private val blockReplicationThread = new Thread {
       override def run(): Unit = {
         var failures = 0
         while (blockManagerDecommissioning
           && !stopped
           && !Thread.interrupted()
           && failures < 20) {
+          logInfo("Iterating on migrating from the block manager.")
           try {
-            logDebug("Attempting to replicate all cached RDD blocks")
-            decommissionRddCacheBlocks()
-            logInfo("Attempt to replicate all cached blocks done")
+            // If enabled we migrate shuffle blocks first as they are more expensive.
+            if (conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
+              logDebug(s"Attempting to replicate all shuffle blocks")
+              offloadShuffleBlocks()
+              logInfo(s"Done starting workers to migrate shuffle blocks")
+            }
+            if (conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED)) {
+              logDebug(s"Attempting to replicate all cached RDD blocks")
+              decommissionRddCacheBlocks()
+              logInfo(s"Attempt to replicate all cached blocks done")
+            }
+            if (!conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED) &&
+              !conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
+              logWarning("Decommissioning, but no task configured set one or both:\n" +
+                "spark.storage.decommission.shuffle_blocks\n" +
+                "spark.storage.decommission.rdd_blocks")
+            }
+            logInfo(s"Waiting for ${sleepInterval} before refreshing migrations.")
             Thread.sleep(sleepInterval)
           } catch {
-            case _: InterruptedException =>
+            case e: InterruptedException =>
               logInfo("Interrupted during migration, will not refresh migrations.")
               stopped = true
             case NonFatal(e) =>
@@ -1934,19 +2074,19 @@ private[spark] class BlockManager(
         }
       }
     }
-    blockReplicationThread.setDaemon(true)
-    blockReplicationThread.setName("block-replication-thread")
+    blockMigrationThread.setDaemon(true)
+    blockMigrationThread.setName("block-replication-thread")
 
     def start(): Unit = {
       logInfo("Starting block replication thread")
-      blockReplicationThread.start()
+      blockMigrationThread.start()
     }
 
     def stop(): Unit = {
       if (!stopped) {
         stopped = true
         logInfo("Stopping block replication thread")
-        blockReplicationThread.interrupt()
+        blockMigrationThread.interrupt()
       }
     }
   }

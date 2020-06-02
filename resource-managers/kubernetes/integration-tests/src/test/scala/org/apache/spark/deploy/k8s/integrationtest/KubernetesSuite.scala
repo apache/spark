@@ -325,7 +325,7 @@ class KubernetesSuite extends SparkFunSuite
                   val result = checkPodReady(namespace, name)
                   result shouldBe (true)
                 }
-                // Look for the string that indicates we're good to clean up
+                // Look for the string that indicates we're good to trigger decom
                 // on the driver
                 logDebug("Waiting for first collect...")
                 Eventually.eventually(TIMEOUT, INTERVAL) {
@@ -333,13 +333,29 @@ class KubernetesSuite extends SparkFunSuite
                     .pods()
                     .withName(driverPodName)
                     .getLog
-                    .contains("Waiting to give nodes time to finish."),
+                    .contains("Waiting to give nodes time to finish migration, decom exec 1."),
                     "Decommission test did not complete first collect.")
                 }
                 // Delete the pod to simulate cluster scale down/migration.
-                val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
+                // This will allow the pod to remain up for the grace period
+                val pod = kubernetesTestComponents.kubernetesClient.pods()
+                  .withName(name)
                 pod.delete()
                 logDebug(s"Triggered pod decom/delete: $name deleted")
+                // Look for the string that indicates we should force kill the first
+                // Executor. This simulates the pod being fully lost.
+                logDebug("Waiting for second collect...")
+                Eventually.eventually(TIMEOUT, INTERVAL) {
+                  assert(kubernetesTestComponents.kubernetesClient
+                    .pods()
+                    .withName(driverPodName)
+                    .getLog
+                    .contains("Waiting some more, please kill exec 1."),
+                    "Decommission test did not complete second collect.")
+                }
+                logDebug("Force deleting")
+                val podNoGrace = pod.withGracePeriod(0)
+                podNoGrace.delete()
               }
             case Action.DELETED | Action.ERROR =>
               execPods.remove(name)

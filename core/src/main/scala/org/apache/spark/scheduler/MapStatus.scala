@@ -33,8 +33,10 @@ import org.apache.spark.util.Utils
  * task ran on as well as the sizes of outputs for each reducer, for passing on to the reduce tasks.
  */
 private[spark] sealed trait MapStatus {
-  /** Location where this task was run. */
+  /** Location where this task output is. */
   def location: BlockManagerId
+
+  def updateLocation(bm: BlockManagerId): Unit
 
   /**
    * Estimated size for the reduce block, in bytes.
@@ -126,6 +128,10 @@ private[spark] class CompressedMapStatus(
 
   override def location: BlockManagerId = loc
 
+  override def updateLocation(bm: BlockManagerId): Unit = {
+    loc = bm
+  }
+
   override def getSizeForBlock(reduceId: Int): Long = {
     MapStatus.decompressSize(compressedSizes(reduceId))
   }
@@ -177,6 +183,10 @@ private[spark] class HighlyCompressedMapStatus private (
   protected def this() = this(null, -1, null, -1, null, -1)  // For deserialization only
 
   override def location: BlockManagerId = loc
+
+  override def updateLocation(bm: BlockManagerId): Unit = {
+    loc = bm
+  }
 
   override def getSizeForBlock(reduceId: Int): Long = {
     assert(hugeBlockSizes != null)
