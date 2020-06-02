@@ -548,7 +548,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[app-id]/sql</code></td>
     <td>A list of all queries for a given application.
     <br>
-    <code>?details=[true (default) | false]</code> lists metric details in addition to queries details.
+    <code>?details=[true (default) | false]</code> lists/hides details of Spark plan nodes.
     <br>
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand when Physical Plan size is high.
     <br>
