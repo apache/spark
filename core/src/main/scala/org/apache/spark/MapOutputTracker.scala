@@ -283,6 +283,7 @@ private[spark] class MapOutputTrackerMasterEndpoint(
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
+      logInfo(s"Asked to send map output locations for shuffle ${shuffleId} to ${hostPort}")
       tracker.post(new GetMapOutputMessage(shuffleId, context))
 
     case StopMapOutputTracker =>
@@ -466,7 +467,7 @@ private[spark] class MapOutputTrackerMaster(
             val context = data.context
             val shuffleId = data.shuffleId
             val hostPort = context.senderAddress.hostPort
-            logInfo("Handling request to send map output locations for shuffle " + shuffleId +
+            logDebug("Handling request to send map output locations for shuffle " + shuffleId +
               " to " + hostPort)
             val shuffleStatus = shuffleStatuses.get(shuffleId).head
             context.reply(

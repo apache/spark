@@ -1586,12 +1586,7 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.removeListener(listener)
   }
 
-  /**
-   * :: DeveloperApi ::
-   * Deregister the listener from Spark's listener bus.
-   */
-  @DeveloperApi
-  def getExecutorIds(): Seq[String] = {
+  private[spark] def getExecutorIds(): Seq[String] = {
     schedulerBackend match {
       case b: ExecutorAllocationClient =>
         b.getExecutorIds()
@@ -1731,8 +1726,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
 
-  @DeveloperApi
-  def decommissionExecutors(executorIds: Seq[String]): Unit = {
+  private[spark] def decommissionExecutors(executorIds: Seq[String]): Unit = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         executorIds.foreach(b.decommissionExecutor)
