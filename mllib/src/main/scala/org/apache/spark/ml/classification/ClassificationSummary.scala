@@ -195,7 +195,9 @@ trait BinaryClassificationSummary extends ClassificationSummary {
   private val sparkSession = predictions.sparkSession
   import sparkSession.implicits._
 
-  /** Field in "predictions" which gives the probability of each class as a vector. */
+  /**
+   * Field in "predictions" which gives the probability or rawPrediction of each class as a vector.
+   */
   @Since("3.1.0")
   def scoreCol: String
 
