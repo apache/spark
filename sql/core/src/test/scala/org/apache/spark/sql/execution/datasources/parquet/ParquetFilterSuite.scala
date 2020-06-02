@@ -602,7 +602,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
   test("filter pushdown - timestamp") {
-    Seq(true).foreach { java8Api =>
+    Seq(true, false).foreach { java8Api =>
       withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
         // spark.sql.parquet.outputTimestampType = TIMESTAMP_MILLIS
         val millisData = Seq(
