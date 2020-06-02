@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
+import org.apache.spark.{MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
@@ -70,9 +70,9 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       size > conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD)
   }
 
-  private def medianSize(stats: MapOutputStatistics): Long = {
-    val numPartitions = stats.bytesByPartitionId.length
-    val bytes = stats.bytesByPartitionId.sorted
+  private def medianSize(sizes: Seq[Long]): Long = {
+    val numPartitions = sizes.length
+    val bytes = sizes.sorted
     numPartitions match {
       case _ if (numPartitions % 2 == 0) =>
         math.max((bytes(numPartitions / 2) + bytes(numPartitions / 2 - 1)) / 2, 1)
@@ -88,9 +88,11 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   private def targetSize(sizes: Seq[Long], medianSize: Long): Long = {
     val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     val nonSkewSizes = sizes.filterNot(isSkewed(_, medianSize))
-    // It's impossible that all the partitions are skewed, as we use median size to define skew.
-    assert(nonSkewSizes.nonEmpty)
-    math.max(advisorySize, nonSkewSizes.sum / nonSkewSizes.length)
+    if (nonSkewSizes.isEmpty) {
+      advisorySize
+    } else {
+      math.max(advisorySize, nonSkewSizes.sum / nonSkewSizes.length)
+    }
   }
 
   /**
@@ -161,16 +163,16 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         if supportedJoinTypes.contains(joinType) =>
       assert(left.partitionsWithSizes.length == right.partitionsWithSizes.length)
       val numPartitions = left.partitionsWithSizes.length
-      // We use the median size of the original shuffle partitions to detect skewed partitions.
-      val leftMedSize = medianSize(left.mapStats)
-      val rightMedSize = medianSize(right.mapStats)
+      // Use the median size of the actual (coalesced) partition sizes to detect skewed partitions.
+      val leftMedSize = medianSize(left.partitionsWithSizes.map(_._2))
+      val rightMedSize = medianSize(right.partitionsWithSizes.map(_._2))
       logDebug(
         s"""
           |Optimizing skewed join.
           |Left side partitions size info:
-          |${getSizeInfo(leftMedSize, left.mapStats.bytesByPartitionId)}
+          |${getSizeInfo(leftMedSize, left.partitionsWithSizes.map(_._2))}
           |Right side partitions size info:
-          |${getSizeInfo(rightMedSize, right.mapStats.bytesByPartitionId)}
+          |${getSizeInfo(rightMedSize, right.partitionsWithSizes.map(_._2))}
         """.stripMargin)
       val canSplitLeft = canSplitLeftSide(joinType)
       val canSplitRight = canSplitRightSide(joinType)
@@ -288,15 +290,16 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
 private object ShuffleStage {
   def unapply(plan: SparkPlan): Option[ShuffleStageInfo] = plan match {
-    case s: ShuffleQueryStageExec =>
-      val sizes = s.mapStats.bytesByPartitionId
+    case s: ShuffleQueryStageExec if s.mapStats.isDefined =>
+      val sizes = s.mapStats.get.bytesByPartitionId
       val partitions = sizes.zipWithIndex.map {
         case (size, i) => CoalescedPartitionSpec(i, i + 1) -> size
       }
-      Some(ShuffleStageInfo(s, s.mapStats, partitions))
+      Some(ShuffleStageInfo(s, partitions))
 
-    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
-      val sizes = s.mapStats.bytesByPartitionId
+    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs)
+      if s.mapStats.isDefined && partitionSpecs.nonEmpty =>
+      val sizes = s.mapStats.get.bytesByPartitionId
       val partitions = partitionSpecs.map {
         case spec @ CoalescedPartitionSpec(start, end) =>
           var sum = 0L
@@ -309,7 +312,7 @@ private object ShuffleStage {
         case other => throw new IllegalArgumentException(
           s"Expect CoalescedPartitionSpec but got $other")
       }
-      Some(ShuffleStageInfo(s, s.mapStats, partitions))
+      Some(ShuffleStageInfo(s, partitions))
 
     case _ => None
   }
@@ -317,5 +320,4 @@ private object ShuffleStage {
 
 private case class ShuffleStageInfo(
     shuffleStage: ShuffleQueryStageExec,
-    mapStats: MapOutputStatistics,
     partitionsWithSizes: Seq[(CoalescedPartitionSpec, Long)])

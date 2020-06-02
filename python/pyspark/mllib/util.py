@@ -372,7 +372,7 @@ class Saveable(object):
          * human-readable (JSON) model metadata to path/metadata/
          * Parquet formatted data to path/data/
 
-        The model may be loaded using py:meth:`Loader.load`.
+        The model may be loaded using :py:meth:`Loader.load`.
 
         :param sc: Spark context used to save model data.
         :param path: Path specifying the directory in which to save
@@ -412,7 +412,7 @@ class Loader(object):
     def load(cls, sc, path):
         """
         Load a model from the given path. The model should have been
-        saved using py:meth:`Saveable.save`.
+        saved using :py:meth:`Saveable.save`.
 
         :param sc: Spark context used for loading model files.
         :param path: Path specifying the directory to which the model

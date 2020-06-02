@@ -133,7 +133,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       ComputeCurrentTime,
-      GetCurrentDatabase(catalogManager),
+      GetCurrentDatabaseAndCatalog(catalogManager),
       RewriteDistinctAggregates,
       ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -223,7 +223,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView.ruleName ::
       ReplaceExpressions.ruleName ::
       ComputeCurrentTime.ruleName ::
-      GetCurrentDatabase(catalogManager).ruleName ::
+      GetCurrentDatabaseAndCatalog(catalogManager).ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
       ReplaceIntersectWithSemiJoin.ruleName ::
@@ -1188,9 +1188,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
   def getAliasMap(plan: Aggregate): AttributeMap[Expression] = {
     // Find all the aliased expressions in the aggregate list that don't include any actual
-    // AggregateExpression, and create a map from the alias to the expression
+    // AggregateExpression or PythonUDF, and create a map from the alias to the expression
     val aliasMap = plan.aggregateExpressions.collect {
-      case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
+      case a: Alias if a.child.find(e => e.isInstanceOf[AggregateExpression] ||
+          PythonUDF.isGroupedAggPandasUDF(e)).isEmpty =>
         (a.toAttribute, a.child)
     }
     AttributeMap(aliasMap)

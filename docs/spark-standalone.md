@@ -335,7 +335,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
     local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
     all files/subdirectories of a stopped and timeout application.
-    This only affects Standalone mode, support of other cluster manangers can be added in the future.
+    This only affects Standalone mode, support of other cluster managers can be added in the future.
   </td>
   <td>2.4.0</td>
 </tr>

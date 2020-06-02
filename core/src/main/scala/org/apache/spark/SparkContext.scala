@@ -435,7 +435,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     _listenerBus = new LiveListenerBus(_conf)
-    _resourceProfileManager = new ResourceProfileManager(_conf)
+    _resourceProfileManager = new ResourceProfileManager(_conf, _listenerBus)
 
     // Initialize the app status store and listener before SparkEnv is created so that it gets
     // all events.
@@ -2740,7 +2740,7 @@ object SparkContext extends Logging {
       case "local" => 1
       case SparkMasterRegex.LOCAL_N_REGEX(threads) => convertToInt(threads)
       case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
-      case "yarn" =>
+      case "yarn" | SparkMasterRegex.KUBERNETES_REGEX(_) =>
         if (conf != null && conf.get(SUBMIT_DEPLOY_MODE) == "cluster") {
           conf.getInt(DRIVER_CORES.key, 0)
         } else {
@@ -2885,6 +2885,8 @@ private object SparkMasterRegex {
   val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
   // Regular expression for connecting to Spark deploy clusters
   val SPARK_REGEX = """spark://(.*)""".r
+  // Regular expression for connecting to kubernetes clusters
+  val KUBERNETES_REGEX = """k8s://(.*)""".r
 }
 
 /**

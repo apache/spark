@@ -1,5 +1,19 @@
-[
-  {
+[ {
+  "id" : "application_1578436911597_0052",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2020-01-11T17:44:22.851GMT",
+    "endTime" : "2020-01-11T17:46:42.615GMT",
+    "lastUpdated" : "",
+    "duration" : 139764,
+    "sparkUser" : "tgraves",
+    "completed" : true,
+    "appSparkVersion" : "3.0.0-SNAPSHOT",
+    "endTimeEpoch" : 1578764802615,
+    "startTimeEpoch" : 1578764662851,
+    "lastUpdatedEpoch" : 0
+  } ]
+}, {
     "id": "application_1555004656427_0144",
     "name": "Spark shell",
     "attempts": [

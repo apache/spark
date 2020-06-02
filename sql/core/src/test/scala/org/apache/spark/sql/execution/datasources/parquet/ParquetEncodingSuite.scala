@@ -42,7 +42,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -69,7 +69,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -100,7 +100,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file, null /* set columns to null to project all columns */)
         val column = reader.resultBatch().column(0)
         assert(reader.nextBatch())

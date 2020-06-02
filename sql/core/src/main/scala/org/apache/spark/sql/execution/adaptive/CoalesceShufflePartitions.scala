@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.MapOutputStatistics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
@@ -28,7 +27,6 @@ import org.apache.spark.sql.internal.SQLConf
  * avoid many small reduce tasks that hurt performance.
  */
 case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPlan] {
-  import CoalesceShufflePartitions._
   private def conf = session.sessionState.conf
 
   override def apply(plan: SparkPlan): SparkPlan = {
@@ -54,14 +52,10 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
     if (!shuffleStages.forall(_.shuffle.canChangeNumPartitions)) {
       plan
     } else {
-      val shuffleMetrics = shuffleStages.map { stage =>
-        assert(stage.resultOption.isDefined, "ShuffleQueryStageExec should already be ready")
-        stage.resultOption.get.asInstanceOf[MapOutputStatistics]
-      }
-
-      // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD has 0 partitions,
+      // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
       // we should skip it when calculating the `partitionStartIndices`.
-      val validMetrics = shuffleMetrics.filter(_ != null)
+      val validMetrics = shuffleStages.flatMap(_.mapStats)
+
       // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
       // in that case. For example when we union fully aggregated data (data is arranged to a single
       // partition) and a result of a SortMergeJoin (multiple partitions).

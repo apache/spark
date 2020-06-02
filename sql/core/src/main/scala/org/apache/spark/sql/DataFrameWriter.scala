@@ -790,7 +790,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
@@ -915,7 +915,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.

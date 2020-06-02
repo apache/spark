@@ -142,7 +142,7 @@ class FileStreamSink(
   }
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
+    if (batchId <= fileLog.getLatestBatchId().getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
       val committer = FileCommitProtocol.instantiate(

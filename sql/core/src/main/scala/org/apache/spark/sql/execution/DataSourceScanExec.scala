@@ -55,10 +55,12 @@ trait DataSourceScanExec extends LeafExecNode {
   // Metadata that describes more details of this scan.
   protected def metadata: Map[String, String]
 
+  protected val maxMetadataValueLength = 100
+
   override def simpleString(maxFields: Int): String = {
     val metadataEntries = metadata.toSeq.sorted.map {
       case (key, value) =>
-        key + ": " + StringUtils.abbreviate(redact(value), 100)
+        key + ": " + StringUtils.abbreviate(redact(value), maxMetadataValueLength)
     }
     val metadataStr = truncatedString(metadataEntries, " ", ", ", "", maxFields)
     redact(
@@ -75,10 +77,10 @@ trait DataSourceScanExec extends LeafExecNode {
     }
 
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
-     """.stripMargin
+       |""".stripMargin
   }
 
   /**
@@ -326,13 +328,17 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private lazy val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
+  private lazy val pushedDownFilters = {
+    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
+    dataFilters.flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+  }
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
     val location = relation.location
     val locationDesc =
-      location.getClass.getSimpleName + seqToString(location.rootPaths)
+      location.getClass.getSimpleName +
+        Utils.buildLocationMetadata(location.rootPaths, maxMetadataValueLength)
     val metadata =
       Map(
         "Format" -> relation.fileFormat.toString,
@@ -377,10 +383,10 @@ case class FileSourceScanExec(
     }
 
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
-     """.stripMargin
+       |""".stripMargin
   }
 
   lazy val inputRDD: RDD[InternalRow] = {

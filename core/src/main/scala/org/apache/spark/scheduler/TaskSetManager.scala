@@ -221,10 +221,11 @@ private[spark] class TaskSetManager(
   private[scheduler] var localityWaits = myLocalityLevels.map(getLocalityWait)
 
   // Delay scheduling variables: we keep track of our current locality level and the time we
-  // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
-  // We then move down if we manage to launch a "more local" task.
+  // last reset the locality wait timer, and move up a level when localityWaits[curLevel] expires.
+  // We then move down if we manage to launch a "more local" task when resetting the timer
+  private val legacyLocalityWaitReset = conf.get(LEGACY_LOCALITY_WAIT_RESET)
   private var currentLocalityIndex = 0 // Index of our current locality level in validLocalityLevels
-  private var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
+  private var lastLocalityWaitResetTime = clock.getTimeMillis()  // Time we last reset locality wait
 
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
@@ -386,6 +387,14 @@ private[spark] class TaskSetManager(
     None
   }
 
+  private[scheduler] def resetDelayScheduleTimer(
+      minLocality: Option[TaskLocality.TaskLocality]): Unit = {
+    lastLocalityWaitResetTime = clock.getTimeMillis()
+    for (locality <- minLocality) {
+      currentLocalityIndex = getLocalityIndex(locality)
+    }
+  }
+
   /**
    * Respond to an offer of a single executor from the scheduler by finding a task
    *
@@ -396,6 +405,9 @@ private[spark] class TaskSetManager(
    * @param execId the executor Id of the offered resource
    * @param host  the host Id of the offered resource
    * @param maxLocality the maximum locality we want to schedule the tasks at
+   *
+   * @return Tuple containing:
+   *         (TaskDescription of launched task if any, rejected resource due to delay scheduling?)
    */
   @throws[TaskNotSerializableException]
   def resourceOffer(
@@ -403,7 +415,7 @@ private[spark] class TaskSetManager(
       host: String,
       maxLocality: TaskLocality.TaskLocality,
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
-    : Option[TaskDescription] =
+    : (Option[TaskDescription], Boolean) =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
       blacklist.isNodeBlacklistedForTaskSet(host) ||
@@ -422,7 +434,9 @@ private[spark] class TaskSetManager(
         }
       }
 
-      dequeueTask(execId, host, allowedLocality).map { case ((index, taskLocality, speculative)) =>
+      val taskDescription =
+        dequeueTask(execId, host, allowedLocality)
+          .map { case (index, taskLocality, speculative) =>
         // Found a task; do some bookkeeping and return a task description
         val task = tasks(index)
         val taskId = sched.newTaskId()
@@ -433,11 +447,8 @@ private[spark] class TaskSetManager(
           execId, host, taskLocality, speculative)
         taskInfos(taskId) = info
         taskAttempts(index) = info :: taskAttempts(index)
-        // Update our locality level for delay scheduling
-        // NO_PREF will not affect the variables related to delay scheduling
-        if (maxLocality != TaskLocality.NO_PREF) {
-          currentLocalityIndex = getLocalityIndex(taskLocality)
-          lastLaunchTime = curTime
+        if (legacyLocalityWaitReset && maxLocality != TaskLocality.NO_PREF) {
+          resetDelayScheduleTimer(Some(taskLocality))
         }
         // Serialize and return the task
         val serializedTask: ByteBuffer = try {
@@ -482,8 +493,14 @@ private[spark] class TaskSetManager(
           taskResourceAssignments,
           serializedTask)
       }
+      val hasPendingTasks = pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty
+      val hasScheduleDelayReject =
+        taskDescription.isEmpty &&
+          maxLocality == TaskLocality.ANY &&
+          hasPendingTasks
+      (taskDescription, hasScheduleDelayReject)
     } else {
-      None
+      (None, false)
     }
   }
 
@@ -547,14 +564,14 @@ private[spark] class TaskSetManager(
         // This is a performance optimization: if there are no more tasks that can
         // be scheduled at a particular locality level, there is no point in waiting
         // for the locality wait timeout (SPARK-4939).
-        lastLaunchTime = curTime
+        lastLocalityWaitResetTime = curTime
         logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
           s"so moving to locality level ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
-      } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
-        // Jump to the next locality level, and reset lastLaunchTime so that the next locality
-        // wait timer doesn't immediately expire
-        lastLaunchTime += localityWaits(currentLocalityIndex)
+      } else if (curTime - lastLocalityWaitResetTime >= localityWaits(currentLocalityIndex)) {
+        // Jump to the next locality level, and reset lastLocalityWaitResetTime so that the next
+        // locality wait timer doesn't immediately expire
+        lastLocalityWaitResetTime += localityWaits(currentLocalityIndex)
         logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
         currentLocalityIndex += 1
@@ -1090,10 +1107,19 @@ private[spark] class TaskSetManager(
   def recomputeLocality(): Unit = {
     // A zombie TaskSetManager may reach here while executorLost happens
     if (isZombie) return
+    val previousLocalityIndex = currentLocalityIndex
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
+    val previousMyLocalityLevels = myLocalityLevels
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
     currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
+    if (currentLocalityIndex > previousLocalityIndex) {
+      // SPARK-31837: If the new level is more local, shift to the new most local locality
+      // level in terms of better data locality. For example, say the previous locality
+      // levels are [PROCESS, NODE, ANY] and current level is ANY. After recompute, the
+      // locality levels are [PROCESS, NODE, RACK, ANY]. Then, we'll shift to RACK level.
+      currentLocalityIndex = getLocalityIndex(myLocalityLevels.diff(previousMyLocalityLevels).head)
+    }
   }
 
   def executorAdded(): Unit = {

@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
@@ -237,7 +238,7 @@ object SparkPlanTest {
    * @param spark SqlContext used for execution of the plan
    */
   def executePlan(outputPlan: SparkPlan, spark: SQLContext): Seq[Row] = {
-    val execution = new QueryExecution(spark.sparkSession, null) {
+    val execution = new QueryExecution(spark.sparkSession, LocalRelation(Nil)) {
       override lazy val sparkPlan: SparkPlan = outputPlan transform {
         case plan: SparkPlan =>
           val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap

@@ -20,41 +20,38 @@ license: |
 ---
 
 ### Description
+
 `USE` statement is used to set the current database. After the current database is set,
 the unqualified database artifacts such as tables, functions and views that are 
 referenced by SQLs are resolved from the current database. 
 The default database name is 'default'.
 
 ### Syntax
-{% highlight sql %}
+
+```sql
 USE database_name
-{% endhighlight %}
+```
 
 ### Parameter
 
-<dl>
-  <dt><code><em>database_name</em></code></dt>
-  <dd>
-     Name of the database will be used. If the database does not exist, an exception will be thrown.
-  </dd>
-</dl>
+* **database_name**
 
-### Example
-{% highlight sql %}
+    Name of the database will be used. If the database does not exist, an exception will be thrown.
+
+### Examples
+
+```sql
 -- Use the 'userdb' which exists.
 USE userdb;
-+---------+--+
-| Result  |
-+---------+--+
-+---------+--+
 
 -- Use the 'userdb1' which doesn't exist
 USE userdb1;
-Error: org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: Database 'userdb1' not found;(state=,code=0)
-{% endhighlight %}
+Error: org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: Database 'userdb1' not found;
+(state=,code=0)
+```
 
-### Related statements.
-- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
-- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
-- [CREATE TABLE ](sql-ref-syntax-ddl-create-table.html)
+### Related Statements
 
+* [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+* [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+* [CREATE TABLE ](sql-ref-syntax-ddl-create-table.html)

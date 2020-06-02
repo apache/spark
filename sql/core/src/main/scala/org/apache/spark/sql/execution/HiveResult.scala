@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDate}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand}
+import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -49,6 +49,10 @@ object HiveResult {
     // SHOW TABLES in Hive only output table names while our v2 command outputs
     // namespace and table name.
     case command : ShowTablesExec =>
+      command.executeCollect().map(_.getString(1))
+    // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
+    // namespace, viewName, and isTemporary.
+    case command @ ExecutedCommandExec(_: ShowViewsCommand) =>
       command.executeCollect().map(_.getString(1))
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
@@ -76,13 +80,10 @@ object HiveResult {
   def toHiveString(a: (Any, DataType), nested: Boolean = false): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
-    case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
-    case (ld: LocalDate, DateType) =>
-      dateFormatter.format(DateTimeUtils.localDateToDays(ld))
-    case (t: Timestamp, TimestampType) =>
-      timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t))
-    case (i: Instant, TimestampType) =>
-      timestampFormatter.format(DateTimeUtils.instantToMicros(i))
+    case (d: Date, DateType) => dateFormatter.format(d)
+    case (ld: LocalDate, DateType) => dateFormatter.format(ld)
+    case (t: Timestamp, TimestampType) => timestampFormatter.format(t)
+    case (i: Instant, TimestampType) => timestampFormatter.format(i)
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString

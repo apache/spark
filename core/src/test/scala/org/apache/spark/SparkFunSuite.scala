@@ -19,6 +19,7 @@ package org.apache.spark
 
 // scalastyle:off
 import java.io.File
+import java.util.{Locale, TimeZone}
 
 import org.apache.log4j.spi.LoggingEvent
 
@@ -62,6 +63,11 @@ abstract class SparkFunSuite
   with ThreadAudit
   with Logging {
 // scalastyle:on
+
+  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+  // Add Locale setting
+  Locale.setDefault(Locale.US)
 
   protected val enableAutoThreadAudit = true
 

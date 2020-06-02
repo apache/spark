@@ -17,17 +17,23 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import scala.concurrent.Future
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.{FutureAction, MapOutputStatistics}
+import scala.concurrent.{Future, Promise}
+
+import org.apache.spark.{FutureAction, MapOutputStatistics, SparkException}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A query stage is an independent subgraph of the query plan. Query stage materializes its output
@@ -78,7 +84,7 @@ abstract class QueryStageExec extends LeafExecNode {
   /**
    * Compute the statistics of the query stage if executed, otherwise None.
    */
-  def computeStats(): Option[Statistics] = resultOption.map { _ =>
+  def computeStats(): Option[Statistics] = resultOption.get().map { _ =>
     // Metrics `dataSize` are available in both `ShuffleExchangeExec` and `BroadcastExchangeExec`.
     val exchange = plan match {
       case r: ReusedExchangeExec => r.child
@@ -90,7 +96,9 @@ abstract class QueryStageExec extends LeafExecNode {
 
   @transient
   @volatile
-  private[adaptive] var resultOption: Option[Any] = None
+  protected var _resultOption = new AtomicReference[Option[Any]](None)
+
+  private[adaptive] def resultOption: AtomicReference[Option[Any]] = _resultOption
 
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
@@ -100,8 +108,8 @@ abstract class QueryStageExec extends LeafExecNode {
   override def executeTail(n: Int): Array[InternalRow] = plan.executeTail(n)
   override def executeToIterator(): Iterator[InternalRow] = plan.executeToIterator()
 
-  override def doPrepare(): Unit = plan.prepare()
-  override def doExecute(): RDD[InternalRow] = plan.execute()
+  protected override def doPrepare(): Unit = plan.prepare()
+  protected override def doExecute(): RDD[InternalRow] = plan.execute()
   override def doExecuteBroadcast[T](): Broadcast[T] = plan.executeBroadcast()
   override def doCanonicalize(): SparkPlan = plan.canonicalized
 
@@ -143,14 +151,16 @@ case class ShuffleQueryStageExec(
       throw new IllegalStateException("wrong plan for shuffle stage:\n " + plan.treeString)
   }
 
-  override def doMaterialize(): Future[Any] = {
+  override def doMaterialize(): Future[Any] = attachTree(this, "execute") {
     shuffle.mapOutputStatisticsFuture
   }
 
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
-    ShuffleQueryStageExec(
+    val reuse = ShuffleQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, shuffle))
+    reuse._resultOption = this._resultOption
+    reuse
   }
 
   override def cancel(): Unit = {
@@ -162,9 +172,14 @@ case class ShuffleQueryStageExec(
     }
   }
 
-  def mapStats: MapOutputStatistics = {
-    assert(resultOption.isDefined)
-    resultOption.get.asInstanceOf[MapOutputStatistics]
+  /**
+   * Returns the Option[MapOutputStatistics]. If the shuffle map stage has no partition,
+   * this method returns None, as there is no map statistics.
+   */
+  def mapStats: Option[MapOutputStatistics] = {
+    assert(resultOption.get().isDefined, "ShuffleQueryStageExec should already be ready")
+    val stats = resultOption.get().get.asInstanceOf[MapOutputStatistics]
+    Option(stats)
   }
 }
 
@@ -182,14 +197,32 @@ case class BroadcastQueryStageExec(
       throw new IllegalStateException("wrong plan for broadcast stage:\n " + plan.treeString)
   }
 
+  @transient private lazy val materializeWithTimeout = {
+    val broadcastFuture = broadcast.completionFuture
+    val timeout = SQLConf.get.broadcastTimeout
+    val promise = Promise[Any]()
+    val fail = BroadcastQueryStageExec.scheduledExecutor.schedule(new Runnable() {
+      override def run(): Unit = {
+        promise.tryFailure(new SparkException(s"Could not execute broadcast in $timeout secs. " +
+          s"You can increase the timeout for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or " +
+          s"disable broadcast join by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1"))
+      }
+    }, timeout, TimeUnit.SECONDS)
+    broadcastFuture.onComplete(_ => fail.cancel(false))(AdaptiveSparkPlanExec.executionContext)
+    Future.firstCompletedOf(
+      Seq(broadcastFuture, promise.future))(AdaptiveSparkPlanExec.executionContext)
+  }
+
   override def doMaterialize(): Future[Any] = {
-    broadcast.completionFuture
+    materializeWithTimeout
   }
 
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
-    BroadcastQueryStageExec(
+    val reuse = BroadcastQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, broadcast))
+    reuse._resultOption = this._resultOption
+    reuse
   }
 
   override def cancel(): Unit = {
@@ -198,4 +231,9 @@ case class BroadcastQueryStageExec(
       broadcast.relationFuture.cancel(true)
     }
   }
+}
+
+object BroadcastQueryStageExec {
+  private val scheduledExecutor =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("BroadcastStageTimeout")
 }
