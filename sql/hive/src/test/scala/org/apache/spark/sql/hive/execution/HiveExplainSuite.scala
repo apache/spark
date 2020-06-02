@@ -62,13 +62,15 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
 
     // No statistics information if "cost" is not specified
-    checkKeywordsNotExist(sql("EXPLAIN  SELECT * FROM src "), "sizeInBytes", "rowCount")
+    checkKeywordsExist(sql("EXPLAIN  SELECT * FROM src "), "sizeInBytes=8.0 EiB")
+    checkKeywordsNotExist(sql("EXPLAIN  SELECT * FROM src "), "rowCount")
   }
 
   test("explain extended command") {
     checkKeywordsExist(sql(" explain   select * from src where key=123 "),
                    "== Physical Plan ==",
-                   "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+                   "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+                   "Statistics(sizeInBytes=8.0 EiB)")
 
     checkKeywordsNotExist(sql(" explain   select * from src where key=123 "),
                    "== Parsed Logical Plan ==",
@@ -81,7 +83,6 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
                    "Type",
                    "Provider",
                    "Properties",
-                   "Statistics",
                    "Location",
                    "Serde Library",
                    "InputFormat",
