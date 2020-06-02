@@ -166,4 +166,5 @@ select date_format(timestamp '2018-11-17 13:33:33', 'yyyyyyyyyy-MM-dd HH:mm:ss')
 select date_format(date '2018-11-17', 'yyyyyyyyyyy-MM-dd');
 
 -- SPARK-31879: the first day of week
-select to_timestamp('2020-01-01', 'YYYY-ww-uu');
+select date_format('2020-01-01', 'YYYY-MM-dd uu');
+select date_format('2020-01-01', 'YYYY-MM-dd uuuu');
