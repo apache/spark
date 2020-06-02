@@ -24,7 +24,8 @@ function exit_with_usage {
   local NAME=$(basename $0)
   cat << EOF
 usage: $NAME
-Tags a Spark release on a particular branch. Must push after
+Tags a Spark release on a particular branch.
+You must push the tags after.
 
 Inputs are specified with the following environment variables:
 ASF_USERNAME - Apache Username
