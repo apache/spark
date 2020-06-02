@@ -874,11 +874,34 @@ class Column(val expr: Expression) extends Logging {
   /**
    * An expression that adds/replaces field in `StructType` by name.
    *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".withField("c", lit(3)))
+   *   // result: {"a":1,"b":2,"c":3}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".withField("b", lit(3)))
+   *   // result: {"a":1,"b":3}
+   *
+   *   val df = sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+   *   df.select($"struct_col".withField("c", lit(3)))
+   *   // result: null of type struct<a:int,b:int,c:int>
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+   *   df.select($"struct_col".withField("b", lit(100)))
+   *   // result: {"a":1,"b":100,"b":100}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)))
+   *   // result: {"a":{"a":1,"b":2,"c":3}}
+   * }}}
+   *
    * @group expr_ops
    * @since 3.1.0
    */
   def withField(fieldName: String, fieldValue: Column): Column = withExpr {
-    WithField(expr :: Literal(fieldName) :: fieldValue.expr :: Nil)
+    require(fieldName != null && fieldName.nonEmpty)
+    WithField(expr, CatalystSqlParser.parseMultipartIdentifier(fieldName), fieldValue.expr)
   }
 
   /**
