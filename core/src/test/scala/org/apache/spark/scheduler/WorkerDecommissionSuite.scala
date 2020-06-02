@@ -58,7 +58,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     })
     TestUtils.waitUntilExecutorsUp(sc = sc,
       numExecutors = 2,
-      timeout = 10000) // 10s
+      timeout = 30000) // 30s
     val sleepyRdd = input.mapPartitions{ x =>
       Thread.sleep(5000) // 5s
       x

@@ -28,7 +28,7 @@ import scala.util.Random
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
@@ -48,7 +48,8 @@ class BlockManagerMasterEndpoint(
     conf: SparkConf,
     listenerBus: LiveListenerBus,
     externalBlockStoreClient: Option[ExternalBlockStoreClient],
-    blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo])
+    blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo],
+    mapOutputTracker: MapOutputTrackerMaster)
   extends IsolatedRpcEndpoint with Logging {
 
   // Mapping from executor id to the block manager's local disk directories.
@@ -157,7 +158,8 @@ class BlockManagerMasterEndpoint(
       context.reply(true)
 
     case DecommissionBlockManagers(executorIds) =>
-      decommissionBlockManagers(executorIds.flatMap(blockManagerIdByExecutor.get))
+      val bmIds = executorIds.flatMap(blockManagerIdByExecutor.get)
+      decommissionBlockManagers(bmIds)
       context.reply(true)
 
     case GetReplicateInfoForRDDBlocks(blockManagerId) =>
@@ -334,13 +336,14 @@ class BlockManagerMasterEndpoint(
     val info = blockManagerInfo(blockManagerId)
 
     val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
-    rddBlocks.map { blockId =>
+    val result = rddBlocks.map { blockId =>
       val currentBlockLocations = blockLocations.get(blockId)
       val maxReplicas = currentBlockLocations.size + 1
       val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
       val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
       replicateMsg
     }.toSeq
+    result
   }
 
   // Remove a block from the slaves that have it. This can only be used to remove
@@ -489,6 +492,23 @@ class BlockManagerMasterEndpoint(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
+    logInfo(s"Updating block info on master ${blockId} for ${blockManagerId}")
+
+    if (blockId.isInternalShuffle) {
+      blockId match {
+        case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+          // Don't update the map output on just the index block
+          logDebug("Received shuffle index block update for ${shuffleId} ${mapId}")
+          return true
+        case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
+          logInfo("Received shuffle data block update for ${shuffleId} ${mapId}, performing update")
+          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
+          return true
+        case _ =>
+          logDebug(s"Unexpected shuffle block type ${blockId}")
+          return false
+      }
+    }
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {

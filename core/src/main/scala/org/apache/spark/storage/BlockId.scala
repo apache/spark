@@ -40,6 +40,9 @@ sealed abstract class BlockId {
   def isRDD: Boolean = isInstanceOf[RDDBlockId]
   def isShuffle: Boolean = isInstanceOf[ShuffleBlockId] || isInstanceOf[ShuffleBlockBatchId]
   def isBroadcast: Boolean = isInstanceOf[BroadcastBlockId]
+  def isInternalShuffle: Boolean = {
+    isInstanceOf[ShuffleDataBlockId] || isInstanceOf[ShuffleIndexBlockId]
+  }
 
   override def toString: String = name
 }

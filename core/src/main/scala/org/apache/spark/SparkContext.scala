@@ -57,7 +57,7 @@ import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.ShuffleDataIOUtils
 import org.apache.spark.shuffle.api.ShuffleDriverComponents
@@ -1722,6 +1722,16 @@ class SparkContext(config: SparkConf) extends Logging {
       case _ =>
         logWarning("Killing executors is not supported by current scheduler.")
         false
+    }
+  }
+
+
+  private[spark] def decommissionExecutors(executorIds: Seq[String]): Unit = {
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        executorIds.foreach(b.decommissionExecutor)
+      case _ =>
+        logWarning("Decommissioning executors is not supported by current scheduler.")
     }
   }
 
