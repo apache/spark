@@ -21,10 +21,9 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.{createToCatalystConverter, createToScalaConverter, isPrimitive}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, UserDefinedType}
 
 /**
  * User-defined function.
@@ -41,9 +40,6 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
  * @param nullable  True if the UDF can return null value.
  * @param udfDeterministic  True if the UDF is deterministic. Deterministic UDF returns same result
  *                          each time it is invoked with a particular input.
- * @param inputDeserializers deserializers used to convert internal inputs from children
- *                           to external data types, and they will only be instantiated
- *                           by `PrepareInputDeserializerForUDF`.
  */
 case class ScalaUDF(
     function: AnyRef,
@@ -52,18 +48,10 @@ case class ScalaUDF(
     inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,
-    udfDeterministic: Boolean = true,
-    inputDeserializers: Seq[Option[Deserializer[_]]] = Nil)
+    udfDeterministic: Boolean = true)
   extends Expression with NonSQLExpression with UserDefinedExpression {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
-
-  override lazy val canonicalized: Expression = {
-    val canonicalizedChildren = children.map(_.canonicalized)
-    // if the canonicalized children and inputEncoders are equal,
-    // then we must have equal inputDeserializers as well.
-    this.copy(inputDeserializers = Nil).withNewChildren(canonicalizedChildren)
-  }
 
   override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
 
@@ -115,27 +103,25 @@ case class ScalaUDF(
   }
 
   private def scalaConverter(i: Int, dataType: DataType): Any => Any = {
-    if (inputEncoders.isEmpty) {
-      // for untyped Scala UDF
+    if (inputEncoders.isEmpty || // for untyped Scala UDF
+        dataType.isInstanceOf[UserDefinedType[_]]) {
       createToScalaConverter(dataType)
-    } else if (isPrimitive(dataType)) {
-      identity
     } else {
-      val encoder = inputEncoders(i)
-      encoder match {
-        case Some(enc) =>
-          val fromRow = inputDeserializers(i).get
-          if (enc.isSerializedAsStructForTopLevel) {
-            row: Any => fromRow(row.asInstanceOf[InternalRow])
-          } else {
-            value: Any =>
-              val row = new GenericInternalRow(1)
-              row.update(0, value)
-              fromRow(row)
-          }
-
-          // e.g. for UDF types
-        case _ => createToScalaConverter(dataType)
+      val encoderOpt = inputEncoders(i)
+      assert(encoderOpt.isDefined, s"ScalaUDF expects an encoder of ${i}th child, but got empty.")
+      val enc = encoderOpt.get
+      if (isPrimitive(dataType) && !enc.schema.head.nullable) {
+        createToScalaConverter(dataType)
+      } else {
+        val fromRow = enc.createDeserializer()
+        if (enc.isSerializedAsStructForTopLevel) {
+          row: Any => fromRow(row.asInstanceOf[InternalRow])
+        } else {
+          value: Any =>
+            val row = new GenericInternalRow(1)
+            row.update(0, value)
+            fromRow(row)
+        }
       }
     }
   }

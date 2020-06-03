@@ -257,7 +257,7 @@ class Analyzer(
       PullOutNondeterministic),
     Batch("UDF", Once,
       HandleNullInputsForUDF,
-      PrepareDeserializerForUDF),
+      ResolveEncodersInUDF),
     Batch("UpdateNullability", Once,
       UpdateAttributeNullability),
     Batch("Subquery", Once,
@@ -2814,7 +2814,7 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(_, _, inputs, _, _, _, _, _)
+        case udf @ ScalaUDF(_, _, inputs, _, _, _, _)
             if udf.inputPrimitives.contains(true) =>
           // Otherwise, add special handling of null for fields that can't accept null.
           // The result of operations like this, when passed null, is generally to return null.
@@ -2848,20 +2848,17 @@ class Analyzer(
     }
   }
 
-  object PrepareDeserializerForUDF extends Rule[LogicalPlan] {
+  object ResolveEncodersInUDF extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p if !p.resolved => p // Skip unresolved nodes.
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(_, _, inputs, encoders, _, _, _, desers)
-          if encoders.nonEmpty && desers.isEmpty =>
-          val deserializers = encoders.zipWithIndex.map { case (encOpt, i) =>
+        case udf @ ScalaUDF(_, _, inputs, encoders, _, _, _) if encoders.nonEmpty =>
+          val resolvedEncoders = encoders.zipWithIndex.map { case (encOpt, i) =>
             val dataType = inputs(i).dataType
-            if (CatalystTypeConverters.isPrimitive(dataType) ||
-              dataType.isInstanceOf[UserDefinedType[_]]) {
-              // primitive/UDT data types use `CatalystTypeConverters` to
-              // convert internal data to external data.
+            if (dataType.isInstanceOf[UserDefinedType[_]]) {
+              // for UDT, we use `CatalystTypeConverters`
               None
             } else {
               encOpt.map { enc =>
@@ -2870,13 +2867,13 @@ class Analyzer(
                 } else {
                   // the field name doesn't matter here, so we use
                   // a simple literal to avoid any overhead
-                  new StructType().add(s"input", dataType).toAttributes
+                  new StructType().add("input", dataType).toAttributes
                 }
-                enc.resolveAndBind(attrs).createDeserializer()
+                enc.resolveAndBind(attrs)
               }
             }
           }
-          udf.copy(inputDeserializers = deserializers)
+          udf.copy(inputEncoders = resolvedEncoders)
       }
     }
   }

@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.log4j.Level
 import org.scalatest.Matchers
@@ -307,6 +308,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    def resolvedEncoder[T : TypeTag](): ExpressionEncoder[T] = {
+      ExpressionEncoder[T]().resolveAndBind()
+    }
+
     val testRelation = LocalRelation(
       AttributeReference("a", StringType)(),
       AttributeReference("b", DoubleType)(),
@@ -326,31 +331,26 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       )
     }
 
-    val strEnc = ExpressionEncoder[String]()
-    val strDeser = strEnc.resolveAndBind().createDeserializer()
-
     // non-primitive parameters do not need special null handling
     val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil,
-      Option(strEnc) :: Nil, inputDeserializers = Option(strDeser) :: Nil)
+      Option(resolvedEncoder[String]()) :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
-      Option(strEnc) :: Option(ExpressionEncoder[Double]()) :: Nil,
-      inputDeserializers = Option(strDeser) :: None :: Nil)
+      Option(resolvedEncoder[String]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected2 =
       If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
     val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
-      Option(ExpressionEncoder[Short]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
+      Option(resolvedEncoder[Short]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3.copy(children = KnownNotNull(short) :: KnownNotNull(double) :: Nil,
-        inputDeserializers = None :: None :: Nil))
+      udf3.copy(children = KnownNotNull(short) :: KnownNotNull(double) :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
@@ -358,12 +358,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       (s: Short, d: Double) => "x",
       StringType,
       short :: nonNullableDouble :: Nil,
-      Option(ExpressionEncoder[Short]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
+      Option(resolvedEncoder[Short]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4.copy(children = KnownNotNull(short) :: nonNullableDouble :: Nil,
-        inputDeserializers = None :: None :: Nil))
+      udf4.copy(children = KnownNotNull(short) :: nonNullableDouble :: Nil))
     checkUDF(udf4, expected4)
   }
 
