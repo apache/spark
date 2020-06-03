@@ -386,15 +386,33 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   }
 
   test("missing am/pm field") {
-    val formatter = TimestampFormatter("yyyy hh:mm:ss", UTC)
-    val micros = formatter.parse("2009 11:30:01")
-    assert(micros === date(2009, 1, 1, 11, 30, 1))
+    Seq("HH", "hh", "KK", "kk").foreach { hour =>
+      val formatter = TimestampFormatter(s"yyyy $hour:mm:ss", UTC)
+      val micros = formatter.parse("2009 11:30:01")
+      assert(micros === date(2009, 1, 1, 11, 30, 1))
+    }
   }
 
   test("missing time fields") {
     val formatter = TimestampFormatter("yyyy HH", UTC)
     val micros = formatter.parse("2009 11")
     assert(micros === date(2009, 1, 1, 11))
+  }
+
+  test("missing hour field") {
+    val f1 = TimestampFormatter("mm:ss a", UTC)
+    val t1 = f1.parse("30:01 PM")
+    assert(t1 === date(1970, 1, 1, 12, 30, 1))
+    val t2 = f1.parse("30:01 AM")
+    assert(t2 === date(1970, 1, 1, 0, 30, 1))
+    val f2 = TimestampFormatter("mm:ss", UTC)
+    val t3 = f2.parse("30:01")
+    assert(t3 === date(1970, 1, 1, 0, 30, 1))
+    val f3 = TimestampFormatter("a", UTC)
+    val t4 = f3.parse("PM")
+    assert(t4 === date(1970, 1, 1, 12))
+    val t5 = f3.parse("AM")
+    assert(t5 === date(1970))
   }
 
   test("explicitly forbidden datetime patterns") {
