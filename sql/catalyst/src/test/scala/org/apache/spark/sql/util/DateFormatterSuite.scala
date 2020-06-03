@@ -199,4 +199,50 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
     // SparkUpgradeException here.
     intercept[SparkUpgradeException](formatter.parse("02-29"))
   }
+
+  test("Disable week-based date fields and quarter fields for parsing") {
+
+    def checkSparkUpgrade(c: Char): Unit = {
+      intercept[SparkUpgradeException] {
+        DateFormatter(
+          c.toString,
+          UTC,
+          DateFormatter.defaultLocale,
+          LegacyDateFormats.SIMPLE_DATE_FORMAT,
+          isParsing = true)
+      }
+      assert(DateFormatter(
+        c.toString,
+        UTC,
+        DateFormatter.defaultLocale,
+        LegacyDateFormats.SIMPLE_DATE_FORMAT,
+        isParsing = false).format(0).nonEmpty)
+    }
+
+    def checkIllegalArg(c: Char): Unit = {
+      intercept[IllegalArgumentException] {
+        DateFormatter(
+          c.toString,
+          UTC,
+          DateFormatter.defaultLocale,
+          LegacyDateFormats.SIMPLE_DATE_FORMAT,
+          isParsing = true)
+      }
+
+      assert(DateFormatter(
+        c.toString,
+        UTC,
+        DateFormatter.defaultLocale,
+        LegacyDateFormats.SIMPLE_DATE_FORMAT,
+        isParsing = false).format(0).nonEmpty)
+    }
+
+    Seq('Y', 'W', 'w', 'E', 'u', 'F').foreach { l =>
+      checkSparkUpgrade(l)
+    }
+
+    Seq('q', 'Q').foreach { l =>
+      checkIllegalArg(l)
+    }
+  }
 }

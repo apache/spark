@@ -89,7 +89,7 @@ trait DateTimeFormatterHelper {
   protected def getOrCreateFormatter(
       pattern: String,
       locale: Locale,
-      isParsing: Boolean = false): DateTimeFormatter = {
+      isParsing: Boolean): DateTimeFormatter = {
     val newPattern = convertIncompatiblePattern(pattern, isParsing)
     val useVarLen = isParsing && newPattern.contains('S')
     val key = (newPattern, locale, useVarLen)
