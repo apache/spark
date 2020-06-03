@@ -32,6 +32,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import static org.apache.spark.launcher.SparkSubmitCommandBuilder.*;
+
 import static org.junit.Assert.*;
 
 public class SparkSubmitCommandBuilderSuite extends BaseSuite {
@@ -268,6 +270,88 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     sparkSubmitArgs = Arrays.asList(parser.MASTER, "mesos", parser.DEPLOY_MODE, "cluster");
     builder = newCommandBuilder(sparkSubmitArgs);
     assertFalse(builder.isClientMode(Collections.emptyMap()));
+  }
+
+  private static final List<Map.Entry<String, String>> TEST_MEM_PRECEDENCE_LIST = Arrays.asList(
+      kv(SPARK_DAEMON_MEMORY, "2g"),
+      kv(SparkLauncher.DRIVER_MEMORY, "3g "),
+      kv(SPARK_DRIVER_MEMORY, " 4g"),
+      kv(SPARK_MEM, " 5g ")
+  );
+
+  @Test
+  public void testInvalidMemoryArgs() {
+    // SPARK-31900: ensure that the setting creating a corrupt Xmx is identified
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Invalid memory value specified by " +
+        SparkLauncher.DRIVER_MEMORY);
+    assertNotEquals("1g", firstNonEmptyMemory("testMainClass",
+        Arrays.asList(kv(SparkLauncher.DRIVER_MEMORY, "boom"))));
+  }
+
+  @Test
+  public void testDefaultMemoryWithEmptyPrecedenceList() {
+    // SPARK-31900: ensure there is a default client memory
+    assertEquals("1g", firstNonEmptyMemory("testMainClass", Collections.emptyList()));
+  }
+
+  @Test
+  public void testThriftServerMemory() {
+    // SPARK-31900: ensure that SPARK_DAEMON_MEMORY is used for thrift server
+    assertEquals("2g",
+        firstNonEmptyMemory("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
+            TEST_MEM_PRECEDENCE_LIST));
+  }
+
+  @Test
+  public void testThriftServerNonDaemonMemory() {
+    // SPARK-31900: ensure that spark.driver.memory is used for thrift server w/o SPARK_DAEMON_MEMORY
+    final List<Map.Entry<String, String>> candList = new ArrayList<>(TEST_MEM_PRECEDENCE_LIST);
+    candList.set(0, kv(TEST_MEM_PRECEDENCE_LIST.get(0).getKey(), null));
+    assertEquals("3g",
+        firstNonEmptyMemory("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
+            candList));
+  }
+
+  @Test
+  public void testNonThriftServerMemory() {
+    // SPARK-31900: ensure that spark.driver.memory is used for non-thrift-server
+    assertEquals("3g", firstNonEmptyMemory("testClass", TEST_MEM_PRECEDENCE_LIST));
+  }
+
+  @Test
+  public void testSparkDriverMemoryEnv() {
+    // SPARK-31900: ensure that SPARK_DRIVER_MEMORY env var is used for non-thrift-server
+    // w/o spark.driver.memory
+    final List<Map.Entry<String, String>> candList = new ArrayList<>(TEST_MEM_PRECEDENCE_LIST);
+    candList.set(1, kv(TEST_MEM_PRECEDENCE_LIST.get(1).getKey(), null));
+    assertEquals("4g", firstNonEmptyMemory("testClass", candList));
+  }
+
+  @Test
+  public void testSparkMemEnv() {
+    // SPARK-31900: ensure that SPARK_MEM env var is used for non-thrift-server
+    // w/o spark.driver.memory, SPARK_DRIVER_MEMORY
+    final List<Map.Entry<String, String>> candList = new ArrayList<>(TEST_MEM_PRECEDENCE_LIST);
+    candList.set(1, kv(TEST_MEM_PRECEDENCE_LIST.get(1).getKey(), null));
+    candList.set(2, kv(TEST_MEM_PRECEDENCE_LIST.get(2).getKey(), null));
+    assertEquals("5g", firstNonEmptyMemory("testClass", candList));
+  }
+
+  @Test
+  public void testDefaultMemEnv() {
+    // SPARK-31900: ensure that 1g default is used
+    // w/o spark.driver.memory, SPARK_DRIVER_MEMORY
+    final List<Map.Entry<String, String>> candList = new ArrayList<>(TEST_MEM_PRECEDENCE_LIST);
+    for (int i = 1; i < candList.size(); i++) {
+      candList.set(i, kv(TEST_MEM_PRECEDENCE_LIST.get(i).getKey(), ""));
+    }
+    assertEquals("1g", firstNonEmptyMemory("testClass", candList));
+
+    candList.set(0, kv(TEST_MEM_PRECEDENCE_LIST.get(0).getKey(), ""));
+    assertEquals("1g",
+        firstNonEmptyMemory("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
+            candList));
   }
 
   private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {

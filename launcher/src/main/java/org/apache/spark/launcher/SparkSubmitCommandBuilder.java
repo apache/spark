@@ -20,6 +20,7 @@ package org.apache.spark.launcher;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -80,6 +81,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * spark-submit.
    */
   private static final Map<String, String> specialClasses = new HashMap<>();
+  static final String SPARK_DAEMON_MEMORY = "SPARK_DAEMON_MEMORY";
+  static final String SPARK_DRIVER_MEMORY = "SPARK_DRIVER_MEMORY";
+  static final String SPARK_MEM = "SPARK_MEM";
+
   static {
     specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
@@ -249,6 +254,34 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     return args;
   }
 
+  static Map.Entry<String, String> kv(String key, String value) {
+    return new AbstractMap.SimpleImmutableEntry<>(key, value);
+  }
+
+  private static final Pattern JavaHeapPattern = Pattern.compile("\\p{Digit}+[kmgt]?");
+  private static String validateMemoryArg(Map.Entry<String, String> memoryKV) throws IllegalArgumentException {
+    final String lower = memoryKV.getValue().toLowerCase(Locale.ROOT).trim();
+    if (!JavaHeapPattern.matcher(lower).matches()) {
+      throw new IllegalArgumentException(memoryKV.getValue() +
+          ": Invalid memory value specified by " + memoryKV.getKey() + " does not satisfy " +
+          JavaHeapPattern);
+    }
+    return lower;
+  }
+
+  static String firstNonEmptyMemory(String mainClass, List<Map.Entry<String,String>> memArgs) {
+    for (Map.Entry<String, String> kv : memArgs) {
+      if (!isThriftServer(mainClass) && SPARK_DAEMON_MEMORY.equals(kv.getKey())) {
+        continue;
+      }
+
+      if (!isEmpty(kv.getValue())) {
+        return validateMemoryArg(kv);
+      }
+    }
+    return DEFAULT_MEM;
+  }
+
   private List<String> buildSparkSubmitCommand(Map<String, String> env)
       throws IOException, IllegalArgumentException {
     // Load the properties file and check whether spark-submit will be running the app's driver
@@ -281,10 +314,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // - SPARK_MEM env variable
       // - default value (1g)
       // Take Thrift Server as daemon
-      String tsMemory =
-        isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
-      String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
-        System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
+      final List<Map.Entry<String, String>> candidateList = Arrays.asList(
+          kv(SPARK_DAEMON_MEMORY, System.getenv(SPARK_DAEMON_MEMORY)),
+          kv(SparkLauncher.DRIVER_MEMORY, config.get(SparkLauncher.DRIVER_MEMORY)),
+          kv(SPARK_DRIVER_MEMORY, config.get(SPARK_DRIVER_MEMORY)),
+          kv(SPARK_MEM, System.getenv(SPARK_MEM))
+      );
+      String memory = firstNonEmptyMemory(mainClass, candidateList);
       cmd.add("-Xmx" + memory);
       addOptionString(cmd, driverDefaultJavaOptions);
       addOptionString(cmd, driverExtraJavaOptions);
@@ -396,7 +432,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   /**
    * Return whether the given main class represents a thrift server.
    */
-  private boolean isThriftServer(String mainClass) {
+  private static boolean isThriftServer(String mainClass) {
     return (mainClass != null &&
       mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
   }
