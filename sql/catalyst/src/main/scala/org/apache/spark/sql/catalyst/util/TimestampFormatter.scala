@@ -293,13 +293,13 @@ object TimestampFormatter {
       zoneId: ZoneId,
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
-      needVarLengthSecondFraction: Boolean = false): TimestampFormatter = {
+      isParsing: Boolean = false): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
       val tf = new Iso8601TimestampFormatter(
-        pattern, zoneId, locale, legacyFormat, needVarLengthSecondFraction)
+        pattern, zoneId, locale, legacyFormat, isParsing)
       tf.validatePatternString()
       tf
     }
@@ -325,23 +325,23 @@ object TimestampFormatter {
       zoneId: ZoneId,
       locale: Locale,
       legacyFormat: LegacyDateFormat,
-      needVarLengthSecondFraction: Boolean): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, locale, legacyFormat, needVarLengthSecondFraction)
+      isParsing: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, locale, legacyFormat, isParsing)
   }
 
   def apply(
       format: String,
       zoneId: ZoneId,
       legacyFormat: LegacyDateFormat,
-      needVarLengthSecondFraction: Boolean): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, needVarLengthSecondFraction)
+      isParsing: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, isParsing)
   }
 
   def apply(
       format: String,
       zoneId: ZoneId,
-      needVarLengthSecondFraction: Boolean = false): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, needVarLengthSecondFraction = needVarLengthSecondFraction)
+      isParsing: Boolean = false): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, isParsing = isParsing)
   }
 
   def apply(zoneId: ZoneId): TimestampFormatter = {
