@@ -897,6 +897,13 @@
         <version>3.1.0</version>
         <scope>test</scope>
       </dependency>
+      <!-- Added to force matching verson with mockito -->
+      <dependency>
+        <groupId>net.bytebuddy</groupId>
+        <artifactId>byte-buddy</artifactId>
+        <version>1.9.16</version>
+        <scope>test</scope>
+      </dependency>
       <dependency>
         <groupId>org.jmock</groupId>
         <artifactId>jmock-junit4</artifactId>
