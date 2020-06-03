@@ -62,7 +62,15 @@ trait DateTimeFormatterHelper {
       accessor.get(ChronoField.HOUR_OF_DAY)
     } else if (accessor.isSupported(ChronoField.HOUR_OF_AMPM)) {
       // When we reach here, it means am/pm is not specified. Here we assume it's am.
+      // All of CLOCK_HOUR_OF_AMPM(h)/HOUR_OF_DAY(H)/CLOCK_HOUR_OF_DAY(k)/HOUR_OF_AMPM(K) will
+      // be resolved to HOUR_OF_AMPM here, we do not need to handle them separately
       accessor.get(ChronoField.HOUR_OF_AMPM)
+    } else if (accessor.isSupported(ChronoField.AMPM_OF_DAY) &&
+      accessor.get(ChronoField.AMPM_OF_DAY) == 1) {
+      // When reach here, the `hour` part is missing, and PM is specified.
+      // None of CLOCK_HOUR_OF_AMPM(h)/HOUR_OF_DAY(H)/CLOCK_HOUR_OF_DAY(k)/HOUR_OF_AMPM(K) is
+      // specified
+      12
     } else {
       0
     }
@@ -89,9 +97,9 @@ trait DateTimeFormatterHelper {
   protected def getOrCreateFormatter(
       pattern: String,
       locale: Locale,
-      needVarLengthSecondFraction: Boolean = false): DateTimeFormatter = {
-    val newPattern = convertIncompatiblePattern(pattern)
-    val useVarLen = needVarLengthSecondFraction && newPattern.contains('S')
+      isParsing: Boolean = false): DateTimeFormatter = {
+    val newPattern = convertIncompatiblePattern(pattern, isParsing)
+    val useVarLen = isParsing && newPattern.contains('S')
     val key = (newPattern, locale, useVarLen)
     var formatter = cache.getIfPresent(key)
     if (formatter == null) {
@@ -227,6 +235,12 @@ private object DateTimeFormatterHelper {
     formatter.format(LocalDate.of(2000, 1, 1)) == "1 1"
   }
   final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
+  // SPARK-31892: The week-based date fields are rarely used and really confusing for parsing values
+  // to datetime, especially when they are mixed with other non-week-based ones
+  // The quarter fields will also be parsed strangely, e.g. when the pattern contains `yMd` and can
+  // be directly resolved then the `q` do check for whether the month is valid, but if the date
+  // fields is incomplete, e.g. `yM`, the checking will be bypassed.
+  final val unsupportedLettersForParsing = Set('Y', 'W', 'w', 'E', 'u', 'F', 'q', 'Q')
   final val unsupportedPatternLengths = {
     // SPARK-31771: Disable Narrow-form TextStyle to avoid silent data change, as it is Full-form in
     // 2.4
@@ -246,7 +260,7 @@ private object DateTimeFormatterHelper {
    * @param pattern The input pattern.
    * @return The pattern for new parser
    */
-  def convertIncompatiblePattern(pattern: String): String = {
+  def convertIncompatiblePattern(pattern: String, isParsing: Boolean = false): String = {
     val eraDesignatorContained = pattern.split("'").zipWithIndex.exists {
       case (patternPart, index) =>
         // Text can be quoted using single quotes, we only check the non-quote parts.
@@ -255,7 +269,8 @@ private object DateTimeFormatterHelper {
     (pattern + " ").split("'").zipWithIndex.map {
       case (patternPart, index) =>
         if (index % 2 == 0) {
-          for (c <- patternPart if unsupportedLetters.contains(c)) {
+          for (c <- patternPart if unsupportedLetters.contains(c) ||
+            (isParsing && unsupportedLettersForParsing.contains(c))) {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")
           }
           for (style <- unsupportedPatternLengths if patternPart.contains(style)) {

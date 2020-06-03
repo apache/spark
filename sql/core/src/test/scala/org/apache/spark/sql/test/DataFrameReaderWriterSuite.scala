@@ -333,7 +333,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         var msg = intercept[AnalysisException] {
           Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
 
         // Insert into table successfully.
         Seq((1, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
@@ -354,14 +354,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         var msg = intercept[AnalysisException] {
           Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': string to int") &&
+          msg.contains("Cannot safely cast 'd': string to double"))
 
         msg = intercept[AnalysisException] {
           Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
+          msg.contains("Cannot safely cast 'd': boolean to double"))
       }
     }
   }
