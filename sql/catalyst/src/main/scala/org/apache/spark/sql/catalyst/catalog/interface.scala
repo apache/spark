@@ -654,7 +654,8 @@ case class HiveTableRelation(
     tableMeta: CatalogTable,
     dataCols: Seq[AttributeReference],
     partitionCols: Seq[AttributeReference],
-    tableStats: Option[Statistics] = Option(Statistics(sizeInBytes = SQLConf.get.defaultSizeInBytes)),
+    tableStats: Option[Statistics] = Option(Statistics(sizeInBytes
+      = SQLConf.get.defaultSizeInBytes)),
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
   extends LeafNode with MultiInstanceRelation {
   assert(tableMeta.identifier.database.isDefined)
