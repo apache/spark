@@ -259,7 +259,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   private static final Pattern JavaHeapPattern = Pattern.compile("\\p{Digit}+[kmgt]?");
-  private static String validateMemoryArg(Map.Entry<String, String> memoryKV) throws IllegalArgumentException {
+  private static String validateMemoryArg(Map.Entry<String, String> memoryKV)
+      throws IllegalArgumentException {
     final String lower = memoryKV.getValue().toLowerCase(Locale.ROOT).trim();
     if (!JavaHeapPattern.matcher(lower).matches()) {
       throw new IllegalArgumentException(memoryKV.getValue() +

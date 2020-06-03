@@ -305,7 +305,8 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   @Test
   public void testThriftServerNonDaemonMemory() {
-    // SPARK-31900: ensure that spark.driver.memory is used for thrift server w/o SPARK_DAEMON_MEMORY
+    // SPARK-31900: ensure that spark.driver.memory is used for thrift server
+    // w/o SPARK_DAEMON_MEMORY
     final List<Map.Entry<String, String>> candList = new ArrayList<>(TEST_MEM_PRECEDENCE_LIST);
     candList.set(0, kv(TEST_MEM_PRECEDENCE_LIST.get(0).getKey(), null));
     assertEquals("3g",
