@@ -72,14 +72,17 @@ object HiveResult {
     }
   }
 
-  // Date formatting does not depend on time zone ID because it converts local days
-  // since the epoch to local date string. Time zone id does matter only in parsing
-  // when the parser has to handle special values like `now`, `yesterday` and etc.
-  // Here, `dateFormatter` is used only for formatting, so, we can initialize it by
-  // any time zone once, for instance, by the UTC time zone. And we can reuse it even
-  // when the session time zone might be changed.
+  // We can create the date formatter only once because it does not depend on Spark's
+  // session time zone controlled by the SQL config `spark.sql.session.timeZone`.
+  // The `zoneId` parameter is used only in parsing of special date values like `now`,
+  // `yesterday` and etc. but not in date formatting. While formatting of:
+  // - `java.time.LocalDate`, zone id is not used by `DateTimeFormatter` at all.
+  // - `java.sql.Date`, the date formatter delegates formatting to the legacy formatter
+  //   which uses the default system time zone `TimeZone.getDefault`. This works correctly
+  //   due to `DateTimeUtils.toJavaDate` which is based on the system time zone too.
   private val dateFormatter = DateFormatter(
     format = DateFormatter.defaultPattern,
+    // We can set any time zone id. UTC was taken for simplicity.
     zoneId = ZoneOffset.UTC,
     locale = DateFormatter.defaultLocale,
     // Use `FastDateFormat` as the legacy formatter because it is thread-safe.
