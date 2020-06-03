@@ -278,13 +278,7 @@ object LegacyDateFormats extends Enumeration {
 object TimestampFormatter {
   import LegacyDateFormats._
 
-  /**
-   * Before Spark 3.0, the first day-of-week is always Monday. Since Spark 3.0, it depends on the
-   * locale.
-   * We pick GB as the default locale instead of US, to be compatible with Spark 2.x, as US locale
-   * uses Sunday as the first day-of-week. See SPARK-31879.
-   */
-  val defaultLocale: Locale = new Locale("en", "GB")
+  val defaultLocale: Locale = Locale.US
 
   def defaultPattern(): String = s"${DateFormatter.defaultPattern} HH:mm:ss"
 
