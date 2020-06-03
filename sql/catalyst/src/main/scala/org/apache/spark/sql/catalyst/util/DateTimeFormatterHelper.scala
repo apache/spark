@@ -58,31 +58,23 @@ trait DateTimeFormatterHelper {
     // If all the time fields are specified, return the local time directly.
     if (localTime != null) return localTime
 
-    val hour = if (accessor.isSupported(ChronoField.AMPM_OF_DAY)) {
+    val hour = if (accessor.isSupported(ChronoField.HOUR_OF_DAY)) {
+      accessor.get(ChronoField.HOUR_OF_DAY)
+    } else if (accessor.isSupported(ChronoField.HOUR_OF_AMPM)) {
+      // When we reach here, it means am/pm is not specified. Here we assume it's am.
+      // All of CLOCK_HOUR_OF_AMPM(h)/HOUR_OF_DAY(H)/CLOCK_HOUR_OF_DAY(k)/HOUR_OF_AMPM(K) will
+      // be resolved to HOUR_OF_AMPM here, we do not need to handle them separately
+      accessor.get(ChronoField.HOUR_OF_AMPM)
+    } else if (accessor.isSupported(ChronoField.AMPM_OF_DAY) &&
+      accessor.get(ChronoField.AMPM_OF_DAY) == 1) {
       // When reach here, the `hour` part is missing, the pattern is always contains `a` and minute
       // or second part, e.g. `mm a`, `mm:ss a`
       // None of CLOCK_HOUR_OF_AMPM(h)/HOUR_OF_DAY(H)/CLOCK_HOUR_OF_DAY(k)/HOUR_OF_AMPM(K) is
       // specified
-      if (accessor.get(ChronoField.AMPM_OF_DAY) == 1) {
-        12
-      } else {
-        0
-      }
+      12
     } else {
-      // In strict mode, only one hour value will eventually get here, otherwise, they will be
-      // resolved or jammed by the DateTimeFormatter directly.
-      if (accessor.isSupported(ChronoField.HOUR_OF_DAY)) {
-        accessor.get(ChronoField.HOUR_OF_DAY)
-      } else if (accessor.isSupported(ChronoField.HOUR_OF_AMPM)) {
-        // When we reach here, it means am/pm is not specified. Here we assume it's am.
-        // All of CLOCK_HOUR_OF_AMPM(h)/HOUR_OF_DAY(H)/CLOCK_HOUR_OF_DAY(k)/HOUR_OF_AMPM(K) will
-        // be resolved to HOUR_OF_AMPM here, we do not need to handle them separately
-        accessor.get(ChronoField.HOUR_OF_AMPM)
-      } else {
-        0
-      }
+      0
     }
-
     val minute = getOrDefault(accessor, ChronoField.MINUTE_OF_HOUR, 0)
     val second = getOrDefault(accessor, ChronoField.SECOND_OF_MINUTE, 0)
     val nanoSecond = getOrDefault(accessor, ChronoField.NANO_OF_SECOND, 0)
