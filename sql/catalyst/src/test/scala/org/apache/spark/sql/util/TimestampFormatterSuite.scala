@@ -48,7 +48,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       val formatter = TimestampFormatter(
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
         getZoneId(zoneId),
-        needVarLengthSecondFraction = true)
+        isParsing = true)
       val microsSinceEpoch = formatter.parse(localDate)
       assert(microsSinceEpoch === expectedMicros(zoneId))
     }
@@ -73,7 +73,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
           // Test only FAST_DATE_FORMAT because other legacy formats don't support formatting
           // in microsecond precision.
           LegacyDateFormats.FAST_DATE_FORMAT,
-          needVarLengthSecondFraction = false),
+          isParsing = false),
         TimestampFormatter.getFractionFormatter(getZoneId(zoneId))).foreach { formatter =>
         val timestamp = formatter.format(microsSinceEpoch)
         assert(timestamp === expectedTimestamp(zoneId))
@@ -98,7 +98,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
         outstandingZoneIds.foreach { zoneId =>
           val timestamp = TimestampFormatter(pattern, zoneId).format(micros)
           val parsed = TimestampFormatter(
-            pattern, zoneId, needVarLengthSecondFraction = true).parse(timestamp)
+            pattern, zoneId, isParsing = true).parse(timestamp)
           assert(micros === parsed)
         }
       }
@@ -119,7 +119,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
       outstandingZoneIds.foreach { zoneId =>
         val pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
         val micros = TimestampFormatter(
-          pattern, zoneId, needVarLengthSecondFraction = true).parse(timestamp)
+          pattern, zoneId, isParsing = true).parse(timestamp)
         val formatted = TimestampFormatter(pattern, zoneId).format(micros)
         assert(timestamp === formatted)
       }
@@ -182,7 +182,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   test("parsing timestamp strings with various seconds fractions") {
     outstandingZoneIds.foreach { zoneId =>
       def check(pattern: String, input: String, reference: String): Unit = {
-        val formatter = TimestampFormatter(pattern, zoneId, needVarLengthSecondFraction = true)
+        val formatter = TimestampFormatter(pattern, zoneId, isParsing = true)
         val expected = stringToTimestamp(UTF8String.fromString(reference), zoneId).get
         val actual = formatter.parse(input)
         assert(actual === expected)
@@ -289,7 +289,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
                   zoneId,
                   TimestampFormatter.defaultLocale,
                   legacyFormat,
-                  needVarLengthSecondFraction = false)
+                  isParsing = false)
               }.toSeq :+ TimestampFormatter.getFractionFormatter(zoneId)
               formatters.foreach { formatter =>
                 assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
