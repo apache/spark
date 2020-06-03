@@ -1448,7 +1448,7 @@ private class LogisticRegressionTrainingSummaryImpl(
  *
  * @param predictions dataframe output by the model's `transform` method.
  * @param scoreCol field in "predictions" which gives the probability of
- *                       each class as a vector.
+ *                 each class as a vector.
  * @param predictionCol field in "predictions" which gives the prediction for a data instance as a
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
@@ -1468,7 +1468,7 @@ private class LogisticRegressionSummaryImpl(
  * Binary logistic regression training results.
  *
  * @param predictions dataframe output by the model's `transform` method.
- * @param scoreCol field in "predictions" which gives the probability of
+ * @param probabilityCol field in "predictions" which gives the probability of
  *                       each class as a vector.
  * @param predictionCol field in "predictions" which gives the prediction for a data instance as a
  *                      double.
@@ -1479,22 +1479,22 @@ private class LogisticRegressionSummaryImpl(
  */
 private class BinaryLogisticRegressionTrainingSummaryImpl(
     predictions: DataFrame,
-    scoreCol: String,
+    probabilityCol: String,
     predictionCol: String,
     labelCol: String,
     featuresCol: String,
     weightCol: String,
     override val objectiveHistory: Array[Double])
   extends BinaryLogisticRegressionSummaryImpl(
-    predictions, scoreCol, predictionCol, labelCol, featuresCol, weightCol)
+    predictions, probabilityCol, predictionCol, labelCol, featuresCol, weightCol)
   with BinaryLogisticRegressionTrainingSummary
 
 /**
  * Binary logistic regression results for a given model.
  *
  * @param predictions dataframe output by the model's `transform` method.
- * @param scoreCol field in "predictions" which gives the probability of
- *                 each class as a vector.
+ * @param probabilityCol field in "predictions" which gives the probability of
+ *                       each class as a vector.
  * @param predictionCol field in "predictions" which gives the prediction of
  *                      each class as a double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
@@ -1503,11 +1503,11 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
  */
 private class BinaryLogisticRegressionSummaryImpl(
     predictions: DataFrame,
-    scoreCol: String,
+    probabilityCol: String,
     predictionCol: String,
     labelCol: String,
     featuresCol: String,
     weightCol: String)
   extends LogisticRegressionSummaryImpl(
-    predictions, scoreCol, predictionCol, labelCol, featuresCol, weightCol)
+    predictions, probabilityCol, predictionCol, labelCol, featuresCol, weightCol)
   with BinaryLogisticRegressionSummary
