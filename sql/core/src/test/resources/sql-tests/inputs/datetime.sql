@@ -178,11 +178,8 @@ create temporary view ttt as select t from VALUES
  (timestamp '2018-11-17 13:33:33.123Z'),
  (timestamp '2020-01-01 01:33:33.123Asia/Shanghai'),
  (timestamp '2100-01-01 01:33:33.123America/Los_Angeles') tt(t);
-select date_format(t, 'Y YY YYYY YYYYY YYYYY y yy yyy yyyy yyyyy') from ttt;
+select date_format(t, 'Y-w-u YYYY-ww-uu YYY-W-uuu YY YYYYY uuuu E EE EEE EEEE') from ttt;
 select date_format(t, 'q qq Q QQ QQQ QQQQ') from ttt;
-select date_format(t, 'M MM MMM MMMM L LL') from ttt;
-select date_format(t, 'W ww d dd DDD u uu uuu uuuu F E EE EEE EEEE a') from ttt;
-select date_format(t, 'h hh H HH k kk K KK m mm s ss SSS') from ttt;
+select date_format(t, 'y-M-d H:m:s yyyy-MM-dd HH:mm:ss.SSS yy yyy yyyyy MMM MMMM L LL F h hh k kk K KK a') from ttt;
 select date_format(t, 'VV z zz zzz zzzz O OOOO X XX XXX XXXX XXXXX x xx xxx xxxx xxxx xxxxx Z ZZ ZZZ ZZZZ ZZZZZ') from ttt;
-select date_format(date '1970-01-01', 'D DD');
-
+select date_format(date '1970-01-01', 'D DD DDD');
