@@ -568,7 +568,7 @@ case class WithField(struct: Expression, fieldPath: Seq[String], value: Expressi
       currentStruct: DataType,
       checkedFields: Seq[String],
       fieldPath: Seq[String]): TypeCheckResult = currentStruct match {
-    case _ if fieldPath.length == 1 => TypeCheckResult.TypeCheckSuccess
+    case _ if fieldPath.isEmpty => TypeCheckResult.TypeCheckSuccess
     case st: StructType =>
       val newCheckedFields = checkedFields :+ fieldPath.head
       st.find(f => resolver(f.name, fieldPath.head)).map { field =>
