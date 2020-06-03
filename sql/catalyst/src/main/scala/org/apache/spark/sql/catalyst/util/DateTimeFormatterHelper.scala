@@ -67,7 +67,7 @@ trait DateTimeFormatterHelper {
       accessor.get(ChronoField.HOUR_OF_AMPM)
     } else if (accessor.isSupported(ChronoField.AMPM_OF_DAY) &&
       accessor.get(ChronoField.AMPM_OF_DAY) == 1) {
-      // When reach here, the `hour` part is missing, and PM/AM is specified e.g. `mm a`, `mm:ss a`
+      // When reach here, the `hour` part is missing, and PM is specified.
       // None of CLOCK_HOUR_OF_AMPM(h)/HOUR_OF_DAY(H)/CLOCK_HOUR_OF_DAY(k)/HOUR_OF_AMPM(K) is
       // specified
       12
