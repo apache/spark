@@ -23,21 +23,26 @@ import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 class DateTimeFormatterHelperSuite extends SparkFunSuite {
 
   test("check incompatible pattern") {
-    assert(convertIncompatiblePattern("MM-DD-u") === "MM-DD-e")
-    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz")
-      === "uuuu-MM-dd'T'HH:mm:ss.SSSz")
-    assert(convertIncompatiblePattern("yyyy-MM'y contains in quoted text'HH:mm:ss")
-      === "uuuu-MM'y contains in quoted text'HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM-dd-u'T'HH:mm:ss.SSSz")
+    assert(convertIncompatiblePattern("MM-DD-u", isParsing = false) === "MM-DD-e")
+    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz", isParsing = false) ===
+      "uuuu-MM-dd'T'HH:mm:ss.SSSz")
+    assert(convertIncompatiblePattern(
+      "yyyy-MM'y contains in quoted text'HH:mm:ss", isParsing = false) ===
+      "uuuu-MM'y contains in quoted text'HH:mm:ss")
+    assert(convertIncompatiblePattern("yyyy-MM-dd-u'T'HH:mm:ss.SSSz", isParsing = false)
       === "uuuu-MM-dd-e'T'HH:mm:ss.SSSz")
-    assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'HH:mm:ss")
+    assert(
+      convertIncompatiblePattern("yyyy-MM'u contains in quoted text'HH:mm:ss", isParsing = false)
       === "uuuu-MM'u contains in quoted text'HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'''''HH:mm:ss")
-      === "uuuu-MM'u contains in quoted text'''''HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
-      === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
+    assert(convertIncompatiblePattern(
+      "yyyy-MM'u contains in quoted text'''''HH:mm:ss", isParsing = false) ===
+      "uuuu-MM'u contains in quoted text'''''HH:mm:ss")
+    assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G", isParsing = false) ===
+      "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
     unsupportedLetters.foreach { l =>
-      val e = intercept[IllegalArgumentException](convertIncompatiblePattern(s"yyyy-MM-dd $l G"))
+      val e = intercept[IllegalArgumentException] {
+        convertIncompatiblePattern(s"yyyy-MM-dd $l G", isParsing = false)
+      }
       assert(e.getMessage === s"Illegal pattern character: $l")
     }
     unsupportedLettersForParsing.foreach { l =>
@@ -45,21 +50,22 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
         convertIncompatiblePattern(s"$l", isParsing = true)
       }
       assert(e.getMessage === s"Illegal pattern character: $l")
-      assert(convertIncompatiblePattern(s"$l").nonEmpty)
+      assert(convertIncompatiblePattern(s"$l", isParsing = false).nonEmpty)
     }
     unsupportedPatternLengths.foreach { style =>
       val e1 = intercept[IllegalArgumentException] {
-        convertIncompatiblePattern(s"yyyy-MM-dd $style")
+        convertIncompatiblePattern(s"yyyy-MM-dd $style", isParsing = false)
       }
       assert(e1.getMessage === s"Too many pattern letters: ${style.head}")
       val e2 = intercept[IllegalArgumentException] {
-        convertIncompatiblePattern(s"yyyy-MM-dd $style${style.head}")
+        convertIncompatiblePattern(s"yyyy-MM-dd $style${style.head}", isParsing = false)
       }
       assert(e2.getMessage === s"Too many pattern letters: ${style.head}")
     }
-    assert(convertIncompatiblePattern("yyyy-MM-dd uuuu") === "uuuu-MM-dd eeee")
-    assert(convertIncompatiblePattern("yyyy-MM-dd EEEE") === "uuuu-MM-dd EEEE")
-    assert(convertIncompatiblePattern("yyyy-MM-dd'e'HH:mm:ss") === "uuuu-MM-dd'e'HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM-dd'T'") === "uuuu-MM-dd'T'")
+    assert(convertIncompatiblePattern("yyyy-MM-dd uuuu", isParsing = false) === "uuuu-MM-dd eeee")
+    assert(convertIncompatiblePattern("yyyy-MM-dd EEEE", isParsing = false) === "uuuu-MM-dd EEEE")
+    assert(convertIncompatiblePattern("yyyy-MM-dd'e'HH:mm:ss", isParsing = false) ===
+      "uuuu-MM-dd'e'HH:mm:ss")
+    assert(convertIncompatiblePattern("yyyy-MM-dd'T'", isParsing = false) === "uuuu-MM-dd'T'")
   }
 }

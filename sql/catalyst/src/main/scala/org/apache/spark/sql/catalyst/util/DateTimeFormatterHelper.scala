@@ -252,7 +252,7 @@ private object DateTimeFormatterHelper {
    * @param pattern The input pattern.
    * @return The pattern for new parser
    */
-  def convertIncompatiblePattern(pattern: String, isParsing: Boolean = false): String = {
+  def convertIncompatiblePattern(pattern: String, isParsing: Boolean): String = {
     val eraDesignatorContained = pattern.split("'").zipWithIndex.exists {
       case (patternPart, index) =>
         // Text can be quoted using single quotes, we only check the non-quote parts.
