@@ -1,7 +1,7 @@
 --- TESTS FOR DATETIME FORMATTING FUNCTIONS ---
 
 -- valid formatter pattern check
-create temporary view v as select t from values
+create temporary view v as select col from values
  (timestamp '1582-06-01 11:33:33.123UTC+080000'),
  (timestamp '1970-01-01 00:00:00.000Europe/Paris'),
  (timestamp '1970-12-31 23:59:59.999Asia/Srednekolymsk'),
