@@ -61,8 +61,13 @@ public interface ShuffleMapOutputWriter {
    * <p>
    * This can also close any resources and clean up temporary state if necessary.
    * <p>
-   * The returned array should contain, for each partition from (0) to (numPartitions - 1), the
-   * number of bytes written by the partition writer for that partition id.
+   * The returned commit message is a structure with two components:
+   * <p>
+   * 1) An array of longs, which should contain, for each partition from (0) to
+   *    (numPartitions - 1), the number of bytes written by the partition writer
+   *    for that partition id.
+   * <p>
+   * 2) An optional metadata blob that can be used by shuffle readers.
    */
   MapOutputCommitMessage commitAllPartitions() throws IOException;
 

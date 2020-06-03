@@ -39,7 +39,7 @@ public final class MapOutputCommitMessage {
   private final long[] partitionLengths;
   private final Optional<MapOutputMetadata> mapOutputMetadata;
 
-  MapOutputCommitMessage(
+  private MapOutputCommitMessage(
       long[] partitionLengths, Optional<MapOutputMetadata> mapOutputMetadata) {
     this.partitionLengths = partitionLengths;
     this.mapOutputMetadata = mapOutputMetadata;
