@@ -392,8 +392,9 @@ class CrossValidatorTests(SparkSessionTestCase):
             ["features", "label"]).repartition(2, "features")
 
         dataset_with_folds = dataset.repartition(1).withColumn("random", rand(100)) \
-            .withColumn("fold", F.when(F.col("random") < 0.33, 0) \
-                .when(F.col("random") < 0.66, 1).otherwise(2)).repartition(2, "features")
+            .withColumn("fold", F.when(F.col("random") < 0.33, 0)
+                        .when(F.col("random") < 0.66, 1)
+                        .otherwise(2)).repartition(2, "features")
 
         lr = LogisticRegression()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [20]).build()
