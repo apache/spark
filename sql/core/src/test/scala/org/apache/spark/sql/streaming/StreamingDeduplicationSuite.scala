@@ -259,10 +259,9 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
   }
 
   test("test no-data flag") {
-    val noDataProgressIntervalKey = SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key
-    val noDataBatchEnableKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
+    val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
 
-    def testWithFlag(flag: Boolean): Unit = withClue(s"with $noDataBatchEnableKey = $flag") {
+    def testWithFlag(flag: Boolean): Unit = withClue(s"with $flagKey = $flag") {
       val inputData = MemoryStream[Int]
       val result = inputData.toDS()
         .withColumn("eventTime", $"value".cast("timestamp"))
@@ -271,12 +270,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
         .select($"eventTime".cast("long").as[Long])
 
       testStream(result, Append)(
-        StartStream(additionalConfs = Map(
-          noDataBatchEnableKey -> flag.toString,
-          // set `STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL` a small value to
-          // report an `empty` progress when no data come.
-          noDataProgressIntervalKey -> "1")
-        ),
+        StartStream(additionalConfs = Map(flagKey -> flag.toString)),
         AddData(inputData, 10, 11, 12, 13, 14, 15),
         CheckAnswer(10, 11, 12, 13, 14, 15),
         assertNumStateRows(total = 6, updated = 6),
@@ -287,7 +281,12 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
           if (flag) assertNumStateRows(total = 1, updated = 1)
           else assertNumStateRows(total = 7, updated = 1)
         },
-        AssertOnQuery(q => q.lastProgress.sink.numOutputRows == 0L)
+        AssertOnQuery { q =>
+          eventually(timeout(streamingTimeout)) {
+            q.lastProgress.sink.numOutputRows == 0L
+            true
+          }
+        }
       )
     }
 

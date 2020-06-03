@@ -439,9 +439,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         StartStream(
           Trigger.ProcessingTime(100),
           triggerClock = clock,
-          // set `STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL` a small value to
-          // report an `empty` progress when no data come.
-          Map(noDataProgressIntervalKey -> "1")),
+          Map(noDataProgressIntervalKey -> "100")),
         // Batch 1
         AddData(inputData, 1, 2),
         AdvanceManualClock(100),
@@ -481,6 +479,16 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
       }
       spark.streams.addListener(listener)
+
+      def checkProgressEvent(count: Int): StreamAction = {
+        AssertOnQuery { _ =>
+          eventually(Timeout(streamingTimeout)) {
+            assert(numProgressEvent == count)
+          }
+          true
+        }
+      }
+
       try {
         val input = new MemoryStream[Int](0, sqlContext)
         val clock = new StreamManualClock()
@@ -488,33 +496,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         testStream(result)(
           StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
           AddData(input, 10),
-          AssertOnQuery { _ =>
-            eventually(Timeout(streamingTimeout)) {
-              assert(numProgressEvent == 1)
-            }
-            true
-          },
+          checkProgressEvent(1),
           AdvanceManualClock(10),
-          AssertOnQuery { _ =>
-            eventually(Timeout(streamingTimeout)) {
-              assert(numProgressEvent == 2)
-            }
-            true
-          },
+          checkProgressEvent(2),
           AdvanceManualClock(90),
-          AssertOnQuery { _ =>
-            eventually(Timeout(streamingTimeout)) {
-              assert(numProgressEvent == 2)
-            }
-            true
-          },
+          checkProgressEvent(2),
           AdvanceManualClock(10),
-          AssertOnQuery { _ =>
-            eventually(Timeout(streamingTimeout)) {
-              assert(numProgressEvent == 3)
-            }
-            true
-          }
+          checkProgressEvent(3)
         )
       } finally {
         spark.streams.removeListener(listener)
