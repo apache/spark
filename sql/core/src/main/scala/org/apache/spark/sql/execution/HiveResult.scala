@@ -86,7 +86,8 @@ object HiveResult {
     zoneId = ZoneOffset.UTC,
     locale = DateFormatter.defaultLocale,
     // Use `FastDateFormat` as the legacy formatter because it is thread-safe.
-    legacyFormat = LegacyDateFormats.FAST_DATE_FORMAT)
+    legacyFormat = LegacyDateFormats.FAST_DATE_FORMAT,
+    isParsing = false)
   private def timestampFormatter = TimestampFormatter.getFractionFormatter(
     DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
 
