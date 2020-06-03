@@ -226,6 +226,7 @@ private[spark] class IndexShuffleBlockResolver(
 
       override def onFailure(streamId: String, cause: Throwable): Unit = {
         // the framework handles the connection itself, we just need to do local cleanup
+        logWarning(s"Error while uploading $blockId", cause)
         channel.close()
         fileTmp.delete()
       }
