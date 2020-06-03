@@ -86,9 +86,11 @@ object StreamingAggregationStateManager extends Logging {
  * An exception thrown when an invalid UnsafeRow is detected.
  */
 class InvalidUnsafeRowException
-  extends SparkException("The UnsafeRow format is invalid. This may happen when using the old " +
-    "version or broken checkpoint file. To resolve this problem, you can try to restart the " +
-    "application or use the legacy way to process streaming state.", null)
+  extends SparkException("The streaming aggregation query failed by state format invalidation. " +
+    "The following reasons may cause this: 1. An old Spark version wrote the checkpoint that is " +
+    "incompatible with the current one; 2. Broken checkpoint files; 3. The query is changed " +
+    "among restart. For the first case, you can try to restart the application without " +
+    "checkpoint or use the legacy Spark version to process the streaming state.", null)
 
 abstract class StreamingAggregationStateManagerBaseImpl(
     protected val keyExpressions: Seq[Attribute],
@@ -113,7 +115,7 @@ abstract class StreamingAggregationStateManagerBaseImpl(
 
   override def unsafeRowFormatValidation(row: UnsafeRow, schema: StructType): Unit = {
     if (checkFormat && SQLConf.get.getConf(
-        SQLConf.STREAMING_STATE_FORMAT_CHECK_ENABLED) && row != null) {
+        SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_CHECK_ENABLED) && row != null) {
       if (schema.fields.length != row.numFields) {
         throw new InvalidUnsafeRowException
       }

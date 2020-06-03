@@ -1558,10 +1558,10 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STREAMING_STATE_FORMAT_CHECK_ENABLED =
-    buildConf("spark.sql.streaming.stateFormatCheck.enabled")
-      .doc("Whether to detect a streaming query may try to use an invalid UnsafeRow in the " +
-        "state store.")
+  val STREAMING_AGGREGATION_STATE_FORMAT_CHECK_ENABLED =
+    buildConf("spark.sql.streaming.aggregationStateFormatCheck.enabled")
+      .doc("Whether to detect a streaming aggregation query may try to use an invalid UnsafeRow " +
+        "in the state store.")
       .version("3.1.0")
       .internal()
       .booleanConf
