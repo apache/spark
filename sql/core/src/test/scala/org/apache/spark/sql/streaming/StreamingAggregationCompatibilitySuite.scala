@@ -102,4 +102,25 @@ class StreamingAggregationCompatibilitySuite extends StreamTest {
           Seq(4, 9, 14, 19), Seq(0, 1, 2)))
     )
   }
+
+  test("SPARK-28067 change the sum decimal unsafe row format") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF().toDF("value")
+        .selectExpr(
+          "value",
+          "value % 2 AS id",
+          "CAST(value AS DECIMAL) as dec")
+        .groupBy($"id")
+        .agg(sum($"dec").as("sum_dec"))
+        .select("id", "sum_dec")
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    testStream(aggregated, Complete)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+       AddData(inputData, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+       CheckAnswer(Row(0, 2.5, 2.5F, 2.5, 2.5000, 2, 0, 0, 5, 5, 0, 5, 5, 5.0, 5.0, 5, Seq(0, 5)))
+    )
+  }
 }
