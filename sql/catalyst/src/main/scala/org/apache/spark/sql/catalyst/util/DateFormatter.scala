@@ -81,15 +81,16 @@ class Iso8601DateFormatter(
 }
 
 trait LegacyDateFormatter extends DateFormatter {
+  val zoneId: ZoneId
+  val timeZone: TimeZone = TimeZone.getTimeZone(zoneId)
   def parseToDate(s: String): Date
-  def zoneId: ZoneId
 
   override def parse(s: String): Int = {
-    fromJavaDate(new java.sql.Date(parseToDate(s).getTime), TimeZone.getTimeZone(zoneId))
+    fromJavaDate(new java.sql.Date(parseToDate(s).getTime), timeZone)
   }
 
   override def format(days: Int): String = {
-    format(DateTimeUtils.toJavaDate(days, TimeZone.getTimeZone(zoneId)))
+    format(DateTimeUtils.toJavaDate(days, timeZone))
   }
 
   override def format(localDate: LocalDate): String = {
@@ -102,7 +103,7 @@ class LegacyFastDateFormatter(
     override val zoneId: ZoneId,
     locale: Locale) extends LegacyDateFormatter {
   @transient
-  private lazy val fdf = FastDateFormat.getInstance(pattern, TimeZone.getTimeZone(zoneId), locale)
+  private lazy val fdf = FastDateFormat.getInstance(pattern, timeZone, locale)
   override def parseToDate(s: String): Date = fdf.parse(s)
   override def format(d: Date): String = fdf.format(d)
   override def validatePatternString(): Unit = fdf
@@ -115,13 +116,12 @@ class LegacySimpleDateFormatter(
   @transient
   private lazy val sdf = {
     val formatter = new SimpleDateFormat(pattern, locale)
-    formatter.setTimeZone(TimeZone.getTimeZone(zoneId))
+    formatter.setTimeZone(timeZone)
     formatter
   }
   override def parseToDate(s: String): Date = sdf.parse(s)
   override def format(d: Date): String = sdf.format(d)
   override def validatePatternString(): Unit = sdf
-
 }
 
 object DateFormatter {
