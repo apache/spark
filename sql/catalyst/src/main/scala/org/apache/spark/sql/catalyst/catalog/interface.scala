@@ -654,8 +654,7 @@ case class HiveTableRelation(
     tableMeta: CatalogTable,
     dataCols: Seq[AttributeReference],
     partitionCols: Seq[AttributeReference],
-    tableStats: Option[Statistics] = Option(Statistics(sizeInBytes
-      = SQLConf.get.defaultSizeInBytes)),
+    tableStats: Statistics = Statistics(sizeInBytes = SQLConf.get.defaultSizeInBytes),
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
   extends LeafNode with MultiInstanceRelation {
   assert(tableMeta.identifier.database.isDefined)
@@ -681,10 +680,9 @@ case class HiveTableRelation(
   )
 
   override def computeStats(): Statistics = {
-    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
-      .orElse(tableStats)
-      .getOrElse {
-      throw new IllegalStateException("table stats must be specified.")
+    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled)) match {
+      case Some(stats) => stats
+      case _ => tableStats
     }
   }
 
