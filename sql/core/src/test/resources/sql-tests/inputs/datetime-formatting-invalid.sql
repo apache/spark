@@ -1,6 +1,6 @@
 --- TESTS FOR DATETIME FORMATTING FUNCTIONS WITH INVALID PATTERNS ---
 
--- separating this from datetime-formatting.sql ,because the text form
+-- separating this from datetime-formatting.sql, because the text form
 -- for patterns with 5 letters in SimpleDateFormat varies from different JDKs
 select date_format('2018-11-17 13:33:33.333', 'GGGGG');
 -- pattern letter count can not be greater than 10
@@ -17,7 +17,7 @@ select date_format('2018-11-17 13:33:33.333', 'uuuuu');
 select date_format('2018-11-17 13:33:33.333', 'EEEEE');
 select date_format('2018-11-17 13:33:33.333', 'FF');
 select date_format('2018-11-17 13:33:33.333', 'ddd');
--- DD is invalid in 8, but valid in 11 for the JDKs that PR builder uses
+-- DD is invalid if the day-of-year exceeds 100, but it becomes valid in Java 11
 -- select date_format('2018-11-17 13:33:33.333', 'DD');
 select date_format('2018-11-17 13:33:33.333', 'DDDD');
 select date_format('2018-11-17 13:33:33.333', 'HHH');

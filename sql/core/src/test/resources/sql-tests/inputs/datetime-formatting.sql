@@ -52,8 +52,7 @@ select col, date_format(col, 's ss') from v;
 
 select col, date_format(col, 'S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSSS SSSSSSSSS') from v;
 
--- add upper function here to avoid
-select col, upper(date_format(col, 'a')) from v;
+select col, date_format(col, 'a') from v;
 
 select col, date_format(col, 'VV') from v;
 

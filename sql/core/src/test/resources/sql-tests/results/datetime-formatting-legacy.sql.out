@@ -310,9 +310,9 @@ struct<col:timestamp,date_format(col, S SS SSS SSSS SSSSS SSSSSS SSSSSSS SSSSSSS
 
 
 -- !query
-select col, upper(date_format(col, 'a')) from v
+select col, date_format(col, 'a') from v
 -- !query schema
-struct<col:timestamp,upper(date_format(col, a)):string>
+struct<col:timestamp,date_format(col, a):string>
 -- !query output
 1582-05-31 19:40:35.123	PM
 1969-12-31 15:00:00	PM
