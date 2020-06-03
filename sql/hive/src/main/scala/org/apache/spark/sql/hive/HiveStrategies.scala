@@ -133,7 +133,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       conf.defaultSizeInBytes
     }
 
-    val stats = Some(Statistics(sizeInBytes = BigInt(sizeInBytes)))
+    val stats = Statistics(sizeInBytes = BigInt(sizeInBytes))
     relation.copy(tableStats = stats)
   }
 
