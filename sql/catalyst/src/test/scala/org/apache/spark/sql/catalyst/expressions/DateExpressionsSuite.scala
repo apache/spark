@@ -1182,8 +1182,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         UnixTimestamp(Literal("1"), Literal(c.toString)), "3.0")
     }
 
-    Seq('Y', 'W', 'w', 'E', 'u', 'F', 'q', 'Q').foreach { l =>
+    def checkNullify(c: Char): Unit = {
+      checkEvaluation(new ParseToTimestamp(Literal("1"), Literal(c.toString)).child, null)
+      checkEvaluation(new ParseToDate(Literal("1"), Literal(c.toString)).child, null)
+      checkEvaluation(ToUnixTimestamp(Literal("1"), Literal(c.toString)), null)
+      checkEvaluation(UnixTimestamp(Literal("1"), Literal(c.toString)), null)
+    }
+
+    Seq('Y', 'W', 'w', 'E', 'u', 'F').foreach { l =>
       checkSparkUpgrade(l)
+    }
+
+    Seq('q', 'Q').foreach { l =>
+      checkNullify(l)
     }
   }
 }
