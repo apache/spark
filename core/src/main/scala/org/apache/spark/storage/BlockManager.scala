@@ -657,7 +657,6 @@ private[spark] class BlockManager(
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[_]): StreamCallbackWithID = {
-    // Delegate shuffle blocks here to resolver if supported
     if (blockId.isShuffle || blockId.isInternalShuffle) {
       logInfo(s"Putting shuffle block ${blockId}")
       try {
