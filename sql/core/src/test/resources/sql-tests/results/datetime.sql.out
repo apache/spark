@@ -1018,12 +1018,12 @@ struct<date_format(CAST(2020-01-01 AS TIMESTAMP), YYYY-MM-dd uuuu):string>
 -- !query
 create temporary view ttt as select t from VALUES
  (timestamp '1582-06-01 11:33:33.123UTC+080000'),
- (timestamp '1996-04-01 00:33:33.123Australia/Darwin'),
  (timestamp '1970-01-01 00:00:00.000Europe/Paris'),
- (timestamp '1970-12-31 23:59:59.999America/Los_Angeles'),
+ (timestamp '1970-12-31 23:59:59.999Asia/Srednekolymsk'),
+ (timestamp '1996-04-01 00:33:33.123Australia/Darwin'),
  (timestamp '2018-11-17 13:33:33.123Z'),
  (timestamp '2020-01-01 01:33:33.123Asia/Shanghai'),
- (timestamp '2100-01-01 01:33:33.123Asia/Srednekolymsk') tt(t)
+ (timestamp '2100-01-01 01:33:33.123America/Los_Angeles') tt(t)
 -- !query schema
 struct<>
 -- !query output
@@ -1041,7 +1041,7 @@ struct<date_format(t, Y YY YYYY YYYYY YYYYY y yy yyy yyyy yyyyy):string>
 1996 96 1996 01996 01996 1996 96 1996 1996 01996
 2018 18 2018 02018 02018 2018 18 2018 2018 02018
 2020 20 2020 02020 02020 2019 19 2019 2019 02019
-2099 99 2099 02099 02099 2099 99 2099 2099 02099
+2099 99 2099 02099 02099 2100 00 2100 2100 02100
 
 
 -- !query
@@ -1050,8 +1050,8 @@ select date_format(t, 'q qq Q QQ QQQ QQQQ') from ttt
 struct<date_format(t, q qq Q QQ QQQ QQQQ):string>
 -- !query output
 1 01 1 01 Q1 1st quarter
+1 01 1 01 Q1 1st quarter
 2 02 2 02 Q2 2nd quarter
-4 04 4 04 Q4 4th quarter
 4 04 4 04 Q4 4th quarter
 4 04 4 04 Q4 4th quarter
 4 04 4 04 Q4 4th quarter
@@ -1063,8 +1063,8 @@ select date_format(t, 'M MM MMM MMMM L LL') from ttt
 -- !query schema
 struct<date_format(t, M MM MMM MMMM L LL):string>
 -- !query output
+1 01 Jan January 1 01
 11 11 Nov November 11 11
-12 12 Dec December 12 12
 12 12 Dec December 12 12
 12 12 Dec December 12 12
 12 12 Dec December 12 12
@@ -1073,17 +1073,17 @@ struct<date_format(t, M MM MMM MMMM L LL):string>
 
 
 -- !query
-select date_format(t, 'W ww d dd DDD u uu uuu uuuu F E EE EEE EEEE') from ttt
+select date_format(t, 'W ww d dd DDD u uu uuu uuuu F E EE EEE EEEE a') from ttt
 -- !query schema
-struct<date_format(t, W ww d dd DDD u uu uuu uuuu F E EE EEE EEEE):string>
+struct<date_format(t, W ww d dd DDD u uu uuu uuuu F E EE EEE EEEE a):string>
 -- !query output
-3 46 17 17 321 6 06 Sat Saturday 3 Sat Sat Sat Saturday
-4 13 31 31 091 7 07 Sun Sunday 3 Sun Sun Sun Sunday
-5 01 31 31 365 2 02 Tue Tuesday 3 Tue Tue Tue Tuesday
-5 01 31 31 365 3 03 Wed Wednesday 3 Wed Wed Wed Wednesday
-5 22 31 31 151 1 01 Mon Monday 3 Mon Mon Mon Monday
-5 53 31 31 365 4 04 Thu Thursday 3 Thu Thu Thu Thursday
-5 53 31 31 365 4 04 Thu Thursday 3 Thu Thu Thu Thursday
+0 53 1 01 001 5 05 Fri Friday 1 Fri Fri Fri Friday AM
+3 46 17 17 321 6 06 Sat Saturday 3 Sat Sat Sat Saturday AM
+4 13 31 31 091 7 07 Sun Sunday 3 Sun Sun Sun Sunday AM
+5 01 31 31 365 2 02 Tue Tuesday 3 Tue Tue Tue Tuesday AM
+5 01 31 31 365 3 03 Wed Wednesday 3 Wed Wed Wed Wednesday PM
+5 22 31 31 151 1 01 Mon Monday 3 Mon Mon Mon Monday PM
+5 53 31 31 365 4 04 Thu Thursday 3 Thu Thu Thu Thursday AM
 
 
 -- !query
@@ -1091,10 +1091,10 @@ select date_format(t, 'h hh H HH k kk K KK m mm s ss SSS') from ttt
 -- !query schema
 struct<date_format(t, h hh H HH k kk K KK m mm s ss SSS):string>
 -- !query output
-11 11 23 23 23 23 11 11 59 59 59 59 999
+1 01 1 01 1 01 1 01 33 33 33 33 123
 3 03 15 15 15 15 3 03 0 00 0 00 000
+4 04 4 04 4 04 4 04 59 59 59 59 999
 5 05 5 05 5 05 5 05 33 33 33 33 123
-6 06 6 06 6 06 6 06 33 33 33 33 123
 7 07 19 19 19 19 7 07 40 40 35 35 123
 7 07 7 07 7 07 7 07 3 03 33 33 123
 9 09 9 09 9 09 9 09 33 33 33 33 123
