@@ -1543,27 +1543,28 @@ object SQLConf {
 
   val STREAMING_CHECKPOINT_FILE_MANAGER_CLASS =
     buildConf("spark.sql.streaming.checkpointFileManagerClass")
+      .internal()
       .doc("The class used to write checkpoint files atomically. This class must be a subclass " +
         "of the interface CheckpointFileManager.")
       .version("2.4.0")
-      .internal()
       .stringConf
 
   val STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.escapedPathCheck.enabled")
+      .internal()
       .doc("Whether to detect a streaming query may pick up an incorrect checkpoint path due " +
         "to SPARK-26824.")
       .version("3.0.0")
-      .internal()
       .booleanConf
       .createWithDefault(true)
 
   val STREAMING_AGGREGATION_STATE_FORMAT_CHECK_ENABLED =
     buildConf("spark.sql.streaming.aggregationStateFormatCheck.enabled")
-      .doc("Whether to detect a streaming aggregation query may try to use an invalid UnsafeRow " +
-        "in the state store.")
-      .version("3.1.0")
       .internal()
+      .doc("When true, check if the UnsafeRow from the state store is valid or not when running " +
+        "streaming aggregation queries. This can happen if the state store format has been " +
+        "changed.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
 
