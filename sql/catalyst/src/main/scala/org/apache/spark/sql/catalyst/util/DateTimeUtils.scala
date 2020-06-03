@@ -112,22 +112,17 @@ object DateTimeUtils {
   }
 
   /**
-   * The opposite to `fromJavaDate` method which converts a number of days to an
-   * instance of `java.sql.Date`. It builds a local date in Proleptic Gregorian
-   * calendar, extracts date fields `year`, `month`, `day`, and creates a local
-   * date in the hybrid calendar (Julian + Gregorian calendars) from the fields.
+   * Converts days since the epoch 1970-01-01 in Proleptic Gregorian calendar to a local date
+   * at the given time zone in the hybrid calendar (Julian + Gregorian). It rebases the given
+   * days from Proleptic Gregorian to the hybrid calendar at UTC time zone for simplicity because
+   * the difference between two calendars doesn't depend on any time zone. The result is shifted
+   * by time zone offset in wall clock to have the same date fields (year, month, day)
+   * at the given `timeZone` as the input `daysSinceEpoch` in Proleptic Gregorian calendar.
    *
-   * The purpose of the conversion is to have the same local date as the triple
-   * of `year`, `month`, `day` in the original Proleptic Gregorian calendar and
-   * in the target calender.
-   *
-   * @param daysSinceEpoch The number of days since 1970-01-01.
-   * @return A `java.sql.Date` from number of days since epoch.
+   * @param daysSinceEpoch The number of days since 1970-01-01 in Proleptic Gregorian calendar.
+   * @param timeZone The time zone of the desired local date.
+   * @return A local date in the hybrid calendar as `java.sql.Date` from number of days since epoch.
    */
-  def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    toJavaDate(daysSinceEpoch, TimeZone.getDefault)
-  }
-
   def toJavaDate(daysSinceEpoch: SQLDate, timeZone: TimeZone): Date = {
     val rebasedDays = rebaseGregorianToJulianDays(daysSinceEpoch)
     val localMillis = Math.multiplyExact(rebasedDays, MILLIS_PER_DAY)
@@ -136,6 +131,10 @@ object DateTimeUtils {
       case timeZone: TimeZone => timeZone.getOffset(localMillis - timeZone.getRawOffset)
     }
     new Date(localMillis - timeZoneOffset)
+  }
+
+  def toJavaDate(daysSinceEpoch: SQLDate): Date = {
+    toJavaDate(daysSinceEpoch, TimeZone.getDefault)
   }
 
   /**
