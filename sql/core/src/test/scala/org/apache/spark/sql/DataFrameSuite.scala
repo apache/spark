@@ -832,30 +832,30 @@ class DataFrameSuite extends QueryTest
   }
 
   private lazy val person2: DataFrame = Seq(
-    ("Bob", 16, 176),
-    ("Alice", 32, 164),
-    ("David", 60, 192),
-    ("Amy", 24, 180)).toDF("name", "age", "height")
+    ("Bob", 16, 176, new Date(2020, 1, 1)),
+    ("Alice", 32, 164, new Date(2020, 1, 5)),
+    ("David", 60, 192, new Date(2020, 1, 19)),
+    ("Amy", 24, 180, new Date(2020, 1, 25))).toDF("name", "age", "height", "birthday")
 
   test("describe") {
     val describeResult = Seq(
-      Row("count", "4", "4", "4"),
-      Row("mean", null, "33.0", "178.0"),
-      Row("stddev", null, "19.148542155126762", "11.547005383792516"),
-      Row("min", "Alice", "16", "164"),
-      Row("max", "David", "60", "192"))
+      Row("count", "4", "4", "4", "4"),
+      Row("mean", null, "33.0", "178.0", "2020-1-25"),
+      Row("stddev", null, "19.148542155126762", "11.547005383792516", null),
+      Row("min", "Alice", "16", "164", "2020-1-1"),
+      Row("max", "David", "60", "192", "2020-1-25"))
 
     val emptyDescribeResult = Seq(
-      Row("count", "0", "0", "0"),
-      Row("mean", null, null, null),
-      Row("stddev", null, null, null),
-      Row("min", null, null, null),
-      Row("max", null, null, null))
+      Row("count", "0", "0", "0", "0"),
+      Row("mean", null, null, null, null),
+      Row("stddev", null, null, null, null),
+      Row("min", null, null, null, null),
+      Row("max", null, null, null, null))
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
     val describeAllCols = person2.describe()
-    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height", "birthday"))
     checkAnswer(describeAllCols, describeResult)
     // All aggregate value should have been cast to string
     describeAllCols.collect().foreach { row =>
@@ -875,7 +875,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _, _) => Row(s)} )
 
     val emptyDescription = person2.limit(0).describe()
-    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height", "birthday"))
     checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
