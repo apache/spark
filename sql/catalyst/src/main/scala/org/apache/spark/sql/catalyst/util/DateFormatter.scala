@@ -159,8 +159,8 @@ object DateFormatter {
     getFormatter(Some(format), zoneId, locale, legacyFormat, isParsing)
   }
 
-  def apply(format: String, zoneId: ZoneId): DateFormatter = {
-    getFormatter(Some(format), zoneId)
+  def apply(format: String, zoneId: ZoneId, isParsing: Boolean = false): DateFormatter = {
+    getFormatter(Some(format), zoneId, isParsing = isParsing)
   }
 
   def apply(zoneId: ZoneId): DateFormatter = {

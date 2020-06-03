@@ -40,7 +40,7 @@ Spark uses pattern letters in the following table for date and timestamp parsing
 |**w**|week-of-week-based-year|number(2)|27|
 |**W**|week-of-month|number(1)|4|
 |**E**|day-of-week|text|Tue; Tuesday|
-|**u**|localized day-of-week|number/text|2; 02; Tue; Tuesday|
+|**e**|localized day-of-week|number/text|2; 02; Tue; Tuesday|
 |**F**|week-of-month|number(1)|3|
 |**a**|am-pm-of-day|am-pm|PM|
 |**h**|clock-hour-of-am-pm (1-12)|number(2)|12|

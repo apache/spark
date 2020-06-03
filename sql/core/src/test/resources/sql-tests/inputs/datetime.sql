@@ -125,8 +125,8 @@ select to_timestamp("2019-10-06S", "yyyy-MM-dd'S'");
 select to_timestamp("S2019-10-06", "'S'yyyy-MM-dd");
 
 select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuee');
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc');
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuuu');
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eecc');
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eeee');
 
 select to_timestamp("2019-10-06T10:11:12'12", "yyyy-MM-dd'T'HH:mm:ss''SSSS"); -- middle
 select to_timestamp("2019-10-06T10:11:12'", "yyyy-MM-dd'T'HH:mm:ss''"); -- tail

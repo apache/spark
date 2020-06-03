@@ -19,15 +19,18 @@ package org.apache.spark.sql.util
 
 import java.time.{DateTimeException, LocalDate}
 
-import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.{DateFormatter, LegacyDateFormats}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
-class DateFormatterSuite extends SparkFunSuite with SQLHelper {
+class DateFormatterSuite extends DatetimeFormatterSuite {
+  override def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit = {
+    DateFormatter(pattern, UTC, isParsing)
+  }
+
   test("parsing dates") {
     outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {

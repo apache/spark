@@ -20,10 +20,7 @@ package org.apache.spark.sql.util
 import java.time.{DateTimeException, Instant, LocalDateTime, LocalTime}
 import java.util.concurrent.TimeUnit
 
-import org.scalatest.Matchers
-
-import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.{LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -31,7 +28,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.unsafe.types.UTF8String
 
-class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers {
+class TimestampFormatterSuite extends DatetimeFormatterSuite {
+
+  override def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit = {
+    TimestampFormatter(pattern, UTC, isParsing)
+  }
 
   test("parsing timestamps using time zones") {
     val localDate = "2018-12-02T10:11:12.001234"
@@ -416,17 +417,5 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
     assert(t4 === date(1970, 1, 1, 12))
     val t5 = f3.parse("AM")
     assert(t5 === date(1970))
-  }
-
-  test("explicitly forbidden datetime patterns") {
-    // not support by the legacy one too
-    Seq("QQQQQ", "qqqqq", "A", "c", "e", "n", "N", "p").foreach { pattern =>
-      intercept[IllegalArgumentException](TimestampFormatter(pattern, UTC).format(0))
-    }
-    // supported by the legacy one, then we will suggest users with SparkUpgradeException
-    Seq("GGGGG", "MMMMM", "LLLLL", "EEEEE", "uuuuu", "aa", "aaa", "y" * 11, "y" * 11)
-      .foreach { pattern =>
-        intercept[SparkUpgradeException](TimestampFormatter(pattern, UTC).format(0))
-    }
   }
 }
