@@ -260,6 +260,11 @@ private[spark] class BlockManager(
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
 
+  // Shuffles which are either in queue for migrations or migrated
+  private val migratingShuffles = mutable.HashSet[(Int, Long)]()
+  // Shuffles which are queued for migration
+  private val shufflesToMigrate = new java.util.concurrent.ConcurrentLinkedQueue[(Int, Long)]()
+
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
    *
@@ -1811,13 +1816,6 @@ private[spark] class BlockManager(
       logDebug("Block manager already in decommissioning state")
     }
   }
-
-
-  // Shuffles which are either in queue for migrations or migrated
-  private val migratingShuffles = mutable.HashSet[(Int, Long)]()
-  // Shuffles which are queued for migration
-  private val shufflesToMigrate = new java.util.concurrent.ConcurrentLinkedQueue[(Int, Long)]()
-
 
   private class ShuffleMigrationRunnable(peer: BlockManagerId) extends Runnable {
     @volatile var running = true

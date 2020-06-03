@@ -69,7 +69,7 @@ private[spark] class IndexShuffleBlockResolver(
     val searchDirs = rootDirs.flatMap(_.listFiles()).filter(_.isDirectory()) ++ rootDirs
     val filenames = searchDirs.flatMap(_.list())
     logDebug(s"Got block files ${filenames.toList}")
-    filenames.flatMap{ fname =>
+    filenames.flatMap { fname =>
       pattern.findAllIn(fname).matchData.map {
         matched => (matched.group(1).toInt, matched.group(2).toLong)
       }
@@ -180,7 +180,7 @@ private[spark] class IndexShuffleBlockResolver(
       StreamCallbackWithID = {
     val file = blockId match {
       case ShuffleIndexBlockId(shuffleId, mapId, _) =>
-         getIndexFile(shuffleId, mapId)
+        getIndexFile(shuffleId, mapId)
       case ShuffleDataBlockId(shuffleId, mapId, _) =>
         getDataFile(shuffleId, mapId)
       case _ =>
@@ -203,7 +203,7 @@ private[spark] class IndexShuffleBlockResolver(
       }
 
       override def onComplete(streamId: String): Unit = {
-        logTrace(s"Done receiving block $blockId, now putting into local shuffle service")
+        logTrace(s"Done receiving shuffle block $blockId, now storing on local disk.")
         channel.close()
         val diskSize = fileTmp.length()
         this.synchronized {
