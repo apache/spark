@@ -44,6 +44,7 @@ class KubernetesSuite extends SparkFunSuite
   with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite with PVTestsSuite
   with DepsTestsSuite with RTestsSuite with Logging with Eventually with Matchers {
 
+
   import KubernetesSuite._
 
   protected var sparkHomeDir: Path = _
