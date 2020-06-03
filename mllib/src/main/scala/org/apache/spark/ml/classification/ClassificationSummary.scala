@@ -37,6 +37,12 @@ private[classification] trait ClassificationSummary extends Serializable {
   @Since("3.1.0")
   def predictions: DataFrame
 
+  /**
+   * Field in "predictions" which gives the probability or rawPrediction of each class as a vector.
+   */
+  @Since("3.1.0")
+  def scoreCol: String
+
   /** Field in "predictions" which gives the prediction of each class. */
   @Since("3.1.0")
   def predictionCol: String
@@ -194,12 +200,6 @@ trait BinaryClassificationSummary extends ClassificationSummary {
 
   private val sparkSession = predictions.sparkSession
   import sparkSession.implicits._
-
-  /**
-   * Field in "predictions" which gives the probability or rawPrediction of each class as a vector.
-   */
-  @Since("3.1.0")
-  def scoreCol: String
 
   // TODO: Allow the user to vary the number of bins using a setBins method in
   // BinaryClassificationMetrics. For now the default is set to 100.

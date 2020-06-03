@@ -1191,7 +1191,7 @@ class LogisticRegressionModel private[spark] (
     val (summaryModel, probabilityColName, predictionColName) = findSummaryModel()
     if (numClasses > 2) {
       new LogisticRegressionSummaryImpl(summaryModel.transform(dataset),
-        predictionColName, $(labelCol), $(featuresCol), weightColName)
+        probabilityColName, predictionColName, $(labelCol), $(featuresCol), weightColName)
     } else {
       new BinaryLogisticRegressionSummaryImpl(summaryModel.transform(dataset),
         probabilityColName, predictionColName, $(labelCol), $(featuresCol), weightColName)
@@ -1394,6 +1394,10 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
  * Abstraction for logistic regression results for a given model.
  */
 sealed trait LogisticRegressionSummary extends ClassificationSummary {
+
+  /** Field in "predictions" which gives the probability of each class as a vector. */
+  @Since("1.5.0")
+  def probabilityCol: String = scoreCol
 }
 
 /**
@@ -1436,13 +1440,15 @@ private class LogisticRegressionTrainingSummaryImpl(
     weightCol: String,
     override val objectiveHistory: Array[Double])
   extends LogisticRegressionSummaryImpl(
-    predictions, predictionCol, labelCol, featuresCol, weightCol)
+    predictions, probabilityCol, predictionCol, labelCol, featuresCol, weightCol)
   with LogisticRegressionTrainingSummary
 
 /**
  * Multiclass logistic regression results for a given model.
  *
  * @param predictions dataframe output by the model's `transform` method.
+ * @param scoreCol field in "predictions" which gives the probability of
+ *                       each class as a vector.
  * @param predictionCol field in "predictions" which gives the prediction for a data instance as a
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
@@ -1451,6 +1457,7 @@ private class LogisticRegressionTrainingSummaryImpl(
  */
 private class LogisticRegressionSummaryImpl(
     @transient override val predictions: DataFrame,
+    override val scoreCol: String,
     override val predictionCol: String,
     override val labelCol: String,
     override val featuresCol: String,
@@ -1487,7 +1494,7 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
  *
  * @param predictions dataframe output by the model's `transform` method.
  * @param scoreCol field in "predictions" which gives the probability of
- *                       each class as a vector.
+ *                 each class as a vector.
  * @param predictionCol field in "predictions" which gives the prediction of
  *                      each class as a double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
@@ -1496,11 +1503,11 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
  */
 private class BinaryLogisticRegressionSummaryImpl(
     predictions: DataFrame,
-    override val scoreCol: String,
+    scoreCol: String,
     predictionCol: String,
     labelCol: String,
     featuresCol: String,
     weightCol: String)
   extends LogisticRegressionSummaryImpl(
-    predictions, predictionCol, labelCol, featuresCol, weightCol)
+    predictions, scoreCol, predictionCol, labelCol, featuresCol, weightCol)
   with BinaryLogisticRegressionSummary
