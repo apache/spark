@@ -104,24 +104,17 @@ case class ScalaUDF(
 
   private def scalaConverter(i: Int, dataType: DataType): Any => Any = {
     if (inputEncoders.isEmpty || // for untyped Scala UDF
+        inputEncoders(i).isEmpty || // for types aren't supported by encoder, e.g. Any
+        isPrimitive(dataType) ||
         dataType.isInstanceOf[UserDefinedType[_]]) {
       createToScalaConverter(dataType)
     } else {
-      val encoderOpt = inputEncoders(i)
-      assert(encoderOpt.isDefined, s"ScalaUDF expects an encoder of ${i}th child, but got empty.")
-      val enc = encoderOpt.get
-      if (isPrimitive(dataType) && !enc.schema.head.nullable) {
-        createToScalaConverter(dataType)
+      val enc = inputEncoders(i).get
+      val fromRow = enc.createDeserializer()
+      if (enc.isSerializedAsStructForTopLevel) {
+        row: Any => fromRow(row.asInstanceOf[InternalRow])
       } else {
-        val fromRow = enc.createDeserializer()
-        if (enc.isSerializedAsStructForTopLevel) {
-          row: Any => fromRow(row.asInstanceOf[InternalRow])
-        } else {
-          value: Any =>
-            val row = new GenericInternalRow(1)
-            row.update(0, value)
-            fromRow(row)
-        }
+        value: Any => fromRow(new GenericInternalRow(Array(value)))
       }
     }
   }
