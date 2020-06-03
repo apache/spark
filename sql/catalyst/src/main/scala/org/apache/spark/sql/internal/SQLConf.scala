@@ -548,8 +548,8 @@ object SQLConf {
     buildConf("spark.sql.maxRewritingCNFDepth")
       .internal()
       .doc("The maximum depth of rewriting a join condition to conjunctive normal form " +
-        "expression. The deeper, the more predicate may be found, but the optimization time " +
-        "will increase. The default is 6. By setting this value to 0 this feature can be disabled.")
+        "expression. The deeper, the more predicate may be found, but the optimization time will " +
+        "increase. The default is 10. By setting this value to 0 this feature can be disabled.")
       .version("3.1.0")
       .intConf
       .checkValue(_ >= 0,

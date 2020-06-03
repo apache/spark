@@ -51,7 +51,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
   override protected val blacklistedOnceBatches: Set[String] =
     Set(
       "PartitionPruning",
-      "Extract Python UDFs")
+      "Extract Python UDFs",
+      "Push predicate through join by CNF")
 
   protected def fixedPoint =
     FixedPoint(
@@ -121,7 +122,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         rulesWithoutInferFiltersFromConstraints: _*) ::
       // Set strategy to Once to avoid pushing filter every time because we do not change the
       // join condition.
-      Batch("Push predicate through join by conjunctive normal form", Once,
+      Batch("Push predicate through join by CNF", Once,
         PushPredicateThroughJoinByCNF) :: Nil
     }
 
@@ -1383,10 +1384,11 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Rewrite pattern:
-   * 1. (a && b) || c --> (a || c) && (b || c)
-   * 2. a || (b && c) --> (a || b) && (a || c)
+   * 1. (a && b) || (c && d) --> (a || c) && (a || d) && (b || c) && (b && d)
+   * 2. (a && b) || c --> (a || c) && (b || c)
+   * 3. a || (b && c) --> (a || b) && (a || c)
    *
-   * To avoid generating too many predicates, we first group the filter columns from the same table.
+   * To avoid generating too many predicates, we first group the columns from the same table.
    */
   private def toCNF(condition: Expression, depth: Int = 0): Expression = {
     if (depth < SQLConf.get.maxRewritingCNFDepth) {
@@ -1395,12 +1397,12 @@ object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHel
           val lhs = splitConjunctivePredicates(left).groupBy(_.references.map(_.qualifier))
           val rhs = splitConjunctivePredicates(right).groupBy(_.references.map(_.qualifier))
           if (lhs.size > 1) {
-            lhs.values.map(_.reduceLeft(And)).map { c =>
-              toCNF(Or(toCNF(c, depth + 1), toCNF(right, depth + 1)), depth + 1)
+            lhs.values.map(_.reduceLeft(And)).map { e =>
+              toCNF(Or(toCNF(e, depth + 1), toCNF(right, depth + 1)), depth + 1)
             }.reduce(And)
           } else if (rhs.size > 1) {
-            rhs.values.map(_.reduceLeft(And)).map { c =>
-              toCNF(Or(toCNF(left, depth + 1), toCNF(c, depth + 1)), depth + 1)
+            rhs.values.map(_.reduceLeft(And)).map { e =>
+              toCNF(Or(toCNF(left, depth + 1), toCNF(e, depth + 1)), depth + 1)
             }.reduce(And)
           } else {
             or
@@ -1409,8 +1411,8 @@ object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHel
         case or @ Or(left: And, right) =>
           val lhs = splitConjunctivePredicates(left).groupBy(_.references.map(_.qualifier))
           if (lhs.size > 1) {
-            lhs.values.map(_.reduceLeft(And)).map {
-              c => toCNF(Or(toCNF(c, depth + 1), toCNF(right, depth + 1)), depth + 1)
+            lhs.values.map(_.reduceLeft(And)).map { e =>
+              toCNF(Or(toCNF(e, depth + 1), toCNF(right, depth + 1)), depth + 1)
             }.reduce(And)
           } else {
             or
@@ -1419,8 +1421,8 @@ object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHel
         case or @ Or(left, right: And) =>
           val rhs = splitConjunctivePredicates(right).groupBy(_.references.map(_.qualifier))
           if (rhs.size > 1) {
-            rhs.values.map(_.reduceLeft(And)).map { c =>
-              toCNF(Or(toCNF(left, depth + 1), toCNF(c, depth + 1)), depth + 1)
+            rhs.values.map(_.reduceLeft(And)).map { e =>
+              toCNF(Or(toCNF(left, depth + 1), toCNF(e, depth + 1)), depth + 1)
             }.reduce(And)
           } else {
             or
@@ -1437,32 +1439,19 @@ object PushPredicateThroughJoinByCNF extends Rule[LogicalPlan] with PredicateHel
     }
   }
 
-  private def maybeWithFilter(joinCondition: Option[Expression], plan: LogicalPlan) = {
-    (joinCondition, plan) match {
-      // Avoid adding the same filter.
-      case (Some(condition), filter: Filter) if condition.semanticEquals(filter.condition) =>
-        plan
-      case (Some(condition), _) =>
-        Filter(condition, plan)
-      case _ =>
-        plan
-    }
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
-
-  val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case j @ Join(left, right, joinType, Some(joinCondition), hint) =>
-
       val pushDownCandidates =
         splitConjunctivePredicates(toCNF(joinCondition)).filter(_.deterministic)
-      val (leftEvaluateCondition, rest) =
+      val (leftFilterConditions, rest) =
         pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
-      val (rightEvaluateCondition, _) =
+      val (rightFilterConditions, _) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-      val newLeft = maybeWithFilter(leftEvaluateCondition.reduceLeftOption(And), left)
-      val newRight = maybeWithFilter(rightEvaluateCondition.reduceLeftOption(And), right)
+      val newLeft = leftFilterConditions.
+        reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
+      val newRight = rightFilterConditions.
+        reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
 
       joinType match {
         case _: InnerLike | LeftSemi =>

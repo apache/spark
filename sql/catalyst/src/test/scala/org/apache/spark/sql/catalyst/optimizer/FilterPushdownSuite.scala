@@ -32,6 +32,10 @@ import org.apache.spark.unsafe.types.CalendarInterval
 class FilterPushdownSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
+
+    override protected val blacklistedOnceBatches: Set[String] =
+      Set("Push predicate through join by CNF")
+
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
@@ -41,7 +45,7 @@ class FilterPushdownSuite extends PlanTest {
         BooleanSimplification,
         PushPredicateThroughJoin,
         CollapseProject) ::
-      Batch("PushPredicateThroughJoinByCNF", Once,
+      Batch("Push predicate through join by CNF", Once,
         PushPredicateThroughJoinByCNF) :: Nil
   }
 
@@ -1336,7 +1340,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("inner join: rewrite to conjunctive normal form avoid genereting too many predicates") {
+  test("inner join: rewrite to conjunctive normal form avoid generating too many predicates") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
