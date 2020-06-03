@@ -124,7 +124,7 @@ case class GenerateExec(
     }
   }
 
-  override def supportCodegen: Boolean = false
+  override def supportCodegen: Boolean = true
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
@@ -233,7 +233,7 @@ case class GenerateExec(
        |for (int $index = $init; $index < $numElements; $index++) {
        |  $numOutput.add(1);
        |  $updateRowData
-       |  ${consume(ctx, input ++ position ++ values)}
+       |  ${consume(ctx, input.filterNot(_ == data) ++ position ++ values)}
        |}
      """.stripMargin
   }

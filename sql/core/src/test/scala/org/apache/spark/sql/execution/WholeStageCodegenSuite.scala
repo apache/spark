@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHash
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StringType, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
@@ -48,6 +48,77 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
     assert(df.collect() === Array(Row(9, 4.5)))
+  }
+
+  test("GenerateExec should be included in WholeStageCodegen") {
+    val arrayData1 = Seq(
+      Row("James", List("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown")),
+    )
+
+    val arraySchema1 = new StructType()
+      .add("name", StringType)
+      .add("knownLanguages", ArrayType(StringType))
+      .add("properties", MapType(StringType, StringType))
+
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(arrayData1), arraySchema1)
+
+    // Array - explode
+    var expDF = df.select($"name",explode($"knownLanguages"), $"properties")
+    var plan = expDF.queryExecution.executedPlan
+    assert(plan.find {
+      case stage: WholeStageCodegenExec =>
+        stage.find(_.isInstanceOf[GenerateExec]).isDefined
+      case _ =>
+        false
+    }.isDefined)
+    var results  = expDF.collect()
+    assert(results.size ==2 && results ===
+      Array(Row("James", "Java", Map("hair" -> "black", "eye" -> "brown")),
+        Row("James", "Scala", Map("hair" -> "black", "eye" -> "brown"))))
+
+    // Map - explode
+    expDF = df.select($"name",$"knownLanguages", explode($"properties"))
+    plan = expDF.queryExecution.executedPlan
+    assert(plan.find {
+      case stage: WholeStageCodegenExec =>
+        stage.find(_.isInstanceOf[GenerateExec]).isDefined
+      case _ =>
+        false
+    }.isDefined)
+    results = expDF.collect()
+    assert(results.size ==2 && results ===
+      Array(Row("James", List("Java", "Scala"), "hair", "black"),
+        Row("James", List("Java", "Scala"), "eye", "brown")))
+
+    // Array - posexplode
+    expDF = df.select($"name",posexplode($"knownLanguages"))
+    plan = expDF.queryExecution.executedPlan
+    assert(plan.find {
+      case stage: WholeStageCodegenExec =>
+        stage.find(_.isInstanceOf[GenerateExec]).isDefined
+      case _ =>
+        false
+    }.isDefined)
+    results = expDF.collect()
+    assert(results.size ==2 && results ===
+      Array(Row("James", 0, "Java"),
+        Row("James", 1, "Scala")))
+
+    // Map - posexplode
+    expDF = df.select($"name", posexplode($"properties"))
+    plan = expDF.queryExecution.executedPlan
+    assert(plan.find {
+      case stage: WholeStageCodegenExec =>
+        stage.find(_.isInstanceOf[GenerateExec]).isDefined
+      case _ =>
+        false
+    }.isDefined)
+    results = expDF.collect()
+    assert(results.size ==2 && results ===
+      Array(Row("James", 0, "hair", "black"),
+        Row("James", 1, "eye", "brown")))
+
+
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {
