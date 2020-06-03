@@ -325,8 +325,7 @@ class KubernetesSuite extends SparkFunSuite
                   val result = checkPodReady(namespace, name)
                   result shouldBe (true)
                 }
-                // Look for the string that indicates we're good to trigger decom
-                // on the driver
+                // Look for the string that indicates we're good to trigger decom on the driver
                 logDebug("Waiting for first collect...")
                 Eventually.eventually(TIMEOUT, INTERVAL) {
                   assert(kubernetesTestComponents.kubernetesClient

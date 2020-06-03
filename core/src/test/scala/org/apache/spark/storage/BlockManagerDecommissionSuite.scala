@@ -187,10 +187,10 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     eventually(timeout(15.seconds), interval(10.milliseconds)) {
       if (persist) {
         // One of our blocks should have moved.
-        val rddUpdates = blocksUpdated.filter{update =>
+        val rddUpdates = blocksUpdated.filter {update =>
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isRDD}
-        val blockLocs = rddUpdates.map{ update =>
+        val blockLocs = rddUpdates.map { update =>
           (update.blockUpdatedInfo.blockId.name,
             update.blockUpdatedInfo.blockManagerId)}
         val blocksToManagers = blockLocs.groupBy(_._1).mapValues(_.size)
@@ -201,11 +201,11 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
       // If we're migrating shuffles we look for any shuffle block updates
       // as there is no block update on the initial shuffle block write.
       if (shuffle) {
-        val numDataLocs = blocksUpdated.filter{ update =>
+        val numDataLocs = blocksUpdated.filter { update =>
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isInstanceOf[ShuffleDataBlockId]
         }.size
-        val numIndexLocs = blocksUpdated.filter{ update =>
+        val numIndexLocs = blocksUpdated.filter { update =>
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isInstanceOf[ShuffleIndexBlockId]
         }.size
