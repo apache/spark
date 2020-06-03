@@ -25,7 +25,7 @@ import org.apache.spark.shuffle.api.metadata.{MapOutputMetadata, ShuffleOutputTr
 import org.apache.spark.storage.ShuffleBlockId
 
 class MockAsyncBackupShuffleOutputTracker(
-    backupManager: MockAsyncShuffleBlockBackupManager,
+    val backupManager: MockAsyncShuffleBlockBackupManager,
     localDelegateTracker: Option[ShuffleOutputTracker]) extends ShuffleOutputTracker {
 
   private val backupIdsByBlockId = new ConcurrentHashMap[ShuffleBlockId, String].asScala
@@ -65,6 +65,10 @@ class MockAsyncBackupShuffleOutputTracker(
         .filterKeys(key => key.shuffleId == shuffleId && key.mapId == mapTaskAttemptId)
         .values
         .toSet)
+  }
+
+  def getBackupIds(shuffleId: Int): Set[String] = {
+    backupIdsByBlockId.filterKeys(blockId => blockId.shuffleId == shuffleId).values.toSet
   }
 
   private def cast(generic: MapOutputMetadata): MockAsyncBackupMapOutputMetadata = {

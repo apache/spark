@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.io.plugin
 import java.io.File
 import java.nio.file.{Files, Path, StandardOpenOption}
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ExecutorService}
+import java.util.concurrent.ConcurrentHashMap
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
