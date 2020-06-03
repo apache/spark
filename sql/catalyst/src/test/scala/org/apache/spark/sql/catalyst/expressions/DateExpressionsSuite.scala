@@ -1168,4 +1168,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[ArithmeticException](
       MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
   }
+
+  test("SPARK-31896: Handle am-pm timestamp parsing when hour is missing") {
+    checkEvaluation(
+      new ParseToTimestamp(Literal("PM"), Literal("a")).child,
+      Timestamp.valueOf("1970-01-01 12:00:00.0"))
+    checkEvaluation(
+      new ParseToTimestamp(Literal("11:11 PM"), Literal("mm:ss a")).child,
+      Timestamp.valueOf("1970-01-01 12:11:11.0"))
+  }
 }
