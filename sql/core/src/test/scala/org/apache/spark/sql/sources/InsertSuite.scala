@@ -623,12 +623,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[AnalysisException] {
           sql("insert into t select 1L, 2")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
 
         msg = intercept[AnalysisException] {
           sql("insert into t select 1, 2.0")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'd': DecimalType(2,1) to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'd': decimal(2,1) to double"))
 
         msg = intercept[AnalysisException] {
           sql("insert into t select 1, 2.0D, 3")
@@ -660,18 +660,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[AnalysisException] {
           sql("insert into t values('a', 'b')")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': string to int") &&
+          msg.contains("Cannot safely cast 'd': string to double"))
         msg = intercept[AnalysisException] {
           sql("insert into t values(now(), now())")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': TimestampType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': TimestampType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': timestamp to int") &&
+          msg.contains("Cannot safely cast 'd': timestamp to double"))
         msg = intercept[AnalysisException] {
           sql("insert into t values(true, false)")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
+          msg.contains("Cannot safely cast 'd': boolean to double"))
       }
     }
   }

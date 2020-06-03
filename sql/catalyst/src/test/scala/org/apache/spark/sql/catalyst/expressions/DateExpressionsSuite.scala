@@ -1169,6 +1169,36 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
   }
 
+  test("Disable week-based date fields and quarter fields for parsing") {
+
+    def checkSparkUpgrade(c: Char): Unit = {
+      checkExceptionInExpression[SparkUpgradeException](
+        new ParseToTimestamp(Literal("1"), Literal(c.toString)).child, "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        new ParseToDate(Literal("1"), Literal(c.toString)).child, "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        ToUnixTimestamp(Literal("1"), Literal(c.toString)), "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        UnixTimestamp(Literal("1"), Literal(c.toString)), "3.0")
+    }
+
+    def checkNullify(c: Char): Unit = {
+      checkEvaluation(new ParseToTimestamp(Literal("1"), Literal(c.toString)).child, null)
+      checkEvaluation(new ParseToDate(Literal("1"), Literal(c.toString)).child, null)
+      checkEvaluation(ToUnixTimestamp(Literal("1"), Literal(c.toString)), null)
+      checkEvaluation(UnixTimestamp(Literal("1"), Literal(c.toString)), null)
+    }
+
+    Seq('Y', 'W', 'w', 'E', 'u', 'F').foreach { l =>
+      checkSparkUpgrade(l)
+    }
+
+    Seq('q', 'Q').foreach { l =>
+      checkNullify(l)
+    }
+  }
+
+
   test("SPARK-31896: Handle am-pm timestamp parsing when hour is missing") {
     checkEvaluation(
       new ParseToTimestamp(Literal("PM"), Literal("a")).child,
