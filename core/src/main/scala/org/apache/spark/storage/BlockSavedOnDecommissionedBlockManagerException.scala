@@ -17,5 +17,5 @@
 
 package org.apache.spark.storage
 
-class RDDBlockSavedOnDecommissionedBlockManagerException(blockId: RDDBlockId)
-  extends Exception(s"RDD Block $blockId cannot be saved on decommissioned executor")
+class BlockSavedOnDecommissionedBlockManagerException(blockId: BlockId)
+  extends Exception(s"Block $blockId cannot be saved on decommissioned executor")
