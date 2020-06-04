@@ -124,8 +124,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
         val hadoopConf = session.sessionState.newHadoopConf()
         val tablePath = new Path(table.location)
         val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-        val size = fs.getContentSummary(tablePath).getLength
-        size
+        fs.getContentSummary(tablePath).getLength
       } catch {
         case e: IOException =>
           logWarning("Failed to get table size from HDFS.", e)
