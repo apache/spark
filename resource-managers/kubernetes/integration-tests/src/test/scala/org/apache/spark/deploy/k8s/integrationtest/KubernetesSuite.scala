@@ -380,9 +380,10 @@ class KubernetesSuite extends SparkFunSuite
       .get(0)
 
     driverPodChecker(driverPod)
-    // If we're testing decommissioning we delete all the executors, but we should have
-    // an executor at some point.
-    Eventually.eventually(patienceTimeout, patienceInterval) {
+
+    // If we're testing decommissioning we an executors, but we should have an executor
+    // at some point.
+    Eventually.eventually(TIMEOUT, patienceInterval) {
       execPods.values.nonEmpty should be (true)
     }
     execWatcher.close()
@@ -497,6 +498,6 @@ private[spark] object KubernetesSuite {
   val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
-  val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
+  val TIMEOUT = PatienceConfiguration.Timeout(Span(3, Minutes))
   val INTERVAL = PatienceConfiguration.Interval(Span(1, Seconds))
 }
