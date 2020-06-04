@@ -662,6 +662,11 @@ private[spark] class BlockManager(
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[_]): StreamCallbackWithID = {
+
+    if (blockManagerDecommissioning) {
+      throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
+    }
+
     if (blockId.isShuffle || blockId.isInternalShuffle) {
       logInfo(s"Putting shuffle block ${blockId}")
       try {
@@ -1309,8 +1314,8 @@ private[spark] class BlockManager(
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
-    if (blockManagerDecommissioning && blockId.isRDD) {
-      throw new RDDBlockSavedOnDecommissionedBlockManagerException(blockId.asRDDId.get)
+    if (blockManagerDecommissioning) {
+      throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
     }
 
     val putBlockInfo = {
