@@ -1868,7 +1868,7 @@ private[spark] class BlockManager(
               logError("Error ${e} during migration, adding ${shuffleMap} back to migration queue")
               shufflesToMigrate.add(shuffleMap)
             case None =>
-              logError("Error ${e} while waiting for block to migrate")
+              logError(s"Error ${e} while waiting for block to migrate")
           }
       }
     }
