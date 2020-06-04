@@ -1891,9 +1891,7 @@ private[spark] class BlockManager(
     // Update the queue of shuffles to be migrated
     logInfo("Offloading shuffle blocks")
     val localShuffles = migratableResolver.getStoredShuffles()
-    logInfo(s"My local shuffles are ${localShuffles.toList}")
     val newShufflesToMigrate = localShuffles.&~(migratingShuffles).toSeq
-    logInfo(s"My new shuffles to migrate ${newShufflesToMigrate.toList}")
     shufflesToMigrate.addAll(newShufflesToMigrate.asJava)
     migratingShuffles ++= newShufflesToMigrate
 
@@ -2055,14 +2053,14 @@ private[spark] class BlockManager(
           try {
             // If enabled we migrate shuffle blocks first as they are more expensive.
             if (conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
-              logDebug(s"Attempting to replicate all shuffle blocks")
+              logDebug("Attempting to replicate all shuffle blocks")
               offloadShuffleBlocks()
-              logInfo(s"Done starting workers to migrate shuffle blocks")
+              logInfo("Done starting workers to migrate shuffle blocks")
             }
             if (conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED)) {
-              logDebug(s"Attempting to replicate all cached RDD blocks")
+              logDebug("Attempting to replicate all cached RDD blocks")
               decommissionRddCacheBlocks()
-              logInfo(s"Attempt to replicate all cached blocks done")
+              logInfo("Attempt to replicate all cached blocks done")
             }
             if (!conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED) &&
               !conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
@@ -2085,17 +2083,17 @@ private[spark] class BlockManager(
       }
     }
     blockMigrationThread.setDaemon(true)
-    blockMigrationThread.setName("block-replication-thread")
+    blockMigrationThread.setName("block-migration-thread")
 
     def start(): Unit = {
-      logInfo("Starting block replication thread")
+      logInfo("Starting block migration thread")
       blockMigrationThread.start()
     }
 
     def stop(): Unit = {
       if (!stopped) {
         stopped = true
-        logInfo("Stopping block replication thread")
+        logInfo("Stopping block migration thread")
         blockMigrationThread.interrupt()
         stopOffloadingShuffleBlocks()
       }
