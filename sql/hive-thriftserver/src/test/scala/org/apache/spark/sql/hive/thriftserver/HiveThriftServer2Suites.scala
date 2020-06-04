@@ -873,9 +873,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val date = "1582-10-10"
       val rs = st.executeQuery(s"select date '$date'")
       rs.next()
-      assert(rs.getString(1) === date)
-      // 1582-10-10 is shifted to the next valid date in the hybrid calendar by java.sql.Date
-      assert(rs.getDate(1).toString() === "1582-10-15")
+      val expected = java.sql.Date.valueOf(date)
+      assert(rs.getDate(1) === expected)
+      assert(rs.getString(1) === expected.toString)
     }
   }
 }
