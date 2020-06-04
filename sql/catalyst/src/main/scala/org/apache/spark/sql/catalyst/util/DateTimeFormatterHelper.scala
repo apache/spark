@@ -234,10 +234,14 @@ private object DateTimeFormatterHelper {
     val formatter = DateTimeFormatter.ofPattern("LLL qqq", Locale.US)
     formatter.format(LocalDate.of(2000, 1, 1)) == "1 1"
   }
+  // SPARK-31892: The week-based date fields are rarely used and really confusing for parsing values
+  // to datetime, especially when they are mixed with other non-week-based ones;
+  // SPARK-31879: It's also difficult for us to restore the behavior of week-based date fields
+  // formatting, in DateTimeFormatter the first day of week for week-based date fields become
+  // localized, for the default Locale.US, it uses Sunday as the first day of week, while in Spark
+  // 2.4, the SimpleDateFormat uses Monday as the first day of week.
   final val weekBasedLetters = Set('Y', 'W', 'w', 'u', 'e', 'c')
   final val unsupportedLetters = Set('A', 'n', 'N', 'p')
-  // SPARK-31892: The week-based date fields are rarely used and really confusing for parsing values
-  // to datetime, especially when they are mixed with other non-week-based ones
   // The quarter fields will also be parsed strangely, e.g. when the pattern contains `yMd` and can
   // be directly resolved then the `q` do check for whether the month is valid, but if the date
   // fields is incomplete, e.g. `yM`, the checking will be bypassed.
