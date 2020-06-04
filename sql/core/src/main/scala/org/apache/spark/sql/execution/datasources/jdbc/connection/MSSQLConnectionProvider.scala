@@ -35,6 +35,8 @@ private[sql] class MSSQLConnectionProvider(
     val appEntryDefault = "SQLJDBCDriver"
 
     val parseURL = try {
+      // The default parser method signature is the following:
+      // private Properties parseAndMergeProperties(String Url, Properties suppliedProperties)
       val m = driver.getClass.getDeclaredMethod(parserMethod, classOf[String], classOf[Properties])
       m.setAccessible(true)
       Some(m)
@@ -69,6 +71,7 @@ private[sql] class MSSQLConnectionProvider(
 
   override def getAdditionalProperties(): Properties = {
     val result = new Properties()
+    // These props needed to reach internal kerberos authentication in the JDBC driver
     result.put("integratedSecurity", "true")
     result.put("authenticationScheme", "JavaKerberos")
     result
