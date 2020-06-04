@@ -62,38 +62,74 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
 
+  private lazy val isEmpty = AttributeReference("isEmpty", BooleanType, nullable = false)()
+
   private lazy val zero = Literal.default(sumDataType)
 
-  override lazy val aggBufferAttributes = sum :: Nil
+  override lazy val aggBufferAttributes = resultType match {
+    case _: DecimalType => sum :: isEmpty :: Nil
+    case _ => sum :: Nil
+  }
 
-  override lazy val initialValues: Seq[Expression] = Seq(
-    /* sum = */ Literal.create(null, sumDataType)
-  )
+  override lazy val initialValues: Seq[Expression] = resultType match {
+    case _: DecimalType => Seq(Literal(null, resultType), Literal(true, BooleanType))
+    case _ => Seq(Literal(null, resultType))
+  }
 
   override lazy val updateExpressions: Seq[Expression] = {
     if (child.nullable) {
-      Seq(
-        /* sum = */
-        coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
-      )
+      val updateSumExpr = coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
+      resultType match {
+        case _: DecimalType =>
+          Seq(updateSumExpr, isEmpty && child.isNull)
+        case _ => Seq(updateSumExpr)
+      }
     } else {
-      Seq(
-        /* sum = */
-        coalesce(sum, zero) + child.cast(sumDataType)
-      )
+      val updateSumExpr = coalesce(sum, zero) + child.cast(sumDataType)
+      resultType match {
+        case _: DecimalType =>
+          Seq(updateSumExpr, Literal(false, BooleanType))
+        case _ => Seq(updateSumExpr)
+      }
     }
   }
 
+  /**
+   * For decimal type:
+   * If isEmpty is false and if sum is null, then it means we have had an overflow.
+   *
+   * update of the sum is as follows:
+   * Check if either portion of the left.sum or right.sum has overflowed
+   * If it has, then the sum value will remain null.
+   * If it did not have overflow, then add the sum.left and sum.right
+   *
+   * isEmpty:  Set to false if either one of the left or right is set to false. This
+   * means we have seen atleast a value that was not null.
+   */
   override lazy val mergeExpressions: Seq[Expression] = {
-    Seq(
-      /* sum = */
-      coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
-    )
+    val mergeSumExpr = coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
+    resultType match {
+      case _: DecimalType =>
+        val inputOverflow = !isEmpty.right && sum.right.isNull
+        val bufferOverflow = !isEmpty.left && sum.left.isNull
+        Seq(
+          If(inputOverflow || bufferOverflow, Literal.create(null, sumDataType), mergeSumExpr),
+          isEmpty.left && isEmpty.right)
+      case _ => Seq(mergeSumExpr)
+    }
   }
 
+  /**
+   * If the isEmpty is true, then it means there were no values to begin with or all the values
+   * were null, so the result will be null.
+   * If the isEmpty is false, then if sum is null that means an overflow has happened.
+   * So now, if ansi is enabled, then throw exception, if not then return null.
+   * If sum is not null, then return the sum.
+   */
   override lazy val evaluateExpression: Expression = resultType match {
-    case d: DecimalType => CheckOverflow(sum, d, !SQLConf.get.ansiEnabled)
+    case d: DecimalType =>
+      If(isEmpty, Literal.create(null, sumDataType),
+        CheckOverflowInSum(sum, d, !SQLConf.get.ansiEnabled))
     case _ => sum
   }
-
 }

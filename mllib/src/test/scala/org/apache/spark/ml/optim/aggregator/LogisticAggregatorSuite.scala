@@ -79,21 +79,6 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     new BlockLogisticAggregator(numFeatures, numClasses, fitIntercept, multinomial)(bcCoefficients)
   }
 
-  private def standardize(instances: Array[Instance]): Array[Instance] = {
-    val (featuresSummarizer, _) =
-      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
-    val stdArray = featuresSummarizer.std.toArray
-    val numFeatures = stdArray.length
-    instances.map { case Instance(label, weight, features) =>
-      val standardized = Array.ofDim[Double](numFeatures)
-      features.foreachNonZero { (i, v) =>
-        val std = stdArray(i)
-        if (std != 0) standardized(i) = v / std
-      }
-      Instance(label, weight, Vectors.dense(standardized).compressed)
-    }
-  }
-
   test("aggregator add method input size") {
     val coefArray = Array(1.0, 2.0, -2.0, 3.0, 0.0, -1.0)
     val interceptArray = Array(4.0, 2.0, -3.0)

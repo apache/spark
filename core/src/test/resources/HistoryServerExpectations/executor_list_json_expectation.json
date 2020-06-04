@@ -22,5 +22,6 @@
   "executorLogs" : { },
   "blacklistedInStages" : [ ],
   "attributes" : { },
-  "resources" : { }
+  "resources" : { },
+  "resourceProfileId" : 0
 } ]

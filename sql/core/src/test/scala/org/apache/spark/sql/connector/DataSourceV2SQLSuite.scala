@@ -256,8 +256,8 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  test("CreateTable: without USING clause") {
-    spark.conf.set(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key, "false")
+  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
+  ignore("CreateTable: without USING clause") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val testCatalog = catalog("testcat").asTableCatalog
@@ -681,8 +681,8 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("CreateTableAsSelect: without USING clause") {
-    spark.conf.set(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key, "false")
+  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
+  ignore("CreateTableAsSelect: without USING clause") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val testCatalog = catalog("testcat").asTableCatalog

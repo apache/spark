@@ -146,6 +146,8 @@ object RebaseDateTime {
     -354226, -317702, -244653, -208129, -171605, -141436, -141435, -141434,
     -141433, -141432, -141431, -141430, -141429, -141428, -141427)
 
+  final val lastSwitchGregorianDay: Int = gregJulianDiffSwitchDay.last
+
   // The first days of Common Era (CE) which is mapped to the '0001-01-01' date
   // in Proleptic Gregorian calendar.
   private final val gregorianCommonEraStartDay = gregJulianDiffSwitchDay(0)
@@ -295,7 +297,7 @@ object RebaseDateTime {
   }
   // The switch time point after which all diffs between Gregorian and Julian calendars
   // across all time zones are zero
-  private final val lastSwitchGregorianTs: Long = getLastSwitchTs(gregJulianRebaseMap)
+  final val lastSwitchGregorianTs: Long = getLastSwitchTs(gregJulianRebaseMap)
 
   private final val gregorianStartTs = LocalDateTime.of(gregorianStartDate, LocalTime.MIDNIGHT)
   private final val julianEndTs = LocalDateTime.of(

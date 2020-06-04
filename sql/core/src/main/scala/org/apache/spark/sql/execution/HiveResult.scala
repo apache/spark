@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, ZoneOffset}
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -72,21 +72,33 @@ object HiveResult {
     }
   }
 
-  private def zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-  private def dateFormatter = DateFormatter(zoneId)
-  private def timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
+  // We can create the date formatter only once because it does not depend on Spark's
+  // session time zone controlled by the SQL config `spark.sql.session.timeZone`.
+  // The `zoneId` parameter is used only in parsing of special date values like `now`,
+  // `yesterday` and etc. but not in date formatting. While formatting of:
+  // - `java.time.LocalDate`, zone id is not used by `DateTimeFormatter` at all.
+  // - `java.sql.Date`, the date formatter delegates formatting to the legacy formatter
+  //   which uses the default system time zone `TimeZone.getDefault`. This works correctly
+  //   due to `DateTimeUtils.toJavaDate` which is based on the system time zone too.
+  private val dateFormatter = DateFormatter(
+    format = DateFormatter.defaultPattern,
+    // We can set any time zone id. UTC was taken for simplicity.
+    zoneId = ZoneOffset.UTC,
+    locale = DateFormatter.defaultLocale,
+    // Use `FastDateFormat` as the legacy formatter because it is thread-safe.
+    legacyFormat = LegacyDateFormats.FAST_DATE_FORMAT,
+    isParsing = false)
+  private def timestampFormatter = TimestampFormatter.getFractionFormatter(
+    DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
   def toHiveString(a: (Any, DataType), nested: Boolean = false): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
-    case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
-    case (ld: LocalDate, DateType) =>
-      dateFormatter.format(DateTimeUtils.localDateToDays(ld))
-    case (t: Timestamp, TimestampType) =>
-      timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t))
-    case (i: Instant, TimestampType) =>
-      timestampFormatter.format(DateTimeUtils.instantToMicros(i))
+    case (d: Date, DateType) => dateFormatter.format(d)
+    case (ld: LocalDate, DateType) => dateFormatter.format(ld)
+    case (t: Timestamp, TimestampType) => timestampFormatter.format(t)
+    case (i: Instant, TimestampType) => timestampFormatter.format(i)
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString

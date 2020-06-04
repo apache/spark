@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, Tim
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -197,7 +198,7 @@ case class CurrentBatchTimestamp(
   group = "datetime_funcs",
   since = "1.5.0")
 case class DateAdd(startDate: Expression, days: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def left: Expression = startDate
   override def right: Expression = days
@@ -233,7 +234,7 @@ case class DateAdd(startDate: Expression, days: Expression)
   group = "datetime_funcs",
   since = "1.5.0")
 case class DateSub(startDate: Expression, days: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
   override def left: Expression = startDate
   override def right: Expression = days
 
@@ -265,7 +266,8 @@ case class DateSub(startDate: Expression, days: Expression)
   group = "datetime_funcs",
   since = "1.5.0")
 case class Hour(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
+    with NullIntolerant {
 
   def this(child: Expression) = this(child, None)
 
@@ -297,7 +299,8 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
   group = "datetime_funcs",
   since = "1.5.0")
 case class Minute(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
+    with NullIntolerant {
 
   def this(child: Expression) = this(child, None)
 
@@ -329,7 +332,8 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
   group = "datetime_funcs",
   since = "1.5.0")
 case class Second(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
+    with NullIntolerant {
 
   def this(child: Expression) = this(child, None)
 
@@ -352,7 +356,8 @@ case class Second(child: Expression, timeZoneId: Option[String] = None)
 }
 
 case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
+    with NullIntolerant {
 
   def this(child: Expression) = this(child, None)
 
@@ -384,7 +389,8 @@ case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = No
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class DayOfYear(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
@@ -400,6 +406,83 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
   }
 }
 
+abstract class NumberToTimestampBase extends UnaryExpression
+  with ExpectsInputTypes with NullIntolerant {
+
+  protected def upScaleFactor: Long
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
+
+  override def dataType: DataType = TimestampType
+
+  override def nullSafeEval(input: Any): Any = {
+    Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (upScaleFactor == 1) {
+      defineCodeGen(ctx, ev, c => c)
+    } else {
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${upScaleFactor}L)")
+    }
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000);
+       2008-12-25 07:30:00
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+case class SecondsToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: Long = MICROS_PER_SECOND
+
+  override def prettyName: String = "timestamp_seconds"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(milliseconds) - Creates timestamp from the number of milliseconds since UTC epoch.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000123);
+       2008-12-25 07:30:00.123
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class MillisToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: Long = MICROS_PER_MILLIS
+
+  override def prettyName: String = "timestamp_millis"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(microseconds) - Creates timestamp from the number of microseconds since UTC epoch.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1230219000123123);
+       2008-12-25 07:30:00.123123
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class MicrosToTimestamp(child: Expression)
+  extends NumberToTimestampBase {
+
+  override def upScaleFactor: Long = 1L
+
+  override def prettyName: String = "timestamp_micros"
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the year component of the date/timestamp.",
   examples = """
@@ -409,7 +492,8 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Year(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Year(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
@@ -425,7 +509,8 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
   }
 }
 
-case class YearOfWeek(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class YearOfWeek(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
@@ -450,7 +535,8 @@ case class YearOfWeek(child: Expression) extends UnaryExpression with ImplicitCa
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Quarter(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
@@ -475,7 +561,8 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Month(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Month(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
@@ -499,7 +586,8 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
        30
   """,
   since = "1.5.0")
-case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class DayOfMonth(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
@@ -569,7 +657,7 @@ case class WeekDay(child: Expression) extends DayWeek {
   }
 }
 
-abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
+abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
@@ -587,7 +675,8 @@ abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class WeekOfYear(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
@@ -626,7 +715,8 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
+    with NullIntolerant {
 
   def this(left: Expression, right: Expression) = this(left, right, None)
 
@@ -644,7 +734,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
           format.toString,
           zoneId,
           legacyFormat = SIMPLE_DATE_FORMAT,
-          needVarLengthSecondFraction = false)
+          isParsing = false)
       }
     } else None
   }
@@ -655,7 +745,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
         format.toString,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        needVarLengthSecondFraction = false)
+        isParsing = false)
     } else {
       formatter.get
     }
@@ -800,8 +890,9 @@ abstract class ToTimestamp
         constFormat.toString,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        needVarLengthSecondFraction = true)
+        isParsing = true)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 
@@ -838,7 +929,7 @@ abstract class ToTimestamp
                 formatString,
                 zoneId,
                 legacyFormat = SIMPLE_DATE_FORMAT,
-                needVarLengthSecondFraction = true)
+                isParsing = true)
                 .parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case e: SparkUpgradeException => throw e
@@ -981,8 +1072,9 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         constFormat.toString,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        needVarLengthSecondFraction = false)
+        isParsing = false)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 
@@ -998,6 +1090,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           try {
             UTF8String.fromString(formatter.format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(_) => null
           }
         }
@@ -1012,9 +1105,10 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
                 f.toString,
                 zoneId,
                 legacyFormat = SIMPLE_DATE_FORMAT,
-                needVarLengthSecondFraction = false)
+                isParsing = false)
                 .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(_) => null
           }
         }
@@ -1072,7 +1166,8 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class LastDay(startDate: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def child: Expression = startDate
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -1110,7 +1205,7 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class NextDay(startDate: Expression, dayOfWeek: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = startDate
   override def right: Expression = dayOfWeek
@@ -1166,7 +1261,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
  * Adds an interval to timestamp.
  */
 case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
+  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes with NullIntolerant {
 
   def this(start: Expression, interval: Expression) = this(start, interval, None)
 
@@ -1205,8 +1300,9 @@ case class DatetimeSub(
     start: Expression,
     interval: Expression,
     child: Expression) extends RuntimeReplaceable {
+  override def exprsReplaced: Seq[Expression] = Seq(start, interval)
   override def toString: String = s"$start - $interval"
-  override def sql: String = s"${start.sql} - ${interval.sql}"
+  override def mkString(childrenString: Seq[String]): String = childrenString.mkString(" - ")
 }
 
 /**
@@ -1223,7 +1319,7 @@ case class DateAddInterval(
     interval: Expression,
     timeZoneId: Option[String] = None,
     ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
-  extends BinaryExpression with ExpectsInputTypes with TimeZoneAwareExpression {
+  extends BinaryExpression with ExpectsInputTypes with TimeZoneAwareExpression with NullIntolerant {
 
   override def left: Expression = start
   override def right: Expression = interval
@@ -1297,7 +1393,7 @@ case class DateAddInterval(
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class FromUTCTimestamp(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
@@ -1357,7 +1453,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class AddMonths(startDate: Expression, numMonths: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = startDate
   override def right: Expression = numMonths
@@ -1411,7 +1507,8 @@ case class MonthsBetween(
     date2: Expression,
     roundOff: Expression,
     timeZoneId: Option[String] = None)
-  extends TernaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
+    with NullIntolerant {
 
   def this(date1: Expression, date2: Expression) = this(date1, date2, Literal.TrueLiteral, None)
 
@@ -1469,7 +1566,7 @@ case class MonthsBetween(
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
@@ -1553,14 +1650,8 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
     this(left, None, Cast(left, DateType))
   }
 
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
   override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def sql: String = {
-    if (format.isDefined) {
-      s"$prettyName(${left.sql}, ${format.get.sql})"
-    } else {
-      s"$prettyName(${left.sql})"
-    }
-  }
 
   override def prettyName: String = "to_date"
 }
@@ -1601,13 +1692,7 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
   def this(left: Expression) = this(left, None, Cast(left, TimestampType))
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def sql: String = {
-    if (format.isDefined) {
-      s"$prettyName(${left.sql}, ${format.get.sql})"
-    } else {
-      s"$prettyName(${left.sql})"
-    }
-  }
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
 
   override def prettyName: String = "to_timestamp"
   override def dataType: DataType = TimestampType
@@ -1835,7 +1920,7 @@ case class TruncTimestamp(
   group = "datetime_funcs",
   since = "1.5.0")
 case class DateDiff(endDate: Expression, startDate: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = endDate
   override def right: Expression = startDate
@@ -1889,7 +1974,7 @@ private case class GetTimestamp(
   group = "datetime_funcs",
   since = "3.0.0")
 case class MakeDate(year: Expression, month: Expression, day: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def children: Seq[Expression] = Seq(year, month, day)
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType)
@@ -1960,7 +2045,8 @@ case class MakeTimestamp(
     sec: Expression,
     timezone: Option[Expression] = None,
     timeZoneId: Option[String] = None)
-  extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
+    with NullIntolerant {
 
   def this(
       year: Expression,
@@ -2161,7 +2247,8 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(field, source)
-  override def sql: String = s"$prettyName(${field.sql}, ${source.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(field, source)
+
   override def prettyName: String = "date_part"
 }
 
@@ -2221,8 +2308,12 @@ case class Extract(field: Expression, source: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(field, source)
-  override def sql: String = s"$prettyName(${field.sql} FROM ${source.sql})"
-  override def prettyName: String = "extract"
+
+  override def exprsReplaced: Seq[Expression] = Seq(field, source)
+
+  override def mkString(childrenString: Seq[String]): String = {
+    prettyName + childrenString.mkString("(", " FROM ", ")")
+  }
 }
 
 /**
@@ -2231,7 +2322,7 @@ case class Extract(field: Expression, source: Expression, child: Expression)
  * between the given timestamps.
  */
 case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def left: Expression = endTimestamp
   override def right: Expression = startTimestamp
@@ -2252,7 +2343,7 @@ case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expressi
  * Returns the interval from the `left` date (inclusive) to the `right` date (exclusive).
  */
 case class SubtractDates(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
   override def dataType: DataType = CalendarIntervalType

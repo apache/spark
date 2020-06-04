@@ -27,38 +27,36 @@ describe the query output.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 { DESC | DESCRIBE } [ QUERY ] input_statement
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>QUERY</em></code></dt>
-  <dd>This clause is optional and may be omitted.</dd>
-  <dt><code><em>input_statement</em></code></dt>
-  <dd>
+* **QUERY**
+    This clause is optional and may be omitted.
+
+* **input_statement**
+
     Specifies a result set producing statement and may be one of the following: 
-    <ul>
-      <li>a <code>SELECT</code> statement</li>
-      <li>a <code>CTE(Common table expression)</code> statement</li>
-      <li>an <code>INLINE TABLE</code> statement</li>
-      <li>a <code>TABLE</code> statement</li>
-      <li>a <code>FROM</code> statement</li>
-    </ul>
-    Please refer to <a href="sql-ref-syntax-qry-select.html">select-statement</a>
+
+    * a `SELECT` statement
+    * a `CTE(Common table expression)` statement
+    * an `INLINE TABLE` statement
+    * a `TABLE` statement
+    * a `FROM` statement`
+
+    Please refer to [select-statement](sql-ref-syntax-qry-select.html)
     for a detailed syntax of the query parameter.
-  </dd>
-</dl>
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Create table `person`
 CREATE TABLE person (name STRING , age INT COMMENT 'Age column', address STRING);
 
 -- Returns column metadata information for a simple select query
-DESCRIBE QUERY select age, sum(age) FROM person GROUP BY age;
+DESCRIBE QUERY SELECT age, sum(age) FROM person GROUP BY age;
 +--------+---------+----------+
 |col_name|data_type|   comment|
 +--------+---------+----------+
@@ -103,10 +101,10 @@ DESCRIBE FROM person SELECT age;
 +--------+---------+----------+
 |     age|      int| Agecolumn|
 +--------+---------+----------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
- * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
- * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+* [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+* [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+* [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
