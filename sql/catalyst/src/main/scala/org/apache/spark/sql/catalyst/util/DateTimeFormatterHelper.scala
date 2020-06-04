@@ -161,8 +161,7 @@ private[spark] object DateTimeFormatterHelper {
   val defaultLocale = Locale.US
 
   def presetSundayStartToMondayStart(): Unit = {
-    val weekFields: WeekFields = WeekFields.of(defaultLocale)
-    val CACHE: Field = weekFields.getClass.getDeclaredField("CACHE")
+    val CACHE: Field = classOf[WeekFields].getDeclaredField("CACHE")
     CACHE.setAccessible(true)
     val modifiers: Field = CACHE.getClass.getDeclaredField("modifiers")
     modifiers.setAccessible(true)
@@ -171,7 +170,7 @@ private[spark] object DateTimeFormatterHelper {
     // Preset the Sunday start entry to ISO-based Monday start instance for retrieving first day
     // of week
     newCache.put(DayOfWeek.SUNDAY.toString + 1, WeekFields.ISO)
-    CACHE.set(weekFields, newCache)
+    CACHE.set(null, newCache)
   }
 
   val cache = CacheBuilder.newBuilder()
