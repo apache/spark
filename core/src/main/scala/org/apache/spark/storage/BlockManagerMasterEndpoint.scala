@@ -505,7 +505,8 @@ class BlockManagerMasterEndpoint(
           mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
           return true
         case _ =>
-          logDebug(s"Unexpected shuffle block type ${blockId}")
+          logDebug(s"Unexpected shuffle block type ${blockId}" +
+            s"as ${blockId.getClass().getSimpleName()}")
           return false
       }
     }
