@@ -187,7 +187,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     eventually(timeout(15.seconds), interval(10.milliseconds)) {
       if (persist) {
         // One of our blocks should have moved.
-        val rddUpdates = blocksUpdated.filter {update =>
+        val rddUpdates = blocksUpdated.filter { update =>
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isRDD}
         val blockLocs = rddUpdates.map { update =>
