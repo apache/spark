@@ -1898,7 +1898,7 @@ private[spark] class BlockManager(
     val currentPeerSet = migrationPeers.keys.toSet
     val deadPeers = currentPeerSet.&~(livePeerSet)
     val newPeers = livePeerSet.&~(currentPeerSet)
-    migrationPeers ++= newPeers.map{peer =>
+    migrationPeers ++= newPeers.map { peer =>
       logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
       val executor = ThreadUtils.newDaemonSingleThreadExecutor(s"migrate-shuffle-to-${peer}")
       val runnable = new ShuffleMigrationRunnable(peer)
