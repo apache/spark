@@ -240,7 +240,7 @@ private object DateTimeFormatterHelper {
   // The quarter fields will also be parsed strangely, e.g. when the pattern contains `yMd` and can
   // be directly resolved then the `q` do check for whether the month is valid, but if the date
   // fields is incomplete, e.g. `yM`, the checking will be bypassed.
-  final val unsupportedLettersForParsing = Set('E', 'F', 'q', 'Q')
+  final val unsupportedLettersForParsing = Set('E', 'e', 'F', 'q', 'Q')
   final val unsupportedPatternLengths = {
     // SPARK-31771: Disable Narrow-form TextStyle to avoid silent data change, as it is Full-form in
     // 2.4

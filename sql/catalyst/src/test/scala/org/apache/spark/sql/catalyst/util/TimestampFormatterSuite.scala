@@ -417,18 +417,6 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(t5 === date(1970))
   }
 
-  test("explicitly forbidden datetime patterns") {
-    // not support by the legacy one too
-    Seq("QQQQQ", "qqqqq", "A", "c", "e", "n", "N", "p").foreach { pattern =>
-      intercept[IllegalArgumentException](TimestampFormatter(pattern, UTC).format(0))
-    }
-    // supported by the legacy one, then we will suggest users with SparkUpgradeException
-    Seq("GGGGG", "MMMMM", "LLLLL", "EEEEE", "uuuuu", "aa", "aaa", "y" * 11, "y" * 11)
-      .foreach { pattern =>
-        intercept[SparkUpgradeException](TimestampFormatter(pattern, UTC).format(0))
-    }
-  }
-
   override def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit = {
     TimestampFormatter(pattern, UTC, isParsing)
   }

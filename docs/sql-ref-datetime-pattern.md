@@ -36,9 +36,6 @@ Spark uses pattern letters in the following table for date and timestamp parsing
 |**M/L**|month-of-year|month|7; 07; Jul; July|
 |**d**|day-of-month|number(3)|28|
 |**Q/q**|quarter-of-year|number/text|3; 03; Q3; 3rd quarter|
-|**Y**|week-based-year|year|1996; 96|
-|**w**|week-of-week-based-year|number(2)|27|
-|**W**|week-of-month|number(1)|4|
 |**E**|day-of-week|text|Tue; Tuesday|
 |**e**|localized day-of-week|number/text|2; 02; Tue; Tuesday|
 |**F**|week-of-month|number(1)|3|
@@ -137,7 +134,7 @@ The count of pattern letters determines the format.
   During parsing, the whole section may be missing from the parsed string.
   An optional section is started by `[` and ended using `]` (or at the end of the pattern).
   
-- Symbols of 'Y', 'W', 'w', 'E', 'u', 'F', 'q' and 'Q' can only be used for datetime formatting, e.g. `date_format`. They are not allowed used for datetime parsing, e.g. `to_timestamp`.
+- Symbols of 'E', 'e', 'F', 'q' and 'Q' can only be used for datetime formatting, e.g. `date_format`. They are not allowed used for datetime parsing, e.g. `to_timestamp`.
 
 More details for the text style:
 

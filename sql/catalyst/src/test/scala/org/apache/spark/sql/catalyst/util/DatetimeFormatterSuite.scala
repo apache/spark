@@ -41,7 +41,7 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
     }
 
     // not support by the legacy one too
-    val unsupportedBoth = Seq("q", "Q")
+    val unsupportedBoth = Seq("e", "q", "Q")
     unsupportedBoth.foreach { pattern =>
       intercept[IllegalArgumentException](checkFormatterCreation(pattern, true))
     }
