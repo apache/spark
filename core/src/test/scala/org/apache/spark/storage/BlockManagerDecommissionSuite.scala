@@ -41,10 +41,6 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     runDecomTest(true, false, true)
   }
 
-  test(s"verify that shuffle blocks are migrated with force to disk") {
-    runDecomTest(false, true, false, remoteBlockSize = "1")
-  }
-
   test(s"verify that shuffle blocks are migrated") {
     runDecomTest(false, true, false)
   }
@@ -53,8 +49,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     runDecomTest(true, true, false)
   }
 
-  private def runDecomTest(persist: Boolean, shuffle: Boolean, migrateDuring: Boolean,
-    remoteBlockSize: String = "100000") = {
+  private def runDecomTest(persist: Boolean, shuffle: Boolean, migrateDuring: Boolean) = {
 
     val master = s"local-cluster[${numExecs}, 1, 1024]"
     val conf = new SparkConf().setAppName("test").setMaster(master)
@@ -65,9 +60,6 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
     // Just replicate blocks as fast as we can during testing, there isn't another
     // workload we need to worry about.
       .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 1L)
-
-    // Allow force fetching to local disk
-    conf.set("spark.network.maxRemoteBlockSizeFetchToMem", remoteBlockSize)
 
     sc = new SparkContext(master, "test", conf)
 

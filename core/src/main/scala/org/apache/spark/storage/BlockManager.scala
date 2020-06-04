@@ -664,7 +664,7 @@ private[spark] class BlockManager(
       classTag: ClassTag[_]): StreamCallbackWithID = {
 
     if (blockManagerDecommissioning) {
-      throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
+       throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
     }
 
     if (blockId.isShuffle || blockId.isInternalShuffle) {
@@ -1907,6 +1907,7 @@ private[spark] class BlockManager(
       logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
       val executor = ThreadUtils.newDaemonSingleThreadExecutor(s"migrate-shuffle-to-${peer}")
       val runnable = new ShuffleMigrationRunnable(peer)
+      executor.submit(runnable)
       (peer, runnable)
     }
     // A peer may have entered a decommissioning state, don't transfer any new blocks
