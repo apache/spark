@@ -68,8 +68,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // Missing UDF
     "postgreSQL/boolean.sql",
     "postgreSQL/case.sql",
-    // SPARK-28624
-    "date.sql",
     // SPARK-28620
     "postgreSQL/float4.sql",
     // SPARK-28636
