@@ -262,6 +262,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     System.exit(code)
   }
 
+  private var previousAllBlocksMigrated = false
   private def shutdownIfDone(): Unit = {
     val numRunningTasks = executor.numRunningTasks
     logInfo(s"Checking to see if we can shutdown have ${numRunningTasks} running tasks.")
@@ -271,14 +272,18 @@ private[spark] class CoarseGrainedExecutorBackend(
           case Some(m) => m.allBlocksMigrated
           case None => false // We haven't started migrations yet.
         }
-        if (allBlocksMigrated) {
+        if (allBlocksMigrated && previousAllBlocksMigrated) {
           logInfo("No running tasks, all blocks migrated, stopping.")
           exitExecutor(0, "Finished decommissioning", notifyDriver = true)
         }
+        previousAllBlocksMigrated = allBlocksMigrated
       } else {
         logInfo("No running tasks, no block migration configured, stopping.")
         exitExecutor(0, "Finished decommissioning", notifyDriver = true)
       }
+    } else {
+      // If there's a running task it could store blocks.
+      previousAllBlocksMigrated = false
     }
   }
 
