@@ -1403,13 +1403,15 @@ sealed trait LogisticRegressionSummary extends ClassificationSummary {
 /**
  * Abstraction for multiclass logistic regression training results.
  */
-sealed trait LogisticRegressionTrainingSummary extends ClassificationTrainingSummary {
+sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
+  with TrainingSummary {
 }
 
 /**
  * Abstraction for binary logistic regression results for a given model.
  */
-sealed trait BinaryLogisticRegressionSummary extends BinaryClassificationSummary {
+sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary
+  with BinaryClassificationSummary {
 }
 
 /**

@@ -150,6 +150,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         # test evaluation (with training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
+        self.assertEqual(sameSummary.probabilityCol, "probability")
         self.assertTrue(isinstance(sameSummary, BinaryLogisticRegressionSummary))
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
@@ -189,6 +190,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         # test evaluation (with training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
+        self.assertEqual(sameSummary.probabilityCol, "probability")
         self.assertTrue(isinstance(sameSummary, LogisticRegressionSummary))
         self.assertFalse(isinstance(sameSummary, BinaryLogisticRegressionSummary))
         self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)

@@ -174,9 +174,9 @@ private[classification] trait ClassificationSummary extends Serializable {
 }
 
 /**
- * Abstraction for multiclass classification training results.
+ * Abstraction for training results.
  */
-private[classification] trait ClassificationTrainingSummary extends ClassificationSummary {
+private[classification] trait TrainingSummary {
 
   /**
    *  objective function (scaled loss + regularization) at each iteration.
@@ -269,9 +269,3 @@ trait BinaryClassificationSummary extends ClassificationSummary {
     binaryMetrics.recallByThreshold().toDF("threshold", "recall")
   }
 }
-
-/**
- * Abstraction for binary classification training results.
- */
-sealed trait BinaryClassificationTrainingSummary extends BinaryClassificationSummary
-  with ClassificationTrainingSummary
