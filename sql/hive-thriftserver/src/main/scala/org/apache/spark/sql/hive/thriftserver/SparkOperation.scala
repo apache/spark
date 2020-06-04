@@ -73,7 +73,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
           sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
         case None =>
       }
-
+      sqlContext.sparkContext.setLocalProperty(SQLConf.DATETIME_JAVA8API_ENABLED.key, "true")
       // run the body
       f
     } finally {
