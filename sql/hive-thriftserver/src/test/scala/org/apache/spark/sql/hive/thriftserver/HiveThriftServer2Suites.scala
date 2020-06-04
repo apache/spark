@@ -866,6 +866,18 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
     }
   }
+
+  test("SPARK-30808: use Java 8 time API and Proleptic Gregorian calendar by default") {
+    withJdbcStatement() { st =>
+      // Proleptic Gregorian calendar has no gap in the range 1582-10-04..1582-10-15
+      val date = "1582-10-10"
+      val rs = st.executeQuery(s"select date '$date'")
+      rs.next()
+      assert(rs.getString(1) === date)
+      // 1582-10-10 is shifted to the next valid date in the hybrid calendar by java.sql.Date
+      assert(rs.getDate(1).toString() === "1582-10-15")
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
