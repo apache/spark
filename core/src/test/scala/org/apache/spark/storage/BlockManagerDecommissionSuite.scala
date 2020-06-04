@@ -223,10 +223,7 @@ class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
       assert(execIdToBlocksMapping.values.flatMap(_.keys).count(_.isRDD) === numParts)
     }
 
-    // Make the executor we decommissioned exit
-    sched.client.killExecutors(List(execToDecommission))
-
-    // Wait for the executor to be removed
+    // Wait for the executor to be removed after blocks are migrated.
     executorRemovedSem.acquire(1)
 
     // Since the RDD is cached or shuffled so further usage of same RDD should use the
