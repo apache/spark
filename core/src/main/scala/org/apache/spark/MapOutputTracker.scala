@@ -132,7 +132,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
         mapStatus.updateLocation(bmAddress)
         invalidateSerializedMapOutputStatusCache()
       case None =>
-        logError("Asked to update map output ${mapId} for untracked map status.")
+        logError(s"Asked to update map output ${mapId} for untracked map status.")
     }
   }
 
