@@ -1927,6 +1927,7 @@ private[spark] class BlockManager(
    * Stop migrating shuffle blocks.
    */
   def stopOffloadingShuffleBlocks(): Unit = {
+    logInfo("Stopping offloading shuffle blocks")
     migrationPeers.values.foreach(_.running = false)
   }
 
@@ -2050,6 +2051,7 @@ private[spark] class BlockManager(
     @volatile private var stopped = false
     // Since running tasks can add more blocks this can change.
     @volatile var allBlocksMigrated = false
+    var previousBlocksLeft = true
     private val blockMigrationThread = new Thread {
       val sleepInterval = conf.get(
         config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
@@ -2065,17 +2067,20 @@ private[spark] class BlockManager(
             var blocksLeft = false
             // If enabled we migrate shuffle blocks first as they are more expensive.
             if (conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
-              logDebug(s"Attempting to replicate all shuffle blocks")
+              logDebug("Attempting to replicate all shuffle blocks")
               blocksLeft = blocksLeft || offloadShuffleBlocks()
-              logInfo(s"Done starting workers to migrate shuffle blocks")
+              logInfo("Done starting workers to migrate shuffle blocks")
             }
             if (conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED)) {
-              logDebug(s"Attempting to replicate all cached RDD blocks")
+              logDebug("Attempting to replicate all cached RDD blocks")
               blocksLeft = blocksLeft || decommissionRddCacheBlocks()
-              logInfo(s"Attempt to replicate all cached blocks done")
+              logInfo("Attempt to replicate all cached blocks done")
               blocksLeft
             }
-            allBlocksMigrated = ! blocksLeft
+            logInfo(s"We have blocksLeft: ${blocksLeft}")
+            // Avoid the situation where  block was added during the loop
+            allBlocksMigrated = (! blocksLeft ) && ( ! previousBlocksLeft )
+            previousBlocksLeft = blocksLeft
             if (!conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED) &&
               !conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
               logWarning("Decommissioning, but no task configured set one or both:\n" +
@@ -2117,6 +2122,7 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
+    logInfo("Stopping decommission manager")
     decommissionManager.foreach(_.stop())
     blockTransferService.close()
     if (blockStoreClient ne blockTransferService) {

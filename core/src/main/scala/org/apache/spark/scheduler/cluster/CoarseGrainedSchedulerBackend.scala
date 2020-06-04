@@ -27,7 +27,7 @@ import scala.concurrent.Future
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{DeployMessage, SparkHadoopUtil}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
@@ -432,7 +432,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       if (shouldDisable) {
         logInfo(s"Starting decommissioning executor $executorId.")
         try {
+          // Stop making offers on this executor
           scheduler.executorDecommission(executorId)
+          // Send decommission message to the executor (it could have originated there but not
+          // necessarily).
+          executorDataMap.get(executorId) match {
+            case Some(executorInfo) =>
+              executorInfo.executorEndpoint.send(
+                DecommissionSelf)
+            case None =>
+              // Ignoring the executor since it is not registered.
+              logWarning(s"Attempted to decommission unknown executor $executorId.")
+          }
         } catch {
           case e: Exception =>
             logError(s"Unexpected error during decommissioning ${e.toString}", e)

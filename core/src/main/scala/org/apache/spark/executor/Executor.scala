@@ -229,38 +229,12 @@ private[spark] class Executor(
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
-  private def shutdownIfDone(): Unit = {
-    if (numRunningTasks == 0) {
-      if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
-        val allBlocksMigrated = env.blockManager.decommissionManager match {
-          case Some(m) => m.allBlocksMigrated
-          case None => false // We haven't started migrations yet.
-        }
-        if (allBlocksMigrated) {
-          stop()
-        }
-      } else {
-        stop()
-      }
-    }
-  }
-
-
   /**
    * Mark an executor for decommissioning and avoid launching new tasks.
    */
   private[spark] def decommission(): Unit = {
+    logInfo("Executor asked to decommission. Starting shutdown thread.")
     decommissioned = true
-    // Shutdown the executor once all tasks are gone :)
-    val shutdownThread = new Thread() {
-      while (true) {
-        shutdownIfDone()
-        Thread.sleep(1000) // 1s
-      }
-    }
-    shutdownThread.setDaemon(true)
-    shutdownThread.setName("decommission-shutdown-thread")
-    shutdownThread.start()
   }
 
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {

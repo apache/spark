@@ -210,6 +210,10 @@ private[spark] class CoarseGrainedExecutorBackend(
     case UpdateDelegationTokens(tokenBytes) =>
       logInfo(s"Received tokens of ${tokenBytes.length} bytes")
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
+
+    case DecommissionSelf =>
+      logInfo("Received decommission self")
+      decommissionSelf()
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -258,26 +262,60 @@ private[spark] class CoarseGrainedExecutorBackend(
     System.exit(code)
   }
 
-  private def decommissionSelf(): Boolean = {
-    logInfo("Decommissioning self w/sync")
-    try {
-      decommissioned = true
-      // Tell master we are are decommissioned so it stops trying to schedule us
-      if (driver.nonEmpty) {
-        driver.get.askSync[Boolean](DecommissionExecutor(executorId))
+  private def shutdownIfDone(): Unit = {
+    val numRunningTasks = executor.numRunningTasks
+    logInfo(s"Checking to see if we can shutdown have ${numRunningTasks} running tasks.")
+    if (executor.numRunningTasks == 0) {
+      if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+        val allBlocksMigrated = env.blockManager.decommissionManager match {
+          case Some(m) => m.allBlocksMigrated
+          case None => false // We haven't started migrations yet.
+        }
+        if (allBlocksMigrated) {
+          logInfo("No running tasks, all blocks migrated, stopping.")
+          exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+        }
       } else {
-        logError("No driver to message decommissioning.")
+        logInfo("No running tasks, no block migration configured, stopping.")
+        exitExecutor(0, "Finished decommissioning", notifyDriver = true)
       }
-      if (executor != null) {
-        executor.decommission()
+    }
+  }
+
+  private def decommissionSelf(): Boolean = {
+    if (!decommissioned) {
+      logInfo("Decommissioning self w/sync")
+      try {
+        decommissioned = true
+        // Tell master we are are decommissioned so it stops trying to schedule us
+        if (driver.nonEmpty) {
+          driver.get.askSync[Boolean](DecommissionExecutor(executorId))
+        } else {
+          logError("No driver to message decommissioning.")
+        }
+        if (executor != null) {
+          executor.decommission()
+        }
+        // Shutdown the executor once all tasks are gone :)
+        val shutdownThread = new Thread() {
+          while (true) {
+            shutdownIfDone()
+            Thread.sleep(1000) // 1s
+          }
+        }
+        shutdownThread.setDaemon(true)
+        shutdownThread.setName("decommission-shutdown-thread")
+        shutdownThread.start()
+        logInfo("Done decommissioning self.")
+        // Return true since we are handling a signal
+        true
+      } catch {
+        case e: Exception =>
+          logError(s"Error ${e} during attempt to decommission self")
+          false
       }
-      logInfo("Done decommissioning self.")
-      // Return true since we are handling a signal
+    } else {
       true
-    } catch {
-      case e: Exception =>
-        logError(s"Error ${e} during attempt to decommission self")
-        false
     }
   }
 }

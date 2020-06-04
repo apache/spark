@@ -52,6 +52,8 @@ private[spark] object CoarseGrainedClusterMessages {
   case class UpdateDelegationTokens(tokens: Array[Byte])
     extends CoarseGrainedClusterMessage
 
+  case object DecommissionSelf extends CoarseGrainedClusterMessage // Mark as decommissioned.
+
   // Executors to driver
   case class RegisterExecutor(
       executorId: String,
