@@ -196,17 +196,17 @@ private[spark] object History {
       .booleanConf
       .createWithDefault(true)
 
-  val HYBRID_KVSTORE_ENABLED = ConfigBuilder("spark.history.store.hybridKVStore.enabled")
-    .doc("Whether to use HybridKVStore as the store when parsing event logs. " +
-      "HybridKVStore will first write data to an in-memory store and having a background thread " +
-      "that keeps pushing the change to a disk store. Use it with caution, as in-memory store " +
-      "requires higher memory usage.")
+  val HYBRID_STORE_ENABLED = ConfigBuilder("spark.history.store.hybridStore.enabled")
+    .doc("Whether to use HybridStore as the store when parsing event logs. " +
+      "HybridStore will first write data to an in-memory store and having a background thread " +
+      "that dumps data to a disk store after the writing to in-memory store is completed. " +
+      "Use it with caution, as in-memory store requires higher memory usage.")
     .version("3.1.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
-  val MAX_IN_MEMORY_STORE_USAGE = ConfigBuilder("spark.history.store.hybridKVStore.maxMemoryUsage")
+  val MAX_IN_MEMORY_STORE_USAGE = ConfigBuilder("spark.history.store.hybridStore.maxMemoryUsage")
     .version("3.1.0")
     .bytesConf(ByteUnit.BYTE)
-    .createWithDefaultString("1g")
+    .createWithDefaultString("2g")
 }

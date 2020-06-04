@@ -22,7 +22,6 @@ import java.lang.{Long => JLong}
 import java.nio.file.Files
 import java.util.{Date, NoSuchElementException, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future, TimeUnit}
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipOutputStream
 
 import scala.collection.JavaConverters._
@@ -51,6 +50,7 @@ import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
+import org.apache.spark.status.CachedQuantile
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.kvstore._
@@ -129,14 +129,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val storePath = conf.get(LOCAL_STORE_DIR).map(new File(_))
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
 
-  private val hybridKVStoreEnabled = conf.get(History.HYBRID_KVSTORE_ENABLED)
+  private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
   private val maxInMemoryStoreUsage = conf.get(History.MAX_IN_MEMORY_STORE_USAGE)
   private val currentInMemoryStoreUsage = new java.util.concurrent.atomic.AtomicLong(0L)
-
-  if (hybridKVStoreEnabled) {
-    logInfo("Hybrid kvstore is enabled. Max in-memory store usage: " +
-      s"${Utils.bytesToString(maxInMemoryStoreUsage)}")
-  }
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
@@ -1177,13 +1172,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // At this point the disk data either does not exist or was deleted because it failed to
     // load, so the event log needs to be replayed.
 
-    // If hybrid kvstore is enabled, try it first.
-    if (hybridKVStoreEnabled) {
+    // If hybrid store is enabled, try it first.
+    if (hybridStoreEnabled) {
       try {
-        return createHybridKVStore(dm, appId, attempt, metadata)
+        return createHybridStore(dm, appId, attempt, metadata)
       } catch {
         case e: Exception =>
-          logInfo(s"Failed to create hybrid kvstore for $appId/${attempt.info.attemptId}." +
+          logInfo(s"Failed to create hybrid store for $appId/${attempt.info.attemptId}." +
             " Using leveldb.", e)
       }
     }
@@ -1218,7 +1213,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     KVUtils.open(newStorePath, metadata)
   }
 
-  private def createHybridKVStore(
+  private def createHybridStore(
       dm: HistoryServerDiskManager,
       appId: String,
       attempt: AttemptInfoWrapper,
@@ -1227,56 +1222,56 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
       attempt.lastIndex)
     val isCompressed = reader.compressionCodec.isDefined
+
     val memoryUsage = approximateMemoryUsage(reader.totalSize, isCompressed)
-
     if (currentInMemoryStoreUsage.get + memoryUsage > maxInMemoryStoreUsage) {
-      throw new IllegalStateException("Not enough in-memory storage to create hybrid kvstore.")
+      throw new IllegalStateException("Not enough in-memory storage to create hybrid store.")
     }
-
     currentInMemoryStoreUsage.addAndGet(memoryUsage)
-    logInfo(s"Attempt creating hyrbid kvstore to parse $appId / ${attempt.info.attemptId}.")
-    logInfo(s"Requested ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
+    logInfo(s"Attempt creating hybrid store to parse $appId / ${attempt.info.attemptId}. " +
+      s"Requested ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
 
     logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
     val lease = dm.lease(reader.totalSize, isCompressed)
-    val isRolledBackLeaseOnFailure = new AtomicBoolean(false)
-    var store: HybridKVStore = null
+    val isLeaseRolledBack = new java.util.concurrent.atomic.AtomicBoolean(false)
+    var store: HybridStore = null
     try {
-      store = new HybridKVStore()
+      store = new HybridStore()
       val levelDB = KVUtils.open(lease.tmpPath, metadata)
       store.setLevelDB(levelDB)
+      store.setCachedQuantileKlass(classOf[CachedQuantile])
+      rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
 
-      store.startBackgroundThreadToWriteToDB(new HybridKVStore.SwitchingToLevelDBListener {
+      // Start the background thread to dump data to levelDB when writing to
+      // InMemoryStore is completed.
+      store.switchingToLevelDB(new HybridStore.SwitchingToLevelDBListener {
         override def onSwitchingToLevelDBSuccess: Unit = {
           levelDB.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)
           store.setLevelDB(KVUtils.open(newStorePath, metadata))
           currentInMemoryStoreUsage.addAndGet(-memoryUsage)
-          logInfo(s"Completely switched to use leveldb for app" +
-          s" $appId / ${attempt.info.attemptId}.")
-          logInfo(s"Released ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
+          logInfo(s"Completely switched to leveldb for app" +
+            s" $appId / ${attempt.info.attemptId}. " +
+            s"Released ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
         }
 
         override def onSwitchingToLevelDBFail(e: Exception): Unit = {
-          logWarning(s"Failed to switch to use leveldb for app" +
-          s" $appId / ${attempt.info.attemptId}")
+          logWarning(s"Failed to switch to leveldb for app" +
+          s" $appId / ${attempt.info.attemptId}", e)
           levelDB.close()
-          if (!isRolledBackLeaseOnFailure.getAndSet(true)) {
+          if (!isLeaseRolledBack.getAndSet(true)) {
             lease.rollback()
           }
-          throw e
         }
       })
 
-      rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
-      store.stopBackgroundThreadAndSwitchToLevelDB()
       store
     } catch {
       case e: Exception =>
         store.close()
         currentInMemoryStoreUsage.addAndGet(-memoryUsage)
         logInfo(s"Released ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
-        if (!isRolledBackLeaseOnFailure.getAndSet(true)) {
+        if (!isLeaseRolledBack.getAndSet(true)) {
           lease.rollback()
         }
         throw e
