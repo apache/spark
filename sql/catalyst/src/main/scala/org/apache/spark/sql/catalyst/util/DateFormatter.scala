@@ -126,7 +126,7 @@ object DateFormatter {
       zoneId: ZoneId,
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
-      isParsing: Boolean = true): DateFormatter = {
+      isParsing: Boolean): DateFormatter = {
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
@@ -164,6 +164,6 @@ object DateFormatter {
   }
 
   def apply(zoneId: ZoneId): DateFormatter = {
-    getFormatter(None, zoneId)
+    getFormatter(None, zoneId, isParsing = false)
   }
 }

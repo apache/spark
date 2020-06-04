@@ -97,7 +97,7 @@ trait DateTimeFormatterHelper {
   protected def getOrCreateFormatter(
       pattern: String,
       locale: Locale,
-      isParsing: Boolean = false): DateTimeFormatter = {
+      isParsing: Boolean): DateTimeFormatter = {
     val newPattern = convertIncompatiblePattern(pattern, isParsing)
     val useVarLen = isParsing && newPattern.contains('S')
     val key = (newPattern, locale, useVarLen)
@@ -261,7 +261,7 @@ private object DateTimeFormatterHelper {
    * @param pattern The input pattern.
    * @return The pattern for new parser
    */
-  def convertIncompatiblePattern(pattern: String, isParsing: Boolean = false): String = {
+  def convertIncompatiblePattern(pattern: String, isParsing: Boolean): String = {
     val eraDesignatorContained = pattern.split("'").zipWithIndex.exists {
       case (patternPart, index) =>
         // Text can be quoted using single quotes, we only check the non-quote parts.
@@ -271,7 +271,7 @@ private object DateTimeFormatterHelper {
       case (patternPart, index) =>
         if (index % 2 == 0) {
           for (c <- patternPart if weekBasedLetters.contains(c)) {
-            throw new IllegalArgumentException(s"All week-based pattern are unsupported since" +
+            throw new IllegalArgumentException(s"All week-based patterns are unsupported since" +
               s" Spark 3.0, detected: $c, Please use the SQL function EXTRACT instead")
           }
           for (c <- patternPart if unsupportedLetters.contains(c) ||

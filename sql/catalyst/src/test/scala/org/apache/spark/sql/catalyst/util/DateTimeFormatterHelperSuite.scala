@@ -22,6 +22,10 @@ import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 
 class DateTimeFormatterHelperSuite extends SparkFunSuite {
 
+  private def convertIncompatiblePattern(pattern: String): String = {
+    DateTimeFormatterHelper.convertIncompatiblePattern(pattern, isParsing = false)
+  }
+
   test("check incompatible pattern") {
     assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz")
       === "uuuu-MM-dd'T'HH:mm:ss.SSSz")
@@ -43,7 +47,7 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
     }
     unsupportedLettersForParsing.foreach { l =>
       val e = intercept[IllegalArgumentException] {
-        convertIncompatiblePattern(s"$l", isParsing = true)
+        DateTimeFormatterHelper.convertIncompatiblePattern(s"$l", isParsing = true)
       }
       assert(e.getMessage === s"Illegal pattern character: $l")
       assert(convertIncompatiblePattern(s"$l").nonEmpty)
