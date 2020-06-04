@@ -117,7 +117,9 @@ class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyD
 object DateFormatter {
   import LegacyDateFormats._
 
-  val defaultLocale: Locale = Locale.US
+  import DateTimeFormatterHelper._
+
+  presetSundayStartToMondayStart()
 
   val defaultPattern: String = "yyyy-MM-dd"
 

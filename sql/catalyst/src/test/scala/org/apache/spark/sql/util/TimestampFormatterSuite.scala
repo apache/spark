@@ -25,6 +25,7 @@ import org.scalatest.Matchers
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{LegacyDateFormats, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -290,7 +291,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
                 TimestampFormatter(
                   TimestampFormatter.defaultPattern,
                   zoneId,
-                  TimestampFormatter.defaultLocale,
+                  defaultLocale,
                   legacyFormat,
                   isParsing = false)
               }.toSeq :+ TimestampFormatter.getFractionFormatter(zoneId)

@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.lang.reflect.{Field, Modifier}
 import java.time._
 import java.time.chrono.IsoChronology
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
-import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
+import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries, WeekFields}
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 import com.google.common.cache.CacheBuilder
 
@@ -155,7 +157,23 @@ trait DateTimeFormatterHelper {
   }
 }
 
-private object DateTimeFormatterHelper {
+private[spark] object DateTimeFormatterHelper {
+  val defaultLocale = Locale.US
+
+  def presetSundayStartToMondayStart(): Unit = {
+    val weekFields: WeekFields = WeekFields.of(defaultLocale)
+    val CACHE: Field = weekFields.getClass.getDeclaredField("CACHE")
+    CACHE.setAccessible(true)
+    val modifiers: Field = CACHE.getClass.getDeclaredField("modifiers")
+    modifiers.setAccessible(true)
+    modifiers.setInt(CACHE, CACHE.getModifiers & ~Modifier.FINAL)
+    val newCache = new ConcurrentHashMap[String, WeekFields]()
+    // Preset the Sunday start entry to ISO-based Monday start instance for retrieving first day
+    // of week
+    newCache.put(DayOfWeek.SUNDAY.toString + 1, WeekFields.ISO)
+    CACHE.set(weekFields, newCache)
+  }
+
   val cache = CacheBuilder.newBuilder()
     .maximumSize(128)
     .build[(String, Locale, Boolean), DateTimeFormatter]()
@@ -222,7 +240,7 @@ private object DateTimeFormatterHelper {
       .appendValue(ChronoField.MINUTE_OF_HOUR, 2).appendLiteral(':')
       .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
       .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
-    toFormatter(builder, TimestampFormatter.defaultLocale)
+    toFormatter(builder, defaultLocale)
   }
 
   private final val bugInStandAloneForm = {

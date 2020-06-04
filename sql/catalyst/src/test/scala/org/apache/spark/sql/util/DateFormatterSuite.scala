@@ -21,7 +21,7 @@ import java.time.{DateTimeException, LocalDate}
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{DateFormatter, LegacyDateFormats}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeFormatterHelper, LegacyDateFormats}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -71,7 +71,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
                 val formatter = DateFormatter(
                   DateFormatter.defaultPattern,
                   getZoneId(timeZone),
-                  DateFormatter.defaultLocale,
+                  DateTimeFormatterHelper.defaultLocale,
                   legacyFormat,
                   isParsing = false)
                 val days = formatter.parse(date)
@@ -106,7 +106,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
                 val formatter = DateFormatter(
                   DateFormatter.defaultPattern,
                   getZoneId(timeZone),
-                  DateFormatter.defaultLocale,
+                  DateTimeFormatterHelper.defaultLocale,
                   legacyFormat,
                   isParsing = false)
                 val date = formatter.format(days)
@@ -174,7 +174,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
             val formatter = DateFormatter(
               DateFormatter.defaultPattern,
               getZoneId(timeZone),
-              DateFormatter.defaultLocale,
+              DateTimeFormatterHelper.defaultLocale,
               legacyFormat,
               isParsing = false)
             assert(LocalDate.ofEpochDay(formatter.parse("1000-01-01")) === LocalDate.of(1000, 1, 1))

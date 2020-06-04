@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit.SECONDS
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
@@ -120,7 +121,7 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   extends Iso8601TimestampFormatter(
     TimestampFormatter.defaultPattern,
     zoneId,
-    TimestampFormatter.defaultLocale,
+    defaultLocale,
     LegacyDateFormats.FAST_DATE_FORMAT,
     needVarLengthSecondFraction = false) {
 
@@ -278,7 +279,7 @@ object LegacyDateFormats extends Enumeration {
 object TimestampFormatter {
   import LegacyDateFormats._
 
-  val defaultLocale: Locale = Locale.US
+  presetSundayStartToMondayStart()
 
   def defaultPattern(): String = s"${DateFormatter.defaultPattern} HH:mm:ss"
 

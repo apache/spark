@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, ZoneOffset}
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, LegacyDateFormats, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeFormatterHelper, DateTimeUtils, LegacyDateFormats, TimestampFormatter}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -84,7 +84,7 @@ object HiveResult {
     format = DateFormatter.defaultPattern,
     // We can set any time zone id. UTC was taken for simplicity.
     zoneId = ZoneOffset.UTC,
-    locale = DateFormatter.defaultLocale,
+    locale = DateTimeFormatterHelper.defaultLocale,
     // Use `FastDateFormat` as the legacy formatter because it is thread-safe.
     legacyFormat = LegacyDateFormats.FAST_DATE_FORMAT,
     isParsing = false)
