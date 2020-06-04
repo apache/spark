@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
  * For each PR breaks this test, we need to pay attention to the underlying unsafe row format
  * changing of aggregate functions. All the checkpoint dirs were generated based on Spark version
  * 2.4.5. If we accept the changes, it means the checkpoint for Structured Streaming will become
- * non-reusable. Please add a new test for the issue, just like the test suite "SPARK-28067 change
+ * non-reusable. Please add a new test for the issue, just like the test suite "SPARK-28067 changed
  * the sum decimal unsafe row format".
  */
 class StreamingAggregationCompatibilitySuite extends StreamTest {
@@ -182,7 +182,7 @@ class StreamingAggregationCompatibilitySuite extends StreamTest {
     )
   }
 
-  test("SPARK-28067 change the sum decimal unsafe row format") {
+  test("SPARK-28067 changed the sum decimal unsafe row format") {
     val inputData = MemoryStream[Int]
     val aggregated =
       inputData.toDF().toDF("value")
