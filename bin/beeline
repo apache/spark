@@ -28,5 +28,7 @@ if [ -z "${SPARK_HOME}" ]; then
   source "$(dirname "$0")"/find-spark-home
 fi
 
+. "${SPARK_HOME}"/bin/load-spark-env.sh
+
 CLASS="org.apache.hive.beeline.BeeLine"
-exec "${SPARK_HOME}/bin/spark-class" $CLASS "$@"
+exec "${SPARK_HOME}/bin/spark-class" $SPARK_SUBMIT_OPTS $CLASS "$@"
