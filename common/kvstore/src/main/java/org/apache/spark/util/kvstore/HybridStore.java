@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.kvstore;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.annotation.Private;
 
 import java.io.IOException;
@@ -28,7 +27,7 @@ import java.util.Collection;
 
 /**
  * Implementation of KVStore that writes data to InMemoryStore at first and uses
- * a background thread to dump data to LevelDB after the writing to InMemoryStore
+ * a background thread to dump data to LevelDB once the writing to InMemoryStore
  * is completed.
  */
 @Private
@@ -48,9 +47,9 @@ public class HybridStore implements KVStore {
   private ConcurrentHashMap<Class<?>, Boolean> klassMap = new ConcurrentHashMap<>();
 
   // CachedQuantile can be written to kvstore after rebuildAppStore(), so we need
-  // to handle it specially to avoid conflicts. we will use a queue store CachedQuantile
+  // to handle it specially to avoid conflicts. We will use a queue store CachedQuantile
   // objects when the underlying store is inMemoryStore, and dump these objects to levelDB
-  // before the switch complete.
+  // before the switch completes.
   private Class<?> cachedQuantileKlass = null;
   private ConcurrentLinkedQueue<Object> cachedQuantileQueue = new ConcurrentLinkedQueue<>();
 
@@ -235,14 +234,6 @@ public class HybridStore implements KVStore {
     void onSwitchingToLevelDBSuccess();
 
     void onSwitchingToLevelDBFail(Exception e);
-  }
-
-  @VisibleForTesting boolean getShouldUseMemoryStore() {
-    return this.shouldUseInMemoryStore.get();
-  }
-
-  @VisibleForTesting Thread getBackgroundThread() {
-    return this.backgroundThread;
   }
 
 }
