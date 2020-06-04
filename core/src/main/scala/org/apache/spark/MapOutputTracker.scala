@@ -501,7 +501,6 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.updateMapOutput(mapId, bmAddress)
-        shuffleStatus.invalidateSerializedMapOutputStatusCache()
       case None =>
         logError(s"Asked to update map output for unknown shuffle ${shuffleId}")
     }

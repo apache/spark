@@ -1731,7 +1731,8 @@ class SparkContext(config: SparkConf) extends Logging {
       case b: CoarseGrainedSchedulerBackend =>
         executorIds.foreach(b.decommissionExecutor)
       case _ =>
-        logWarning("Decommissioning executors is not supported by current scheduler.")
+        logWarning(s"Decommissioning executors is not supported by current scheduler" +
+          s"${schedulerBackend}")
     }
   }
 
