@@ -234,17 +234,18 @@ private object DateTimeFormatterHelper {
     val formatter = DateTimeFormatter.ofPattern("LLL qqq", Locale.US)
     formatter.format(LocalDate.of(2000, 1, 1)) == "1 1"
   }
-  final val unsupportedLetters = Set('A', 'c', 'n', 'N', 'p', 'Y', 'W', 'w', 'u')
+  final val weekBasedLetters = Set('Y', 'W', 'w', 'u', 'e', 'c')
+  final val unsupportedLetters = Set('A', 'n', 'N', 'p')
   // SPARK-31892: The week-based date fields are rarely used and really confusing for parsing values
   // to datetime, especially when they are mixed with other non-week-based ones
   // The quarter fields will also be parsed strangely, e.g. when the pattern contains `yMd` and can
   // be directly resolved then the `q` do check for whether the month is valid, but if the date
   // fields is incomplete, e.g. `yM`, the checking will be bypassed.
-  final val unsupportedLettersForParsing = Set('E', 'e', 'F', 'q', 'Q')
+  final val unsupportedLettersForParsing = Set('E', 'F', 'q', 'Q')
   final val unsupportedPatternLengths = {
     // SPARK-31771: Disable Narrow-form TextStyle to avoid silent data change, as it is Full-form in
     // 2.4
-    Seq("G", "M", "L", "E", "e", "Q", "q").map(_ * 5) ++
+    Seq("G", "M", "L", "E", "Q", "q").map(_ * 5) ++
       // SPARK-31867: Disable year pattern longer than 10 which will cause Java time library throw
       // unchecked `ArrayIndexOutOfBoundsException` by the `NumberPrinterParser` for formatting. It
       // makes the call side difficult to handle exceptions and easily leads to silent data change
@@ -269,6 +270,10 @@ private object DateTimeFormatterHelper {
     (pattern + " ").split("'").zipWithIndex.map {
       case (patternPart, index) =>
         if (index % 2 == 0) {
+          for (c <- patternPart if weekBasedLetters.contains(c)) {
+            throw new IllegalArgumentException(s"All week-based pattern are unsupported since" +
+              s" Spark 3.0, detected: $c, Please use the SQL function EXTRACT instead")
+          }
           for (c <- patternPart if unsupportedLetters.contains(c) ||
             (isParsing && unsupportedLettersForParsing.contains(c))) {
             throw new IllegalArgumentException(s"Illegal pattern character: $c")

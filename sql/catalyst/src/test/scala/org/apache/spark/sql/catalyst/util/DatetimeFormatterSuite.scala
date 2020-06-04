@@ -30,18 +30,19 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
 
     Seq(true, false).foreach { isParsing =>
       // not support by the legacy one too
-      val unsupportedBoth = Seq("QQQQQ", "qqqqq", "eeeee", "A", "c", "n", "N", "p")
+      val unsupportedBoth = Seq("QQQQQ", "qqqqq", "eeeee", "A", "c", "n", "N", "p", "e")
       unsupportedBoth.foreach { pattern =>
         intercept[IllegalArgumentException](checkFormatterCreation(pattern, isParsing))
       }
       // supported by the legacy one, then we will suggest users with SparkUpgradeException
-      (unsupportedLetters.map(_.toString) ++ unsupportedPatternLengths -- unsupportedBoth).foreach {
+      ((weekBasedLetters ++ unsupportedLetters).map(_.toString)
+        ++ unsupportedPatternLengths -- unsupportedBoth).foreach {
         pattern => intercept[SparkUpgradeException](checkFormatterCreation(pattern, isParsing))
       }
     }
 
     // not support by the legacy one too
-    val unsupportedBoth = Seq("e", "q", "Q")
+    val unsupportedBoth = Seq("q", "Q")
     unsupportedBoth.foreach { pattern =>
       intercept[IllegalArgumentException](checkFormatterCreation(pattern, true))
     }

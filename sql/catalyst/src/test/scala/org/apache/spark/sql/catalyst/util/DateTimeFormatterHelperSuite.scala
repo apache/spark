@@ -33,6 +33,10 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
       === "uuuu-MM'u contains in quoted text'''''HH:mm:ss")
     assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
       === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
+    weekBasedLetters.foreach { l =>
+      val e = intercept[IllegalArgumentException](convertIncompatiblePattern(s"yyyy-MM-dd $l G"))
+      assert(e.getMessage.contains("week-based"))
+    }
     unsupportedLetters.foreach { l =>
       val e = intercept[IllegalArgumentException](convertIncompatiblePattern(s"yyyy-MM-dd $l G"))
       assert(e.getMessage === s"Illegal pattern character: $l")

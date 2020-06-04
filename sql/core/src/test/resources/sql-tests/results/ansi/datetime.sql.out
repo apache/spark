@@ -749,15 +749,16 @@ select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eecc')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character: c
+Illegal pattern character: e
 
 
 -- !query
 select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eeee')
 -- !query schema
-struct<date_format(TIMESTAMP '2019-10-06 00:00:00', yyyy-MM-dd eeee):string>
+struct<>
 -- !query output
-2019-10-06 Sunday
+java.lang.IllegalArgumentException
+Illegal pattern character: e
 
 
 -- !query
