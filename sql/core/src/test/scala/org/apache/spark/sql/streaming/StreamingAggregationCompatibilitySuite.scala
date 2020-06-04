@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -113,14 +114,26 @@ class StreamingAggregationCompatibilitySuite extends StreamTest {
           "value % 2 AS id",
           "CAST(value AS DECIMAL) as dec")
         .groupBy($"id")
-        .agg(sum($"dec").as("sum_dec"))
-        .select("id", "sum_dec")
+        .agg(sum($"dec").as("sum_dec"), collect_list($"value").as("col_list"))
+        .select("id", "sum_dec", "col_list")
 
+    val resourceUri = this.getClass.getResource("/structured-streaming/" +
+      "checkpoint-version-2.4.5-for-compatibility-test-sum-decimal").toURI
     val checkpointDir = Utils.createTempDir().getCanonicalFile
+
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    inputData.addData(0 to 9: _*)
+
     testStream(aggregated, Complete)(
       StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-       AddData(inputData, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
-       CheckAnswer(Row(0, 2.5, 2.5F, 2.5, 2.5000, 2, 0, 0, 5, 5, 0, 5, 5, 5.0, 5.0, 5, Seq(0, 5)))
+//      AddData(inputData, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+//      CheckAnswer(Row(0, 20, Seq(0, 2, 4, 6, 8)), Row(1, 25, Seq(1, 3, 5, 7, 9)))
+      AddData(inputData, 10 to 19: _*),
+      ExpectFailure[SparkException](e => {
+        // Check the exception message to make sure the state store format changing.
+        assert(e.getCause.getMessage.contains("The UnsafeRow format is invalid"))
+      })
     )
   }
 }
