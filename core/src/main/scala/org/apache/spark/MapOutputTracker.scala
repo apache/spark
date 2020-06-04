@@ -128,7 +128,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
     val mapStatusOpt = mapStatuses.find(_.mapId == mapId)
     mapStatusOpt match {
       case Some(mapStatus) =>
-        logInfo("Updating map output for ${mapId} to ${bmAddress}")
+        logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
         mapStatus.updateLocation(bmAddress)
         invalidateSerializedMapOutputStatusCache()
       case None =>
