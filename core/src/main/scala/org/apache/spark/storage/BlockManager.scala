@@ -1907,13 +1907,20 @@ private[spark] class BlockManager(
       logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
       val executor = ThreadUtils.newDaemonSingleThreadExecutor(s"migrate-shuffle-to-${peer}")
       val runnable = new ShuffleMigrationRunnable(peer)
-      executor.submit(runnable)
       (peer, runnable)
     }
     // A peer may have entered a decommissioning state, don't transfer any new blocks
     deadPeers.foreach { peer =>
         migrationPeers.get(peer).foreach(_.running = false)
     }
+  }
+
+
+  /**
+   * Stop migrating shuffle blocks.
+   */
+  def stopOffloadingShuffleBlocks(): Unit = {
+    migrationPeers.values.foreach(_.running = false)
   }
 
   /**
@@ -2089,6 +2096,7 @@ private[spark] class BlockManager(
         stopped = true
         logInfo("Stopping block replication thread")
         blockMigrationThread.interrupt()
+        stopOffloadingShuffleBlocks()
       }
     }
   }
