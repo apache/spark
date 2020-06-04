@@ -716,20 +716,21 @@ Illegal pattern character 'e'
 
 
 -- !query
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc')
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eecc')
 -- !query schema
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character 'c'
+Illegal pattern character 'e'
 
 
 -- !query
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuuu')
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eeee')
 -- !query schema
-struct<date_format(TIMESTAMP '2019-10-06 00:00:00', yyyy-MM-dd uuuu):string>
+struct<>
 -- !query output
-2019-10-06 0007
+java.lang.IllegalArgumentException
+Illegal pattern character 'e'
 
 
 -- !query

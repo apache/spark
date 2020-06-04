@@ -234,22 +234,22 @@ private object DateTimeFormatterHelper {
     val formatter = DateTimeFormatter.ofPattern("LLL qqq", Locale.US)
     formatter.format(LocalDate.of(2000, 1, 1)) == "1 1"
   }
-  final val unsupportedLetters = Set('A', 'c', 'e', 'n', 'N', 'p')
+  final val unsupportedLetters = Set('A', 'c', 'n', 'N', 'p', 'Y', 'W', 'w', 'u')
   // SPARK-31892: The week-based date fields are rarely used and really confusing for parsing values
   // to datetime, especially when they are mixed with other non-week-based ones
   // The quarter fields will also be parsed strangely, e.g. when the pattern contains `yMd` and can
   // be directly resolved then the `q` do check for whether the month is valid, but if the date
   // fields is incomplete, e.g. `yM`, the checking will be bypassed.
-  final val unsupportedLettersForParsing = Set('Y', 'W', 'w', 'E', 'u', 'F', 'q', 'Q')
+  final val unsupportedLettersForParsing = Set('E', 'F', 'q', 'Q')
   final val unsupportedPatternLengths = {
     // SPARK-31771: Disable Narrow-form TextStyle to avoid silent data change, as it is Full-form in
     // 2.4
-    Seq("G", "M", "L", "E", "u", "Q", "q").map(_ * 5) ++
+    Seq("G", "M", "L", "E", "e", "Q", "q").map(_ * 5) ++
       // SPARK-31867: Disable year pattern longer than 10 which will cause Java time library throw
       // unchecked `ArrayIndexOutOfBoundsException` by the `NumberPrinterParser` for formatting. It
       // makes the call side difficult to handle exceptions and easily leads to silent data change
       // because of the exceptions being suppressed.
-      Seq("y", "Y").map(_ * 11)
+      Seq("y").map(_ * 11)
   }.toSet
 
   /**
@@ -282,20 +282,13 @@ private object DateTimeFormatterHelper {
               "or upgrade your Java version. For more details, please read " +
               "https://bugs.openjdk.java.net/browse/JDK-8114833")
           }
-          // The meaning of 'u' was day number of week in SimpleDateFormat, it was changed to year
-          // in DateTimeFormatter. Substitute 'u' to 'e' and use DateTimeFormatter to parse the
-          // string. If parsable, return the result; otherwise, fall back to 'u', and then use the
-          // legacy SimpleDateFormat parser to parse. When it is successfully parsed, throw an
-          // exception and ask users to change the pattern strings or turn on the legacy mode;
-          // otherwise, return NULL as what Spark 2.4 does.
-          val res = patternPart.replace("u", "e")
           // In DateTimeFormatter, 'u' supports negative years. We substitute 'y' to 'u' here for
           // keeping the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'.
           // We only do this substitution when there is no era designator found in the pattern.
           if (!eraDesignatorContained) {
-            res.replace("y", "u")
+            patternPart.replace("y", "u")
           } else {
-            res
+            patternPart
           }
         } else {
           patternPart

@@ -15,19 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.util
+package org.apache.spark.sql.catalyst.util
 
 import java.time.{DateTimeException, LocalDate}
 
-import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{DateFormatter, LegacyDateFormats}
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
-class DateFormatterSuite extends SparkFunSuite with SQLHelper {
+class DateFormatterSuite extends DatetimeFormatterSuite {
   test("parsing dates") {
     outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
@@ -198,5 +196,9 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
     // The date parser in 2.4 accepts 1970-02-29 and turn it into 1970-03-01, so we should get a
     // SparkUpgradeException here.
     intercept[SparkUpgradeException](formatter.parse("02-29"))
+  }
+
+  override def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit = {
+    DateFormatter(pattern, UTC, isParsing)
   }
 }

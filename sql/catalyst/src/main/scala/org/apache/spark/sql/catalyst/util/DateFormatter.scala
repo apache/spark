@@ -46,7 +46,7 @@ class Iso8601DateFormatter(
   extends DateFormatter with DateTimeFormatterHelper {
 
   @transient
-  private lazy val formatter = getOrCreateFormatter(pattern, locale)
+  private lazy val formatter = getOrCreateFormatter(pattern, locale, isParsing)
 
   @transient
   private lazy val legacyFormatter = DateFormatter.getLegacyFormatter(
@@ -159,8 +159,8 @@ object DateFormatter {
     getFormatter(Some(format), zoneId, locale, legacyFormat, isParsing)
   }
 
-  def apply(format: String, zoneId: ZoneId): DateFormatter = {
-    getFormatter(Some(format), zoneId)
+  def apply(format: String, zoneId: ZoneId, isParsing: Boolean = false): DateFormatter = {
+    getFormatter(Some(format), zoneId, isParsing = isParsing)
   }
 
   def apply(zoneId: ZoneId): DateFormatter = {

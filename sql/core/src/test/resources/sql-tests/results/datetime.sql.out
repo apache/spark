@@ -712,11 +712,11 @@ select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuee')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Illegal pattern character: e
+Illegal pattern character: u
 
 
 -- !query
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc')
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eecc')
 -- !query schema
 struct<>
 -- !query output
@@ -725,9 +725,9 @@ Illegal pattern character: c
 
 
 -- !query
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuuu')
+select date_format(timestamp '2019-10-06', 'yyyy-MM-dd eeee')
 -- !query schema
-struct<date_format(TIMESTAMP '2019-10-06 00:00:00', yyyy-MM-dd uuuu):string>
+struct<date_format(TIMESTAMP '2019-10-06 00:00:00', yyyy-MM-dd eeee):string>
 -- !query output
 2019-10-06 Sunday
 

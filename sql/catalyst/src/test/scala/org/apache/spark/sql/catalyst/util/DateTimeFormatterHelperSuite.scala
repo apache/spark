@@ -23,13 +23,10 @@ import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 class DateTimeFormatterHelperSuite extends SparkFunSuite {
 
   test("check incompatible pattern") {
-    assert(convertIncompatiblePattern("MM-DD-u") === "MM-DD-e")
     assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz")
       === "uuuu-MM-dd'T'HH:mm:ss.SSSz")
     assert(convertIncompatiblePattern("yyyy-MM'y contains in quoted text'HH:mm:ss")
       === "uuuu-MM'y contains in quoted text'HH:mm:ss")
-    assert(convertIncompatiblePattern("yyyy-MM-dd-u'T'HH:mm:ss.SSSz")
-      === "uuuu-MM-dd-e'T'HH:mm:ss.SSSz")
     assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'HH:mm:ss")
       === "uuuu-MM'u contains in quoted text'HH:mm:ss")
     assert(convertIncompatiblePattern("yyyy-MM'u contains in quoted text'''''HH:mm:ss")
