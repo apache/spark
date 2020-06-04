@@ -34,7 +34,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       // Ensure we have somewhere to migrate our data too
       .set("spark.executor.instances", "3")
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
-      .set("spark.storage.decommission.replicationReattemptInterval", "1s")
+      .set("spark.storage.decommission.replicationReattemptInterval", "1")
       .set("spark.storage.decommission.rdd_blocks", "true")
 
     runSparkApplicationAndVerifyCompletion(
