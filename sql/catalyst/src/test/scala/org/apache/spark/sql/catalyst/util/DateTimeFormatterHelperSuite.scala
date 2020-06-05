@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 
 class DateTimeFormatterHelperSuite extends SparkFunSuite {
@@ -40,7 +40,14 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
       val e = intercept[IllegalArgumentException](convertIncompatiblePattern(s"yyyy-MM-dd $l G"))
       assert(e.getMessage === s"Illegal pattern character: $l")
     }
-    unsupportedNarrowTextStyle.foreach { style =>
+    unsupportedLettersForParsing.foreach { l =>
+      val e = intercept[IllegalArgumentException] {
+        convertIncompatiblePattern(s"$l", isParsing = true)
+      }
+      assert(e.getMessage === s"Illegal pattern character: $l")
+      assert(convertIncompatiblePattern(s"$l").nonEmpty)
+    }
+    unsupportedPatternLengths.foreach { style =>
       val e1 = intercept[IllegalArgumentException] {
         convertIncompatiblePattern(s"yyyy-MM-dd $style")
       }
