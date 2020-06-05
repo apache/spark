@@ -62,11 +62,11 @@ class Iso8601TimestampFormatter(
     zoneId: ZoneId,
     locale: Locale,
     legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
-    needVarLengthSecondFraction: Boolean)
+    isParsing: Boolean)
   extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
   protected lazy val formatter: DateTimeFormatter =
-    getOrCreateFormatter(pattern, locale, needVarLengthSecondFraction)
+    getOrCreateFormatter(pattern, locale, isParsing)
 
   @transient
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
@@ -84,12 +84,15 @@ class Iso8601TimestampFormatter(
         val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
         Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
-      } catch checkDiffResult(s, legacyFormatter.parse)
+      } catch checkParsedDiff(s, legacyFormatter.parse)
     }
   }
 
   override def format(instant: Instant): String = {
-    formatter.withZone(zoneId).format(instant)
+    try {
+      formatter.withZone(zoneId).format(instant)
+    } catch checkFormattedDiff(toJavaTimestamp(instantToMicros(instant)),
+      (t: Timestamp) => format(t))
   }
 
   override def format(us: Long): String = {
@@ -122,7 +125,7 @@ class FractionTimestampFormatter(zoneId: ZoneId)
     zoneId,
     TimestampFormatter.defaultLocale,
     LegacyDateFormats.FAST_DATE_FORMAT,
-    needVarLengthSecondFraction = false) {
+    isParsing = false) {
 
   @transient
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
@@ -287,7 +290,7 @@ object TimestampFormatter {
       zoneId: ZoneId,
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
-      isParsing: Boolean = false): TimestampFormatter = {
+      isParsing: Boolean): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
@@ -334,12 +337,12 @@ object TimestampFormatter {
   def apply(
       format: String,
       zoneId: ZoneId,
-      isParsing: Boolean = false): TimestampFormatter = {
+      isParsing: Boolean): TimestampFormatter = {
     getFormatter(Some(format), zoneId, isParsing = isParsing)
   }
 
   def apply(zoneId: ZoneId): TimestampFormatter = {
-    getFormatter(None, zoneId)
+    getFormatter(None, zoneId, isParsing = false)
   }
 
   def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {

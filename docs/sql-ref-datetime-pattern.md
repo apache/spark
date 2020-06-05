@@ -36,11 +36,7 @@ Spark uses pattern letters in the following table for date and timestamp parsing
 |**M/L**|month-of-year|month|7; 07; Jul; July|
 |**d**|day-of-month|number(3)|28|
 |**Q/q**|quarter-of-year|number/text|3; 03; Q3; 3rd quarter|
-|**Y**|week-based-year|year|1996; 96|
-|**w**|week-of-week-based-year|number(2)|27|
-|**W**|week-of-month|number(1)|4|
 |**E**|day-of-week|text|Tue; Tuesday|
-|**u**|localized day-of-week|number/text|2; 02; Tue; Tuesday|
 |**F**|week-of-month|number(1)|3|
 |**a**|am-pm-of-day|am-pm|PM|
 |**h**|clock-hour-of-am-pm (1-12)|number(2)|12|
@@ -63,7 +59,7 @@ Spark uses pattern letters in the following table for date and timestamp parsing
 
 The count of pattern letters determines the format.
 
-- Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short form. Exactly 4 pattern letters will use the full form. Exactly 5 pattern letters will use the narrow form. 5 or more letters will fail.
+- Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short text form, typically an abbreviation, e.g. day-of-week Monday might output "Mon". Exactly 4 pattern letters will use the full text form, typically the full description, e.g, day-of-week Monday might output "Monday". 5 or more letters will fail.
 
 - Number(n): The n here represents the maximum count of letters this type of datetime pattern can be used. If the count of letters is one, then the value is output using the minimum number of digits and without padding. Otherwise, the count of digits is used as the width of the output field, with the value zero-padded as necessary.
 
@@ -137,10 +133,4 @@ The count of pattern letters determines the format.
   During parsing, the whole section may be missing from the parsed string.
   An optional section is started by `[` and ended using `]` (or at the end of the pattern).
   
-- Symbols of 'Y', 'W', 'w', 'E', 'u', 'F', 'q' and 'Q' can only be used for datetime formatting, e.g. `date_format`. They are not allowed used for datetime parsing, e.g. `to_timestamp`.
-
-More details for the text style:
-
-- Short Form: Short text, typically an abbreviation. For example, day-of-week Monday might output "Mon".
-
-- Full Form: Full text, typically the full description. For example, day-of-week Monday might output "Monday".
+- Symbols of 'E', 'F', 'q' and 'Q' can only be used for datetime formatting, e.g. `date_format`. They are not allowed used for datetime parsing, e.g. `to_timestamp`.

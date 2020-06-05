@@ -15,20 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.util
+package org.apache.spark.sql.catalyst.util
 
 import java.time.{DateTimeException, LocalDate, ZoneId}
 import java.util.{Calendar, TimeZone}
 
-import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{DateFormatter, LegacyDateFormats}
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
-class DateFormatterSuite extends SparkFunSuite with SQLHelper {
+class DateFormatterSuite extends DatetimeFormatterSuite {
+
+  override def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit = {
+    DateFormatter(pattern, UTC, isParsing)
+  }
+
   private def withOutstandingZoneIds(f: ZoneId => Unit): Unit = {
     for {
       jvmZoneId <- outstandingZoneIds
