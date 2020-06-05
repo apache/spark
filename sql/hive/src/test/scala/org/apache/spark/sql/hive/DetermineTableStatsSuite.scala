@@ -56,7 +56,8 @@ class DetermineTableStatsSuite extends QueryTest
       def getStats: CacheStats = {
         cache.stats()
       }
-      
+      spark.sql(s"select count(id) id from ${tName} group by name order by id").collect()
+
       val df = catalog.lookupRelation(TableIdentifier(tName))
       catalog.invalidateAllCachedTables()
       val baseStats: CacheStats = getStats
