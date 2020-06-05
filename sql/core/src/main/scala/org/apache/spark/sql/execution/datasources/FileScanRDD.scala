@@ -86,11 +86,40 @@ class FileScanRDD(
       private[this] var currentIterator: Iterator[Object] = null
 
       def hasNext: Boolean = {
+        def hasNextInCurrentFile: Boolean = {
+          try {
+            currentIterator != null && currentIterator.hasNext
+          } catch {
+            case e: SchemaColumnConvertNotSupportedException =>
+              val message = "Parquet column cannot be converted in " +
+                s"file ${currentFile.filePath}. Column: ${e.getColumn}, " +
+                s"Expected: ${e.getLogicalType}, Found: ${e.getPhysicalType}"
+              throw new QueryExecutionException(message, e)
+            case e: ParquetDecodingException =>
+              if (e.getCause.isInstanceOf[SparkUpgradeException]) {
+                throw e.getCause
+              } else if (e.getMessage.contains("Can not read value at")) {
+                val message = "Encounter error while reading parquet files. " +
+                  "One possible cause: Parquet column cannot be converted in the " +
+                  "corresponding files. Details: "
+                throw new QueryExecutionException(message, e)
+              }
+              throw e
+          }
+        }
+
         // Kill the task in case it has been marked as killed. This logic is from
         // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
         // to avoid performance overhead.
         context.killTaskIfInterrupted()
-        (currentIterator != null && currentIterator.hasNext) || nextIterator()
+        while (!hasNextInCurrentFile && files.hasNext) {
+          processNextFile()
+        }
+        if (!files.hasNext) {
+          currentFile = null
+          InputFileBlockHolder.unset()
+        }
+        hasNextInCurrentFile
       }
       def next(): Object = {
         val nextElement = currentIterator.next()
@@ -125,73 +154,47 @@ class FileScanRDD(
         }
       }
 
-      /** Advances to the next file. Returns true if a new non-empty iterator is available. */
-      private def nextIterator(): Boolean = {
-        if (files.hasNext) {
-          currentFile = files.next()
-          logInfo(s"Reading File $currentFile")
-          // Sets InputFileBlockHolder for the file block's information
-          InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
+      /** Advances to the next file. */
+      private def processNextFile(): Unit = {
+        currentFile = files.next()
+        logInfo(s"Reading File $currentFile")
+        // Sets InputFileBlockHolder for the file block's information
+        InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
 
-          if (ignoreMissingFiles || ignoreCorruptFiles) {
-            currentIterator = new NextIterator[Object] {
-              // The readFunction may read some bytes before consuming the iterator, e.g.,
-              // vectorized Parquet reader. Here we use lazy val to delay the creation of
-              // iterator so that we will throw exception in `getNext`.
-              private lazy val internalIter = readCurrentFile()
+        if (ignoreMissingFiles || ignoreCorruptFiles) {
+          currentIterator = new NextIterator[Object] {
+            // The readFunction may read some bytes before consuming the iterator, e.g.,
+            // vectorized Parquet reader. Here we use lazy val to delay the creation of
+            // iterator so that we will throw exception in `getNext`.
+            private lazy val internalIter = readCurrentFile()
 
-              override def getNext(): AnyRef = {
-                try {
-                  if (internalIter.hasNext) {
-                    internalIter.next()
-                  } else {
-                    finished = true
-                    null
-                  }
-                } catch {
-                  case e: FileNotFoundException if ignoreMissingFiles =>
-                    logWarning(s"Skipped missing file: $currentFile", e)
-                    finished = true
-                    null
-                  // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-                  case e: FileNotFoundException if !ignoreMissingFiles => throw e
-                  case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-                    logWarning(
-                      s"Skipped the rest of the content in the corrupted file: $currentFile", e)
-                    finished = true
-                    null
+            override def getNext(): AnyRef = {
+              try {
+                if (internalIter.hasNext) {
+                  internalIter.next()
+                } else {
+                  finished = true
+                  null
                 }
+              } catch {
+                case e: FileNotFoundException if ignoreMissingFiles =>
+                  logWarning(s"Skipped missing file: $currentFile", e)
+                  finished = true
+                  null
+                // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+                case e: FileNotFoundException if !ignoreMissingFiles => throw e
+                case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+                  logWarning(
+                    s"Skipped the rest of the content in the corrupted file: $currentFile", e)
+                  finished = true
+                  null
               }
-
-              override def close(): Unit = {}
             }
-          } else {
-            currentIterator = readCurrentFile()
-          }
 
-          try {
-            hasNext
-          } catch {
-            case e: SchemaColumnConvertNotSupportedException =>
-              val message = "Parquet column cannot be converted in " +
-                s"file ${currentFile.filePath}. Column: ${e.getColumn}, " +
-                s"Expected: ${e.getLogicalType}, Found: ${e.getPhysicalType}"
-              throw new QueryExecutionException(message, e)
-            case e: ParquetDecodingException =>
-              if (e.getCause.isInstanceOf[SparkUpgradeException]) {
-                throw e.getCause
-              } else if (e.getMessage.contains("Can not read value at")) {
-                val message = "Encounter error while reading parquet files. " +
-                  "One possible cause: Parquet column cannot be converted in the " +
-                  "corresponding files. Details: "
-                throw new QueryExecutionException(message, e)
-              }
-              throw e
+            override def close(): Unit = {}
           }
         } else {
-          currentFile = null
-          InputFileBlockHolder.unset()
-          false
+          currentIterator = readCurrentFile()
         }
       }
 
