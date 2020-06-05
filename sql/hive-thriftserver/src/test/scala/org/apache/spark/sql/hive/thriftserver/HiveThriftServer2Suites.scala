@@ -122,6 +122,29 @@ class HiveThriftBinaryServerSuite extends JdbcConnectionSuite {
     }
   }
 
+  test("Support beeline --hiveconf and --hivevar") {
+    withJdbcStatement() { statement =>
+      executeTest(hiveConfList)
+      executeTest(hiveVarList)
+      def executeTest(hiveList: String): Unit = {
+        hiveList.split(";").foreach{ m =>
+          val kv = m.split("=")
+          val k = kv(0)
+          val v = kv(1)
+          val modValue = s"${v}_MOD_VALUE"
+          // select '${a}'; ---> avalue
+          val resultSet = statement.executeQuery(s"select '$${$k}'")
+          resultSet.next()
+          assert(resultSet.getString(1) === v)
+          statement.executeQuery(s"set $k=$modValue")
+          val modResultSet = statement.executeQuery(s"select '$${$k}'")
+          modResultSet.next()
+          assert(modResultSet.getString(1) === s"$modValue")
+        }
+      }
+    }
+  }
+
   test("SPARK-11043 check operation log root directory") {
     assert(operationLogPath.exists())
   }
@@ -408,7 +431,8 @@ class HiveThriftCleanUpScratchDirSuite extends SharedThriftServer {
     ConfVars.HIVE_START_CLEANUP_SCRATCHDIR.varname -> "true",
     ConfVars.SCRATCHDIR.varname -> tempScratchDir.getAbsolutePath)
 
-  test("Cleanup the Hive scratchdir when starting the Hive Server") {
+  // TODO restore this with old start-thriftserver script
+  ignore("Cleanup the Hive scratchdir when starting the Hive Server") {
     assert(!tempScratchDir.exists())
     withJdbcStatement() { statement =>
       val rs = statement.executeQuery("SELECT id FROM range(1)")

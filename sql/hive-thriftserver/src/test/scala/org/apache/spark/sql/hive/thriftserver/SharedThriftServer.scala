@@ -38,6 +38,7 @@ trait SharedThriftServer extends SharedSparkSession {
   Utils.classForName(classOf[HiveDriver].getCanonicalName)
 
   protected var hiveServer2: HiveThriftServer2 = _
+  protected var hostName: String = _
   protected var serverPort: Int = 0
   protected val hiveConfList = "a=avalue;b=bvalue"
   protected val hiveVarList = "c=cvalue;d=dvalue"
@@ -93,9 +94,9 @@ trait SharedThriftServer extends SharedSparkSession {
 
   protected def jdbcUri: String = if (mode == ServerMode.http) {
     s"""jdbc:hive2://localhost:$serverPort/
-       |default?
-       |hive.server2.transport.mode=http;
-       |hive.server2.thrift.http.path=cliservice;
+       |default;
+       |transportMode=http;
+       |httpPath=cliservice;
        |$hiveConfList#$hiveVarList
      """.stripMargin.split("\n").mkString.trim
   } else {
@@ -152,9 +153,13 @@ trait SharedThriftServer extends SharedSparkSession {
     sqlContext.setConf(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION.varname,
       operationLogPath.getAbsolutePath)
     sqlContext.setConf(ConfVars.LOCALSCRATCHDIR.varname, lScratchDir.getAbsolutePath)
+    extraConf.foreach { case (k, v) => sqlContext.setConf(k, v) }
     hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
     hiveServer2.getServices.asScala.foreach {
-      case t: ThriftCLIService if t.getPortNumber != 0 =>
+      case t: ThriftCLIService =>
+        if (t.getPortNumber == 0) {
+          Thread.sleep(3000)
+        }
         serverPort = t.getPortNumber
         logInfo(s"Started HiveThriftServer2: mode: $mode port=$serverPort, attempt=$attempt")
       case _ =>

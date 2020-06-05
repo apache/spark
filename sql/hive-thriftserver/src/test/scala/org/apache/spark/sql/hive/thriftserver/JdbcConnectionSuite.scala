@@ -44,7 +44,7 @@ trait JdbcConnectionSuite extends SharedThriftServer {
            |$hiveConfList#$hiveVarList
          """.stripMargin.split("\n").mkString.trim
       } else {
-        s"""jdbc:hive2://localhost:$serverPort/$JDBC_TEST_DATABASE/?$hiveConfList#$hiveVarList"""
+        s"""jdbc:hive2://localhost:$serverPort/$JDBC_TEST_DATABASE?$hiveConfList#$hiveVarList"""
       }
       val connection = DriverManager.getConnection(jdbcUri, user, "")
       val statement = connection.createStatement()
@@ -55,29 +55,6 @@ trait JdbcConnectionSuite extends SharedThriftServer {
       } finally {
         statement.close()
         connection.close()
-      }
-    }
-  }
-
-  test("Support beeline --hiveconf and --hivevar") {
-    withJdbcStatement() { statement =>
-      executeTest(hiveConfList)
-      executeTest(hiveVarList)
-      def executeTest(hiveList: String): Unit = {
-        hiveList.split(";").foreach{ m =>
-          val kv = m.split("=")
-          val k = kv(0)
-          val v = kv(1)
-          val modValue = s"${v}_MOD_VALUE"
-          // select '${a}'; ---> avalue
-          val resultSet = statement.executeQuery(s"select '$${$k}'")
-          resultSet.next()
-          assert(resultSet.getString(1) === v)
-          statement.executeQuery(s"set $k=$modValue")
-          val modResultSet = statement.executeQuery(s"select '$${$k}'")
-          modResultSet.next()
-          assert(modResultSet.getString(1) === s"$modValue")
-        }
       }
     }
   }
