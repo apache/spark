@@ -45,6 +45,8 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 
 - As of Spark 3.0, `Row` field names are no longer sorted alphabetically when constructing with named arguments for Python versions 3.6 and above, and the order of fields will match that as entered. To enable sorted fields by default, as in Spark 2.4, set the environment variable `PYSPARK_ROW_FIELD_SORTING_ENABLED` to `true` for both executors and driver - this environment variable must be consistent on all executors and driver; otherwise, it may cause failures or incorrect answers. For Python versions less than 3.6, the field names will be sorted alphabetically as the only option.
 
+- In Spark 3.0, `pyspark.ml.param.shared.Has*` mixins do not provide any `set*(self, value)` setter methods anymore, use the respective `self.set(self.*, value)` instead. See [SPARK-29093](https://issues.apache.org/jira/browse/SPARK-29093) for details.
+
 ## Upgrading from PySpark 2.3 to 2.4
 
   - In PySpark, when Arrow optimization is enabled, previously `toPandas` just failed when Arrow optimization is unable to be used whereas `createDataFrame` from Pandas DataFrame allowed the fallback to non-optimization. Now, both `toPandas` and `createDataFrame` from Pandas DataFrame allow the fallback by default, which can be switched off by `spark.sql.execution.arrow.fallback.enabled`.

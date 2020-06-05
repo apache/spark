@@ -15,19 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.util
+package org.apache.spark.sql.catalyst.util
 
 import java.time.{DateTimeException, LocalDate}
 
-import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{DateFormatter, LegacyDateFormats}
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
-class DateFormatterSuite extends SparkFunSuite with SQLHelper {
+class DateFormatterSuite extends DatetimeFormatterSuite {
+
+  override def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit = {
+    DateFormatter(pattern, UTC, isParsing)
+  }
+
   test("parsing dates") {
     outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
@@ -72,7 +75,8 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
                   DateFormatter.defaultPattern,
                   getZoneId(timeZone),
                   DateFormatter.defaultLocale,
-                  legacyFormat)
+                  legacyFormat,
+                  isParsing = false)
                 val days = formatter.parse(date)
                 assert(date === formatter.format(days))
                 assert(date === formatter.format(daysToLocalDate(days)))
@@ -106,7 +110,8 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
                   DateFormatter.defaultPattern,
                   getZoneId(timeZone),
                   DateFormatter.defaultLocale,
-                  legacyFormat)
+                  legacyFormat,
+                  isParsing = false)
                 val date = formatter.format(days)
                 val parsed = formatter.parse(date)
                 assert(days === parsed)
@@ -173,7 +178,8 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
               DateFormatter.defaultPattern,
               getZoneId(timeZone),
               DateFormatter.defaultLocale,
-              legacyFormat)
+              legacyFormat,
+              isParsing = false)
             assert(LocalDate.ofEpochDay(formatter.parse("1000-01-01")) === LocalDate.of(1000, 1, 1))
             assert(formatter.format(LocalDate.of(1000, 1, 1)) === "1000-01-01")
             assert(formatter.format(localDateToDays(LocalDate.of(1000, 1, 1))) === "1000-01-01")

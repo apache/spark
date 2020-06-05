@@ -62,11 +62,11 @@ class Iso8601TimestampFormatter(
     zoneId: ZoneId,
     locale: Locale,
     legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
-    needVarLengthSecondFraction: Boolean)
+    isParsing: Boolean)
   extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
   protected lazy val formatter: DateTimeFormatter =
-    getOrCreateFormatter(pattern, locale, needVarLengthSecondFraction)
+    getOrCreateFormatter(pattern, locale, isParsing)
 
   @transient
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
@@ -122,7 +122,7 @@ class FractionTimestampFormatter(zoneId: ZoneId)
     zoneId,
     TimestampFormatter.defaultLocale,
     LegacyDateFormats.FAST_DATE_FORMAT,
-    needVarLengthSecondFraction = false) {
+    isParsing = false) {
 
   @transient
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
@@ -278,13 +278,7 @@ object LegacyDateFormats extends Enumeration {
 object TimestampFormatter {
   import LegacyDateFormats._
 
-  /**
-   * Before Spark 3.0, the first day-of-week is always Monday. Since Spark 3.0, it depends on the
-   * locale.
-   * We pick GB as the default locale instead of US, to be compatible with Spark 2.x, as US locale
-   * uses Sunday as the first day-of-week. See SPARK-31879.
-   */
-  val defaultLocale: Locale = new Locale("en", "GB")
+  val defaultLocale: Locale = Locale.US
 
   def defaultPattern(): String = s"${DateFormatter.defaultPattern} HH:mm:ss"
 
@@ -293,13 +287,13 @@ object TimestampFormatter {
       zoneId: ZoneId,
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
-      needVarLengthSecondFraction: Boolean = false): TimestampFormatter = {
+      isParsing: Boolean): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
       val tf = new Iso8601TimestampFormatter(
-        pattern, zoneId, locale, legacyFormat, needVarLengthSecondFraction)
+        pattern, zoneId, locale, legacyFormat, isParsing)
       tf.validatePatternString()
       tf
     }
@@ -325,27 +319,27 @@ object TimestampFormatter {
       zoneId: ZoneId,
       locale: Locale,
       legacyFormat: LegacyDateFormat,
-      needVarLengthSecondFraction: Boolean): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, locale, legacyFormat, needVarLengthSecondFraction)
+      isParsing: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, locale, legacyFormat, isParsing)
   }
 
   def apply(
       format: String,
       zoneId: ZoneId,
       legacyFormat: LegacyDateFormat,
-      needVarLengthSecondFraction: Boolean): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, needVarLengthSecondFraction)
+      isParsing: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, isParsing)
   }
 
   def apply(
       format: String,
       zoneId: ZoneId,
-      needVarLengthSecondFraction: Boolean = false): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, needVarLengthSecondFraction = needVarLengthSecondFraction)
+      isParsing: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, isParsing = isParsing)
   }
 
   def apply(zoneId: ZoneId): TimestampFormatter = {
-    getFormatter(None, zoneId)
+    getFormatter(None, zoneId, isParsing = false)
   }
 
   def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {
