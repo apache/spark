@@ -183,7 +183,8 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       .withWatermark("leftTime", "10 seconds")
 
     val df2 = rightInput.toDF.toDF("rightKey", "time")
-      .select('rightKey, timestamp_seconds($"time") as "rightTime", ('rightKey * 3) as "rightValue")
+      .select('rightKey, timestamp_seconds($"time") as "rightTime",
+        ('rightKey * 3) as "rightValue")
       .withWatermark("rightTime", "10 seconds")
 
     val joined =
@@ -241,7 +242,8 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       .withWatermark("leftTime", "20 seconds")
 
     val df2 = rightInput.toDF.toDF("rightKey", "time")
-      .select('rightKey, timestamp_seconds($"time") as "rightTime", ('rightKey * 3) as "rightValue")
+      .select('rightKey, timestamp_seconds($"time") as "rightTime",
+        ('rightKey * 3) as "rightValue")
       .withWatermark("rightTime", "30 seconds")
 
     val condition = expr(
@@ -688,7 +690,8 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
         .withWatermark("leftTime", "10 seconds")
 
       val df2 = rightInput.toDF.toDF("rightKey", "time")
-        .select('rightKey, timestamp_seconds($"time") as "rightTime", ('rightKey * 3) as "rightValue")
+        .select('rightKey, timestamp_seconds($"time") as "rightTime",
+          ('rightKey * 3) as "rightValue")
         .withWatermark("rightTime", "10 seconds")
 
       val joined =
