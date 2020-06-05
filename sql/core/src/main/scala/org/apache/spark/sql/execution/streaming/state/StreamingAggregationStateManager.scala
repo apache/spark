@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -61,9 +59,6 @@ sealed trait StreamingAggregationStateManager extends Serializable {
 
   /** Return an iterator containing all the values in target state store. */
   def values(store: StateStore): Iterator[UnsafeRow]
-
-  /** Check the UnsafeRow format with the expected schema */
-  def unsafeRowFormatValidation(row: UnsafeRow, schema: StructType): Unit
 }
 
 object StreamingAggregationStateManager extends Logging {
@@ -82,25 +77,12 @@ object StreamingAggregationStateManager extends Logging {
   }
 }
 
-/**
- * An exception thrown when an invalid UnsafeRow is detected.
- */
-class InvalidUnsafeRowException
-  extends SparkException("The streaming aggregation query failed by state format invalidation. " +
-    "The following reasons may cause this: 1. An old Spark version wrote the checkpoint that is " +
-    "incompatible with the current one; 2. Broken checkpoint files; 3. The query is changed " +
-    "among restart. For the first case, you can try to restart the application without " +
-    "checkpoint or use the legacy Spark version to process the streaming state.", null)
-
 abstract class StreamingAggregationStateManagerBaseImpl(
     protected val keyExpressions: Seq[Attribute],
     protected val inputRowAttributes: Seq[Attribute]) extends StreamingAggregationStateManager {
 
   @transient protected lazy val keyProjector =
     GenerateUnsafeProjection.generate(keyExpressions, inputRowAttributes)
-
-  // Consider about the cost, only check the UnsafeRow format for the first row
-  private var checkFormat = true
 
   override def getKey(row: UnsafeRow): UnsafeRow = keyProjector(row)
 
@@ -111,28 +93,6 @@ abstract class StreamingAggregationStateManagerBaseImpl(
   override def keys(store: StateStore): Iterator[UnsafeRow] = {
     // discard and don't convert values to avoid computation
     store.getRange(None, None).map(_.key)
-  }
-
-  override def unsafeRowFormatValidation(row: UnsafeRow, schema: StructType): Unit = {
-    if (checkFormat && SQLConf.get.getConf(
-        SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_CHECK_ENABLED) && row != null) {
-      if (schema.fields.length != row.numFields) {
-        throw new InvalidUnsafeRowException
-      }
-      schema.fields.zipWithIndex
-        .filterNot(field => UnsafeRow.isFixedLength(field._1.dataType)).foreach {
-        case (_, index) =>
-          val offsetAndSize = row.getLong(index)
-          val offset = (offsetAndSize >> 32).toInt
-          val size = offsetAndSize.toInt
-          if (size < 0 ||
-              offset < UnsafeRow.calculateBitSetWidthInBytes(row.numFields) + 8 * row.numFields ||
-              offset + size > row.getSizeInBytes) {
-            throw new InvalidUnsafeRowException
-          }
-      }
-      checkFormat = false
-    }
   }
 }
 
@@ -154,9 +114,7 @@ class StreamingAggregationStateManagerImplV1(
   override def getStateValueSchema: StructType = inputRowAttributes.toStructType
 
   override def get(store: StateStore, key: UnsafeRow): UnsafeRow = {
-    val res = store.get(key)
-    unsafeRowFormatValidation(res, inputRowAttributes.toStructType)
-    res
+    store.get(key)
   }
 
   override def put(store: StateStore, row: UnsafeRow): Unit = {
@@ -215,9 +173,7 @@ class StreamingAggregationStateManagerImplV2(
       return savedState
     }
 
-    val res = restoreOriginalRow(key, savedState)
-    unsafeRowFormatValidation(res, inputRowAttributes.toStructType)
-    res
+    restoreOriginalRow(key, savedState)
   }
 
   override def put(store: StateStore, row: UnsafeRow): Unit = {
