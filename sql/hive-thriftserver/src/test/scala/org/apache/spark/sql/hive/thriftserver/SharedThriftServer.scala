@@ -91,7 +91,7 @@ trait SharedThriftServer extends SharedSparkSession {
     }
   }
 
-  private def jdbcUri: String = if (mode == ServerMode.http) {
+  protected def jdbcUri: String = if (mode == ServerMode.http) {
     s"""jdbc:hive2://localhost:$serverPort/
        |default?
        |hive.server2.transport.mode=http;
