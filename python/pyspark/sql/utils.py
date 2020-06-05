@@ -44,7 +44,7 @@ class CapturedException(Exception):
         debug_enabled = sql_conf.pysparkJVMStacktraceEnabled()
         desc = self.desc
         if debug_enabled:
-            desc = desc + "\nJVM stacktrace:\n%s" % self.stackTrace
+            desc = desc + "\n\nJVM stacktrace:\n%s" % self.stackTrace
         # encode unicode instance for python2 for human readable description
         if sys.version_info.major < 3 and isinstance(desc, unicode):
             return str(desc.encode('utf-8'))
