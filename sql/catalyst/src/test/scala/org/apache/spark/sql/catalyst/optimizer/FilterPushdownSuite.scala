@@ -1279,6 +1279,26 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("inner join: rewrite complex join predicates to conjunctive normal form") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val joinCondition = (("x.b".attr === "y.b".attr)
+      && ((("x.a".attr === 5) && ("y.a".attr >= 2) && ("y.a".attr <= 3))
+      || (("x.a".attr === 2) && ("y.a".attr >= 1) && ("y.a".attr <= 14))
+      || (("x.a".attr === 1) && ("y.a".attr >= 9) && ("y.a".attr <= 27))))
+
+    val originalQuery = x.join(y, condition = Some(joinCondition))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where(
+      ('a === 5 || 'a === 2 || 'a === 1)).subquery('x)
+    val right = testRelation.where(
+      ('a >= 2 && 'a <= 3) || ('a >= 1 && 'a <= 14) || ('a >= 9 && 'a <= 27)).subquery('y)
+    val correctAnswer = left.join(right, condition = Some(joinCondition)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("inner join: rewrite join predicates(with NOT predicate) to conjunctive normal form") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
