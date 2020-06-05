@@ -604,8 +604,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_null_dataframe(self):
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False,
-                            "spark.sql.legacy.allowCastNumericToTimestamp": True}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
             import numpy as np
             sql = """
@@ -633,8 +632,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_mixed_dataframe(self):
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False,
-                            "spark.sql.legacy.allowCastNumericToTimestamp": True}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
             import numpy as np
             sql = """
@@ -646,7 +644,7 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(col6 AS DOUBLE) AS double,
             CAST(col7 AS BOOLEAN) AS boolean,
             CAST(col8 AS STRING) AS string,
-            CAST(col9 AS TIMESTAMP) AS timestamp
+            timestamp_seconds(col9) AS timestamp
             FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1),
                         (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
             """

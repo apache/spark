@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.expressions
 
-import org.scalatest.BeforeAndAfter
 import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.SparkFunSuite
@@ -28,16 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession with BeforeAndAfter {
-
-  before {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
-  }
-
-  after {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
-      SQLConf.get.legacyAllowCastNumericToTimestamp)
-  }
+class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
 
   test("Replace _FUNC_ in ExpressionInfo") {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("upper"))

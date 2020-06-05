@@ -29,7 +29,6 @@ import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.{LongWritable, Writable}
-import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -51,19 +50,10 @@ case class ListStringCaseClass(l: Seq[String])
 /**
  * A test suite for Hive custom UDFs.
  */
-class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfter{
+class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   import spark.udf
   import spark.implicits._
-
-  before {
-    spark.sessionState.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
-  }
-
-  after {
-    spark.sessionState.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
-      SQLConf.get.legacyAllowCastNumericToTimestamp)
-  }
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
@@ -444,8 +434,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils wi
     withTempView("tab1") {
       Seq(Tuple1(1451400761)).toDF("test_date").createOrReplaceTempView("tab1")
       sql(s"CREATE TEMPORARY FUNCTION testUDFToDate AS '${classOf[GenericUDFToDate].getName}'")
-      val count = sql("select testUDFToDate(cast(test_date as timestamp))" +
-        " from tab1 group by testUDFToDate(cast(test_date as timestamp))").count()
+      val count = sql("select testUDFToDate(timestamp_seconds(test_date))" +
+        " from tab1 group by testUDFToDate(timestamp_seconds(test_date))").count()
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToDate")
       assert(count == 1)
     }

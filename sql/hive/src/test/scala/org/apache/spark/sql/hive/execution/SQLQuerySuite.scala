@@ -25,7 +25,6 @@ import java.util.{Locale, Set}
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
@@ -69,19 +68,9 @@ case class Order(
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHiveSingleton
-  with BeforeAndAfter {
+abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
-
-  before {
-    spark.sessionState.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
-  }
-
-  after {
-    spark.sessionState.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
-      SQLConf.get.legacyAllowCastNumericToTimestamp)
-  }
 
   test("query global temp view") {
     val df = Seq(1).toDF("i1")
@@ -1183,7 +1172,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("SPARK-6785: HiveQuerySuite - Date comparison test 2") {
     checkAnswer(
-      sql("SELECT CAST(CAST(0 AS timestamp) AS date) > CAST(0 AS timestamp) FROM src LIMIT 1"),
+      sql("SELECT CAST(timestamp_seconds(0) AS date) > timestamp_seconds(0) FROM src LIMIT 1"),
       Row(false))
   }
 
@@ -1193,10 +1182,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       sql(
         """
           | SELECT
-          | CAST(CAST(0 AS timestamp) AS date),
-          | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
-          | CAST(0 AS timestamp),
-          | CAST(CAST(0 AS timestamp) AS string),
+          | CAST(timestamp_seconds(0) AS date),
+          | CAST(CAST(timestamp_seconds(0) AS date) AS string),
+          | timestamp_seconds(0),
+          | CAST(timestamp_seconds(0) AS string),
           | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
           | FROM src LIMIT 1
         """.stripMargin),

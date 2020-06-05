@@ -534,7 +534,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. note:: Evolving
 
-        # >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
+        >>> sdf.select('name', timestamp_seconds(sdf.time).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
         """
         if not eventTime or type(eventTime) is not str:

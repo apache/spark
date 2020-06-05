@@ -26,22 +26,15 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
-  import org.apache.spark.sql.internal.SQLConf
-
-  before {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
-  }
 
   after {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
-      SQLConf.get.legacyAllowCastNumericToTimestamp)
     sqlContext.streams.active.foreach(_.stop())
   }
 
@@ -170,7 +163,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as 'window)
       .agg(count("*") as 'count)
@@ -204,7 +197,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as 'window)
       .agg(count("*") as 'count)

@@ -43,7 +43,7 @@ select
   ,cast (cint as float)
   ,cast (cdouble as float)
 -- to timestamp
-  ,cast (ctinyint as timestamp)
+  ,timestamp_seconds (ctinyint as timestamp)
   ,cast (csmallint as timestamp)
   ,cast (cint as timestamp)
   ,cast (cbigint as timestamp)

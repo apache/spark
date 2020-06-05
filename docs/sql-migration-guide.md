@@ -28,7 +28,7 @@ license: |
 
   - In Spark 3.1, SQL UI data adopts the `formatted` mode for the query plan explain results. To restore the behavior before Spark 3.0, you can set `spark.sql.ui.explainMode` to `extended`.
   
-  - In Spark 3.1, casting numeric to timestamp and  will be forbidden by default, user can enable it by setting spark.sql.legacy.allowCastNumericToTimestamp to true, and functions(TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS) are strongly recommended to avoid possible inaccurate scenes, [SPARK-31710](https://issues.apache.org/jira/browse/SPARK-31710) for more details.
+  - In Spark 3.1, casting numeric to timestamp will be forbidden by default. It's strongly recommended to use dedicated functions: TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS. Or you can setting `spark.sql.legacy.allowCastNumericToTimestamp` to true to work around it. See more details in SPARK-31710.
   
 ## Upgrading from Spark SQL 2.4 to 3.0
 

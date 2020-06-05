@@ -23,7 +23,7 @@ import java.util.{Locale, TimeZone}
 import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.{Assertions, BeforeAndAfter}
+import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.rdd.BlockRDD
@@ -48,18 +48,9 @@ object FailureSingleton {
   var firstTime = true
 }
 
-class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions with BeforeAndAfter{
+class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
   import testImplicits._
-
-  before {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
-  }
-
-  after {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
-      SQLConf.get.legacyAllowCastNumericToTimestamp)
-  }
 
   def executeFuncWithStateVersionSQLConf(
       stateVersion: Int,
@@ -197,7 +188,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions wi
   testWithAllStateVersions("state metrics - append mode") {
     val inputData = MemoryStream[Int]
     val aggWithWatermark = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as 'window)
       .agg(count("*") as 'count)

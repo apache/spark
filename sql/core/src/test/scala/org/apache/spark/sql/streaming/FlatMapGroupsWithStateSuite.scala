@@ -21,7 +21,7 @@ import java.io.File
 import java.sql.Date
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, MemoryStateStore, StateStore, StateStoreId, StateStoreMetrics, UnsafeRowPair}
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -45,21 +46,12 @@ case class RunningCount(count: Long)
 
 case class Result(key: Long, count: Int)
 
-class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfter {
+class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
   import testImplicits._
   import GroupStateImpl._
   import GroupStateTimeout._
   import FlatMapGroupsWithStateSuite._
-
-  before {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
-  }
-
-  after {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
-      SQLConf.get.legacyAllowCastNumericToTimestamp)
-  }
 
   test("GroupState - get, exists, update, remove") {
     var state: GroupStateImpl[String] = null
@@ -835,7 +827,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS
-        .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
+        .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
         .withWatermark("eventTime", "10 seconds")
         .as[(String, Long)]
         .groupByKey(_._1)
@@ -910,7 +902,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS
-        .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
+        .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
         .withWatermark("eventTime", "10 seconds")
         .as[(String, Long)]
         .groupByKey(_._1)
@@ -1120,7 +1112,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       val inputData = MemoryStream[(String, Long)]
       val result =
         inputData.toDF().toDF("key", "time")
-          .selectExpr("key", "cast(time as timestamp) as timestamp")
+          .selectExpr("key", "timestamp_seconds(time) as timestamp")
           .withWatermark("timestamp", "10 second")
           .as[(String, Long)]
           .groupByKey(x => x._1)

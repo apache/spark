@@ -23,8 +23,6 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -34,17 +32,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class DateFunctionsSuite extends QueryTest with SharedSparkSession with BeforeAndAfter{
+class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  before {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
-  }
-
-  after {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
-      SQLConf.get.legacyAllowCastNumericToTimestamp)
-  }
   test("function current_date") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
     val d0 = DateTimeUtils.currentDate(ZoneId.systemDefault())
@@ -649,7 +639,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession with BeforeAn
 
         val now = sql("select unix_timestamp()").collect().head.getLong(0)
         checkAnswer(
-          sql(s"select cast ($now as timestamp)"),
+          sql(s"select timestamp_seconds($now)"),
           Row(new java.util.Date(TimeUnit.SECONDS.toMillis(now))))
       }
     }
@@ -725,7 +715,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession with BeforeAn
         val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
 
         checkAnswer(df.select(to_timestamp(col("ss"))),
-          df.select(unix_timestamp(col("ss")).cast("timestamp")))
+          df.select(timestamp_seconds(unix_timestamp(col("ss")))))
         checkAnswer(df.select(to_timestamp(col("ss"))), Seq(
           Row(ts1), Row(ts2)))
         if (legacyParserPolicy == "legacy") {

@@ -22,7 +22,6 @@ import java.net.URI
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
-import org.scalatest.BeforeAndAfter
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -30,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
@@ -40,18 +40,8 @@ import org.apache.spark.util.Utils
 /**
  * End-to-end suite testing statistics collection and use on both entire table and columns.
  */
-class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSparkSession
-  with BeforeAndAfter{
+class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSparkSession {
   import testImplicits._
-
-  before {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
-  }
-
-  after {
-    sqlContext.conf.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
-      SQLConf.get.legacyAllowCastNumericToTimestamp)
-  }
 
   test("estimates the size of a limit 0 on outer join") {
     withTempView("test") {
@@ -478,7 +468,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         withTable(table) {
           TimeZone.setDefault(srcTimeZone)
           spark.range(start, end)
-            .select('id.cast(TimestampType).cast(t).as(column))
+            .select(timestamp_seconds($"id").cast(t).as(column))
             .write.saveAsTable(table)
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
 
