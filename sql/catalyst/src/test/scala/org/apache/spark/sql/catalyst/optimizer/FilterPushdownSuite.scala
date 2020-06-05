@@ -1293,7 +1293,14 @@ class FilterPushdownSuite extends PlanTest {
     val left = testRelation.where(
       ('a === 5 || 'a === 2 || 'a === 1)).subquery('x)
     val right = testRelation.where(
-      ('a >= 2 && 'a <= 3) || ('a >= 1 && 'a <= 14) || ('a >= 9 && 'a <= 27)).subquery('y)
+      ('a >= 2 || 'a >= 1 || 'a >= 9) &&
+        ('a >= 2 || 'a >= 1 || 'a <= 27) &&
+        ('a >= 2 || 'a <=14 || 'a >= 9) &&
+        ('a >= 2 || 'a <=14 || 'a <= 27) &&
+        ('a <= 3 || 'a >= 1 || 'a >= 9) &&
+        ('a <= 3 || 'a >= 1 || 'a <= 27) &&
+        ('a <= 3 || 'a <=14 || 'a >= 9) &&
+        ('a <= 3 || 'a <=14 || 'a <= 27)).subquery('y)
     val correctAnswer = left.join(right, condition = Some(joinCondition)).analyze
 
     comparePlans(optimized, correctAnswer)

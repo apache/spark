@@ -556,7 +556,7 @@ object SQLConf {
       .intConf
       .checkValue(_ >= 0,
         "The depth of the maximum rewriting conjunction normal form must be positive.")
-      .createWithDefault(20)
+      .createWithDefault(256)
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
