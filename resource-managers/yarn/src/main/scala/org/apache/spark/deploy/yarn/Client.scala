@@ -637,7 +637,7 @@ private[spark] class Client(
 
     pySparkArchives.foreach { f =>
       val uri = Utils.resolveURI(f)
-      if (uri.getScheme != LOCAL_SCHEME) {
+      if (uri.getScheme != Utils.LOCAL_SCHEME) {
         distribute(f)
       }
     }
