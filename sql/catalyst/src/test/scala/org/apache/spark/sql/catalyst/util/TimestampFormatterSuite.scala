@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{DateTimeException, Instant, LocalDate, LocalDateTime, LocalTime}
+import java.time.{DateTimeException, Instant, LocalDateTime, LocalTime}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkUpgradeException
-
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
