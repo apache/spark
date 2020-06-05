@@ -91,7 +91,7 @@ class Iso8601TimestampFormatter(
   override def format(instant: Instant): String = {
     try {
       formatter.withZone(zoneId).format(instant)
-    } catch checkDiffFormatResult(toJavaTimestamp(instantToMicros(instant)),
+    } catch checkFormattedDiff(toJavaTimestamp(instantToMicros(instant)),
       (t: Timestamp) => format(t))
   }
 

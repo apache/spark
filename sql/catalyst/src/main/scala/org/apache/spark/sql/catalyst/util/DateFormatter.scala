@@ -65,7 +65,7 @@ class Iso8601DateFormatter(
   override def format(localDate: LocalDate): String = {
     try {
       localDate.format(formatter)
-    } catch checkDiffFormatResult(toJavaDate(localDateToDays(localDate)),
+    } catch checkFormattedDiff(toJavaDate(localDateToDays(localDate)),
       (d: Date) => format(d))
   }
 

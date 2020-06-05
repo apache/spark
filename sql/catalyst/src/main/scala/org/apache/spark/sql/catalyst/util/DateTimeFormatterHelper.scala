@@ -134,7 +134,7 @@ trait DateTimeFormatterHelper {
   // between legacy formatter and new formatter. If new formatter fails but legacy formatter works,
   // throw a SparkUpgradeException. On the contrary, if the legacy policy set to CORRECTED,
   // DateTimeParseException will address by the caller side.
-  protected def checkDiffFormatResult[T <: Date](
+  protected def checkFormattedDiff[T <: Date](
       d: T,
       legacyFormatFunc: T => String): PartialFunction[Throwable, String] = {
     case e if needConvertToSparkUpgradeException(e) =>
