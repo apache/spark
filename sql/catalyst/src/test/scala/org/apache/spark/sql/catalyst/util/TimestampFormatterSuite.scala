@@ -418,4 +418,19 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     val t5 = f3.parse("AM")
     assert(t5 === date(1970))
   }
+
+  test("check result differences for datetime formatting") {
+    val formatter = TimestampFormatter("DD", UTC, isParsing = false)
+    assert(formatter.format(date(1970, 1, 3)) == "03")
+    assert(formatter.format(date(1970, 4, 9)) == "99")
+
+    if (System.getProperty("java.version").split("\\D+")(0).toInt < 9) {
+      // https://bugs.openjdk.java.net/browse/JDK-8079628
+      intercept[SparkUpgradeException] {
+        formatter.format(date(1970, 4, 10))
+      }
+    } else {
+      assert(formatter.format(date(1970, 4, 10)) == "100")
+    }
+  }
 }
