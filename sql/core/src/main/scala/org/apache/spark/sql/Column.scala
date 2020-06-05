@@ -142,8 +142,6 @@ class TypedColumn[-T, U](
 @Stable
 class Column(val expr: Expression) extends Logging {
 
-  import org.apache.spark.sql.functions.withExpr
-
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
     case _ if name.endsWith(".*") =>
@@ -1046,18 +1044,6 @@ class Column(val expr: Expression) extends Logging {
   def name(alias: String): Column = withExpr {
     Alias(expr, alias)()
   }
-
-  /**
-    *usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
-    * examples = """
-    * Examples:
-    * > SELECT _FUNC_(1230219000);
-    * 2008-12-25 07:30:00
-    * """,
-    * group = "datetime_funcs",
-    * since = "3.1.0")
-    */
-  def timestamp_seconds(e: Column): Column = withExpr { SecondsToTimestamp(e.expr) }
 
   /**
    * Casts the column to a different data type.

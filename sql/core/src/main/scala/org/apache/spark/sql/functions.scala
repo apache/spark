@@ -3358,15 +3358,15 @@ object functions {
     window(timeColumn, windowDuration, windowDuration, "0 second")
   }
 
-  /**
-    *usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
+   /**
+    * usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
     * examples = """
     * Examples:
     * > SELECT _FUNC_(1230219000);
     * 2008-12-25 07:30:00
     * """,
-    * group = "datetime_funcs",
-    * since = "3.1.0")
+    * @group = "datetime_funcs",
+    * @since = "3.1.0")
     */
   def timestamp_seconds(e: Column): Column = withExpr { SecondsToTimestamp(e.expr) }
 
