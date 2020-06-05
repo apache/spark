@@ -84,12 +84,15 @@ class Iso8601TimestampFormatter(
         val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
         Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
-      } catch checkDiffResult(s, legacyFormatter.parse)
+      } catch checkParsedDiff(s, legacyFormatter.parse)
     }
   }
 
   override def format(instant: Instant): String = {
-    formatter.withZone(zoneId).format(instant)
+    try {
+      formatter.withZone(zoneId).format(instant)
+    } catch checkDiffFormatResult(toJavaTimestamp(instantToMicros(instant)),
+      (t: Timestamp) => format(t))
   }
 
   override def format(us: Long): String = {

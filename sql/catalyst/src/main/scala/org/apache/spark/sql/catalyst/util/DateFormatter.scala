@@ -58,12 +58,15 @@ class Iso8601DateFormatter(
       try {
         val localDate = toLocalDate(formatter.parse(s))
         localDateToDays(localDate)
-      } catch checkDiffResult(s, legacyFormatter.parse)
+      } catch checkParsedDiff(s, legacyFormatter.parse)
     }
   }
 
   override def format(localDate: LocalDate): String = {
-    localDate.format(formatter)
+    try {
+      localDate.format(formatter)
+    } catch checkDiffFormatResult(toJavaDate(localDateToDays(localDate)),
+      (d: Date) => format(d))
   }
 
   override def format(days: Int): String = {
