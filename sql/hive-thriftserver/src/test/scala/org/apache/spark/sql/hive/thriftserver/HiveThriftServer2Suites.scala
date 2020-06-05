@@ -19,34 +19,26 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.{File, FilenameFilter}
 import java.net.URL
-import java.nio.charset.StandardCharsets
-import java.sql.{Date, DriverManager, SQLException, Statement}
-import java.util.{Locale, UUID}
+import java.sql.{Date, SQLException}
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.io.Source
-import scala.util.{Random, Try}
 
-import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.{FetchOrientation, FetchType, GetInfoType, RowSet}
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
-import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 object TestData {
@@ -58,13 +50,11 @@ object TestData {
   val smallKvWithNull = getTestDataFilePath("small_kv_with_null.txt")
 }
 
-class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
-  override def mode: ServerMode.Value = ServerMode.binary
+class HiveThriftBinaryServerSuite extends SharedThriftServer {
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
     // Transport creation logic below mimics HiveConnection.createBinaryTransport
     val rawTransport = new TSocket("localhost", serverPort)
-    val user = System.getProperty("user.name")
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val protocol = new TBinaryProtocol(transport)
     val client = new ThriftCLIServiceClient(new ThriftserverShimUtils.Client(protocol))
@@ -75,7 +65,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
   test("GetInfo Thrift API") {
     withCLIServiceClient { client =>
-      val user = System.getProperty("user.name")
       val sessionHandle = client.openSession(user, "")
 
       assertResult("Spark SQL", "Wrong GetInfo(CLI_DBMS_NAME) result") {
@@ -96,7 +85,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
   test("SPARK-16563 ThriftCLIService FetchResults repeat fetching result") {
     withCLIServiceClient { client =>
-      val user = System.getProperty("user.name")
       val sessionHandle = client.openSession(user, "")
 
       withJdbcStatement("test_16563") { statement =>
@@ -619,14 +607,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("SPARK-11043 check operation log root directory") {
-    val expectedLine =
-      "Operation log root directory is created: " + operationLogPath.getAbsoluteFile
-    val bufferSrc = Source.fromFile(logPath)
-    Utils.tryWithSafeFinally {
-      assert(bufferSrc.getLines().exists(_.contains(expectedLine)))
-    } {
-      bufferSrc.close()
-    }
+    assert(operationLogPath.exists())
   }
 
   test("SPARK-23547 Cleanup the .pipeout file when the Hive Session closed") {
@@ -639,7 +620,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
 
     withCLIServiceClient { client =>
-      val user = System.getProperty("user.name")
       val sessionHandle = client.openSession(user, "")
       val sessionID = sessionHandle.getSessionId
 
@@ -774,7 +754,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
   test("SPARK-29492: use add jar in sync mode") {
     withCLIServiceClient { client =>
-      val user = System.getProperty("user.name")
       val sessionHandle = client.openSession(user, "")
       withJdbcStatement("smallKV", "addJar") { statement =>
         val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
@@ -868,11 +847,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 }
 
-class SingleSessionSuite extends HiveThriftJdbcTest {
-  override def mode: ServerMode.Value = ServerMode.binary
-
-  override protected def extraConf: Seq[String] =
-    s"--conf ${HIVE_THRIFT_SERVER_SINGLESESSION.key}=true" :: Nil
+class SingleSessionSuite extends SharedThriftServer {
+  override def sparkConf: SparkConf = {
+    super.sparkConf
+      .set(HIVE_THRIFT_SERVER_SINGLESESSION, true)
+  }
 
   test("share the temporary functions across JDBC connections") {
     withMultipleConnectionJdbcStatement()(
@@ -979,10 +958,10 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
   }
 }
 
-class HiveThriftCleanUpScratchDirSuite extends HiveThriftJdbcTest{
+class HiveThriftCleanUpScratchDirSuite extends SharedThriftServer {
   var tempScratchDir: File = _
 
-  override protected def beforeAll(): Unit = {
+  override def beforeAll(): Unit = {
     tempScratchDir = Utils.createTempDir()
     tempScratchDir.setWritable(true, false)
     assert(tempScratchDir.list().isEmpty)
@@ -991,11 +970,9 @@ class HiveThriftCleanUpScratchDirSuite extends HiveThriftJdbcTest{
     super.beforeAll()
   }
 
-  override def mode: ServerMode.Value = ServerMode.binary
-
-  override protected def extraConf: Seq[String] =
-    s" --hiveconf ${ConfVars.HIVE_START_CLEANUP_SCRATCHDIR}=true " ::
-       s"--hiveconf ${ConfVars.SCRATCHDIR}=${tempScratchDir.getAbsolutePath}" :: Nil
+  override def extraConf: Map[String, String] = Map(
+    ConfVars.HIVE_START_CLEANUP_SCRATCHDIR.varname -> "true",
+    ConfVars.SCRATCHDIR.varname -> tempScratchDir.getAbsolutePath)
 
   test("Cleanup the Hive scratchdir when starting the Hive Server") {
     assert(!tempScratchDir.exists())
@@ -1006,13 +983,13 @@ class HiveThriftCleanUpScratchDirSuite extends HiveThriftJdbcTest{
     }
   }
 
-  override protected def afterAll(): Unit = {
+  override def afterAll(): Unit = {
     Utils.deleteRecursively(tempScratchDir)
     super.afterAll()
   }
 }
 
-class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
+class HiveThriftHttpServerSuite extends SharedThriftServer {
   override def mode: ServerMode.Value = ServerMode.http
 
   test("JDBC query execution") {
@@ -1053,291 +1030,4 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
 
 object ServerMode extends Enumeration {
   val binary, http = Value
-}
-
-abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
-  Utils.classForName(classOf[HiveDriver].getCanonicalName)
-
-  private def jdbcUri = if (mode == ServerMode.http) {
-    s"""jdbc:hive2://localhost:$serverPort/
-       |default?
-       |hive.server2.transport.mode=http;
-       |hive.server2.thrift.http.path=cliservice;
-       |${hiveConfList}#${hiveVarList}
-     """.stripMargin.split("\n").mkString.trim
-  } else {
-    s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
-  }
-
-  def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*): Unit = {
-    val user = System.getProperty("user.name")
-    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
-    val statements = connections.map(_.createStatement())
-
-    try {
-      statements.zip(fs).foreach { case (s, f) => f(s) }
-    } finally {
-      tableNames.foreach { name =>
-        // TODO: Need a better way to drop the view.
-        if (name.toUpperCase(Locale.ROOT).startsWith("VIEW")) {
-          statements(0).execute(s"DROP VIEW IF EXISTS $name")
-        } else {
-          statements(0).execute(s"DROP TABLE IF EXISTS $name")
-        }
-      }
-      statements.foreach(_.close())
-      connections.foreach(_.close())
-    }
-  }
-
-  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*): Unit = {
-    val user = System.getProperty("user.name")
-    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
-    val statements = connections.map(_.createStatement())
-
-    try {
-      statements.zip(fs).foreach { case (s, f) => f(s) }
-    } finally {
-      dbNames.foreach { name =>
-        statements(0).execute(s"DROP DATABASE IF EXISTS $name")
-      }
-      statements.foreach(_.close())
-      connections.foreach(_.close())
-    }
-  }
-
-  def withJdbcStatement(tableNames: String*)(f: Statement => Unit): Unit = {
-    withMultipleConnectionJdbcStatement(tableNames: _*)(f)
-  }
-}
-
-abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAll with Logging {
-  def mode: ServerMode.Value
-
-  private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")
-  private val LOG_FILE_MARK = s"starting $CLASS_NAME, logging to "
-
-  protected val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
-  protected val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
-
-  private var listeningPort: Int = _
-  protected def serverPort: Int = listeningPort
-
-  protected val hiveConfList = "a=avalue;b=bvalue"
-  protected val hiveVarList = "c=cvalue;d=dvalue"
-  protected def user = System.getProperty("user.name")
-
-  protected var warehousePath: File = _
-  protected var metastorePath: File = _
-  protected def metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
-
-  private val pidDir: File = Utils.createTempDir(namePrefix = "thriftserver-pid")
-  protected var logPath: File = _
-  protected var operationLogPath: File = _
-  protected var lScratchDir: File = _
-  private var logTailingProcess: Process = _
-  private var diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
-
-  protected def extraConf: Seq[String] = Nil
-
-  protected def serverStartCommand(port: Int) = {
-    val portConf = if (mode == ServerMode.binary) {
-      ConfVars.HIVE_SERVER2_THRIFT_PORT
-    } else {
-      ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT
-    }
-
-    val driverClassPath = {
-      // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
-      // overrides all other potential log4j configurations contained in other dependency jar files.
-      val tempLog4jConf = Utils.createTempDir().getCanonicalPath
-
-      Files.write(
-        """log4j.rootCategory=DEBUG, console
-          |log4j.appender.console=org.apache.log4j.ConsoleAppender
-          |log4j.appender.console.target=System.err
-          |log4j.appender.console.layout=org.apache.log4j.PatternLayout
-          |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
-        """.stripMargin,
-        new File(s"$tempLog4jConf/log4j.properties"),
-        StandardCharsets.UTF_8)
-
-      tempLog4jConf
-    }
-
-    s"""$startScript
-       |  --master local
-       |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-       |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-       |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
-       |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
-       |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
-       |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
-       |  --hiveconf $portConf=$port
-       |  --driver-class-path $driverClassPath
-       |  --driver-java-options -Dlog4j.debug
-       |  --conf spark.ui.enabled=false
-       |  ${extraConf.mkString("\n")}
-     """.stripMargin.split("\\s+").toSeq
-  }
-
-  /**
-   * String to scan for when looking for the thrift binary endpoint running.
-   * This can change across Hive versions.
-   */
-  val THRIFT_BINARY_SERVICE_LIVE = "Starting ThriftBinaryCLIService on port"
-
-  /**
-   * String to scan for when looking for the thrift HTTP endpoint running.
-   * This can change across Hive versions.
-   */
-  val THRIFT_HTTP_SERVICE_LIVE = "Started ThriftHttpCLIService in http"
-
-  val SERVER_STARTUP_TIMEOUT = 3.minutes
-
-  private def startThriftServer(port: Int, attempt: Int) = {
-    warehousePath = Utils.createTempDir()
-    warehousePath.delete()
-    metastorePath = Utils.createTempDir()
-    metastorePath.delete()
-    operationLogPath = Utils.createTempDir()
-    operationLogPath.delete()
-    lScratchDir = Utils.createTempDir()
-    lScratchDir.delete()
-    logPath = null
-    logTailingProcess = null
-
-    val command = serverStartCommand(port)
-
-    diagnosisBuffer ++=
-      s"""
-         |### Attempt $attempt ###
-         |HiveThriftServer2 command line: $command
-         |Listening port: $port
-         |System user: $user
-       """.stripMargin.split("\n")
-
-    logInfo(s"Trying to start HiveThriftServer2: port=$port, mode=$mode, attempt=$attempt")
-
-    logPath = {
-      val lines = Utils.executeAndGetOutput(
-        command = command,
-        extraEnvironment = Map(
-          // Disables SPARK_TESTING to exclude log4j.properties in test directories.
-          "SPARK_TESTING" -> "0",
-          // But set SPARK_SQL_TESTING to make spark-class happy.
-          "SPARK_SQL_TESTING" -> "1",
-          // Points SPARK_PID_DIR to SPARK_HOME, otherwise only 1 Thrift server instance can be
-          // started at a time, which is not Jenkins friendly.
-          "SPARK_PID_DIR" -> pidDir.getCanonicalPath),
-        redirectStderr = true)
-
-      logInfo(s"COMMAND: $command")
-      logInfo(s"OUTPUT: $lines")
-      lines.split("\n").collectFirst {
-        case line if line.contains(LOG_FILE_MARK) => new File(line.drop(LOG_FILE_MARK.length))
-      }.getOrElse {
-        throw new RuntimeException("Failed to find HiveThriftServer2 log file.")
-      }
-    }
-
-    val serverStarted = Promise[Unit]()
-
-    // Ensures that the following "tail" command won't fail.
-    logPath.createNewFile()
-    val successLines = Seq(THRIFT_BINARY_SERVICE_LIVE, THRIFT_HTTP_SERVICE_LIVE)
-
-    logTailingProcess = {
-      val command = s"/usr/bin/env tail -n +0 -f ${logPath.getCanonicalPath}".split(" ")
-      // Using "-n +0" to make sure all lines in the log file are checked.
-      val builder = new ProcessBuilder(command: _*)
-      val captureOutput = (line: String) => diagnosisBuffer.synchronized {
-        diagnosisBuffer += line
-
-        successLines.foreach { r =>
-          if (line.contains(r)) {
-            serverStarted.trySuccess(())
-          }
-        }
-      }
-
-        val process = builder.start()
-
-      new ProcessOutputCapturer(process.getInputStream, captureOutput).start()
-      new ProcessOutputCapturer(process.getErrorStream, captureOutput).start()
-      process
-    }
-
-    ThreadUtils.awaitResult(serverStarted.future, SERVER_STARTUP_TIMEOUT)
-  }
-
-  private def stopThriftServer(): Unit = {
-    // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
-    Utils.executeAndGetOutput(
-      command = Seq(stopScript),
-      extraEnvironment = Map("SPARK_PID_DIR" -> pidDir.getCanonicalPath))
-    Thread.sleep(3.seconds.toMillis)
-
-    warehousePath.delete()
-    warehousePath = null
-
-    metastorePath.delete()
-    metastorePath = null
-
-    operationLogPath.delete()
-    operationLogPath = null
-
-    lScratchDir.delete()
-    lScratchDir = null
-
-    Option(logPath).foreach(_.delete())
-    logPath = null
-
-    Option(logTailingProcess).foreach(_.destroy())
-    logTailingProcess = null
-  }
-
-  private def dumpLogs(): Unit = {
-    logError(
-      s"""
-         |=====================================
-         |HiveThriftServer2Suite failure output
-         |=====================================
-         |${diagnosisBuffer.mkString("\n")}
-         |=========================================
-         |End HiveThriftServer2Suite failure output
-         |=========================================
-       """.stripMargin)
-  }
-
-  override protected def beforeAll(): Unit = {
-    super.beforeAll()
-    // Chooses a random port between 10000 and 19999
-    listeningPort = 10000 + Random.nextInt(10000)
-    diagnosisBuffer.clear()
-
-    // Retries up to 3 times with different port numbers if the server fails to start
-    (1 to 3).foldLeft(Try(startThriftServer(listeningPort, 0))) { case (started, attempt) =>
-      started.orElse {
-        listeningPort += 1
-        stopThriftServer()
-        Try(startThriftServer(listeningPort, attempt))
-      }
-    }.recover {
-      case cause: Throwable =>
-        dumpLogs()
-        throw cause
-    }.get
-
-    logInfo(s"HiveThriftServer2 started successfully")
-  }
-
-  override protected def afterAll(): Unit = {
-    try {
-      stopThriftServer()
-      logInfo("HiveThriftServer2 stopped")
-    } finally {
-      super.afterAll()
-    }
-  }
 }

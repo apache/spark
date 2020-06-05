@@ -29,16 +29,13 @@ import org.apache.thrift.transport.TSocket
 import org.apache.spark.sql.catalyst.util.NumberConverter
 import org.apache.spark.unsafe.types.UTF8String
 
-class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
-
-  override def mode: ServerMode.Value = ServerMode.binary
+class SparkThriftServerProtocolVersionsSuite extends SharedThriftServer {
 
   def testExecuteStatementWithProtocolVersion(
       version: ThriftserverShimUtils.TProtocolVersion,
       sql: String)(f: HiveQueryResultSet => Unit): Unit = {
     val rawTransport = new TSocket("localhost", serverPort)
     val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
-    val user = System.getProperty("user.name")
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val client = new ThriftserverShimUtils.Client(new TBinaryProtocol(transport))
     transport.open()

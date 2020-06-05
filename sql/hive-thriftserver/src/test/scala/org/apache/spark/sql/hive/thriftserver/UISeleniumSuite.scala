@@ -17,26 +17,25 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.util.Random
-
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.{BeforeAndAfterAll, Matchers}
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 
+import org.apache.spark.SparkConf
 import org.apache.spark.ui.SparkUICssErrorHandler
 
-class UISeleniumSuite
-  extends HiveThriftJdbcTest
+class UISeleniumSuite extends SharedThriftServer
   with WebBrowser with Matchers with BeforeAndAfterAll {
 
   implicit var webDriver: WebDriver = _
-  var server: HiveThriftServer2 = _
-  val uiPort = 20000 + Random.nextInt(10000)
-  override def mode: ServerMode.Value = ServerMode.binary
+
+  override def sparkConf: SparkConf = {
+    super.sparkConf
+      .set("spark.ui.enabled", "true")
+      .set("spark.ui.port", "0")
+  }
 
   override def beforeAll(): Unit = {
     webDriver = new HtmlUnitDriver {
@@ -55,30 +54,9 @@ class UISeleniumSuite
     }
   }
 
-  override protected def serverStartCommand(port: Int) = {
-    val portConf = if (mode == ServerMode.binary) {
-      ConfVars.HIVE_SERVER2_THRIFT_PORT
-    } else {
-      ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT
-    }
-
-    s"""$startScript
-        |  --master local
-        |  --hiveconf hive.root.logger=INFO,console
-        |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-        |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
-        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
-        |  --hiveconf $portConf=$port
-        |  --driver-class-path ${sys.props("java.class.path")}
-        |  --conf spark.ui.enabled=true
-        |  --conf spark.ui.port=$uiPort
-     """.stripMargin.split("\\s+").toSeq
-  }
-
-  ignore("thrift server ui test") {
+  test("thrift server ui test") {
     withJdbcStatement("test_map") { statement =>
-      val baseURL = s"http://localhost:$uiPort"
+      val baseURL = spark.sparkContext.uiWebUrl.get
 
       val queries = Seq(
         "CREATE TABLE test_map(key INT, value STRING)",
@@ -92,13 +70,14 @@ class UISeleniumSuite
       }
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
-        go to (baseURL + "/sql")
+        go to (baseURL + "/sqlserver")
         find(id("sessionstat")) should not be None
         find(id("sqlstat")) should not be None
 
         // check whether statements exists
         queries.foreach { line =>
-          findAll(cssSelector("""ul table tbody tr td""")).map(_.text).toList should contain (line)
+          findAll(cssSelector("""table tbody tr td span"""))
+            .map(_.text).toList should contain (line)
         }
       }
     }

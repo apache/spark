@@ -19,9 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.{DatabaseMetaData, ResultSet}
 
-class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
-
-  override def mode: ServerMode.Value = ServerMode.binary
+class SparkMetadataOperationSuite extends SharedThriftServer {
 
   test("Spark's own GetSchemasOperation(SparkGetSchemasOperation)") {
     def checkResult(rs: ResultSet, dbNames: Seq[String]): Unit = {
