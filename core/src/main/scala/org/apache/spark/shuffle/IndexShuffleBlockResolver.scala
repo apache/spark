@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getSortBasedShuffleBlockData().
 private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
-    _blockManager: BlockManager = null)
+    var _blockManager: BlockManager = null)
   extends ShuffleBlockResolver
   with Logging with MigratableResolver {
 

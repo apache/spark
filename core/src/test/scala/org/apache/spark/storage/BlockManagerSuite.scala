@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.File
 import java.nio.ByteBuffer
+import java.nio.file.Files
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -50,7 +51,7 @@ import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, Transpo
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExecutorDiskUtils, ExternalBlockStoreClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerBlockUpdated}
+import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, SparkListenerBlockUpdated}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -100,7 +101,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       name: String = SparkContext.DRIVER_IDENTIFIER,
       master: BlockManagerMaster = this.master,
       transferService: Option[BlockTransferService] = Option.empty,
-      testConf: Option[SparkConf] = None): BlockManager = {
+      testConf: Option[SparkConf] = None,
+      shuffleManager: SortShuffleManager = shuffleManager): BlockManager = {
     val bmConf = testConf.map(_.setAll(conf.getAll)).getOrElse(conf)
     bmConf.set(TEST_MEMORY, maxMem)
     bmConf.set(MEMORY_OFFHEAP_SIZE, maxMem)
@@ -1762,6 +1764,46 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockIdSmall) === Seq(store2.blockManagerId))
     // Larger block still present in store1 as it can't be offloaded
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
+  }
+
+  test("test migration of shuffle blocks during decommissioning") {
+    val shuffleManager1 = new SortShuffleManager(new SparkConf(false))
+    val bm1 = makeBlockManager(3500, "exec1", shuffleManager = shuffleManager1)
+    shuffleManager1.shuffleBlockResolver._blockManager = bm1
+
+    val shuffleManager2 = new SortShuffleManager(new SparkConf(false))
+    val bm2 = makeBlockManager(3500, "exec2", shuffleManager = shuffleManager2)
+    shuffleManager2.shuffleBlockResolver._blockManager = bm2
+
+    val blockSize = 5
+    val shuffleDataBlockContent = Array[Byte](0, 1, 2, 3, 4)
+    val shuffleData = ShuffleDataBlockId(0, 0, 0)
+    Files.write(bm1.diskBlockManager.getFile(shuffleData).toPath(), shuffleDataBlockContent)
+    val shuffleIndexBlockContent = Array[Byte](5, 6, 7, 8, 9)
+    val shuffleIndex = ShuffleIndexBlockId(0, 0, 0)
+    Files.write(bm1.diskBlockManager.getFile(shuffleIndex).toPath(), shuffleIndexBlockContent)
+
+    mapOutputTracker.registerShuffle(0, 1)
+    try {
+      mapOutputTracker.registerMapOutput(0, 0, MapStatus(bm1.blockManagerId, Array(blockSize), 0))
+      assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm1.blockManagerId)
+
+      val env = mock(classOf[SparkEnv])
+      when(env.conf).thenReturn(conf)
+      SparkEnv.set(env)
+
+      bm1.offloadShuffleBlocks()
+
+      eventually(timeout(1.second), interval(10.milliseconds)) {
+        assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm2.blockManagerId)
+      }
+      assert(Files.readAllBytes(bm2.diskBlockManager.getFile(shuffleData).toPath())
+        === shuffleDataBlockContent)
+      assert(Files.readAllBytes(bm2.diskBlockManager.getFile(shuffleIndex).toPath())
+        === shuffleIndexBlockContent)
+    } finally {
+      mapOutputTracker.unregisterShuffle(0)
+    }
   }
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
