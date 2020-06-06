@@ -1293,14 +1293,7 @@ class FilterPushdownSuite extends PlanTest {
     val left = testRelation.where(
       ('a === 5 || 'a === 2 || 'a === 1)).subquery('x)
     val right = testRelation.where(
-      ('a >= 2 || 'a >= 1 || 'a >= 9) &&
-        ('a >= 2 || 'a >= 1 || 'a <= 27) &&
-        ('a >= 2 || 'a <=14 || 'a >= 9) &&
-        ('a >= 2 || 'a <=14 || 'a <= 27) &&
-        ('a <= 3 || 'a >= 1 || 'a >= 9) &&
-        ('a <= 3 || 'a >= 1 || 'a <= 27) &&
-        ('a <= 3 || 'a <=14 || 'a >= 9) &&
-        ('a <= 3 || 'a <=14 || 'a <= 27)).subquery('y)
+      ('a >= 2 && 'a <= 3) || ('a >= 1 && 'a <= 14) || ('a >= 9 && 'a <= 27)).subquery('y)
     val correctAnswer = left.join(right, condition = Some(joinCondition)).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -1367,6 +1360,25 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("inner join: rewrite to conjunctive normal form avoid generating too many predicates") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = {
+      x.join(y, condition = Some(("x.b".attr === "y.b".attr) && ((("x.a".attr > 3) &&
+        ("x.a".attr < 13) && ("y.c".attr <= 5)) || (("y.a".attr > 2) && ("y.c".attr < 1)))))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.subquery('x)
+    val right = testRelation.where('c <= 5 || ('a > 2 && 'c < 1)).subquery('y)
+    val correctAnswer = left.join(right, condition = Some("x.b".attr === "y.b".attr &&
+      ((("x.a".attr > 3) && ("x.a".attr < 13) && ("y.c".attr <= 5)) ||
+        (("y.a".attr > 2) && ("y.c".attr < 1))))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test(s"Disable rewrite to CNF by setting ${SQLConf.MAX_CNF_NODE_COUNT.key}=0") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
@@ -1384,7 +1396,7 @@ class FilterPushdownSuite extends PlanTest {
           (testRelation.subquery('x), testRelation.subquery('y))
         } else {
           (testRelation.subquery('x),
-            testRelation.where(('c <= 5 || 'c < 1) && ('c <=5 || 'a > 2)).subquery('y))
+            testRelation.where('c <= 5 || ('a > 2 && 'c < 1)).subquery('y))
         }
         val correctAnswer = left.join(right, condition = Some("x.b".attr === "y.b".attr
           && ((("x.a".attr > 3) && ("x.a".attr < 13) && ("y.c".attr <= 5))

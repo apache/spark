@@ -55,8 +55,11 @@ object PushCNFPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelpe
           val left: Seq[Expression] = resultStack.pop()
           left ++ right
         case _: Or =>
-          val right: Seq[Expression] = resultStack.pop()
-          val left: Seq[Expression] = resultStack.pop()
+          // For each side, there is no need to expand predicates of the same references.
+          // So here we can aggregate predicates of the same references as one single predicate,
+          // for reducing the size of pushed down predicates and corresponding codegen.
+          val right = aggregateExpressionsOfSameReference(resultStack.pop())
+          val left = aggregateExpressionsOfSameReference(resultStack.pop())
           // Stop the loop whenever the result exceeds the `maxCnfNodeCount`
           if (left.size * right.size > maxCnfNodeCount) {
             Seq.empty
@@ -75,6 +78,9 @@ object PushCNFPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelpe
     resultStack.top
   }
 
+  private def aggregateExpressionsOfSameReference(expressions: Seq[Expression]): Seq[Expression] = {
+    expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq
+  }
   /**
    * Iterative post order traversal over a binary tree built by And/Or clauses.
    * @param condition to be traversed as binary tree
