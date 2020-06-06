@@ -3497,56 +3497,86 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-31670: Struct Field in groupByExpr with CUBE") {
-    withTable("t1") {
+    withTable("t") {
       sql(
-        """create table t1(
-          |a string,
-          |b int,
-          |c array<struct<row_id:int,json_string:string>>,
-          |d array<array<string>>,
-          |e array<map<string, int>>)
-          |using orc""".stripMargin)
+        """CREATE TABLE t(
+          |a STRING,
+          |b INT,
+          |c ARRAY<STRUCT<row_id:INT,json_string:STRING>>,
+          |d ARRAY<ARRAY<STRING>>,
+          |e ARRAY<MAP<STRING, INT>>)
+          |USING ORC""".stripMargin)
 
       checkAnswer(
         sql(
           """
-            |select a, each.json_string, sum(b)
-            |from t1
-            |LATERAL VIEW explode(c) x AS each
-            |group by a, each.json_string
-            |with cube
+            |SELECT a, each.json_string, SUM(b)
+            |FROM t
+            |LATERAL VIEW EXPLODE(c) x AS each
+            |GROUP BY a, each.json_string
+            |WITH CUBE
             |""".stripMargin), Nil)
 
       checkAnswer(
         sql(
           """
-            |select a, get_json_object(each.json_string, '$.i'), sum(b)
-            |from t1
-            |LATERAL VIEW explode(c) x AS each
-            |group by a, get_json_object(each.json_string, '$.i')
-            |with cube
+            |SELECT a, get_json_object(each.json_string, '$.i'), SUM(b)
+            |FROM t
+            |LATERAL VIEW EXPLODE(c) X AS each
+            |GROUP BY a, get_json_object(each.json_string, '$.i')
+            |WITH CUBE
             |""".stripMargin), Nil)
 
       checkAnswer(
         sql(
           """
-            |select a, each.json_string as json_string, sum(b)
-            |from t1
-            |LATERAL VIEW explode(c) x AS each
-            |group by a, each.json_string
-            |with cube
+            |SELECT a, each.json_string AS json_string, SUM(b)
+            |FROM t
+            |LATERAL VIEW EXPLODE(c) x AS each
+            |GROUP BY a, each.json_string
+            |WITH CUBE
             |""".stripMargin), Nil)
 
       checkAnswer(
         sql(
           """
-            |select a, each.json_string as js, sum(b)
-            |from t1
-            |LATERAL VIEW explode(c) x AS each
-            |group by a, each.json_string
-            |with cube
+            |SELECT a, each.json_string as js, SUM(b)
+            |FROM t
+            |LATERAL VIEW EXPLODE(c) X AS each
+            |GROUP BY a, each.json_string
+            |WITH CUBE
+            |""".stripMargin), Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, each.json_string as js, SUM(b)
+            |FROM t
+            |LATERAL VIEW EXPLODE(c) X AS each
+            |GROUP BY a, each.json_string
+            |WITH ROLLUP
+            |""".stripMargin), Nil)
+
+      sql(
+        """
+          |SELECT a, each.json_string, SUM(b)
+          |FROM t
+          |LATERAL VIEW EXPLODE(c) X AS each
+          |GROUP BY a, each.json_string
+          |GROUPING sets((a),(a, each.json_string))
+          |""".stripMargin).explain(true)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, each.json_string, SUM(b)
+            |FROM t
+            |LATERAL VIEW EXPLODE(c) X AS each
+            |GROUP BY a, each.json_string
+            |GROUPING sets((a),(a, each.json_string))
             |""".stripMargin), Nil)
     }
+  }
 
   test("SPARK-31761: test byte, short, integer overflow for (Divide) integral type") {
     checkAnswer(sql("Select -2147483648 DIV -1"), Seq(Row(Integer.MIN_VALUE.toLong * -1)))

@@ -506,55 +506,33 @@ class Analyzer(
         aggregations: Seq[NamedExpression],
         groupByAliases: Seq[Alias],
         groupingAttrs: Seq[Expression],
-        gid: Attribute): Seq[NamedExpression] = {
-      val resolvedGroupByAliases = groupByAliases.map(_.transformDown {
-        case a @ Alias(Alias(GetStructField(_, _, _), _), _) => a
-        case e => e.transformDown {
-          case Alias(gsf: GetStructField, _) => gsf
-        }
-      }.asInstanceOf[Alias])
-      aggregations.map {
-        // collect all the found AggregateExpression, so we can check an expression is part of
-        // any AggregateExpression or not.
-        val aggsBuffer = ArrayBuffer[Expression]()
-        // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
-        def isPartOfAggregation(e: Expression): Boolean = {
-          aggsBuffer.exists(a => a.find(_ eq e).isDefined)
-        }
+        gid: Attribute): Seq[NamedExpression] = aggregations.map {
+      // collect all the found AggregateExpression, so we can check an expression is part of
+      // any AggregateExpression or not.
+      val aggsBuffer = ArrayBuffer[Expression]()
 
-        replaceGroupingFunc(_, groupByExprs, gid) match {
-          case a @ Alias(e: GetStructField, _) =>
-            val index = resolvedGroupByAliases.indexWhere(alias => alias.child match {
-              case child: GetStructField =>
-                child.semanticEquals(e)
-              case _ => false
-            })
-            if (index == -1) {
-              a
-            } else {
-              groupingAttrs(index)
-            }.asInstanceOf[NamedExpression]
-          case e => e.transformDown {
-            case Alias(gsf: GetStructField, _) => gsf
-          }.transformDown {
-            // AggregateExpression should be computed on the unmodified value of its argument
-            // expressions, so we should not replace any references to grouping expression
-            // inside it.
-            case e: AggregateExpression =>
-              aggsBuffer += e
-              e
-            case e if isPartOfAggregation(e) => e
-            case e =>
-              // Replace expression by expand output attribute.
-              val index = resolvedGroupByAliases.indexWhere(_.child.semanticEquals(e))
-              if (index == -1) {
-                e
-              } else {
-                groupingAttrs(index)
-              }
-          }.asInstanceOf[NamedExpression]
-        }
+      // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
+      def isPartOfAggregation(e: Expression): Boolean = {
+        aggsBuffer.exists(a => a.find(_ eq e).isDefined)
       }
+
+      replaceGroupingFunc(_, groupByExprs, gid).transformDown {
+        // AggregateExpression should be computed on the unmodified value of its argument
+        // expressions, so we should not replace any references to grouping expression
+        // inside it.
+        case e: AggregateExpression =>
+          aggsBuffer += e
+          e
+        case e if isPartOfAggregation(e) => e
+        case e =>
+          // Replace expression by expand output attribute.
+          val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
+          if (index == -1) {
+            e
+          } else {
+            groupingAttrs(index)
+          }
+      }.asInstanceOf[NamedExpression]
     }
 
     private def getFinalGroupByExpressions(
@@ -1283,6 +1261,11 @@ class Analyzer(
       attr.withExprId(exprId)
     }
 
+    private def dedupStructField(attr: Alias, structFieldMap: Map[String, Attribute]) = {
+      val exprId = structFieldMap.getOrElse(attr.child.sql, attr).exprId
+      Alias(attr.child, attr.name)(exprId, attr.qualifier, attr.explicitMetadata)
+    }
+
     /**
      * The outer plan may have been de-duplicated and the function below updates the
      * outer references to refer to the de-duplicated attributes.
@@ -1503,9 +1486,67 @@ class Analyzer(
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
       case h: UnresolvedHaving => h
 
+      case p: LogicalPlan if needResolveStructField(p) =>
+        logTrace(s"Attempting to resolve ${p.simpleString(SQLConf.get.maxToStringFields)}")
+        val resolved = p.mapExpressions(resolveExpressionTopDown(_, p))
+        val structFieldMap = new mutable.HashMap[String, Alias]
+        resolved.transformExpressions {
+          case a @ Alias(struct: GetStructField, _) =>
+            if (structFieldMap.contains(struct.sql)) {
+              val exprId = structFieldMap.getOrElse(struct.sql, a).exprId
+              Alias(a.child, a.name)(exprId, a.qualifier, a.explicitMetadata)
+            } else {
+              structFieldMap.put(struct.sql, a)
+              a
+            }
+          case e => e
+        }
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
         q.mapExpressions(resolveExpressionTopDown(_, q))
+    }
+
+    def needResolveStructField(plan: LogicalPlan): Boolean = {
+      plan match {
+        case h @ UnresolvedHaving(havingCondition, a: Aggregate)
+          if containSameStructFields(a.groupingExpressions.flatMap(_.references),
+            a.aggregateExpressions.flatMap(_.references),
+            Some(havingCondition.references.toSeq)) => true
+        case a @ Aggregate(groupingExpressions, aggregateExpressions, child)
+          if containSameStructFields(groupingExpressions.flatMap(_.references),
+            aggregateExpressions.flatMap(_.references)) => true
+        case x @ GroupingSets(selectedGroupByExprs, groupByExprs, child, aggregations)
+          if containSameStructFields(groupByExprs.flatMap(_.references),
+            aggregations.flatMap(_.references),
+            Some(selectedGroupByExprs.flatMap(_.flatMap(_.references)))) => true
+        case _ => false
+      }
+    }
+
+    def containSameStructFields(
+        grpExprs: Seq[Attribute],
+        aggExprs: Seq[Attribute],
+        extra: Option[Seq[Attribute]] = None): Boolean = {
+      def isStructField(attr: Attribute): Boolean = {
+        attr.isInstanceOf[UnresolvedAttribute] &&
+          attr.asInstanceOf[UnresolvedAttribute].nameParts.size == 2
+      }
+
+      val grpAttrs = grpExprs.filter(isStructField)
+        .map(_.asInstanceOf[UnresolvedAttribute].name)
+      val aggAttrs = aggExprs.filter(isStructField)
+        .map(_.asInstanceOf[UnresolvedAttribute].name)
+      val havingAttrs = extra.getOrElse(Seq.empty[Attribute]).filter(isStructField)
+        .map(_.asInstanceOf[UnresolvedAttribute].name)
+
+      if (extra.isDefined) {
+        grpAttrs.exists(aggAttrs.contains)
+      } else {
+        grpAttrs.exists(aggAttrs.contains) ||
+          grpAttrs.exists(havingAttrs.contains) ||
+          aggAttrs.exists(havingAttrs.contains)
+      }
     }
 
     def resolveAssignments(
