@@ -394,7 +394,8 @@ class SparkConversionMixin(object):
 
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
-            arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
+            # Arrow < 0.17.0 cannot handle ExtensionDtype columns when inferring the schema
+            arrow_schema = pa.Schema.from_pandas(pdf.astype('object'), preserve_index=False)
             struct = StructType()
             for name, field in zip(schema, arrow_schema):
                 struct.add(name, from_arrow_type(field.type), nullable=field.nullable)

@@ -415,7 +415,7 @@ class ArrowTests(ReusedSQLTestCase):
         for case in cases:
             run_test(*case)
 
-    def test_createDateFrame_with_category_type(self):
+    def test_createDataFrame_with_category_type(self):
         pdf = pd.DataFrame({"A": [u"a", u"b", u"c", u"a"]})
         pdf["B"] = pdf["A"].astype('category')
         category_first_element = dict(enumerate(pdf['B'].cat.categories))[0]
@@ -441,6 +441,26 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(arrow_type, 'string')
         self.assertIsInstance(arrow_first_category_element, str)
         self.assertIsInstance(spark_first_category_element, str)
+
+    def test_createDataFrame_from_string_extension_dtype(self):
+        pdf = pd.DataFrame({u"A": [u"a", u"b", u"c", u"d"]})
+        pdf_ext_dtype = pd.DataFrame({u"A": [u"a", u"b", u"c", u"d"]}, dtype=pd.StringDtype())
+
+        df = self.spark.createDataFrame(pdf)
+        df_ext_dtype = self.spark.createDataFrame(pdf_ext_dtype)
+
+        self.assertEqual(df_ext_dtype.schema, df.schema)
+        self.assertEqual(df_ext_dtype.collect(), df.collect())
+
+    def test_createDataFrame_from_integer_extension_dtype(self):
+        pdf = pd.DataFrame({u"A": range(4)})
+        pdf_ext_dtype = pd.DataFrame({u"A": range(4)}, dtype=pd.Int64Dtype())
+
+        df = self.spark.createDataFrame(pdf)
+        df_ext_dtype = self.spark.createDataFrame(pdf_ext_dtype)
+
+        self.assertEqual(df_ext_dtype.schema, df.schema)
+        self.assertEqual(df_ext_dtype.collect(), df.collect())
 
 
 @unittest.skipIf(

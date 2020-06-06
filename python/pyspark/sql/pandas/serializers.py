@@ -150,7 +150,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         def create_array(s, t):
-            mask = s.isnull()
+            # If the series implements __arrow_array__, conversion will fail if a mask is passed
+            mask = s.isnull() if not hasattr(s.values, "__arrow_array__") else None
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
