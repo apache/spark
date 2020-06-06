@@ -1509,14 +1509,14 @@ class Analyzer(
 
     def needResolveStructField(plan: LogicalPlan): Boolean = {
       plan match {
-        case h @ UnresolvedHaving(havingCondition, a: Aggregate)
+        case UnresolvedHaving(havingCondition, a: Aggregate)
           if containSameStructFields(a.groupingExpressions.flatMap(_.references),
             a.aggregateExpressions.flatMap(_.references),
             Some(havingCondition.references.toSeq)) => true
-        case a @ Aggregate(groupingExpressions, aggregateExpressions, child)
+        case Aggregate(groupingExpressions, aggregateExpressions, _)
           if containSameStructFields(groupingExpressions.flatMap(_.references),
             aggregateExpressions.flatMap(_.references)) => true
-        case x @ GroupingSets(selectedGroupByExprs, groupByExprs, child, aggregations)
+        case GroupingSets(selectedGroupByExprs, groupByExprs, _, aggregations)
           if containSameStructFields(groupByExprs.flatMap(_.references),
             aggregations.flatMap(_.references),
             Some(selectedGroupByExprs.flatMap(_.flatMap(_.references)))) => true
@@ -1528,6 +1528,7 @@ class Analyzer(
         grpExprs: Seq[Attribute],
         aggExprs: Seq[Attribute],
         extra: Option[Seq[Attribute]] = None): Boolean = {
+
       def isStructField(attr: Attribute): Boolean = {
         attr.isInstanceOf[UnresolvedAttribute] &&
           attr.asInstanceOf[UnresolvedAttribute].nameParts.size == 2
