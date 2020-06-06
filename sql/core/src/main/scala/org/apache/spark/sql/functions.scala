@@ -3359,12 +3359,7 @@ object functions {
   }
 
    /**
-    * usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
-    * examples = """
-    * Examples:
-    * > SELECT _FUNC_(1230219000);
-    * 2008-12-25 07:30:00
-    * """,
+    * Creates timestamp from the number of seconds since UTC epoch.",
     * @group = "datetime_funcs",
     * @since = "3.1.0")
     */

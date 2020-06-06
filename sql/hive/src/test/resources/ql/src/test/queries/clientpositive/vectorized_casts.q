@@ -45,7 +45,7 @@ select
 -- to timestamp
   ,timestamp_seconds (ctinyint)
   ,timestamp_seconds (csmallint)
-  ,catimestamp_secondsst (cint)
+  ,timestamp_seconds (cint)
   ,timestamp_seconds (cbigint)
   ,timestamp_seconds (cfloat)
   ,timestamp_seconds (cdouble)
@@ -117,12 +117,12 @@ select
 -- to timestamp
   ,timestamp_seconds (ctinyint)
   ,timestamp_seconds (csmallint)
-  ,timestamp_seconds (cintp)
+  ,timestamp_seconds (cint)
   ,timestamp_seconds (cbigint)
   ,timestamp_seconds (cfloat)
   ,timestamp_seconds (cdouble)
   ,cast (cboolean1 as timestamp)
-  ,timestamp_seconds (cbigint * 0 as timestamp)
+  ,timestamp_seconds (cbigint * 0)
   ,cast (ctimestamp1 as timestamp)
   ,cast (cstring1 as timestamp)
   ,cast (substr(cstring1, 1, 1) as timestamp)
