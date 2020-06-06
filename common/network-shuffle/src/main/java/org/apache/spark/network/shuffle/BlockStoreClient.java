@@ -18,9 +18,19 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.Closeable;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import com.codahale.metrics.MetricSet;
+import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.GetLocalDirsForExecutors;
+import org.apache.spark.network.shuffle.protocol.LocalDirsForExecutors;
 
 /**
  * Provides an interface for reading both shuffle files and RDD blocks, either from an Executor
@@ -61,4 +71,10 @@ public abstract class BlockStoreClient implements Closeable {
     // Return an empty MetricSet by default.
     return () -> Collections.emptyMap();
   }
+
+  public abstract void getHostLocalDirs(
+      String host,
+      int port,
+      String[] execIds,
+      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable);
 }

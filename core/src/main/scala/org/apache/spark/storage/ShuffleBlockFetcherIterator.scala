@@ -301,7 +301,7 @@ final class ShuffleBlockFetcherIterator(
         numBlocksToFetch += mergedBlockInfos.size
         localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
         localBlockBytes += mergedBlockInfos.map(_.size).sum
-      } else if (hostLocalDirReadingEnabled && address.host == blockManager.blockManagerId.host) {
+      } else if (address.host == blockManager.blockManagerId.host) {
         checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
@@ -462,8 +462,9 @@ final class ShuffleBlockFetcherIterator(
    * `ManagedBuffer`'s memory is allocated lazily when we create the input stream, so all we
    * track in-memory are the ManagedBuffer references themselves.
    */
-  private[this] def fetchHostLocalBlocks(hostLocalDirManager: HostLocalDirManager): Unit = {
-    val cachedDirsByExec = hostLocalDirManager.getCachedHostLocalDirs()
+  private[this] def fetchHostLocalBlocks(): Unit = {
+    val cachedDirsByExec = blockManager.hostLocalDirManager
+      .map(_.getCachedHostLocalDirs()).getOrElse(Map.empty[String, Array[String]])
     val (hostLocalBlocksWithCachedDirs, hostLocalBlocksWithMissingDirs) =
       hostLocalBlocksByExecutor
         .map { case (hostLocalBmId, bmInfos) =>
@@ -477,26 +478,38 @@ final class ShuffleBlockFetcherIterator(
     if (immutableHostLocalBlocksWithoutDirs.nonEmpty) {
       logDebug(s"Asynchronous fetching host-local blocks without cached executors' dir: " +
         s"${immutableHostLocalBlocksWithoutDirs.mkString(", ")}")
-      val execIdsWithoutDirs = immutableHostLocalBlocksWithoutDirs.keys.map(_.executorId).toArray
-      hostLocalDirManager.getHostLocalDirs(execIdsWithoutDirs) {
-        case Success(dirs) =>
-          immutableHostLocalBlocksWithoutDirs.foreach { case (hostLocalBmId, blockInfos) =>
-            blockInfos.takeWhile { case (blockId, _, mapIndex) =>
-              fetchHostLocalBlock(
-                blockId,
-                mapIndex,
-                dirs.get(hostLocalBmId.executorId),
-                hostLocalBmId)
-            }
-          }
-          logDebug(s"Got host-local blocks (without cached executors' dir) in " +
-            s"${Utils.getUsedTimeNs(startTimeNs)}")
+      val execIdsWithoutDirs = immutableHostLocalBlocksWithoutDirs.keys.map(_.executorId)
 
-        case Failure(throwable) =>
-          logError(s"Error occurred while fetching host local blocks", throwable)
-          val (hostLocalBmId, blockInfoSeq) = immutableHostLocalBlocksWithoutDirs.head
-          val (blockId, _, mapIndex) = blockInfoSeq.head
-          results.put(FailureFetchResult(blockId, mapIndex, hostLocalBmId, throwable))
+      val addressesAnExecutors = blockManager.hostLocalDirManager.map { _ =>
+        val host = blockManager.blockManagerId.host
+        val port = blockManager.externalShuffleServicePort
+        Seq((host, port, execIdsWithoutDirs.toArray))
+      }.getOrElse {
+        hostLocalBlocksByExecutor.keysIterator.map { bm =>
+          (bm.host, bm.port, Array(bm.executorId))
+        }
+      }
+      addressesAnExecutors.foreach { case (host, port, executorIds) =>
+        blockManager.getHostLocalDirs(host, port, executorIds) {
+          case Success(dirs) =>
+            immutableHostLocalBlocksWithoutDirs.foreach { case (hostLocalBmId, blockInfos) =>
+              blockInfos.takeWhile { case (blockId, _, mapIndex) =>
+                fetchHostLocalBlock(
+                  blockId,
+                  mapIndex,
+                  dirs.get(hostLocalBmId.executorId),
+                  hostLocalBmId)
+              }
+            }
+            logDebug(s"Got host-local blocks (without cached executors' dir) in " +
+              s"${Utils.getUsedTimeNs(startTimeNs)}")
+
+          case Failure(throwable) =>
+            logError(s"Error occurred while fetching host local blocks", throwable)
+            val (hostLocalBmId, blockInfoSeq) = immutableHostLocalBlocksWithoutDirs.head
+            val (blockId, _, mapIndex) = blockInfoSeq.head
+            results.put(FailureFetchResult(blockId, mapIndex, hostLocalBmId, throwable))
+        }
       }
     }
     if (hostLocalBlocksWithCachedDirs.nonEmpty) {
@@ -537,7 +550,7 @@ final class ShuffleBlockFetcherIterator(
     logDebug(s"Got local blocks in ${Utils.getUsedTimeNs(startTimeNs)}")
 
     if (hostLocalBlocks.nonEmpty) {
-      blockManager.hostLocalDirManager.foreach(fetchHostLocalBlocks)
+      fetchHostLocalBlocks()
     }
   }
 

@@ -27,6 +27,8 @@ import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
 private[spark]
 trait BlockDataManager {
 
+  def getLocalDiskDirs: Array[String]
+
   /**
    * Interface to get host-local shuffle block data. Throws an exception if the block cannot be
    * found or cannot be read successfully.

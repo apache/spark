@@ -124,7 +124,7 @@ private[spark] class HostLocalDirManager(
     host: String,
     externalShuffleServicePort: Int) extends Logging {
 
-  private val executorIdToLocalDirsCache =
+  private[spark] val executorIdToLocalDirsCache =
     CacheBuilder
       .newBuilder()
       .maximumSize(cacheSize)
@@ -134,27 +134,6 @@ private[spark] class HostLocalDirManager(
       : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
     import scala.collection.JavaConverters._
     return executorIdToLocalDirsCache.asMap().asScala
-  }
-
-  private[spark] def getHostLocalDirs(
-      executorIds: Array[String])(
-      callback: Try[java.util.Map[String, Array[String]]] => Unit): Unit = {
-    val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
-    externalBlockStoreClient.getHostLocalDirs(
-      host,
-      externalShuffleServicePort,
-      executorIds,
-      hostLocalDirsCompletable)
-    hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
-      if (hostLocalDirs != null) {
-        callback(Success(hostLocalDirs))
-        executorIdToLocalDirsCache.synchronized {
-          executorIdToLocalDirsCache.putAll(hostLocalDirs)
-        }
-      } else {
-        callback(Failure(throwable))
-      }
-    }
   }
 }
 
@@ -212,7 +191,7 @@ private[spark] class BlockManager(
   private val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
   private val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
 
-  private val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
+  private[spark] val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
 
   var blockManagerId: BlockManagerId = _
 
@@ -263,6 +242,29 @@ private[spark] class BlockManager(
   // for shuffles. Used in BlockManagerDecommissioner & block puts.
   private[storage] lazy val migratableResolver: MigratableResolver = {
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
+  }
+
+  override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
+
+  private[spark] def getHostLocalDirs(
+      host: String,
+      port: Int,
+      executorIds: Array[String])(
+      callback: Try[java.util.Map[String, Array[String]]] => Unit)
+    : Unit = {
+    val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
+    blockStoreClient.getHostLocalDirs(
+      host,
+      port,
+      executorIds,
+      hostLocalDirsCompletable)
+    hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
+      if (hostLocalDirs != null) {
+        callback(Success(hostLocalDirs))
+      } else {
+        callback(Failure(throwable))
+      }
+    }
   }
 
   /**

@@ -113,6 +113,14 @@ class NettyBlockRpcServer(
             s"when there is not sufficient space available to store the block.")
           responseContext.onFailure(exception)
         }
+
+      case req: GetLocalDirsForExecutors =>
+        assert(req.appId == appId)
+        val execId = req.execIds.head
+        val dirs = blockManager.getLocalDiskDirs
+        responseContext
+          .onSuccess(new LocalDirsForExecutors(Map(execId -> dirs).asJava).toByteBuffer)
+
     }
   }
 
