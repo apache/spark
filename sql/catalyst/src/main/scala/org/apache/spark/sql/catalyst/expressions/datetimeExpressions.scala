@@ -411,19 +411,48 @@ abstract class NumberToTimestampBase extends UnaryExpression
 
   protected def upScaleFactor: Long
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(input: Any): Any = {
-    Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
+      child.dataType match {
+        case ByteType | ShortType | IntegerType | LongType =>
+          Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor).longValue()
+        case DecimalType() =>
+          (input.asInstanceOf[Decimal].toBigDecimal * upScaleFactor).longValue()
+        case FloatType =>
+          if (input.asInstanceOf[Float].isNaN || input.asInstanceOf[Float].isInfinite) null
+          (input.asInstanceOf[Float] * upScaleFactor).longValue()
+        case DoubleType =>
+          if (input.asInstanceOf[Double].isNaN || input.asInstanceOf[Double].isInfinite) null
+          (input.asInstanceOf[Double] * upScaleFactor).longValue()
+      }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (upScaleFactor == 1) {
       defineCodeGen(ctx, ev, c => c)
     } else {
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${upScaleFactor}L)")
+        child.dataType match {
+          case ByteType | ShortType | IntegerType | LongType =>
+            defineCodeGen(ctx, ev, c =>
+              s"java.lang.Math.multiplyExact($c, ${upScaleFactor}L)")
+          case DecimalType() =>
+            val block = inline"new java.math.BigDecimal($upScaleFactor)"
+            defineCodeGen(ctx, ev, c =>
+              s"($c.toBigDecimal().bigDecimal().multiply($block)).longValue()")
+          case FloatType =>
+            val caf = child.eval().asInstanceOf[Float]
+            if (caf.isNaN || caf.isInfinite) ExprCode.forNullValue(LongType)
+            else defineCodeGen(ctx, ev, c =>
+              s"(long)($c * ${upScaleFactor})")
+          case DoubleType =>
+            val cad = child.eval().asInstanceOf[Double]
+            if (cad.isNaN || cad.isInfinite) ExprCode.forNullValue(LongType)
+            else defineCodeGen(ctx, ev, c =>
+              s"(long)($c * ${upScaleFactor})")
+      }
     }
   }
 }

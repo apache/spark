@@ -17,6 +17,6 @@ select cast(t as bigint) from decimal_1;
 select cast(t as float) from decimal_1;
 select cast(t as double) from decimal_1;
 select cast(t as string) from decimal_1;
-select cast(t as timestamp) from decimal_1;
+select timestamp_seconds(t) from decimal_1;
 
 drop table decimal_1;
