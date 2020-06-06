@@ -933,33 +933,24 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     assert(df.schema == expectedSchema)
   }
 
+  private lazy val structType = StructType(Seq(
+    StructField("a", IntegerType, nullable = false),
+    StructField("b", IntegerType, nullable = true),
+    StructField("c", IntegerType, nullable = false)))
+
   private lazy val structLevel1: DataFrame = spark.createDataFrame(
     sparkContext.parallelize(Row(Row(1, null, 3)) :: Nil),
-    StructType(Seq(
-      StructField("a", StructType(Seq(
-        StructField("a", IntegerType, nullable = false),
-        StructField("b", IntegerType, nullable = true),
-        StructField("c", IntegerType, nullable = false))),
-      nullable = false))))
+    StructType(Seq(StructField("a", structType, nullable = false))))
 
   private lazy val nullStructLevel1: DataFrame = spark.createDataFrame(
     sparkContext.parallelize(Row(null) :: Nil),
-    StructType(Seq(
-      StructField("a", StructType(Seq(
-        StructField("a", IntegerType, nullable = false),
-        StructField("b", IntegerType, nullable = true),
-        StructField("c", IntegerType, nullable = false))),
-      nullable = true))))
+    StructType(Seq(StructField("a", structType, nullable = true))))
 
   private lazy val structLevel2: DataFrame = spark.createDataFrame(
     sparkContext.parallelize(Row(Row(Row(1, null, 3))) :: Nil),
     StructType(Seq(
       StructField("a", StructType(Seq(
-        StructField("a", StructType(Seq(
-          StructField("a", IntegerType, nullable = false),
-          StructField("b", IntegerType, nullable = true),
-          StructField("c", IntegerType, nullable = false))),
-          nullable = false))),
+        StructField("a", structType, nullable = false))),
         nullable = false))))
 
   private lazy val structLevel3: DataFrame = spark.createDataFrame(
@@ -967,33 +958,26 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     StructType(Seq(
       StructField("a", StructType(Seq(
         StructField("a", StructType(Seq(
-          StructField("a", StructType(Seq(
-            StructField("a", IntegerType, nullable = false),
-            StructField("b", IntegerType, nullable = true),
-            StructField("c", IntegerType, nullable = false))),
-            nullable = false))),
+          StructField("a", structType, nullable = false))),
           nullable = false))),
         nullable = false))))
 
-  private val withFieldTestNamePrefix = "withField "
-
-  test(withFieldTestNamePrefix +
-    "should throw an exception if called on a non-StructType column") {
+  test("withField should throw an exception if called on a non-StructType column") {
     intercept[AnalysisException] {
       testData.withColumn("key", $"key".withField("a", lit(2)))
-    }.getMessage should include("Only struct is allowed to appear at first position, got: " +
-      "integer")
+    }.getMessage should include("The first parameter must be struct type")
   }
 
-  test(withFieldTestNamePrefix + "should throw an exception if given null fieldName") {
-    intercept[AnalysisException] {
+  test("withField should throw an exception if fieldName is empty or null") {
+    intercept[IllegalArgumentException] {
       structLevel1.withColumn("a", $"a".withField(null, lit(2)))
-    }.getMessage should include(s"Only foldable string expressions are allowed to appear at " +
-      "second position.")
+    }
+    intercept[IllegalArgumentException] {
+      structLevel1.withColumn("a", $"a".withField("", lit(2)))
+    }
   }
 
-  test(withFieldTestNamePrefix +
-    "should throw an exception if any intermediate structs don't exist") {
+  test("withField should throw an exception if any intermediate structs don't exist") {
     intercept[AnalysisException] {
       structLevel2.withColumn("a", 'a.withField("x.b", lit(2)))
     }.getMessage should include("Intermediate struct field `x` does not exist.")
@@ -1003,14 +987,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }.getMessage should include("Intermediate struct field `a.x` does not exist.")
   }
 
-  test(withFieldTestNamePrefix +
-    "should throw an exception if an intermediate field is not a struct") {
+  test("withField should throw an exception if an intermediate field is not a struct") {
     intercept[AnalysisException] {
       structLevel1.withColumn("a", 'a.withField("b.a", lit(2)))
     }.getMessage should include("Intermediate fields must be a struct. `b` is integer.")
   }
 
-  test(withFieldTestNamePrefix + "should add field to struct") {
+  test("withField should add field to struct") {
     checkAnswerAndSchema(
       structLevel1.withColumn("a", 'a.withField("d", lit(4))),
       Row(Row(1, null, 3, 4)) :: Nil,
@@ -1023,7 +1006,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should add field to null struct") {
+  test("withField should add field to null struct") {
     checkAnswerAndSchema(
       nullStructLevel1.withColumn("a", $"a".withField("d", lit(4))),
       Row(Row(null, null, null, 4)) :: Nil,
@@ -1036,7 +1019,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should add null field to struct") {
+  test("withField should add null field to struct") {
     checkAnswerAndSchema(
       structLevel1.withColumn("a", 'a.withField("d", lit(null).cast(IntegerType))),
       Row(Row(1, null, 3, null)) :: Nil,
@@ -1049,7 +1032,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should add multiple fields to struct") {
+  test("withField should add multiple fields to struct") {
     checkAnswerAndSchema(
       structLevel1.withColumn("a", 'a.withField("d", lit(4)).withField("e", lit(5))),
       Row(Row(1, null, 3, 4, 5)) :: Nil,
@@ -1063,7 +1046,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should add field to nested struct") {
+  test("withField should add field to nested struct") {
     Seq(
       structLevel2.withColumn("a", 'a.withField("a.d", lit(4))),
       structLevel2.withColumn("a", 'a.withField("a", $"a.a".withField("d", lit(4))))
@@ -1083,7 +1066,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(withFieldTestNamePrefix + "should add field to deeply nested struct") {
+  test("withField should add field to deeply nested struct") {
     checkAnswerAndSchema(
       structLevel3.withColumn("a", 'a.withField("a.a.d", lit(4))),
       Row(Row(Row(Row(1, null, 3, 4)))) :: Nil,
@@ -1100,7 +1083,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should replace field in struct") {
+  test( "withField should replace field in struct") {
     checkAnswerAndSchema(
       structLevel1.withColumn("a", 'a.withField("b", lit(2))),
       Row(Row(1, 2, 3)) :: Nil,
@@ -1112,7 +1095,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should replace field in null struct") {
+  test("withField should replace field in null struct") {
     checkAnswerAndSchema(
       nullStructLevel1.withColumn("a", 'a.withField("b", lit(2))),
       Row(Row(null, 2, null)) :: Nil,
@@ -1124,7 +1107,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should replace field with null value in struct") {
+  test("withField should replace field with null value in struct") {
     checkAnswerAndSchema(
       structLevel1.withColumn("a", 'a.withField("c", lit(null).cast(IntegerType))),
       Row(Row(1, null, null)) :: Nil,
@@ -1136,7 +1119,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should replace multiple fields in struct") {
+  test("withField should replace multiple fields in struct") {
     checkAnswerAndSchema(
       structLevel1.withColumn("a", 'a.withField("a", lit(10)).withField("b", lit(20))),
       Row(Row(10, 20, 3)) :: Nil,
@@ -1148,7 +1131,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should replace field in nested struct") {
+  test("withField should replace field in nested struct") {
     Seq(
       structLevel2.withColumn("a", $"a".withField("a.b", lit(2))),
       structLevel2.withColumn("a", 'a.withField("a", $"a.a".withField("b", lit(2))))
@@ -1167,7 +1150,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(withFieldTestNamePrefix + "should replace field in deeply nested struct") {
+  test("withField should replace field in deeply nested struct") {
     checkAnswerAndSchema(
       structLevel3.withColumn("a", $"a".withField("a.a.b", lit(2))),
       Row(Row(Row(Row(1, 2, 3)))) :: Nil,
@@ -1183,7 +1166,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should replace all fields with given name in struct") {
+  test("withField should replace all fields with given name in struct") {
     val structLevel1 = spark.createDataFrame(
       sparkContext.parallelize(Row(Row(1, 2, 3)) :: Nil),
       StructType(Seq(
@@ -1204,7 +1187,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should replace fields in struct in given order") {
+  test("withField should replace fields in struct in given order") {
     checkAnswerAndSchema(
       structLevel1.withColumn("a", 'a.withField("b", lit(2)).withField("b", lit(20))),
       Row(Row(1, 20, 3)) :: Nil,
@@ -1216,7 +1199,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix + "should add field and then replace same field in struct") {
+  test("withField should add field and then replace same field in struct") {
     checkAnswerAndSchema(
       structLevel1.withColumn("a", 'a.withField("d", lit(4)).withField("d", lit(5))),
       Row(Row(1, null, 3, 5)) :: Nil,
@@ -1229,8 +1212,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test(withFieldTestNamePrefix +
-    "should handle fields with dots in their name if correctly quoted") {
+  test("withField should handle fields with dots in their name if correctly quoted") {
     val df: DataFrame = spark.createDataFrame(
       sparkContext.parallelize(Row(Row(Row(1, null, 3))) :: Nil),
       StructType(Seq(
@@ -1267,7 +1249,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         StructField("B", IntegerType, nullable = false))),
         nullable = false))))
 
-  test(withFieldTestNamePrefix + "should replace field in struct even if casing is different") {
+  test("withField should replace field in struct even if casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> false.toString) {
       checkAnswerAndSchema(
         mixedCaseStructLevel1.withColumn("a", 'a.withField("A", lit(2))),
@@ -1289,7 +1271,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(withFieldTestNamePrefix + "should add field to struct because casing is different") {
+  test("withField should add field to struct because casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
       checkAnswerAndSchema(
         mixedCaseStructLevel1.withColumn("a", 'a.withField("A", lit(2))),
@@ -1327,8 +1309,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))),
         nullable = false))))
 
-  test(withFieldTestNamePrefix +
-    "should replace nested field in struct even if casing is different") {
+  test("withField should replace nested field in struct even if casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> false.toString) {
       checkAnswerAndSchema(
         mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2))),
@@ -1362,7 +1343,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test(withFieldTestNamePrefix + "should throw an exception because casing is different") {
+  test("withField should throw an exception because casing is different") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
       intercept[AnalysisException] {
         mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2)))

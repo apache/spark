@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, TypeCheckResult, TypeCoercion, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -542,31 +543,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
 /**
  * Adds/replaces field in struct by name.
- *
- * @param children Seq(struct, name, val)
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(struct, name, val) - Adds/replaces field in struct by name.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(NAMED_STRUCT("a", 1, "b", 2), "c", 3);
-       {"a":1,"b":2,"c":3}
-      > SELECT _FUNC_(NAMED_STRUCT("a", 1, "b", 2), "b", 3);
-       {"a":1,"b":3}
-      > SELECT _FUNC_(CAST(NULL AS struct<a:int,b:int>), "c", 3);
-       {"a":null,"b":null,"c":3}
-      > SELECT _FUNC_(NAMED_STRUCT('a', 1, 'b', 2, 'b', 3), 'b', 100);
-       {"a":1,"b":100,"b":100}
-      > SELECT _FUNC_(a, 'a.c', 3) FROM (VALUES (NAMED_STRUCT('a', NAMED_STRUCT('a', 1, 'b', 2))) AS T(a));
-       {"a":{"a":1,"b":2,"c":3}}
-  """)
-// scalastyle:on line.size.limit
-case class WithField(children: Seq[Expression]) extends Unevaluable {
-  private lazy val Seq(structExpr, nestedAttributeExpr, valExpr) = children
-  private lazy val nestedAttribute = nestedAttributeExpr.eval().toString
-  private lazy val attributes = UnresolvedAttribute.parseAttributeName(nestedAttribute)
-  lazy val toCreateNamedStruct: Expression = toCreateNamedStruct(structExpr, attributes)
+case class WithField(struct: Expression, fieldPath: Seq[String], value: Expression)
+  extends Unevaluable {
+  assert(fieldPath.nonEmpty)
+
+  override def children: Seq[Expression] = Seq(struct, value)
+
+  @transient lazy val toCreateNamedStruct: Expression = toCreateNamedStruct(struct, fieldPath)
 
   override def dataType: StructType = toCreateNamedStruct.dataType.asInstanceOf[StructType]
 
@@ -574,61 +558,58 @@ case class WithField(children: Seq[Expression]) extends Unevaluable {
 
   override def nullable: Boolean = toCreateNamedStruct.nullable
 
+  @transient private val resolver = SQLConf.get.resolver
+
   override def checkInputDataTypes(): TypeCheckResult = {
-    val structTypeName = StructType(Nil).typeName
-    if (children.size != 3) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects 3 arguments.")
-    } else if (!structExpr.dataType.isInstanceOf[StructType]) {
-      TypeCheckResult.TypeCheckFailure(s"Only $structTypeName is allowed to appear at " +
-        s"first position, got: ${structExpr.dataType.typeName}.")
-    } else if (!(nestedAttributeExpr.foldable && nestedAttributeExpr.dataType == StringType)) {
-      TypeCheckResult.TypeCheckFailure(s"Only foldable ${StringType.catalogString} expressions " +
-        s"are allowed to appear at second position.")
-    } else if (nestedAttribute == null) {
-      TypeCheckResult.TypeCheckFailure("Field name should not be null.")
-    } else {
-      val structType = structExpr.dataType.asInstanceOf[StructType]
-      val intermediateAttributes :+ _ = attributes
-      intermediateAttributes
-        .scanLeft(Seq.empty[String])((lastScan, attr) => lastScan :+ attr).tail
-        .map(x => (x.mkString("`", ".", "`"), structType.findNestedField(x, resolver = resolver)
-          .map(_._2.dataType)))
-        .collectFirst {
-          case (attrPath, Some(dataType)) if !dataType.isInstanceOf[StructType] =>
-            TypeCheckResult.TypeCheckFailure(s"Intermediate fields must be a $structTypeName. " +
-              s"$attrPath is ${dataType.typeName}.")
-          case (attrPath, None) => TypeCheckResult.TypeCheckFailure(
-            s"Intermediate struct field $attrPath does not exist.")
-        }.getOrElse(TypeCheckResult.TypeCheckSuccess)
-    }
+    checkFieldExists(struct.dataType, Nil, fieldPath)
+  }
+
+  private def checkFieldExists(
+      currentStruct: DataType,
+      checkedFields: Seq[String],
+      fieldPath: Seq[String]): TypeCheckResult = currentStruct match {
+    case _ if fieldPath.isEmpty => TypeCheckResult.TypeCheckSuccess
+    case st: StructType =>
+      val newCheckedFields = checkedFields :+ fieldPath.head
+      st.find(f => resolver(f.name, fieldPath.head)).map { field =>
+        checkFieldExists(field.dataType, newCheckedFields, fieldPath.tail)
+      }.getOrElse {
+        TypeCheckResult.TypeCheckFailure(
+          s"Intermediate field ${newCheckedFields.quoted} does not exist.")
+      }
+    case _ =>
+      val fieldName = if (checkedFields.isEmpty) {
+        "The first parameter"
+      } else {
+        s"Intermediate field ${checkedFields.quoted}"
+      }
+      TypeCheckResult.TypeCheckFailure(
+        s"$fieldName must be struct type, got: ${currentStruct.catalogString}")
   }
 
   override def prettyName: String = "with_field"
 
-  private def resolver(name: String, attribute: String): Boolean =
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      caseSensitiveResolution(name, attribute)
-    } else {
-      caseInsensitiveResolution(name, attribute)
-    }
-
-  private def toCreateNamedStruct(struct: Expression, attributes: Seq[String]): Expression = {
-    val attribute +: nextAttributes = attributes
-    val existingNames = struct.dataType.asInstanceOf[StructType].fieldNames
-
-    if (nextAttributes.isEmpty) {
-      val attributeAlreadyExists = existingNames.exists(resolver(_, attribute))
-      val newField = Seq(Literal(attribute), valExpr)
-      CreateNamedStruct(existingNames.zipWithIndex.flatMap {
-        case (name, _) if resolver(name, attribute) => newField
+  private def toCreateNamedStruct(struct: Expression, fieldPath: Seq[String]): Expression = {
+    val existingFields = struct.dataType.asInstanceOf[StructType].fieldNames
+    val expr = if (fieldPath.length == 1) {
+      val newField = Seq(Literal(fieldPath.head), value)
+      val fields = existingFields.zipWithIndex.flatMap {
+        case (name, _) if resolver(name, fieldPath.head) => newField
         case (name, i) => Seq(Literal(name), GetStructField(struct, i, Some(name)))
-      } ++ (if (attributeAlreadyExists) None else newField))
+      }
+      if (existingFields.exists(resolver(_, fieldPath.head))) {
+        CreateNamedStruct(fields)
+      } else {
+        CreateNamedStruct(fields ++ newField)
+      }
     } else {
-      CreateNamedStruct(existingNames.zipWithIndex.flatMap {
-        case (name, i) if resolver(name, attribute) => Seq(Literal(attribute),
-          toCreateNamedStruct(GetStructField(struct, i, Some(attribute)), nextAttributes))
+      CreateNamedStruct(existingFields.zipWithIndex.flatMap {
+        case (name, i) if resolver(name, fieldPath.head) =>
+          val innerStruct = GetStructField(struct, i, Some(fieldPath.head))
+          Seq(Literal(fieldPath.head), toCreateNamedStruct(innerStruct, fieldPath.tail))
         case (name, i) => Seq(Literal(name), GetStructField(struct, i, Some(name)))
       })
     }
+    If(IsNull(struct), Literal(null, expr.dataType), expr)
   }
 }
