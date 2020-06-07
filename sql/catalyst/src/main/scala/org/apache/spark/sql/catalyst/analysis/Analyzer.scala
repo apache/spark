@@ -510,12 +510,10 @@ class Analyzer(
       // collect all the found AggregateExpression, so we can check an expression is part of
       // any AggregateExpression or not.
       val aggsBuffer = ArrayBuffer[Expression]()
-
       // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
       def isPartOfAggregation(e: Expression): Boolean = {
         aggsBuffer.exists(a => a.find(_ eq e).isDefined)
       }
-
       replaceGroupingFunc(_, groupByExprs, gid).transformDown {
         // AggregateExpression should be computed on the unmodified value of its argument
         // expressions, so we should not replace any references to grouping expression
@@ -1489,14 +1487,14 @@ class Analyzer(
       case p: LogicalPlan if needResolveStructField(p) =>
         logTrace(s"Attempting to resolve ${p.simpleString(SQLConf.get.maxToStringFields)}")
         val resolved = p.mapExpressions(resolveExpressionTopDown(_, p))
-        val structFieldMap = new mutable.HashMap[String, Alias]
+        val structFieldMap = mutable.Map[String, Alias]()
         resolved.transformExpressions {
           case a @ Alias(struct: GetStructField, _) =>
             if (structFieldMap.contains(struct.sql)) {
               val exprId = structFieldMap.getOrElse(struct.sql, a).exprId
               Alias(a.child, a.name)(exprId, a.qualifier, a.explicitMetadata)
             } else {
-              structFieldMap.put(struct.sql, a)
+              structFieldMap += (struct.sql -> a)
               a
             }
           case e => e
@@ -1507,12 +1505,8 @@ class Analyzer(
         q.mapExpressions(resolveExpressionTopDown(_, q))
     }
 
-    def needResolveStructField(plan: LogicalPlan): Boolean = {
+    private def needResolveStructField(plan: LogicalPlan): Boolean = {
       plan match {
-        case UnresolvedHaving(havingCondition, a: Aggregate)
-          if containSameStructFields(a.groupingExpressions.flatMap(_.references),
-            a.aggregateExpressions.flatMap(_.references),
-            Some(havingCondition.references.toSeq)) => true
         case Aggregate(groupingExpressions, aggregateExpressions, _)
           if containSameStructFields(groupingExpressions.flatMap(_.references),
             aggregateExpressions.flatMap(_.references)) => true
@@ -1524,8 +1518,8 @@ class Analyzer(
       }
     }
 
-    def containSameStructFields(
-        grpExprs: Seq[Attribute],
+    private def containSameStructFields(
+        groupExprs: Seq[Attribute],
         aggExprs: Seq[Attribute],
         extra: Option[Seq[Attribute]] = None): Boolean = {
 
@@ -1534,7 +1528,7 @@ class Analyzer(
           attr.asInstanceOf[UnresolvedAttribute].nameParts.size == 2
       }
 
-      val grpAttrs = grpExprs.filter(isStructField)
+      val grpAttrs = groupExprs.filter(isStructField)
         .map(_.asInstanceOf[UnresolvedAttribute].name)
       val aggAttrs = aggExprs.filter(isStructField)
         .map(_.asInstanceOf[UnresolvedAttribute].name)
