@@ -320,7 +320,6 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
 
         val hiveCachedResults = hiveCacheFiles.flatMap { cachedAnswerFile =>
           logDebug(s"Looking for cached answer file $cachedAnswerFile.")
-          logError(s"sss" + cachedAnswerFile)
           if (cachedAnswerFile.exists) {
             Some(fileToString(cachedAnswerFile))
           } else {
