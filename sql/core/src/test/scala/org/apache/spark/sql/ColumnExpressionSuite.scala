@@ -994,6 +994,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     intercept[AnalysisException] {
       structLevel1.withColumn("a", 'a.withField("b.a", lit(2)))
     }.getMessage should include("Intermediate field b must be struct type, got: int.")
+
+    intercept[AnalysisException] {
+      val structLevel2: DataFrame = spark.createDataFrame(
+        sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
+        StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", structType, nullable = false),
+            StructField("a", IntegerType, nullable = false))),
+            nullable = false))))
+
+      structLevel2.withColumn("a", 'a.withField("a.b", lit(2)))
+    }.getMessage should include("Intermediate field a must be struct type, got: int.")
   }
 
   test("withField should add field to struct") {

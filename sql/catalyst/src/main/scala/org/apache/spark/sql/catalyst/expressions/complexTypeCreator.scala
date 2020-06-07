@@ -572,31 +572,33 @@ case class WithField(structExpr: Expression, fieldName: String, valueExpr: Expre
       TypeCheckResult.TypeCheckFailure("fieldName argument should not be empty.")
     } else {
       val structType = structExpr.dataType.asInstanceOf[StructType]
-      checkIntermediateStructTypeFieldsExist(structType, Nil, fieldPath)
+      checkIntermediateDataTypesAreStruct(structType, Nil, fieldPath)
     }
   }
 
   private val resolver = SQLConf.get.resolver
 
-  private def checkIntermediateStructTypeFieldsExist(
-    currentStruct: DataType,
+  private def checkIntermediateDataTypesAreStruct(
+    dataType: DataType,
     checkedFields: Seq[String],
-    fieldPath: Seq[String]): TypeCheckResult = currentStruct match {
-    case _: StructType if fieldPath.length == 1 => TypeCheckResult.TypeCheckSuccess
-    case st: StructType =>
-      val newCheckedFields = checkedFields :+ fieldPath.head
-      st.find(f => resolver(f.name, fieldPath.head)).map { field =>
-        checkIntermediateStructTypeFieldsExist(field.dataType, newCheckedFields, fieldPath.tail)
-      }.getOrElse(TypeCheckResult.TypeCheckFailure(
-        s"Intermediate field ${newCheckedFields.quoted} does not exist."))
-    case _ =>
-      val fieldName = if (checkedFields.isEmpty) {
-        "The first parameter"
-      } else {
-        s"Intermediate field ${checkedFields.quoted}"
+    fieldPath: Seq[String]): TypeCheckResult = dataType match {
+    case st: StructType => if (fieldPath.length == 1) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      val fieldName = fieldPath.head
+      val newCheckedFields = checkedFields :+ fieldName
+      val matchingFieldsCheckResults = st.collect { case f if resolver(f.name, fieldName) =>
+        checkIntermediateDataTypesAreStruct(f.dataType, newCheckedFields, fieldPath.tail)
       }
-      TypeCheckResult.TypeCheckFailure(
-        s"$fieldName must be struct type, got: ${currentStruct.catalogString}.")
+      if (matchingFieldsCheckResults.isEmpty) {
+        TypeCheckResult.TypeCheckFailure(
+          s"Intermediate field ${newCheckedFields.quoted} does not exist.")
+      } else {
+        matchingFieldsCheckResults.find(_.isFailure).getOrElse(TypeCheckResult.TypeCheckSuccess)
+      }
+    }
+    case _ => TypeCheckResult.TypeCheckFailure(s"Intermediate field ${checkedFields.quoted} must " +
+      s"be struct type, got: ${dataType.catalogString}.")
   }
 
   private def toCreateNamedStruct(struct: Expression, fieldPath: Seq[String]): Expression = {
