@@ -1259,11 +1259,6 @@ class Analyzer(
       attr.withExprId(exprId)
     }
 
-    private def dedupStructField(attr: Alias, structFieldMap: Map[String, Attribute]) = {
-      val exprId = structFieldMap.getOrElse(attr.child.sql, attr).exprId
-      Alias(attr.child, attr.name)(exprId, attr.qualifier, attr.explicitMetadata)
-    }
-
     /**
      * The outer plan may have been de-duplicated and the function below updates the
      * outer references to refer to the de-duplicated attributes.
@@ -1484,37 +1479,36 @@ class Analyzer(
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
       case h: UnresolvedHaving => h
 
-      case q: LogicalPlan =>
-        logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
-        val resolved = q.mapExpressions(resolveExpressionTopDown(_, q))
-        if (needResolveStructField(q)) {
-          resolveStructField(resolved)
+      case agg @ (_: Aggregate | _: GroupingSets) =>
+        val resolved = agg.mapExpressions(resolveExpressionTopDown(_, agg))
+        val hasStructField = resolved.expressions.exists {
+          _.collectFirst { case gsf: GetStructField => gsf }.isDefined
+        }
+        if (hasStructField) {
+          // For struct field, it will be resolve as Alias(GetStructField, name),
+          // In Aggregate/GroupingSets this behavior will cause same struct field
+          // in aggExprs/groupExprs/selectedGroupByExprs will be resolved divided
+          // with different ExprId of Alias and replace failed when construct
+          // Aggregate in ResolveGroupingAnalytics, so we resolve duplicated struct
+          // field here with same ExprId
+          val structFieldMap = mutable.Map[String, Alias]()
+          resolved.transformExpressionsDown {
+            case a @ Alias(struct: GetStructField, _) =>
+              if (structFieldMap.contains(struct.sql)) {
+                val exprId = structFieldMap.getOrElse(struct.sql, a).exprId
+                Alias(a.child, a.name)(exprId, a.qualifier, a.explicitMetadata)
+              } else {
+                structFieldMap += (struct.sql -> a)
+                a
+              }
+          }
         } else {
           resolved
         }
-    }
 
-    private def resolveStructField(plan: LogicalPlan): LogicalPlan = {
-      val structFieldMap = mutable.Map[String, Alias]()
-      plan.transformExpressionsDown {
-        case a @ Alias(struct: GetStructField, _) =>
-          if (structFieldMap.contains(struct.sql)) {
-            val exprId = structFieldMap.getOrElse(struct.sql, a).exprId
-            Alias(a.child, a.name)(exprId, a.qualifier, a.explicitMetadata)
-          } else {
-            structFieldMap += (struct.sql -> a)
-            a
-          }
-        case e => e
-      }
-    }
-
-    private def needResolveStructField(plan: LogicalPlan): Boolean = {
-      plan match {
-        case Aggregate(_, _, _) => true
-        case GroupingSets(_, _, _, _) => true
-        case _ => false
-      }
+      case q: LogicalPlan =>
+        logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
+        q.mapExpressions(resolveExpressionTopDown(_, q))
     }
 
     def resolveAssignments(
