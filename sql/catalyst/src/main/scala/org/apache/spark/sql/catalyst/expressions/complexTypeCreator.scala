@@ -568,7 +568,7 @@ case class WithField(structExpr: Expression, fieldName: String, valueExpr: Expre
     } else if (fieldName.isEmpty) {
       TypeCheckResult.TypeCheckFailure("fieldName argument should not be empty.")
     } else {
-      checkIntermediateDataTypesAreStruct(structExpr.dataType, Nil, fieldPath)
+      checkIntermediateDataTypesAreStruct(structExpr.dataType, fieldPath)
     }
   }
 
@@ -576,15 +576,15 @@ case class WithField(structExpr: Expression, fieldName: String, valueExpr: Expre
 
   private def checkIntermediateDataTypesAreStruct(
     dataType: DataType,
-    checkedFields: Seq[String],
-    fieldPath: Seq[String]): TypeCheckResult = dataType match {
-    case st: StructType => if (fieldPath.length == 1) {
+    remainingFields: Seq[String],
+    checkedFields: Seq[String] = Nil): TypeCheckResult = dataType match {
+    case st: StructType => if (remainingFields.length == 1) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      val fieldName = fieldPath.head
+      val fieldName = remainingFields.head
       val newCheckedFields = checkedFields :+ fieldName
       val matchingFieldsCheckResults = st.collect { case f if resolver(f.name, fieldName) =>
-        checkIntermediateDataTypesAreStruct(f.dataType, newCheckedFields, fieldPath.tail)
+        checkIntermediateDataTypesAreStruct(f.dataType, remainingFields.tail, newCheckedFields)
       }
       if (matchingFieldsCheckResults.isEmpty) {
         TypeCheckResult.TypeCheckFailure(
