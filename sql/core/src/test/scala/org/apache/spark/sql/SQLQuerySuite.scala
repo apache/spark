@@ -3497,17 +3497,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-31670: Resolve Struct Field in Grouping Aggregate with same ExprId") {
-    withTable("t") {
-      sql(
-        """CREATE TABLE t(
-          |a STRING,
-          |b INT,
-          |c STRUCT<row_id:INT,json_string:STRING>)
-          |USING ORC""".stripMargin)
-
+    withTempView("t") {
       sql(
         """
-          |INSERT INTO TABLE t
+          |CREATE TEMPORARY VIEW t(a, b, c) AS
           |SELECT * FROM VALUES
           |('A', 1, NAMED_STRUCT('row_id', 1, 'json_string', '{"i": 1}')),
           |('A', 2, NAMED_STRUCT('row_id', 2, 'json_string', '{"i": 1}')),
