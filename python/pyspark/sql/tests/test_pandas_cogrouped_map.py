@@ -196,10 +196,16 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
     def test_case_insensitive_grouping_column(self):
         # SPARK-31915: case-insensitive grouping column should work.
         df1 = self.spark.createDataFrame([(1, 1)], ("column", "value"))
+
+        row = df1.groupby("ColUmn").cogroup(
+            df1.groupby("COLUMN")
+        ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
+        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
+
         df2 = self.spark.createDataFrame([(1, 1)], ("column", "value"))
 
-        row = df1.groupby("column").cogroup(
-            df2.groupby("column")
+        row = df1.groupby("ColUmn").cogroup(
+            df2.groupby("COLUMN")
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
         self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
 
