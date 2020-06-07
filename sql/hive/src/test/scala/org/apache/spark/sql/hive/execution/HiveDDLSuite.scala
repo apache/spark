@@ -2720,4 +2720,14 @@ class HiveDDLSuite
       checkAnswer(sql("SHOW PARTITIONS ta_part"), Row("ts=10") :: Nil)
     }
   }
+
+  test("SPARK-31904: Fix case sensitive problem of char and varchar partition columns") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(a STRING, B VARCHAR(10), C CHAR(10)) STORED AS parquet")
+      sql("CREATE TABLE t2 USING parquet PARTITIONED BY (b, c) AS SELECT * FROM t1")
+      // make sure there is no exception
+      assert(sql("SELECT * FROM t2 WHERE b = 'A'").collect().isEmpty)
+      assert(sql("SELECT * FROM t2 WHERE c = 'A'").collect().isEmpty)
+    }
+  }
 }
