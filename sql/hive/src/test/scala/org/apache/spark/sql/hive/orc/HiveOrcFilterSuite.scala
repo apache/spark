@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
 import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -123,217 +124,298 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
   }
 
   test("filter pushdown - integer") {
-    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    import testImplicits._
 
-      checkFilterPredicate($"_1" === 1, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i))).toDF) { implicit df =>
+      checkFilterPredicate(UnresolvedAttribute("_1").isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate($"_1" < 2, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= 4, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") === 1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(Literal(1) === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(1) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(2) > $"_1", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(3) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(1) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(4) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") < 2, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") >= 4, PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(1) === UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(1) <=> UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(2) > UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(3) < UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(1) >= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(4) <= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - long") {
-    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i.toLong)))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    import testImplicits._
 
-      checkFilterPredicate($"_1" === 1, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i.toLong))).toDF) { implicit df =>
+      checkFilterPredicate(UnresolvedAttribute("_1").isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate($"_1" < 2, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= 4, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") === 1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(Literal(1) === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(1) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(2) > $"_1", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(3) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(1) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(4) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") < 2, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") >= 4, PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(1) === UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(1) <=> UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(2) > UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(3) < UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(1) >= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(4) <= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - float") {
-    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i.toFloat)))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    import testImplicits._
 
-      checkFilterPredicate($"_1" === 1, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i.toFloat))).toDF) { implicit df =>
+      checkFilterPredicate(UnresolvedAttribute("_1").isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate($"_1" < 2, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= 4, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") === 1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(Literal(1) === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(1) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(2) > $"_1", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(3) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(1) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(4) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") < 2, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") >= 4, PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(1) === UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(1) <=> UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(2) > UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(3) < UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(1) >= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(4) <= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - double") {
-    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i.toDouble)))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    import testImplicits._
 
-      checkFilterPredicate($"_1" === 1, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i.toDouble))).toDF) { implicit df =>
+      checkFilterPredicate(UnresolvedAttribute("_1").isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate($"_1" < 2, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= 4, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") === 1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(Literal(1) === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(1) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(2) > $"_1", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(3) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(1) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(4) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") < 2, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") >= 4, PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(1) === UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(1) <=> UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(2) > UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(3) < UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(1) >= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(4) <= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - string") {
-    withOrcDataFrame((1 to 4).map(i => Tuple1(i.toString))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    import testImplicits._
 
-      checkFilterPredicate($"_1" === "1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> "1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(i.toString)).toDF) { implicit df =>
+      checkFilterPredicate(UnresolvedAttribute("_1").isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate($"_1" < "2", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > "3", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= "1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= "4", PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") === "1", PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <=> "1",
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(Literal("1") === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal("1") <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal("2") > $"_1", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal("3") < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal("1") >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal("4") <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") < "2", PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") > "3", PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <= "1",
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") >= "4", PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal("1") === UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal("1") <=> UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal("2") > UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal("3") < UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal("1") >= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal("4") <= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - boolean") {
-    withOrcDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    import testImplicits._
 
-      checkFilterPredicate($"_1" === true, PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+    withOrcDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b))).toDF) { implicit df =>
+      checkFilterPredicate(UnresolvedAttribute("_1").isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate($"_1" < true, PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= false, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") === true, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <=> true,
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(Literal(false) === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(false) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(false) > $"_1", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(true) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(true) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(true) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") < true, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") > false,
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <= false,
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") >= false,
+        PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(false) === UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(false) <=> UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(false) > UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(true) < UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) >= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) <= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - decimal") {
-    withOrcDataFrame((1 to 4).map(i => Tuple1.apply(BigDecimal.valueOf(i)))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    import testImplicits._
 
-      checkFilterPredicate($"_1" === BigDecimal.valueOf(1), PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> BigDecimal.valueOf(1), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+    withOrcDataFrame((1 to 4).map(i => Tuple1.apply(BigDecimal.valueOf(i))).toDF) { implicit df =>
+      checkFilterPredicate(UnresolvedAttribute("_1").isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate($"_1" < BigDecimal.valueOf(2), PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > BigDecimal.valueOf(3), PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= BigDecimal.valueOf(1), PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= BigDecimal.valueOf(4), PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") === BigDecimal.valueOf(1),
+        PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <=> BigDecimal.valueOf(1),
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+
+      checkFilterPredicate(UnresolvedAttribute("_1") < BigDecimal.valueOf(2),
+        PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") > BigDecimal.valueOf(3),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <= BigDecimal.valueOf(1),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") >= BigDecimal.valueOf(4),
+        PredicateLeaf.Operator.LESS_THAN)
 
       checkFilterPredicate(
-        Literal(BigDecimal.valueOf(1)) === $"_1", PredicateLeaf.Operator.EQUALS)
+        Literal(BigDecimal.valueOf(1)) === UnresolvedAttribute("_1"), PredicateLeaf.Operator.EQUALS)
       checkFilterPredicate(
-        Literal(BigDecimal.valueOf(1)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        Literal(BigDecimal.valueOf(1)) <=> UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
       checkFilterPredicate(
-        Literal(BigDecimal.valueOf(2)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
+        Literal(BigDecimal.valueOf(2)) > UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
       checkFilterPredicate(
-        Literal(BigDecimal.valueOf(3)) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        Literal(BigDecimal.valueOf(3)) < UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
       checkFilterPredicate(
-        Literal(BigDecimal.valueOf(1)) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        Literal(BigDecimal.valueOf(1)) >= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
       checkFilterPredicate(
-        Literal(BigDecimal.valueOf(4)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+        Literal(BigDecimal.valueOf(4)) <= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - timestamp") {
+    import testImplicits._
+
     val timeString = "2015-08-20 14:57:00"
     val timestamps = (1 to 4).map { i =>
       val milliseconds = Timestamp.valueOf(timeString).getTime + i * 3600
       new Timestamp(milliseconds)
     }
-    withOrcDataFrame(timestamps.map(Tuple1(_))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    withOrcDataFrame(timestamps.map(Tuple1(_)).toDF) { implicit df =>
+      checkFilterPredicate(UnresolvedAttribute("_1").isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate($"_1" === timestamps(0), PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> timestamps(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-
-      checkFilterPredicate($"_1" < timestamps(1), PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > timestamps(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= timestamps(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= timestamps(3), PredicateLeaf.Operator.LESS_THAN)
-
-      checkFilterPredicate(Literal(timestamps(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(Literal(timestamps(0)) <=> $"_1",
+      checkFilterPredicate(UnresolvedAttribute("_1") === timestamps(0),
+        PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <=> timestamps(0),
         PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(timestamps(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(timestamps(2)) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(timestamps(0)) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(timestamps(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(UnresolvedAttribute("_1") < timestamps(1),
+        PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(UnresolvedAttribute("_1") > timestamps(2),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") <= timestamps(0),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(UnresolvedAttribute("_1") >= timestamps(3),
+        PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(timestamps(0)) === UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(timestamps(0)) <=> UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(timestamps(1)) > UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(timestamps(2)) < UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(timestamps(0)) >= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(timestamps(3)) <= UnresolvedAttribute("_1"),
+        PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - combinations with logical operators") {
-    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
+    import testImplicits._
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i))).toDF) { implicit df =>
       // Because `ExpressionTree` is not accessible at Hive 1.2.x, this should be checked
       // in string form in order to check filter creation including logical operators
       // such as `and`, `or` or `not`. So, this function uses `SearchArgument.toString()`
       // to produce string expression and then compare it to given string expression below.
       // This might have to be changed after Hive version is upgraded.
       checkFilterPredicateWithDiffHiveVersion(
-        $"_1".isNotNull,
+        UnresolvedAttribute("_1").isNotNull,
         """leaf-0 = (IS_NULL _1)
           |expr = (not leaf-0)""".stripMargin.trim
       )
       checkFilterPredicateWithDiffHiveVersion(
-        $"_1" =!= 1,
+        UnresolvedAttribute("_1") =!= 1,
         """leaf-0 = (IS_NULL _1)
           |leaf-1 = (EQUALS _1 1)
           |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
       checkFilterPredicateWithDiffHiveVersion(
-        !($"_1" < 4),
+        !(UnresolvedAttribute("_1") < 4),
         """leaf-0 = (IS_NULL _1)
           |leaf-1 = (LESS_THAN _1 4)
           |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
       checkFilterPredicateWithDiffHiveVersion(
-        $"_1" < 2 || $"_1" > 3,
+        UnresolvedAttribute("_1") < 2 || UnresolvedAttribute("_1") > 3,
         """leaf-0 = (LESS_THAN _1 2)
           |leaf-1 = (LESS_THAN_EQUALS _1 3)
           |expr = (or leaf-0 (not leaf-1))""".stripMargin.trim
       )
       checkFilterPredicateWithDiffHiveVersion(
-        $"_1" < 2 && $"_1" > 3,
+        UnresolvedAttribute("_1") < 2 && UnresolvedAttribute("_1") > 3,
         """leaf-0 = (IS_NULL _1)
           |leaf-1 = (LESS_THAN _1 2)
           |leaf-2 = (LESS_THAN_EQUALS _1 3)
@@ -343,27 +425,29 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
   }
 
   test("no filter pushdown - non-supported types") {
+    import testImplicits._
+
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
     }
     // ArrayType
-    withOrcDataFrame((1 to 4).map(i => Tuple1(Array(i)))) { implicit df =>
-      checkNoFilterPredicate($"_1".isNull)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Array(i))).toDF) { implicit df =>
+      checkNoFilterPredicate(UnresolvedAttribute("_1").isNull)
     }
     // BinaryType
-    withOrcDataFrame((1 to 4).map(i => Tuple1(i.b))) { implicit df =>
-      checkNoFilterPredicate($"_1" <=> 1.b)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(i.b)).toDF) { implicit df =>
+      checkNoFilterPredicate(UnresolvedAttribute("_1") <=> 1.b)
     }
     // DateType
     if (!HiveUtils.isHive23) {
       val stringDate = "2015-01-01"
-      withOrcDataFrame(Seq(Tuple1(Date.valueOf(stringDate)))) { implicit df =>
-        checkNoFilterPredicate($"_1" === Date.valueOf(stringDate))
+      withOrcDataFrame(Seq(Tuple1(Date.valueOf(stringDate))).toDF) { implicit df =>
+        checkNoFilterPredicate(UnresolvedAttribute("_1") === Date.valueOf(stringDate))
       }
     }
     // MapType
-    withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i)))) { implicit df =>
-      checkNoFilterPredicate($"_1".isNotNull)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i))).toDF) { implicit df =>
+      checkNoFilterPredicate(UnresolvedAttribute("_1").isNotNull)
     }
   }
 

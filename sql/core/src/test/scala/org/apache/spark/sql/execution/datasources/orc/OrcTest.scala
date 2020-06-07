@@ -78,12 +78,16 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
       (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
   /**
-   * Writes `data` to a Orc file and reads it back as a `DataFrame`,
+   * Writes `df` dataframe to a Orc file and reads it back as a `DataFrame`,
    * which is then passed to `f`. The Orc file will be deleted after `f` returns.
    */
-  protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
-      (data: Seq[T], testVectorized: Boolean = true)
-      (f: DataFrame => Unit): Unit = withDataSourceDataFrame(data, testVectorized)(f)
+  protected def withOrcDataFrame(df: DataFrame, testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = {
+    withTempPath { file =>
+      df.write.format(dataSourceName).save(file.getCanonicalPath)
+      readFile(file.getCanonicalPath, testVectorized)(f)
+    }
+  }
 
   /**
    * Writes `data` to a Orc file, reads it back as a `DataFrame` and registers it as a
