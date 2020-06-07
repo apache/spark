@@ -201,7 +201,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |IF(TRUE, CAST(NULL AS BINARY), CAST("1" AS BINARY)) AS COL18,
       |IF(FALSE, CAST(NULL AS DATE), CAST("1970-01-01" AS DATE)) AS COL19,
       |IF(TRUE, CAST(NULL AS DATE), CAST("1970-01-01" AS DATE)) AS COL20,
-      |IF(TRUE, CAST(NULL AS TIMESTAMP), SecondsToTimestamp(1)) AS COL21,
+      |IF(TRUE, CAST(NULL AS TIMESTAMP), timestamp_seconds(1)) AS COL21,
       |IF(FALSE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL22,
       |IF(TRUE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL23
       |FROM src LIMIT 1""".stripMargin)
@@ -555,7 +555,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     val res = sql("SELECT CAST(timestamp_seconds(1) AS DOUBLE) FROM src LIMIT 1").collect().head
     assert(1 == res.getDouble(0))
   }
-
   createQueryTest("timestamp cast #2",
     "SELECT CAST(timestamp_seconds(1.2) AS DOUBLE) FROM src LIMIT 1")
 
