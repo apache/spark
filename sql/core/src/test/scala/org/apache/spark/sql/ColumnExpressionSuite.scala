@@ -965,32 +965,35 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("withField should throw an exception if called on a non-StructType column") {
     intercept[AnalysisException] {
       testData.withColumn("key", $"key".withField("a", lit(2)))
-    }.getMessage should include("The first parameter must be struct type")
+    }.getMessage should include("struct argument should be struct type, got: integer.")
   }
 
-  test("withField should throw an exception if fieldName is empty or null") {
-    intercept[IllegalArgumentException] {
+  test("withField should throw an exception if fieldName is null") {
+    intercept[AnalysisException] {
       structLevel1.withColumn("a", $"a".withField(null, lit(2)))
-    }
-    intercept[IllegalArgumentException] {
+    }.getMessage should include("fieldName argument should not be null.")
+  }
+
+  test("withField should throw an exception if fieldName is empty") {
+    intercept[AnalysisException] {
       structLevel1.withColumn("a", $"a".withField("", lit(2)))
-    }
+    }.getMessage should include("fieldName argument should not be empty.")
   }
 
   test("withField should throw an exception if any intermediate structs don't exist") {
     intercept[AnalysisException] {
       structLevel2.withColumn("a", 'a.withField("x.b", lit(2)))
-    }.getMessage should include("Intermediate struct field `x` does not exist.")
+    }.getMessage should include("Intermediate field x does not exist.")
 
     intercept[AnalysisException] {
       structLevel3.withColumn("a", 'a.withField("a.x.b", lit(2)))
-    }.getMessage should include("Intermediate struct field `a.x` does not exist.")
+    }.getMessage should include("Intermediate field a.x does not exist.")
   }
 
   test("withField should throw an exception if an intermediate field is not a struct") {
     intercept[AnalysisException] {
       structLevel1.withColumn("a", 'a.withField("b.a", lit(2)))
-    }.getMessage should include("Intermediate fields must be a struct. `b` is integer.")
+    }.getMessage should include("Intermediate field b must be struct type, got: int.")
   }
 
   test("withField should add field to struct") {
@@ -1009,14 +1012,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("withField should add field to null struct") {
     checkAnswerAndSchema(
       nullStructLevel1.withColumn("a", $"a".withField("d", lit(4))),
-      Row(Row(null, null, null, 4)) :: Nil,
+      Row(null) :: Nil,
       StructType(Seq(
         StructField("a", StructType(Seq(
           StructField("a", IntegerType, nullable = true),
           StructField("b", IntegerType, nullable = true),
           StructField("c", IntegerType, nullable = true),
           StructField("d", IntegerType, nullable = false))),
-          nullable = false))))
+          nullable = true))))
   }
 
   test("withField should add null field to struct") {
@@ -1098,13 +1101,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("withField should replace field in null struct") {
     checkAnswerAndSchema(
       nullStructLevel1.withColumn("a", 'a.withField("b", lit(2))),
-      Row(Row(null, 2, null)) :: Nil,
+      Row(null) :: Nil,
       StructType(Seq(
         StructField("a", StructType(Seq(
           StructField("a", IntegerType, nullable = true),
           StructField("b", IntegerType, nullable = false),
           StructField("c", IntegerType, nullable = true))),
-          nullable = false))))
+          nullable = true))))
   }
 
   test("withField should replace field with null value in struct") {
@@ -1238,7 +1241,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
     intercept[AnalysisException] {
       df.withColumn("a", 'a.withField("a.b.e.f", lit(2)))
-    }.getMessage should include("Intermediate struct field `a` does not exist.")
+    }.getMessage should include("Intermediate field a does not exist.")
   }
 
   private lazy val mixedCaseStructLevel1: DataFrame = spark.createDataFrame(
@@ -1347,11 +1350,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
       intercept[AnalysisException] {
         mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2)))
-      }.getMessage should include("Intermediate struct field `A` does not exist.")
+      }.getMessage should include("Intermediate field A does not exist.")
 
       intercept[AnalysisException] {
         mixedCaseStructLevel2.withColumn("a", 'a.withField("b.a", lit(2)))
-      }.getMessage should include("Intermediate struct field `b` does not exist.")
+      }.getMessage should include("Intermediate field b does not exist.")
     }
   }
 }

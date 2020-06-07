@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -544,13 +545,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 /**
  * Adds/replaces field in struct by name.
  */
-case class WithField(struct: Expression, fieldPath: Seq[String], value: Expression)
+case class WithField(structExpr: Expression, fieldName: String, valueExpr: Expression)
   extends Unevaluable {
-  assert(fieldPath.nonEmpty)
 
-  override def children: Seq[Expression] = Seq(struct, value)
+  private lazy val fieldPath = CatalystSqlParser.parseMultipartIdentifier(fieldName)
 
-  @transient lazy val toCreateNamedStruct: Expression = toCreateNamedStruct(struct, fieldPath)
+  lazy val toCreateNamedStruct: Expression = toCreateNamedStruct(structExpr, fieldPath)
+
+  override def children: Seq[Expression] = Seq(structExpr, valueExpr)
 
   override def dataType: StructType = toCreateNamedStruct.dataType.asInstanceOf[StructType]
 
@@ -558,25 +560,35 @@ case class WithField(struct: Expression, fieldPath: Seq[String], value: Expressi
 
   override def nullable: Boolean = toCreateNamedStruct.nullable
 
-  @transient private val resolver = SQLConf.get.resolver
+  override def prettyName: String = "with_field"
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    checkFieldExists(struct.dataType, Nil, fieldPath)
+    if (!structExpr.dataType.isInstanceOf[StructType]) {
+      TypeCheckResult.TypeCheckFailure("struct argument should be struct type, got: " +
+        s"${structExpr.dataType.typeName}.")
+    } else if (fieldName == null) {
+      TypeCheckResult.TypeCheckFailure("fieldName argument should not be null.")
+    } else if (fieldName.isEmpty) {
+      TypeCheckResult.TypeCheckFailure("fieldName argument should not be empty.")
+    } else {
+      val structType = structExpr.dataType.asInstanceOf[StructType]
+      checkIntermediateStructTypeFieldsExist(structType, Nil, fieldPath)
+    }
   }
 
-  private def checkFieldExists(
-      currentStruct: DataType,
-      checkedFields: Seq[String],
-      fieldPath: Seq[String]): TypeCheckResult = currentStruct match {
-    case _ if fieldPath.isEmpty => TypeCheckResult.TypeCheckSuccess
+  private val resolver = SQLConf.get.resolver
+
+  private def checkIntermediateStructTypeFieldsExist(
+    currentStruct: DataType,
+    checkedFields: Seq[String],
+    fieldPath: Seq[String]): TypeCheckResult = currentStruct match {
+    case _: StructType if fieldPath.length == 1 => TypeCheckResult.TypeCheckSuccess
     case st: StructType =>
       val newCheckedFields = checkedFields :+ fieldPath.head
       st.find(f => resolver(f.name, fieldPath.head)).map { field =>
-        checkFieldExists(field.dataType, newCheckedFields, fieldPath.tail)
-      }.getOrElse {
-        TypeCheckResult.TypeCheckFailure(
-          s"Intermediate field ${newCheckedFields.quoted} does not exist.")
-      }
+        checkIntermediateStructTypeFieldsExist(field.dataType, newCheckedFields, fieldPath.tail)
+      }.getOrElse(TypeCheckResult.TypeCheckFailure(
+        s"Intermediate field ${newCheckedFields.quoted} does not exist."))
     case _ =>
       val fieldName = if (checkedFields.isEmpty) {
         "The first parameter"
@@ -584,15 +596,13 @@ case class WithField(struct: Expression, fieldPath: Seq[String], value: Expressi
         s"Intermediate field ${checkedFields.quoted}"
       }
       TypeCheckResult.TypeCheckFailure(
-        s"$fieldName must be struct type, got: ${currentStruct.catalogString}")
+        s"$fieldName must be struct type, got: ${currentStruct.catalogString}.")
   }
-
-  override def prettyName: String = "with_field"
 
   private def toCreateNamedStruct(struct: Expression, fieldPath: Seq[String]): Expression = {
     val existingFields = struct.dataType.asInstanceOf[StructType].fieldNames
     val expr = if (fieldPath.length == 1) {
-      val newField = Seq(Literal(fieldPath.head), value)
+      val newField = Seq(Literal(fieldPath.head), valueExpr)
       val fields = existingFields.zipWithIndex.flatMap {
         case (name, _) if resolver(name, fieldPath.head) => newField
         case (name, i) => Seq(Literal(name), GetStructField(struct, i, Some(name)))
@@ -610,6 +620,7 @@ case class WithField(struct: Expression, fieldPath: Seq[String], value: Expressi
         case (name, i) => Seq(Literal(name), GetStructField(struct, i, Some(name)))
       })
     }
-    If(IsNull(struct), Literal(null, expr.dataType), expr)
+
+    if (struct.nullable) If(IsNull(struct), Literal(null, expr.dataType), expr) else expr
   }
 }
