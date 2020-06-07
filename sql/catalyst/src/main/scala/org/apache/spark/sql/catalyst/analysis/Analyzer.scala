@@ -1374,12 +1374,10 @@ class Analyzer(
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
-      case f @ FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, _, _, left, right) =>
-        val leftRes = leftAttributes
-          .map(x => resolveExpressionBottomUp(x, left).asInstanceOf[Attribute])
-        val rightRes = rightAttributes
-          .map(x => resolveExpressionBottomUp(x, right).asInstanceOf[Attribute])
-        f.copy(leftAttributes = leftRes, rightAttributes = rightRes)
+      case f @ FlatMapCoGroupsInPandas(leftExprs, rightExprs, _, _, left, right) =>
+        f.copy(
+          leftExprs = leftExprs.map(x => resolveExpressionBottomUp(x, left)),
+          rightExprs = rightExprs.map(x => resolveExpressionBottomUp(x, right)))
       // intersect/except will be rewritten to join at the begininng of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>

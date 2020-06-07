@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL}
 import org.apache.spark.sql.types._
 
 object NamedExpression {
@@ -31,6 +31,10 @@ object NamedExpression {
   private[expressions] val jvmId = UUID.randomUUID()
   def newExprId: ExprId = ExprId(curId.getAndIncrement(), jvmId)
   def unapply(expr: NamedExpression): Option[(String, DataType)] = Some((expr.name, expr.dataType))
+  def fromExpression(expr: Expression): NamedExpression = expr match {
+    case ne: NamedExpression => ne
+    case _: Expression => Alias(expr, toPrettySQL(expr))()
+  }
 }
 
 /**

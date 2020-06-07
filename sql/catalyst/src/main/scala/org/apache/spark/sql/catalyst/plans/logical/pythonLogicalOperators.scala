@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expre
  * This is used by DataFrame.groupby().apply().
  */
 case class FlatMapGroupsInPandas(
-    groupingAttributes: Seq[Attribute],
+    groupingExprs: Seq[Expression],
     functionExpr: Expression,
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
@@ -56,8 +56,8 @@ case class MapInPandas(
  * This is used by DataFrame.groupby().cogroup().apply().
  */
 case class FlatMapCoGroupsInPandas(
-    leftAttributes: Seq[Attribute],
-    rightAttributes: Seq[Attribute],
+    leftExprs: Seq[Expression],
+    rightExprs: Seq[Expression],
     functionExpr: Expression,
     output: Seq[Attribute],
     left: LogicalPlan,

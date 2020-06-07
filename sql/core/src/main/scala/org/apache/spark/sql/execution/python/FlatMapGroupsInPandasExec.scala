@@ -46,7 +46,7 @@ import org.apache.spark.sql.util.ArrowUtils
  * is left as future work.
  */
 case class FlatMapGroupsInPandasExec(
-    groupingAttributes: Seq[Attribute],
+    groupingExprs: Seq[NamedExpression],
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
@@ -56,38 +56,39 @@ case class FlatMapGroupsInPandasExec(
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
   private val pandasFunction = func.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
+  private val inputExprs =
+    func.asInstanceOf[PythonUDF].children.map(_.asInstanceOf[NamedExpression])
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (groupingAttributes.isEmpty) {
+    if (groupingExprs.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(groupingAttributes) :: Nil
+      ClusteredDistribution(groupingExprs) :: Nil
     }
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+    Seq(groupingExprs.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val (dedupAttributes, argOffsets) = resolveArgOffsets(child, groupingAttributes)
-
+    val (dedupExprs, argOffsets) = resolveArgOffsets(inputExprs, groupingExprs)
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
 
-      val data = groupAndProject(iter, groupingAttributes, child.output, dedupAttributes)
+      val data = groupAndProject(iter, groupingExprs, child.output, dedupExprs)
         .map { case (_, x) => x }
 
       val runner = new ArrowPythonRunner(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         Array(argOffsets),
-        StructType.fromAttributes(dedupAttributes),
+        StructType.fromAttributes(dedupExprs.map(_.toAttribute)),
         sessionLocalTimeZone,
         pythonRunnerConf)
 

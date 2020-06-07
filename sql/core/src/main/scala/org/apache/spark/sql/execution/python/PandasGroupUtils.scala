@@ -23,8 +23,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.BasePythonRunner
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
-import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, UnsafeProjection}
+import org.apache.spark.sql.execution.GroupedIterator
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
@@ -59,10 +59,10 @@ private[python] object PandasGroupUtils {
    */
   def groupAndProject(
       input: Iterator[InternalRow],
-      groupingAttributes: Seq[Attribute],
+      groupingExprs: Seq[NamedExpression],
       inputSchema: Seq[Attribute],
-      dedupSchema: Seq[Attribute]): Iterator[(InternalRow, Iterator[InternalRow])] = {
-    val groupedIter = GroupedIterator(input, groupingAttributes, inputSchema)
+      dedupSchema: Seq[NamedExpression]): Iterator[(InternalRow, Iterator[InternalRow])] = {
+    val groupedIter = GroupedIterator(input, groupingExprs, inputSchema)
     val dedupProj = UnsafeProjection.create(dedupSchema, inputSchema)
     groupedIter.map {
       case (k, groupedRowIter) => (k, groupedRowIter.map(dedupProj))
@@ -70,54 +70,54 @@ private[python] object PandasGroupUtils {
   }
 
   /**
-   * Returns a the deduplicated attributes of the spark plan and the arg offsets of the
+   * Returns a the deduplicated named expressions of the spark plan and the arg offsets of the
    * keys and values.
    *
-   * The deduplicated attributes are needed because the spark plan may contain an attribute
-   * twice; once in the key and once in the value.  For any such attribute we need to
+   * The deduplicated expressions are needed because the spark plan may contain an expression
+   * twice; once in the key and once in the value.  For any such expression we need to
    * deduplicate.
    *
-   * The arg offsets are used to distinguish grouping grouping attributes and data attributes
+   * The arg offsets are used to distinguish grouping expressions and data expressions
    * as following:
    *
    * argOffsets[0] is the length of the argOffsets array
    *
-   * argOffsets[1] is the length of grouping attribute
-   * argOffsets[2 .. argOffsets[0]+2] is the arg offsets for grouping attributes
+   * argOffsets[1] is the length of grouping expression
+   * argOffsets[2 .. argOffsets[0]+2] is the arg offsets for grouping expressions
    *
-   * argOffsets[argOffsets[0]+2 .. ] is the arg offsets for data attributes
+   * argOffsets[argOffsets[0]+2 .. ] is the arg offsets for data expressions
    */
   def resolveArgOffsets(
-    child: SparkPlan, groupingAttributes: Seq[Attribute]): (Seq[Attribute], Array[Int]) = {
+      dataExprs: Seq[NamedExpression], groupingExprs: Seq[NamedExpression])
+    : (Seq[NamedExpression], Array[Int]) = {
 
-    val dataAttributes = child.output.drop(groupingAttributes.length)
-    val groupingIndicesInData = groupingAttributes.map { attribute =>
-      dataAttributes.indexWhere(attribute.semanticEquals)
+    val groupingIndicesInData = groupingExprs.map { expression =>
+      dataExprs.indexWhere(expression.semanticEquals)
     }
 
     val groupingArgOffsets = new ArrayBuffer[Int]
-    val nonDupGroupingAttributes = new ArrayBuffer[Attribute]
+    val nonDupGroupingExprs = new ArrayBuffer[NamedExpression]
     val nonDupGroupingSize = groupingIndicesInData.count(_ == -1)
 
-    groupingAttributes.zip(groupingIndicesInData).foreach {
-      case (attribute, index) =>
+    groupingExprs.zip(groupingIndicesInData).foreach {
+      case (expression, index) =>
         if (index == -1) {
-          groupingArgOffsets += nonDupGroupingAttributes.length
-          nonDupGroupingAttributes += attribute
+          groupingArgOffsets += nonDupGroupingExprs.length
+          nonDupGroupingExprs += expression
         } else {
           groupingArgOffsets += index + nonDupGroupingSize
         }
     }
 
-    val dataArgOffsets = nonDupGroupingAttributes.length until
-      (nonDupGroupingAttributes.length + dataAttributes.length)
+    val dataArgOffsets = nonDupGroupingExprs.length until
+      (nonDupGroupingExprs.length + dataExprs.length)
 
-    val argOffsetsLength = groupingAttributes.length + dataArgOffsets.length + 1
+    val argOffsetsLength = groupingExprs.length + dataArgOffsets.length + 1
     val argOffsets = Array(argOffsetsLength,
-          groupingAttributes.length) ++ groupingArgOffsets ++ dataArgOffsets
+      groupingExprs.length) ++ groupingArgOffsets ++ dataArgOffsets
 
-    // Attributes after deduplication
-    val dedupAttributes = nonDupGroupingAttributes ++ dataAttributes
-    (dedupAttributes, argOffsets)
+    // Expressions after deduplication
+    val dedupExprs = nonDupGroupingExprs ++ dataExprs
+    (dedupExprs, argOffsets)
   }
 }

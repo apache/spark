@@ -541,17 +541,8 @@ class RelationalGroupedDataset protected[sql](
       "Must pass a grouped map udf")
     require(expr.dataType.isInstanceOf[StructType],
       s"The returnType of the udf must be a ${StructType.simpleString}")
-
-    val groupingNamedExpressions = groupingExprs.map {
-      case ne: NamedExpression => ne
-      case other => Alias(other, other.toString)()
-    }
-    val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
-    val child = df.logicalPlan
-    val project = Project(groupingNamedExpressions ++ child.output, child)
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
-    val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
-
+    val plan = FlatMapGroupsInPandas(groupingExprs, expr, output, df.logicalPlan)
     Dataset.ofRows(df.sparkSession, plan)
   }
 
@@ -572,28 +563,9 @@ class RelationalGroupedDataset protected[sql](
       "Must pass a cogrouped map udf")
     require(expr.dataType.isInstanceOf[StructType],
       s"The returnType of the udf must be a ${StructType.simpleString}")
-
-    val leftGroupingNamedExpressions = groupingExprs.map {
-      case ne: NamedExpression => ne
-      case other => Alias(other, other.toString)()
-    }
-
-    val rightGroupingNamedExpressions = r.groupingExprs.map {
-      case ne: NamedExpression => ne
-      case other => Alias(other, other.toString)()
-    }
-
-    val leftAttributes = leftGroupingNamedExpressions.map(_.toAttribute)
-    val rightAttributes = rightGroupingNamedExpressions.map(_.toAttribute)
-
-    val leftChild = df.logicalPlan
-    val rightChild = r.df.logicalPlan
-
-    val left = Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild)
-    val right = Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)
-
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
-    val plan = FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, expr, output, left, right)
+    val plan = FlatMapCoGroupsInPandas(
+      groupingExprs, r.groupingExprs, expr, output, df.logicalPlan, r.df.logicalPlan)
     Dataset.ofRows(df.sparkSession, plan)
   }
 
