@@ -1484,63 +1484,36 @@ class Analyzer(
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
       case h: UnresolvedHaving => h
 
-      case p: LogicalPlan if needResolveStructField(p) =>
-        logTrace(s"Attempting to resolve ${p.simpleString(SQLConf.get.maxToStringFields)}")
-        val resolved = p.mapExpressions(resolveExpressionTopDown(_, p))
-        val structFieldMap = mutable.Map[String, Alias]()
-        resolved.transformExpressions {
-          case a @ Alias(struct: GetStructField, _) =>
-            if (structFieldMap.contains(struct.sql)) {
-              val exprId = structFieldMap.getOrElse(struct.sql, a).exprId
-              Alias(a.child, a.name)(exprId, a.qualifier, a.explicitMetadata)
-            } else {
-              structFieldMap += (struct.sql -> a)
-              a
-            }
-          case e => e
-        }
-
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
-        q.mapExpressions(resolveExpressionTopDown(_, q))
+        val resolved = q.mapExpressions(resolveExpressionTopDown(_, q))
+        if (needResolveStructField(q)) {
+          resolveStructField(resolved)
+        } else {
+          resolved
+        }
+    }
+
+    private def resolveStructField(plan: LogicalPlan): LogicalPlan = {
+      val structFieldMap = mutable.Map[String, Alias]()
+      plan.transformExpressionsDown {
+        case a @ Alias(struct: GetStructField, _) =>
+          if (structFieldMap.contains(struct.sql)) {
+            val exprId = structFieldMap.getOrElse(struct.sql, a).exprId
+            Alias(a.child, a.name)(exprId, a.qualifier, a.explicitMetadata)
+          } else {
+            structFieldMap += (struct.sql -> a)
+            a
+          }
+        case e => e
+      }
     }
 
     private def needResolveStructField(plan: LogicalPlan): Boolean = {
       plan match {
-        case Aggregate(groupingExpressions, aggregateExpressions, _)
-          if containSameStructFields(groupingExpressions.flatMap(_.references),
-            aggregateExpressions.flatMap(_.references)) => true
-        case GroupingSets(selectedGroupByExprs, groupByExprs, _, aggregations)
-          if containSameStructFields(groupByExprs.flatMap(_.references),
-            aggregations.flatMap(_.references),
-            Some(selectedGroupByExprs.flatMap(_.flatMap(_.references)))) => true
+        case Aggregate(_, _, _) => true
+        case GroupingSets(_, _, _, _) => true
         case _ => false
-      }
-    }
-
-    private def containSameStructFields(
-        groupExprs: Seq[Attribute],
-        aggExprs: Seq[Attribute],
-        extra: Option[Seq[Attribute]] = None): Boolean = {
-
-      def isStructField(attr: Attribute): Boolean = {
-        attr.isInstanceOf[UnresolvedAttribute] &&
-          attr.asInstanceOf[UnresolvedAttribute].nameParts.size == 2
-      }
-
-      val grpAttrs = groupExprs.filter(isStructField)
-        .map(_.asInstanceOf[UnresolvedAttribute].name)
-      val aggAttrs = aggExprs.filter(isStructField)
-        .map(_.asInstanceOf[UnresolvedAttribute].name)
-      val havingAttrs = extra.getOrElse(Seq.empty[Attribute]).filter(isStructField)
-        .map(_.asInstanceOf[UnresolvedAttribute].name)
-
-      if (extra.isDefined) {
-        grpAttrs.exists(aggAttrs.contains)
-      } else {
-        grpAttrs.exists(aggAttrs.contains) ||
-          grpAttrs.exists(havingAttrs.contains) ||
-          aggAttrs.exists(havingAttrs.contains)
       }
     }
 
