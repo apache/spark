@@ -563,16 +563,12 @@ case class WithField(structExpr: Expression, fieldName: String, valueExpr: Expre
   override def prettyName: String = "with_field"
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!structExpr.dataType.isInstanceOf[StructType]) {
-      TypeCheckResult.TypeCheckFailure("struct argument should be struct type, got: " +
-        s"${structExpr.dataType.typeName}.")
-    } else if (fieldName == null) {
+    if (fieldName == null) {
       TypeCheckResult.TypeCheckFailure("fieldName argument should not be null.")
     } else if (fieldName.isEmpty) {
       TypeCheckResult.TypeCheckFailure("fieldName argument should not be empty.")
     } else {
-      val structType = structExpr.dataType.asInstanceOf[StructType]
-      checkIntermediateDataTypesAreStruct(structType, Nil, fieldPath)
+      checkIntermediateDataTypesAreStruct(structExpr.dataType, Nil, fieldPath)
     }
   }
 
@@ -597,8 +593,14 @@ case class WithField(structExpr: Expression, fieldName: String, valueExpr: Expre
         matchingFieldsCheckResults.find(_.isFailure).getOrElse(TypeCheckResult.TypeCheckSuccess)
       }
     }
-    case _ => TypeCheckResult.TypeCheckFailure(s"Intermediate field ${checkedFields.quoted} must " +
-      s"be struct type, got: ${dataType.catalogString}.")
+    case dt =>
+      val fieldName = if (checkedFields.isEmpty) {
+        "struct argument"
+      } else {
+        s"Intermediate field ${checkedFields.quoted}"
+      }
+      TypeCheckResult.TypeCheckFailure(
+        s"$fieldName should be struct type, got: ${dt.catalogString}.")
   }
 
   private def toCreateNamedStruct(struct: Expression, fieldPath: Seq[String]): Expression = {

@@ -965,7 +965,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("withField should throw an exception if called on a non-StructType column") {
     intercept[AnalysisException] {
       testData.withColumn("key", $"key".withField("a", lit(2)))
-    }.getMessage should include("struct argument should be struct type, got: integer.")
+    }.getMessage should include("struct argument should be struct type, got: int.")
   }
 
   test("withField should throw an exception if fieldName is null") {
@@ -990,10 +990,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }.getMessage should include("Intermediate field a.x does not exist.")
   }
 
-  test("withField should throw an exception if an intermediate field is not a struct") {
+  test("withField should throw an exception if any intermediate field is not a struct") {
     intercept[AnalysisException] {
       structLevel1.withColumn("a", 'a.withField("b.a", lit(2)))
-    }.getMessage should include("Intermediate field b must be struct type, got: int.")
+    }.getMessage should include("Intermediate field b should be struct type, got: int.")
 
     intercept[AnalysisException] {
       val structLevel2: DataFrame = spark.createDataFrame(
@@ -1005,7 +1005,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             nullable = false))))
 
       structLevel2.withColumn("a", 'a.withField("a.b", lit(2)))
-    }.getMessage should include("Intermediate field a must be struct type, got: int.")
+    }.getMessage should include("Intermediate field a should be struct type, got: int.")
   }
 
   test("withField should add field to struct") {
