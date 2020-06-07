@@ -87,6 +87,7 @@ metastore_db/
 sql/hive-thriftserver/test_warehouses
 warehouse/
 spark-warehouse/
+!sql/hive/src/test/resources/golden/*
 
 # For R session data
 .RData
