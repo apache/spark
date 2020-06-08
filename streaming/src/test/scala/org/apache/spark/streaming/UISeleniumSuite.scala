@@ -104,7 +104,7 @@ class UISeleniumSuite
         find(cssSelector( """ul li a[href*="streaming"]""")) should not be (None)
       }
 
-      eventually(timeout(10.seconds), interval(500.milliseconds)) {
+      eventually(timeout(30.seconds), interval(500.milliseconds)) {
         // check whether streaming page exists
         go to (sparkUI.webUrl.stripSuffix("/") + "/streaming")
         val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
@@ -128,7 +128,6 @@ class UISeleniumSuite
         h4Text.exists(_.matches("Running Batches \\(\\d+\\)")) should be (true)
         h4Text.exists(_.matches("Waiting Batches \\(\\d+\\)")) should be (true)
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
-
         val arrow = 0x25BE.toChar
         findAll(cssSelector("""#runningBatches-table th""")).map(_.text).toList should be {
           List(s"Batch Time $arrow", "Records", "Scheduling Delay", "Processing Time",
