@@ -143,7 +143,7 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       // 0 which represents any free port, we should set it to the actual one
       portNum = connector.getLocalPort();
       String msg = "Started " + ThriftHttpCLIService.class.getSimpleName() + " in " + schemeName
-        + " mode on port " + portNumb + " path=" + httpPath + " with " + minWorkerThreads + "..."
+        + " mode on port " + portNum + " path=" + httpPath + " with " + minWorkerThreads + "..."
         + maxWorkerThreads + " worker threads";
       LOG.info(msg);
     } catch (Exception t) {
