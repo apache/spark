@@ -244,8 +244,8 @@ private[spark] class BlockManager(
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
 
-  private var blockManagerDecommissioning: Boolean = false
-  private var decommissionManager: Option[BlockManagerDecommissionManager] = None
+  @volatile private var blockManagerDecommissioning: Boolean = false
+  @volatile private var decommissionManager: Option[BlockManagerDecommissionManager] = None
 
   // A DownloadFileManager used to track all the files of remote blocks which are above the
   // specified memory threshold. Files will be deleted automatically based on weak reference.
@@ -1829,7 +1829,7 @@ private[spark] class BlockManager(
       logInfo(s"Starting migration thread for ${peer}")
       // Once a block fails to transfer to an executor stop trying to transfer more blocks
       try {
-        while (running) {
+        while (running && !Thread.interrupted()) {
           val migrating = Option(shufflesToMigrate.poll())
           migrating match {
             case None =>
@@ -1882,6 +1882,7 @@ private[spark] class BlockManager(
    * Note: this does not delete the shuffle files in-case there is an in-progress fetch
    * but rather shadows them.
    * Requires an Indexed based shuffle resolver.
+   * Note: if called in testing please call stopOffloadingShuffleBlocks to avoid thread leakage.
    */
   def offloadShuffleBlocks(): Unit = {
     // Update the queue of shuffles to be migrated
@@ -1915,8 +1916,14 @@ private[spark] class BlockManager(
    * Stop migrating shuffle blocks.
    */
   def stopOffloadingShuffleBlocks(): Unit = {
-    migrationPeers.values.foreach(_._1.running = false)
-    migrationPeers.values.foreach(_._2.shutdownNow())
+    logInfo("Stopping offloading shuffle blocks.")
+    // Stop as gracefully as possible.
+    migrationPeers.values.foreach{case (runnable, service) =>
+      runnable.running = false}
+    migrationPeers.values.foreach{case (runnable, service) =>
+      service.shutdown()}
+    migrationPeers.values.foreach{case (runnable, service) =>
+      service.shutdownNow()}
   }
 
   /**
@@ -2036,7 +2043,10 @@ private[spark] class BlockManager(
    */
   private class BlockManagerDecommissionManager(conf: SparkConf) {
     @volatile private var stopped = false
-    private val blockMigrationThread = new Thread {
+    private lazy val blockMigrationExecutor =
+      ThreadUtils.newDaemonSingleThreadExecutor("block-manager-decommission")
+
+    private val blockMigrationRunnable = new Runnable {
       val sleepInterval = conf.get(
         config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
 
@@ -2079,21 +2089,30 @@ private[spark] class BlockManager(
         }
       }
     }
-    blockMigrationThread.setDaemon(true)
-    blockMigrationThread.setName("block-migration-thread")
 
     def start(): Unit = {
       logInfo("Starting block migration thread")
-      blockMigrationThread.start()
+      blockMigrationExecutor.submit(blockMigrationRunnable)
     }
 
     def stop(): Unit = {
       if (!stopped) {
         stopped = true
-        logInfo("Stopping block migration thread")
-        blockMigrationThread.interrupt()
-        stopOffloadingShuffleBlocks()
       }
+      try {
+        blockMigrationExecutor.shutdown()
+      } catch {
+        case e: Exception =>
+          logInfo(s"Error during shutdown ${e}")
+      }
+      try {
+        stopOffloadingShuffleBlocks()
+      } catch {
+        case e: Exception =>
+          logInfo(s"Error during shuffle shutdown ${e}")
+      }
+      logInfo("Stopping block migration thread")
+      blockMigrationExecutor.shutdownNow()
     }
   }
 

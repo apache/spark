@@ -61,7 +61,7 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with LocalSparkContext with ResetSystemProperties
-  with EncryptionFunSuite with TimeLimits {
+  with EncryptionFunSuite with TimeLimits with BeforeAndAfterAll {
 
   import BlockManagerSuite._
 
@@ -70,6 +70,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   var conf: SparkConf = null
   val allStores = ArrayBuffer[BlockManager]()
+  val sortShuffleManagers = ArrayBuffer[SortShuffleManager]()
   var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
   var liveListenerBus: LiveListenerBus = null
@@ -94,6 +95,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(MEMORY_STORAGE_FRACTION, 0.999)
       .set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
+  }
+
+  private def makeSortShuffleManager(): SortShuffleManager = {
+    val newMgr = new SortShuffleManager(new SparkConf(false))
+    sortShuffleManagers += newMgr
+    newMgr
   }
 
   private def makeBlockManager(
@@ -161,16 +168,31 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   override def afterEach(): Unit = {
     try {
+      logInfo("Stopping...")
       conf = null
       allStores.foreach(_.stop())
       allStores.clear()
+      sortShuffleManagers.foreach(_.stop())
+      sortShuffleManagers.clear()
       rpcEnv.shutdown()
       rpcEnv.awaitTermination()
       rpcEnv = null
       master = null
       liveListenerBus = null
+      logInfo("After each finished")
     } finally {
       super.afterEach()
+    }
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      // Cleanup the reused items.
+      Option(bcastManager).foreach(_.stop())
+      Option(mapOutputTracker).foreach(_.stop())
+      Option(shuffleManager).foreach(_.stop())
+    } finally {
+      super.afterAll()
     }
   }
 
@@ -1767,11 +1789,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("test migration of shuffle blocks during decommissioning") {
-    val shuffleManager1 = new SortShuffleManager(new SparkConf(false))
+    val shuffleManager1 = makeSortShuffleManager()
     val bm1 = makeBlockManager(3500, "exec1", shuffleManager = shuffleManager1)
     shuffleManager1.shuffleBlockResolver._blockManager = bm1
 
-    val shuffleManager2 = new SortShuffleManager(new SparkConf(false))
+    val shuffleManager2 = makeSortShuffleManager()
     val bm2 = makeBlockManager(3500, "exec2", shuffleManager = shuffleManager2)
     shuffleManager2.shuffleBlockResolver._blockManager = bm2
 
@@ -1803,6 +1825,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         === shuffleIndexBlockContent)
     } finally {
       mapOutputTracker.unregisterShuffle(0)
+      // Avoid thread leak
+      bm1.stopOffloadingShuffleBlocks()
     }
   }
 
