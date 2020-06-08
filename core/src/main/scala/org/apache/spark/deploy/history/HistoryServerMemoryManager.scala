@@ -68,6 +68,7 @@ private class HistoryServerMemoryManager(
         currentUsage.addAndGet(-m)
         logInfo(s"Released ${Utils.bytesToString(m)} memory usage for " +
           s"app $appId / $attemptId")
+      case None =>
     }
   }
 

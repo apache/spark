@@ -1335,7 +1335,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         endProcessing(rootPath)
     }
   }
-
 }
 
 private[history] object FsHistoryProvider {
