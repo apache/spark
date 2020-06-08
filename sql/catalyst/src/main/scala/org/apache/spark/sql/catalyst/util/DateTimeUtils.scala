@@ -422,10 +422,6 @@ object DateTimeUtils {
     Instant.ofEpochSecond(secs, mos * NANOS_PER_MICROS)
   }
 
-  def daysToInstant(daysSinceEpoch: SQLDate): Instant = {
-    Instant.ofEpochSecond(daysSinceEpoch * SECONDS_PER_DAY)
-  }
-
   def instantToDays(instant: Instant): Int = {
     val seconds = instant.getEpochSecond
     val days = Math.floorDiv(seconds, SECONDS_PER_DAY)
@@ -824,21 +820,6 @@ object DateTimeUtils {
     val rebasedDateTime = microsToInstant(ts).atZone(toZone).toLocalDateTime.atZone(fromZone)
     instantToMicros(rebasedDateTime.toInstant)
   }
-
-  /**
-   * Convert the date `ts` from one date to another.
-   *
-   * TODO: Because of DST, the conversion between UTC and human time is not exactly one-to-one
-   * mapping, the conversion here may return wrong result, we should make the timestamp
-   * timezone-aware.
-   */
-  def convertTz(ts: SQLDate, fromZone: ZoneId, toZone: ZoneId): SQLDate = {
-    val rebasedDateTime = daysToInstant(ts).atZone(toZone).toLocalDateTime.atZone(fromZone)
-    instantToDays(rebasedDateTime.toInstant)
-  }
-
-  // Convenience method for making it easier to only pass the first argument in Java codegen
-  def convertTz(ts: SQLDate): SQLDate = convertTz(ts, ZoneOffset.UTC, defaultTimeZone().toZoneId)
 
   /**
    * Returns a timestamp of given timezone from utc timestamp, with the same string

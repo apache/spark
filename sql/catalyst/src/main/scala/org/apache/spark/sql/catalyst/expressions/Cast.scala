@@ -471,7 +471,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
     case DoubleType =>
-      buildCast[Double](_, daysSinceEpoch => convertTz(daysSinceEpoch.toInt))
+      buildCast[Double](_, daysSinceEpoch => daysSinceEpoch.toInt)
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
@@ -1110,8 +1110,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             $evNull = true;
           }
          """
-      case DoubleType => (c, evPrim, evNull) =>
-        code"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.convertTz((int)$c);"
+      case DoubleType => (c, evPrim, evNull) => code"$evPrim = (int) $c;"
       case TimestampType =>
         val zid = getZoneId()
         (c, evPrim, evNull) =>
