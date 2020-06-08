@@ -19,8 +19,6 @@
 # This script builds and pushes docker images when run from a release of Spark
 # with Kubernetes support.
 
-set -x
-
 function error {
   echo "$@" 1>&2
   exit 1
