@@ -122,8 +122,8 @@ object StringUtils extends Logging {
           val available = maxLength - length
           val stringToAppend = if (available >= sLen) s else s.substring(0, available)
           strings.append(stringToAppend)
-          length += sLen
         }
+        length = Math.min(length.toLong + sLen, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH).toInt
       }
     }
 
