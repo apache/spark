@@ -168,7 +168,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   override def afterEach(): Unit = {
     try {
-      logInfo("Stopping...")
       conf = null
       allStores.foreach(_.stop())
       allStores.clear()
@@ -179,7 +178,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       rpcEnv = null
       master = null
       liveListenerBus = null
-      logInfo("After each finished")
     } finally {
       super.afterEach()
     }
