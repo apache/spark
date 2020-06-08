@@ -141,6 +141,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         :return: Arrow RecordBatch
         """
         import pandas as pd
+        from pandas.api.types import is_categorical_dtype
         import pyarrow as pa
         from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal
         # Make input conform to [(series1, type1), (series2, type2), ...]
@@ -150,16 +151,22 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         def create_array(s, t):
-            # If the series implements __arrow_array__, conversion will fail if a mask is passed
-            mask = s.isnull() if not hasattr(s.values, "__arrow_array__") else None
+            # Create with __arrow_array__ if the series' backing array implements it
+            series_array = getattr(s, 'array', s._values)
+            if hasattr(series_array, "__arrow_array__"):
+                return series_array.__arrow_array__(type=t)
+
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
-            elif type(s.dtype) == pd.CategoricalDtype:
+            elif is_categorical_dtype(s.dtype):
                 # Note: This can be removed once minimum pyarrow version is >= 0.16.1
                 s = s.astype(s.dtypes.categories.dtype)
             try:
-                array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
+                mask = s.isnull()
+                # pass _ndarray_values to avoid potential failed type checks from pandas array types
+                array = pa.Array.from_pandas(s._ndarray_values, mask=mask, type=t,
+                                             safe=self._safecheck)
             except pa.ArrowException as e:
                 error_msg = "Exception thrown when converting pandas.Series (%s) to Arrow " + \
                             "Array (%s). It can be caused by overflows or other unsafe " + \

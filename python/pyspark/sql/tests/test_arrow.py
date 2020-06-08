@@ -34,6 +34,8 @@ from pyspark.util import _exception_message
 if have_pandas:
     import pandas as pd
     from pandas.util.testing import assert_frame_equal
+    from distutils.version import LooseVersion
+    pandas_version = LooseVersion(pd.__version__)
 
 if have_pyarrow:
     import pyarrow as pa
@@ -442,25 +444,47 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertIsInstance(arrow_first_category_element, str)
         self.assertIsInstance(spark_first_category_element, str)
 
-    def test_createDataFrame_from_string_extension_dtype(self):
-        pdf = pd.DataFrame({u"A": [u"a", u"b", u"c", u"d"]})
-        pdf_ext_dtype = pd.DataFrame({u"A": [u"a", u"b", u"c", u"d"]}, dtype=pd.StringDtype())
+    def _assert_converted_dfs_equal(self, pdf1, pdf2):
+        df1 = self.spark.createDataFrame(pdf1)
+        df2 = self.spark.createDataFrame(pdf2)
+        self.assertEqual(df1.schema, df2.schema)
+        self.assertEqual(df1.collect(), df2.collect())
 
-        df = self.spark.createDataFrame(pdf)
-        df_ext_dtype = self.spark.createDataFrame(pdf_ext_dtype)
-
-        self.assertEqual(df_ext_dtype.schema, df.schema)
-        self.assertEqual(df_ext_dtype.collect(), df.collect())
-
-    def test_createDataFrame_from_integer_extension_dtype(self):
+    @unittest.skipIf(pandas_version < "0.24.0", "pandas < 0.24.0 missing Int64Dtype")
+    def test_createDataFrame_with_pandas_integer_dtype(self):
         pdf = pd.DataFrame({u"A": range(4)})
         pdf_ext_dtype = pd.DataFrame({u"A": range(4)}, dtype=pd.Int64Dtype())
+        self._assert_converted_dfs_equal(pdf, pdf_ext_dtype)
 
-        df = self.spark.createDataFrame(pdf)
-        df_ext_dtype = self.spark.createDataFrame(pdf_ext_dtype)
+    @unittest.skipIf(pandas_version < "1.0.0",
+                     "pandas < 1.0.0 missing StringDtype and BooleanDtype")
+    def test_createDataFrame_with_pandas_boolean_and_string_dtypes(self):
+        pdf = pd.DataFrame({
+            u"A": pd.Series([0, 1, 2, 3]),
+            u"B": pd.Series([u"a", u"b", u"c", u"d"]),
+            u"C": pd.Series([True, False, True, False]),
+        })
+        pdf_ext_dtype = pd.DataFrame({
+            u"A": pd.Series([0, 1, 2, 3], dtype=pd.Int64Dtype()),
+            u"B": pd.Series([u"a", u"b", u"c", u"d"], dtype=pd.StringDtype()),
+            u"C": pd.Series([True, False, True, False], dtype=pd.BooleanDtype()),
+        })
+        self._assert_converted_dfs_equal(pdf, pdf_ext_dtype)
 
-        self.assertEqual(df_ext_dtype.schema, df.schema)
-        self.assertEqual(df_ext_dtype.collect(), df.collect())
+    @unittest.skipIf(pandas_version < "1.0.0", "pandas < 1.0.0 missing pd.NA")
+    def test_createDataFrame_with_pd_NA_values(self):
+        pdf = pd.DataFrame({
+            u"A": pd.Series([0, pd.NA, 2, 3]),
+            u"B": pd.Series([pd.NA, u"b", u"c", u"d"]),
+            u"C": pd.Series([True, False, pd.NA, False]),
+        })
+        pdf_ext_dtype = pd.DataFrame({
+            u"A": pd.Series([0, pd.NA, 2, 3], dtype=pd.Int64Dtype()),
+            u"B": pd.Series([pd.NA, u"b", u"c", u"d"], dtype=pd.StringDtype()),
+            u"C": pd.Series([True, False, pd.NA, False], dtype=pd.BooleanDtype()),
+        })
+        self._assert_converted_dfs_equal(pdf, pdf_ext_dtype)
+
 
 
 @unittest.skipIf(
