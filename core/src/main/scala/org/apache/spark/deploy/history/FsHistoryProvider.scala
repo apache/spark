@@ -48,7 +48,6 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
-import org.apache.spark.status.CachedQuantile
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
@@ -130,8 +129,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
 
   private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
-  private val maxInMemoryStoreUsage = conf.get(History.MAX_IN_MEMORY_STORE_USAGE)
-  private val currentInMemoryStoreUsage = new java.util.concurrent.atomic.AtomicLong(0L)
+
+  private val memoryManager = new HistoryServerMemoryManager(conf)
+  memoryManager.initialize()
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
@@ -1223,13 +1223,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       attempt.lastIndex)
     val isCompressed = reader.compressionCodec.isDefined
 
-    val memoryUsage = approximateMemoryUsage(reader.totalSize, isCompressed)
-    if (currentInMemoryStoreUsage.get + memoryUsage > maxInMemoryStoreUsage) {
-      throw new IllegalStateException("Not enough in-memory storage to create hybrid store.")
-    }
-    currentInMemoryStoreUsage.addAndGet(memoryUsage)
-    logInfo(s"Attempt creating hybrid store to parse $appId / ${attempt.info.attemptId}. " +
-      s"Requested ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
+    // Will throw an exception if the memory space is not enough
+    memoryManager.lease(appId, attempt.info.attemptId, reader.totalSize, isCompressed)
 
     logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
     val lease = dm.lease(reader.totalSize, isCompressed)
@@ -1239,29 +1234,25 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       store = new HybridStore()
       val levelDB = KVUtils.open(lease.tmpPath, metadata)
       store.setLevelDB(levelDB)
-      store.setCachedQuantileKlass(classOf[CachedQuantile])
       rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
 
       // Start the background thread to dump data to levelDB when writing to
       // InMemoryStore is completed.
-      store.switchingToLevelDB(new HybridStore.SwitchingToLevelDBListener {
-        override def onSwitchingToLevelDBSuccess: Unit = {
+      store.switchToLevelDB(new HybridStore.SwitchToLevelDBListener {
+        override def onSwitchToLevelDBSuccess: Unit = {
           levelDB.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)
           store.setLevelDB(KVUtils.open(newStorePath, metadata))
-          currentInMemoryStoreUsage.addAndGet(-memoryUsage)
-          logInfo(s"Completely switched to leveldb for app" +
-            s" $appId / ${attempt.info.attemptId}. " +
-            s"Released ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
+          memoryManager.release(appId, attempt.info.attemptId)
+          logInfo(s"Completely switched to LevelDB for app $appId / ${attempt.info.attemptId}.")
         }
 
-        override def onSwitchingToLevelDBFail(e: Exception): Unit = {
-          logWarning(s"Failed to switch to leveldb for app" +
-          s" $appId / ${attempt.info.attemptId}", e)
+        override def onSwitchToLevelDBFail(e: Exception): Unit = {
           levelDB.close()
           if (!isLeaseRolledBack.getAndSet(true)) {
             lease.rollback()
           }
+          logWarning(s"Failed to switch to LevelDB for app $appId / ${attempt.info.attemptId}", e)
         }
       })
 
@@ -1269,8 +1260,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } catch {
       case e: Exception =>
         store.close()
-        currentInMemoryStoreUsage.addAndGet(-memoryUsage)
-        logInfo(s"Released ${Utils.bytesToString(memoryUsage)} in-memory storage quota.")
+        memoryManager.release(appId, attempt.info.attemptId)
         if (!isLeaseRolledBack.getAndSet(true)) {
           lease.rollback()
         }
@@ -1346,13 +1336,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  private def approximateMemoryUsage(eventLogSize: Long, isCompressed: Boolean): Long = {
-    if (isCompressed) {
-      eventLogSize * 2
-    } else {
-      eventLogSize / 2
-    }
-  }
 }
 
 private[history] object FsHistoryProvider {
