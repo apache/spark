@@ -105,7 +105,7 @@ class ConjunctiveNormalFormPredicateSuite extends SparkFunSuite with PredicateHe
     checkCondition((a && a1 && c) || (b && b1), ((a && a1) || (b && b1)) && (c || (b && b1)))
   }
 
-  test("Return None when exceeding MAX_CNF_NODE_COUNT") {
+  test("Return Seq.empty when exceeding MAX_CNF_NODE_COUNT") {
     // The following expression contains 36 conjunctive sub-expressions in CNF
     val input = (a && b && c) || (d && e && f) || (g && h && i && j)
     // The following expression contains 9 conjunctive sub-expressions in CNF
