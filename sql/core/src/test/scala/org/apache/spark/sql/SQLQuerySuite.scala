@@ -3503,6 +3503,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("select CAST(-32768 as short) DIV CAST (-1 as short)"),
       Seq(Row(Short.MinValue.toLong * -1)))
   }
+
+  test("test") {
+    withTable("t") {
+      sql(
+        """
+          |create table t(id int, dt string) using orc partitioned by (dt)
+        """.stripMargin)
+
+      sql(
+        """
+          |select * from t where dt = '1' or (dt = '2' and id = 1)
+        """.stripMargin).explain(true)
+    }
+
+  }
 }
 
 case class Foo(bar: Option[String])
