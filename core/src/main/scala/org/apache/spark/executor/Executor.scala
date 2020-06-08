@@ -322,11 +322,15 @@ private[spark] class Executor(
     val taskId = taskDescription.taskId
     val threadName = s"Executor task launch worker for task $taskId"
     val taskName = taskDescription.name
-    val mdcProperties = taskDescription.properties.asScala
-      .filter(_._1.startsWith("mdc.")).map { item =>
+    val mdcProperties = (taskDescription.properties.asScala ++
+      Seq((Executor.TASK_MDC_KEY, taskName)))
+      .filter(_._1.startsWith(Executor.MDC_KEY)).map { item =>
         val key = item._1.substring(4)
+        if (key == Executor.TASK_MDC_KEY && item._2 != taskName) {
+          logWarning(s"Override mdc.taskName is not allowed, ignore ${item._2}")
+        }
         (key, item._2)
-      }.toSeq
+      }.toMap
 
     /** If specified, this task has been killed and this option contains the reason. */
     @volatile private var reasonIfKilled: Option[String] = None
@@ -401,9 +405,22 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
+      val oldMdcProperties = mdcProperties.keys.map(k => (k, MDC.get(k)))
+      try {
+        mdcProperties.foreach { case (k, v) => MDC.put(k, v) }
+        runInternal()
+      } finally {
+        oldMdcProperties.foreach { case (k, v) =>
+          if (v == null) {
+            MDC.remove(k)
+          } else {
+            MDC.put(k, v)
+          }
+        }
+      }
+    }
 
-      setMDCForTask(taskName, mdcProperties)
-
+    private def runInternal(): Unit = {
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
@@ -750,9 +767,23 @@ private[spark] class Executor(
     private[this] val takeThreadDump: Boolean = conf.get(TASK_REAPER_THREAD_DUMP)
 
     override def run(): Unit = {
+      val mdcProperties = taskRunner.mdcProperties
+      val oldMdcProperties = mdcProperties.keys.map(k => (k, MDC.get(k)))
+      try {
+        mdcProperties.foreach { case (k, v) => MDC.put(k, v) }
+        runInternal()
+      } finally {
+        oldMdcProperties.foreach { case (k, v) =>
+          if (v == null) {
+            MDC.remove(k)
+          } else {
+            MDC.put(k, v)
+          }
+        }
+      }
+    }
 
-      setMDCForTask(taskRunner.taskName, taskRunner.mdcProperties)
-
+    private def runInternal(): Unit = {
       val startTimeNs = System.nanoTime()
       def elapsedTimeNs = System.nanoTime() - startTimeNs
       def timeoutExceeded(): Boolean = killTimeoutNs > 0 && elapsedTimeNs > killTimeoutNs
@@ -969,4 +1000,7 @@ private[spark] object Executor {
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.
   val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
+
+  val MDC_KEY = "mdc."
+  val TASK_MDC_KEY = s"${MDC_KEY}taskName"
 }
