@@ -356,7 +356,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(d, IntegerType), null)
     checkEvaluation(cast(d, LongType), null)
     checkEvaluation(cast(d, FloatType), null)
-    checkEvaluation(cast(d, DoubleType), null)
+    checkEvaluation(cast(d, DoubleType), 0.0d)
     checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
     checkEvaluation(cast(d, DecimalType(10, 2)), null)
     checkEvaluation(cast(d, StringType), "1970-01-01")
@@ -1296,6 +1296,21 @@ class CastSuite extends CastSuiteBase {
       Seq(DoubleType, FloatType).foreach { dataType =>
         checkEvaluation(cast("badvalue", dataType), null)
       }
+    }
+  }
+
+  private val dateDaysSinceEpoch = 18389.0 // Days since epoch (1970-01-01)
+  private val date = Date.valueOf("2020-05-07")
+
+  test("SPARK-10520: Cast a Date to Double") {
+    withDefaultTimeZone(UTC) {
+      checkEvaluation(cast(Literal(date), DoubleType), dateDaysSinceEpoch)
+    }
+  }
+
+  test("SPARK-10520: Cast a Double to Date") {
+    withDefaultTimeZone(UTC) {
+      checkEvaluation(cast(Literal(dateDaysSinceEpoch), DateType), date)
     }
   }
 

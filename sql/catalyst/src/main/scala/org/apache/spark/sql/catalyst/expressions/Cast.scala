@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
+import java.sql.Date
 import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
@@ -63,6 +64,7 @@ object Cast {
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
+    case (DoubleType, DateType) => true
 
     case (StringType, CalendarIntervalType) => true
 
@@ -468,6 +470,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
+    case DoubleType =>
+      buildCast[Double](_, daysSinceEpoch => convertTz(daysSinceEpoch.toInt))
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
@@ -694,8 +698,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1d else 0d)
-    case DateType =>
-      buildCast[Int](_, d => null)
+    case DateType => _.asInstanceOf[Int].toDouble
     case TimestampType =>
       buildCast[Long](_, t => timestampToDouble(t))
     case x: NumericType =>
@@ -1107,6 +1110,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             $evNull = true;
           }
          """
+      case DoubleType => (c, evPrim, evNull) =>
+        code"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.convertTz((int)$c);"
       case TimestampType =>
         val zid = getZoneId()
         (c, evPrim, evNull) =>
@@ -1569,7 +1574,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       case BooleanType =>
         (c, evPrim, evNull) => code"$evPrim = $c ? 1.0d : 0.0d;"
       case DateType =>
-        (c, evPrim, evNull) => code"$evNull = true;"
+        (c, evPrim, evNull) => code"$evPrim = (double) $c;"
       case TimestampType =>
         (c, evPrim, evNull) => code"$evPrim = ${timestampToDoubleCode(c)};"
       case DecimalType() =>

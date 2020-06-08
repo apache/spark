@@ -18,6 +18,7 @@
 package org.apache.spark.sql.test
 
 import java.nio.charset.StandardCharsets
+import java.sql.Date
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext, SQLImplicits}
@@ -70,6 +71,16 @@ private[sql] trait SQLTestData { self =>
       TestData3(1, None) ::
       TestData3(2, Some(2)) :: Nil).toDF()
     df.createOrReplaceTempView("testData3")
+    df
+  }
+
+  protected lazy val testDataDates: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      TestDataDate(new Date(2000, 1, 1)) ::
+      TestDataDate(new Date(2010, 1, 1)) ::
+      TestDataDate(new Date(2015, 1, 1)) ::
+      TestDataDate(new Date(2020, 1, 1)) :: Nil, 2).toDF()
+    df.createOrReplaceTempView("testDates")
     df
   }
 
@@ -326,6 +337,7 @@ private[sql] object SQLTestData {
   case class TestData(key: Int, value: String)
   case class TestData2(a: Int, b: Int)
   case class TestData3(a: Int, b: Option[Int])
+  case class TestDataDate(a: Date)
   case class LargeAndSmallInts(a: Int, b: Int)
   case class DecimalData(a: BigDecimal, b: BigDecimal)
   case class BinaryData(a: Array[Byte], b: Int)

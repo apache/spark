@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql
 
+import java.sql.Date
+
 import scala.util.Random
 
 import org.scalatest.Matchers.the
 
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -31,7 +34,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -317,6 +319,14 @@ class DataFrameAggregateSuite extends QueryTest
       decimalData.agg(
         avg($"a" cast DecimalType(10, 2)), sumDistinct($"a" cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
+  }
+
+  test("SPARK-10520: date average") {
+    withDefaultTimeZone(UTC) {
+      checkAnswer(
+        testDataDates.agg(avg($"a")),
+        Row(new Date(2011, 4, 3)))
+    }
   }
 
   test("null average") {
