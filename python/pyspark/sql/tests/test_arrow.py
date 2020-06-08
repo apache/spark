@@ -30,12 +30,14 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarro
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
 from pyspark.util import _exception_message
+from distutils.version import LooseVersion
 
 if have_pandas:
     import pandas as pd
     from pandas.util.testing import assert_frame_equal
-    from distutils.version import LooseVersion
     pandas_version = LooseVersion(pd.__version__)
+else:
+    pandas_version = LooseVersion("0")
 
 if have_pyarrow:
     import pyarrow as pa
