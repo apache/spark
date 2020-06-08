@@ -1023,13 +1023,13 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-31220 repartition obeys initialPartitionNum when adaptiveExecutionEnabled") {
-    Seq(true, false).foreach { adaptiveExecutionEnabled =>
+    Seq(true, false).foreach { enableAQE =>
       withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$adaptiveExecutionEnabled",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
         SQLConf.SHUFFLE_PARTITIONS.key -> "6",
         SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "7") {
         val partitionsNum = spark.range(10).repartition($"id").rdd.collectPartitions().length
-        if (adaptiveExecutionEnabled) {
+        if (enableAQE) {
           assert(partitionsNum === 7)
         } else {
           assert(partitionsNum === 6)
