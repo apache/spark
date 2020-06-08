@@ -2706,33 +2706,6 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-30098: create table without provider should " +
-    "use default data source under non-legacy mode") {
-    val catalog = spark.sessionState.catalog
-    withSQLConf(
-      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "false") {
-      withTable("s") {
-        val defaultProvider = conf.defaultDataSourceName
-        sql("CREATE TABLE s(a INT, b INT)")
-        val table = catalog.getTableMetadata(TableIdentifier("s"))
-        assert(table.provider === Some(defaultProvider))
-      }
-    }
-  }
-
-  test("SPARK-30098: create table without provider should " +
-    "use hive under legacy mode") {
-    val catalog = spark.sessionState.catalog
-    withSQLConf(
-      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key -> "true") {
-      withTable("s") {
-        sql("CREATE TABLE s(a INT, b INT)")
-        val table = catalog.getTableMetadata(TableIdentifier("s"))
-        assert(table.provider === Some("hive"))
-      }
-    }
-  }
-
   test("SPARK-30785: create table like a partitioned table") {
     val catalog = spark.sessionState.catalog
     withTable("sc_part", "ta_part") {
@@ -2745,6 +2718,16 @@ class HiveDDLSuite
       assert(targetTable.partitionColumnNames == Seq("ts"))
       sql("ALTER TABLE ta_part ADD PARTITION (ts=10)") // no exception
       checkAnswer(sql("SHOW PARTITIONS ta_part"), Row("ts=10") :: Nil)
+    }
+  }
+
+  test("SPARK-31904: Fix case sensitive problem of char and varchar partition columns") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(a STRING, B VARCHAR(10), C CHAR(10)) STORED AS parquet")
+      sql("CREATE TABLE t2 USING parquet PARTITIONED BY (b, c) AS SELECT * FROM t1")
+      // make sure there is no exception
+      assert(sql("SELECT * FROM t2 WHERE b = 'A'").collect().isEmpty)
+      assert(sql("SELECT * FROM t2 WHERE c = 'A'").collect().isEmpty)
     }
   }
 }

@@ -134,7 +134,7 @@ object PartitioningUtils {
     val timestampFormatter = TimestampFormatter(
       timestampPartitionPattern,
       zoneId,
-      needVarLengthSecondFraction = true)
+      isParsing = true)
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
       parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes,

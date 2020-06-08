@@ -629,12 +629,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case p: Predicate => p
       case e => Cast(e, BooleanType)
     }
-    plan match {
-      case aggregate: Aggregate =>
-        AggregateWithHaving(predicate, aggregate)
-      case _ =>
-        Filter(predicate, plan)
-    }
+    UnresolvedHaving(predicate, plan)
   }
 
   /**
@@ -1539,7 +1534,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a [[CreateStruct]] expression.
    */
   override def visitStruct(ctx: StructContext): Expression = withOrigin(ctx) {
-    CreateStruct(ctx.argument.asScala.map(expression))
+    CreateStruct.create(ctx.argument.asScala.map(expression))
   }
 
   /**

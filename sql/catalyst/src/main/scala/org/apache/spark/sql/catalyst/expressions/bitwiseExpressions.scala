@@ -127,7 +127,8 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
       > SELECT _FUNC_ 0;
        -1
   """)
-case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class BitwiseNot(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
 
@@ -164,7 +165,8 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
        0
   """,
   since = "3.0.0")
-case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class BitwiseCount(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))
 

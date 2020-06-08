@@ -197,7 +197,7 @@ class _JavaClassificationModel(ClassificationModel, JavaPredictionModel):
     """
     Java Model produced by a ``Classifier``.
     Classes are indexed {0, 1, ..., numClasses - 1}.
-    To be mixed in with class:`pyspark.ml.JavaModel`
+    To be mixed in with :class:`pyspark.ml.JavaModel`
     """
 
     @property
@@ -662,6 +662,8 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
     DenseVector([-1.080..., -0.646...])
     >>> blorModel.intercept
     3.112...
+    >>> blorModel.evaluate(bdf).accuracy == blorModel.summary.accuracy
+    True
     >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
     >>> mdf = spark.read.format("libsvm").load(data_path)
     >>> mlor = LogisticRegression(regParam=0.1, elasticNetParam=1.0, family="multinomial")
@@ -932,7 +934,10 @@ class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRe
         if not isinstance(dataset, DataFrame):
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
         java_blr_summary = self._call_java("evaluate", dataset)
-        return BinaryLogisticRegressionSummary(java_blr_summary)
+        if self.numClasses <= 2:
+            return BinaryLogisticRegressionSummary(java_blr_summary)
+        else:
+            return LogisticRegressionSummary(java_blr_summary)
 
 
 class LogisticRegressionSummary(JavaWrapper):
@@ -984,6 +989,15 @@ class LogisticRegressionSummary(JavaWrapper):
         as a vector.
         """
         return self._call_java("featuresCol")
+
+    @property
+    @since("3.1.0")
+    def weightCol(self):
+        """
+        Field in "predictions" which gives the weight of each instance
+        as a vector.
+        """
+        return self._call_java("weightCol")
 
     @property
     @since("2.3.0")

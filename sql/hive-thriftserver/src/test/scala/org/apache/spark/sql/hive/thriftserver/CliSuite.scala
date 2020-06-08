@@ -39,7 +39,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * A test suite for the `spark-sql` CLI tool.
  */
-class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterEach with Logging {
+class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
@@ -62,12 +62,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
     }
   }
 
-  override def afterEach(): Unit = {
-    // Only running `runCliWithin` in a single test case will share the same temporary
-    // Hive metastore
-    Utils.deleteRecursively(metastorePath)
-  }
-
   /**
    * Run a CLI operation and expect all the queries and expected answers to be returned.
    *
@@ -77,6 +71,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
    *                       is taken as an immediate error condition. That is: if a line containing
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
+   * @param maybeWarehouse an option for warehouse path, which will be set via
+   *                       `hive.metastore.warehouse.dir`.
+   * @param useExternalHiveFile whether to load the hive-site.xml from `src/test/noclasspath` or
+   *                            not, disabled by default
+   * @param metastore which path the embedded derby database for metastore locates. Use the the
+   *                  global `metastorePath` by default
    * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
@@ -84,7 +84,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       extraArgs: Seq[String] = Seq.empty,
       errorResponses: Seq[String] = Seq("Error:"),
       maybeWarehouse: Option[File] = Some(warehousePath),
-      useExternalHiveFile: Boolean = false)(
+      useExternalHiveFile: Boolean = false,
+      metastore: File = metastorePath)(
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
@@ -116,7 +117,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
       maybeWarehouse.map(dir => s"--hiveconf ${ConfVars.METASTOREWAREHOUSE}=$dir").getOrElse("")
     val command = {
       val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
-      val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
+      val jdbcUrl = s"jdbc:derby:;databaseName=$metastore;create=true"
       s"""$cliScript
          |  --master local
          |  --driver-java-options -Dderby.system.durability=test
@@ -202,9 +203,18 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
   }
 
   test("load warehouse dir from hive-site.xml") {
-    runCliWithin(1.minute, maybeWarehouse = None, useExternalHiveFile = true)(
-      "desc database default;" -> "hive_one",
-      "set spark.sql.warehouse.dir;" -> "hive_one")
+    val metastore = Utils.createTempDir()
+    metastore.delete()
+    try {
+      runCliWithin(1.minute,
+        maybeWarehouse = None,
+        useExternalHiveFile = true,
+        metastore = metastore)(
+        "desc database default;" -> "hive_one",
+        "set spark.sql.warehouse.dir;" -> "hive_one")
+    } finally {
+      Utils.deleteRecursively(metastore)
+    }
   }
 
   test("load warehouse dir from --hiveconf") {
@@ -218,35 +228,47 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
 
   test("load warehouse dir from --conf spark(.hadoop).hive.*") {
     // override conf from hive-site.xml
-    runCliWithin(
-      2.minute,
-      extraArgs = Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
-      maybeWarehouse = None,
-      useExternalHiveFile = true)(
-      "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
-      "create database cliTestDb;" -> "",
-      "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
-      "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
+    val metastore = Utils.createTempDir()
+    metastore.delete()
+    try {
+      runCliWithin(2.minute,
+        extraArgs =
+          Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
+        maybeWarehouse = None,
+        useExternalHiveFile = true,
+        metastore = metastore)(
+        "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
+        "create database cliTestDb;" -> "",
+        "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
+        "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
 
-    // override conf from --hiveconf too
-    runCliWithin(
-      2.minute,
-      extraArgs = Seq("--conf", s"spark.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"))(
-      "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
-      "create database cliTestDb;" -> "",
-      "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
-      "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
+      // override conf from --hiveconf too
+      runCliWithin(2.minute,
+        extraArgs = Seq("--conf", s"spark.${ConfVars.METASTOREWAREHOUSE}=$sparkWareHouseDir"),
+        metastore = metastore)(
+        "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
+        "create database cliTestDb;" -> "",
+        "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
+        "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
+    } finally {
+      Utils.deleteRecursively(metastore)
+    }
   }
 
   test("load warehouse dir from spark.sql.warehouse.dir") {
     // spark.sql.warehouse.dir overrides all hive ones
-    runCliWithin(
-      2.minute,
-      extraArgs =
-        Seq("--conf",
-          s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}1",
-          "--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=${sparkWareHouseDir}2"))(
-      "desc database default;" -> sparkWareHouseDir.getAbsolutePath.concat("1"))
+    val metastore = Utils.createTempDir()
+    metastore.delete()
+    try {
+      runCliWithin(2.minute,
+        extraArgs = Seq(
+            "--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}1",
+            "--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=${sparkWareHouseDir}2"),
+        metastore = metastore)(
+        "desc database default;" -> sparkWareHouseDir.getAbsolutePath.concat("1"))
+    } finally {
+      Utils.deleteRecursively(metastore)
+    }
   }
 
   test("Simple commands") {
@@ -528,5 +550,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterE
         "-e", "select date_sub(date'2011-11-11', '1.2');"),
       errorResponses = Seq("AnalysisException"))(
       ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."))
+  }
+
+  test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
+    // If Java 8 time API is enabled via the SQL config `spark.sql.datetime.java8API.enabled`,
+    // the date formatter for `java.sql.LocalDate` must output negative years with sign.
+    runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
   }
 }

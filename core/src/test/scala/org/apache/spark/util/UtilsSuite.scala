@@ -1301,6 +1301,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
     }
   }
+
+  test("pathsToMetadata") {
+    val paths = (0 to 4).map(i => new Path(s"path$i"))
+    assert(Utils.buildLocationMetadata(paths, 5) == "[path0]")
+    assert(Utils.buildLocationMetadata(paths, 10) == "[path0, path1]")
+    assert(Utils.buildLocationMetadata(paths, 15) == "[path0, path1, path2]")
+    assert(Utils.buildLocationMetadata(paths, 25) == "[path0, path1, path2, path3]")
+  }
 }
 
 private class SimpleExtension

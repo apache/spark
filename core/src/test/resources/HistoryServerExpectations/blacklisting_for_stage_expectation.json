@@ -717,5 +717,6 @@
       "isBlacklistedForStage" : false
     }
   },
-  "killedTasksSummary" : { }
+  "killedTasksSummary" : { },
+  "resourceProfileId" : 0
 }

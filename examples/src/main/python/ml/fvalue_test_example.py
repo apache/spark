@@ -46,7 +46,7 @@ if __name__ == "__main__":
     ftest = FValueTest.test(df, "features", "label").head()
     print("pValues: " + str(ftest.pValues))
     print("degreesOfFreedom: " + str(ftest.degreesOfFreedom))
-    print("fvalue: " + str(ftest.fValues))
+    print("fvalues: " + str(ftest.fValues))
     # $example off$
 
     spark.stop()
