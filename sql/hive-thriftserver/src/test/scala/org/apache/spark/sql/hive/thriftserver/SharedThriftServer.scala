@@ -33,7 +33,7 @@ trait SharedThriftServer extends SharedSparkSession {
   private var hiveServer2: HiveThriftServer2 = _
   private var serverPort: Int = 0
 
-  def mode: ServerMode.Value = ServerMode.binary
+  def mode: ServerMode.Value
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -94,7 +94,7 @@ trait SharedThriftServer extends SharedSparkSession {
     try {
       hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
       hiveServer2.getServices.asScala.foreach {
-        case t: ThriftCLIService if t.getPortNumber != 0 =>
+        case t: ThriftCLIService =>
           serverPort = t.getPortNumber
           logInfo(s"Started HiveThriftServer2: port=$serverPort, attempt=$attempt")
         case _ =>

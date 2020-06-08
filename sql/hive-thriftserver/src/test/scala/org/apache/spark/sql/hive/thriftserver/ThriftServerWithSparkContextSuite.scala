@@ -44,7 +44,10 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 }
 
 
-class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite
+class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {
+  override def mode: ServerMode.Value = ServerMode.binary
+}
+
 class ThriftServerWithSparkContextInHttpSuite extends ThriftServerWithSparkContextSuite {
   override def mode: ServerMode.Value = ServerMode.http
 }
