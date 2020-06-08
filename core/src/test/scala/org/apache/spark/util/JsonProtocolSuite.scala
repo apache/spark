@@ -436,8 +436,6 @@ class JsonProtocolSuite extends SparkFunSuite {
     testAccumValue(Some("anything"), 123, JString("123"))
   }
 
-<<<<<<< HEAD
-=======
   /** Create an AccumulableInfo and verify we can serialize and deserialize it. */
   private def testAccumulableInfo(
       name: String,
@@ -485,29 +483,6 @@ class JsonProtocolSuite extends SparkFunSuite {
       value = Some(Set("foo")),
       expectedValue = None)
   }
-
-  test("SPARK-30936: forwards compatibility - ignore unknown fields") {
-    val expected = TestListenerEvent("foo", 123)
-    val unknownFieldsJson =
-      """{
-        |  "Event" : "org.apache.spark.util.TestListenerEvent",
-        |  "foo" : "foo",
-        |  "bar" : 123,
-        |  "unknown" : "unknown"
-        |}""".stripMargin
-    assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
-  }
-
-  test("SPARK-30936: backwards compatibility - set default values for missing fields") {
-    val expected = TestListenerEvent("foo", 0)
-    val unknownFieldsJson =
-      """{
-        |  "Event" : "org.apache.spark.util.TestListenerEvent",
-        |  "foo" : "foo"
-        |}""".stripMargin
-    assert(JsonProtocol.sparkEventFromJson(parse(unknownFieldsJson)) === expected)
-  }
->>>>>>> b333ed0c4a... [SPARK-31923][CORE] Ignore internal accumulators that use unrecognized types rather than crashing
 }
 
 
