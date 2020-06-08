@@ -17,6 +17,8 @@
 
 import os
 import pydoc
+import shutil
+import tempfile
 import time
 import unittest
 
@@ -529,6 +531,39 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEquals(types[4], np.object)  # datetime.date
         self.assertEquals(types[5], 'datetime64[ns]')
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_to_pandas_with_duplicated_column_names(self):
+        import numpy as np
+
+        sql = "select 1 v, 1 v"
+        for arrowEnabled in [False, True]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrowEnabled}):
+                df = self.spark.sql(sql)
+                pdf = df.toPandas()
+                types = pdf.dtypes
+                self.assertEquals(types.iloc[0], np.int32)
+                self.assertEquals(types.iloc[1], np.int32)
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_to_pandas_on_cross_join(self):
+        import numpy as np
+
+        sql = """
+        select t1.*, t2.* from (
+          select explode(sequence(1, 3)) v
+        ) t1 left join (
+          select explode(sequence(1, 3)) v
+        ) t2
+        """
+        for arrowEnabled in [False, True]:
+            with self.sql_conf({"spark.sql.crossJoin.enabled": True,
+                                "spark.sql.execution.arrow.pyspark.enabled": arrowEnabled}):
+                df = self.spark.sql(sql)
+                pdf = df.toPandas()
+                types = pdf.dtypes
+                self.assertEquals(types.iloc[0], np.int32)
+                self.assertEquals(types.iloc[1], np.int32)
+
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_to_pandas_required_pandas_not_found(self):
         with QuietTest(self.sc):
@@ -786,6 +821,22 @@ class DataFrameTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(ValueError, "should be of DataFrame.*int"):
                 self.spark.range(10).sameSemantics(1)
+
+    def test_input_files(self):
+        tpath = tempfile.mkdtemp()
+        shutil.rmtree(tpath)
+        try:
+            self.spark.range(1, 100, 1, 10).write.parquet(tpath)
+            # read parquet file and get the input files list
+            input_files_list = self.spark.read.parquet(tpath).inputFiles()
+
+            # input files list should contain 10 entries
+            self.assertEquals(len(input_files_list), 10)
+            # all file paths in list must contain tpath
+            for file_path in input_files_list:
+                self.assertTrue(tpath in file_path)
+        finally:
+            shutil.rmtree(tpath)
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

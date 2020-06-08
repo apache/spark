@@ -448,60 +448,62 @@ object DataSourceStrategy {
     }
   }
 
-  private def translateLeafNodeFilter(predicate: Expression): Option[Filter] = predicate match {
-    case expressions.EqualTo(PushableColumn(name), Literal(v, t)) =>
+  private def translateLeafNodeFilter(
+      predicate: Expression,
+      pushableColumn: PushableColumnBase): Option[Filter] = predicate match {
+    case expressions.EqualTo(pushableColumn(name), Literal(v, t)) =>
       Some(sources.EqualTo(name, convertToScala(v, t)))
-    case expressions.EqualTo(Literal(v, t), PushableColumn(name)) =>
+    case expressions.EqualTo(Literal(v, t), pushableColumn(name)) =>
       Some(sources.EqualTo(name, convertToScala(v, t)))
 
-    case expressions.EqualNullSafe(PushableColumn(name), Literal(v, t)) =>
+    case expressions.EqualNullSafe(pushableColumn(name), Literal(v, t)) =>
       Some(sources.EqualNullSafe(name, convertToScala(v, t)))
-    case expressions.EqualNullSafe(Literal(v, t), PushableColumn(name)) =>
+    case expressions.EqualNullSafe(Literal(v, t), pushableColumn(name)) =>
       Some(sources.EqualNullSafe(name, convertToScala(v, t)))
 
-    case expressions.GreaterThan(PushableColumn(name), Literal(v, t)) =>
+    case expressions.GreaterThan(pushableColumn(name), Literal(v, t)) =>
       Some(sources.GreaterThan(name, convertToScala(v, t)))
-    case expressions.GreaterThan(Literal(v, t), PushableColumn(name)) =>
+    case expressions.GreaterThan(Literal(v, t), pushableColumn(name)) =>
       Some(sources.LessThan(name, convertToScala(v, t)))
 
-    case expressions.LessThan(PushableColumn(name), Literal(v, t)) =>
+    case expressions.LessThan(pushableColumn(name), Literal(v, t)) =>
       Some(sources.LessThan(name, convertToScala(v, t)))
-    case expressions.LessThan(Literal(v, t), PushableColumn(name)) =>
+    case expressions.LessThan(Literal(v, t), pushableColumn(name)) =>
       Some(sources.GreaterThan(name, convertToScala(v, t)))
 
-    case expressions.GreaterThanOrEqual(PushableColumn(name), Literal(v, t)) =>
+    case expressions.GreaterThanOrEqual(pushableColumn(name), Literal(v, t)) =>
       Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
-    case expressions.GreaterThanOrEqual(Literal(v, t), PushableColumn(name)) =>
+    case expressions.GreaterThanOrEqual(Literal(v, t), pushableColumn(name)) =>
       Some(sources.LessThanOrEqual(name, convertToScala(v, t)))
 
-    case expressions.LessThanOrEqual(PushableColumn(name), Literal(v, t)) =>
+    case expressions.LessThanOrEqual(pushableColumn(name), Literal(v, t)) =>
       Some(sources.LessThanOrEqual(name, convertToScala(v, t)))
-    case expressions.LessThanOrEqual(Literal(v, t), PushableColumn(name)) =>
+    case expressions.LessThanOrEqual(Literal(v, t), pushableColumn(name)) =>
       Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
 
-    case expressions.InSet(e @ PushableColumn(name), set) =>
+    case expressions.InSet(e @ pushableColumn(name), set) =>
       val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
       Some(sources.In(name, set.toArray.map(toScala)))
 
     // Because we only convert In to InSet in Optimizer when there are more than certain
     // items. So it is possible we still get an In expression here that needs to be pushed
     // down.
-    case expressions.In(e @ PushableColumn(name), list) if list.forall(_.isInstanceOf[Literal]) =>
+    case expressions.In(e @ pushableColumn(name), list) if list.forall(_.isInstanceOf[Literal]) =>
       val hSet = list.map(_.eval(EmptyRow))
       val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
       Some(sources.In(name, hSet.toArray.map(toScala)))
 
-    case expressions.IsNull(PushableColumn(name)) =>
+    case expressions.IsNull(pushableColumn(name)) =>
       Some(sources.IsNull(name))
-    case expressions.IsNotNull(PushableColumn(name)) =>
+    case expressions.IsNotNull(pushableColumn(name)) =>
       Some(sources.IsNotNull(name))
-    case expressions.StartsWith(PushableColumn(name), Literal(v: UTF8String, StringType)) =>
+    case expressions.StartsWith(pushableColumn(name), Literal(v: UTF8String, StringType)) =>
       Some(sources.StringStartsWith(name, v.toString))
 
-    case expressions.EndsWith(PushableColumn(name), Literal(v: UTF8String, StringType)) =>
+    case expressions.EndsWith(pushableColumn(name), Literal(v: UTF8String, StringType)) =>
       Some(sources.StringEndsWith(name, v.toString))
 
-    case expressions.Contains(PushableColumn(name), Literal(v: UTF8String, StringType)) =>
+    case expressions.Contains(pushableColumn(name), Literal(v: UTF8String, StringType)) =>
       Some(sources.StringContains(name, v.toString))
 
     case expressions.Literal(true, BooleanType) =>
@@ -518,8 +520,9 @@ object DataSourceStrategy {
    *
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
-  protected[sql] def translateFilter(predicate: Expression): Option[Filter] = {
-    translateFilterWithMapping(predicate, None)
+  protected[sql] def translateFilter(
+      predicate: Expression, supportNestedPredicatePushdown: Boolean): Option[Filter] = {
+    translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown)
   }
 
   /**
@@ -529,11 +532,13 @@ object DataSourceStrategy {
    * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
    *                               translated [[Filter]]. The map is used for rebuilding
    *                               [[Expression]] from [[Filter]].
+   * @param nestedPredicatePushdownEnabled Whether nested predicate pushdown is enabled.
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterWithMapping(
       predicate: Expression,
-      translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]])
+      translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]],
+      nestedPredicatePushdownEnabled: Boolean)
     : Option[Filter] = {
     predicate match {
       case expressions.And(left, right) =>
@@ -547,21 +552,26 @@ object DataSourceStrategy {
         // Pushing one leg of AND down is only safe to do at the top level.
         // You can see ParquetFilters' createFilter for more details.
         for {
-          leftFilter <- translateFilterWithMapping(left, translatedFilterToExpr)
-          rightFilter <- translateFilterWithMapping(right, translatedFilterToExpr)
+          leftFilter <- translateFilterWithMapping(
+            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          rightFilter <- translateFilterWithMapping(
+            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
         } yield sources.And(leftFilter, rightFilter)
 
       case expressions.Or(left, right) =>
         for {
-          leftFilter <- translateFilterWithMapping(left, translatedFilterToExpr)
-          rightFilter <- translateFilterWithMapping(right, translatedFilterToExpr)
+          leftFilter <- translateFilterWithMapping(
+            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          rightFilter <- translateFilterWithMapping(
+            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
         } yield sources.Or(leftFilter, rightFilter)
 
       case expressions.Not(child) =>
-        translateFilterWithMapping(child, translatedFilterToExpr).map(sources.Not)
+        translateFilterWithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          .map(sources.Not)
 
       case other =>
-        val filter = translateLeafNodeFilter(other)
+        val filter = translateLeafNodeFilter(other, PushableColumn(nestedPredicatePushdownEnabled))
         if (filter.isDefined && translatedFilterToExpr.isDefined) {
           translatedFilterToExpr.get(filter.get) = predicate
         }
@@ -608,8 +618,9 @@ object DataSourceStrategy {
 
     // A map from original Catalyst expressions to corresponding translated data source filters.
     // If a predicate is not in this map, it means it cannot be pushed down.
+    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     val translatedMap: Map[Expression, Filter] = predicates.flatMap { p =>
-      translateFilter(p).map(f => p -> f)
+      translateFilter(p, supportNestedPredicatePushdown).map(f => p -> f)
     }.toMap
 
     val pushedFilters: Seq[Filter] = translatedMap.values.toSeq
@@ -637,9 +648,9 @@ object DataSourceStrategy {
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.needConversion) {
-      val converters = RowEncoder(StructType.fromAttributes(output))
+      val toRow = RowEncoder(StructType.fromAttributes(output)).createSerializer()
       rdd.mapPartitions { iterator =>
-        iterator.map(converters.toRow)
+        iterator.map(toRow)
       }
     } else {
       rdd.asInstanceOf[RDD[InternalRow]]
@@ -650,12 +661,40 @@ object DataSourceStrategy {
 /**
  * Find the column name of an expression that can be pushed down.
  */
-object PushableColumn {
+abstract class PushableColumnBase {
+  val nestedPredicatePushdownEnabled: Boolean
+
   def unapply(e: Expression): Option[String] = {
-    def helper(e: Expression) = e match {
-      case a: Attribute => Some(a.name)
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    def helper(e: Expression): Option[Seq[String]] = e match {
+      case a: Attribute =>
+        if (nestedPredicatePushdownEnabled || !a.name.contains(".")) {
+          Some(Seq(a.name))
+        } else {
+          None
+        }
+      case s: GetStructField if nestedPredicatePushdownEnabled =>
+        helper(s.child).map(_ :+ s.childSchema(s.ordinal).name)
       case _ => None
     }
-    helper(e)
+    helper(e).map(_.quoted)
   }
+}
+
+object PushableColumn {
+  def apply(nestedPredicatePushdownEnabled: Boolean): PushableColumnBase = {
+    if (nestedPredicatePushdownEnabled) {
+      PushableColumnAndNestedColumn
+    } else {
+      PushableColumnWithoutNestedColumn
+    }
+  }
+}
+
+object PushableColumnAndNestedColumn extends PushableColumnBase {
+  override val nestedPredicatePushdownEnabled = true
+}
+
+object PushableColumnWithoutNestedColumn extends PushableColumnBase {
+  override val nestedPredicatePushdownEnabled = false
 }

@@ -256,8 +256,8 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  test("CreateTable: without USING clause") {
-    spark.conf.set(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key, "false")
+  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
+  ignore("CreateTable: without USING clause") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val testCatalog = catalog("testcat").asTableCatalog
@@ -681,8 +681,8 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("CreateTableAsSelect: without USING clause") {
-    spark.conf.set(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED.key, "false")
+  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
+  ignore("CreateTableAsSelect: without USING clause") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val testCatalog = catalog("testcat").asTableCatalog
@@ -907,6 +907,23 @@ class DataSourceV2SQLSuite
     }
 
     assert(exception.getMessage.contains("The database name is not valid: a.b"))
+  }
+
+  test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+    val exception = intercept[AnalysisException] {
+      sql("SHOW TABLES FROM a.b")
+    }
+
+    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+  }
+
+  test("ShowViews: using v2 catalog, command not supported.") {
+    val exception = intercept[AnalysisException] {
+      sql("SHOW VIEWS FROM testcat")
+    }
+
+    assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
+      " only SessionCatalog supports this command."))
   }
 
   test("ShowTables: using v2 catalog with empty namespace") {
@@ -2105,8 +2122,6 @@ class DataSourceV2SQLSuite
         .add("value", StringType, nullable = false)
 
       val expected = Seq(
-        Row(TableCatalog.PROP_OWNER, defaultUser),
-        Row("provider", provider),
         Row("status", status),
         Row("user", user))
 

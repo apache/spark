@@ -200,10 +200,6 @@ trait CheckAnalysis extends PredicateHelper {
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.catalogString} is not a boolean.")
 
-          case Filter(condition, _) if hasNullAwarePredicateWithinNot(condition) =>
-            failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
-              s"conditions: $condition")
-
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +

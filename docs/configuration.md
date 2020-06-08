@@ -143,6 +143,7 @@ of the most common options to set are:
   <td>
     The name of your application. This will appear in the UI and in log data.
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.driver.cores</code></td>
@@ -206,6 +207,7 @@ of the most common options to set are:
     <code>spark.driver.resource.{resourceName}.discoveryScript</code>
     for the driver to find the resource on startup.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
  <td><code>spark.driver.resource.{resourceName}.discoveryScript</code></td>
@@ -216,6 +218,7 @@ of the most common options to set are:
     name and an array of addresses. For a client-submitted driver, discovery script must assign
     different resource addresses to this driver comparing to other drivers on the same host.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
  <td><code>spark.driver.resource.{resourceName}.vendor</code></td>
@@ -226,6 +229,7 @@ of the most common options to set are:
     the Kubernetes device plugin naming convention. (e.g. For GPUs on Kubernetes
     this config would be set to nvidia.com or amd.com)
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
  <td><code>spark.resources.discoveryPlugin</code></td>
@@ -293,6 +297,7 @@ of the most common options to set are:
     <code>spark.executor.resource.{resourceName}.discoveryScript</code>
     for the executor to find the resource on startup.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
  <td><code>spark.executor.resource.{resourceName}.discoveryScript</code></td>
@@ -302,6 +307,7 @@ of the most common options to set are:
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
     name and an array of addresses.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
  <td><code>spark.executor.resource.{resourceName}.vendor</code></td>
@@ -312,6 +318,7 @@ of the most common options to set are:
     the Kubernetes device plugin naming convention. (e.g. For GPUs on Kubernetes
     this config would be set to nvidia.com or amd.com)
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.extraListeners</code></td>
@@ -337,6 +344,7 @@ of the most common options to set are:
     <em>Note:</em> This will be overridden by SPARK_LOCAL_DIRS (Standalone), MESOS_SANDBOX (Mesos) or
     LOCAL_DIRS (YARN) environment variables set by the cluster manager.
   </td>
+  <td>0.5.0</td>
 </tr>
 <tr>
   <td><code>spark.logConf</code></td>
@@ -344,6 +352,7 @@ of the most common options to set are:
   <td>
     Logs the effective SparkConf as INFO when a SparkContext is started.
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.master</code></td>
@@ -352,6 +361,7 @@ of the most common options to set are:
     The cluster manager to connect to. See the list of
     <a href="submitting-applications.html#master-urls"> allowed master URL's</a>.
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.submit.deployMode</code></td>
@@ -467,6 +477,7 @@ Apart from these, the following properties are also available, and may be useful
     Instead, please set this through the <code>--driver-java-options</code> command line option or in
     your default properties file.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.driver.extraJavaOptions</code></td>
@@ -540,6 +551,7 @@ Apart from these, the following properties are also available, and may be useful
     verbose gc logging to a file named for the executor ID of the app in /tmp, pass a 'value' of:
     <code>-verbose:gc -Xloggc:/tmp/{{APP_ID}}-{{EXECUTOR_ID}}.gc</code>
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
@@ -636,6 +648,7 @@ Apart from these, the following properties are also available, and may be useful
     Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor
     process. The user can specify multiple of these to set multiple environment variables.
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.redaction.regex</code></td>
@@ -659,7 +672,7 @@ Apart from these, the following properties are also available, and may be useful
     By default the <code>pyspark.profiler.BasicProfiler</code> will be used, but this can be overridden by
     passing a profiler class in as a parameter to the <code>SparkContext</code> constructor.
   </td>
-  <td></td>
+  <td>1.2.0</td>
 </tr>
 <tr>
   <td><code>spark.python.profile.dump</code></td>
@@ -670,6 +683,7 @@ Apart from these, the following properties are also available, and may be useful
     by <code>pstats.Stats()</code>. If this is specified, the profile result will not be displayed
     automatically.
   </td>
+  <td>1.2.0</td>
 </tr>
 <tr>
   <td><code>spark.python.worker.memory</code></td>
@@ -680,6 +694,7 @@ Apart from these, the following properties are also available, and may be useful
     (e.g. <code>512m</code>, <code>2g</code>).
     If the memory used during aggregation goes above this amount, it will spill the data into disks.
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.python.worker.reuse</code></td>
@@ -727,6 +742,7 @@ Apart from these, the following properties are also available, and may be useful
     repositories given by the command-line option <code>--repositories</code>. For more details, see
     <a href="submitting-applications.html#advanced-dependency-management">Advanced Dependency Management</a>.
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.jars.excludes</code></td>
@@ -735,6 +751,7 @@ Apart from these, the following properties are also available, and may be useful
     Comma-separated list of groupId:artifactId, to exclude while resolving the dependencies
     provided in <code>spark.jars.packages</code> to avoid dependency conflicts.
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.jars.ivy</code></td>
@@ -744,6 +761,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.jars.packages</code>. This will override the Ivy property <code>ivy.default.ivy.user.dir</code>
     which defaults to ~/.ivy2.
   </td>
+  <td>1.3.0</td>
 </tr>
 <tr>
   <td><code>spark.jars.ivySettings</code></td>
@@ -756,6 +774,7 @@ Apart from these, the following properties are also available, and may be useful
     artifact server like Artifactory. Details on the settings file format can be
     found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>
   </td>
+  <td>2.2.0</td>
 </tr>
  <tr>
   <td><code>spark.jars.repositories</code></td>
@@ -764,6 +783,7 @@ Apart from these, the following properties are also available, and may be useful
     Comma-separated list of additional remote repositories to search for the maven coordinates
     given with <code>--packages</code> or <code>spark.jars.packages</code>.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.pyspark.driver.python</code></td>
@@ -849,6 +869,7 @@ Apart from these, the following properties are also available, and may be useful
     set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC
     pauses or transient network connectivity issues.
   </td>
+  <td>1.2.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.io.numConnectionsPerPeer</code></td>
@@ -858,6 +879,7 @@ Apart from these, the following properties are also available, and may be useful
     large clusters. For clusters with many hard disks and few hosts, this may result in insufficient
     concurrency to saturate all disks, and so users may consider increasing this value.
   </td>
+  <td>1.2.1</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.io.preferDirectBufs</code></td>
@@ -867,6 +889,7 @@ Apart from these, the following properties are also available, and may be useful
     block transfer. For environments where off-heap memory is tightly limited, users may wish to
     turn this off to force all allocations from Netty to be on-heap.
   </td>
+  <td>1.2.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.io.retryWait</code></td>
@@ -875,6 +898,7 @@ Apart from these, the following properties are also available, and may be useful
     (Netty only) How long to wait between retries of fetches. The maximum delay caused by retrying
     is 15 seconds by default, calculated as <code>maxRetries * retryWait</code>.
   </td>
+  <td>1.2.1</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.io.backLog</code></td>
@@ -887,6 +911,7 @@ Apart from these, the following properties are also available, and may be useful
     application (see <code>spark.shuffle.service.enabled</code> option below). If set below 1,
     will fallback to OS default defined by Netty's <code>io.netty.util.NetUtil#SOMAXCONN</code>.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.enabled</code></td>
@@ -915,6 +940,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Cache entries limited to the specified memory footprint, in bytes unless otherwise specified.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.maxChunksBeingTransferred</code></td>
@@ -926,6 +952,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.shuffle.io.retryWait</code>), if those limits are reached the task will fail with
     fetch failure.
   </td>
+  <td>2.3.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
@@ -1233,6 +1260,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many finished executions the Spark UI and status APIs remember before garbage collecting.
   </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.ui.retainedBatches</code></td>
@@ -1240,6 +1268,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     How many finished batches the Spark UI and status APIs remember before garbage collecting.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.retainedDeadExecutors</code></td>
@@ -1633,6 +1662,7 @@ Apart from these, the following properties are also available, and may be useful
     Default number of partitions in RDDs returned by transformations like <code>join</code>,
     <code>reduceByKey</code>, and <code>parallelize</code> when not set by user.
   </td>
+  <td>0.5.0</td>
 </tr>
 <tr>
   <td><code>spark.executor.heartbeatInterval</code></td>
@@ -1652,6 +1682,7 @@ Apart from these, the following properties are also available, and may be useful
     Communication timeout to use when fetching files added through SparkContext.addFile() from
     the driver.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.files.useFetchCache</code></td>
@@ -1664,6 +1695,7 @@ Apart from these, the following properties are also available, and may be useful
     disabled in order to use Spark local directories that reside on NFS filesystems (see
     <a href="https://issues.apache.org/jira/browse/SPARK-6313">SPARK-6313</a> for more details).
   </td>
+  <td>1.2.2</td>
 </tr>
 <tr>
   <td><code>spark.files.overwrite</code></td>
@@ -1672,6 +1704,7 @@ Apart from these, the following properties are also available, and may be useful
     Whether to overwrite files added through SparkContext.addFile() when the target file exists and
     its contents do not match those of the source.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.files.maxPartitionBytes</code></td>
@@ -1692,23 +1725,29 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.1.0</td>
 </tr>
 <tr>
-    <td><code>spark.hadoop.cloneConf</code></td>
-    <td>false</td>
-    <td>If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This
+  <td><code>spark.hadoop.cloneConf</code></td>
+  <td>false</td>
+  <td>
+    If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This
     option should be enabled to work around <code>Configuration</code> thread-safety issues (see
     <a href="https://issues.apache.org/jira/browse/SPARK-2546">SPARK-2546</a> for more details).
     This is disabled by default in order to avoid unexpected performance regressions for jobs that
-    are not affected by these issues.</td>
+    are not affected by these issues.
+  </td>
+  <td>1.0.3</td>
 </tr>
 <tr>
-    <td><code>spark.hadoop.validateOutputSpecs</code></td>
-    <td>true</td>
-    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
+  <td><code>spark.hadoop.validateOutputSpecs</code></td>
+  <td>true</td>
+  <td>
+    If set to true, validates the output specification (e.g. checking if the output directory already exists)
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
-    output directories. We recommend that users do not disable this except if trying to achieve compatibility with
-    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.
-    This setting is ignored for jobs generated through Spark Streaming's StreamingContext, since
-    data may need to be rewritten to pre-existing output directories during checkpoint recovery.</td>
+    output directories. We recommend that users do not disable this except if trying to achieve compatibility
+    with previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.
+    This setting is ignored for jobs generated through Spark Streaming's StreamingContext, since data may
+    need to be rewritten to pre-existing output directories during checkpoint recovery.
+  </td>
+  <td>1.0.1</td>
 </tr>
 <tr>
   <td><code>spark.storage.memoryMapThreshold</code></td>
@@ -1728,6 +1767,7 @@ Apart from these, the following properties are also available, and may be useful
     Version 2 may have better performance, but version 1 may handle failures better in certain situations,
     as per <a href="https://issues.apache.org/jira/browse/MAPREDUCE-4815">MAPREDUCE-4815</a>.
   </td>
+  <td>2.2.0</td>
 </tr>
 </table>
 
@@ -1842,7 +1882,7 @@ Apart from these, the following properties are also available, and may be useful
     need to be increased, so that incoming connections are not dropped when a large number of
     connections arrives in a short period of time.
   </td>
-  <td></td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.network.timeout</code></td>
@@ -1865,7 +1905,7 @@ Apart from these, the following properties are also available, and may be useful
     block transfer. For environments where off-heap memory is tightly limited, users may wish to
     turn this off to force all allocations to be on-heap.
   </td>
-  <td></td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.port.maxRetries</code></td>
@@ -1877,7 +1917,7 @@ Apart from these, the following properties are also available, and may be useful
     essentially allows it to try a range of ports from the start port specified
     to port + maxRetries.
   </td>
-  <td></td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.rpc.numRetries</code></td>
@@ -1920,7 +1960,7 @@ Apart from these, the following properties are also available, and may be useful
     out and giving up. To avoid unwilling timeout caused by long pause like GC,
     you can set larger value.
   </td>
-  <td></td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
@@ -2053,6 +2093,7 @@ Apart from these, the following properties are also available, and may be useful
     that register to the listener bus. Consider increasing value, if the listener events corresponding
     to shared queue are dropped. Increasing this value may result in the driver using more memory.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.listenerbus.eventqueue.appStatus.capacity</code></td>
@@ -2062,6 +2103,7 @@ Apart from these, the following properties are also available, and may be useful
     Consider increasing value, if the listener events corresponding to appStatus queue are dropped.
     Increasing this value may result in the driver using more memory.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.listenerbus.eventqueue.executorManagement.capacity</code></td>
@@ -2071,6 +2113,7 @@ Apart from these, the following properties are also available, and may be useful
     executor management listeners. Consider increasing value if the listener events corresponding to
     executorManagement queue are dropped. Increasing this value may result in the driver using more memory.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.listenerbus.eventqueue.eventLog.capacity</code></td>
@@ -2080,6 +2123,7 @@ Apart from these, the following properties are also available, and may be useful
     that write events to eventLogs. Consider increasing value if the listener events corresponding to eventLog queue
     are dropped. Increasing this value may result in the driver using more memory.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.listenerbus.eventqueue.streams.capacity</code></td>
@@ -2089,6 +2133,18 @@ Apart from these, the following properties are also available, and may be useful
     Consider increasing value if the listener events corresponding to streams queue are dropped. Increasing
     this value may result in the driver using more memory.
   </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.resource.profileMergeConflicts</code></td>
+  <td>false</td>
+  <td>
+    If set to "true", Spark will merge ResourceProfiles when different profiles are specified
+    in RDDs that get combined into a single stage. When they are merged, Spark chooses the maximum of
+    each resource and creates a new ResourceProfile. The default of false results in Spark throwing
+    an exception if multiple different ResourceProfiles are found in RDDs going into the same stage.
+  </td>
+  <td>3.1.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.blacklist.unschedulableTaskSetTimeout</code></td>
@@ -2271,6 +2327,7 @@ Apart from these, the following properties are also available, and may be useful
     in order to assign resource slots (e.g. a 0.2222 configuration, or 1/0.2222 slots will become 
     4 tasks/resource, not 5).
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.task.maxFailures</code></td>
@@ -2335,6 +2392,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Number of consecutive stage attempts allowed before a stage is aborted.
   </td>
+  <td>2.2.0</td>
 </tr>
 </table>
 
@@ -2398,7 +2456,8 @@ Apart from these, the following properties are also available, and may be useful
     For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
-    This requires <code>spark.shuffle.service.enabled</code> to be set.
+    This requires <code>spark.shuffle.service.enabled</code> or
+    <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be set.
     The following configurations are also relevant:
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
@@ -2503,7 +2562,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.dynamicAllocation.shuffleTimeout</code></td>
+  <td><code>spark.dynamicAllocation.shuffleTracking.timeout</code></td>
   <td><code>infinity</code></td>
   <td>
     When shuffle tracking is enabled, controls the timeout for executors that are holding shuffle
@@ -2526,13 +2585,14 @@ like shuffle, just replace "rpc" with "shuffle" in the property names except
 <code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code>, which is only for RPC module.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.{driver|executor}.rpc.io.serverThreads</code></td>
   <td>
     Fall back on <code>spark.rpc.io.serverThreads</code>
   </td>
   <td>Number of threads used in the server thread pool</td>
+  <td>1.6.0</td>
 </tr>
 <tr>
   <td><code>spark.{driver|executor}.rpc.io.clientThreads</code></td>
@@ -2540,6 +2600,7 @@ like shuffle, just replace "rpc" with "shuffle" in the property names except
     Fall back on <code>spark.rpc.io.clientThreads</code>
   </td>
   <td>Number of threads used in the client thread pool</td>
+  <td>1.6.0</td>
 </tr>
 <tr>
   <td><code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code></td>
@@ -2547,6 +2608,7 @@ like shuffle, just replace "rpc" with "shuffle" in the property names except
     Fall back on <code>spark.rpc.netty.dispatcher.numThreads</code>
   </td>
   <td>Number of threads used in RPC message dispatcher thread pool</td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
@@ -2560,11 +2622,33 @@ Please refer to the [Security](security.html) page for available options on how 
 Spark subsystems.
 
 
-{% for static_file in site.static_files %}
-    {% if static_file.name == 'sql-configs.html' %}
 ### Spark SQL
 
-        {% include_relative sql-configs.html %}
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'generated-runtime-sql-config-table.html' %}
+
+#### Runtime SQL Configuration
+
+Runtime SQL configurations are per-session, mutable Spark SQL configurations. They can be set with initial values by the config file
+and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
+Also, they can be set and queried by SET commands and rest to their initial values by RESET command,
+or by `SparkSession.conf`'s setter and getter methods in runtime.
+
+{% include_relative generated-runtime-sql-config-table.html %}
+        {% break %}
+    {% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'generated-static-sql-config-table.html' %}
+
+#### Static SQL Configuration
+
+Static SQL configurations are cross-session, immutable Spark SQL configurations. They can be set with final values by the config file
+and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
+External users can query the static sql config values via `SparkSession.conf` or via set command, e.g. `SET spark.sql.extensions;`, but cannot set/unset them.
+
+{% include_relative generated-static-sql-config-table.html %}
         {% break %}
     {% endif %}
 {% endfor %}
@@ -2661,6 +2745,7 @@ Spark subsystems.
     <a href="streaming-kafka-0-10-integration.html">Kafka Integration guide</a>
     for more details.
   </td>
+  <td>1.3.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
@@ -2669,6 +2754,7 @@ Spark subsystems.
     Minimum rate (number of records per second) at which data will be read from each Kafka
     partition when using the new Kafka direct stream API.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.streaming.ui.retainedBatches</code></td>
@@ -2726,7 +2812,7 @@ Spark subsystems.
   <td>
     Executable for executing R scripts in client modes for driver. Ignored in cluster modes.
   </td>
-  <td></td>
+  <td>1.5.3</td>
 </tr>
 <tr>
   <td><code>spark.r.shell.command</code></td>
@@ -2735,7 +2821,7 @@ Spark subsystems.
     Executable for executing sparkR shell in client modes for driver. Ignored in cluster modes. It is the same as environment variable <code>SPARKR_DRIVER_R</code>, but take precedence over it.
     <code>spark.r.shell.command</code> is used for sparkR shell while <code>spark.r.driver.command</code> is used for running R script.
   </td>
-  <td></td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.r.backendConnectionTimeout</code></td>
@@ -2759,7 +2845,7 @@ Spark subsystems.
 ### GraphX
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.graphx.pregel.checkpointInterval</code></td>
   <td>-1</td>
@@ -2767,6 +2853,7 @@ Spark subsystems.
     Checkpoint interval for graph and message in Pregel. It used to avoid stackOverflowError due to long lineage chains
   after lots of iterations. The checkpoint is disabled by default.
   </td>
+  <td>2.2.0</td>
 </tr>
 </table>
 
@@ -2867,6 +2954,12 @@ Note: When running Spark on YARN in `cluster` mode, environment variables need t
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
 `log4j.properties` file in the `conf` directory. One way to start is to copy the existing
 `log4j.properties.template` located there.
+
+By default, Spark adds 1 record to the MDC (Mapped Diagnostic Context): `taskName`, which shows something
+like `task 1.0 in stage 0.0`. You can add `%X{taskName}` to your patternLayout in
+order to print it in the logs.
+Moreover, you can use `spark.sparkContext.setLocalProperty("mdc." + name, "value")` to add user specific data into MDC.
+The key in MDC will be the string after the `mdc.` prefix.
 
 # Overriding configuration directory
 

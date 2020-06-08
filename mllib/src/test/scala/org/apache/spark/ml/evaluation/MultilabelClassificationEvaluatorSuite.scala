@@ -59,4 +59,52 @@ class MultilabelClassificationEvaluatorSuite
       .setMetricName("precisionByLabel")
     testDefaultReadWrite(evaluator)
   }
+
+  test("getMetrics") {
+    val scoreAndLabels = Seq((Array(0.0, 1.0), Array(0.0, 2.0)),
+      (Array(0.0, 2.0), Array(0.0, 1.0)),
+      (Array.empty[Double], Array(0.0)),
+      (Array(2.0), Array(2.0)),
+      (Array(2.0, 0.0), Array(2.0, 0.0)),
+      (Array(0.0, 1.0, 2.0), Array(0.0, 1.0)),
+      (Array(1.0), Array(1.0, 2.0))).toDF("prediction", "label")
+
+    val evaluator = new MultilabelClassificationEvaluator()
+
+    val metrics = evaluator.getMetrics(scoreAndLabels)
+    val f1 = metrics.f1Measure
+    val accuracy = metrics.accuracy
+    val precision = metrics.precision
+    val recall = metrics.recall
+    val hammingLoss = metrics.hammingLoss
+    val precisionByLabel = metrics.precision(evaluator.getMetricLabel)
+
+    // default = f1
+    assert(evaluator.evaluate(scoreAndLabels) == f1)
+
+    // accuracy
+    evaluator.setMetricName("accuracy")
+    assert(evaluator.evaluate(scoreAndLabels) == accuracy)
+
+    // precision
+    evaluator.setMetricName("precision")
+    assert(evaluator.evaluate(scoreAndLabels) == precision)
+
+    // recall
+    evaluator.setMetricName("recall")
+    assert(evaluator.evaluate(scoreAndLabels) == recall)
+
+    // hammingLoss
+    evaluator.setMetricName("hammingLoss")
+    assert(evaluator.evaluate(scoreAndLabels) == hammingLoss)
+
+    // precisionByLabel
+    evaluator.setMetricName("precisionByLabel")
+    assert(evaluator.evaluate(scoreAndLabels) == precisionByLabel)
+
+    // truePositiveRateByLabel
+    evaluator.setMetricName("recallByLabel").setMetricLabel(1.0)
+    assert(evaluator.evaluate(scoreAndLabels) ==
+      metrics.recall(evaluator.getMetricLabel))
+  }
 }

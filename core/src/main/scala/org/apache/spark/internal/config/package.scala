@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
@@ -412,6 +413,34 @@ package object config {
       .intConf
       .createWithDefault(1)
 
+  private[spark] val STORAGE_DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.storage.decommission.enabled")
+      .doc("Whether to decommission the block manager when decommissioning executor")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
+    ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
+      .internal()
+      .doc("Maximum number of failures which can be handled for the replication of " +
+        "one RDD block when block manager is decommissioning and trying to move its " +
+        "existing blocks.")
+      .version("3.1.0")
+      .intConf
+      .createWithDefault(3)
+
+  private[spark] val STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL =
+    ConfigBuilder("spark.storage.decommission.replicationReattemptInterval")
+      .internal()
+      .doc("The interval of time between consecutive cache block replication reattempts " +
+        "happening on each decommissioning executor (due to storage decommissioning).")
+      .version("3.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "Time interval between two consecutive attempts of " +
+        "cache block replication should be positive.")
+      .createWithDefaultString("30s")
+
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")
@@ -520,14 +549,14 @@ package object config {
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(60)
 
-  private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING =
+  private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.enabled")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val DYN_ALLOCATION_SHUFFLE_TIMEOUT =
-    ConfigBuilder("spark.dynamicAllocation.shuffleTimeout")
+  private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.shuffleTracking.timeout")
       .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
@@ -542,6 +571,16 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout")
       .version("1.2.0")
       .fallbackConf(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
+
+  private[spark] val LEGACY_LOCALITY_WAIT_RESET =
+    ConfigBuilder("spark.locality.wait.legacyResetOnTaskLaunch")
+    .doc("Whether to use the legacy behavior of locality wait, which resets the delay timer " +
+      "anytime a task is scheduled. See Delay Scheduling section of TaskSchedulerImpl's class " +
+      "documentation for more details.")
+    .internal()
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(false)
 
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .version("0.5.0")
@@ -1756,6 +1795,7 @@ package object config {
     ConfigBuilder("spark.scheduler.mode")
       .version("0.8.0")
       .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
       .createWithDefault(SchedulingMode.FIFO.toString)
 
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
@@ -1814,4 +1854,14 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
+  private[spark] val RESOURCE_PROFILE_MERGE_CONFLICTS =
+    ConfigBuilder("spark.scheduler.resource.profileMergeConflicts")
+      .doc("If set to true, Spark will merge ResourceProfiles when different profiles " +
+        "are specified in RDDs that get combined into a single stage. When they are merged, " +
+        "Spark chooses the maximum of each resource and creates a new ResourceProfile. The " +
+        "default of false results in Spark throwing an exception if multiple different " +
+        "ResourceProfiles are found in RDDs going into the same stage.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 }

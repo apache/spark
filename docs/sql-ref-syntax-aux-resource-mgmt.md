@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-* [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
-* [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
-* [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
-* [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
+ * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
+ * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
+ * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
+ * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)

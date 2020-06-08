@@ -150,10 +150,11 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
         The function takes an iterator of `pandas.Series` and outputs an iterator of
         `pandas.Series`. In this case, the created pandas UDF instance requires one input
-        column when this is called as a PySpark column. The output of each series from
-        the function should always be of the same length as the input.
+        column when this is called as a PySpark column. The length of the entire output from
+        the function should be the same length of the entire input; therefore, it can
+        prefetch the data from the input iterator as long as the lengths are the same.
 
-        It is useful when the UDF execution
+        It is also useful when the UDF execution
         requires initializing some states although internally it works identically as
         Series to Series case. The pseudocode below illustrates the example.
 
@@ -194,9 +195,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         The function takes an iterator of a tuple of multiple `pandas.Series` and outputs an
         iterator of `pandas.Series`. In this case, the created pandas UDF instance requires
         input columns as many as the series when this is called as a PySpark column.
-        It works identically as Iterator of Series to Iterator of Series case except
-        the parameter difference. The output of each series from the function should always
-        be of the same length as the input.
+        Otherwise, it has the same characteristics and restrictions as Iterator of Series
+        to Iterator of Series case.
 
         >>> from typing import Iterator, Tuple
         >>> from pyspark.sql.functions import struct, col
@@ -384,6 +384,14 @@ def _create_pandas_udf(f, returnType, evalType):
                 "In Python 3.6+ and Spark 3.0+, it is preferred to specify type hints for "
                 "pandas UDF instead of specifying pandas UDF type which will be deprecated "
                 "in the future releases. See SPARK-28264 for more details.", UserWarning)
+        elif evalType in [PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                          PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+                          PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF]:
+            # In case of 'SQL_GROUPED_MAP_PANDAS_UDF',  deprecation warning is being triggered
+            # at `apply` instead.
+            # In case of 'SQL_MAP_PANDAS_ITER_UDF' and 'SQL_COGROUPED_MAP_PANDAS_UDF', the
+            # evaluation type will always be set.
+            pass
         elif len(argspec.annotations) > 0:
             evalType = infer_eval_type(signature(f))
             assert evalType is not None

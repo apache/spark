@@ -204,7 +204,7 @@ private[spark] class ExecutorAllocationManager(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING)) {
+      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)) {
         logWarning("Dynamic allocation without a shuffle service is an experimental feature.")
       } else if (!testing) {
         throw new SparkException("Dynamic allocation of executors requires the external " +
@@ -437,7 +437,7 @@ private[spark] class ExecutorAllocationManager(
           } else {
             logDebug(s"Lowering target number of executors to" +
               s" ${numExecutorsTargetPerResourceProfileId(rpId)} (previously " +
-              s"$targetNum.oldNumExecutorsTarget for resource profile id: ${rpId}) " +
+              s"${targetNum.oldNumExecutorsTarget} for resource profile id: ${rpId}) " +
               "because not all requested executors " +
               "are actually needed")
           }
@@ -645,7 +645,6 @@ private[spark] class ExecutorAllocationManager(
         resourceProfileIdToStageAttempt.getOrElseUpdate(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
         numExecutorsToAddPerResourceProfileId.getOrElseUpdate(profId, 1)
-        numExecutorsTargetPerResourceProfileId.getOrElseUpdate(profId, initialNumExecutors)
 
         // Compute the number of tasks requested by the stage on each host
         var numTasksPending = 0
@@ -661,9 +660,20 @@ private[spark] class ExecutorAllocationManager(
         }
         stageAttemptToExecutorPlacementHints.put(stageAttempt,
           (numTasksPending, hostToLocalTaskCountPerStage.toMap, profId))
-
         // Update the executor placement hints
         updateExecutorPlacementHints()
+
+        if (!numExecutorsTargetPerResourceProfileId.contains(profId)) {
+          numExecutorsTargetPerResourceProfileId.put(profId, initialNumExecutors)
+          if (initialNumExecutors > 0) {
+            logDebug(s"requesting executors, rpId: $profId, initial number is $initialNumExecutors")
+            // we need to trigger a schedule since we add an initial number here.
+            client.requestTotalExecutors(
+              numExecutorsTargetPerResourceProfileId.toMap,
+              numLocalityAwareTasksPerResourceProfileId.toMap,
+              rpIdToHostToLocalTaskCount)
+          }
+        }
       }
     }
 

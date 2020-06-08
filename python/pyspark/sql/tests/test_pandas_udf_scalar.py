@@ -445,8 +445,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     Exception,
-                    "The number of output rows of pandas iterator UDF should be "
-                    "the same with input rows"):
+                    "The length of output in Scalar iterator.*"
+                    "the length of output was 1"):
                 df.select(iter_udf_wong_output_size(col('id'))).collect()
 
         @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
@@ -461,7 +461,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(
                         Exception,
-                        "SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator"):
+                        "pandas iterator UDF should exhaust"):
                     df1.select(iter_udf_not_reading_all_input(col('id'))).collect()
 
     def test_vectorized_udf_chained(self):
@@ -896,6 +896,24 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             foo_udf = pandas_udf(lambda x: x, 'timestamp', udf_type)
             result = df.withColumn('time', foo_udf(df.time))
             self.assertEquals(df.collect(), result.collect())
+
+    def test_udf_category_type(self):
+
+        @pandas_udf('string')
+        def to_category_func(x):
+            return x.astype('category')
+
+        pdf = pd.DataFrame({"A": [u"a", u"b", u"c", u"a"]})
+        df = self.spark.createDataFrame(pdf)
+        df = df.withColumn("B", to_category_func(df['A']))
+        result_spark = df.toPandas()
+
+        spark_type = df.dtypes[1][1]
+        # spark data frame and arrow execution mode enabled data frame type must match pandas
+        self.assertEqual(spark_type, 'string')
+
+        # Check result of column 'B' must be equal to column 'A' in type and values
+        pd.testing.assert_series_equal(result_spark["A"], result_spark["B"], check_names=False)
 
     @unittest.skipIf(sys.version_info[:2] < (3, 5), "Type hints are supported from Python 3.5.")
     def test_type_annotation(self):

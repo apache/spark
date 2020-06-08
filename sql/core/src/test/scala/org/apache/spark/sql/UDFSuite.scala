@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.math.BigDecimal
 
 import org.apache.spark.sql.api.java._
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -32,7 +31,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.QueryExecutionListener
-
 
 private case class FunctionResult(f1: String, f2: String)
 
@@ -534,21 +532,53 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(spark.range(2).select(nonDeterministicJavaUDF()).distinct().count() == 2)
   }
 
-  test("Replace _FUNC_ in UDF ExpressionInfo") {
-    val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("upper"))
-    assert(info.getName === "upper")
-    assert(info.getClassName === "org.apache.spark.sql.catalyst.expressions.Upper")
-    assert(info.getUsage === "upper(str) - Returns `str` with all characters changed to uppercase.")
-    assert(info.getExamples.contains("> SELECT upper('SparkSql');"))
-    assert(info.getSince === "1.0.1")
-    assert(info.getNote === "")
-    assert(info.getExtended.contains("> SELECT upper('SparkSql');"))
-  }
-
   test("SPARK-28521 error message for CAST(parameter types contains DataType)") {
     val e = intercept[AnalysisException] {
       spark.sql("SELECT CAST(1)")
     }
     assert(e.getMessage.contains("Invalid arguments for function cast"))
+  }
+
+  test("only one case class parameter") {
+    val f = (d: TestData) => d.key * d.value.toInt
+    val myUdf = udf(f)
+    val df = Seq(("data", TestData(50, "2"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("one case class with primitive parameter") {
+    val f = (i: Int, p: TestData) => p.key * i
+    val myUdf = udf(f)
+    val df = Seq((2, TestData(50, "data"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("multiple case class parameters") {
+    val f = (d1: TestData, d2: TestData) => d1.key * d2.key
+    val myUdf = udf(f)
+    val df = Seq((TestData(10, "d1"), TestData(50, "d2"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(500) :: Nil)
+  }
+
+  test("input case class parameter and return case class") {
+    val f = (d: TestData) => TestData(d.key * 2, "copy")
+    val myUdf = udf(f)
+    val df = Seq(("data", TestData(50, "d2"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(Row(100, "copy")) :: Nil)
+  }
+
+  test("any and case class parameter") {
+    val f = (any: Any, d: TestData) => s"${any.toString}, ${d.value}"
+    val myUdf = udf(f)
+    val df = Seq(("Hello", TestData(50, "World"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row("Hello, World") :: Nil)
+  }
+
+  test("nested case class parameter") {
+    val f = (y: Int, training: TrainingSales) => training.sales.year + y
+    val myUdf = udf(f)
+    val df = Seq((20, TrainingSales("training", CourseSales("course", 2000, 3.14))))
+      .toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(2020) :: Nil)
   }
 }
