@@ -91,18 +91,26 @@ trait SharedThriftServer extends SharedSparkSession {
     sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT.varname, "0")
     sqlContext.setConf(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname, mode.toString)
 
-    hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
-    hiveServer2.getServices.asScala.foreach {
-      case t: ThriftCLIService if t.getPortNumber != 0 =>
-        serverPort = t.getPortNumber
-        logInfo(s"Started HiveThriftServer2: port=$serverPort, attempt=$attempt")
-      case _ =>
-    }
+    try {
+      hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
+      hiveServer2.getServices.asScala.foreach {
+        case t: ThriftCLIService if t.getPortNumber != 0 =>
+          serverPort = t.getPortNumber
+          logInfo(s"Started HiveThriftServer2: port=$serverPort, attempt=$attempt")
+        case _ =>
+      }
 
-    // Wait for thrift server to be ready to serve the query, via executing simple query
-    // till the query succeeds. See SPARK-30345 for more details.
-    eventually(timeout(30.seconds), interval(1.seconds)) {
-      withJdbcStatement { _.execute("SELECT 1") }
+      // Wait for thrift server to be ready to serve the query, via executing simple query
+      // till the query succeeds. See SPARK-30345 for more details.
+      eventually(timeout(30.seconds), interval(1.seconds)) {
+        withJdbcStatement {_.execute("SELECT 1")}
+      }
+    } catch {
+      case e: Exception =>
+        logError("Error start hive server with Context ", e)
+        if (hiveServer2 != null) {
+          hiveServer2.stop()
+        }
     }
   }
 }
