@@ -118,11 +118,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Infer Filters", Once,
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        rulesWithoutInferFiltersFromConstraints: _*) ::
-        // Set strategy to Once to avoid pushing filter every time because we do not change the
-        // join condition.
-        Batch("Push CNF predicate through join", Once,
-          PushCNFPredicateThroughScan) :: Nil
+        rulesWithoutInferFiltersFromConstraints: _*) :: Nil
     }
 
     val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::

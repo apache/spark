@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.And
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -184,6 +186,42 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
       val scan1 = getHiveTableScanExec(s"SELECT * FROM $table WHERE a = 1 AND b = 2")
       val scan2 = getHiveTableScanExec(s"SELECT * FROM $table WHERE b = 2 AND a = 1")
       assert(scan1.sameResult(scan2))
+    }
+  }
+
+  test("Convert scan predicate to CNF") {
+    withTable("t", "temp") {
+      sql(
+        s"""
+           |CREATE TABLE t(i int)
+           |PARTITIONED BY (p int)
+           |STORED AS textfile""".stripMargin)
+      spark.range(0, 1000, 1).selectExpr("id as col")
+        .createOrReplaceTempView("temp")
+
+      for (part <- Seq(1, 2, 3, 4)) {
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE t PARTITION (p='$part')
+             |select col from temp""".stripMargin)
+      }
+
+      val scan1 = getHiveTableScanExec("SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)")
+      val scan2 = getHiveTableScanExec(
+        "SELECT * FROM t WHERE (p = '1' and i = 2) or (i = 1 or p = '2')")
+      val scan3 = getHiveTableScanExec(
+        "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '3' and i = 3 )")
+      val scan4 = getHiveTableScanExec(
+        "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '2' or p = '3')")
+
+      assert(scan1.prunedPartitions.map(_.toString) ==
+        Stream("t(p=1)", "t(p=2)"))
+      assert(scan2.prunedPartitions.map(_.toString) ==
+        Stream("t(p=1)", "t(p=2)", "t(p=3)", "t(p=4)"))
+      assert(scan3.prunedPartitions.map(_.toString) ==
+        Stream("t(p=1)", "t(p=3)"))
+      assert(scan4.prunedPartitions.map(_.toString) ==
+        Stream("t(p=1)", "t(p=2)", "t(p=3)"))
     }
   }
 

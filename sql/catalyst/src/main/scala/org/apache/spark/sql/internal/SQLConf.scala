@@ -545,6 +545,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val MAX_CNF_NODE_COUNT =
+    buildConf("spark.sql.optimizer.maxCNFNodeCount")
+      .internal()
+      .doc("Specifies the maximum allowable number of conjuncts in the result of CNF " +
+        "conversion. If the conversion exceeds the threshold, None is returned. " +
+        "For example, CNF conversion of (a && b) || (c && d) generates " +
+        "four conjuncts (a || c) && (a || d) && (b || c) && (b || d).")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0,
+        "The depth of the maximum rewriting conjunction normal form must be positive.")
+      .createWithDefault(128)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -2870,6 +2883,8 @@ class SQLConf extends Serializable with Logging {
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
+
+  def maxCnfNodeCount: Int = getConf(MAX_CNF_NODE_COUNT)
 
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
 

@@ -2544,40 +2544,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assert(e.getMessage.contains("Cannot modify the value of a static config"))
     }
   }
-
-  test("test") {
-    Seq("false").foreach { convertParquet =>
-      withTable("t") {
-        withTempDir { f =>
-          sql("CREATE EXTERNAL TABLE t(id int) PARTITIONED BY (dt string) STORED AS " +
-            s"PARQUET LOCATION '${f.getAbsolutePath}'")
-
-          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet) {
-            sql(
-              """
-                |SELECT * FROM t WHERE dt = '1' OR (dt = '2' AND id = 1)
-              """.stripMargin).explain(true)
-
-            sql(
-              """
-                |SELECT * FROM t WHERE (dt = '20190624' and id = 2) or (id = 1 or dt = '20190625')
-              """.stripMargin).explain(true)
-
-            sql(
-              """
-                |SELECT * FROM t WHERE (dt = '20190624' and id = 2) or (dt = '20190625' and id = 3 );
-              """.stripMargin).explain(true)
-
-            sql(
-              """
-                |SELECT * FROM t WHERE (dt = '20190624' and id = 2) or (dt = '20190630' or dt = '20190625')
-              """.stripMargin).explain(true)
-          }
-        }
-      }
-    }
-  }
-
 }
 
 class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite
