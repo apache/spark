@@ -19,6 +19,7 @@
 package org.apache.hive.service.cli.thrift;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.SynchronousQueue;
@@ -29,6 +30,7 @@ import org.apache.hadoop.hive.common.auth.HiveAuthUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hive.service.ServiceException;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
@@ -46,7 +48,7 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
   }
 
   @Override
-  public void run() {
+  protected void initializeServer() {
     try {
       // Server thread pool
       String threadPoolName = "HiveServer2-Handler-Pool";
@@ -59,10 +61,8 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       TTransportFactory transportFactory = hiveAuthFactory.getAuthTransFactory();
       TProcessorFactory processorFactory = hiveAuthFactory.getAuthProcFactory(this);
       TServerSocket serverSocket = null;
-      List<String> sslVersionBlacklist = new ArrayList<String>();
-      for (String sslVersion : hiveConf.getVar(ConfVars.HIVE_SSL_PROTOCOL_BLACKLIST).split(",")) {
-        sslVersionBlacklist.add(sslVersion);
-      }
+      List<String> sslVersionBlacklist =
+          new ArrayList(Arrays.asList(hiveConf.getVar(ConfVars.HIVE_SSL_PROTOCOL_BLACKLIST).split(",")));
       if (!hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_USE_SSL)) {
         serverSocket = HiveAuthUtils.getServerSocket(hiveHost, portNum);
       } else {
@@ -84,9 +84,9 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       // Server args
       int maxMessageSize = hiveConf.getIntVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_MAX_MESSAGE_SIZE);
       int requestTimeout = (int) hiveConf.getTimeVar(
-          HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT, TimeUnit.SECONDS);
+              HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT, TimeUnit.SECONDS);
       int beBackoffSlotLength = (int) hiveConf.getTimeVar(
-          HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_BEBACKOFF_SLOT_LENGTH, TimeUnit.MILLISECONDS);
+              HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_BEBACKOFF_SLOT_LENGTH, TimeUnit.MILLISECONDS);
       TThreadPoolServer.Args sargs = new TThreadPoolServer.Args(serverSocket)
           .processorFactory(processorFactory).transportFactory(transportFactory)
           .protocolFactory(new TBinaryProtocol.Factory())
@@ -101,11 +101,17 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       String msg = "Starting " + ThriftBinaryCLIService.class.getSimpleName() + " on port "
           + portNum + " with " + minWorkerThreads + "..." + maxWorkerThreads + " worker threads";
       LOG.info(msg);
+    } catch (Exception t) {
+      throw new ServiceException("Error initializing " + getName(), t);
+    }
+  }
+
+  @Override
+  public void run() {
+    try {
       server.serve();
     } catch (Throwable t) {
-      LOG.error(
-          "Error starting HiveServer2: could not start "
-              + ThriftBinaryCLIService.class.getSimpleName(), t);
+      LOG.error("Error starting HiveServer2: could not start " + getName(), t);
       System.exit(-1);
     }
   }
