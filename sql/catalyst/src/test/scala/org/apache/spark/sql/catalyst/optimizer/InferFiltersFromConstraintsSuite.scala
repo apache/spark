@@ -402,7 +402,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("Constraints inferred from inequality attributes: case2") {
     val original = testRelation.where('a < 'b && 'b < 'c && 'c < 5)
     val optimized = testRelation.where(IsNotNull('a) && IsNotNull('b) && IsNotNull('c)
-      && 'a < 'b && 'b < 'c && 'c > 'a && 'a < 5 && 'b < 5 && 'c < 5)
+      && 'a < 'b && 'b < 'c && 'a < 5 && 'b < 5 && 'c < 5)
     comparePlans(Optimize.execute(original.analyze), optimized.analyze)
   }
 
@@ -413,8 +413,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimizedLeft = testRelation.where(IsNotNull('a) && IsNotNull('b)
       && 'b >= 3 && 'b <= 13).as("x")
     val optimizedRight = testRelation.where(IsNotNull('a) && IsNotNull('b) && IsNotNull('c)
-      && 'b < 'c && 'c > 3 && 'b <= 13).as("y")
-
+      && 'c > 3 && 'b <= 13).as("y")
     val condition = Some("x.a".attr === "y.a".attr
       && "x.b".attr >= "y.b".attr && "x.b".attr < "y.c".attr)
     val original = left.join(right, Inner, condition)

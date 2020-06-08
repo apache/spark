@@ -107,49 +107,28 @@ trait ConstraintHelper {
     }
 
     val greaterThans = binaryComparisons.map {
+      case EqualTo(l, r) if l.foldable => EqualTo(r, l)
       case LessThan(l, r) => GreaterThan(r, l)
       case LessThanOrEqual(l, r) => GreaterThanOrEqual(r, l)
       case other => other
     }
 
     val lessThans = binaryComparisons.map {
+      case EqualTo(l, r) if l.foldable => EqualTo(r, l)
       case GreaterThan(l, r) => LessThan(r, l)
       case GreaterThanOrEqual(l, r) => LessThanOrEqual(r, l)
       case other => other
     }
 
     var inferredConstraints = Set.empty[Expression]
-
-    greaterThans.foreach {
-      case gt @ GreaterThan(l: Attribute, r: Attribute) =>
-        inferredConstraints ++= replaceInequalityConstraints(greaterThans, r, l, gt)
-      case gt @ GreaterThanOrEqual(l: Attribute, r: Attribute) =>
-        inferredConstraints ++= replaceInequalityConstraints(greaterThans, r, l, gt)
-      case gt @ GreaterThan(l @ Cast(_: Attribute, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceInequalityConstraints(greaterThans, r, l, gt)
-      case gt @ GreaterThanOrEqual(l @ Cast(_: Attribute, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceInequalityConstraints(greaterThans, r, l, gt)
-      case gt @ GreaterThan(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
-        inferredConstraints ++= replaceInequalityConstraints(greaterThans, r, l, gt)
-      case gt @ GreaterThanOrEqual(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
-        inferredConstraints ++= replaceInequalityConstraints(greaterThans, r, l, gt)
-      case _ => // No inference
-    }
-
-    lessThans.foreach {
-      case lt @ LessThan(l: Attribute, r: Attribute) =>
-        inferredConstraints ++= replaceInequalityConstraints(lessThans, r, l, lt)
-      case lt @ LessThanOrEqual(l: Attribute, r: Attribute) =>
-        inferredConstraints ++= replaceInequalityConstraints(lessThans, r, l, lt)
-      case lt @ LessThan(l @ Cast(_: Attribute, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceInequalityConstraints(lessThans, r, l, lt)
-      case lt @ LessThanOrEqual(l @ Cast(_: Attribute, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceInequalityConstraints(lessThans, r, l, lt)
-      case lt @ LessThan(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
-        inferredConstraints ++= replaceInequalityConstraints(lessThans, r, l, lt)
-      case lt @ LessThanOrEqual(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
-        inferredConstraints ++= replaceInequalityConstraints(lessThans, r, l, lt)
-      case _ => // No inference
+    Seq(greaterThans, lessThans).foreach { comparisons =>
+      comparisons.foreach {
+        case b @ BinaryComparison(l: Attribute, r: Expression) if r.foldable =>
+          inferredConstraints ++= replaceInequalityConstraints(comparisons, l, r, b)
+        case b @ BinaryComparison(l @ Cast(_: Attribute, _, _), r: Expression) if r.foldable =>
+          inferredConstraints ++= replaceInequalityConstraints(comparisons, l, r, b)
+        case _ => // No inference
+      }
     }
     (inferredConstraints -- constraints -- greaterThans -- lessThans)
       .filterNot(i => constraints.exists(_.semanticEquals(i)))
@@ -167,11 +146,18 @@ trait ConstraintHelper {
       source: Expression,
       destination: Expression,
       op: BinaryComparison): Set[Expression] = (constraints - op).map {
-    case EqualTo(l, r) if l.semanticEquals(source) => op.makeCopy(Array(destination, r))
-    case EqualTo(l, r) if r.semanticEquals(source) => op.makeCopy(Array(destination, l))
-    case gt @ GreaterThan(l, r) if l.semanticEquals(source) => gt.makeCopy(Array(destination, r))
-    case lt @ LessThan(l, r) if l.semanticEquals(source) => lt.makeCopy(Array(destination, r))
-    case BinaryComparison(l, r) if l.semanticEquals(source) => op.makeCopy(Array(destination, r))
+    case gt @ GreaterThan(l, r) if r.semanticEquals(source) =>
+      gt.copy(l, destination)
+    case GreaterThanOrEqual(l, r) if r.semanticEquals(source) && op.isInstanceOf[GreaterThan] =>
+      op.makeCopy(Array(l, destination))
+    case gt @ GreaterThanOrEqual(l, r) if r.semanticEquals(source) =>
+      gt.copy(l, destination)
+    case lt @ LessThan(l, r) if r.semanticEquals(source) =>
+      lt.copy(l, destination)
+    case LessThanOrEqual(l, r) if r.semanticEquals(source) && op.isInstanceOf[LessThan] =>
+      op.makeCopy(Array(l, destination))
+    case lt @ LessThanOrEqual(l, r) if r.semanticEquals(source) =>
+      lt.copy(l, destination)
     case other => other
   }
 
