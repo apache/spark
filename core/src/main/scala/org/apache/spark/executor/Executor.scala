@@ -719,14 +719,6 @@ private[spark] class Executor(
     }
   }
 
-  private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
-    MDC.put("taskName", taskName)
-
-    mdc.foreach { case (key, value) =>
-      MDC.put(key, value)
-    }
-  }
-
   /**
    * Supervises the killing / cancellation of a task by sending the interrupted flag, optionally
    * sending a Thread.interrupt(), and monitoring the task until it finishes.
