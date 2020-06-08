@@ -570,7 +570,7 @@ case class DataSource(
       checkEmptyGlobPath: Boolean,
       checkFilesExist: Boolean): Seq[Path] = {
     val allPaths = caseInsensitiveOptions.get("path") ++ paths
-    val hadoopConf = sparkSession.sessionState.newHadoopConf()
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
 
     DataSource.checkAndGlobPathIfNecessary(allPaths.toSeq, hadoopConf,
       checkEmptyGlobPath, checkFilesExist)
