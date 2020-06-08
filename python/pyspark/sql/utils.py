@@ -44,7 +44,7 @@ class CapturedException(Exception):
         debug_enabled = sql_conf.pysparkJVMStacktraceEnabled()
         desc = self.desc
         if debug_enabled:
-            desc = desc + "\nJVM stacktrace:\n%s" % self.stackTrace
+            desc = desc + "\n\nJVM stacktrace:\n%s" % self.stackTrace
         # encode unicode instance for python2 for human readable description
         if sys.version_info.major < 3 and isinstance(desc, unicode):
             return str(desc.encode('utf-8'))
@@ -97,11 +97,8 @@ class UnknownException(CapturedException):
 def convert_exception(e):
     s = e.toString()
     c = e.getCause()
+    stacktrace = SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(e)
 
-    jvm = SparkContext._jvm
-    jwriter = jvm.java.io.StringWriter()
-    e.printStackTrace(jvm.java.io.PrintWriter(jwriter))
-    stacktrace = jwriter.toString()
     if s.startswith('org.apache.spark.sql.AnalysisException: '):
         return AnalysisException(s.split(': ', 1)[1], stacktrace, c)
     if s.startswith('org.apache.spark.sql.catalyst.analysis'):
