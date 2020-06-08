@@ -122,8 +122,8 @@ object StringUtils extends Logging {
           val available = maxLength - length
           val stringToAppend = if (available >= sLen) s else s.substring(0, available)
           strings.append(stringToAppend)
+          length += sLen
         }
-        length += sLen
       }
     }
 
