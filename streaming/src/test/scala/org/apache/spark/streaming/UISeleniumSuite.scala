@@ -125,25 +125,15 @@ class UISeleniumSuite
 
         // Check batch tables
         val h4Text = findAll(cssSelector("h4")).map(_.text).toSeq
-        h4Text.exists(_.matches("Running Batches \\(\\d+\\)")) should be (true)
-        h4Text.exists(_.matches("Waiting Batches \\(\\d+\\)")) should be (true)
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         val arrow = 0x25BE.toChar
-        findAll(cssSelector("""#runningBatches-table th""")).map(_.text).toList should be {
-          List(s"Batch Time $arrow", "Records", "Scheduling Delay", "Processing Time",
-            "Output Ops: Succeeded/Total", "Status")
-        }
-        findAll(cssSelector("""#waitingBatches-table th""")).map(_.text).toList should be {
-          List(s"Batch Time $arrow", "Records", "Scheduling Delay", "Processing Time",
-            "Output Ops: Succeeded/Total", "Status")
-        }
         findAll(cssSelector("""#completedBatches-table th""")).map(_.text).toList should be {
           List(s"Batch Time $arrow", "Records", "Scheduling Delay", "Processing Time",
             "Total Delay", "Output Ops: Succeeded/Total")
         }
 
-        val pageSize = 3
+        val pageSize = 1
         val pagedTablePath = "/streaming/?completedBatches.sort=Batch+Time" +
           "&completedBatches.desc=true&completedBatches.page=1" +
           s"&completedBatches.pageSize=$pageSize#completedBatches"
@@ -155,7 +145,7 @@ class UISeleniumSuite
         completedTableRows.length should be (1 + pageSize)
 
         val sortedBatchTimePath = "/streaming/?&completedBatches.sort=Batch+Time" +
-          "&completedBatches.desc=false&completedBatches.pageSize=3#completedBatches"
+          s"&completedBatches.desc=false&completedBatches.pageSize=$pageSize#completedBatches"
 
         // sort batches in ascending order of batch time
         go to (sparkUI.webUrl.stripSuffix("/") + sortedBatchTimePath)
