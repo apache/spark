@@ -22,7 +22,7 @@ import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
-import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, ExecutorService, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -1826,12 +1826,6 @@ private[spark] class BlockManager(
     @volatile var running = true
     override def run(): Unit = {
       var migrating: Option[(Int, Long)] = None
-      val storageLevel = StorageLevel(
-        useDisk = true,
-        useMemory = false,
-        useOffHeap = false,
-        deserialized = false,
-        replication = 1)
       logInfo(s"Starting migration thread for ${peer}")
       // Once a block fails to transfer to an executor stop trying to transfer more blocks
       try {
@@ -1857,7 +1851,7 @@ private[spark] class BlockManager(
                   peer.executorId,
                   blockId,
                   buffer,
-                  storageLevel,
+                  StorageLevel.DISK_ONLY,
                   null)// class tag, we don't need for shuffle
                 logInfo(s"Migrated sub block ${blockId}")
               }
@@ -1879,7 +1873,9 @@ private[spark] class BlockManager(
     }
   }
 
-  private val migrationPeers = mutable.HashMap[BlockManagerId, ShuffleMigrationRunnable]()
+  private val migrationPeers = mutable.HashMap[
+    BlockManagerId,
+    (ShuffleMigrationRunnable, ExecutorService)]()
 
   /**
    * Tries to offload all shuffle blocks that are registered with the shuffle service locally.
@@ -1906,11 +1902,11 @@ private[spark] class BlockManager(
       val executor = ThreadUtils.newDaemonSingleThreadExecutor(s"migrate-shuffle-to-${peer}")
       val runnable = new ShuffleMigrationRunnable(peer)
       executor.submit(runnable)
-      (peer, runnable)
+      (peer, (runnable, executor))
     }
     // A peer may have entered a decommissioning state, don't transfer any new blocks
     deadPeers.foreach { peer =>
-        migrationPeers.get(peer).foreach(_.running = false)
+        migrationPeers.get(peer).foreach(_._1.running = false)
     }
   }
 
@@ -1919,7 +1915,8 @@ private[spark] class BlockManager(
    * Stop migrating shuffle blocks.
    */
   def stopOffloadingShuffleBlocks(): Unit = {
-    migrationPeers.values.foreach(_.running = false)
+    migrationPeers.values.foreach(_._1.running = false)
+    migrationPeers.values.foreach(_._2.shutdownNow())
   }
 
   /**

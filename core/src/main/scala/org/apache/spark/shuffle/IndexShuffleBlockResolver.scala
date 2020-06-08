@@ -214,14 +214,7 @@ private[spark] class IndexShuffleBlockResolver(
             throw new IOException(s"fail to rename file ${fileTmp} to ${file}")
           }
         }
-        blockManager.reportBlockStatus(blockId, BlockStatus(
-          StorageLevel(
-            useDisk = true,
-            useMemory = false,
-            useOffHeap = false,
-            deserialized = false,
-            replication = 0)
-          , 0, diskSize))
+        blockManager.reportBlockStatus(blockId, BlockStatus(StorageLevel.DISK_ONLY, 0, diskSize))
       }
 
       override def onFailure(streamId: String, cause: Throwable): Unit = {
