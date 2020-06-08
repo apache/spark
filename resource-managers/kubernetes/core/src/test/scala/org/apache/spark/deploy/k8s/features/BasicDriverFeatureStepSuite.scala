@@ -115,9 +115,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val resourceRequirements = configuredPod.container.getResources
     val requests = resourceRequirements.getRequests.asScala
     assert(requests("cpu").getAmount === "2")
-    assert(requests("memory").getAmount === "456Mi")
+    assert(requests("memory").getAmount === "456")
+    assert(requests("memory").getFormat === "Mi")
     val limits = resourceRequirements.getLimits.asScala
-    assert(limits("memory").getAmount === "456Mi")
+    assert(limits("memory").getAmount === "456")
+    assert(limits("memory").getFormat === "Mi")
     assert(limits("cpu").getAmount === "4")
 
     val driverPodMetadata = configuredPod.pod.getMetadata
