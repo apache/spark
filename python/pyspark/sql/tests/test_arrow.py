@@ -486,7 +486,6 @@ class ArrowTests(ReusedSQLTestCase):
         self._assert_converted_dfs_equal(pdf, pdf_ext_dtype)
 
 
-
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message)
