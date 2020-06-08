@@ -97,11 +97,8 @@ class UnknownException(CapturedException):
 def convert_exception(e):
     s = e.toString()
     c = e.getCause()
+    stacktrace = SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(e)
 
-    jvm = SparkContext._jvm
-    jwriter = jvm.java.io.StringWriter()
-    e.printStackTrace(jvm.java.io.PrintWriter(jwriter))
-    stacktrace = jwriter.toString()
     if s.startswith('org.apache.spark.sql.AnalysisException: '):
         return AnalysisException(s.split(': ', 1)[1], stacktrace, c)
     if s.startswith('org.apache.spark.sql.catalyst.analysis'):
