@@ -99,7 +99,7 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(checkLimit("1234567890"))
   }
 
-  test("StringConcat doesn't overflow on many inputs") {
+  test("SPARK-31916: StringConcat doesn't overflow on many inputs") {
     val concat = new StringConcat(maxLength = 100)
     0.to(Integer.MAX_VALUE).foreach { _ =>
       concat.append("hello world")
