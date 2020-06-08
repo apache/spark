@@ -115,7 +115,7 @@ class FileScanRDD(
         while (!hasNextInCurrentFile && files.hasNext) {
           processNextFile()
         }
-        if (!files.hasNext) {
+        if (!hasNextInCurrentFile && !files.hasNext) {
           currentFile = null
           InputFileBlockHolder.unset()
         }
