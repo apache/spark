@@ -135,9 +135,9 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
   }
 
   test("Data source options should be propagated in method checkAndGlobPathIfNecessary") {
-    val fsDefaultName = "mockFs://mockFs"
+    val dataSourceOptions = Map("fs.defaultFS" -> "mockFs://mockFs")
     val dataSource =
-      DataSource(spark, "parquet", Seq("/path1"), options = Map("fs.defaultFS" -> fsDefaultName))
+      DataSource(spark, "parquet", Seq("/path1"), options = dataSourceOptions)
     val checkAndGlobPathIfNecessary = PrivateMethod[Seq[Path]]('checkAndGlobPathIfNecessary)
 
     val message = intercept[java.io.IOException] {
