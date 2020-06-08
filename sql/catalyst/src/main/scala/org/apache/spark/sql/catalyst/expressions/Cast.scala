@@ -271,7 +271,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}," +
             "you can enable the casting by setting " +
             s"${SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key} to true," +
-            "but we strongly recommand using function " +
+            "but we strongly recommend using function " +
             "TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead."
         } else {
           s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"

@@ -1430,6 +1430,7 @@ def to_utc_timestamp(timestamp, tz):
 @since(3.1)
 def timestamp_seconds(col):
     """
+    >>> from pyspark.sql.functions import timestamp_seconds
     >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
     >>> time_df.select(timestamp_seconds(time_df.unix_time).alias('ts')).collect()
     [Row(ts=datetime.datetime(2008, 12, 25, 07, 30))]

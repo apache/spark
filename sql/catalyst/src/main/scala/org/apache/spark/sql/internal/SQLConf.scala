@@ -2598,8 +2598,8 @@ object SQLConf {
   val LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP =
     buildConf("spark.sql.legacy.allowCastNumericToTimestamp")
       .internal()
-      .doc("When true, allow cast numeric to timestamp, but for integral numbers," +
-        "Hive treats it as milliseconds, Spark SQL treats n as seconds")
+      .doc("When true, allow casting numeric to timestamp," +
+        "when false, forbid the cast, more details in SPARK-31710")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)

@@ -533,7 +533,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             (e.g. "1 minute" or "5 hours").
 
         .. note:: Evolving
-
+        >>> from pyspark.sql.functions import timestamp_seconds
         >>> sdf.select('name', timestamp_seconds(sdf.time)).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
         """
