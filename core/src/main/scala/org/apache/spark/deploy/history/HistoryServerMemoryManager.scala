@@ -56,7 +56,7 @@ private class HistoryServerMemoryManager(
       active(appId -> attemptId) = memoryUsage
     }
     currentUsage.addAndGet(memoryUsage)
-    logInfo(s"Leasing ${Units.bytesToString(memoryUsage)} memory usage for " +
+    logInfo(s"Leasing ${Utils.bytesToString(memoryUsage)} memory usage for " +
       s"app $appId / $attemptId")
   }
 
@@ -66,7 +66,7 @@ private class HistoryServerMemoryManager(
     memoryUsage match {
       case Some(m) =>
         currentUsage.addAndGet(-m)
-        logInfo(s"Released ${Units.bytesToString(memoryUsage)} memory usage for " +
+        logInfo(s"Released ${Utils.bytesToString(memoryUsage)} memory usage for " +
           s"app $appId / $attemptId")
     }
   }
