@@ -128,6 +128,7 @@ class UISeleniumSuite
         h4Text.exists(_.matches("Running Batches \\(\\d+\\)")) should be (true)
         h4Text.exists(_.matches("Waiting Batches \\(\\d+\\)")) should be (true)
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
+
         val arrow = 0x25BE.toChar
         findAll(cssSelector("""#runningBatches-table th""")).map(_.text).toList should be {
           List(s"Batch Time $arrow", "Records", "Scheduling Delay", "Processing Time",
