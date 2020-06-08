@@ -512,7 +512,10 @@ object IntervalUtils {
         TRIM_BEFORE_UNIT,
         UNIT_BEGIN,
         UNIT_SUFFIX,
-        UNIT_END = Value
+        UNIT_END,
+        TRIM_BEFORE_DETERMINE_FORMAT,
+        DETERMINE_FORMAT,
+        ISO_FORMAT = Value
   }
   private final val intervalStr = UTF8String.fromString("interval")
   private def unitToUtf8(unit: IntervalUnit): UTF8String = {
@@ -587,6 +590,110 @@ object IntervalUtils {
       strings(strings.length - lenRight)
     }
 
+    var isoFormatParser: PartialFunction[Byte, Unit] = null
+    val END = Byte.MinValue
+    var hasValue = false
+    var limit = 2
+    val isoTimePartParser2: PartialFunction[Byte, Unit] = {
+      case 'h' | END =>
+        val hoursUs = Math.multiplyExact(currentValue, MICROS_PER_HOUR)
+        microseconds = Math.addExact(microseconds, hoursUs)
+      case 'm' =>
+        val minutesUs = Math.multiplyExact(currentValue, MICROS_PER_MINUTE)
+        microseconds = Math.addExact(microseconds, minutesUs)
+      case 's' =>
+        val secondsUs = Math.multiplyExact(currentValue, MICROS_PER_SECOND)
+        microseconds = Math.addExact(microseconds, secondsUs)
+      case _ => throwIAE("invalid ISO 8601 format with designator")
+    }
+    val isoTimePartParser3: PartialFunction[Byte, Unit] = {
+      case c @ (':' | END) if hasValue =>
+        limit match {
+          case 2 =>
+            val hoursUs = Math.multiplyExact(currentValue, MICROS_PER_HOUR)
+            microseconds = Math.addExact(microseconds, hoursUs)
+            limit -= 1
+          case 1 =>
+            val minutesUs = Math.multiplyExact(currentValue, MICROS_PER_MINUTE)
+            microseconds = Math.addExact(microseconds, minutesUs)
+            limit -= 1
+          case 0 if c == END =>
+            val secondsUs = Math.multiplyExact(currentValue, MICROS_PER_SECOND)
+            microseconds = Math.addExact(microseconds, secondsUs)
+          case _ => throwIAE("invalid ISO 8601 alternative format")
+        }
+      case _ => throwIAE("invalid ISO 8601 alternative format")
+    }
+    val isoDatePartParser2: PartialFunction[Byte, Unit] = {
+      case 'y' =>
+        val monthsInYears = Math.multiplyExact(MONTHS_PER_YEAR, currentValue)
+        months = Math.toIntExact(Math.addExact(months, monthsInYears))
+      case 'm' =>
+        months = Math.addExact(months, Math.toIntExact(currentValue))
+      case 'd' =>
+        days = Math.addExact(days, Math.toIntExact(currentValue))
+      case 'w' =>
+        val daysInWeeks = Math.multiplyExact(DAYS_PER_WEEK, currentValue)
+        days = Math.toIntExact(Math.addExact(days, daysInWeeks))
+      case 't' | END =>
+        if (hasValue) {
+          val monthsInYears = Math.multiplyExact(MONTHS_PER_YEAR, currentValue)
+          months = Math.toIntExact(Math.addExact(months, monthsInYears))
+        }
+        isoFormatParser = isoTimePartParser2
+      case _ => throwIAE("invalid ISO 8601 format with designator")
+    }
+    val isoDatePartParser3: PartialFunction[Byte, Unit] = {
+      case c @ ('-' | 't' | END) if hasValue =>
+        limit match {
+          case 2 =>
+            val monthsInYears = Math.multiplyExact(MONTHS_PER_YEAR, currentValue)
+            months = Math.toIntExact(Math.addExact(months, monthsInYears))
+            limit -= 1
+          case 1 =>
+            months = Math.addExact(months, Math.toIntExact(currentValue))
+            limit -= 1
+          case 0 if c == END || c == 't' =>
+            days = Math.addExact(days, Math.toIntExact(currentValue))
+          case _ => throwIAE("invalid ISO 8601 alternative format")
+        }
+        if (c == 't') {
+          limit = 2
+          isoFormatParser = isoTimePartParser3
+        }
+      case _ => throwIAE("invalid ISO 8601 alternative format")
+    }
+    val isoTimePartParser1: PartialFunction[Byte, Unit] = {
+      case c @ ('h' | 'm' | 's') =>
+        isoFormatParser = isoTimePartParser2
+        isoFormatParser(c)
+      case ':' =>
+        isoFormatParser = isoTimePartParser3
+        isoFormatParser(':')
+      case END =>
+        if (hasValue) {
+          val hoursUs = Math.multiplyExact(currentValue, MICROS_PER_HOUR)
+          microseconds = Math.addExact(microseconds, hoursUs)
+        } else throwIAE("time part cannot be empty")
+      case c => throwIAE(s"invalid unit '${c.toChar}'")
+    }
+    val isoDatePartParser1: PartialFunction[Byte, Unit] = {
+      case 't' | END =>
+        if (hasValue) {
+          val monthsInYears = Math.multiplyExact(MONTHS_PER_YEAR, currentValue)
+          months = Math.toIntExact(Math.addExact(months, monthsInYears))
+        }
+        isoFormatParser = isoTimePartParser1
+      case c @ ('y' | 'm' | 'd' | 'w') =>
+        isoFormatParser = isoDatePartParser2
+        isoFormatParser(c)
+      case '-' =>
+        isoFormatParser = isoDatePartParser3
+        isoFormatParser('-')
+      case c => throwIAE(s"invalid unit '${c.toChar}'")
+    }
+    isoFormatParser = isoDatePartParser1
+
     while (i < bytes.length) {
       val b = bytes(i)
       state match {
@@ -600,7 +707,39 @@ object IntervalUtils {
               i += intervalStr.numBytes() + 1
             }
           }
-          state = TRIM_BEFORE_SIGN
+          state = TRIM_BEFORE_DETERMINE_FORMAT
+        case TRIM_BEFORE_DETERMINE_FORMAT => trimToNextState(b, DETERMINE_FORMAT)
+        case DETERMINE_FORMAT =>
+          if (b == 'p') {
+            if (i == bytes.length - 1) throwIAE("interval string cannot be empty")
+            state = ISO_FORMAT
+            i += 1
+          } else {
+            state = SIGN
+          }
+        case ISO_FORMAT =>
+          b match {
+            case _ if '0' <= b && b <= '9' =>
+              try {
+                currentValue = Math.addExact(Math.multiplyExact(10, currentValue), b - '0')
+                hasValue = true
+              } catch {
+                case e: ArithmeticException => throwIAE(e.getMessage, e)
+              }
+            case '-' if !hasValue && !isNegative =>
+              isNegative = true
+            case unit if hasValue =>
+              currentValue = if (isNegative) -currentValue else currentValue
+              isoFormatParser(unit)
+              currentValue = 0
+              hasValue = false
+              isNegative = false
+            case 't' =>
+              isoFormatParser('t')
+            case _ =>
+              throwIAE(s"no value before unit '${b.toChar}'")
+          }
+          i += 1
         case TRIM_BEFORE_SIGN => trimToNextState(b, SIGN)
         case SIGN =>
           currentValue = 0
@@ -734,6 +873,10 @@ object IntervalUtils {
 
     val result = state match {
       case UNIT_SUFFIX | UNIT_END | TRIM_BEFORE_SIGN =>
+        new CalendarInterval(months, days, microseconds)
+      case ISO_FORMAT =>
+        currentValue = if (isNegative) -currentValue else currentValue
+        isoFormatParser(END)
         new CalendarInterval(months, days, microseconds)
       case _ => null
     }

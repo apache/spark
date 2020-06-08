@@ -130,6 +130,43 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFromInvalidString("0.123456789123 seconds", "'0.123456789123' is out of range")
   }
 
+  test("string to interval: iso format") {
+    checkFromString("interval P1", new CalendarInterval(12, 0, 0))
+    checkFromString("P1", new CalendarInterval(12, 0, 0))
+    checkFromString("P1T2", new CalendarInterval(12, 0, 7200000000L))
+
+    checkFromString("P1Y2M3D", new CalendarInterval(14, 3, 0))
+    checkFromString("PT1H1M1S", new CalendarInterval(0, 0, 3661000000L))
+    checkFromString("P1Y2M3DT1H1M1S", new CalendarInterval(14, 3, 3661000000L))
+    checkFromString("P1T1S", new CalendarInterval(12, 0, 1000000L))
+    checkFromString("P1DT1", new CalendarInterval(0, 1, 3600000000L))
+
+    checkFromString("P2W", new CalendarInterval(0, 14, 0))
+
+    checkFromString("P1-2-3", new CalendarInterval(14, 3, 0))
+    checkFromString("PT1:1:1", new CalendarInterval(0, 0, 3661000000L))
+    checkFromString("P1-2-3T1:1:1", new CalendarInterval(14, 3, 3661000000L))
+    checkFromString("P1-2T1:1:1", new CalendarInterval(14, 0, 3661000000L))
+    checkFromString("P1-2T1", new CalendarInterval(14, 0, 3600000000L))
+
+    checkFromString("P1Y2M-3DT-1H-1S", new CalendarInterval(14, -3, -3601000000L))
+    checkFromString("P1--2--3T-1:0:-1", new CalendarInterval(10, -3, -3601000000L))
+
+    checkFromInvalidString("P", "cannot be empty")
+    checkFromInvalidString("PT", "cannot be empty")
+    checkFromInvalidString("P1F", "invalid unit")
+    checkFromInvalidString("P1T2G", "invalid unit")
+    checkFromInvalidString("P1YY2M", "no value before unit")
+    checkFromInvalidString("P1Y2H", "invalid ISO 8601 format with designator")
+    checkFromInvalidString("P1YT1D", "invalid ISO 8601 format with designator")
+    checkFromInvalidString("P1-2-3-4", "invalid ISO 8601 alternative format")
+    checkFromInvalidString("P1-2-T3", "invalid ISO 8601 alternative format")
+    checkFromInvalidString("P1-2-3T4:5:", "invalid ISO 8601 alternative format")
+    checkFromInvalidString("P1-2-3T4:5:6:7", "invalid ISO 8601 alternative format")
+    checkFromInvalidString("P1Y2M3DT4:5:6", "invalid ISO 8601 format with designator")
+    checkFromInvalidString("P1-2-3T4H5M6S", "invalid ISO 8601 alternative format")
+  }
+
   test("from year-month string") {
     assert(fromYearMonthString("99-10") === new CalendarInterval(99 * 12 + 10, 0, 0L))
     assert(fromYearMonthString("+99-10") === new CalendarInterval(99 * 12 + 10, 0, 0L))
