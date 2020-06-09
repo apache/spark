@@ -1994,7 +1994,7 @@ private[spark] class BlockManager(
 
       // Update the threads doing migrations
       // TODO: Sort & only start as many threads as min(||blocks||, ||targets||) using location pref
-      val livePeerSet = peerProvider.getPeers(false).toSet
+      val livePeerSet = getPeers(false).toSet
       val currentPeerSet = migrationPeers.keys.toSet
       val deadPeers = currentPeerSet.&~(livePeerSet)
       val newPeers = livePeerSet.&~(currentPeerSet)
