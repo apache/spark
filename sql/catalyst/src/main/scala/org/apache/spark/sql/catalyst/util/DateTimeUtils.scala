@@ -88,19 +88,20 @@ object DateTimeUtils {
   }
 
   /**
-   * Converts an instance of `java.sql.Date` to a number of days since the epoch
-   * 1970-01-01 via extracting date fields `year`, `month`, `days` from the input,
-   * creating a local date in Proleptic Gregorian calendar from the fields, and
-   * getting the number of days from the resulted local date.
+   * Converts a local date at the default JVM time zone to the number of days since 1970-01-01
+   * in the hybrid calendar (Julian + Gregorian) by discarding the time part. The resulted days are
+   * rebased from the hybrid to Proleptic Gregorian calendar. The days rebasing is performed via
+   * UTC time zone for simplicity because the difference between two calendars is the same in
+   * any given time zone and UTC time zone.
    *
-   * This approach was taken to have the same local date as the triple of `year`,
-   * `month`, `day` in the original hybrid calendar used by `java.sql.Date` and
-   * Proleptic Gregorian calendar used by Spark since version 3.0.0, see SPARK-26651.
+   * Note: The date is shifted by the offset of the default JVM time zone for backward compatibility
+   *       with Spark 2.4 and earlier versions. The goal of the shift is to get a local date derived
+   *       from the number of days that has the same date fields (year, month, day) as the original
+   *       `date` at the default JVM time zone.
    *
-   * @param date It represents a specific instant in time based on
-   *             the hybrid calendar which combines Julian and
-   *             Gregorian calendars.
-   * @return The number of days since epoch from java.sql.Date.
+   * @param date It represents a specific instant in time based on the hybrid calendar which
+   *             combines Julian and Gregorian calendars.
+   * @return The number of days since the epoch in Proleptic Gregorian calendar.
    */
   def fromJavaDate(date: Date): SQLDate = {
     val millisUtc = date.getTime
