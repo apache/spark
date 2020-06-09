@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -96,7 +97,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 }
 
-trait PredicateHelper {
+trait PredicateHelper extends Logging {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -238,6 +239,10 @@ trait PredicateHelper {
       }
       if (cnf.isEmpty) {
         return Seq.empty
+      }
+      if (resultStack.length != 1) {
+        logWarning("The length of CNF conversion result stack is supposed to be 1. There might " +
+          "be something wrong with CNF conversion.")
       }
       resultStack.push(cnf)
     }
