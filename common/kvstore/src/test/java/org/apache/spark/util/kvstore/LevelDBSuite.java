@@ -279,7 +279,7 @@ public class LevelDBSuite {
   @Test
   public void testCloseLevelDBIterator() throws Exception {
     // SPARK-31929: test when LevelDB.close() is called, related LevelDBIterators
-    // are also closed. So no file handle for level DB files are opened.
+    // are closed. And files opened by iterators are also closed.
     File dbpathForCloseTest = File
             .createTempFile(
                     "test_db_close.",
