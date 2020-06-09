@@ -843,7 +843,7 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-31935: Hadoop file system related data source options should be effective") {
+  test("SPARK-31935: Hadoop file system config should be effective in data source options") {
     Seq("parquet", "").foreach { format =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> format) {
         withTempDir { dir =>

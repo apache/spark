@@ -532,7 +532,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("SPARK-31935: Hadoop file system related data source options should be effective") {
+  test("SPARK-31935: Hadoop file system config should be effective in data source options") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
       val defaultFs = "nonexistFS://nonexistFS"
