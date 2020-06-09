@@ -139,6 +139,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     blockManager
   }
 
+  private def decommissionManager(bm: BlockManager) = new bm.BlockManagerDecommissionManager(conf)
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
@@ -1759,7 +1761,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockId).size === 2)
     assert(master.getLocations(blockId).contains(store1.blockManagerId))
 
-    store1.decommissionRddCacheBlocks()
+    decommissionManager(store1).decommissionRddCacheBlocks()
     assert(master.getLocations(blockId).size === 2)
     assert(master.getLocations(blockId).toSet === Set(store2.blockManagerId,
       store3.blockManagerId))
@@ -1779,7 +1781,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
     assert(master.getLocations(blockIdSmall) === Seq(store1.blockManagerId))
 
-    store1.decommissionRddCacheBlocks()
+    decommissionManager(store1).decommissionRddCacheBlocks()
     // Smaller block offloaded to store2
     assert(master.getLocations(blockIdSmall) === Seq(store2.blockManagerId))
     // Larger block still present in store1 as it can't be offloaded
@@ -1804,6 +1806,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     Files.write(bm1.diskBlockManager.getFile(shuffleIndex).toPath(), shuffleIndexBlockContent)
 
     mapOutputTracker.registerShuffle(0, 1)
+    val decomManager = decommissionManager(bm1)
     try {
       mapOutputTracker.registerMapOutput(0, 0, MapStatus(bm1.blockManagerId, Array(blockSize), 0))
       assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm1.blockManagerId)
@@ -1812,7 +1815,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       when(env.conf).thenReturn(conf)
       SparkEnv.set(env)
 
-      bm1.offloadShuffleBlocks()
+      decomManager.offloadShuffleBlocks()
 
       eventually(timeout(1.second), interval(10.milliseconds)) {
         assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm2.blockManagerId)
@@ -1824,7 +1827,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     } finally {
       mapOutputTracker.unregisterShuffle(0)
       // Avoid thread leak
-      bm1.stopOffloadingShuffleBlocks()
+      decomManager.stopOffloadingShuffleBlocks()
     }
   }
 

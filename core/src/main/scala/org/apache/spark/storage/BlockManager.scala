@@ -186,6 +186,9 @@ private[spark] class BlockManager(
 
   private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
 
+  private val maxReplicationFailuresForDecommission =
+    conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
+
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
     val deleteFilesOnStop =
@@ -256,7 +259,7 @@ private[spark] class BlockManager(
 
   var hostLocalDirManager: Option[HostLocalDirManager] = None
 
-  private lazy val migratableResolver: MigratableResolver = {
+  private[storage] lazy val migratableResolver: MigratableResolver = {
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
 
@@ -1822,151 +1825,23 @@ private[spark] class BlockManager(
     }
   }
 
-  private class ShuffleMigrationRunnable(peer: BlockManagerId) extends Runnable {
-    @volatile var running = true
-    override def run(): Unit = {
-      var migrating: Option[(Int, Long)] = None
-      logInfo(s"Starting migration thread for ${peer}")
-      // Once a block fails to transfer to an executor stop trying to transfer more blocks
-      try {
-        while (running && !Thread.interrupted()) {
-          val migrating = Option(shufflesToMigrate.poll())
-          migrating match {
-            case None =>
-              logInfo("Nothing to migrate")
-              // Nothing to do right now, but maybe a transfer will fail or a new block
-              // will finish being committed.
-              val SLEEP_TIME_SECS = 1
-              Thread.sleep(SLEEP_TIME_SECS * 1000L)
-            case Some((shuffleId, mapId)) =>
-              logInfo(s"Trying to migrate shuffle ${shuffleId},${mapId} to ${peer}")
-              val blocks =
-                migratableResolver.getMigrationBlocks(shuffleId, mapId)
-              logInfo(s"Got migration sub-blocks ${blocks}")
-              blocks.foreach { case (blockId, buffer) =>
-                logInfo(s"Migrating sub-block ${blockId}")
-                blockTransferService.uploadBlockSync(
-                  peer.host,
-                  peer.port,
-                  peer.executorId,
-                  blockId,
-                  buffer,
-                  StorageLevel.DISK_ONLY,
-                  null)// class tag, we don't need for shuffle
-                logInfo(s"Migrated sub block ${blockId}")
-              }
-              logInfo(s"Migrated ${shuffleId},${mapId} to ${peer}")
-          }
-        }
-        // This catch is intentionally outside of the while running block.
-        // if we encounter errors migrating to an executor we want to stop.
-      } catch {
-        case e: Exception =>
-          migrating match {
-            case Some(shuffleMap) =>
-              logError("Error ${e} during migration, adding ${shuffleMap} back to migration queue")
-              shufflesToMigrate.add(shuffleMap)
-            case None =>
-              logError(s"Error ${e} while waiting for block to migrate")
-          }
-      }
-    }
-  }
+  private[storage] def getMigratableRDDBlocks(): Seq[ReplicateBlock] =
+    master.getReplicateInfoForRDDBlocks(blockManagerId)
 
-  private val migrationPeers = mutable.HashMap[
-    BlockManagerId,
-    (ShuffleMigrationRunnable, ExecutorService)]()
-
-  /**
-   * Tries to offload all shuffle blocks that are registered with the shuffle service locally.
-   * Note: this does not delete the shuffle files in-case there is an in-progress fetch
-   * but rather shadows them.
-   * Requires an Indexed based shuffle resolver.
-   * Note: if called in testing please call stopOffloadingShuffleBlocks to avoid thread leakage.
-   */
-  def offloadShuffleBlocks(): Unit = {
-    // Update the queue of shuffles to be migrated
-    logInfo("Offloading shuffle blocks")
-    val localShuffles = migratableResolver.getStoredShuffles()
-    val newShufflesToMigrate = localShuffles.&~(migratingShuffles).toSeq
-    shufflesToMigrate.addAll(newShufflesToMigrate.asJava)
-    migratingShuffles ++= newShufflesToMigrate
-
-    // Update the threads doing migrations
-    // TODO: Sort & only start as many threads as min(||blocks||, ||targets||) using location pref
-    val livePeerSet = getPeers(false).toSet
-    val currentPeerSet = migrationPeers.keys.toSet
-    val deadPeers = currentPeerSet.&~(livePeerSet)
-    val newPeers = livePeerSet.&~(currentPeerSet)
-    migrationPeers ++= newPeers.map { peer =>
-      logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
-      val executor = ThreadUtils.newDaemonSingleThreadExecutor(s"migrate-shuffle-to-${peer}")
-      val runnable = new ShuffleMigrationRunnable(peer)
-      executor.submit(runnable)
-      (peer, (runnable, executor))
-    }
-    // A peer may have entered a decommissioning state, don't transfer any new blocks
-    deadPeers.foreach { peer =>
-        migrationPeers.get(peer).foreach(_._1.running = false)
-    }
-  }
-
-
-  /**
-   * Stop migrating shuffle blocks.
-   */
-  def stopOffloadingShuffleBlocks(): Unit = {
-    logInfo("Stopping offloading shuffle blocks.")
-    // Stop as gracefully as possible.
-    migrationPeers.values.foreach{case (runnable, service) =>
-      runnable.running = false}
-    migrationPeers.values.foreach{case (runnable, service) =>
-      service.shutdown()}
-    migrationPeers.values.foreach{case (runnable, service) =>
-      service.shutdownNow()}
-  }
-
-  /**
-   * Tries to offload all cached RDD blocks from this BlockManager to peer BlockManagers
-   * Visible for testing
-   */
-  def decommissionRddCacheBlocks(): Unit = {
-    val replicateBlocksInfo = master.getReplicateInfoForRDDBlocks(blockManagerId)
-
-    if (replicateBlocksInfo.nonEmpty) {
-      logInfo(s"Need to replicate ${replicateBlocksInfo.size} RDD blocks " +
-        "for block manager decommissioning")
+  private[storage] def migrateBlock(blockToReplicate: ReplicateBlock): Boolean = {
+    val replicatedSuccessfully = replicateBlock(
+      blockToReplicate.blockId,
+      blockToReplicate.replicas.toSet,
+      blockToReplicate.maxReplicas,
+      maxReplicationFailures = Some(maxReplicationFailuresForDecommission))
+    if (replicatedSuccessfully) {
+      logInfo(s"Block ${blockToReplicate.blockId} offloaded successfully, Removing block now")
+      removeBlock(blockToReplicate.blockId)
+      logInfo(s"Block ${blockToReplicate.blockId} removed")
     } else {
-      logWarning(s"Asked to decommission RDD cache blocks, but no blocks to migrate")
-      return
+      logWarning(s"Failed to offload block ${blockToReplicate.blockId}")
     }
-
-    // Maximum number of storage replication failure which replicateBlock can handle
-    val maxReplicationFailures = conf.get(
-      config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
-
-    // TODO: We can sort these blocks based on some policy (LRU/blockSize etc)
-    //   so that we end up prioritize them over each other
-    val blocksFailedReplication = replicateBlocksInfo.map {
-      case ReplicateBlock(blockId, existingReplicas, maxReplicas) =>
-        val replicatedSuccessfully = replicateBlock(
-          blockId,
-          existingReplicas.toSet,
-          maxReplicas,
-          maxReplicationFailures = Some(maxReplicationFailures))
-        if (replicatedSuccessfully) {
-          logInfo(s"Block $blockId offloaded successfully, Removing block now")
-          removeBlock(blockId)
-          logInfo(s"Block $blockId removed")
-        } else {
-          logWarning(s"Failed to offload block $blockId")
-        }
-        (blockId, replicatedSuccessfully)
-    }.filterNot(_._2).map(_._1)
-    if (blocksFailedReplication.nonEmpty) {
-      logWarning("Blocks failed replication in cache decommissioning " +
-        s"process: ${blocksFailedReplication.mkString(",")}")
-    }
+    replicatedSuccessfully
   }
 
   /**
@@ -2041,10 +1916,142 @@ private[spark] class BlockManager(
    * Class to handle block manager decommissioning retries
    * It creates a Thread to retry offloading all RDD cache blocks
    */
-  private class BlockManagerDecommissionManager(conf: SparkConf) {
+  private[storage] class BlockManagerDecommissionManager(conf: SparkConf) {
+    private class ShuffleMigrationRunnable(peer: BlockManagerId) extends Runnable {
+      @volatile var running = true
+      override def run(): Unit = {
+        var migrating: Option[(Int, Long)] = None
+        logInfo(s"Starting migration thread for ${peer}")
+        // Once a block fails to transfer to an executor stop trying to transfer more blocks
+        try {
+          while (running && !Thread.interrupted()) {
+            val migrating = Option(shufflesToMigrate.poll())
+            migrating match {
+              case None =>
+                logInfo("Nothing to migrate")
+                // Nothing to do right now, but maybe a transfer will fail or a new block
+                // will finish being committed.
+                val SLEEP_TIME_SECS = 1
+                Thread.sleep(SLEEP_TIME_SECS * 1000L)
+              case Some((shuffleId, mapId)) =>
+                logInfo(s"Trying to migrate shuffle ${shuffleId},${mapId} to ${peer}")
+                val blocks =
+                  migratableResolver.getMigrationBlocks(shuffleId, mapId)
+                logInfo(s"Got migration sub-blocks ${blocks}")
+                blocks.foreach { case (blockId, buffer) =>
+                  logInfo(s"Migrating sub-block ${blockId}")
+                  blockTransferService.uploadBlockSync(
+                    peer.host,
+                    peer.port,
+                    peer.executorId,
+                    blockId,
+                    buffer,
+                    StorageLevel.DISK_ONLY,
+                    null)// class tag, we don't need for shuffle
+                  logInfo(s"Migrated sub block ${blockId}")
+                }
+                logInfo(s"Migrated ${shuffleId},${mapId} to ${peer}")
+            }
+          }
+          // This catch is intentionally outside of the while running block.
+          // if we encounter errors migrating to an executor we want to stop.
+        } catch {
+          case e: Exception =>
+            migrating match {
+              case Some(shuffleMap) =>
+                logError(s"Error ${e} during migration, " +
+                  s"adding ${shuffleMap} back to migration queue")
+                shufflesToMigrate.add(shuffleMap)
+              case None =>
+                logError(s"Error ${e} while waiting for block to migrate")
+            }
+        }
+      }
+    }
+
     @volatile private var stopped = false
+
+    private val migrationPeers =
+      mutable.HashMap[BlockManagerId, (ShuffleMigrationRunnable, ExecutorService)]()
+
     private lazy val blockMigrationExecutor =
       ThreadUtils.newDaemonSingleThreadExecutor("block-manager-decommission")
+
+    /**
+     * Tries to offload all shuffle blocks that are registered with the shuffle service locally.
+     * Note: this does not delete the shuffle files in-case there is an in-progress fetch
+     * but rather shadows them.
+     * Requires an Indexed based shuffle resolver.
+     * Note: if called in testing please call stopOffloadingShuffleBlocks to avoid thread leakage.
+     */
+    def offloadShuffleBlocks(): Unit = {
+      // Update the queue of shuffles to be migrated
+      logInfo("Offloading shuffle blocks")
+      val localShuffles = migratableResolver.getStoredShuffles()
+      val newShufflesToMigrate = localShuffles.&~(migratingShuffles).toSeq
+      shufflesToMigrate.addAll(newShufflesToMigrate.asJava)
+      migratingShuffles ++= newShufflesToMigrate
+
+      // Update the threads doing migrations
+      // TODO: Sort & only start as many threads as min(||blocks||, ||targets||) using location pref
+      val livePeerSet = peerProvider.getPeers(false).toSet
+      val currentPeerSet = migrationPeers.keys.toSet
+      val deadPeers = currentPeerSet.&~(livePeerSet)
+      val newPeers = livePeerSet.&~(currentPeerSet)
+      migrationPeers ++= newPeers.map { peer =>
+        logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
+        val executor = ThreadUtils.newDaemonSingleThreadExecutor(s"migrate-shuffle-to-${peer}")
+        val runnable = new ShuffleMigrationRunnable(peer)
+        executor.submit(runnable)
+        (peer, (runnable, executor))
+      }
+      // A peer may have entered a decommissioning state, don't transfer any new blocks
+      deadPeers.foreach { peer =>
+          migrationPeers.get(peer).foreach(_._1.running = false)
+      }
+    }
+
+
+    /**
+     * Stop migrating shuffle blocks.
+     */
+    def stopOffloadingShuffleBlocks(): Unit = {
+      logInfo("Stopping offloading shuffle blocks.")
+      // Stop as gracefully as possible.
+      migrationPeers.values.foreach{case (runnable, service) =>
+        runnable.running = false}
+      migrationPeers.values.foreach{case (runnable, service) =>
+        service.shutdown()}
+      migrationPeers.values.foreach{case (runnable, service) =>
+        service.shutdownNow()}
+    }
+
+    /**
+     * Tries to offload all cached RDD blocks from this BlockManager to peer BlockManagers
+     * Visible for testing
+     */
+    def decommissionRddCacheBlocks(): Unit = {
+      val replicateBlocksInfo = getMigratableRDDBlocks()
+
+      if (replicateBlocksInfo.nonEmpty) {
+        logInfo(s"Need to replicate ${replicateBlocksInfo.size} RDD blocks " +
+          "for block manager decommissioning")
+      } else {
+        logWarning(s"Asked to decommission RDD cache blocks, but no blocks to migrate")
+        return
+      }
+
+      // TODO: We can sort these blocks based on some policy (LRU/blockSize etc)
+      //   so that we end up prioritize them over each other
+      val blocksFailedReplication = replicateBlocksInfo.map { replicateBlock =>
+          val replicatedSuccessfully = migrateBlock(replicateBlock)
+          (replicateBlock.blockId, replicatedSuccessfully)
+      }.filterNot(_._2).map(_._1)
+      if (blocksFailedReplication.nonEmpty) {
+        logWarning("Blocks failed replication in cache decommissioning " +
+          s"process: ${blocksFailedReplication.mkString(",")}")
+      }
+    }
 
     private val blockMigrationRunnable = new Runnable {
       val sleepInterval = conf.get(
