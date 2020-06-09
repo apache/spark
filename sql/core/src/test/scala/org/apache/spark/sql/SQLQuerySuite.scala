@@ -3503,26 +3503,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(Row(Byte.MinValue.toLong * -1)))
     checkAnswer(sql("select CAST(-32768 as short) DIV CAST (-1 as short)"),
       Seq(Row(Short.MinValue.toLong * -1)))
-  }
 
-
-  test("SPARK-31916: verify that PlanStringConcat's output shows the actual length of the plan") {
-    withSQLConf("spark.sql.maxPlanStringLength" -> "0") {
-      val concat = new PlanStringConcat()
-      0.to(3).foreach { i =>
-        concat.append(s"plan fragment $i")
-      }
-      assert(concat.toString === "Truncated plan of 60 characters")
-    }
-
-    withSQLConf("spark.sql.maxPlanStringLength" -> "60") {
-      val concat = new PlanStringConcat()
-      0.to(2).foreach { i =>
-        concat.append(s"plan fragment $i")
-      }
-      assert(concat.toString === "plan fragment 0plan fragment 1... 15 more characters")
-    }
-  }
 }
 
 case class Foo(bar: Option[String])
