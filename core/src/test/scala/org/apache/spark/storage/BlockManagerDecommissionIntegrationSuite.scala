@@ -30,7 +30,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.util.{ResetSystemProperties, ThreadUtils}
 
-class BlockManagerDecommissionSuite extends SparkFunSuite with LocalSparkContext
+class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalSparkContext
     with ResetSystemProperties with Eventually {
 
   val numExecs = 3

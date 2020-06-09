@@ -31,7 +31,7 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.shuffle.MigratableResolver
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 
-class BlockManagerDecommissionManagerSuite extends SparkFunSuite with Matchers {
+class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
 
   private val bmPort = 12345
 
