@@ -87,7 +87,6 @@ private[spark] class SparkUI private (
         .getOrElse("<unknown>")
     } catch {
       case _: SparkException => "<unknown>"
-      case _: NoSuchElementException => "<unknown>"
     }
   }
 
