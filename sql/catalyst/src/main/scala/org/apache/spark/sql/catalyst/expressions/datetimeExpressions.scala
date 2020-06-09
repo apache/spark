@@ -1009,7 +1009,8 @@ abstract class UnixTime extends ToTimestamp {
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimestampFormatterHelper with ImplicitCastInputTypes {
+  extends BinaryExpression with TimestampFormatterHelper with ImplicitCastInputTypes
+    with NullIntolerant {
 
   def this(sec: Expression, format: Expression) = this(sec, format, None)
 
