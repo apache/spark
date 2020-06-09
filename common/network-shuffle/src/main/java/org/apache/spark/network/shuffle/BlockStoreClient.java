@@ -72,9 +72,10 @@ public abstract class BlockStoreClient implements Closeable {
     return () -> Collections.emptyMap();
   }
 
-  public abstract void getHostLocalDirs(
+  public void getHostLocalDirs(
       String host,
       int port,
       String[] execIds,
-      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable);
+      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
+  }
 }
