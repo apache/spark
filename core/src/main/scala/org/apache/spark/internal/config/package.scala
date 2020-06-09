@@ -1917,7 +1917,12 @@ package object config {
 
   private[spark] val GRACEFUL_DECOMMISSION_MIN_TERMINATION_TIME_IN_SEC =
     ConfigBuilder("spark.graceful.decommission.min.termination.time")
-      .doc("Minimum time to termination below which node decommissioning is performed immediately")
+      .doc("Minimum time to termination below which node decommissioning is performed " +
+        "immediately. If decommissioning time is less than the " +
+        "configured time(spark.graceful.decommission.min.termination.time)," +
+        "than in that scenario the executor decommissioning and shuffle data clean up will " +
+        "take place immediately.First the executor decommission than the " +
+        "shuffle data clean up.")
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("60s")

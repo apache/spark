@@ -2147,6 +2147,72 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.graceful.decommission.enable</code></td>
+  <td>false</td>
+  <td>
+    If set to "true", Spark will handle the node decommissioning gracefully
+    for YARN Resource Manager.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.graceful.decommission.node.timeout</code></td>
+  <td>110s</td>
+  <td>
+    Interval in seconds after which the node is decommissioned. In case aws spotloss
+    the time is approximately 110s and in case of GCP preemptible VMs this is around 30s
+    this config can be changed according to node type in the public cloud. This will
+    be applied if the decommission timeout is not sent by the Resource Manager.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.graceful.decommission.fetchfailed.ignore.threshold</code></td>
+  <td>8</td>
+  <td>
+    Threshold of number of times fetchfailed ignored due to node decommission.
+    This is configurable as per the need of the user and depending upon
+    type of the cloud. If we keep this a large value and there is
+    continuous decommission of nodes, in those scenarios stage
+    will never abort and keeps on retrying in an unbounded manner.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.graceful.decommission.executor.leasetimePct</code></td>
+  <td>50</td>
+  <td>
+    Percentage of time to expiry after which executors are killed
+    (if enabled) on the node. Value ranges between (0-100).
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.graceful.decommission.shuffedata.leasetimePct</code></td>
+  <td>90</td>
+  <td>
+    Percentage of time to expiry after which shuffle data
+    cleaned up (if enabled) on the node. Value ranges between (0-100)
+    This value is always greater than or equal to executor
+    leaseTime (is set to be equal if incorrectly configured).
+    Near 0% would mean generated data is marked as lost too early.
+    Too close to 100 would shuffle data may not get cleared proactively
+    leading to tasks going into fetchFail scenarios.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.graceful.decommission.min.termination.time</code></td>
+  <td>60s</td>
+  <td>
+    Minimum time to termination below which node decommissioning is performed immediately.
+    If decommissioning time is less than the configured time(spark.graceful.decommission.min.termination.time),
+    than in  that scenario the executor decommissioning and shuffle data clean up will take place
+    immediately. First the executor decommission than the shuffle data clean up.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.scheduler.blacklist.unschedulableTaskSetTimeout</code></td>
   <td>120s</td>
   <td>
