@@ -2848,6 +2848,13 @@ class Analyzer(
     }
   }
 
+  /**
+   * Resolve the encoders for the UDF by explicitly given the attributes. We give the
+   * attributes explicitly in order to handle the case where the data type of the input
+   * value is not the same with the internal schema of the encoder, which could cause
+   * data loss. For example, the encoder should not cast the input value to Decimal(38, 18)
+   * if the actual data type is Decimal(30, 0).
+   */
   object ResolveEncodersInUDF extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p if !p.resolved => p // Skip unresolved nodes.
