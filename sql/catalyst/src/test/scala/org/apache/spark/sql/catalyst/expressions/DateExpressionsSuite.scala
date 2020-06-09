@@ -1149,22 +1149,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-31710:Adds TIMESTAMP_SECONDS, " +
     "TIMESTAMP_MILLIS and TIMESTAMP_MICROS functions") {
-    checkEvaluation(SecondsToTimestamp(Literal(null, DoubleType)), null)
-    checkEvaluation(SecondsToTimestamp(Literal(null, FloatType)), null)
-    checkEvaluation(SecondsToTimestamp(Literal(1.3041352164485E9)),
-      (1.3041352164485E9 * MICROS_PER_SECOND).longValue())
-    checkEvaluation(SecondsToTimestamp(Literal(2.3f)), (2.3d * MICROS_PER_SECOND).longValue())
-    checkEvaluation(SecondsToTimestamp(Literal(2.3f)), (2.3f * MICROS_PER_SECOND).longValue())
-    checkEvaluation(SecondsToTimestamp(Literal(Decimal(BigDecimal(23.53333333333333333), 8, 6))),
-      (BigDecimal(23.53333333333333333) * MICROS_PER_SECOND).longValue())
-
-    checkEvaluation(MillisToTimestamp(Literal(null, DoubleType)), null)
-    checkEvaluation(MillisToTimestamp(Literal(null, FloatType)), null)
-    checkEvaluation(MillisToTimestamp(Literal(2.3f)), (2.3d * MICROS_PER_MILLIS).longValue())
-    checkEvaluation(MillisToTimestamp(Literal(2.3f)), (2.3f * MICROS_PER_MILLIS).longValue())
-    checkEvaluation(MillisToTimestamp(Literal(Decimal(BigDecimal(23.53333333333333333), 8, 6))),
-      (BigDecimal(23.53333333333333333) * MICROS_PER_MILLIS).longValue())
-
     checkEvaluation(SecondsToTimestamp(Literal(1230219000)), 1230219000L * MICROS_PER_SECOND)
     checkEvaluation(SecondsToTimestamp(Literal(-1230219000)), -1230219000L * MICROS_PER_SECOND)
     checkEvaluation(SecondsToTimestamp(Literal(null, IntegerType)), null)
