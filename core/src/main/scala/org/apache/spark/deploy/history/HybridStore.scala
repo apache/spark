@@ -19,7 +19,10 @@ package org.apache.spark.deploy.history
 
 import java.io.IOException
 import java.util.Collection
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.util.kvstore._
 
@@ -43,21 +46,8 @@ private[history] class HybridStore extends KVStore {
   // A background thread that dumps data from inMemoryStore to levelDB
   private var backgroundThread: Thread = null
 
-  // Objects of these classes will be dumped to levelDB in the background thread
-  private var klassList: Seq[Class[_]] = List(
-    classOf[org.apache.spark.status.ApplicationInfoWrapper],
-    classOf[org.apache.spark.status.ApplicationEnvironmentInfoWrapper],
-    classOf[org.apache.spark.status.ExecutorSummaryWrapper],
-    classOf[org.apache.spark.status.JobDataWrapper],
-    classOf[org.apache.spark.status.StageDataWrapper],
-    classOf[org.apache.spark.status.TaskDataWrapper],
-    classOf[org.apache.spark.status.RDDStorageInfoWrapper],
-    classOf[org.apache.spark.status.ExecutorStageSummaryWrapper],
-    classOf[org.apache.spark.status.StreamBlockData],
-    classOf[org.apache.spark.status.RDDOperationClusterWrapper],
-    classOf[org.apache.spark.status.RDDOperationGraphWrapper],
-    classOf[org.apache.spark.status.PoolData],
-    classOf[org.apache.spark.status.AppSummary])
+  // A hash map that stores all classes that had been writen to inMemoryStore
+  private val klassMap = new ConcurrentHashMap[Class[_], Boolean]
 
   override def getMetadata[T](klass: Class[T]): T = {
     getStore().getMetadata(klass)
@@ -75,13 +65,9 @@ private[history] class HybridStore extends KVStore {
     val store = getStore()
     store.write(value)
 
-    if (store.isInstanceOf[InMemoryStore] && backgroundThread != null) {
-      // In this case, rebuildAppStore() is completed,
-      // only CachedQuantile will be written
-      assert(value.isInstanceOf[org.apache.spark.status.CachedQuantile],
-        s"write() for objects of ${value.getClass()} type shouldn't be called " +
-        "after the hybrid store begins switching to levelDB")
-      levelDB.write(value)
+    if (backgroundThread == null) {
+      // New classes won't be dumped once the background thread is started
+      klassMap.putIfAbsent(value.getClass(), true)
     }
   }
 
@@ -112,14 +98,13 @@ private[history] class HybridStore extends KVStore {
         // The background thread is still running, wait for it to finish
         backgroundThread.join()
       }
-
       if (levelDB != null) {
         levelDB.close()
       }
-
-      inMemoryStore.close()
     } catch {
       case ioe: IOException => throw ioe
+    } finally {
+      inMemoryStore.close()
     }
   }
 
@@ -139,11 +124,6 @@ private[history] class HybridStore extends KVStore {
     this.levelDB = levelDB
   }
 
-  // For testing purpose
-  def setKlassList(klassList: Seq[Class[_]]): Unit = {
-    this.klassList = klassList
-  }
-
   /**
    * This method is called when the writing is done for inMemoryStore. A
    * background thread will be created and be started to dump data in inMemoryStore
@@ -155,7 +135,7 @@ private[history] class HybridStore extends KVStore {
       var exception: Option[Exception] = None
 
       try {
-        klassList.foreach { klass =>
+        for (klass <- klassMap.keys().asScala) {
           val it = inMemoryStore.view(klass).closeableIterator()
           while (it.hasNext()) {
             levelDB.write(it.next())
