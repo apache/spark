@@ -41,12 +41,6 @@ private[storage] class BlockManagerDecommissionManager(
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
 
-  // Shuffles which are either in queue for migrations or migrated
-  private val migratingShuffles = mutable.HashSet[(Int, Long)]()
-
-  // Shuffles which are queued for migration
-  private val shufflesToMigrate = new java.util.concurrent.ConcurrentLinkedQueue[(Int, Long)]()
-
   private class ShuffleMigrationRunnable(peer: BlockManagerId) extends Runnable {
     @volatile var running = true
     override def run(): Unit = {
@@ -89,8 +83,7 @@ private[storage] class BlockManagerDecommissionManager(
         case e: Exception =>
           migrating match {
             case Some(shuffleMap) =>
-              logError(s"Error ${e} during migration, " +
-                s"adding ${shuffleMap} back to migration queue")
+              logError(s"Error ${e} during migration, adding ${shuffleMap} back to migration queue")
               shufflesToMigrate.add(shuffleMap)
             case None =>
               logError(s"Error ${e} while waiting for block to migrate")
@@ -98,6 +91,13 @@ private[storage] class BlockManagerDecommissionManager(
       }
     }
   }
+
+  // Shuffles which are either in queue for migrations or migrated
+  private val migratingShuffles = mutable.HashSet[(Int, Long)]()
+
+  // Shuffles which are queued for migration
+  private[storage] val shufflesToMigrate =
+    new java.util.concurrent.ConcurrentLinkedQueue[(Int, Long)]()
 
   @volatile private var stopped = false
 
@@ -107,6 +107,46 @@ private[storage] class BlockManagerDecommissionManager(
   private lazy val blockMigrationExecutor =
     ThreadUtils.newDaemonSingleThreadExecutor("block-manager-decommission")
 
+  private val blockMigrationRunnable = new Runnable {
+    val sleepInterval = conf.get(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
+
+    override def run(): Unit = {
+      var failures = 0
+      while (!stopped && !Thread.interrupted() && failures < 20) {
+        logInfo("Iterating on migrating from the block manager.")
+        try {
+          // If enabled we migrate shuffle blocks first as they are more expensive.
+          if (conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
+            logDebug("Attempting to replicate all shuffle blocks")
+            offloadShuffleBlocks()
+            logInfo("Done starting workers to migrate shuffle blocks")
+          }
+          if (conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED)) {
+            logDebug("Attempting to replicate all cached RDD blocks")
+            decommissionRddCacheBlocks()
+            logInfo("Attempt to replicate all cached blocks done")
+          }
+          if (!conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED) &&
+            !conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
+            logWarning("Decommissioning, but no task configured set one or both:\n" +
+              "spark.storage.decommission.shuffle_blocks\n" +
+              "spark.storage.decommission.rdd_blocks")
+          }
+          logInfo(s"Waiting for ${sleepInterval} before refreshing migrations.")
+          Thread.sleep(sleepInterval)
+        } catch {
+          case e: InterruptedException =>
+            logInfo("Interrupted during migration, will not refresh migrations.")
+            stopped = true
+          case NonFatal(e) =>
+            failures += 1
+            logError("Error occurred while trying to replicate cached RDD blocks" +
+              s" for block manager decommissioning (failure count: $failures)", e)
+        }
+      }
+    }
+  }
+
   /**
    * Tries to offload all shuffle blocks that are registered with the shuffle service locally.
    * Note: this does not delete the shuffle files in-case there is an in-progress fetch
@@ -114,7 +154,7 @@ private[storage] class BlockManagerDecommissionManager(
    * Requires an Indexed based shuffle resolver.
    * Note: if called in testing please call stopOffloadingShuffleBlocks to avoid thread leakage.
    */
-  def offloadShuffleBlocks(): Unit = {
+  private[storage] def offloadShuffleBlocks(): Unit = {
     // Update the queue of shuffles to be migrated
     logInfo("Offloading shuffle blocks")
     val localShuffles = bm.migratableResolver.getStoredShuffles()
@@ -141,11 +181,10 @@ private[storage] class BlockManagerDecommissionManager(
     }
   }
 
-
   /**
    * Stop migrating shuffle blocks.
    */
-  def stopOffloadingShuffleBlocks(): Unit = {
+  private[storage] def stopOffloadingShuffleBlocks(): Unit = {
     logInfo("Stopping offloading shuffle blocks.")
     // Stop as gracefully as possible.
     migrationPeers.values.foreach{case (runnable, service) =>
@@ -160,7 +199,7 @@ private[storage] class BlockManagerDecommissionManager(
    * Tries to offload all cached RDD blocks from this BlockManager to peer BlockManagers
    * Visible for testing
    */
-  def decommissionRddCacheBlocks(): Unit = {
+  private[storage] def decommissionRddCacheBlocks(): Unit = {
     val replicateBlocksInfo = bm.getMigratableRDDBlocks()
 
     if (replicateBlocksInfo.nonEmpty) {
@@ -197,49 +236,6 @@ private[storage] class BlockManagerDecommissionManager(
       logWarning(s"Failed to offload block ${blockToReplicate.blockId}")
     }
     replicatedSuccessfully
-  }
-
-  private val blockMigrationRunnable = new Runnable {
-    val sleepInterval = conf.get(
-      config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
-
-    override def run(): Unit = {
-      var failures = 0
-      while (!stopped
-        && !Thread.interrupted()
-        && failures < 20) {
-        logInfo("Iterating on migrating from the block manager.")
-        try {
-          // If enabled we migrate shuffle blocks first as they are more expensive.
-          if (conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
-            logDebug("Attempting to replicate all shuffle blocks")
-            offloadShuffleBlocks()
-            logInfo("Done starting workers to migrate shuffle blocks")
-          }
-          if (conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED)) {
-            logDebug("Attempting to replicate all cached RDD blocks")
-            decommissionRddCacheBlocks()
-            logInfo("Attempt to replicate all cached blocks done")
-          }
-          if (!conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED) &&
-            !conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
-            logWarning("Decommissioning, but no task configured set one or both:\n" +
-              "spark.storage.decommission.shuffle_blocks\n" +
-              "spark.storage.decommission.rdd_blocks")
-          }
-          logInfo(s"Waiting for ${sleepInterval} before refreshing migrations.")
-          Thread.sleep(sleepInterval)
-        } catch {
-          case e: InterruptedException =>
-            logInfo("Interrupted during migration, will not refresh migrations.")
-            stopped = true
-          case NonFatal(e) =>
-            failures += 1
-            logError("Error occurred while trying to replicate cached RDD blocks" +
-              s" for block manager decommissioning (failure count: $failures)", e)
-        }
-      }
-    }
   }
 
   def start(): Unit = {
