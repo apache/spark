@@ -86,7 +86,7 @@ private[spark] class SparkUI private (
         .orElse(store.environmentInfo().systemProperties.toMap.get("user.name"))
         .getOrElse("<unknown>")
     } catch {
-      case sparkException: SparkException => "<unknown>"
+      case _: SparkException => "<unknown>"
       case _: NoSuchElementException => "<unknown>"
     }
   }
