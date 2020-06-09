@@ -241,8 +241,6 @@ trait PredicateHelper {
       }
       resultStack.push(cnf)
     }
-    assert(resultStack.length == 1,
-      s"Fail to convert expression ${condition} to conjunctive normal form")
     resultStack.top
   }
 
