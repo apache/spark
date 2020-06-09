@@ -130,7 +130,7 @@ public class ThriftHttpCLIService extends ThriftCLIService {
 
       // Context handler
       final ServletContextHandler context = new ServletContextHandler(
-        ServletContextHandler.SESSIONS);
+          ServletContextHandler.SESSIONS);
       context.setContextPath("/");
       String httpPath = getHttpPath(hiveConf
           .getVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_HTTP_PATH));
