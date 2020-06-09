@@ -186,9 +186,6 @@ private[spark] class BlockManager(
 
   private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
 
-  private val maxReplicationFailuresForDecommission =
-    conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
-
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
     val deleteFilesOnStop =
@@ -259,6 +256,8 @@ private[spark] class BlockManager(
 
   var hostLocalDirManager: Option[HostLocalDirManager] = None
 
+  // This is a lazy val so someone can migrating RDDs even if they don't have a MigratableResolver
+  // for shuffles. Used in BlockManagerDecommissionManager & block puts.
   private[storage] lazy val migratableResolver: MigratableResolver = {
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
@@ -1570,7 +1569,7 @@ private[spark] class BlockManager(
   /**
    * Get peer block managers in the system.
    */
-  private def getPeers(forceFetch: Boolean): Seq[BlockManagerId] = {
+  private[storage] def getPeers(forceFetch: Boolean): Seq[BlockManagerId] = {
     peerFetchLock.synchronized {
       val cachedPeersTtl = conf.get(config.STORAGE_CACHED_PEERS_TTL) // milliseconds
       val diff = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastPeerFetchTimeNs)
@@ -1815,10 +1814,7 @@ private[spark] class BlockManager(
       blockManagerDecommissioning = true
       decommissionManager = Some(new BlockManagerDecommissionManager(
         conf,
-        blockTransferService,
-        this,
-        migratableResolver,
-        peerProvider))
+        this))
       decommissionManager.foreach(_.start())
     } else {
       logDebug("Block manager already in decommissioning state")
@@ -1827,22 +1823,6 @@ private[spark] class BlockManager(
 
   private[storage] def getMigratableRDDBlocks(): Seq[ReplicateBlock] =
     master.getReplicateInfoForRDDBlocks(blockManagerId)
-
-  private[storage] def migrateBlock(blockToReplicate: ReplicateBlock): Boolean = {
-    val replicatedSuccessfully = replicateBlock(
-      blockToReplicate.blockId,
-      blockToReplicate.replicas.toSet,
-      blockToReplicate.maxReplicas,
-      maxReplicationFailures = Some(maxReplicationFailuresForDecommission))
-    if (replicatedSuccessfully) {
-      logInfo(s"Block ${blockToReplicate.blockId} offloaded successfully, Removing block now")
-      removeBlock(blockToReplicate.blockId)
-      logInfo(s"Block ${blockToReplicate.blockId} removed")
-    } else {
-      logWarning(s"Failed to offload block ${blockToReplicate.blockId}")
-    }
-    replicatedSuccessfully
-  }
 
   /**
    * Remove all blocks belonging to the given broadcast.

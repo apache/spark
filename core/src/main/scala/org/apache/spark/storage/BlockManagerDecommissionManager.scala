@@ -26,7 +26,6 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.network.BlockTransferService
 import org.apache.spark.shuffle.MigratableResolver
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.util.ThreadUtils
@@ -37,10 +36,10 @@ import org.apache.spark.util.ThreadUtils
  */
 private[storage] class BlockManagerDecommissionManager(
     conf: SparkConf,
-    blockTransferService: BlockTransferService,
-    migratableRDDResolver: MigratableRDDResolver,
-    migratableShuffleBlockResolver: MigratableResolver,
-    peerProvider: BlockManagerPeerProvider) extends Logging {
+    bm: BlockManager) extends Logging {
+
+  private val maxReplicationFailuresForDecommission =
+    conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
 
   // Shuffles which are either in queue for migrations or migrated
   private val migratingShuffles = mutable.HashSet[(Int, Long)]()
@@ -67,11 +66,11 @@ private[storage] class BlockManagerDecommissionManager(
             case Some((shuffleId, mapId)) =>
               logInfo(s"Trying to migrate shuffle ${shuffleId},${mapId} to ${peer}")
               val blocks =
-                migratableShuffleBlockResolver.getMigrationBlocks(shuffleId, mapId)
+                bm.migratableResolver.getMigrationBlocks(shuffleId, mapId)
               logInfo(s"Got migration sub-blocks ${blocks}")
               blocks.foreach { case (blockId, buffer) =>
                 logInfo(s"Migrating sub-block ${blockId}")
-                blockTransferService.uploadBlockSync(
+                bm.blockTransferService.uploadBlockSync(
                   peer.host,
                   peer.port,
                   peer.executorId,
@@ -118,14 +117,14 @@ private[storage] class BlockManagerDecommissionManager(
   def offloadShuffleBlocks(): Unit = {
     // Update the queue of shuffles to be migrated
     logInfo("Offloading shuffle blocks")
-    val localShuffles = migratableShuffleBlockResolver.getStoredShuffles()
+    val localShuffles = bm.migratableResolver.getStoredShuffles()
     val newShufflesToMigrate = localShuffles.&~(migratingShuffles).toSeq
     shufflesToMigrate.addAll(newShufflesToMigrate.asJava)
     migratingShuffles ++= newShufflesToMigrate
 
     // Update the threads doing migrations
     // TODO: Sort & only start as many threads as min(||blocks||, ||targets||) using location pref
-    val livePeerSet = peerProvider.getPeers(false).toSet
+    val livePeerSet = bm.getPeers(false).toSet
     val currentPeerSet = migrationPeers.keys.toSet
     val deadPeers = currentPeerSet.&~(livePeerSet)
     val newPeers = livePeerSet.&~(currentPeerSet)
@@ -162,7 +161,7 @@ private[storage] class BlockManagerDecommissionManager(
    * Visible for testing
    */
   def decommissionRddCacheBlocks(): Unit = {
-    val replicateBlocksInfo = migratableRDDResolver.getMigratableRDDBlocks()
+    val replicateBlocksInfo = bm.getMigratableRDDBlocks()
 
     if (replicateBlocksInfo.nonEmpty) {
       logInfo(s"Need to replicate ${replicateBlocksInfo.size} RDD blocks " +
@@ -175,13 +174,29 @@ private[storage] class BlockManagerDecommissionManager(
     // TODO: We can sort these blocks based on some policy (LRU/blockSize etc)
     //   so that we end up prioritize them over each other
     val blocksFailedReplication = replicateBlocksInfo.map { replicateBlock =>
-        val replicatedSuccessfully = migratableRDDResolver.migrateBlock(replicateBlock)
+        val replicatedSuccessfully = migrateBlock(replicateBlock)
         (replicateBlock.blockId, replicatedSuccessfully)
     }.filterNot(_._2).map(_._1)
     if (blocksFailedReplication.nonEmpty) {
       logWarning("Blocks failed replication in cache decommissioning " +
         s"process: ${blocksFailedReplication.mkString(",")}")
     }
+  }
+
+  private def migrateBlock(blockToReplicate: ReplicateBlock): Boolean = {
+    val replicatedSuccessfully = bm.replicateBlock(
+      blockToReplicate.blockId,
+      blockToReplicate.replicas.toSet,
+      blockToReplicate.maxReplicas,
+      maxReplicationFailures = Some(maxReplicationFailuresForDecommission))
+    if (replicatedSuccessfully) {
+      logInfo(s"Block ${blockToReplicate.blockId} offloaded successfully, Removing block now")
+      bm.removeBlock(blockToReplicate.blockId)
+      logInfo(s"Block ${blockToReplicate.blockId} removed")
+    } else {
+      logWarning(s"Failed to offload block ${blockToReplicate.blockId}")
+    }
+    replicatedSuccessfully
   }
 
   private val blockMigrationRunnable = new Runnable {
@@ -252,4 +267,3 @@ private[storage] class BlockManagerDecommissionManager(
     blockMigrationExecutor.shutdownNow()
   }
 }
-
