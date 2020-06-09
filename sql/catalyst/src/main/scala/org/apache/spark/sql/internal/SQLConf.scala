@@ -549,7 +549,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.maxCNFNodeCount")
       .internal()
       .doc("Specifies the maximum allowable number of conjuncts in the result of CNF " +
-        "conversion. If the conversion exceeds the threshold, None is returned. " +
+        "conversion. If the conversion exceeds the threshold, an empty sequence is returned. " +
         "For example, CNF conversion of (a && b) || (c && d) generates " +
         "four conjuncts (a || c) && (a || d) && (b || c) && (b || d).")
       .version("3.1.0")
