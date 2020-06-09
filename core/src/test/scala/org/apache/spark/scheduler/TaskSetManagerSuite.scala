@@ -1907,7 +1907,7 @@ class TaskSetManagerSuite
       task.metrics.internalAccums
     }
 
-    // Start TASK 0,1 on exec1, Task 2 on exec2
+    // Start TASK 0,1 on exec1, TASK 2 on exec2
     (0 until 2).foreach { _ =>
       val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)._1
       assert(taskOption.isDefined)
@@ -1939,16 +1939,16 @@ class TaskSetManagerSuite
     assert(sched.speculativeTasks.toSet === Set())
 
     // decommission exec-2. All tasks running on exec-2 (i.e. TASK 2,3)  will be added to
-    //   executorDecommissionSpeculationTriggerTimeoutOpt
-    // (TASK2 -> 15, TASK3 -> 15)
+    // executorDecommissionSpeculationTriggerTimeoutOpt
+    // (TASK 2 -> 15, TASK 3 -> 15)
     manager.executorDecommission("exec2")
     assert(manager.tidToExecutorKillTimeMapping.keySet === Set(2, 3))
     assert(manager.tidToExecutorKillTimeMapping(2) === 15*1000)
     assert(manager.tidToExecutorKillTimeMapping(3) === 15*1000)
 
     assert(manager.checkSpeculatableTasks(0))
-    // Task2 started at t=0s, so it can still finish before t=15s (Median task runtime = 10s)
-    // Task3 started at t=6s, so it might not finish before t=15s. So Task 3 should be part
+    // TASK 2 started at t=0s, so it can still finish before t=15s (Median task runtime = 10s)
+    // TASK 3 started at t=6s, so it might not finish before t=15s. So TASK 3 should be part
     // of speculativeTasks
     assert(sched.speculativeTasks.toSet === Set(3))
     assert(manager.copiesRunning(3) === 1)
@@ -1973,8 +1973,8 @@ class TaskSetManagerSuite
     assert(manager.copiesRunning(3) === 2)
 
     clock.advance(5*1000) // time = 16s
-    // At t=16s, Task 2 has been running for 16s. It is more than the
-    // SPECULATION_MULTIPLIER * medianRuntime = 1.5 * 10 = 15s. So now Task 2 will
+    // At t=16s, TASK 2 has been running for 16s. It is more than the
+    // SPECULATION_MULTIPLIER * medianRuntime = 1.5 * 10 = 15s. So now TASK 2 will
     // be selected for speculation. Here we are verifying that regular speculation configs
     // should still take effect even when a EXECUTOR_DECOMMISSION_KILL_INTERVAL is provided and
     // corresponding executor is decommissioned
@@ -1985,7 +1985,7 @@ class TaskSetManagerSuite
     val taskOption2New = manager.resourceOffer("exec3", "host3", NO_PREF)._1
     assert(taskOption2New.isDefined)
     val speculativeTask2 = taskOption2New.get
-    // Ensure that task index 2 is launched on exec3, host3
+    // Ensure that TASK 2 is re-launched on exec3, host3
     assert(speculativeTask2.index === 2)
     assert(speculativeTask2.taskId === 5)
     assert(speculativeTask2.executorId === "exec3")
