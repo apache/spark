@@ -1231,7 +1231,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
       val lease = dm.lease(reader.totalSize, isCompressed)
-      val isLeaseRolledBack = new java.util.concurrent.atomic.AtomicBoolean(false)
       var store: HybridStore = null
       try {
         store = new HybridStore()
@@ -1249,12 +1248,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             memoryManager.release(appId, attempt.info.attemptId)
             logInfo(s"Completely switched to LevelDB for app $appId / ${attempt.info.attemptId}.")
           }
-
           override def onSwitchToLevelDBFail(e: Exception): Unit = {
             levelDB.close()
-            if (!isLeaseRolledBack.getAndSet(true)) {
-              lease.rollback()
-            }
+            lease.rollback()
             logWarning(s"Failed to switch to LevelDB for app $appId / ${attempt.info.attemptId}", e)
           }
         })
@@ -1267,17 +1263,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             "trying again...")
           store.close()
           memoryManager.release(appId, attempt.info.attemptId)
-          if (!isLeaseRolledBack.getAndSet(true)) {
-            lease.rollback()
-          }
+          lease.rollback()
           retried = true
 
         case e: Exception =>
           store.close()
           memoryManager.release(appId, attempt.info.attemptId)
-          if (!isLeaseRolledBack.getAndSet(true)) {
-            lease.rollback()
-          }
+          lease.rollback()
           throw e
       }
     }

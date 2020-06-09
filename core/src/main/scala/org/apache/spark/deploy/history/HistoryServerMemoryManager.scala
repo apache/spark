@@ -72,7 +72,7 @@ private class HistoryServerMemoryManager(
     }
   }
 
-  def approximateMemoryUsage(eventLogSize: Long, isCompressed: Boolean): Long = {
+  private def approximateMemoryUsage(eventLogSize: Long, isCompressed: Boolean): Long = {
     if (isCompressed) {
       eventLogSize * 2
     } else {
