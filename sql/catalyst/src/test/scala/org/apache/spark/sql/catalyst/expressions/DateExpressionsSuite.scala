@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time.{Instant, LocalDate, ZoneId}
-import java.time.format.DateTimeFormatter
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -42,7 +41,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val JST_OPT = Option(JST.getId)
 
   def toMillis(timestamp: String): Long = {
-    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC)
+    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC, isParsing = true)
     DateTimeUtils.microsToMillis(tf.parse(timestamp))
   }
   val date = "2015-04-08 13:10:15"
@@ -778,6 +777,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           checkEvaluation(
             FromUnixTime(Literal(1000L), Literal.create(null, StringType), timeZoneId),
             null)
+          checkEvaluation(
+            FromUnixTime(Literal(0L), Literal("not a valid format"), timeZoneId), null)
 
           // SPARK-28072 The codegen path for non-literal input should also work
           checkEvaluation(
@@ -791,7 +792,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
     // Test escaping of format
-    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\""), UTC_OPT) :: Nil)
+    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("unix_timestamp") {
@@ -853,13 +854,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               UnixTimestamp(Literal(date1), Literal.create(null, StringType), timeZoneId),
               MICROSECONDS.toSeconds(
                 DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
+            checkEvaluation(
+              UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
           }
         }
       }
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      UnixTimestamp(Literal("2015-07-24"), Literal("\""), UTC_OPT) :: Nil)
+      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("to_unix_timestamp") {
@@ -917,6 +920,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(date1), Literal.create(null, StringType), timeZoneId),
               MICROSECONDS.toSeconds(
                 DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), zid)))
+            checkEvaluation(
+              ToUnixTimestamp(
+                Literal("2015-07-24"),
+                Literal("not a valid format"), timeZoneId), null)
 
             // SPARK-28072 The codegen path for non-literal input should also work
             checkEvaluation(
@@ -933,7 +940,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      ToUnixTimestamp(Literal("2015-07-24"), Literal("\""), UTC_OPT) :: Nil)
+      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("datediff") {
@@ -1162,49 +1169,42 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
   }
 
-  test("invalid datetime pattern for parsing and formatting") {
-    val invalidForBoth = Seq("A", "c", "n", "e", "n", "p")
-    val invalidForNew = Seq("MMMMM", "GGGGG")
+  test("Disable week-based date fields and quarter fields for parsing") {
 
-    invalidForBoth.foreach { format =>
-      Seq("exception", "legacy", "corrected").foreach { policy =>
-        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
-          checkExceptionInExpression[IllegalArgumentException](
-            DateFormatClass(CurrentTimestamp(), Literal(format)), s"${format.head}")
-          checkExceptionInExpression[IllegalArgumentException](
-            FromUnixTime(Literal(0L), Literal(format)), s"${format.head}")
-          checkExceptionInExpression[IllegalArgumentException](
-            UnixTimestamp(Literal(date), Literal(format)), s"${format.head}")
-        }
-      }
+    def checkSparkUpgrade(c: Char): Unit = {
+      checkExceptionInExpression[SparkUpgradeException](
+        new ParseToTimestamp(Literal("1"), Literal(c.toString)).child, "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        new ParseToDate(Literal("1"), Literal(c.toString)).child, "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        ToUnixTimestamp(Literal("1"), Literal(c.toString)), "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        UnixTimestamp(Literal("1"), Literal(c.toString)), "3.0")
     }
 
-    invalidForNew.foreach { format =>
-      Seq("exception", "corrected").foreach { policy =>
-        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
-          checkExceptionInExpression[SparkUpgradeException](
-            DateFormatClass(CurrentTimestamp(), Literal(format)), s"${format.head}")
-          checkExceptionInExpression[SparkUpgradeException](
-            FromUnixTime(Literal(0L), Literal(format)), s"${format.head}")
-          checkExceptionInExpression[SparkUpgradeException](
-            UnixTimestamp(Literal(date), Literal(format)), s"${format.head}")
-          checkExceptionInExpression[SparkUpgradeException](
-            UnixTimestamp(Literal(date), Literal(format)), s"${format.head}")
-        }
-      }
+    def checkNullify(c: Char): Unit = {
+      checkEvaluation(new ParseToTimestamp(Literal("1"), Literal(c.toString)).child, null)
+      checkEvaluation(new ParseToDate(Literal("1"), Literal(c.toString)).child, null)
+      checkEvaluation(ToUnixTimestamp(Literal("1"), Literal(c.toString)), null)
+      checkEvaluation(UnixTimestamp(Literal("1"), Literal(c.toString)), null)
     }
 
-    invalidForNew.foreach { format =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
-        checkEvaluation(
-          DateFormatClass(Literal(ts), Literal(format)),
-          new SimpleDateFormat(format).format(ts))
-        checkEvaluation(
-          FromUnixTime(Literal(0L), Literal(format)),
-          new SimpleDateFormat(format).format(new Date(0)))
-        checkEvaluation(UnixTimestamp(Literal(date), Literal(format)), null)
-        checkEvaluation(ToUnixTimestamp(Literal(date), Literal(format)), null)
-      }
+    Seq('Y', 'W', 'w', 'E', 'u', 'F').foreach { l =>
+      checkSparkUpgrade(l)
     }
+
+    Seq('q', 'Q').foreach { l =>
+      checkNullify(l)
+    }
+  }
+
+
+  test("SPARK-31896: Handle am-pm timestamp parsing when hour is missing") {
+    checkEvaluation(
+      new ParseToTimestamp(Literal("PM"), Literal("a")).child,
+      Timestamp.valueOf("1970-01-01 12:00:00.0"))
+    checkEvaluation(
+      new ParseToTimestamp(Literal("11:11 PM"), Literal("mm:ss a")).child,
+      Timestamp.valueOf("1970-01-01 12:11:11.0"))
   }
 }

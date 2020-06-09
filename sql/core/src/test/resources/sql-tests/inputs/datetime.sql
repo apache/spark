@@ -13,6 +13,10 @@ select TIMESTAMP_MILLIS(-92233720368547758);
 -- [SPARK-16836] current_date and current_timestamp literals
 select current_date = current_date(), current_timestamp = current_timestamp();
 
+select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd');
+
+select to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('2016-12-31', 'yyyy-MM-dd');
+
 select dayofweek('2007-02-03'), dayofweek('2009-07-30'), dayofweek('2017-05-27'), dayofweek(null), dayofweek('1582-10-15 13:10:15');
 
 -- [SPARK-22333]: timeFunctionCall has conflicts with columnReference
@@ -120,10 +124,6 @@ select to_timestamp("12.1234019-10-06S10:11", "ss.SSSSy-MM-dd'S'HH:mm");
 select to_timestamp("2019-10-06S", "yyyy-MM-dd'S'");
 select to_timestamp("S2019-10-06", "'S'yyyy-MM-dd");
 
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuee');
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc');
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuuu');
-
 select to_timestamp("2019-10-06T10:11:12'12", "yyyy-MM-dd'T'HH:mm:ss''SSSS"); -- middle
 select to_timestamp("2019-10-06T10:11:12'", "yyyy-MM-dd'T'HH:mm:ss''"); -- tail
 select to_timestamp("'2019-10-06T10:11:12", "''yyyy-MM-dd'T'HH:mm:ss"); -- head
@@ -157,105 +157,6 @@ select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'd
 select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 
-create temporary view dnf as select d, f from values
- ('1986-05-23', 'yyyy-MM-dd'),
- ('1986-05-23a', 'yyyy-MM-dd'),
- ('1986-05-23', 'invalid'),
- ('1986-05-23', null),
- (null, 'yyyy-MM-dd'),
- (null, 'invalid'),
- (null, null) t(d, f);
-
-select date_format(null, null);
-select date_format(null, 'yyyy-MM-dd');
-select date_format(null, 'invalid');
-select date_format(cast(null as date), 'yyyy-MM-dd');
-select date_format(date '1986-05-23', null);
-select date_format(date '1986-05-23', 'invalid');
-select date_format(date '1986-05-23', 'yyyy-MM-dd');
-select date_format(cast(null as string), 'yyyy-MM-dd');
-select date_format('1986-05-23', null);
-select date_format('1986-05-23', 'invalid');
-select date_format('1986-05-23', 'yyyy-MM-dd');
-select date_format(cast(null as timestamp ), 'yyyy-MM-dd');
-select date_format(timestamp '1986-05-23', null);
-select date_format(timestamp '1986-05-23', 'invalid');
-select date_format(timestamp '1986-05-23', 'yyyy-MM-dd');
-select date_format(d, f) from dnf where f != 'invalid' or d is null or f is null ;
-select date_format(d, f) from dnf where f = 'invalid';
-
-select from_unixtime(null);
-select from_unixtime(null , null);
-select from_unixtime(12345 , null);
-select from_unixtime(null , 'invalid');
-select from_unixtime(null , 'yyyy-MM-dd');
-select from_unixtime(12345 , 'yyyy-MM-dd');
-select from_unixtime(12345, f) from dnf where f <> 'invalid';
-select from_unixtime(9223372036854775807L, f) from dnf where f <> 'invalid';
-select from_unixtime(12345, f) from dnf where f = 'invalid';
-select from_unixtime(null, f) from dnf;
-
-select unix_timestamp() = unix_timestamp();
-select unix_timestamp(null);
-select unix_timestamp(null, null);
-select unix_timestamp(null, 'yyyy-MM-dd');
-select unix_timestamp(null, 'invalid');
-select unix_timestamp(cast(null as date), 'yyyy-MM-dd');
-select unix_timestamp(date '1986-05-23');
-select unix_timestamp(date '1986-05-23', null);
-select unix_timestamp(date '1986-05-23', 'invalid');
-select unix_timestamp(date '1986-05-23', 'yyyy-MM-dd');
-select unix_timestamp(cast(null as string), 'yyyy-MM-dd');
-select unix_timestamp('1986-05-23');
-select unix_timestamp('1986-05-23', null);
-select unix_timestamp('1986-05-23', 'invalid');
-select unix_timestamp('1986-05-23', 'yyyy-MM-dd');
-select unix_timestamp('1986-05-23a', 'yyyy-MM-dd');
-select unix_timestamp(cast(null as timestamp ), 'yyyy-MM-dd');
-select unix_timestamp(timestamp '1986-05-23');
-select unix_timestamp(timestamp '1986-05-23', null);
-select unix_timestamp(timestamp '1986-05-23', 'invalid');
-select unix_timestamp(timestamp '1986-05-23', 'yyyy-MM-dd');
--- these test un-foldable codegen version for [[ToTimestamp]] interface, covers all of its implementations
--- which are unix_timestamp, to_unix_timestamp, to_timestamp and to_date
-select unix_timestamp(d, f) from dnf where d = '1986-05-23a';
-select unix_timestamp(d, f) from dnf where d != '1986-05-23a' and (f != 'invalid' or d is null or f is null);
-select unix_timestamp(d, f) from dnf where f = 'invalid' and d is null;
-select unix_timestamp(d, f) from dnf where f = 'invalid' and d is not null;
-select unix_timestamp(cast(d as date), f), unix_timestamp(cast(d as timestamp), f) from dnf;
-
-select to_unix_timestamp(null);
-select to_unix_timestamp(null, null);
-select to_unix_timestamp(null, 'yyyy-MM-dd');
-select to_unix_timestamp(null, 'invalid');
-select to_unix_timestamp(cast(null as date), 'yyyy-MM-dd');
-select to_unix_timestamp(date '1986-05-23');
-select to_unix_timestamp(date '1986-05-23', null);
-select to_unix_timestamp(date '1986-05-23', 'invalid');
-select to_unix_timestamp(date '1986-05-23', 'yyyy-MM-dd');
-select to_unix_timestamp(cast(null as string), 'yyyy-MM-dd');
-select to_unix_timestamp('1986-05-23');
-select to_unix_timestamp('1986-05-23', null);
-select to_unix_timestamp('1986-05-23', 'invalid');
-select to_unix_timestamp('1986-05-23', 'yyyy-MM-dd');
-select to_unix_timestamp(cast(null as timestamp ), 'yyyy-MM-dd');
-select to_unix_timestamp(timestamp '1986-05-23');
-select to_unix_timestamp(timestamp '1986-05-23', null);
-select to_unix_timestamp(timestamp '1986-05-23', 'invalid');
-select to_unix_timestamp(timestamp '1986-05-23', 'yyyy-MM-dd');
-
-select to_timestamp(null);
-select to_timestamp(cast(null as string), 'yyyy-MM-dd');
-select to_timestamp(cast(null as string), 'invalid');
-select to_timestamp('1986-05-23');
-select to_timestamp('1986-05-23', null);
-select to_timestamp('1986-05-23', 'invalid');
-select to_timestamp('1986-05-23', 'yyyy-MM-dd');
-
-select to_date(null);
-select to_date(cast(null as string), 'yyyy-MM-dd');
-select to_date(cast(null as string), 'invalid');
-select to_date('1986-05-23');
-select to_date('1986-05-23', null);
-select to_date('1986-05-23', 'invalid');
-select to_date('1986-05-23', 'yyyy-MM-dd');
+select from_unixtime(1, 'yyyyyyyyyyy-MM-dd');
+select date_format(timestamp '2018-11-17 13:33:33', 'yyyyyyyyyy-MM-dd HH:mm:ss');
+select date_format(date '2018-11-17', 'yyyyyyyyyyy-MM-dd');

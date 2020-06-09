@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.text.SimpleDateFormat
 import java.time.{LocalDate, ZoneId}
-import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale}
 
 import org.apache.commons.lang3.time.FastDateFormat
@@ -42,11 +41,12 @@ class Iso8601DateFormatter(
     pattern: String,
     zoneId: ZoneId,
     locale: Locale,
-    legacyFormat: LegacyDateFormats.LegacyDateFormat)
+    legacyFormat: LegacyDateFormats.LegacyDateFormat,
+    isParsing: Boolean)
   extends DateFormatter with DateTimeFormatterHelper {
 
   @transient
-  private lazy val formatter = getOrCreateFormatter(pattern, locale)
+  private lazy val formatter = getOrCreateFormatter(pattern, locale, isParsing)
 
   @transient
   private lazy val legacyFormatter = DateFormatter.getLegacyFormatter(
@@ -58,12 +58,15 @@ class Iso8601DateFormatter(
       try {
         val localDate = toLocalDate(formatter.parse(s))
         localDateToDays(localDate)
-      } catch checkDiffResult(s, legacyFormatter.parse)
+      } catch checkParsedDiff(s, legacyFormatter.parse)
     }
   }
 
   override def format(localDate: LocalDate): String = {
-    localDate.format(formatter)
+    try {
+      localDate.format(formatter)
+    } catch checkFormattedDiff(toJavaDate(localDateToDays(localDate)),
+      (d: Date) => format(d))
   }
 
   override def format(days: Int): String = {
@@ -125,12 +128,13 @@ object DateFormatter {
       format: Option[String],
       zoneId: ZoneId,
       locale: Locale = defaultLocale,
-      legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): DateFormatter = {
+      legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
+      isParsing: Boolean): DateFormatter = {
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      val df = new Iso8601DateFormatter(pattern, zoneId, locale, legacyFormat)
+      val df = new Iso8601DateFormatter(pattern, zoneId, locale, legacyFormat, isParsing)
       df.validatePatternString()
       df
     }
@@ -153,15 +157,16 @@ object DateFormatter {
       format: String,
       zoneId: ZoneId,
       locale: Locale,
-      legacyFormat: LegacyDateFormat): DateFormatter = {
-    getFormatter(Some(format), zoneId, locale, legacyFormat)
+      legacyFormat: LegacyDateFormat,
+      isParsing: Boolean): DateFormatter = {
+    getFormatter(Some(format), zoneId, locale, legacyFormat, isParsing)
   }
 
-  def apply(format: String, zoneId: ZoneId): DateFormatter = {
-    getFormatter(Some(format), zoneId)
+  def apply(format: String, zoneId: ZoneId, isParsing: Boolean = false): DateFormatter = {
+    getFormatter(Some(format), zoneId, isParsing = isParsing)
   }
 
   def apply(zoneId: ZoneId): DateFormatter = {
-    getFormatter(None, zoneId)
+    getFormatter(None, zoneId, isParsing = false)
   }
 }
