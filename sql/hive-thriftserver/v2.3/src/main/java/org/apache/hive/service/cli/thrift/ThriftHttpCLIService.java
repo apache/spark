@@ -62,8 +62,8 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       // Start with minWorkerThreads, expand till maxWorkerThreads and reject subsequent requests
       String threadPoolName = "HiveServer2-HttpHandler-Pool";
       ThreadPoolExecutor executorService = new ThreadPoolExecutor(minWorkerThreads, maxWorkerThreads,
-        workerKeepAliveTime, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(),
-        new ThreadFactoryWithGarbageCleanup(threadPoolName));
+          workerKeepAliveTime, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(),
+          new ThreadFactoryWithGarbageCleanup(threadPoolName));
       ExecutorThreadPool threadPool = new ExecutorThreadPool(executorService);
 
       // HTTP Server
@@ -78,10 +78,10 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       if (useSsl) {
         String keyStorePath = hiveConf.getVar(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH).trim();
         String keyStorePassword = ShimLoader.getHadoopShims().getPassword(hiveConf,
-                HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname);
+            HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname);
         if (keyStorePath.isEmpty()) {
           throw new IllegalArgumentException(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH.varname
-            + " Not configured for SSL connection");
+              + " Not configured for SSL connection");
         }
         SslContextFactory sslContextFactory = new SslContextFactory.Server();
         String[] excludedProtocols = hiveConf.getVar(ConfVars.HIVE_SSL_PROTOCOL_BLACKLIST).split(",");
@@ -92,25 +92,25 @@ public class ThriftHttpCLIService extends ThriftCLIService {
         sslContextFactory.setKeyStorePath(keyStorePath);
         sslContextFactory.setKeyStorePassword(keyStorePassword);
         connectionFactories = AbstractConnectionFactory.getFactories(
-          sslContextFactory, new HttpConnectionFactory());
+            sslContextFactory, new HttpConnectionFactory());
       } else {
         connectionFactories = new ConnectionFactory[] { new HttpConnectionFactory() };
       }
       ServerConnector connector = new ServerConnector(
-        httpServer,
-        null,
-        // Call this full constructor to set this, which forces daemon threads:
-        new ScheduledExecutorScheduler("HiveServer2-HttpHandler-JettyScheduler", true),
-        null,
-        -1,
-        -1,
-        connectionFactories);
+          httpServer,
+          null,
+          // Call this full constructor to set this, which forces daemon threads:
+          new ScheduledExecutorScheduler("HiveServer2-HttpHandler-JettyScheduler", true),
+          null,
+          -1,
+          -1,
+          connectionFactories);
 
       connector.setPort(portNum);
       // Linux:yes, Windows:no
       connector.setReuseAddress(!Shell.WINDOWS);
       int maxIdleTime = (int) hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_MAX_IDLE_TIME,
-        TimeUnit.MILLISECONDS);
+          TimeUnit.MILLISECONDS);
       connector.setIdleTimeout(maxIdleTime);
 
       httpServer.addConnector(connector);
@@ -126,14 +126,14 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       UserGroupInformation httpUGI = cliService.getHttpUGI();
       String authType = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION);
       TServlet thriftHttpServlet = new ThriftHttpServlet(processor, protocolFactory, authType,
-        serviceUGI, httpUGI, hiveAuthFactory);
+          serviceUGI, httpUGI, hiveAuthFactory);
 
       // Context handler
       final ServletContextHandler context = new ServletContextHandler(
         ServletContextHandler.SESSIONS);
       context.setContextPath("/");
       String httpPath = getHttpPath(hiveConf
-        .getVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_HTTP_PATH));
+          .getVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_HTTP_PATH));
       httpServer.setHandler(context);
       context.addServlet(new ServletHolder(thriftHttpServlet), httpPath);
 
