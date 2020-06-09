@@ -37,13 +37,14 @@ object PushCNFPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelpe
         j
       } else {
         val pushDownCandidates = predicates.filter(_.deterministic)
-        val leftFilterConditions = pushDownCandidates.filter(_.references.subsetOf(left.outputSet))
-        val rightFilterConditions =
+        lazy val leftFilterConditions =
+          pushDownCandidates.filter(_.references.subsetOf(left.outputSet))
+        lazy val rightFilterConditions =
           pushDownCandidates.filter(_.references.subsetOf(right.outputSet))
 
-        val newLeft =
+        lazy val newLeft =
           leftFilterConditions.reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
-        val newRight =
+        lazy val newRight =
           rightFilterConditions.reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
 
         joinType match {
