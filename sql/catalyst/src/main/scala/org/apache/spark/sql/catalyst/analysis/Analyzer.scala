@@ -2854,6 +2854,8 @@ class Analyzer(
    * value is not the same with the internal schema of the encoder, which could cause
    * data loss. For example, the encoder should not cast the input value to Decimal(38, 18)
    * if the actual data type is Decimal(30, 0).
+   *
+   * The resolved encoders then will be used to deserialize the internal row to Scala value.
    */
   object ResolveEncodersInUDF extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
