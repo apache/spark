@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.util.Date
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler._
@@ -87,6 +87,7 @@ private[spark] class SparkUI private (
         .getOrElse("<unknown>")
     } catch {
       case _: NoSuchElementException => "<unknown>"
+      case _: SparkException => "<unknown>"
     }
   }
 
