@@ -1326,50 +1326,93 @@ case class BRound(child: Expression, scale: Expression)
   def this(child: Expression) = this(child, Literal(0))
 }
 
+object WidthBucket {
+
+  def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
+    // Checks error cases below:
+    //  - `numBucket` must be greater than zero and be less than Long.MaxValue
+    //  - `value`, `min`, and `max` cannot be NaN
+    //  - `min` bound cannot equal `max
+    //  - `min` and `max` must be finite
+    if (numBucket <= 0 || numBucket == Long.MaxValue || jl.Double.isNaN(value) || min == max ||
+        jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
+        jl.Double.isNaN(max) || jl.Double.isInfinite(max)) {
+      return null
+    }
+
+    val lower = Math.min(min, max)
+    val upper = Math.max(min, max)
+
+    if (min < max) {
+      if (value < lower) {
+        0L
+      } else if (value >= upper) {
+        numBucket + 1L
+      } else {
+        (numBucket.toDouble * (value - lower) / (upper - lower)).toLong + 1L
+      }
+    } else { // `min > max` case
+      if (value > upper) {
+        0L
+      } else if (value <= lower) {
+        numBucket + 1L
+      } else {
+        (numBucket.toDouble * (upper - value) / (upper - lower)).toLong + 1L
+      }
+    }
+  }
+}
+
 /**
- *  The bucket number into which
- *  the value of this expression would fall after being evaluated.
+ * Returns the bucket number into which the value of this expression would fall
+ * after being evaluated.
  *
- * @param expr id the expression for which the histogram is being created
- * @param minValue is an expression that resolves
- *                 to the minimum end point of the acceptable range for expr
- * @param maxValue is an expression that resolves
- *                 to the maximum end point of the acceptable range for expr
- * @param numBucket is an An expression that resolves to
- *                  a constant indicating the number of buckets
+ * @param expr is the expression to compute a bucket number in the histogram
+ * @param minValue is the minimum value of the histogram
+ * @param maxValue is the maximum value of the histogram
+ * @param numBucket is the number of buckets
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, min_value, max_value, num_bucket) - Returns an long between 0 and `num_buckets`+1 by mapping the `expr` into buckets defined by the range [`min_value`, `max_value`].",
-  extended = """
+  usage = """
+    _FUNC_(expr, min_value, max_value, num_bucket) - Returns the `bucket` to which
+      operand would be assigned in an equiwidth histogram with `num_bucket` buckets,
+      in the range `min_value` to `max_value`."
+  """,
+  examples = """
     Examples:
-      > SELECT _FUNC_(5.35, 0.024, 10.06, 5);
+      > SELECT _FUNC_(5.3, 0.2, 10.6, 5);
        3
-  """)
-// scalastyle:on line.size.limit
+      > SELECT _FUNC_(-2.1, 1.3, 3.4, 3);
+       0
+      > SELECT _FUNC_(8.1, 0.0, 5.7, 4);
+       5
+      > SELECT _FUNC_(-0.9, 5.2, 0.5, 2);
+       3
+  """,
+  since = "3.1.0")
 case class WidthBucket(
-  expr: Expression,
-  minValue: Expression,
-  maxValue: Expression,
-  numBucket: Expression) extends QuaternaryExpression with ImplicitCastInputTypes {
+    expr: Expression,
+    minValue: Expression,
+    maxValue: Expression,
+    numBucket: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def children: Seq[Expression] = Seq(expr, minValue, maxValue, numBucket)
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
 
-  override def nullSafeEval(ex: Any, min: Any, max: Any, num: Any): Any = {
-    MathUtils.widthBucket(
-      ex.asInstanceOf[Double],
+  override protected def nullSafeEval(input: Any, min: Any, max: Any, numBucket: Any): Any = {
+    WidthBucket.computeBucketNumber(
+      input.asInstanceOf[Double],
       min.asInstanceOf[Double],
       max.asInstanceOf[Double],
-      num.asInstanceOf[Long])
+      numBucket.asInstanceOf[Long])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val mathUtils = MathUtils.getClass.getName.stripSuffix("$")
-    nullSafeCodeGen(ctx, ev, (ex, min, max, num) =>
-      s"${ev.value} = $mathUtils.widthBucket($ex, $min, $max, $num);"
-    )
+    defineCodeGen(ctx, ev, (input, min, max, numBucket) =>
+      "org.apache.spark.sql.catalyst.expressions.WidthBucket" +
+        s".computeBucketNumber($input, $min, $max, $numBucket);")
   }
 }
