@@ -139,7 +139,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     blockManager
   }
 
-  private def decommissionManager(bm: BlockManager) = new bm.BlockManagerDecommissionManager(conf)
+  private def decommissionManager(bm: BlockManager) = new BlockManagerDecommissionManager(
+    conf,
+    bm.blockTransferService,
+    bm,
+    bm.migratableResolver,
+    bm.peerProvider)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
