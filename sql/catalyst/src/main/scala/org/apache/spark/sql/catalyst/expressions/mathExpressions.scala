@@ -1413,6 +1413,6 @@ case class WidthBucket(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (input, min, max, numBucket) =>
       "org.apache.spark.sql.catalyst.expressions.WidthBucket" +
-        s".computeBucketNumber($input, $min, $max, $numBucket);")
+        s".computeBucketNumber($input, $min, $max, $numBucket)")
   }
 }
