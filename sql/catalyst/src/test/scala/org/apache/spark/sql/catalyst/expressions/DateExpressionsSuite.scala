@@ -1163,27 +1163,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
   }
 
-  test("Disable week-based date fields and quarter fields for parsing") {
+  test("Consistent error handling for datetime formatting and parsing functions") {
 
-    def checkException[T <: Exception : ClassTag](c: String, onlyParsing: Boolean = false): Unit = {
+    def checkException[T <: Exception : ClassTag](c: String): Unit = {
       checkExceptionInExpression[T](new ParseToTimestamp(Literal("1"), Literal(c)).child, c)
       checkExceptionInExpression[T](new ParseToDate(Literal("1"), Literal(c)).child, c)
       checkExceptionInExpression[T](ToUnixTimestamp(Literal("1"), Literal(c)), c)
       checkExceptionInExpression[T](UnixTimestamp(Literal("1"), Literal(c)), c)
-      if (!onlyParsing) {
+      if (!Set("E", "F", "q", "Q").contains(c)) {
         checkExceptionInExpression[T](DateFormatClass(CurrentTimestamp(), Literal(c)), c)
         checkExceptionInExpression[T](FromUnixTime(Literal(0L), Literal(c)), c)
       }
     }
 
-    val unsupportedLettersForParsing = Set('E', 'F', 'q', 'Q')
-
     Seq('Y', 'W', 'w', 'E', 'u', 'F').foreach { l =>
-      checkException[SparkUpgradeException](l.toString, unsupportedLettersForParsing.contains(l))
+      checkException[SparkUpgradeException](l.toString)
     }
 
     Seq('q', 'Q', 'e', 'c', 'A', 'n', 'N', 'p').foreach { l =>
-      checkException[IllegalArgumentException](l.toString, unsupportedLettersForParsing.contains(l))
+      checkException[IllegalArgumentException](l.toString)
     }
   }
 
