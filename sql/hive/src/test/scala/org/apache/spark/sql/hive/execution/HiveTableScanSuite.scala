@@ -206,7 +206,8 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
              |select col from temp""".stripMargin)
       }
 
-      val scan1 = getHiveTableScanExec("SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)")
+      val scan1 = getHiveTableScanExec(
+        "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)")
       val scan2 = getHiveTableScanExec(
         "SELECT * FROM t WHERE (p = '1' and i = 2) or (i = 1 or p = '2')")
       val scan3 = getHiveTableScanExec(
