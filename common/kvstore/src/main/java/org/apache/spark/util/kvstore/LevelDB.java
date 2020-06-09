@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -64,6 +65,12 @@ public class LevelDB implements KVStore {
   private final ConcurrentMap<String, byte[]> typeAliases;
   private final ConcurrentMap<Class<?>, LevelDBTypeInfo> types;
 
+  /**
+   * Track level db iterators, make sure iterators are closed before DB is closed. This would
+   * prevent JNI resource leaking (file handle on Windows) by level db iterators.
+   */
+  private final ConcurrentLinkedQueue<LevelDBIterator<?>> iteratorTracker;
+
   public LevelDB(File path) throws Exception {
     this(path, new KVStoreSerializer());
   }
@@ -94,6 +101,8 @@ public class LevelDB implements KVStore {
       aliases = new HashMap<>();
     }
     typeAliases = new ConcurrentHashMap<>(aliases);
+
+    iteratorTracker = new ConcurrentLinkedQueue<>();
   }
 
   @Override
@@ -189,7 +198,12 @@ public class LevelDB implements KVStore {
       @Override
       public Iterator<T> iterator() {
         try {
-          return new LevelDBIterator<>(type, LevelDB.this, this);
+          LevelDBIterator<T> iterator = new LevelDBIterator<>(
+                  type,
+                  LevelDB.this,
+                  this);
+          iteratorTracker.add(iterator);
+          return iterator;
         } catch (Exception e) {
           throw Throwables.propagate(e);
         }
@@ -238,6 +252,11 @@ public class LevelDB implements KVStore {
       }
 
       try {
+        if (iteratorTracker != null) {
+          for (LevelDBIterator<?> it: iteratorTracker) {
+            it.close();
+          }
+        }
         _db.close();
       } catch (IOException ioe) {
         throw ioe;
@@ -256,6 +275,7 @@ public class LevelDB implements KVStore {
       DB _db = this._db.get();
       if (_db != null) {
         it.close();
+        iteratorTracker.remove(it);
       }
     }
   }

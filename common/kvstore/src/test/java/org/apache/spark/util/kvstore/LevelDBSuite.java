@@ -276,6 +276,42 @@ public class LevelDBSuite {
     assertEquals(expected, results);
   }
 
+  @Test
+  public void testCloseLevelDBIterator() throws Exception {
+    // SPARK-31929: test when LevelDB.close() is called, related LevelDBIterators
+    // are also closed. So no file handle for level DB files are opened.
+    File dbpathForCloseTest = File
+            .createTempFile(
+                    "test_db_close.",
+                    ".ldb");
+    dbpathForCloseTest.delete();
+    LevelDB dbForCloseTest = new LevelDB(dbpathForCloseTest);
+    for (int i = 0; i < 8192; i++) {
+      dbForCloseTest.write(createCustomType1(i));
+    }
+
+    KVStoreIterator<CustomType1> it = dbForCloseTest
+                    .view(CustomType1.class).closeableIterator();
+    assertEquals("key0", it.next().key);
+    KVStoreIterator<CustomType1> it1 = dbForCloseTest
+            .view(CustomType1.class).closeableIterator();
+    assertEquals("key0", it1.next().key);
+    try(KVStoreIterator<CustomType1> it2 = dbForCloseTest
+                        .view(CustomType1.class).closeableIterator();
+        KVStoreIterator<CustomType1> it3 = dbForCloseTest
+                        .view(CustomType1.class).closeableIterator();) {
+      assertEquals("key0", it2.next().key);
+      assertEquals("key0", it3.next().key);
+    }
+    dbForCloseTest.close();
+    assertTrue(dbpathForCloseTest.exists());
+    if (dbpathForCloseTest != null) {
+      FileUtils.deleteQuietly(dbpathForCloseTest);
+    }
+    assertTrue(!dbpathForCloseTest.exists());
+  }
+
+
   private CustomType1 createCustomType1(int i) {
     CustomType1 t = new CustomType1();
     t.key = "key" + i;
