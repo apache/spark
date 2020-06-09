@@ -20,7 +20,7 @@ package org.apache.spark.mllib.util
 import scala.annotation.varargs
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{MatrixUDT => MLMatrixUDT, VectorUDT => MLVectorUDT}
@@ -254,10 +254,27 @@ object MLUtils extends Logging {
   @Since("3.1.0")
   def kFold(df: DataFrame, numFolds: Int, foldColName: String): Array[(RDD[Row], RDD[Row])] = {
     val foldCol = df.col(foldColName)
-    val dfWithMod = df.withColumn(foldColName, pmod(foldCol, lit(numFolds)))
+    val checker = udf { foldNum: Int =>
+      // Valid fold number is in range [0, numFolds).
+      if (foldNum < 0 || foldNum >= numFolds) {
+        throw new SparkException(s"Fold number must be in range [0, $numFolds), but got $foldNum.")
+      }
+      true
+    }
     (0 until numFolds).map { fold =>
-      (dfWithMod.filter(col(foldColName) =!= fold).drop(foldColName).rdd,
-        dfWithMod.filter(col(foldColName) === fold).drop(foldColName).rdd)
+      val training = df
+        .filter(checker(foldCol) && foldCol =!= fold)
+        .drop(foldColName).rdd
+      val validation = df
+        .filter(checker(foldCol) && foldCol === fold)
+        .drop(foldColName).rdd
+      if (training.isEmpty()) {
+        throw new SparkException(s"The training data at fold $fold is empty.")
+      }
+      if (validation.isEmpty()) {
+        throw new SparkException(s"The validation data at fold $fold is empty.")
+      }
+      (training, validation)
     }.toArray
   }
 
