@@ -708,7 +708,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         .map(col => col.getName).toSet
 
       def unapply(attr: Attribute): Option[String] = {
-        if (varcharKeys.contains(attr.name)) {
+        val resolver = SQLConf.get.resolver
+        if (varcharKeys.exists(c => resolver(c, attr.name))) {
           None
         } else if (attr.dataType.isInstanceOf[IntegralType] || attr.dataType == StringType) {
           Some(attr.name)
