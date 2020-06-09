@@ -962,7 +962,6 @@ class LinearRegressionSummary private[regression] (
     private val privateModel: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
 
-
   @transient private val metrics = {
     val weightCol =
       if (!privateModel.isDefined(privateModel.weightCol) || privateModel.getWeightCol.isEmpty) {
