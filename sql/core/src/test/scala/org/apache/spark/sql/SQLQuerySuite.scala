@@ -3503,7 +3503,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(Row(Byte.MinValue.toLong * -1)))
     checkAnswer(sql("select CAST(-32768 as short) DIV CAST (-1 as short)"),
       Seq(Row(Short.MinValue.toLong * -1)))
-
+  }
 }
 
 case class Foo(bar: Option[String])
