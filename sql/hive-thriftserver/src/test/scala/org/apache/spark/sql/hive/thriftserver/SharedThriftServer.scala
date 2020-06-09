@@ -56,13 +56,9 @@ trait SharedThriftServer extends SharedSparkSession {
   }
 
   protected def jdbcUri: String = if (mode == ServerMode.http) {
-    s"""jdbc:hive2://localhost:$serverPort/
-       |default;
-       |transportMode=http;
-       |httpPath=cliservice
-     """.stripMargin.split("\n").mkString.trim
+    s"jdbc:hive2://localhost:$serverPort/default;transportMode=http;httpPath=cliservice"
   } else {
-    s"""jdbc:hive2://localhost:$serverPort"""
+    s"jdbc:hive2://localhost:$serverPort"
   }
 
   protected def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
@@ -102,7 +98,7 @@ trait SharedThriftServer extends SharedSparkSession {
       // Wait for thrift server to be ready to serve the query, via executing simple query
       // till the query succeeds. See SPARK-30345 for more details.
       eventually(timeout(30.seconds), interval(1.seconds)) {
-        withJdbcStatement {_.execute("SELECT 1")}
+        withJdbcStatement { _.execute("SELECT 1") }
       }
     } catch {
       case e: Exception =>
