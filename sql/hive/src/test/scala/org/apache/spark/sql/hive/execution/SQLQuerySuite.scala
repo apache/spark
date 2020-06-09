@@ -2544,6 +2544,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assert(e.getMessage.contains("Cannot modify the value of a static config"))
     }
   }
+
   test("SPARK-29295: dynamic partition map parsed from partition path should be case insensitive") {
     withTable("t") {
       withSQLConf("hive.exec.dynamic.partition" -> "true",
