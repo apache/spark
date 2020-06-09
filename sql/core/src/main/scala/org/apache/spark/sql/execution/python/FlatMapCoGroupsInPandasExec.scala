@@ -60,12 +60,10 @@ case class FlatMapCoGroupsInPandasExec(
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
   private val pandasFunction = func.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
-  private val inputExprs =
+  private val inputAttrs =
     func.asInstanceOf[PythonUDF].children.map(_.asInstanceOf[NamedExpression])
-  private val leftExprs =
-    left.output.filter(e => inputExprs.exists(_.semanticEquals(e)))
-  private val rightExprs =
-    right.output.filter(e => inputExprs.exists(_.semanticEquals(e)))
+  private val leftAttrs = left.output.filter(e => inputAttrs.exists(_.semanticEquals(e)))
+  private val rightAttrs = right.output.filter(e => inputAttrs.exists(_.semanticEquals(e)))
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
@@ -86,8 +84,8 @@ case class FlatMapCoGroupsInPandasExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
 
-    val (leftDedup, leftArgOffsets) = resolveArgOffsets(leftExprs, leftGroupingExprs)
-    val (rightDedup, rightArgOffsets) = resolveArgOffsets(rightExprs, rightGroupingExprs)
+    val (leftDedup, leftArgOffsets) = resolveArgOffsets(leftAttrs, leftGroupingExprs)
+    val (rightDedup, rightArgOffsets) = resolveArgOffsets(rightAttrs, rightGroupingExprs)
 
     // Map cogrouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>

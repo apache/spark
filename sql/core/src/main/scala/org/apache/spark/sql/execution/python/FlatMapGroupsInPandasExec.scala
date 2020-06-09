@@ -56,7 +56,7 @@ case class FlatMapGroupsInPandasExec(
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
   private val pandasFunction = func.asInstanceOf[PythonUDF].func
   private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
-  private val inputExprs =
+  private val inputAttrs =
     func.asInstanceOf[PythonUDF].children.map(_.asInstanceOf[NamedExpression])
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
@@ -77,7 +77,7 @@ case class FlatMapGroupsInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val (dedupExprs, argOffsets) = resolveArgOffsets(inputExprs, groupingExprs)
+    val (dedupExprs, argOffsets) = resolveArgOffsets(inputAttrs, groupingExprs)
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
 

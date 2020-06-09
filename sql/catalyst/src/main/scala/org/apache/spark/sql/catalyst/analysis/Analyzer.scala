@@ -2753,11 +2753,23 @@ class Analyzer(
       case f: Filter => f
 
       case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) =>
-        val nondeterToAttr = getNondeterToAttr(a.groupingExpressions)
-        val newChild = Project(a.child.output ++ nondeterToAttr.values, a.child)
-        a.transformExpressions { case e =>
-          nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
-        }.copy(child = newChild)
+        projectGroupingExprs(a, a.groupingExpressions)
+
+      case f: FlatMapGroupsInPandas if f.groupingExprs.exists(!_.deterministic) =>
+        projectGroupingExprs(f, f.groupingExprs)
+
+      case a: FlatMapCoGroupsInPandas if (a.leftExprs ++ a.rightExprs).exists(!_.deterministic) =>
+        val leftNondeterToAttr = getNondeterToAttr(a.leftExprs)
+        val leftNewChild = Project(a.left.output ++ leftNondeterToAttr.values, a.left)
+        val rightNondeterToAttr = getNondeterToAttr(a.rightExprs)
+        val rightNewChild = Project(a.right.output ++ rightNondeterToAttr.values, a.right)
+        a.copy(
+          leftExprs = a.leftExprs.map(
+            e => leftNondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)),
+          rightExprs = a.rightExprs.map(
+            e => rightNondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)),
+          left = leftNewChild,
+          right = rightNewChild)
 
       // Don't touch collect metrics. Top-level metrics are not supported (check analysis will fail)
       // and we want to retain them inside the aggregate functions.
@@ -2773,6 +2785,14 @@ class Analyzer(
         }
         val newChild = Project(p.child.output ++ nondeterToAttr.values, p.child)
         Project(p.output, newPlan.withNewChildren(newChild :: Nil))
+    }
+
+    private def projectGroupingExprs(p: LogicalPlan, exprs: Seq[Expression]): LogicalPlan = {
+      val nondeterToAttr = getNondeterToAttr(exprs)
+      val newChild = Project(p.children.head.output ++ nondeterToAttr.values, p.children.head)
+      p.transformExpressions { case e =>
+        nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
+      }.withNewChildren(newChild :: Nil)
     }
 
     private def getNondeterToAttr(exprs: Seq[Expression]): Map[Expression, NamedExpression] = {

@@ -24,7 +24,7 @@ from decimal import Decimal
 
 from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType, \
-    window
+    window, rand
 from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -589,13 +589,23 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
     def test_case_insensitive_grouping_column(self):
         # SPARK-31915: case-insensitive grouping column should work.
-        @pandas_udf("column integer, Score float", PandasUDFType.GROUPED_MAP)
         def my_pandas_udf(pdf):
-            return pdf.assign(Score=0.5)
+            return pdf.assign(score=0.5)
 
-        df = self.spark.createDataFrame([[1, 1]], ["column", "Score"])
-        row = df.groupby('COLUMN').apply(my_pandas_udf).first()
-        self.assertEquals(row.asDict(), Row(column=1, Score=0.5).asDict())
+        df = self.spark.createDataFrame([[1, 1]], ["column", "score"])
+        row = df.groupby('COLUMN').applyInPandas(
+            my_pandas_udf, schema="column integer, score float").first()
+        self.assertEquals(row.asDict(), Row(column=1, score=0.5).asDict())
+
+    def test_nondeterministic_grouping_column(self):
+        def my_pandas_udf(key, pdf):
+            assert pdf.score.iloc[0] == key
+            return pdf
+
+        df = self.spark.createDataFrame([[1], [3], [5]], ["column"])
+        df = df.select(col("column"), rand(seed=42).alias("score"))
+        df.groupby(rand(seed=42)).applyInPandas(
+            my_pandas_udf, schema="column integer, score float").count()
 
 
 if __name__ == "__main__":

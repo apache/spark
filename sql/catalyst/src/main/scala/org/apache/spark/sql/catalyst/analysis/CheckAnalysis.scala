@@ -619,7 +619,8 @@ trait CheckAnalysis extends PredicateHelper {
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
-            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
+            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
+            !o.isInstanceOf[FlatMapGroupsInPandas] && !o.isInstanceOf[FlatMapCoGroupsInPandas] =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
               s"""nondeterministic expressions are only allowed in

@@ -18,7 +18,8 @@
 import unittest
 import sys
 
-from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType
+from pyspark.sql.functions import array, explode, col, lit, udf, sum, rand, pandas_udf, \
+    PandasUDFType
 from pyspark.sql.types import DoubleType, StructType, StructField, Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -208,6 +209,25 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             df2.groupby("COLUMN")
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
         self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
+
+    def test_nondeterministic_grouping_column(self):
+        def my_pandas_udf(key, left, right):
+            assert left.score.iloc[0] == right.score.iloc[0] == key
+            return left
+
+        df = self.spark.createDataFrame([[1], [3], [5]], ["column"])
+        df = df.select(col("column"), rand(seed=42).alias("score"))
+        df.groupby(rand(seed=42)).cogroup(
+            df.groupby(rand(seed=42))
+        ).applyInPandas(
+            my_pandas_udf, schema="column integer, score float").count()
+
+        df2 = self.spark.createDataFrame([[1], [3], [5]], ["column"])
+        df2 = df2.select(col("column"), rand(seed=42).alias("score"))
+        df.groupby(rand(seed=42)).cogroup(
+            df2.groupby(rand(seed=42))
+        ).applyInPandas(
+            my_pandas_udf, schema="column integer, score float").count()
 
     @staticmethod
     def _test_with_key(left, right, isLeft):
