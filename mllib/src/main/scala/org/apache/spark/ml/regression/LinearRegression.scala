@@ -29,6 +29,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
 import org.apache.spark.ml.feature._
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
@@ -961,21 +962,28 @@ class LinearRegressionSummary private[regression] (
     private val privateModel: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
 
-  @transient private val metrics = new RegressionMetrics(
-    predictions
-      .select(col(predictionCol), col(labelCol).cast(DoubleType))
-      .rdd
-      .map { case Row(pred: Double, label: Double) => (pred, label) },
-    !privateModel.getFitIntercept)
+
+  @transient private val metrics = {
+    val weightCol =
+      if (!privateModel.isDefined(privateModel.weightCol) || privateModel.getWeightCol.isEmpty) {
+        lit(1.0)
+      } else {
+        checkNonNegativeWeight(col(privateModel.getWeightCol).cast(DoubleType))
+      }
+
+    new RegressionMetrics(
+      predictions
+        .select(col(predictionCol), col(labelCol).cast(DoubleType), weightCol)
+        .rdd
+        .map { case Row(pred: Double, label: Double, weight: Double) => (pred, label, weight) },
+      !privateModel.getFitIntercept)
+  }
 
   /**
    * Returns the explained variance regression score.
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
    * Reference: <a href="http://en.wikipedia.org/wiki/Explained_variation">
    * Wikipedia explain variation</a>
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val explainedVariance: Double = metrics.explainedVariance
@@ -983,9 +991,6 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanAbsoluteError: Double = metrics.meanAbsoluteError
@@ -993,9 +998,6 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanSquaredError: Double = metrics.meanSquaredError
@@ -1003,9 +1005,6 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val rootMeanSquaredError: Double = metrics.rootMeanSquaredError
@@ -1014,9 +1013,6 @@ class LinearRegressionSummary private[regression] (
    * Returns R^2^, the coefficient of determination.
    * Reference: <a href="http://en.wikipedia.org/wiki/Coefficient_of_determination">
    * Wikipedia coefficient of determination</a>
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val r2: Double = metrics.r2
@@ -1025,9 +1021,6 @@ class LinearRegressionSummary private[regression] (
    * Returns Adjusted R^2^, the adjusted coefficient of determination.
    * Reference: <a href="https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2">
    * Wikipedia coefficient of determination</a>
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("2.3.0")
   val r2adj: Double = {
