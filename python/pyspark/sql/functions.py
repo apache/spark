@@ -1433,7 +1433,7 @@ def timestamp_seconds(col):
     >>> from pyspark.sql.functions import timestamp_seconds
     >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
     >>> time_df.select(timestamp_seconds(time_df.unix_time).alias('ts')).collect()
-    [Row(ts=datetime.datetime(2008, 12, 25, 07, 30))]
+    [Row(ts=datetime.datetime(2008, 12, 25, 7, 30))]
     """
 
     sc = SparkContext._active_spark_context

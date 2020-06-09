@@ -3363,10 +3363,8 @@ object functions {
     * @group = "datetime_funcs",
     * @since = "3.1.0")
     */
-  def timestamp_seconds(e: Column): Column = withExpr { SecondsToTimestamp(e.expr) }
-
-  def array_contains1(column: Column, value: Any): Column = withExpr {
-    ArrayContains(column.expr, lit(value).expr)
+  def timestamp_seconds(e: Column): Column = withExpr {
+    SecondsToTimestamp(e.expr)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
