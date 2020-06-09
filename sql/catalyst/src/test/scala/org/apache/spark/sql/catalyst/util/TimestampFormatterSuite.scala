@@ -434,7 +434,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     }
   }
 
-  test("abc") {
+  test("SPARK-31939: Fix Parsing day of year when year field pattern is missing") {
     // resolved to queryable LocaleDate or fail directly
     val f0 = TimestampFormatter("yyyy-dd-DD", UTC, isParsing = true)
     assert(f0.parse("2020-29-60") === date(2020, 2, 29))
@@ -449,14 +449,13 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(f3.parse("2020-366") === date(2020, 12, 31))
     assertParsingError(f3.parse("2019-366"))
 
-    // unresolved and need to check manually
+    // unresolved and need to check manually(SPARK-31939 fixed)
     val f4 = TimestampFormatter("DDD", UTC, isParsing = true)
     assert(f4.parse("365") === date(1970, 12, 31))
     assertParsingError(f4.parse("366")) // 1970 is not a leap year
     val f5 = TimestampFormatter("MM-DD", UTC, isParsing = true)
     assert(f5.parse("03-60") === date(1970, 3, 1))
     assertParsingError(f5.parse("02-60"))
-
     val f6 = TimestampFormatter("MM-dd-DD", UTC, isParsing = true)
     assert(f6.parse("02-28-59") === date(1970, 2, 28))
     assertParsingError(f6.parse("02-28-60"))
