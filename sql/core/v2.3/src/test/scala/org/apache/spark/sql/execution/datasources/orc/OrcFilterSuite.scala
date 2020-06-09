@@ -252,7 +252,8 @@ class OrcFilterSuite extends OrcTest with NestedColumnPredicateTest with SharedS
         checkFilterPredicate(booleanAttr >= false, PredicateLeaf.Operator.LESS_THAN)
 
         checkFilterPredicate(Literal(false) === booleanAttr, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(Literal(false) <=> booleanAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(Literal(false) <=> booleanAttr,
+          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
         checkFilterPredicate(Literal(false) > booleanAttr, PredicateLeaf.Operator.LESS_THAN)
         checkFilterPredicate(Literal(true) < booleanAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
         checkFilterPredicate(Literal(true) >= booleanAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
