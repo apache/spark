@@ -142,8 +142,8 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       // In case HIVE_SERVER2_THRIFT_HTTP_PORT or hive.server2.thrift.http.port is configured with
       // 0 which represents any free port, we should set it to the actual one
       portNum = connector.getLocalPort();
-      String msg = "Started " + getName() + " in " + schemeName
-          + " mode on port " + portNum + " path=" + httpPath + " with " + minWorkerThreads + "..."
+      String msg = "Started " + ThriftHttpCLIService.class.getSimpleName() + " in " + schemeName
+          + " mode on port " + connector.getLocalPort()+ " path=" + httpPath + " with " + minWorkerThreads + "..."
           + maxWorkerThreads + " worker threads";
       LOG.info(msg);
     } catch (Exception t) {
@@ -161,7 +161,9 @@ public class ThriftHttpCLIService extends ThriftCLIService {
     try {
       httpServer.join();
     } catch (Throwable t) {
-      LOG.error("Error starting HiveServer2: could not start " + getName(), t);
+      LOG.fatal(
+          "Error starting HiveServer2: could not start "
+              + ThriftHttpCLIService.class.getSimpleName(), t);
       System.exit(-1);
     }
   }

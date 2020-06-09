@@ -98,8 +98,8 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       // TCP Server
       server = new TThreadPoolServer(sargs);
       server.setServerEventHandler(serverEventHandler);
-      String msg = "Starting " + getName() + " on port " + portNum + " with " + minWorkerThreads +
-          "..." + maxWorkerThreads + " worker threads";
+      String msg = "Starting " + ThriftBinaryCLIService.class.getSimpleName() + " on port "
+          + serverSocket.getServerSocket().getLocalPort() + " with " + minWorkerThreads + "..." + maxWorkerThreads + " worker threads";
       LOG.info(msg);
     } catch (Exception t) {
       throw new ServiceException("Error initializing " + getName(), t);
@@ -111,7 +111,9 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
     try {
       server.serve();
     } catch (Throwable t) {
-      LOG.error("Error starting HiveServer2: could not start " + getName(), t);
+      LOG.fatal(
+          "Error starting HiveServer2: could not start "
+              + ThriftBinaryCLIService.class.getSimpleName(), t);
       System.exit(-1);
     }
   }

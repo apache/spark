@@ -112,7 +112,9 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
     try {
       server.serve();
     } catch (Throwable t) {
-      LOG.error("Error starting HiveServer2: could not start " + getName(), t);
+      LOG.error(
+          "Error starting HiveServer2: could not start "
+              + ThriftBinaryCLIService.class.getSimpleName(), t);
       System.exit(-1);
     }
   }
