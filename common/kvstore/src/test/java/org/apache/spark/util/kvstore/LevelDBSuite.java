@@ -310,7 +310,7 @@ public class LevelDBSuite {
     }
     assertTrue(!dbpathForCloseTest.exists());
   }
-  
+
   private CustomType1 createCustomType1(int i) {
     CustomType1 t = new CustomType1();
     t.key = "key" + i;
