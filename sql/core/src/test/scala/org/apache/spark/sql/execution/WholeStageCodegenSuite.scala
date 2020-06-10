@@ -51,16 +51,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("GenerateExec should be included in WholeStageCodegen") {
-    val arrayData1 = Seq(
-      Row("James", List("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown"))
-    )
-
-    val arraySchema1 = new StructType()
-      .add("name", StringType)
-      .add("knownLanguages", ArrayType(StringType))
-      .add("properties", MapType(StringType, StringType))
-
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(arrayData1), arraySchema1)
+    import testImplicits._
+    val arrayData = Seq(("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown")))
+    val df = arrayData.toDF("name", "knownLanguages", "properties")
 
     // Array - explode
     var expDF = df.select($"name", explode($"knownLanguages"), $"properties")
@@ -68,11 +61,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find {
       case stage: WholeStageCodegenExec =>
         stage.find(_.isInstanceOf[GenerateExec]).isDefined
-      case _ =>
-        false
+      case _ => false
     }.isDefined)
     var results = expDF.collect()
-    assert(results.size ==2 && results ===
+    assert(results ===
       Array(Row("James", "Java", Map("hair" -> "black", "eye" -> "brown")),
         Row("James", "Scala", Map("hair" -> "black", "eye" -> "brown"))))
 
@@ -82,11 +74,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find {
       case stage: WholeStageCodegenExec =>
         stage.find(_.isInstanceOf[GenerateExec]).isDefined
-      case _ =>
-        false
+      case _ => false
     }.isDefined)
     results = expDF.collect()
-    assert(results.size ==2 && results ===
+    assert(results ===
       Array(Row("James", List("Java", "Scala"), "hair", "black"),
         Row("James", List("Java", "Scala"), "eye", "brown")))
 
@@ -96,13 +87,11 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find {
       case stage: WholeStageCodegenExec =>
         stage.find(_.isInstanceOf[GenerateExec]).isDefined
-      case _ =>
-        false
+      case _ => false
     }.isDefined)
     results = expDF.collect()
-    assert(results.size ==2 && results ===
-      Array(Row("James", 0, "Java"),
-        Row("James", 1, "Scala")))
+    assert(results ===
+      Array(Row("James", 0, "Java"), Row("James", 1, "Scala")))
 
     // Map - posexplode
     expDF = df.select($"name", posexplode($"properties"))
@@ -110,15 +99,11 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find {
       case stage: WholeStageCodegenExec =>
         stage.find(_.isInstanceOf[GenerateExec]).isDefined
-      case _ =>
-        false
+      case _ => false
     }.isDefined)
     results = expDF.collect()
-    assert(results.size ==2 && results ===
-      Array(Row("James", 0, "hair", "black"),
-        Row("James", 1, "eye", "brown")))
-
-
+    assert(results ===
+      Array(Row("James", 0, "hair", "black"), Row("James", 1, "eye", "brown")))
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {

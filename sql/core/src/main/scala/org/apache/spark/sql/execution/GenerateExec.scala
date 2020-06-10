@@ -226,6 +226,9 @@ case class GenerateExec(
       "0"
     }
     val numOutput = metricTerm(ctx, "numOutputRows")
+    val requiredInput =
+      evaluateRequiredVariablesExpr(child.output,
+        input, parent.inputSet) ++ position ++ values
     s"""
        |${data.code}
        |$initMapData
@@ -233,9 +236,22 @@ case class GenerateExec(
        |for (int $index = $init; $index < $numElements; $index++) {
        |  $numOutput.add(1);
        |  $updateRowData
-       |  ${consume(ctx, input.filterNot(_ == data) ++ position ++ values)}
+       |  ${consume(ctx, requiredInput)}
        |}
      """.stripMargin
+  }
+
+  /**
+   * Returns [ExprCode] for required attributes
+   */
+  private def evaluateRequiredVariablesExpr(
+    attributes: Seq[Attribute],
+    variables: Seq[ExprCode],
+    required: AttributeSet): Seq[ExprCode] = {
+    assert(attributes.size == variables.size)
+    variables.zipWithIndex.flatMap { case (ev, i) =>
+      if (required.contains(attributes(i))) Seq(ev) else Seq()
+    }
   }
 
   /**
