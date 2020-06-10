@@ -58,6 +58,15 @@ class FilterPushdownSuite extends PlanTest {
 
   val testRelation1 = LocalRelation(attrD)
 
+  val simpleDisjuncitvePredicate =
+    ("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)
+  val expectedCNFPredicatePushDownResult = {
+    val left = testRelation.where(('a > 3 || 'a > 1)).subquery('x)
+    val right = testRelation.where('a > 13 || 'a > 11).subquery('y)
+    left.join(right, condition = Some("x.b".attr === "y.b".attr
+      && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)))).analyze
+  }
+
   // This test already passes.
   test("eliminate subqueries") {
     val originalQuery =
@@ -1244,19 +1253,11 @@ class FilterPushdownSuite extends PlanTest {
 
     val originalQuery = {
       x.join(y)
-        .where(("x.b".attr === "y.b".attr)
-          && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)))
+        .where(("x.b".attr === "y.b".attr) && (simpleDisjuncitvePredicate))
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where(('a > 3 || 'a > 1)).subquery('x)
-    val right = testRelation.where('a > 13 || 'a > 11).subquery('y)
-    val correctAnswer =
-      left.join(right, condition = Some("x.b".attr === "y.b".attr
-        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
-        .analyze
-
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, expectedCNFPredicatePushDownResult)
   }
 
   test("inner join: rewrite join predicates to conjunctive normal form") {
@@ -1264,19 +1265,11 @@ class FilterPushdownSuite extends PlanTest {
     val y = testRelation.subquery('y)
 
     val originalQuery = {
-      x.join(y, condition = Some(("x.b".attr === "y.b".attr)
-        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+      x.join(y, condition = Some(("x.b".attr === "y.b".attr) && (simpleDisjuncitvePredicate)))
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where('a > 3 || 'a > 1).subquery('x)
-    val right = testRelation.where('a > 13 || 'a > 11).subquery('y)
-    val correctAnswer =
-      left.join(right, condition = Some("x.b".attr === "y.b".attr
-        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
-        .analyze
-
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, expectedCNFPredicatePushDownResult)
   }
 
   test("inner join: rewrite complex join predicates to conjunctive normal form") {
@@ -1326,7 +1319,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val originalQuery = {
       x.join(y, joinType = LeftOuter, condition = Some(("x.b".attr === "y.b".attr)
-        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+        && simpleDisjuncitvePredicate))
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -1346,7 +1339,7 @@ class FilterPushdownSuite extends PlanTest {
 
     val originalQuery = {
       x.join(y, joinType = RightOuter, condition = Some(("x.b".attr === "y.b".attr)
-        && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11))))
+        && simpleDisjuncitvePredicate))
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
