@@ -372,8 +372,9 @@ object SQLConf {
       .createWithDefault(true)
 
   val DEFAULT_PARALLELISM = buildConf("spark.sql.default.parallelism")
-    .doc("This config behavior is same as spark.default.parallelism, and this value can be " +
-      "isolated across sessions. Note: always use sc.defaultParallelism as default number.")
+    .doc("The session-local default number of partitions and this value is widely used " +
+      "inside physical plans. If not set, the physical plans refer to " +
+      "`spark.default.parallelism` instead.")
     .version("3.1.0")
     .intConf
     .checkValue(_ > 0, "The value of spark.sql.default.parallelism must be positive")
