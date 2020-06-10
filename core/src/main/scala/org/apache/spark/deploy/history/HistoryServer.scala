@@ -69,6 +69,9 @@ class HistoryServer(
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+
+      res.setContentType("text/html;charset=utf-8")
+
       // Parse the URI created by getAttemptURI(). It contains an app ID and an optional
       // attempt ID (separated by a slash).
       val parts = Option(req.getPathInfo()).getOrElse("").split("/")
@@ -96,7 +99,7 @@ class HistoryServer(
       // single attempt, we need to try both. Try the single-attempt route first, and if an
       // error is raised, then try the multiple attempt route.
       if (!loadAppUi(appId, None) && (!attemptId.isDefined || !loadAppUi(appId, attemptId))) {
-        val msg = <div class="row-fluid">Application {appId} not found.</div>
+        val msg = <div class="row">Application {appId} not found.</div>
         res.setStatus(HttpServletResponse.SC_NOT_FOUND)
         UIUtils.basicSparkPage(req, msg, "Not Found").foreach { n =>
           res.getWriter().write(n.toString)

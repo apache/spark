@@ -166,7 +166,8 @@ object EventLogFileWriter {
   val IN_PROGRESS = ".inprogress"
   val COMPACTED = ".compact"
 
-  val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
+  val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("660", 8).toShort)
+  val LOG_FOLDER_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   def apply(
       appId: String,
@@ -317,7 +318,8 @@ class RollingEventLogFilesWriter(
       throw new IOException(s"Target log directory already exists ($logDirForAppPath)")
     }
 
-    fileSystem.mkdirs(logDirForAppPath, EventLogFileWriter.LOG_FILE_PERMISSIONS)
+    // SPARK-30860: use the class method to avoid the umask causing permission issues
+    FileSystem.mkdirs(fileSystem, logDirForAppPath, EventLogFileWriter.LOG_FOLDER_PERMISSIONS)
     createAppStatusFile(inProgress = true)
     rollEventLogFile()
   }
@@ -361,7 +363,9 @@ class RollingEventLogFilesWriter(
 
   private def createAppStatusFile(inProgress: Boolean): Unit = {
     val appStatusPath = getAppStatusFilePath(logDirForAppPath, appId, appAttemptId, inProgress)
-    val outputStream = fileSystem.create(appStatusPath)
+    // SPARK-30860: use the class method to avoid the umask causing permission issues
+    val outputStream = FileSystem.create(fileSystem, appStatusPath,
+      EventLogFileWriter.LOG_FILE_PERMISSIONS)
     // we intentionally create zero-byte file to minimize the cost
     outputStream.close()
   }

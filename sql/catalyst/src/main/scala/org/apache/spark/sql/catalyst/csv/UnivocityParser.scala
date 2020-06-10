@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import com.univocity.parsers.csv.CsvParser
 
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
@@ -84,22 +85,25 @@ class UnivocityParser(
   // We preallocate it avoid unnecessary allocations.
   private val noRows = None
 
-  private val timestampFormatter = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
-  private val dateFormatter = DateFormatter(
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+  private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   private val csvFilters = new CSVFilters(filters, requiredSchema)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
-    UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
+    val currentContent = tokenizer.getContext.currentParsedContent()
+    if (currentContent == null) null else UTF8String.fromString(currentContent.stripLineEnd)
   }
 
   // This parser first picks some tokens from the input tokens, according to the required schema,
@@ -285,6 +289,7 @@ class UnivocityParser(
           }
         }
       } catch {
+        case e: SparkUpgradeException => throw e
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
           row.setNullAt(i)

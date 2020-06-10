@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{mock, never, verify, when}
+import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.executor.ExecutorMetrics
@@ -263,6 +263,26 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(numExecutorsToAdd(manager, rprof1) === 1)
     assert(numExecutorsTarget(manager, rprof1.id) === 10)
+  }
+
+  test("add executors multiple profiles initial num same as needed") {
+    // test when the initial number of executors equals the number needed for the first
+    // stage using a non default profile to make sure we request the intitial number
+    // properly. Here initial is 2, each executor in ResourceProfile 1 can have 2 tasks
+    // per executor, and start a stage with 4 tasks, which would need 2 executors.
+    val clock = new ManualClock(8888L)
+    val manager = createManager(createConf(0, 10, 2), clock)
+    val rp1 = new ResourceProfileBuilder()
+    val execReqs = new ExecutorResourceRequests().cores(2).resource("gpu", 2)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    rp1.require(execReqs).require(taskReqs)
+    val rprof1 = rp1.build
+    rpManager.addResourceProfile(rprof1)
+    when(client.requestTotalExecutors(any(), any(), any())).thenReturn(true)
+    post(SparkListenerStageSubmitted(createStageInfo(1, 4, rp = rprof1)))
+    // called once on start and a second time on stage submit with initial number
+    verify(client, times(2)).requestTotalExecutors(any(), any(), any())
+    assert(numExecutorsTarget(manager, rprof1.id) === 2)
   }
 
   test("remove executors multiple profiles") {
@@ -841,7 +861,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   }
 
   test ("interleaving add and remove") {
-    val manager = createManager(createConf(5, 12, 5))
+    // use ManualClock to disable ExecutorAllocationManager.schedule()
+    // in order to avoid unexpected update of target executors
+    val clock = new ManualClock()
+    val manager = createManager(createConf(5, 12, 5), clock)
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
 
     val updatesNeeded =
@@ -1419,7 +1442,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       conf: SparkConf,
       clock: Clock = new SystemClock()): ExecutorAllocationManager = {
     ResourceProfile.reInitDefaultProfile(conf)
-    rpManager = new ResourceProfileManager(conf)
+    rpManager = new ResourceProfileManager(conf, listenerBus)
     val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock,
       resourceProfileManager = rpManager)
     managers += manager

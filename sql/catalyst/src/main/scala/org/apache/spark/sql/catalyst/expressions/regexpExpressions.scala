@@ -357,7 +357,7 @@ case class SimilarTo(left: Expression, right: Expression, escapeChar: Char)
   """,
   since = "1.5.0")
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = ArrayType(StringType)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
@@ -399,7 +399,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   // last regex in string, we will update the pattern iff regexp value changed.
   @transient private var lastRegex: UTF8String = _
@@ -507,7 +507,7 @@ object RegExpExtract {
   """,
   since = "1.5.0")
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
 
   // last regex in string, we will update the pattern iff regexp value changed.

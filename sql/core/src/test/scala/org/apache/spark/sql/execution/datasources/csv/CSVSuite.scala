@@ -1080,7 +1080,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .format("csv")
         .option("header", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -1102,7 +1102,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .option("header", "true")
         .option("inferSchema", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .load(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)
@@ -1897,6 +1897,20 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     assert(spark.read.csv(input).collect().toSet == Set(Row()))
   }
 
+  test("SPARK-31261: bad csv input with `columnNameCorruptRecord` should not cause NPE") {
+    val schema = StructType(
+      StructField("a", IntegerType) :: StructField("_corrupt_record", StringType) :: Nil)
+    val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
+
+    checkAnswer(
+      spark.read
+        .option("columnNameOfCorruptRecord", "_corrupt_record")
+        .schema(schema)
+        .csv(input),
+      Row(null, null))
+    assert(spark.read.csv(input).collect().toSet == Set(Row()))
+  }
+
   test("field names of inferred schema shouldn't compare to the first row") {
     val input = Seq("1,2").toDS()
     val df = spark.read.option("enforceSchema", false).csv(input)
@@ -2307,6 +2321,26 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     val csv = spark.read.option("header", false).schema("t timestamp, d date").csv(ds)
     checkAnswer(csv, Row(Timestamp.valueOf("2020-1-12 3:23:34.12"), Date.valueOf("2020-1-12")))
   }
+
+  test("exception mode for parsing date/timestamp string") {
+    val ds = Seq("2020-01-27T20:06:11.847-0800").toDS()
+    val csv = spark.read
+      .option("header", false)
+      .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSz")
+      .schema("t timestamp").csv(ds)
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
+      val msg = intercept[SparkException] {
+        csv.collect()
+      }.getCause.getMessage
+      assert(msg.contains("Fail to parse"))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
+      checkAnswer(csv, Row(Timestamp.valueOf("2020-01-27 20:06:11.847")))
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
+      checkAnswer(csv, Row(null))
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
@@ -2327,5 +2361,5 @@ class CSVLegacyTimeParserSuite extends CSVSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.LEGACY_TIME_PARSER_ENABLED, true)
+      .set(SQLConf.LEGACY_TIME_PARSER_POLICY, "legacy")
 }

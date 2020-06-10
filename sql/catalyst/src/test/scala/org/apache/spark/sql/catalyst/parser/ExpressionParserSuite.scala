@@ -188,7 +188,7 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("like escape expressions") {
-    val message = "Escape string must contains only one character."
+    val message = "Escape string must contain only one character."
     assertEqual("a like 'pattern%' escape '#'", 'a.like("pattern%", '#'))
     assertEqual("a like 'pattern%' escape '\"'", 'a.like("pattern%", '\"'))
     intercept("a like 'pattern%' escape '##'", message)
@@ -214,6 +214,21 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
     assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
     assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
+  }
+
+  test("(NOT) LIKE (ANY | SOME | ALL) expressions") {
+    Seq("any", "some").foreach { quantifier =>
+      assertEqual(s"a like $quantifier ('foo%', 'b%')", ('a like "foo%") || ('a like "b%"))
+      assertEqual(s"a not like $quantifier ('foo%', 'b%')", !('a like "foo%") || !('a like "b%"))
+      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !(('a like "foo%") || ('a like "b%")))
+    }
+    assertEqual("a like all ('foo%', 'b%')", ('a like "foo%") && ('a like "b%"))
+    assertEqual("a not like all ('foo%', 'b%')", !('a like "foo%") && !('a like "b%"))
+    assertEqual("not (a like all ('foo%', 'b%'))", !(('a like "foo%") && ('a like "b%")))
+
+    Seq("any", "some", "all").foreach { quantifier =>
+      intercept(s"a like $quantifier()", "Expected something between '(' and ')'")
+    }
   }
 
   test("is null expressions") {
@@ -464,6 +479,11 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual(
       "-interval '3 month 1 hour'",
       UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
+    val intervalStrWithAllUnits = "1 year 3 months 2 weeks 2 days 1 hour 3 minutes 2 seconds " +
+      "100 millisecond 200 microseconds"
+    assertEqual(
+      s"interval '$intervalStrWithAllUnits'",
+      Literal(IntervalUtils.stringToInterval(intervalStrWithAllUnits)))
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
@@ -702,7 +722,7 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
 
     // Year-Month intervals.
-    val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
+    val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0", "\t -1-2\t")
     yearMonthValues.foreach { value =>
       val result = Literal(IntervalUtils.fromYearMonthString(value))
       checkIntervals(s"'$value' year to month", result)
@@ -715,7 +735,8 @@ class ExpressionParserSuite extends AnalysisTest {
       "10 9:8:7.123456789",
       "1 0:0:0",
       "-1 0:0:0",
-      "1 0:0:1")
+      "1 0:0:1",
+      "\t 1 0:0:1 ")
     datTimeValues.foreach { value =>
       val result = Literal(IntervalUtils.fromDayTimeString(value))
       checkIntervals(s"'$value' day to second", result)
@@ -779,10 +800,10 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("timestamp literals") {
-    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone.getID) {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
         def toMicros(time: LocalDateTime): Long = {
-          val seconds = time.atZone(timeZone.toZoneId).toInstant.getEpochSecond
+          val seconds = time.atZone(zid).toInstant.getEpochSecond
           TimeUnit.SECONDS.toMicros(seconds)
         }
         assertEval(

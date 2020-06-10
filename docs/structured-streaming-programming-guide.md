@@ -540,12 +540,13 @@ Here are the details of all the sources in Spark.
         <br/>
         <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
         <br/>
-        <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If <code>latestFirst</code> is set to `true` and <code>maxFilesPerTrigger</code> is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.(default: 1 week)
-        <br/>
         "file:///dataset.txt"<br/>
         "s3://a/dataset.txt"<br/>
         "s3n://a/b/dataset.txt"<br/>
-        "s3a://a/b/c/dataset.txt"<br/>
+        "s3a://a/b/c/dataset.txt"
+        <br/>
+        <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If <code>latestFirst</code> is set to `true` and <code>maxFilesPerTrigger</code> is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.(default: 1 week)
+        <br/>
         <code>cleanSource</code>: option to clean up completed files after processing.<br/>
         Available options are "archive", "delete", "off". If the option is not provided, the default value is "off".<br/>
         When "archive" is provided, additional option <code>sourceArchiveDir</code> must be provided as well. The value of "sourceArchiveDir" must not match with source pattern in depth (the number of directories from the root directory), where the depth is minimum of depth on both paths. This will ensure archived files are never included as new source files.<br/>

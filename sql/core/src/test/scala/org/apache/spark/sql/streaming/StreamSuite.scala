@@ -194,13 +194,15 @@ class StreamSuite extends StreamTest {
   }
 
   test("sql queries") {
-    val inputData = MemoryStream[Int]
-    inputData.toDF().createOrReplaceTempView("stream")
-    val evens = sql("SELECT * FROM stream WHERE value % 2 = 0")
+    withTempView("stream") {
+      val inputData = MemoryStream[Int]
+      inputData.toDF().createOrReplaceTempView("stream")
+      val evens = sql("SELECT * FROM stream WHERE value % 2 = 0")
 
-    testStream(evens)(
-      AddData(inputData, 1, 2, 3, 4),
-      CheckAnswer(2, 4))
+      testStream(evens)(
+        AddData(inputData, 1, 2, 3, 4),
+        CheckAnswer(2, 4))
+    }
   }
 
   test("DataFrame reuse") {
@@ -1245,9 +1247,10 @@ class StreamSuite extends StreamTest {
       failAfter(60.seconds) {
         val startTime = System.nanoTime()
         withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "2000") {
-          intercept[TimeoutException] {
+          val ex = intercept[TimeoutException] {
             sq.stop()
           }
+          assert(ex.getMessage.contains(sq.id.toString))
         }
         val duration = (System.nanoTime() - startTime) / 1e6
         assert(duration >= 2000,

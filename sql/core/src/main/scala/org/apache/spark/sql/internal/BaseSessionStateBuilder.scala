@@ -347,8 +347,14 @@ private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
 
   override protected lazy val conf: SQLConf = {
     val overrideConfigurations = overrideConfs
-    val conf = parentState.map(_.conf.clone()).getOrElse {
-      new SQLConf {
+    parentState.map { s =>
+      val cloned = s.conf.clone()
+      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
+        mergeSparkConf(conf, session.sparkContext.conf)
+      }
+      cloned
+    }.getOrElse {
+      val conf = new SQLConf {
         clear()
         override def clear(): Unit = {
           super.clear()
@@ -356,8 +362,8 @@ private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
           overrideConfigurations.foreach { case (key, value) => setConfString(key, value) }
         }
       }
+      mergeSparkConf(conf, session.sparkContext.conf)
+      conf
     }
-    mergeSparkConf(conf, session.sparkContext.conf)
-    conf
   }
 }

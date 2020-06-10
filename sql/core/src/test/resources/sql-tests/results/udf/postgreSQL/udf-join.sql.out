@@ -536,7 +536,7 @@ SELECT udf('') AS `xxx`, udf(i) AS i, udf(k), udf(t) AS t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'i' is ambiguous, could be: default.j1_tbl.i, default.j2_tbl.i.; line 1 pos 29
+Reference 'i' is ambiguous, could be: spark_catalog.default.j1_tbl.i, spark_catalog.default.j2_tbl.i.; line 1 pos 29
 
 
 -- !query

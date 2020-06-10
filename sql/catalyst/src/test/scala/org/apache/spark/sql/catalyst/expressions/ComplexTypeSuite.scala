@@ -217,7 +217,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
       "Cannot use null as map key")
 
-    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+    checkExceptionInExpression[RuntimeException](
+      CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(
         CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))),
@@ -284,7 +286,12 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       MapFromArrays(intWithNullArray, strArray),
       "Cannot use null as map key")
 
-    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+    checkExceptionInExpression[RuntimeException](
+      MapFromArrays(
+        Literal.create(Seq(1, 1), ArrayType(IntegerType)),
+        Literal.create(Seq(2, 3), ArrayType(IntegerType))),
+      "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(
         MapFromArrays(
@@ -404,7 +411,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val m5 = Map("a" -> null)
     checkEvaluation(new StringToMap(s5), m5)
 
-    withSQLConf(SQLConf.LEGACY_ALLOW_DUPLICATED_MAP_KEY.key -> "true") {
+    checkExceptionInExpression[RuntimeException](
+      new StringToMap(Literal("a:1,b:2,a:3")), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(
         new StringToMap(Literal("a:1,b:2,a:3")),

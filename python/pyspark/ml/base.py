@@ -96,8 +96,6 @@ class Estimator(Params):
         :return: A thread safe iterable which contains one model for each param map. Each
                  call to `next(modelIterator)` will return `(index, model)` where model was fit
                  using `paramMaps[index]`. `index` values may not be sequential.
-
-        .. note:: DeveloperApi
         """
         estimator = self.copy()
 

@@ -63,12 +63,18 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
       (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
   /**
-   * Writes `data` to a Parquet file and reads it back as a [[DataFrame]],
+   * Writes `df` dataframe to a Parquet file and reads it back as a [[DataFrame]],
    * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
-  protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
-      (data: Seq[T], testVectorized: Boolean = true)
-      (f: DataFrame => Unit): Unit = withDataSourceDataFrame(data, testVectorized)(f)
+  protected def withParquetDataFrame(df: DataFrame, testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = {
+    withTempPath { file =>
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+        df.write.format(dataSourceName).save(file.getCanonicalPath)
+      }
+      readFile(file.getCanonicalPath, testVectorized)(f)
+    }
+  }
 
   /**
    * Writes `data` to a Parquet file, reads it back as a [[DataFrame]] and registers it as a
@@ -152,7 +158,17 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   }
 
   protected def readResourceParquetFile(name: String): DataFrame = {
-    val url = Thread.currentThread().getContextClassLoader.getResource(name)
-    spark.read.parquet(url.toString)
+    spark.read.parquet(getResourceParquetFilePath(name))
+  }
+
+  protected def getResourceParquetFilePath(name: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(name).toString
+  }
+
+  def withAllParquetReaders(code: => Unit): Unit = {
+    // test the row-based reader
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false")(code)
+    // test the vectorized reader
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
   }
 }

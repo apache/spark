@@ -22,6 +22,7 @@ import scala.util.Random
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
+import org.apache.spark.streaming.StreamingConf.RECEIVER_WAL_ENABLE_CONF_KEY
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.{BlockManagerBasedStoreResult, Receiver, WriteAheadLogBasedStoreResult}
@@ -117,7 +118,7 @@ class ReceiverInputDStreamSuite
   private def runTest(enableWAL: Boolean, body: ReceiverInputDStream[_] => Unit): Unit = {
     val conf = new SparkConf()
     conf.setMaster("local[4]").setAppName("ReceiverInputDStreamSuite")
-    conf.set(WriteAheadLogUtils.RECEIVER_WAL_ENABLE_CONF_KEY, enableWAL.toString)
+    conf.set(StreamingConf.RECEIVER_WAL_ENABLE_CONF_KEY.key, enableWAL.toString)
     require(WriteAheadLogUtils.enableReceiverLog(conf) === enableWAL)
     ssc = new StreamingContext(conf, Seconds(1))
     val receiverStream = new ReceiverInputDStream[Int](ssc) {

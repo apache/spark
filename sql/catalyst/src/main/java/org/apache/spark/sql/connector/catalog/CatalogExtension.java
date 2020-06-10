@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -29,7 +29,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  *
  * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface CatalogExtension extends TableCatalog, SupportsNamespaces {
 
   /**

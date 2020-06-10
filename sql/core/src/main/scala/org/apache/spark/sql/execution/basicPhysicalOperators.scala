@@ -39,7 +39,10 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport with AliasAwareOutputPartitioning {
+  extends UnaryExecNode
+    with CodegenSupport
+    with AliasAwareOutputPartitioning
+    with AliasAwareOutputOrdering {
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -80,16 +83,16 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     }
   }
 
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
   override protected def outputExpressions: Seq[NamedExpression] = projectList
+
+  override protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
 
   override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |$formattedNodeName
        |${ExplainUtils.generateFieldString("Output", projectList)}
        |${ExplainUtils.generateFieldString("Input", child.output)}
-     """.stripMargin
+       |""".stripMargin
   }
 }
 
@@ -243,10 +246,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |$formattedNodeName
        |${ExplainUtils.generateFieldString("Input", child.output)}
        |Condition : ${condition}
-     """.stripMargin
+       |""".stripMargin
   }
 }
 

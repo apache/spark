@@ -27,15 +27,25 @@ serde tables (e.g., the ones created using the clause `USING HIVE OPTIONS (fileF
 the vectorized reader is used when `spark.sql.hive.convertMetastoreOrc` is also set to `true`.
 
 <table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th></tr>
+  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr>
   <tr>
     <td><code>spark.sql.orc.impl</code></td>
     <td><code>native</code></td>
-    <td>The name of ORC implementation. It can be one of <code>native</code> and <code>hive</code>. <code>native</code> means the native ORC support. <code>hive</code> means the ORC library in Hive.</td>
+    <td>
+      The name of ORC implementation. It can be one of <code>native</code> and <code>hive</code>.
+      <code>native</code> means the native ORC support. <code>hive</code> means the ORC library
+      in Hive.
+    </td>
+    <td>2.3.0</td>
   </tr>
   <tr>
     <td><code>spark.sql.orc.enableVectorizedReader</code></td>
     <td><code>true</code></td>
-    <td>Enables vectorized orc decoding in <code>native</code> implementation. If <code>false</code>, a new non-vectorized ORC reader is used in <code>native</code> implementation. For <code>hive</code> implementation, this is ignored.</td>
+    <td>
+      Enables vectorized orc decoding in <code>native</code> implementation. If <code>false</code>,
+      a new non-vectorized ORC reader is used in <code>native</code> implementation.
+      For <code>hive</code> implementation, this is ignored.
+    </td>
+    <td>2.3.0</td>
   </tr>
 </table>

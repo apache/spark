@@ -18,19 +18,21 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 import java.util.regex.Pattern
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.execution.{SQLExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -256,12 +258,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     def splitWithSemicolon(seq: Seq[String]) = {
       seq.mkString("\n").split("(?<=[^\\\\]);")
     }
-    val input = fileToString(new File(testCase.inputFile))
 
-    val (comments, code) = input.split("\n").partition { line =>
+    def splitCommentsAndCodes(input: String) = input.split("\n").partition { line =>
       val newLine = line.trim
       newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
     }
+
+    val input = fileToString(new File(testCase.inputFile))
+
+    val (comments, code) = splitCommentsAndCodes(input)
 
     // If `--IMPORT` found, load code from another test case file, then insert them
     // into the head in this test.
@@ -269,7 +274,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     val importedCode = importedTestCaseName.flatMap { testCaseName =>
       listTestCases.find(_.name == testCaseName).map { testCase =>
         val input = fileToString(new File(testCase.inputFile))
-        val (_, code) = input.split("\n").partition(_.trim.startsWith("--"))
+        val (_, code) = splitCommentsAndCodes(input)
         code
       }
     }.flatten
@@ -358,7 +363,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     // Create a local SparkSession to have stronger isolation between different test cases.
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
-    loadTestData(localSparkSession)
 
     testCase match {
       case udfTestCase: UDFTest =>
@@ -567,14 +571,20 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   }
 
   /** Load built-in test tables into the SparkSession. */
-  private def loadTestData(session: SparkSession): Unit = {
+  private def createTestTables(session: SparkSession): Unit = {
     import session.implicits._
 
-    (1 to 100).map(i => (i, i.toString)).toDF("key", "value").createOrReplaceTempView("testdata")
+    (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+      .repartition(1)
+      .write
+      .format("parquet")
+      .saveAsTable("testdata")
 
     ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
       .toDF("arraycol", "nestedarraycol")
-      .createOrReplaceTempView("arraydata")
+      .write
+      .format("parquet")
+      .saveAsTable("arraydata")
 
     (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
       Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
@@ -582,7 +592,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       Tuple1(Map(1 -> "a4", 2 -> "b4")) ::
       Tuple1(Map(1 -> "a5")) :: Nil)
       .toDF("mapcol")
-      .createOrReplaceTempView("mapdata")
+      .write
+      .format("parquet")
+      .saveAsTable("mapdata")
 
     session
       .read
@@ -590,7 +602,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       .options(Map("delimiter" -> "\t", "header" -> "false"))
       .schema("a int, b float")
       .load(testFile("test-data/postgresql/agg.data"))
-      .createOrReplaceTempView("aggtest")
+      .write
+      .format("parquet")
+      .saveAsTable("aggtest")
 
     session
       .read
@@ -616,7 +630,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
           |string4 string
         """.stripMargin)
       .load(testFile("test-data/postgresql/onek.data"))
-      .createOrReplaceTempView("onek")
+      .write
+      .format("parquet")
+      .saveAsTable("onek")
 
     session
       .read
@@ -642,28 +658,44 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
           |string4 string
         """.stripMargin)
       .load(testFile("test-data/postgresql/tenk.data"))
-      .createOrReplaceTempView("tenk1")
+      .write
+      .format("parquet")
+      .saveAsTable("tenk1")
   }
 
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
+  private def removeTestTables(session: SparkSession): Unit = {
+    session.sql("DROP TABLE IF EXISTS testdata")
+    session.sql("DROP TABLE IF EXISTS arraydata")
+    session.sql("DROP TABLE IF EXISTS mapdata")
+    session.sql("DROP TABLE IF EXISTS aggtest")
+    session.sql("DROP TABLE IF EXISTS onek")
+    session.sql("DROP TABLE IF EXISTS tenk1")
+  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    // Add Locale setting
-    Locale.setDefault(Locale.US)
+    createTestTables(spark)
     RuleExecutor.resetMetrics()
+    CodeGenerator.resetCompileTime()
+    WholeStageCodegenExec.resetCodeGenTime()
   }
 
   override def afterAll(): Unit = {
     try {
-      TimeZone.setDefault(originalTimeZone)
-      Locale.setDefault(originalLocale)
+      removeTestTables(spark)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
+
+      val codeGenTime = WholeStageCodegenExec.codeGenTime.toDouble / NANOS_PER_SECOND
+      val compileTime = CodeGenerator.compileTime.toDouble / NANOS_PER_SECOND
+      val codegenInfo =
+        s"""
+           |=== Metrics of Whole-stage Codegen ===
+           |Total code generation time: $codeGenTime seconds
+           |Total compile time: $compileTime seconds
+         """.stripMargin
+      logWarning(codegenInfo)
     } finally {
       super.afterAll()
     }

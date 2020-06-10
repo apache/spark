@@ -31,6 +31,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
@@ -429,6 +430,7 @@ class SparkSubmitSuite
   test("handles k8s cluster mode") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",
+      "--proxy-user", "test.user",
       "--master", "k8s://host:port",
       "--executor-memory", "5g",
       "--class", "org.SomeClass",
@@ -444,6 +446,7 @@ class SparkSubmitSuite
     childArgsMap.get("--primary-java-resource") should be (Some("file:/home/thejar.jar"))
     childArgsMap.get("--main-class") should be (Some("org.SomeClass"))
     childArgsMap.get("--arg") should be (Some("arg1"))
+    childArgsMap.get("--proxy-user") should be (Some("test.user"))
     mainClass should be (KUBERNETES_CLUSTER_SUBMIT_CLASS)
     classpath should have length (0)
     conf.get("spark.master") should be ("k8s://https://host:port")
@@ -1417,7 +1420,7 @@ object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
-  def runSparkSubmit(args: Seq[String], root: String = ".."): Unit = {
+  def runSparkSubmit(args: Seq[String], root: String = "..", timeout: Span = 1.minute): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val sparkSubmitFile = if (Utils.isWindows) {
       new File(s"$root\\bin\\spark-submit.cmd")
@@ -1430,7 +1433,7 @@ object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
 
     try {
-      val exitCode = failAfter(1.minute) { process.waitFor() }
+      val exitCode = failAfter(timeout) { process.waitFor() }
       if (exitCode != 0) {
         fail(s"Process returned with exit code $exitCode. See the log4j logs for more detail.")
       }
