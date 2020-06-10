@@ -1173,6 +1173,7 @@ ansiNonReserved
     | TRIM
     | TRUE
     | TRUNCATE
+    | TYPE
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
