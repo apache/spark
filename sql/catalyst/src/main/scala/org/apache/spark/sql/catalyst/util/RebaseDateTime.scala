@@ -337,9 +337,18 @@ object RebaseDateTime {
       .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
       .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
       .build()
+    // A local timestamp can have 2 instants in the cases of switching from:
+    //  1. Summer to winter time.
+    //  2. One standard time zone to another one. For example, Asia/Hong_Kong switched from JST
+    //     to HKT on 18 November, 1945 01:59:59 AM.
+    // Below we check that the original `instant` is earlier or later instant. If it is an earlier
+    // instant, we take the standard and DST offsets of the previous day otherwise of the next one.
     val trans = zoneId.getRules.getTransition(ldt)
     if (trans != null && trans.isOverlap) {
       val cloned = cal.clone().asInstanceOf[Calendar]
+      // Does the current offset belong to the offset before the transition.
+      // If so, we will take zone offsets from the previous day otherwise from the next day.
+      // This assumes that transitions cannot happen often than once per 2 days.
       val shift = if (trans.getOffsetBefore == zonedDateTime.getOffset) -1 else 1
       cloned.add(Calendar.DAY_OF_MONTH, shift)
       cal.set(Calendar.ZONE_OFFSET, cloned.get(Calendar.ZONE_OFFSET))
