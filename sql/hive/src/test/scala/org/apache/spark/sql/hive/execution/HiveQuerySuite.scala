@@ -564,9 +564,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     assert(1200 == res.getInt(0))
   }
 
-  createQueryTest("timestamp cast #4",
-    "SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
-
   test("timestamp cast #5") {
     val res = sql("SELECT CAST(CAST(-1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1").collect().head
     assert(-1 == res.get(0))
@@ -579,9 +576,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     val res = sql("SELECT CAST(CAST(-1200 AS TIMESTAMP) AS INT) FROM src LIMIT 1").collect().head
     assert(-1200 == res.getInt(0))
   }
-
-  createQueryTest("timestamp cast #8",
-    "SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
 
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
