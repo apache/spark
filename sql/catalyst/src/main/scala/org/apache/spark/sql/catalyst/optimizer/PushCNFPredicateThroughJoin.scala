@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.expressions.{And, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Try converting join condition to conjunctive normal form expression so that more predicates may
@@ -33,7 +32,7 @@ object PushCNFPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelpe
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case j @ Join(left, right, joinType, Some(joinCondition), hint) =>
       val predicates = conjunctiveNormalForm(joinCondition)
-      if (predicates.isEmpty || predicates.size > SQLConf.get.maxCnfNodeCount) {
+      if (predicates.isEmpty) {
         j
       } else {
         val pushDownCandidates = predicates.filter(_.deterministic)

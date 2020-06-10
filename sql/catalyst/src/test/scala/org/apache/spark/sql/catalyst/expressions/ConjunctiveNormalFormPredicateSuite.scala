@@ -30,10 +30,10 @@ class ConjunctiveNormalFormPredicateSuite extends SparkFunSuite with PredicateHe
   private val d = AttributeReference("D", BooleanType)(exprId = ExprId(4)).withQualifier(Seq("td"))
   private val e = AttributeReference("E", BooleanType)(exprId = ExprId(5)).withQualifier(Seq("te"))
   private val f = AttributeReference("F", BooleanType)(exprId = ExprId(6)).withQualifier(Seq("tf"))
-  private val g = AttributeReference("C", BooleanType)(exprId = ExprId(7)).withQualifier(Seq("tg"))
-  private val h = AttributeReference("D", BooleanType)(exprId = ExprId(8)).withQualifier(Seq("th"))
-  private val i = AttributeReference("E", BooleanType)(exprId = ExprId(9)).withQualifier(Seq("ti"))
-  private val j = AttributeReference("F", BooleanType)(exprId = ExprId(10)).withQualifier(Seq("tj"))
+  private val g = AttributeReference("G", BooleanType)(exprId = ExprId(7)).withQualifier(Seq("tg"))
+  private val h = AttributeReference("H", BooleanType)(exprId = ExprId(8)).withQualifier(Seq("th"))
+  private val i = AttributeReference("I", BooleanType)(exprId = ExprId(9)).withQualifier(Seq("ti"))
+  private val j = AttributeReference("J", BooleanType)(exprId = ExprId(10)).withQualifier(Seq("tj"))
   private val a1 =
     AttributeReference("a1", BooleanType)(exprId = ExprId(11)).withQualifier(Seq("ta"))
   private val a2 =
