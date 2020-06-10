@@ -18,7 +18,6 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
 import org.apache.spark.sql.{DataFrame, Row}
@@ -60,23 +59,16 @@ private[classification] trait ClassificationSummary extends Serializable {
   def weightCol: String
 
   @transient private val multiclassMetrics = {
-    if (predictions.schema.fieldNames.contains(weightCol)) {
-      new MulticlassMetrics(
-        predictions.select(
-          col(predictionCol),
-          col(labelCol).cast(DoubleType),
-          checkNonNegativeWeight(col(weightCol).cast(DoubleType))).rdd.map {
-          case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
-        })
+    val weightColumn = if (predictions.schema.fieldNames.contains(weightCol)) {
+      col(weightCol).cast(DoubleType)
     } else {
-      new MulticlassMetrics(
-        predictions.select(
-          col(predictionCol),
-          col(labelCol).cast(DoubleType),
-          lit(1.0)).rdd.map {
-          case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
-        })
+      lit(1.0)
     }
+    new MulticlassMetrics(
+      predictions.select(col(predictionCol), col(labelCol).cast(DoubleType), weightColumn)
+        .rdd.map {
+          case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
+      })
   }
 
   /**
@@ -203,17 +195,15 @@ trait BinaryClassificationSummary extends ClassificationSummary {
 
   // TODO: Allow the user to vary the number of bins using a setBins method in
   // BinaryClassificationMetrics. For now the default is set to 100.
-  @transient private val binaryMetrics = if (predictions.schema.fieldNames.contains(weightCol)) {
+  @transient private val binaryMetrics = {
+    val weightColumn = if (predictions.schema.fieldNames.contains(weightCol)) {
+      col(weightCol).cast(DoubleType)
+    } else {
+      lit(1.0)
+    }
+
     new BinaryClassificationMetrics(
-      predictions.select(col(scoreCol), col(labelCol).cast(DoubleType),
-        checkNonNegativeWeight(col(weightCol).cast(DoubleType))).rdd.map {
-        case Row(score: Vector, label: Double, weight: Double) => (score(1), label, weight)
-      }, 100
-    )
-  } else {
-    new BinaryClassificationMetrics(
-      predictions.select(col(scoreCol), col(labelCol).cast(DoubleType),
-        lit(1.0)).rdd.map {
+      predictions.select(col(scoreCol), col(labelCol).cast(DoubleType), weightColumn).rdd.map {
         case Row(score: Vector, label: Double, weight: Double) => (score(1), label, weight)
       }, 100
     )
