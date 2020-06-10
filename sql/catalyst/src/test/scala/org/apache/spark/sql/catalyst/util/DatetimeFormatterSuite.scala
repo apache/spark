@@ -34,7 +34,7 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
       pattern,
       UTC,
       DateFormatter.defaultLocale,
-      LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      LegacyDateFormats.FAST_DATE_FORMAT,
       isParsing = true)
   }
 
