@@ -47,16 +47,11 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
 
   private def assertError(pattern: String, datetimeStr: String, expectedMsg: String): Unit = {
     val exception = if (useDateFormatter) {
-      intercept[Exception](dateFormatter(pattern).parse(datetimeStr))
+      intercept[SparkUpgradeException](dateFormatter(pattern).parse(datetimeStr))
     } else {
-      intercept[Exception](timestampFormatter(pattern).parse(datetimeStr))
+      intercept[SparkUpgradeException](timestampFormatter(pattern).parse(datetimeStr))
     }
-
-    val rootCause = exception match {
-      case e: SparkUpgradeException => e.getCause
-      case e => e
-    }
-    assert(rootCause.getMessage.contains(expectedMsg))
+    assert(exception.getCause.getMessage.contains(expectedMsg))
   }
 
   test("explicitly forbidden datetime patterns") {
