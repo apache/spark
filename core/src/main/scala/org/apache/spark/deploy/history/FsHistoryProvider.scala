@@ -1178,8 +1178,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         return createHybridStore(dm, appId, attempt, metadata)
       } catch {
         case e: Exception =>
-          logInfo(s"Failed to create hybrid store for $appId/${attempt.info.attemptId}." +
-            " Using leveldb.", e)
+          logInfo(s"Failed to create HybridStore for $appId/${attempt.info.attemptId}." +
+            " Using LevelDB.", e)
       }
     }
 
@@ -1218,42 +1218,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       appId: String,
       attempt: AttemptInfoWrapper,
       metadata: AppStatusStoreMetadata): KVStore = {
-
     var retried = false
     var hybridStore: HybridStore = null
+    val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
+      attempt.lastIndex)
+    val isCompressed = reader.compressionCodec.isDefined
+
+    // Use InMemoryStore to rebuild app store
     while (hybridStore == null) {
-      val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
-        attempt.lastIndex)
-      val isCompressed = reader.compressionCodec.isDefined
-
-      // Throws an exception if the memory space is not enough
+      // A RuntimeException will be thrown if the heap memory is not sufficient
       memoryManager.lease(appId, attempt.info.attemptId, reader.totalSize, isCompressed)
-
-      logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
-      val lease = dm.lease(reader.totalSize, isCompressed)
       var store: HybridStore = null
       try {
         store = new HybridStore()
-        val levelDB = KVUtils.open(lease.tmpPath, metadata)
-        store.setLevelDB(levelDB)
         rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
-
-        // Start the background thread to dump data to levelDB when writing to
-        // InMemoryStore is completed.
-        store.switchToLevelDB(new HybridStore.SwitchToLevelDBListener {
-          override def onSwitchToLevelDBSuccess: Unit = {
-            levelDB.close()
-            val newStorePath = lease.commit(appId, attempt.info.attemptId)
-            store.setLevelDB(KVUtils.open(newStorePath, metadata))
-            memoryManager.release(appId, attempt.info.attemptId)
-            logInfo(s"Completely switched to LevelDB for app $appId / ${attempt.info.attemptId}.")
-          }
-          override def onSwitchToLevelDBFail(e: Exception): Unit = {
-            levelDB.close()
-            lease.rollback()
-            logWarning(s"Failed to switch to LevelDB for app $appId / ${attempt.info.attemptId}", e)
-          }
-        })
         hybridStore = store
       } catch {
         case _: IOException if !retried =>
@@ -1263,16 +1241,33 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             "trying again...")
           store.close()
           memoryManager.release(appId, attempt.info.attemptId)
-          lease.rollback()
           retried = true
-
         case e: Exception =>
           store.close()
           memoryManager.release(appId, attempt.info.attemptId)
-          lease.rollback()
           throw e
       }
     }
+
+    // Create a LevelDB and start a background thread to dump data to LevelDB
+    logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
+    val lease = dm.lease(reader.totalSize, isCompressed)
+    val levelDB = KVUtils.open(lease.tmpPath, metadata)
+    hybridStore.setLevelDB(levelDB)
+    hybridStore.switchToLevelDB(new HybridStore.SwitchToLevelDBListener {
+      override def onSwitchToLevelDBSuccess: Unit = {
+        logInfo(s"Completely switched to LevelDB for app $appId / ${attempt.info.attemptId}.")
+        levelDB.close()
+        val newStorePath = lease.commit(appId, attempt.info.attemptId)
+        hybridStore.setLevelDB(KVUtils.open(newStorePath, metadata))
+        memoryManager.release(appId, attempt.info.attemptId)
+      }
+      override def onSwitchToLevelDBFail(e: Exception): Unit = {
+        logWarning(s"Failed to switch to LevelDB for app $appId / ${attempt.info.attemptId}", e)
+        levelDB.close()
+        lease.rollback()
+      }
+    })
 
     hybridStore
   }

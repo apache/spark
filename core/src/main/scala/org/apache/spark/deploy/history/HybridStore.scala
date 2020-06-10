@@ -27,13 +27,12 @@ import scala.collection.JavaConverters._
 import org.apache.spark.util.kvstore._
 
 /**
- * A implementation of KVStore that accelerates event logs loading.
+ * An implementation of KVStore that accelerates event logs loading.
  *
  * When rebuilding the application state from event logs, HybridStore will
  * write data to InMemoryStore at first and use a background thread to dump
- * data to LevelDB once the writing to InMemoryStore is completed. We don't
- * expect write operations (except the case for caching) after calling switch
- * to level DB.
+ * data to LevelDB once the app store is restored. We don't expect write
+ * operations (except the case for caching) after calling switch to level DB.
  */
 
 private[history] class HybridStore extends KVStore {
