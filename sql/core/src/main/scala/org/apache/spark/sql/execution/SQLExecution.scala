@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
-
-import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -62,9 +60,9 @@ object SQLExecution {
    * we can connect them with an execution.
    */
   def withNewExecutionId[T](
-      sparkSession: SparkSession,
       queryExecution: QueryExecution,
-      name: Option[String] = None)(body: => T): T = {
+      name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
+    val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
@@ -86,6 +84,9 @@ object SQLExecution {
           redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
         }.getOrElse(callSite.shortForm)
 
+      val planDescriptionMode =
+        ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
+
       withSQLConfPropagated(sparkSession) {
         var ex: Option[Throwable] = None
         val startTime = System.nanoTime()
@@ -94,7 +95,7 @@ object SQLExecution {
             executionId = executionId,
             description = desc,
             details = callSite.longForm,
-            physicalPlanDescription = queryExecution.toString,
+            physicalPlanDescription = queryExecution.explainString(planDescriptionMode),
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
             sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
@@ -172,11 +173,11 @@ object SQLExecution {
    * SparkContext local properties are forwarded to execution thread
    */
   def withThreadLocalCaptured[T](
-      sparkSession: SparkSession, exec: ExecutionContext)(body: => T): Future[T] = {
+      sparkSession: SparkSession, exec: ExecutorService) (body: => T): JFuture[T] = {
     val activeSession = sparkSession
     val sc = sparkSession.sparkContext
     val localProps = Utils.cloneProperties(sc.getLocalProperties)
-    Future {
+    exec.submit(() => {
       val originalSession = SparkSession.getActiveSession
       val originalLocalProps = sc.getLocalProperties
       SparkSession.setActiveSession(activeSession)
@@ -190,6 +191,6 @@ object SQLExecution {
         SparkSession.clearActiveSession()
       }
       res
-    }(exec)
+    })
   }
 }

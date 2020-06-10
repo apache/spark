@@ -15,7 +15,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `tbl` (
+CREATE TABLE `default`.`tbl` (
   `a` INT,
   `b` STRING,
   `c` INT)
@@ -44,7 +44,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `tbl` (
+CREATE TABLE `default`.`tbl` (
   `a` INT,
   `b` STRING,
   `c` INT)
@@ -75,7 +75,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `tbl` (
+CREATE TABLE `default`.`tbl` (
   `a` INT,
   `b` STRING,
   `c` INT)
@@ -105,7 +105,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `tbl` (
+CREATE TABLE `default`.`tbl` (
   `a` INT,
   `b` STRING,
   `c` INT)
@@ -135,7 +135,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `tbl` (
+CREATE TABLE `default`.`tbl` (
   `b` STRING,
   `c` INT,
   `a` INT)
@@ -165,7 +165,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `tbl` (
+CREATE TABLE `default`.`tbl` (
   `a` INT,
   `b` STRING,
   `c` INT)
@@ -197,7 +197,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `tbl` (
+CREATE TABLE `default`.`tbl` (
   `a` INT,
   `b` STRING,
   `c` INT)
@@ -227,7 +227,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `tbl` (
+CREATE TABLE `default`.`tbl` (
   `a` INT,
   `b` STRING,
   `c` INT)
@@ -257,7 +257,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `tbl` (
+CREATE TABLE `default`.`tbl` (
   `a` FLOAT,
   `b` DECIMAL(10,0),
   `c` DECIMAL(10,0),
@@ -295,7 +295,18 @@ SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `view_SPARK_30302`(
+CREATE VIEW `default`.`view_SPARK_30302`(
+  `aaa`,
+  `bbb`)
+AS SELECT a, b FROM tbl
+
+
+-- !query
+SHOW CREATE TABLE view_SPARK_30302
+-- !query schema
+struct<createtab_stmt:string>
+-- !query output
+CREATE VIEW `default`.`view_SPARK_30302` (
   `aaa`,
   `bbb`)
 AS SELECT a, b FROM tbl
@@ -324,7 +335,19 @@ SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `view_SPARK_30302`(
+CREATE VIEW `default`.`view_SPARK_30302`(
+  `aaa` COMMENT 'comment with \'quoted text\' for aaa',
+  `bbb`)
+COMMENT 'This is a comment with \'quoted text\' for view'
+AS SELECT a, b FROM tbl
+
+
+-- !query
+SHOW CREATE TABLE view_SPARK_30302
+-- !query schema
+struct<createtab_stmt:string>
+-- !query output
+CREATE VIEW `default`.`view_SPARK_30302` (
   `aaa` COMMENT 'comment with \'quoted text\' for aaa',
   `bbb`)
 COMMENT 'This is a comment with \'quoted text\' for view'
@@ -354,7 +377,7 @@ SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `view_SPARK_30302`(
+CREATE VIEW `default`.`view_SPARK_30302`(
   `aaa`,
   `bbb`)
 TBLPROPERTIES (
@@ -364,29 +387,17 @@ AS SELECT a, b FROM tbl
 
 
 -- !query
-DROP VIEW view_SPARK_30302
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE VIEW view_SPARK_30302 (aaa, bbb)
-AS SELECT a, b FROM tbl
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 SHOW CREATE TABLE view_SPARK_30302
 -- !query schema
-struct<>
+struct<createtab_stmt:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Hive view isn't supported by SHOW CREATE TABLE;
+CREATE VIEW `default`.`view_SPARK_30302` (
+  `aaa`,
+  `bbb`)
+TBLPROPERTIES (
+  'a' = '1',
+  'b' = '2')
+AS SELECT a, b FROM tbl
 
 
 -- !query

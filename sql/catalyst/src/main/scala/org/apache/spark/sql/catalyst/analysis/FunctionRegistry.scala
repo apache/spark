@@ -218,7 +218,7 @@ object FunctionRegistry {
     expression[PosExplode]("posexplode"),
     expressionGeneratorOuter[PosExplode]("posexplode_outer"),
     expression[Rand]("rand"),
-    expression[Rand]("random"),
+    expression[Rand]("random", true),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
     expression[CaseWhen]("when"),
@@ -235,7 +235,7 @@ object FunctionRegistry {
     expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
-    expression[Ceil]("ceiling"),
+    expression[Ceil]("ceiling", true),
     expression[Cos]("cos"),
     expression[Cosh]("cosh"),
     expression[Conv]("conv"),
@@ -252,12 +252,12 @@ object FunctionRegistry {
     expression[Log1p]("log1p"),
     expression[Log2]("log2"),
     expression[Log]("ln"),
-    expression[Remainder]("mod"),
-    expression[UnaryMinus]("negative"),
+    expression[Remainder]("mod", true),
+    expression[UnaryMinus]("negative", true),
     expression[Pi]("pi"),
     expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),
-    expression[Pow]("pow"),
+    expression[Pow]("pow", true),
     expression[Pow]("power"),
     expression[ToRadians]("radians"),
     expression[Rint]("rint"),
@@ -265,7 +265,7 @@ object FunctionRegistry {
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
     expression[ShiftRightUnsigned]("shiftrightunsigned"),
-    expression[Signum]("sign"),
+    expression[Signum]("sign", true),
     expression[Signum]("signum"),
     expression[Sin]("sin"),
     expression[Sinh]("sinh"),
@@ -323,12 +323,12 @@ object FunctionRegistry {
 
     // string functions
     expression[Ascii]("ascii"),
-    expression[Chr]("char"),
+    expression[Chr]("char", true),
     expression[Chr]("chr"),
     expression[Base64]("base64"),
     expression[BitLength]("bit_length"),
-    expression[Length]("char_length"),
-    expression[Length]("character_length"),
+    expression[Length]("char_length", true),
+    expression[Length]("character_length", true),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
     expression[Elt]("elt"),
@@ -339,7 +339,7 @@ object FunctionRegistry {
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),
-    expression[Lower]("lcase"),
+    expression[Lower]("lcase", true),
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
     expression[Like]("like"),
@@ -350,8 +350,8 @@ object FunctionRegistry {
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
     expression[ParseUrl]("parse_url"),
-    expression[StringLocate]("position"),
-    expression[FormatString]("printf"),
+    expression[StringLocate]("position", true),
+    expression[FormatString]("printf", true),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpExtractAll]("regexp_extract_all"),
     expression[RegExpReplace]("regexp_replace"),
@@ -365,21 +365,21 @@ object FunctionRegistry {
     expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
-    expression[Substring]("substr"),
+    expression[Substring]("substr", true),
     expression[Substring]("substring"),
     expression[Left]("left"),
     expression[Right]("right"),
     expression[SubstringIndex]("substring_index"),
     expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
-    expression[Upper]("ucase"),
+    expression[Upper]("ucase", true),
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
     expression[XPathList]("xpath"),
     expression[XPathBoolean]("xpath_boolean"),
     expression[XPathDouble]("xpath_double"),
-    expression[XPathDouble]("xpath_number"),
+    expression[XPathDouble]("xpath_number", true),
     expression[XPathFloat]("xpath_float"),
     expression[XPathInt]("xpath_int"),
     expression[XPathLong]("xpath_long"),
@@ -394,7 +394,7 @@ object FunctionRegistry {
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
     expression[DateSub]("date_sub"),
-    expression[DayOfMonth]("day"),
+    expression[DayOfMonth]("day", true),
     expression[DayOfYear]("dayofyear"),
     expression[DayOfMonth]("dayofmonth"),
     expression[FromUnixTime]("from_unixtime"),
@@ -405,7 +405,7 @@ object FunctionRegistry {
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
-    expression[CurrentTimestamp]("now"),
+    expression[Now]("now"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ParseToTimestamp]("to_timestamp"),
@@ -424,6 +424,10 @@ object FunctionRegistry {
     expression[MakeTimestamp]("make_timestamp"),
     expression[MakeInterval]("make_interval"),
     expression[DatePart]("date_part"),
+    expression[Extract]("extract"),
+    expression[SecondsToTimestamp]("timestamp_seconds"),
+    expression[MillisToTimestamp]("timestamp_millis"),
+    expression[MicrosToTimestamp]("timestamp_micros"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -446,7 +450,7 @@ object FunctionRegistry {
     expression[MapConcat]("map_concat"),
     expression[Size]("size"),
     expression[Slice]("slice"),
-    expression[Size]("cardinality"),
+    expression[Size]("cardinality", true),
     expression[ArraysZip]("arrays_zip"),
     expression[SortArray]("sort_array"),
     expression[Shuffle]("shuffle"),
@@ -479,7 +483,7 @@ object FunctionRegistry {
     expression[Uuid]("uuid"),
     expression[Murmur3Hash]("hash"),
     expression[XxHash64]("xxhash64"),
-    expression[Sha1]("sha"),
+    expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
@@ -488,8 +492,9 @@ object FunctionRegistry {
     expression[InputFileBlockLength]("input_file_block_length"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
+    expression[CurrentCatalog]("current_catalog"),
     expression[CallMethodViaReflection]("reflect"),
-    expression[CallMethodViaReflection]("java_method"),
+    expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
 
@@ -539,6 +544,8 @@ object FunctionRegistry {
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
     expression[SchemaOfJson]("schema_of_json"),
+    expression[LengthOfJsonArray]("json_array_length"),
+    expression[JsonObjectKeys]("json_object_keys"),
 
     // cast
     expression[Cast]("cast"),
@@ -591,7 +598,9 @@ object FunctionRegistry {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
         try {
-          varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+          val exp = varargCtor.get.newInstance(expressions).asInstanceOf[Expression]
+          if (setAlias) exp.setTagValue(FUNC_ALIAS, name)
+          exp
         } catch {
           // the exception is an invocation exception. To get a meaningful message, we need the
           // cause.
@@ -651,7 +660,7 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
-      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "")
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "", "")
     (name, (expressionInfo, builder))
   }
 
@@ -671,6 +680,7 @@ object FunctionRegistry {
           df.arguments(),
           df.examples(),
           df.note(),
+          df.group(),
           df.since(),
           df.deprecated())
       } else {

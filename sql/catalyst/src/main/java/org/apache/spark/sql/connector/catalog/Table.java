@@ -36,6 +36,8 @@ import java.util.Set;
  * The default implementation of {@link #partitioning()} returns an empty array of partitions, and
  * the default implementation of {@link #properties()} returns an empty map. These should be
  * overridden by implementations that support partitioning and table properties.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface Table {

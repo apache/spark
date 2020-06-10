@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URI
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.types.StructType
 
@@ -153,5 +156,66 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     catalog.createTable(hiveTable, ignoreIfExists = false)
     assert(catalog.getTable("db1", "spark_29498").owner === owner)
+  }
+
+  test("SPARK-30868 throw an exception if HiveClient#runSqlHive fails") {
+    val client = externalCatalog.client
+    // test add jars which doesn't exists
+    val jarPath = "file:///tmp/not_exists.jar"
+    assertThrows[QueryExecutionException](client.runSqlHive(s"ADD JAR $jarPath"))
+
+    // test change to the database which doesn't exists
+    assertThrows[QueryExecutionException](client.runSqlHive(
+      s"use db_not_exists"))
+
+    // test create hive table failed with unsupported into type
+    assertThrows[QueryExecutionException](client.runSqlHive(
+      s"CREATE TABLE t(n into)"))
+
+    // test desc table failed with wrong `FORMATED` keyword
+    assertThrows[QueryExecutionException](client.runSqlHive(
+      s"DESC FORMATED t"))
+
+    // test wrong insert query
+    assertThrows[QueryExecutionException](client.runSqlHive(
+      "INSERT overwrite directory \"fs://localhost/tmp\" select 1 as a"))
+  }
+
+  test("SPARK-31061: alterTable should be able to change table provider") {
+    val catalog = newBasicCatalog()
+    val parquetTable = CatalogTable(
+      identifier = TableIdentifier("parq_tbl", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat.copy(locationUri = Some(new URI("file:/some/path"))),
+      schema = new StructType().add("col1", "int").add("col2", "string"),
+      provider = Some("parquet"))
+    catalog.createTable(parquetTable, ignoreIfExists = false)
+
+    val rawTable = externalCatalog.getTable("db1", "parq_tbl")
+    assert(rawTable.provider === Some("parquet"))
+
+    val fooTable = parquetTable.copy(provider = Some("foo"))
+    catalog.alterTable(fooTable)
+    val alteredTable = externalCatalog.getTable("db1", "parq_tbl")
+    assert(alteredTable.provider === Some("foo"))
+  }
+
+  test("SPARK-31061: alterTable should be able to change table provider from hive") {
+    val catalog = newBasicCatalog()
+    val hiveTable = CatalogTable(
+      identifier = TableIdentifier("parq_tbl", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat,
+      schema = new StructType().add("col1", "int").add("col2", "string"),
+      provider = Some("hive"))
+    catalog.createTable(hiveTable, ignoreIfExists = false)
+
+    val rawTable = externalCatalog.getTable("db1", "parq_tbl")
+    assert(rawTable.provider === Some("hive"))
+
+    val fooTable = rawTable.copy(provider = Some("foo"))
+    catalog.alterTable(fooTable)
+    val alteredTable = externalCatalog.getTable("db1", "parq_tbl")
+    assert(alteredTable.provider === Some("foo"))
   }
 }

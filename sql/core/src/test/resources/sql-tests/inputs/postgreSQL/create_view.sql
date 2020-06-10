@@ -41,7 +41,7 @@ DROP TABLE emp;
 -- These views are left around mainly to exercise special cases in pg_dump.
 
 -- [SPARK-19842] Informational Referential Integrity Constraints Support in Spark
-CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20));
+CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20)) USING PARQUET;
 --
 CREATE VIEW key_dependent_view AS
    SELECT * FROM view_base_table GROUP BY key;

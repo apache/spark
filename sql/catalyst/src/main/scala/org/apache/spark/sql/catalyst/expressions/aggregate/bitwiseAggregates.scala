@@ -77,6 +77,7 @@ case class BitAndAgg(child: Expression) extends BitAggregate {
       > SELECT _FUNC_(col) FROM VALUES (3), (5) AS tab(col);
        7
   """,
+  group = "agg_funcs",
   since = "3.0.0")
 case class BitOrAgg(child: Expression) extends BitAggregate {
 
@@ -94,6 +95,7 @@ case class BitOrAgg(child: Expression) extends BitAggregate {
       > SELECT _FUNC_(col) FROM VALUES (3), (5) AS tab(col);
        6
   """,
+  group = "agg_funcs",
   since = "3.0.0")
 case class BitXorAgg(child: Expression) extends BitAggregate {
 

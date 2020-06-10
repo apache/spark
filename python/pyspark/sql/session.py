@@ -699,12 +699,14 @@ class SparkSession(SparkConversionMixin):
     def stop(self):
         """Stop the underlying :class:`SparkContext`.
         """
+        from pyspark.sql.context import SQLContext
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         self._jvm.SparkSession.clearDefaultSession()
         self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
+        SQLContext._instantiatedContext = None
 
     @since(2.0)
     def __enter__(self):
