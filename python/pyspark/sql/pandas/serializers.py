@@ -143,6 +143,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         import pandas as pd
         import pyarrow as pa
         from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal
+        try:
+            from pandas import CategoricalDtype
+        except ImportError:
+            from pandas.api.types import CategoricalDtype
         # Make input conform to [(series1, type1), (series2, type2), ...]
         if not isinstance(series, (list, tuple)) or \
                 (len(series) == 2 and isinstance(series[1], pa.DataType)):
@@ -154,7 +158,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
-            elif type(s.dtype) == pd.CategoricalDtype:
+            elif type(s.dtype) == CategoricalDtype:
                 # Note: This can be removed once minimum pyarrow version is >= 0.16.1
                 s = s.astype(s.dtypes.categories.dtype)
             try:
