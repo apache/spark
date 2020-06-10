@@ -85,6 +85,7 @@ trait NamedExpression extends Expression {
    *    e.g. top level attributes aliased in the SELECT clause, or column from a LocalRelation.
    * 2. Seq with a Single element: either the table name or the alias name of the table.
    * 3. Seq with 2 elements: database name and table name
+   * 4. Seq with 3 elements: catalog name, database name and table name
    */
   def qualifier: Seq[String]
 
