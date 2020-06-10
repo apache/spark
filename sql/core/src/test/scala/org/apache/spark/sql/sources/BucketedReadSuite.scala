@@ -922,12 +922,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
     withSQLConf(
       SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true",
-      SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_NUM_BUCKETS_DIFF.key -> "2") {
-      // Coalescing buckets is not applied because the difference in the number of buckets (4)
+      SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO.key -> "2") {
+      // Coalescing buckets is not applied because the ratio of the number of buckets (3)
       // is greater than max allowed (2).
       run(
         BucketedTableTestSpec(
-          Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
+          Some(BucketSpec(12, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = false),
         BucketedTableTestSpec(
           Some(BucketSpec(4, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
     }

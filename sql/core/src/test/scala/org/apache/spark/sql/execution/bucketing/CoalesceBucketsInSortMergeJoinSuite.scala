@@ -106,11 +106,11 @@ class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkS
     }
   }
 
-  test("the difference in the number of buckets is greater than max allowed") {
+  test("the ratio of the number of buckets is greater than max allowed") {
     withSQLConf(
       SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true",
-      SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_NUM_BUCKETS_DIFF.key -> "2") {
-      run(BucketSetting(4, None), BucketSetting(8, None), isSortMergeJoin = true)
+      SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO.key -> "2") {
+      run(BucketSetting(4, None), BucketSetting(16, None), isSortMergeJoin = true)
     }
   }
 }

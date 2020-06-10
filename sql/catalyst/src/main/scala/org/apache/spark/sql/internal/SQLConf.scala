@@ -2605,15 +2605,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_NUM_BUCKETS_DIFF =
-    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.maxNumBucketsDiff")
-      .doc("The difference in count of two buckets being coalesced should be less than or " +
+  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO =
+    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.maxBucketRatio")
+      .doc("The ratio of the number of two buckets being coalesced should be less than or " +
         "equal to this value for bucket coalescing to be applied. This configuration only " +
         s"has an effect when '${COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key}' is set to true.")
       .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The difference must be positive.")
-      .createWithDefault(256)
+      .createWithDefault(10)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -2918,12 +2918,6 @@ class SQLConf extends Serializable with Logging {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
-
-  def coalesceBucketsInSortMergeJoinEnabled: Boolean =
-    getConf(COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED)
-
-  def coalesceBucketsInSortMergeJoinMaxNumBucketsDiff: Int =
-    getConf(COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_NUM_BUCKETS_DIFF)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

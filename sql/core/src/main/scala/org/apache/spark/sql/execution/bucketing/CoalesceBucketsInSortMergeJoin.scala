@@ -28,8 +28,8 @@ import org.apache.spark.sql.internal.SQLConf
  *   - Two bucketed tables are joined.
  *   - The larger bucket number is divisible by the smaller bucket number.
  *   - COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED is set to true.
- *   - The difference in the number of buckets is less than the value set in
- *     COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_NUM_BUCKETS_DIFF.
+ *   - The ratio of the number of buckets is less than the value set in
+ *     COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO.
  */
 case class CoalesceBucketsInSortMergeJoin(conf: SQLConf) extends Rule[SparkPlan] {
   private def mayCoalesce(numBuckets1: Int, numBuckets2: Int, conf: SQLConf): Option[Int] = {
@@ -37,8 +37,8 @@ case class CoalesceBucketsInSortMergeJoin(conf: SQLConf) extends Rule[SparkPlan]
     val (small, large) = (math.min(numBuckets1, numBuckets2), math.max(numBuckets1, numBuckets2))
     // A bucket can be coalesced only if the bigger number of buckets is divisible by the smaller
     // number of buckets because bucket id is calculated by modding the total number of buckets.
-    if ((large % small == 0) &&
-      ((large - small) <= conf.coalesceBucketsInSortMergeJoinMaxNumBucketsDiff)) {
+    if (large % small == 0 &&
+      large / small <= conf.getConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO)) {
       Some(small)
     } else {
       None
@@ -53,21 +53,21 @@ case class CoalesceBucketsInSortMergeJoin(conf: SQLConf) extends Rule[SparkPlan]
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (conf.coalesceBucketsInSortMergeJoinEnabled) {
-      plan transform {
-        case ExtractSortMergeJoinWithBuckets(smj, numLeftBuckets, numRightBuckets)
-          if numLeftBuckets != numRightBuckets =>
-          mayCoalesce(numLeftBuckets, numRightBuckets, conf).map { numCoalescedBuckets =>
-            if (numCoalescedBuckets != numLeftBuckets) {
-              smj.copy(left = updateNumCoalescedBuckets(smj.left, numCoalescedBuckets))
-            } else {
-              smj.copy(right = updateNumCoalescedBuckets(smj.right, numCoalescedBuckets))
-            }
-          }.getOrElse(smj)
-        case other => other
-      }
-    } else {
-      plan
+    if (!conf.getConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED)) {
+      return plan
+    }
+
+    plan transform {
+      case ExtractSortMergeJoinWithBuckets(smj, numLeftBuckets, numRightBuckets)
+        if numLeftBuckets != numRightBuckets =>
+        mayCoalesce(numLeftBuckets, numRightBuckets, conf).map { numCoalescedBuckets =>
+          if (numCoalescedBuckets != numLeftBuckets) {
+            smj.copy(left = updateNumCoalescedBuckets(smj.left, numCoalescedBuckets))
+          } else {
+            smj.copy(right = updateNumCoalescedBuckets(smj.right, numCoalescedBuckets))
+          }
+        }.getOrElse(smj)
+      case other => other
     }
   }
 }
@@ -77,15 +77,11 @@ case class CoalesceBucketsInSortMergeJoin(conf: SQLConf) extends Rule[SparkPlan]
  * tables and are consisted of only the scan operation.
  */
 object ExtractSortMergeJoinWithBuckets {
-  private def isScanOperation(plan: SparkPlan): Boolean = {
-    def forall(plan: SparkPlan)(p: SparkPlan => Boolean): Boolean = {
-      p(plan) && plan.children.forall(forall(_)(p))
-    }
-
-    forall(plan) {
-      case _: FilterExec | _: ProjectExec | _: FileSourceScanExec => true
-      case _ => false
-    }
+  private def isScanOperation(plan: SparkPlan): Boolean = plan match {
+    case f: FilterExec => isScanOperation(f.child)
+    case p: ProjectExec => isScanOperation(p.child)
+    case _: FileSourceScanExec => true
+    case _ => false
   }
 
   private def getBucketSpec(plan: SparkPlan): Option[BucketSpec] = {
