@@ -1,8 +1,12 @@
 --- TESTS FOR DATETIME PARSING FUNCTIONS WITH INVALID VALUES ---
 
-select to_timestamp('10', 'D');
+-- parsing invalid values with pattern 'D'
+select to_timestamp('366', 'D');
+select to_timestamp('9', 'DD');
 select to_timestamp('100', 'DD');
 select to_timestamp('366', 'DD');
+select to_timestamp('9', 'DDD');
+select to_timestamp('99', 'DDD');
 select to_timestamp('30-365', 'dd-DDD');
 select to_timestamp('11-365', 'MM-DDD');
 select to_timestamp('2019-366', 'yyyy-DDD');
