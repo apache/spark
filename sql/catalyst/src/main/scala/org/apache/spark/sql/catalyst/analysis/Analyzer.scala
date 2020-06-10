@@ -2866,7 +2866,7 @@ class Analyzer(
         case udf @ ScalaUDF(_, _, inputs, encoders, _, _, _) if encoders.nonEmpty =>
           val boundEncoders = encoders.zipWithIndex.map { case (encOpt, i) =>
             val dataType = inputs(i).dataType
-            if (dataType.isInstanceOf[UserDefinedType[_]]) {
+            if (dataType.existsRecursively(_.isInstanceOf[UserDefinedType[_]])) {
               // for UDT, we use `CatalystTypeConverters`
               None
             } else {
