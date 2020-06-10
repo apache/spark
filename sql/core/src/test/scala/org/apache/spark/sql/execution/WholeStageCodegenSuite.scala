@@ -131,8 +131,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     results = expDF.collect()
     assert(results ===
       Array(
-        Row("James", List("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown"), "hair", "black"),
-        Row("James", List("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown"), "eye", "brown")))
+        Row("James", List("Java", "Scala"),
+          Map("hair" -> "black", "eye" -> "brown"), "hair", "black"),
+        Row("James", List("Java", "Scala"),
+          Map("hair" -> "black", "eye" -> "brown"), "eye", "brown")))
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {
