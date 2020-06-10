@@ -276,9 +276,6 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
 
   test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
     initLocalClusterSparkContext(2)
-    // It's required to reset the delay timer when a task is scheduled, otherwise all the tasks
-    // could get scheduled at ANY level.
-    sc.conf.set(config.LEGACY_LOCALITY_WAIT_RESET, true)
     val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
     val dep = new OneToOneDependency[Int](rdd0)
     // set up a barrier stage with 2 tasks and both tasks prefer executor 0 (only 1 core) for

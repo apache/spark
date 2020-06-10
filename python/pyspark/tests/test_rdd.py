@@ -168,6 +168,17 @@ class RDDTests(ReusedPySparkTestCase):
             set([(x, (x, x)) for x in 'abc'])
         )
 
+    def test_union_pair_rdd(self):
+        # SPARK-31788: test if pair RDDs can be combined by union.
+        rdd = self.sc.parallelize([1, 2])
+        pair_rdd = rdd.zip(rdd)
+        unionRDD = self.sc.union([pair_rdd, pair_rdd])
+        self.assertEqual(
+            set(unionRDD.collect()),
+            set([(1, 1), (2, 2), (1, 1), (2, 2)])
+        )
+        self.assertEqual(unionRDD.count(), 4)
+
     def test_deleting_input_files(self):
         # Regression test for SPARK-1025
         tempFile = tempfile.NamedTemporaryFile(delete=False)
