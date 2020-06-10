@@ -1,4 +1,5 @@
 set hive.fetch.task.conversion=more;
+set spark.sql.legacy.allowCastNumericToTimestamp=true;
 
 drop table if exists decimal_1;
 
