@@ -1329,11 +1329,6 @@ case class BRound(child: Expression, scale: Expression)
 object WidthBucket {
 
   def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
-    // Checks error cases below:
-    //  - `numBucket` must be greater than zero and be less than Long.MaxValue
-    //  - `value`, `min`, and `max` cannot be NaN
-    //  - `min` bound cannot equal `max
-    //  - `min` and `max` must be finite
     if (numBucket <= 0 || numBucket == Long.MaxValue || jl.Double.isNaN(value) || min == max ||
         jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
         jl.Double.isNaN(max) || jl.Double.isInfinite(max)) {
@@ -1365,7 +1360,12 @@ object WidthBucket {
 
 /**
  * Returns the bucket number into which the value of this expression would fall
- * after being evaluated.
+ * after being evaluated. Note that input arguments must follow conditions listed below;
+ * otherwise, the method will return null.
+ *  - `numBucket` must be greater than zero and be less than Long.MaxValue
+ *  - `value`, `min`, and `max` cannot be NaN
+ *  - `min` bound cannot equal `max
+ *  - `min` and `max` must be finite
  *
  * @param expr is the expression to compute a bucket number in the histogram
  * @param minValue is the minimum value of the histogram
