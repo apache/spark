@@ -29,7 +29,6 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
 import org.apache.spark.ml.feature._
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
@@ -967,7 +966,7 @@ class LinearRegressionSummary private[regression] (
       if (!privateModel.isDefined(privateModel.weightCol) || privateModel.getWeightCol.isEmpty) {
         lit(1.0)
       } else {
-        checkNonNegativeWeight(col(privateModel.getWeightCol).cast(DoubleType))
+        col(privateModel.getWeightCol).cast(DoubleType)
       }
 
     new RegressionMetrics(

@@ -924,7 +924,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
       val trainer1 = new LinearRegression().setSolver(solver)
       val trainer2 = new LinearRegression().setSolver(solver).setWeightCol("weight")
 
-      Seq(0.25).foreach { w =>
+      Seq(0.25, 1.0, 10.0, 50.00).foreach { w =>
         val model1 = trainer1.fit(datasetWithDenseFeature)
         val model2 = trainer2.fit(datasetWithDenseFeature.withColumn("weight", lit(w)))
         val testSummary1 = model1.evaluate(datasetWithDenseFeature)
