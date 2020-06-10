@@ -398,6 +398,8 @@ class SparkConversionMixin(object):
                               for s in (pdf[c] for c in pdf)]
             struct = StructType()
             for name, t in zip(schema, inferred_types):
+                # nullability is not determined on types inferred by Arrow or
+                # by the non-Arrow conversion path, so default to nullable
                 struct.add(name, from_arrow_type(t), nullable=True)
             schema = struct
 

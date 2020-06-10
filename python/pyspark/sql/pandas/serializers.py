@@ -164,7 +164,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 s = s.astype(s.dtypes.categories.dtype)
             try:
                 mask = s.isnull()
-                # pass _ndarray_values to avoid potential failed type checks from pandas array types
+                # pass _ndarray_values to avoid erroneous failed type checks from pandas array types
+                # that do not implement __arrow_array__ (i.e. pre-1.0.0 IntegerArray)
                 array = pa.Array.from_pandas(s._ndarray_values, mask=mask, type=t,
                                              safe=self._safecheck)
             except pa.ArrowException as e:
