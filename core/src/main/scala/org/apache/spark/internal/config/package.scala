@@ -1864,4 +1864,13 @@ package object config {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val STANDALONE_SUBMIT_WAIT_APP_COMPLETION =
+    ConfigBuilder("spark.standalone.submit.waitAppCompletion")
+      .doc("In standalone cluster mode, controls whether the client waits to exit until the " +
+        "application completes. If set to true, the client process will stay alive polling " +
+        "the driver's status. Otherwise, the client process will exit after submission.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 }
