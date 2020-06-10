@@ -88,7 +88,7 @@ object FilePartition extends Logging {
       selectedPartitions: Seq[PartitionDirectory]): Long = {
     val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
-    val defaultParallelism = sparkSession.sparkContext.defaultParallelism
+    val defaultParallelism = sparkSession.defaultParallelism
     val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     val bytesPerCore = totalBytes / defaultParallelism
 

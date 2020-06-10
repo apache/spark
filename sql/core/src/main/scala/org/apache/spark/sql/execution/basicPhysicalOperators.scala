@@ -369,7 +369,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   val start: Long = range.start
   val end: Long = range.end
   val step: Long = range.step
-  val numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
+  val numSlices: Int = range.numSlices.getOrElse(sqlContext.sparkSession.defaultParallelism)
   val numElements: BigInt = range.numElements
 
   override val output: Seq[Attribute] = range.output

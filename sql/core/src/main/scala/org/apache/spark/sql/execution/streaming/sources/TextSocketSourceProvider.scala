@@ -60,7 +60,7 @@ class TextSocketSourceProvider extends SimpleTableProvider with DataSourceRegist
     new TextSocketTable(
       options.get("host"),
       options.getInt("port", -1),
-      options.getInt("numPartitions", SparkSession.active.sparkContext.defaultParallelism),
+      options.getInt("numPartitions", SparkSession.active.defaultParallelism),
       options.getBoolean("includeTimestamp", false))
   }
 

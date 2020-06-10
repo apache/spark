@@ -65,7 +65,7 @@ class RateStreamProvider extends SimpleTableProvider with DataSourceRegister {
     }
 
     val numPartitions = options.getInt(
-      NUM_PARTITIONS, SparkSession.active.sparkContext.defaultParallelism)
+      NUM_PARTITIONS, SparkSession.active.defaultParallelism)
     if (numPartitions <= 0) {
       throw new IllegalArgumentException(
         s"Invalid value '$numPartitions'. The option 'numPartitions' must be positive")

@@ -55,7 +55,7 @@ object SchemaMergeUtils extends Logging {
     // Set the number of partitions to prevent following schema reads from generating many tasks
     // in case of a small number of orc files.
     val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1),
-      sparkSession.sparkContext.defaultParallelism)
+      sparkSession.defaultParallelism)
 
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
 

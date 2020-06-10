@@ -1307,7 +1307,7 @@ class FakeDefaultSource extends FakeSource {
             startOffset,
             end.asInstanceOf[LongOffset].offset + 1,
             1,
-            Some(spark.sparkSession.sparkContext.defaultParallelism),
+            Some(spark.sparkSession.defaultParallelism),
             isStreaming = true),
           Encoders.LONG)
         ds.toDF("a")
