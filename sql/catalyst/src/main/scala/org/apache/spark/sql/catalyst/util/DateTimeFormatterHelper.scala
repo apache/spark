@@ -39,6 +39,18 @@ trait DateTimeFormatterHelper {
     }
   }
 
+  private def verifyLocalDate(
+      accessor: TemporalAccessor, field: ChronoField, candidate: LocalDate): Unit = {
+    if (accessor.isSupported(field) && candidate.isSupported(field)) {
+      val actual = accessor.get(field)
+      val expected = candidate.get(field)
+      if (actual != expected) {
+        throw new DateTimeException(s"Conflict found: Field $field $actual differs from" +
+          s" $field $expected derived from $candidate")
+      }
+    }
+  }
+
   protected def toLocalDate(accessor: TemporalAccessor): LocalDate = {
     val localDate = accessor.query(TemporalQueries.localDate())
     // If all the date fields are specified, return the local date directly.
@@ -51,20 +63,8 @@ trait DateTimeFormatterHelper {
     if (accessor.isSupported(ChronoField.DAY_OF_YEAR)) {
       val dayOfYear = accessor.get(ChronoField.DAY_OF_YEAR)
       val date = LocalDate.ofYearDay(year, dayOfYear)
-      if (accessor.isSupported(ChronoField.MONTH_OF_YEAR)) {
-        val month = accessor.get(ChronoField.MONTH_OF_YEAR)
-        if (date.getMonthValue != month) {
-          throw new DateTimeException(s"Conflict found: Field MonthOfYear $month differs from" +
-            s" MonthOfYear ${date.getMonthValue} derived from $date")
-        }
-      }
-      if (accessor.isSupported(ChronoField.DAY_OF_MONTH)) {
-        val day = accessor.get(ChronoField.DAY_OF_MONTH)
-        if (date.getDayOfMonth != day) {
-          throw new DateTimeException(s"Conflict found: Field DayOfMonth $day differs from" +
-            s" DayOfMonth ${date.getDayOfMonth} derived from $date")
-        }
-      }
+      verifyLocalDate(accessor, ChronoField.MONTH_OF_YEAR, date)
+      verifyLocalDate(accessor, ChronoField.DAY_OF_MONTH, date)
       date
     } else {
       val month = getOrDefault(accessor, ChronoField.MONTH_OF_YEAR, 1)
