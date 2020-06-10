@@ -97,21 +97,17 @@ private[history] class HybridStore extends KVStore {
   }
 
   override def close(): Unit = {
-    closed.set(true)
-
-    if (backgroundThread != null && backgroundThread.isAlive()) {
-      // The background thread is still running, wait for it to finish
-      backgroundThread.join()
-    }
-
     try {
+      closed.set(true)
+      if (backgroundThread != null && backgroundThread.isAlive()) {
+        // The background thread is still running, wait for it to finish
+        backgroundThread.join()
+      }
+    } finally {
+      inMemoryStore.close()
       if (levelDB != null) {
         levelDB.close()
       }
-    } catch {
-      case ioe: IOException => throw ioe
-    } finally {
-      inMemoryStore.close()
     }
   }
 

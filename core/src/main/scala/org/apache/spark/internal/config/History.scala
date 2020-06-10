@@ -202,7 +202,7 @@ private[spark] object History {
       "that dumps data to a disk store after the writing to in-memory store is completed.")
     .version("3.1.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val MAX_IN_MEMORY_STORE_USAGE = ConfigBuilder("spark.history.store.hybridStore.maxMemoryUsage")
     .doc("Maximum memory space that can be used to create HybridStore. The HybridStore co-uses " +
