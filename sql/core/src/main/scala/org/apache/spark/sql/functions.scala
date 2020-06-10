@@ -3358,11 +3358,11 @@ object functions {
     window(timeColumn, windowDuration, windowDuration, "0 second")
   }
 
-   /**
-    * Creates timestamp from the number of seconds since UTC epoch.",
-    * @group = "datetime_funcs",
-    * @since = "3.1.0")
-    */
+  /**
+   * Creates timestamp from the number of seconds since UTC epoch.
+   * @group = datetime_funcs
+   * @since = 3.1.0
+   */
   def timestamp_seconds(e: Column): Column = withExpr {
     SecondsToTimestamp(e.expr)
   }

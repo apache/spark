@@ -53,14 +53,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
       checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
     }
-
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "false") {
-      if (from.isInstanceOf[NumericType] && to.isInstanceOf[TimestampType]) {
-        assert(!cast(Literal.create(null, from), to, UTC_OPT).resolved)
-      } else {
-        checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
-      }
-    }
   }
 
   test("null cast") {
