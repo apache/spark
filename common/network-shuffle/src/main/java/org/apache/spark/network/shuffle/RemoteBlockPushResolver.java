@@ -116,14 +116,18 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // be the first time the merge manager receives a pushed block for a given application
       // shuffle partition, or after the merged shuffle file is finalized. We handle these
       // two cases accordingly by checking if the file already exists.
+      File mergedShuffleFile = getMergedShuffleFile(key);
+      File mergedIndexFile = getMergedIndexFile(id);
       try {
-        File mergedShuffleFile = getMergedShuffleFile(key);
         if (mergedShuffleFile.exists()) {
           return null;
         } else {
-          return new AppShufflePartitionInfo(mergedShuffleFile, getMergedIndexFile(id));
+          return new AppShufflePartitionInfo(mergedShuffleFile, mergedIndexFile);
         }
       } catch (IOException e) {
+        logger.error(
+            "Cannot create merged shuffle partition {} with shuffle file {} and index file {}", key,
+            mergedIndexFile.getAbsolutePath(), mergedIndexFile.getAbsolutePath());
         throw new RuntimeException(String.format(
             "Cannot initialize merged shuffle partition %s", key.toString()), e);
       }
@@ -196,7 +200,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
-    Path relativeMergeDir = appsRelativePath.remove(appId);
+    Path relativeMergeDir = Preconditions.checkNotNull(
+        appsRelativePath.remove(appId), "application " + appId + " is not registered.");
     Iterator<Map.Entry<AppShufflePartitionId, AppShufflePartitionInfo>> iterator =
         partitions.entrySet().iterator();
     while (iterator.hasNext()) {
@@ -231,7 +236,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           logger.debug("Successfully cleaned up directory: {}", localDir);
         }
       } catch (Exception e) {
-        logger.error("Failed to delete directory: " + localDir, e);
+        logger.error("Failed to delete directory: {}", localDir, e);
       }
     }
   }
