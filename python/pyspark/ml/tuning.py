@@ -408,7 +408,8 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
             checker_udf = UserDefinedFunction(checker, BooleanType())
             for i in range(nFolds):
                 training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
-                validation = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i)))
+                validation = dataset.filter(
+                    checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i)))
                 if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
                     raise ValueError("The training data at fold %s is empty." % i)
                 if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
