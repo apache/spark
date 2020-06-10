@@ -41,7 +41,7 @@ private[spark] class AppStatusStore(
       store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
     } catch {
       case _: NoSuchElementException =>
-        throw new SparkException("Failed to get the application information. " +
+        throw new NoSuchElementException("Failed to get the application information. " +
           "If you are starting up Spark, please wait a while until it's ready.")
     }
   }
