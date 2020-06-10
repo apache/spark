@@ -35,6 +35,11 @@ object NestedColumnAliasing {
     case Project(projectList, child)
         if SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
       getAliasSubMap(projectList)
+
+    case plan if SQLConf.get.nestedSchemaPruningEnabled && canPruneOn(plan) =>
+      val exprCandidatesToPrune = plan.expressions
+      getAliasSubMap(exprCandidatesToPrune, plan.producedAttributes.toSeq)
+
     case _ => None
   }
 
@@ -48,7 +53,11 @@ object NestedColumnAliasing {
     case Project(projectList, child) =>
       Project(
         getNewProjectList(projectList, nestedFieldToAlias),
-        replaceChildrenWithAliases(child, attrToAliases))
+        replaceChildrenWithAliases(child, nestedFieldToAlias, attrToAliases))
+
+    // The operators reaching here was already guarded by `canPruneOn`.
+    case other =>
+      replaceChildrenWithAliases(other, nestedFieldToAlias, attrToAliases)
   }
 
   /**
@@ -68,10 +77,23 @@ object NestedColumnAliasing {
    */
   def replaceChildrenWithAliases(
       plan: LogicalPlan,
+      nestedFieldToAlias: Map[ExtractValue, Alias],
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
     plan.withNewChildren(plan.children.map { plan =>
       Project(plan.output.flatMap(a => attrToAliases.getOrElse(a.exprId, Seq(a))), plan)
-    })
+    }).transformExpressions {
+      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
+        nestedFieldToAlias(f).toAttribute
+    }
+  }
+
+  /**
+   * Returns true for those operators that we can prune nested column on it.
+   */
+  private def canPruneOn(plan: LogicalPlan) = plan match {
+    case _: Aggregate => true
+    case _: Expand => true
+    case _ => false
   }
 
   /**
@@ -204,15 +226,8 @@ object GeneratorNestedColumnAliasing {
       g: Generate,
       nestedFieldToAlias: Map[ExtractValue, Alias],
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
-    val newGenerator = g.generator.transform {
-      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
-        nestedFieldToAlias(f).toAttribute
-    }.asInstanceOf[Generator]
-
     // Defer updating `Generate.unrequiredChildIndex` to next round of `ColumnPruning`.
-    val newGenerate = g.copy(generator = newGenerator)
-
-    NestedColumnAliasing.replaceChildrenWithAliases(newGenerate, attrToAliases)
+    NestedColumnAliasing.replaceChildrenWithAliases(g, nestedFieldToAlias, attrToAliases)
   }
 
   /**

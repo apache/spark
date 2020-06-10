@@ -116,8 +116,8 @@ def convert_exception(e):
             # To make sure this only catches Python UDFs.
             and any(map(lambda v: "org.apache.spark.sql.execution.python" in v.toString(),
                         c.getStackTrace()))):
-        msg = ("\n  An exception was thrown from Python worker in the executor. "
-               "The below is the Python worker stacktrace.\n%s" % c.getMessage())
+        msg = ("\n  An exception was thrown from the Python worker. "
+               "Please see the stack trace below.\n%s" % c.getMessage())
         return PythonException(msg, stacktrace)
     return UnknownException(s, stacktrace, c)
 
