@@ -39,7 +39,13 @@ private[spark] class AppStatusStore(
   def applicationInfo(): v1.ApplicationInfo = {
     try {
       // The ApplicationInfo may not be available when Spark is starting up.
-      store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
+      Utils.tryWithResource(
+        store.view(classOf[ApplicationInfoWrapper])
+          .max(1)
+          .closeableIterator()
+      ) { it =>
+        it.next().info
+      }
     } catch {
       case _: NoSuchElementException =>
         throw new NoSuchElementException("Failed to get the application information. " +
