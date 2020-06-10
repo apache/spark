@@ -198,10 +198,7 @@ public class LevelDB implements KVStore {
       @Override
       public Iterator<T> iterator() {
         try {
-          LevelDBIterator<T> iterator = new LevelDBIterator<>(
-                  type,
-                  LevelDB.this,
-                  this);
+          LevelDBIterator<T> iterator = new LevelDBIterator<>(type, LevelDB.this, this);
           iteratorTracker.add(iterator);
           return iterator;
         } catch (Exception e) {
@@ -275,8 +272,9 @@ public class LevelDB implements KVStore {
       DB _db = this._db.get();
       if (_db != null) {
         it.close();
-        iteratorTracker.remove(it);
       }
+
+      iteratorTracker.remove(it);
     }
   }
 

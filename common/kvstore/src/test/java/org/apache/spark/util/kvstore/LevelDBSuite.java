@@ -281,9 +281,9 @@ public class LevelDBSuite {
     // SPARK-31929: test when LevelDB.close() is called, related LevelDBIterators
     // are closed. And files opened by iterators are also closed.
     File dbpathForCloseTest = File
-            .createTempFile(
-                    "test_db_close.",
-                    ".ldb");
+      .createTempFile(
+        "test_db_close.",
+        ".ldb");
     dbpathForCloseTest.delete();
     LevelDB dbForCloseTest = new LevelDB(dbpathForCloseTest);
     for (int i = 0; i < 8192; i++) {
@@ -291,15 +291,15 @@ public class LevelDBSuite {
     }
 
     KVStoreIterator<CustomType1> it = dbForCloseTest
-                    .view(CustomType1.class).closeableIterator();
+      .view(CustomType1.class).closeableIterator();
     assertEquals("key0", it.next().key);
     KVStoreIterator<CustomType1> it1 = dbForCloseTest
-            .view(CustomType1.class).closeableIterator();
+      .view(CustomType1.class).closeableIterator();
     assertEquals("key0", it1.next().key);
     try(KVStoreIterator<CustomType1> it2 = dbForCloseTest
-                        .view(CustomType1.class).closeableIterator();
+      .view(CustomType1.class).closeableIterator();
         KVStoreIterator<CustomType1> it3 = dbForCloseTest
-                        .view(CustomType1.class).closeableIterator();) {
+          .view(CustomType1.class).closeableIterator();) {
       assertEquals("key0", it2.next().key);
       assertEquals("key0", it3.next().key);
     }
