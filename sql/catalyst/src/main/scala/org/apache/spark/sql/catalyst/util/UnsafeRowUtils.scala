@@ -74,6 +74,7 @@ object UnsafeRowUtils {
             if ((row.getLong(index) >> 32) != 0L) return false
           case _ =>
         }
+      case _ =>
     }
     if (bitSetWidthInBytes + 8 * row.numFields + varLenFieldsSizeInBytes > rowSizeInBytes) {
       return false
