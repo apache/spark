@@ -41,7 +41,7 @@ trait DateTimeFormatterHelper {
 
   private def verifyLocalDate(
       accessor: TemporalAccessor, field: ChronoField, candidate: LocalDate): Unit = {
-    if (accessor.isSupported(field) && candidate.isSupported(field)) {
+    if (accessor.isSupported(field)) {
       val actual = accessor.get(field)
       val expected = candidate.get(field)
       if (actual != expected) {

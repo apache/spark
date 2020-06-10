@@ -21,10 +21,43 @@ import org.scalatest.Matchers
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{date, UTC}
 
 trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers {
   import DateTimeFormatterHelper._
   def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit
+
+  private def dateFormatter(pattern: String): DateFormatter = {
+    DateFormatter(pattern, UTC, isParsing = true)
+  }
+
+  private def timestampFormatter(pattern: String): TimestampFormatter =
+    TimestampFormatter(pattern, UTC, isParsing = true)
+
+  protected def useDateFormatter: Boolean
+
+  private def assertEqual(pattern: String, datetimeStr: String, expected: Long): Unit = {
+    if (useDateFormatter) {
+      assert(dateFormatter(pattern).parse(datetimeStr) ===
+        DateTimeUtils.microsToEpochDays(expected, UTC))
+    } else {
+      assert(timestampFormatter(pattern).parse(datetimeStr) === expected)
+    }
+  }
+
+  private def assertError(pattern: String, datetimeStr: String, expectedMsg: String): Unit = {
+    val exception = if (useDateFormatter) {
+      intercept[Exception](dateFormatter(pattern).parse(datetimeStr))
+    } else {
+      intercept[Exception](timestampFormatter(pattern).parse(datetimeStr))
+    }
+
+    val rootCause = exception match {
+      case e: SparkUpgradeException => e.getCause
+      case e => e
+    }
+    assert(rootCause.getMessage.contains(expectedMsg))
+  }
 
   test("explicitly forbidden datetime patterns") {
 
@@ -50,5 +83,37 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
     (unsupportedLettersForParsing.map(_.toString) -- unsupportedBoth).foreach {
       pattern => intercept[SparkUpgradeException](checkFormatterCreation(pattern, true))
     }
+  }
+
+  test("SPARK-31939: Fix Parsing day of year when year field pattern is missing") {
+    // resolved to queryable LocaleDate or fail directly
+    assertEqual("yyyy-dd-DD", "2020-29-60", date(2020, 2, 29))
+    assertError("yyyy-dd-DD", "2020-02-60",
+      "Field DayOfMonth 29 differs from DayOfMonth 2 derived from 2020-02-29")
+    assertEqual("yyyy-MM-DD", "2020-02-60", date(2020, 2, 29))
+    assertError("yyyy-MM-DD", "2020-03-60",
+      "Field MonthOfYear 2 differs from MonthOfYear 3 derived from 2020-02-29")
+    assertEqual("yyyy-MM-dd-DD", "2020-02-29-60", date(2020, 2, 29))
+    assertError("yyyy-MM-dd-DD", "2020-03-01-60",
+      "Field DayOfYear 61 differs from DayOfYear 60 derived from 2020-03-01")
+    assertEqual("yyyy-DDD", "2020-366", date(2020, 12, 31))
+    assertError("yyyy-DDD", "2019-366",
+      "Invalid date 'DayOfYear 366' as '2019' is not a leap year")
+
+    // unresolved and need to check manually(SPARK-31939 fixed)
+    assertEqual("DDD", "365", date(1970, 12, 31))
+    assertError("DDD", "366",
+      "Invalid date 'DayOfYear 366' as '1970' is not a leap year")
+    assertEqual("MM-DD", "03-60", date(1970, 3))
+    assertError("MM-DD", "02-60",
+      "Field MonthOfYear 2 differs from MonthOfYear 3 derived from 1970-03-01")
+    assertEqual("MM-dd-DD", "02-28-59", date(1970, 2, 28))
+    assertError("MM-dd-DD", "02-28-60",
+      "Field MonthOfYear 2 differs from MonthOfYear 3 derived from 1970-03-01")
+    assertError("MM-dd-DD", "02-28-58",
+      "Field DayOfMonth 28 differs from DayOfMonth 27 derived from 1970-02-27")
+    assertEqual("dd-DD", "28-59", date(1970, 2, 28))
+    assertError("dd-DD", "27-59",
+      "Field DayOfMonth 27 differs from DayOfMonth 28 derived from 1970-02-28")
   }
 }
