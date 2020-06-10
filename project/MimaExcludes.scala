@@ -45,7 +45,11 @@ object MimaExcludes {
     // after: class ChiSqSelector extends PSelector
     // false positive, no binary incompatibility
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelector")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelector"),
+
+    //[SPARK-31840] Add instance weight support in LogisticRegressionSummary
+    // weightCol in org.apache.spark.ml.classification.LogisticRegressionSummary is present only in current version
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.weightCol")
   )
 
   // Exclude rules for 3.0.x
