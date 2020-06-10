@@ -243,6 +243,7 @@ trait PredicateHelper extends Logging {
       if (resultStack.length != 1) {
         logWarning("The length of CNF conversion result stack is supposed to be 1. There might " +
           "be something wrong with CNF conversion.")
+        return Seq.empty
       }
       resultStack.push(cnf)
     }
@@ -255,10 +256,19 @@ trait PredicateHelper extends Logging {
   }
 
   /**
-   * Iterative post order traversal over a binary tree built by And/Or clauses.
+   * Iterative post order traversal over a binary tree built by And/Or clauses with two stacks.
+   * For example, a condition `(a And b) Or c`, the postorder traversal is
+   * (`a`,`b`, `And`, `c`, `Or`).
+   * Following is the complete algorithm. After step 2, we get the postorder traversal in
+   * the second stack.
+   * 1. Push root to first stack.
+   * 2. Loop while first stack is not empty
+   *    2.1 Pop a node from first stack and push it to second stack
+   *    2.2 Push the children of the popped node to first stack
+   *
    * @param condition to be traversed as binary tree
-   * @return sub-expressions in post order traversal as an Array.
-   *         The first element of result Array is the leftmost node.
+   * @return sub-expressions in post order traversal as a stack.
+   *         The first element of result stack is the leftmost node.
    */
   private def postOrderTraversal(condition: Expression): mutable.Stack[Expression] = {
     val stack = new mutable.Stack[Expression]
