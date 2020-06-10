@@ -642,6 +642,15 @@ class UDFTests(ReusedSQLTestCase):
         r = df.select(fUdf(*df.columns))
         self.assertEqual(r.first()[0], "success")
 
+    def test_udf_cache(self):
+        func = lambda x: x
+
+        df = self.spark.range(1)
+        df.select(udf(func)("id")).cache()
+
+        self.assertEqual(df.select(udf(func)("id"))._jdf.queryExecution()
+                         .withCachedData().getClass().getSimpleName(), 'InMemoryRelation')
+
 
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):
