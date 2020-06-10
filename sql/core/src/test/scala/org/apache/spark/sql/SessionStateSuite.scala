@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.QueryExecutionListener
 
 class SessionStateSuite extends SparkFunSuite {
@@ -235,6 +236,17 @@ class SessionStateSuite extends SparkFunSuite {
 
       // forked new session should not discard SQLConf overrides
       assert(forkedSession.conf.get(key) == "active")
+    } finally {
+      activeSession.conf.unset(key)
+    }
+  }
+
+  test("add spark.sql.default.parallelism in SQLConf") {
+    val key = SQLConf.DEFAULT_PARALLELISM.key
+    try {
+      assert(activeSession.defaultParallelism == activeSession.sparkContext.defaultParallelism)
+      activeSession.conf.set(key, "1")
+      assert(activeSession.defaultParallelism == 1)
     } finally {
       activeSession.conf.unset(key)
     }
