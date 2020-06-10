@@ -1551,7 +1551,7 @@ sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
 
   /** Number of training iterations. */
   @Since("1.5.0")
-  val totalIterations = {
+  def totalIterations: Int = {
     assert(objectiveHistory.length > 0, s"objectiveHistory length should be greater than 1.")
     objectiveHistory.length - 1
   }
