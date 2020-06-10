@@ -72,9 +72,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     when(bm.getMigratableRDDBlocks())
       .thenReturn(Seq(storedBlock1))
 
-    val bmDecomManager = new BlockManagerDecommissionManager(
-      sparkConf,
-      bm)
+    val bmDecomManager = new BlockManagerDecommissioner(sparkConf, bm)
 
     bmDecomManager.start()
 

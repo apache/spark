@@ -244,8 +244,7 @@ private[spark] class BlockManager(
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
 
-  @volatile private var blockManagerDecommissioning: Boolean = false
-  @volatile private var decommissionManager: Option[BlockManagerDecommissionManager] = None
+  @volatile private var decommissioner: Option[BlockManagerDecommissioner] = None
 
   // A DownloadFileManager used to track all the files of remote blocks which are above the
   // specified memory threshold. Files will be deleted automatically based on weak reference.
@@ -257,7 +256,7 @@ private[spark] class BlockManager(
   var hostLocalDirManager: Option[HostLocalDirManager] = None
 
   // This is a lazy val so someone can migrating RDDs even if they don't have a MigratableResolver
-  // for shuffles. Used in BlockManagerDecommissionManager & block puts.
+  // for shuffles. Used in BlockManagerDecommissioner & block puts.
   private[storage] lazy val migratableResolver: MigratableResolver = {
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
@@ -660,7 +659,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[_]): StreamCallbackWithID = {
 
-    if (blockManagerDecommissioning) {
+    if (decommissioner.isDefined) {
        throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
     }
 
@@ -1311,7 +1310,7 @@ private[spark] class BlockManager(
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
-    if (blockManagerDecommissioning) {
+    if (decommissioner.isDefined) {
       throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
     }
 
@@ -1808,16 +1807,14 @@ private[spark] class BlockManager(
     blocksToRemove.size
   }
 
-  def decommissionBlockManager(): Unit = {
-    if (!blockManagerDecommissioning) {
-      logInfo("Starting block manager decommissioning process...")
-      blockManagerDecommissioning = true
-      decommissionManager = Some(new BlockManagerDecommissionManager(
-        conf,
-        this))
-      decommissionManager.foreach(_.start())
-    } else {
-      logDebug("Block manager already in decommissioning state")
+  def decommissionBlockManager(): Unit = synchronized {
+    decommissioner match {
+      case None =>
+        logInfo("Starting block manager decommissioning process...")
+        decommissioner = Some(new BlockManagerDecommissioner(conf, this))
+        decommissioner.foreach(_.start())
+      case Some(_) =>
+        logDebug("Block manager already in decommissioning state")
     }
   }
 
@@ -1893,7 +1890,7 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
-    decommissionManager.foreach(_.stop())
+    decommissioner.foreach(_.stop())
     blockTransferService.close()
     if (blockStoreClient ne blockTransferService) {
       // Closing should be idempotent, but maybe not for the NioBlockTransferService.

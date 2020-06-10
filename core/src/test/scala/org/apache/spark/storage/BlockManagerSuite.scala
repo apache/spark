@@ -1759,7 +1759,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockId).size === 2)
     assert(master.getLocations(blockId).contains(store1.blockManagerId))
 
-    val decomManager = new BlockManagerDecommissionManager(conf, store1)
+    val decomManager = new BlockManagerDecommissioner(conf, store1)
     decomManager.decommissionRddCacheBlocks()
     assert(master.getLocations(blockId).size === 2)
     assert(master.getLocations(blockId).toSet === Set(store2.blockManagerId,
@@ -1780,7 +1780,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
     assert(master.getLocations(blockIdSmall) === Seq(store1.blockManagerId))
 
-    val decomManager = new BlockManagerDecommissionManager(conf, store1)
+    val decomManager = new BlockManagerDecommissioner(conf, store1)
     decomManager.decommissionRddCacheBlocks()
     // Smaller block offloaded to store2
     assert(master.getLocations(blockIdSmall) === Seq(store2.blockManagerId))
@@ -1806,7 +1806,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     Files.write(bm1.diskBlockManager.getFile(shuffleIndex).toPath(), shuffleIndexBlockContent)
 
     mapOutputTracker.registerShuffle(0, 1)
-    val decomManager = new BlockManagerDecommissionManager(conf, bm1)
+    val decomManager = new BlockManagerDecommissioner(conf, bm1)
     try {
       mapOutputTracker.registerMapOutput(0, 0, MapStatus(bm1.blockManagerId, Array(blockSize), 0))
       assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm1.blockManagerId)

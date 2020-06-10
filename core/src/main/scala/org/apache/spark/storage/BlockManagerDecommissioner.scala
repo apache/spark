@@ -34,9 +34,9 @@ import org.apache.spark.util.ThreadUtils
  * Class to handle block manager decommissioning retries.
  * It creates a Thread to retry offloading all RDD cache and Shuffle blocks
  */
-private[storage] class BlockManagerDecommissionManager(
-    conf: SparkConf,
-    bm: BlockManager) extends Logging {
+private[storage] class BlockManagerDecommissioner(
+  conf: SparkConf,
+  bm: BlockManager) extends Logging {
 
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
