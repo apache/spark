@@ -330,16 +330,23 @@ object RebaseDateTime {
     if (ldt.isAfter(julianEndTs) && ldt.isBefore(gregorianStartTs)) {
       ldt = LocalDateTime.of(gregorianStartDate, ldt.toLocalTime)
     }
-    val cal = new Calendar.Builder()
+    val calBuilder = new Calendar.Builder()
       // `gregory` is a hybrid calendar that supports both
       // the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
       .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
       .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
-      // Local time-line can overlaps, such as at an autumn daylight savings cutover.
-      // This setting selects the original local timestamp mapped to the given `micros`.
-      .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
-      .build()
+    val zoneRules = zoneId.getRules
+    if (zoneRules.getValidOffsets(ldt).size() > 1) {
+      calBuilder
+        .set(
+          Calendar.ZONE_OFFSET,
+          (zoneRules.getStandardOffset(instant).getTotalSeconds * MILLIS_PER_SECOND).toInt)
+        // Local time-line can overlaps, such as at an autumn daylight savings cutover.
+        // This setting selects the original local timestamp mapped to the given `micros`.
+        .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
+    }
+    val cal = calBuilder.build()
     millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
   }
 
