@@ -2864,7 +2864,7 @@ class Analyzer(
       case p => p transformExpressionsUp {
 
         case udf @ ScalaUDF(_, _, inputs, encoders, _, _, _) if encoders.nonEmpty =>
-          val resolvedEncoders = encoders.zipWithIndex.map { case (encOpt, i) =>
+          val boundEncoders = encoders.zipWithIndex.map { case (encOpt, i) =>
             val dataType = inputs(i).dataType
             if (dataType.isInstanceOf[UserDefinedType[_]]) {
               // for UDT, we use `CatalystTypeConverters`
@@ -2882,7 +2882,7 @@ class Analyzer(
               }
             }
           }
-          udf.copy(inputEncoders = resolvedEncoders)
+          udf.copy(inputEncoders = boundEncoders)
       }
     }
   }
