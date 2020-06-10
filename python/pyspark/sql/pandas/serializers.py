@@ -144,7 +144,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         import pyarrow as pa
         from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal
         try:
-            from pandas import CategoricalDtype
+            from pandas import CategoricalDtype
         except ImportError:
             from pandas.api.types import CategoricalDtype
         # Make input conform to [(series1, type1), (series2, type2), ...]
