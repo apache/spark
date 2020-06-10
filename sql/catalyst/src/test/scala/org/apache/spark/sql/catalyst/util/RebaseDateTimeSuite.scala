@@ -410,7 +410,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("JST -> HKT at Asia/Hong_Kong in 1945") {
+  test("SPARK-31959: JST -> HKT at Asia/Hong_Kong in 1945") {
     // The 'Asia/Hong_Kong' time zone switched from 'Japan Standard Time' (JST = UTC+9)
     // to 'Hong Kong Time' (HKT = UTC+8). After Sunday, 18 November, 1945 01:59:59 AM,
     // clocks were moved backward to become Sunday, 18 November, 1945 01:00:00 AM.
