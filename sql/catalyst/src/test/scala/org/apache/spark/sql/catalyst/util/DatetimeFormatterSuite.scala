@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.time.DateTimeException
+
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
@@ -28,11 +30,17 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
   def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit
 
   private def dateFormatter(pattern: String): DateFormatter = {
-    DateFormatter(pattern, UTC, isParsing = true)
+    DateFormatter(
+      pattern,
+      UTC,
+      DateFormatter.defaultLocale,
+      LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      isParsing = true)
   }
 
-  private def timestampFormatter(pattern: String): TimestampFormatter =
-    TimestampFormatter(pattern, UTC, isParsing = true)
+  private def timestampFormatter(pattern: String): TimestampFormatter = {
+    TimestampFormatter(pattern, UTC, LegacyDateFormats.SIMPLE_DATE_FORMAT, isParsing = true)
+  }
 
   protected def useDateFormatter: Boolean
 
@@ -46,12 +54,14 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
   }
 
   private def assertError(pattern: String, datetimeStr: String, expectedMsg: String): Unit = {
-    val exception = if (useDateFormatter) {
-      intercept[SparkUpgradeException](dateFormatter(pattern).parse(datetimeStr))
+    if (useDateFormatter) {
+      // legacy DateFormatter is lenient by default
+      val e = intercept[SparkUpgradeException](dateFormatter(pattern).parse(datetimeStr))
+      assert(e.getCause.getMessage.contains(expectedMsg))
     } else {
-      intercept[SparkUpgradeException](timestampFormatter(pattern).parse(datetimeStr))
+      val e = intercept[DateTimeException](timestampFormatter(pattern).parse(datetimeStr))
+      assert(e.getMessage.contains(expectedMsg))
     }
-    assert(exception.getCause.getMessage.contains(expectedMsg))
   }
 
   test("explicitly forbidden datetime patterns") {
