@@ -181,6 +181,15 @@ class SparkSession private(
   @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
 
   /**
+   * Same as `spark.default.parallelism`, can be isolated across sessions.
+   *
+   * @since 3.1.0
+   */
+  def defaultParallelism: Int = {
+    sessionState.conf.defaultParallelism.getOrElse(sparkContext.defaultParallelism)
+  }
+
+  /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    *
