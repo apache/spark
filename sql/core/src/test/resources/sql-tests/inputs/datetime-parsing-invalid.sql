@@ -15,4 +15,6 @@ select to_timestamp('12-30-365', 'MM-dd-DDD');
 select to_timestamp('2020-01-365', 'yyyy-dd-DDD');
 select to_timestamp('2020-10-350', 'yyyy-MM-DDD');
 select to_timestamp('2020-11-31-366', 'yyyy-MM-dd-DDD');
+-- add a special case to test csv, because the legacy formatter it uses is lenient then Spark should
+-- throw SparkUpgradeException
 select from_csv('2018-366', 'date Date', map('dateFormat', 'yyyy-DDD'))

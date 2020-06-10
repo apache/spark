@@ -31,8 +31,7 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
   def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit
 
   private def dateFormatter(
-      pattern: String,
-      ldf: LegacyDateFormat = FAST_DATE_FORMAT): DateFormatter = {
+      pattern: String, ldf: LegacyDateFormat = FAST_DATE_FORMAT): DateFormatter = {
     DateFormatter(pattern, UTC, DateFormatter.defaultLocale, ldf, isParsing = true)
   }
 
