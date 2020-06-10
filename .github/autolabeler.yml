@@ -36,6 +36,7 @@ BUILD:
   - "!/dev/github_jira_sync.py"
   - "!/dev/merge_spark_pr.py"
   - "!/dev/run-tests-jenkins*"
+  - "!/dev/.rat-excludes"
   - "/build/"
   - "/project/"
   - "/assembly/"
@@ -52,21 +53,18 @@ EXAMPLES:
   - "/bin/run-example*"
 CORE:
   - "/core/"
+  - "!UI.scala"
+  - "!ui/"
   - "/common/kvstore/"
   - "/common/network-common/"
   - "/common/network-shuffle/"
   - "/python/pyspark/*.py"
   - "/python/pyspark/tests/*.py"
-  - "/sbin/*master*.sh"
-  - "/sbin/*slave*.sh"
-  - "/sbin/spark-config.sh"
-  - "/sbin/*daemon*.sh"
-  - "/sbin/*history*.sh"
-  - "/sbin/*mesos*.sh"
 SPARK SUBMIT:
   - "/bin/spark-submit*"
 SPARK SHELL:
   - "/repl/"
+  - "/bin/spark-shell*"
 SQL:
   - "sql/"
   - "/common/unsafe/"
@@ -122,6 +120,7 @@ YARN:
   - "/resource-managers/yarn/"
 MESOS:
   - "/resource-managers/mesos/"
+  - "/sbin/*mesos*.sh"
 KUBERNETES:
   - "/resource-managers/kubernetes/"
 WINDOWS:
@@ -129,3 +128,6 @@ WINDOWS:
   - "/R/pkg/tests/fulltests/test_Windows.R"
 WEB UI:
   - "ui/"
+  - "UI.scala"
+DEPLOY:
+  - "/sbin/"

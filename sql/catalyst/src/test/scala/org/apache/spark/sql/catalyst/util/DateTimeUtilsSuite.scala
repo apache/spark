@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
@@ -386,9 +386,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("date add months") {
-    val input = days(1997, 2, 28, 10, 30)
+    val input = days(1997, 2, 28)
     assert(dateAddMonths(input, 36) === days(2000, 2, 28))
     assert(dateAddMonths(input, -13) === days(1996, 1, 28))
+  }
+
+  test("date add interval with day precision") {
+    val input = days(1997, 2, 28)
+    assert(dateAddInterval(input, new CalendarInterval(36, 0, 0)) === days(2000, 2, 28))
+    assert(dateAddInterval(input, new CalendarInterval(36, 47, 0)) === days(2000, 4, 15))
+    assert(dateAddInterval(input, new CalendarInterval(-13, 0, 0)) === days(1996, 1, 28))
+    intercept[IllegalArgumentException](dateAddInterval(input, new CalendarInterval(36, 47, 1)))
   }
 
   test("timestamp add months") {
@@ -496,8 +504,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       test("2016-03-13 02:00:00", tz, "2016-03-13 10:00:00.0")
       test("2016-03-13 03:00:00", tz, "2016-03-13 10:00:00.0")
       test("2016-11-06 00:59:59", tz, "2016-11-06 07:59:59.0")
-      test("2016-11-06 01:00:00", tz, "2016-11-06 08:00:00.0")
-      test("2016-11-06 01:59:59", tz, "2016-11-06 08:59:59.0")
+      test("2016-11-06 01:00:00", tz, "2016-11-06 09:00:00.0")
+      test("2016-11-06 01:59:59", tz, "2016-11-06 09:59:59.0")
       test("2016-11-06 02:00:00", tz, "2016-11-06 10:00:00.0")
     }
   }
@@ -547,9 +555,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", defaultInputTS2.get)
     testTrunc(DateTimeUtils.TRUNC_TO_MICROSECOND, "2015-03-05T09:32:05.359123", defaultInputTS.get)
     testTrunc(DateTimeUtils.TRUNC_TO_MILLISECOND, "2015-03-05T09:32:05.359", defaultInputTS.get)
-    testTrunc(DateTimeUtils.TRUNC_TO_DECADE, "2010-01-01", defaultInputTS.get)
-    testTrunc(DateTimeUtils.TRUNC_TO_CENTURY, "2001-01-01", defaultInputTS.get)
-    testTrunc(DateTimeUtils.TRUNC_TO_MILLENNIUM, "2001-01-01", defaultInputTS.get)
 
     for (zid <- ALL_TIMEZONES) {
       withDefaultTimeZone(zid) {
@@ -580,9 +585,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS1.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", inputTS2.get, zid)
-        testTrunc(DateTimeUtils.TRUNC_TO_DECADE, "1990-01-01", inputTS5.get, zid)
-        testTrunc(DateTimeUtils.TRUNC_TO_CENTURY, "1901-01-01", inputTS5.get, zid)
-        testTrunc(DateTimeUtils.TRUNC_TO_MILLENNIUM, "2001-01-01", inputTS.get, zid)
       }
     }
   }

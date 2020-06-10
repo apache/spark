@@ -36,6 +36,11 @@ object NestedColumnAliasing {
         if SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
       val exprCandidatesToPrune = projectList ++ child.expressions
       getAliasSubMap(exprCandidatesToPrune, child.producedAttributes.toSeq)
+
+    case plan if SQLConf.get.nestedSchemaPruningEnabled && canPruneOn(plan) =>
+      val exprCandidatesToPrune = plan.expressions
+      getAliasSubMap(exprCandidatesToPrune, plan.producedAttributes.toSeq)
+
     case _ => None
   }
 
@@ -50,6 +55,10 @@ object NestedColumnAliasing {
       Project(
         getNewProjectList(projectList, nestedFieldToAlias),
         replaceWithAliases(child, nestedFieldToAlias, attrToAliases))
+
+    // The operators reaching here was already guarded by `canPruneOn`.
+    case other =>
+      replaceWithAliases(other, nestedFieldToAlias, attrToAliases)
   }
 
   /**
@@ -78,6 +87,15 @@ object NestedColumnAliasing {
       case f: ExtractValue if nestedFieldToAlias.contains(f) =>
         nestedFieldToAlias(f).toAttribute
     }
+  }
+
+  /**
+   * Returns true for those operators that we can prune nested column on it.
+   */
+  private def canPruneOn(plan: LogicalPlan) = plan match {
+    case _: Aggregate => true
+    case _: Expand => true
+    case _ => false
   }
 
   /**

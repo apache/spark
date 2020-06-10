@@ -253,7 +253,7 @@ object FunctionRegistry {
     expression[Log2]("log2"),
     expression[Log]("ln"),
     expression[Remainder]("mod", true),
-    expression[UnaryMinus]("negative"),
+    expression[UnaryMinus]("negative", true),
     expression[Pi]("pi"),
     expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),
@@ -339,7 +339,7 @@ object FunctionRegistry {
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),
-    expression[Lower]("lcase"),
+    expression[Lower]("lcase", true),
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
     expression[Like]("like"),
@@ -350,7 +350,7 @@ object FunctionRegistry {
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
     expression[ParseUrl]("parse_url"),
-    expression[StringLocate]("position"),
+    expression[StringLocate]("position", true),
     expression[FormatString]("printf", true),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
@@ -404,7 +404,7 @@ object FunctionRegistry {
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
-    expression[CurrentTimestamp]("now", true),
+    expression[Now]("now"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ParseToTimestamp]("to_timestamp"),
@@ -423,6 +423,10 @@ object FunctionRegistry {
     expression[MakeTimestamp]("make_timestamp"),
     expression[MakeInterval]("make_interval"),
     expression[DatePart]("date_part"),
+    expression[Extract]("extract"),
+    expression[SecondsToTimestamp]("timestamp_seconds"),
+    expression[MillisToTimestamp]("timestamp_millis"),
+    expression[MicrosToTimestamp]("timestamp_micros"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -487,6 +491,7 @@ object FunctionRegistry {
     expression[InputFileBlockLength]("input_file_block_length"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
+    expression[CurrentCatalog]("current_catalog"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
@@ -654,7 +659,7 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
-      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "")
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "", "")
     (name, (expressionInfo, builder))
   }
 
@@ -674,6 +679,7 @@ object FunctionRegistry {
           df.arguments(),
           df.examples(),
           df.note(),
+          df.group(),
           df.since(),
           df.deprecated())
       } else {

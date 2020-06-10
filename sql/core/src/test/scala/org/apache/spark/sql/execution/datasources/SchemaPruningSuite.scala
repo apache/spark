@@ -23,7 +23,9 @@ import org.scalactic.Equality
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
+import org.apache.spark.sql.catalyst.expressions.Concat
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
@@ -434,6 +436,65 @@ abstract class SchemaPruningSuite
       Row("Jane", "abc") ::
         Row("John", null) ::
         Row(null, null) :: Nil)
+  }
+
+  testSchemaPruning("select nested field in aggregation function of Aggregate") {
+    val query1 = sql("select count(name.first) from contacts group by name.last")
+    checkScan(query1, "struct<name:struct<first:string,last:string>>")
+    checkAnswer(query1, Row(2) :: Row(2) :: Nil)
+
+    val query2 = sql("select count(name.first), sum(pets) from contacts group by id")
+    checkScan(query2, "struct<id:int,name:struct<first:string>,pets:int>")
+    checkAnswer(query2, Row(1, 1) :: Row(1, null) :: Row(1, 3) :: Row(1, null) :: Nil)
+
+    val query3 = sql("select count(name.first), first(name) from contacts group by id")
+    checkScan(query3, "struct<id:int,name:struct<first:string,middle:string,last:string>>")
+    checkAnswer(query3,
+      Row(1, Row("Jane", "X.", "Doe")) ::
+        Row(1, Row("Jim", null, "Jones")) ::
+        Row(1, Row("John", "Y.", "Doe")) ::
+        Row(1, Row("Janet", null, "Jones")) :: Nil)
+
+    val query4 = sql("select count(name.first), sum(pets) from contacts group by name.last")
+    checkScan(query4, "struct<name:struct<first:string,last:string>,pets:int>")
+    checkAnswer(query4, Row(2, null) :: Row(2, 4) :: Nil)
+  }
+
+  testSchemaPruning("select nested field in Expand") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+
+    val query1 = Expand(
+      Seq(
+        Seq($"name.first", $"name.last"),
+        Seq(Concat(Seq($"name.first", $"name.last")),
+          Concat(Seq($"name.last", $"name.first")))
+      ),
+      Seq('a.string, 'b.string),
+      sql("select * from contacts").logicalPlan
+    ).toDF()
+    checkScan(query1, "struct<name:struct<first:string,last:string>>")
+    checkAnswer(query1,
+      Row("Jane", "Doe") ::
+        Row("JaneDoe", "DoeJane") ::
+        Row("John", "Doe") ::
+        Row("JohnDoe", "DoeJohn") ::
+        Row("Jim", "Jones") ::
+        Row("JimJones", "JonesJim") ::
+        Row("Janet", "Jones") ::
+        Row("JanetJones", "JonesJanet") :: Nil)
+
+    val name = StructType.fromDDL("first string, middle string, last string")
+    val query2 = Expand(
+      Seq(Seq($"name", $"name.last")),
+      Seq('a.struct(name), 'b.string),
+      sql("select * from contacts").logicalPlan
+    ).toDF()
+    checkScan(query2, "struct<name:struct<first:string,middle:string,last:string>>")
+    checkAnswer(query2,
+      Row(Row("Jane", "X.", "Doe"), "Doe") ::
+        Row(Row("John", "Y.", "Doe"), "Doe") ::
+        Row(Row("Jim", null, "Jones"), "Jones") ::
+        Row(Row("Janet", null, "Jones"), "Jones") ::Nil)
   }
 
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {

@@ -27,46 +27,35 @@ User-Defined Aggregate Functions (UDAFs) are user-programmable routines that act
 
 A base class for user-defined aggregations, which can be used in Dataset operations to take all of the elements of a group and reduce them to a single value.
 
- * IN - The input type for the aggregation.
- * BUF - The type of the intermediate value of the reduction.
- * OUT - The type of the final output result.
+  ***IN*** - The input type for the aggregation.
 
-<dl>
-  <dt><code><em>bufferEncoder: Encoder[BUF]</em></code></dt>
-  <dd>
+  ***BUF*** - The type of the intermediate value of the reduction.
+
+  ***OUT*** - The type of the final output result.
+
+* **bufferEncoder: Encoder[BUF]**
+
     Specifies the Encoder for the intermediate value type.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>finish(reduction: BUF): OUT</em></code></dt>
-  <dd>
+
+* **finish(reduction: BUF): OUT**
+
     Transform the output of the reduction.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>merge(b1: BUF, b2: BUF): BUF</em></code></dt>
-  <dd>
+
+* **merge(b1: BUF, b2: BUF): BUF**
+
     Merge two intermediate values.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>outputEncoder: Encoder[OUT]</em></code></dt>
-  <dd>
+
+* **outputEncoder: Encoder[OUT]**
+
     Specifies the Encoder for the final output value type.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>reduce(b: BUF, a: IN): BUF</em></code></dt>
-  <dd>
-     Aggregate input value <code>a</code> into current intermediate value. For performance, the function may modify <code>b</code> and return it instead of constructing new object for <code>b</code>.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>zero: BUF</em></code></dt>
-  <dd>
+
+* **reduce(b: BUF, a: IN): BUF**
+
+     Aggregate input value `a` into current intermediate value. For performance, the function may modify `b` and return it instead of constructing new object for `b`.
+
+* **zero: BUF**
+
     The initial value of the intermediate result for this aggregation.
-  </dd>
-</dl>
 
 ### Examples
 
@@ -94,8 +83,45 @@ For example, a user-defined average for untyped DataFrames can look like:
 <div data-lang="java"  markdown="1">
   {% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
 </div>
+<div data-lang="SQL"  markdown="1">
+```sql
+-- Compile and place UDAF MyAverage in a JAR file called `MyAverage.jar` in /tmp.
+CREATE FUNCTION myAverage AS 'MyAverage' USING JAR '/tmp/MyAverage.jar';
+
+SHOW USER FUNCTIONS;
++------------------+
+|          function|
++------------------+
+| default.myAverage|
++------------------+
+
+CREATE TEMPORARY VIEW employees
+USING org.apache.spark.sql.json
+OPTIONS (
+    path "examples/src/main/resources/employees.json"
+);
+
+SELECT * FROM employees;
++-------+------+
+|   name|salary|
++-------+------+
+|Michael|  3000|
+|   Andy|  4500|
+| Justin|  3500|
+|  Berta|  4000|
++-------+------+
+
+SELECT myAverage(salary) as average_salary FROM employees;
++--------------+
+|average_salary|
++--------------+
+|        3750.0|
++--------------+
+```
+</div>
 </div>
 
 ### Related Statements
- * [Scalar User Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
- * [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
+
+* [Scalar User Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
+* [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)

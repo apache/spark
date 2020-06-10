@@ -398,6 +398,21 @@ pyspark_sql = Module(
 )
 
 
+pyspark_resource = Module(
+    name="pyspark-resource",
+    dependencies=[
+        pyspark_core
+    ],
+    source_file_regexes=[
+        "python/pyspark/resource"
+    ],
+    python_test_goals=[
+        # unittests
+        "pyspark.resource.tests.test_resources",
+    ]
+)
+
+
 pyspark_streaming = Module(
     name="pyspark-streaming",
     dependencies=[

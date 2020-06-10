@@ -17,10 +17,12 @@
 
 package org.apache.spark.resource
 
+import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile._
 
@@ -28,15 +30,16 @@ import org.apache.spark.resource.ResourceProfile._
  * A set of Executor resource requests. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
- *
- * This api is currently private until the rest of the pieces are in place and then it
- * will become public.
  */
-private[spark] class ExecutorResourceRequests() extends Serializable {
+@Evolving
+@Since("3.1.0")
+class ExecutorResourceRequests() extends Serializable {
 
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
   def requests: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
+
+  def requestsJMap: JMap[String, ExecutorResourceRequest] = requests.asJava
 
   /**
    * Specify heap memory. The value specified will be converted to MiB.

@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -450,9 +450,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-hh-MM")),
       Seq(Row(null), Row(null), Row(null)))
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-dd-aa")),
-      Seq(Row(null), Row(null), Row(null)))
+    val e = intercept[SparkUpgradeException](df.select(to_date(col("s"), "yyyy-dd-aa")).collect())
+    assert(e.getCause.isInstanceOf[IllegalArgumentException])
+    assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
 
     // february
     val x1 = "2016-02-29"
@@ -474,10 +474,6 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("trunc(t, 'Month')"),
       Seq(Row(Date.valueOf("2015-07-01")), Row(Date.valueOf("2014-12-01"))))
-
-    checkAnswer(
-      df.selectExpr("trunc(t, 'decade')"),
-      Seq(Row(Date.valueOf("2010-01-01")), Row(Date.valueOf("2010-01-01"))))
   }
 
   test("function date_trunc") {
@@ -529,17 +525,15 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("date_trunc('MILLISECOND', t)"),
       Seq(Row(Timestamp.valueOf("2015-07-22 10:01:40.123")),
         Row(Timestamp.valueOf("2014-12-31 05:29:06.123"))))
+  }
 
+  test("unsupported fmt fields for trunc/date_trunc results null") {
+    Seq("INVALID", "decade", "century", "millennium", "whatever", null).foreach { f =>
     checkAnswer(
-      df.selectExpr("date_trunc('DECADE', t)"),
-      Seq(Row(Timestamp.valueOf("2010-01-01 00:00:00")),
-        Row(Timestamp.valueOf("2010-01-01 00:00:00"))))
-
-    Seq("century", "millennium").foreach { level =>
-      checkAnswer(
-        df.selectExpr(s"date_trunc('$level', t)"),
-        Seq(Row(Timestamp.valueOf("2001-01-01 00:00:00")),
-          Row(Timestamp.valueOf("2001-01-01 00:00:00"))))
+      Seq(Date.valueOf("2014-12-31"))
+        .toDF("dt")
+        .selectExpr(s"date_trunc('$f', dt)", "trunc(dt, '$f')"),
+      Row(null, null))
     }
   }
 
@@ -624,8 +618,16 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(secs(ts4.getTime)), Row(null), Row(secs(ts3.getTime)), Row(null)))
 
         // invalid format
-        checkAnswer(df1.selectExpr(s"unix_timestamp(x, 'yyyy-MM-dd aa:HH:ss')"), Seq(
-          Row(null), Row(null), Row(null), Row(null)))
+        val invalid = df1.selectExpr(s"unix_timestamp(x, 'yyyy-MM-dd aa:HH:ss')")
+        if (legacyParserPolicy == "legacy") {
+          checkAnswer(invalid,
+            Seq(Row(null), Row(null), Row(null), Row(null)))
+        } else {
+          val e = intercept[SparkUpgradeException](invalid.collect())
+          assert(e.getCause.isInstanceOf[IllegalArgumentException])
+          assert(
+            e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
+        }
 
         // february
         val y1 = "2016-02-29"
@@ -687,8 +689,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(secs(ts5.getTime)), Row(null)))
 
         // invalid format
-        checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')"), Seq(
-          Row(null), Row(null), Row(null), Row(null)))
+        val invalid = df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')")
+        val e = intercept[IllegalArgumentException](invalid.collect())
+        assert(e.getMessage.contains('b'))
       }
     }
   }
