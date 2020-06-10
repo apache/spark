@@ -227,30 +227,27 @@ trait PredicateHelper extends Logging {
           // For each side, there is no need to expand predicates of the same references.
           // So here we can aggregate predicates of the same references as one single predicate,
           // for reducing the size of pushed down predicates and corresponding codegen.
-          val right = aggregateExpressionsOfSameQualifiers(resultStack.pop())
-          val left = aggregateExpressionsOfSameQualifiers(resultStack.pop())
+          val right = groupExpressionsByQualifier(resultStack.pop())
+          val left = groupExpressionsByQualifier(resultStack.pop())
           // Stop the loop whenever the result exceeds the `maxCnfNodeCount`
           if (left.size * right.size > maxCnfNodeCount) {
-            Seq.empty
+            return Seq.empty
           } else {
             for {x <- left; y <- right} yield Or(x, y)
           }
         case other => other :: Nil
       }
-      if (cnf.isEmpty) {
-        return Seq.empty
-      }
-      if (resultStack.length != 1) {
-        logWarning("The length of CNF conversion result stack is supposed to be 1. There might " +
-          "be something wrong with CNF conversion.")
-        return Seq.empty
-      }
       resultStack.push(cnf)
+    }
+    if (resultStack.length != 1) {
+      logWarning("The length of CNF conversion result stack is supposed to be 1. There might " +
+        "be something wrong with CNF conversion.")
+      return Seq.empty
     }
     resultStack.top
   }
 
-  private def aggregateExpressionsOfSameQualifiers(
+  private def groupExpressionsByQualifier(
     expressions: Seq[Expression]): Seq[Expression] = {
     expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq
   }
