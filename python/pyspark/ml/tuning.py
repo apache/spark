@@ -27,7 +27,8 @@ from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams
-from pyspark.sql.functions import col, lit, rand
+from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
+from pyspark.sql.types import BooleanType
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
            'TrainValidationSplitModel']
@@ -203,9 +204,8 @@ class _CrossValidatorParams(_ValidatorParams):
     foldCol = Param(Params._dummy(), "foldCol", "Param for the column name of user " +
                     "specified fold number. Once this is specified, :py:class:`CrossValidator` " +
                     "won't do random k-fold split. Note that this column should be integer type " +
-                    "with range [0, numFolds) and Spark will also mod the user-specified " +
-                    "fold values with the value of :py:attr:`numFolds` param.",
-                    typeConverter=TypeConverters.toString)
+                    "with range [0, numFolds) and Spark will throw exception on out-of-range " +
+                    "fold numbers.", typeConverter=TypeConverters.toString)
 
     @since("1.4.0")
     def getNumFolds(self):
@@ -399,10 +399,22 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
                 datasets.append((train, validation))
         else:
             # Use user-specified fold numbers.
-            dfWithMod = dataset.withColumn(foldCol, col(foldCol) % lit(nFolds))
+            def checker(foldNum):
+                if foldNum < 0 or foldNum >= nFolds:
+                    raise ValueError(
+                        "Fold number must be in range [0, %s), but got %s." % (nFolds, foldNum))
+                return True
+
+            checker_udf = UserDefinedFunction(checker, BooleanType())
             for i in range(nFolds):
-                datasets.append((dfWithMod.filter(col(foldCol) != lit(i)),
-                                dfWithMod.filter(col(foldCol) == lit(i))))
+                training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
+                validation = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i)))
+                if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
+                    raise ValueError("The training data at fold %s is empty." % i)
+                if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
+                    raise ValueError("The validation data at fold %s is empty." % i)
+                datasets.append((training, validation))
+
         return datasets
 
     @since("1.4.0")
