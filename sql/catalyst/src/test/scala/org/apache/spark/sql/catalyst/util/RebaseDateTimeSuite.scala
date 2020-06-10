@@ -428,6 +428,11 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(toTsStr(rebasedEarlierMicros) === expected)
       assert(toTsStr(rebasedLaterMicros) === expected)
       assert(rebasedEarlierMicros + MICROS_PER_HOUR === rebasedLaterMicros)
+      // Check optimized rebasing
+      val optRebasedEarlierMicros = rebaseGregorianToJulianMicros(earlierMicros)
+      assert(optRebasedEarlierMicros === rebasedEarlierMicros)
+      val optRebasedLaterMicros = rebaseGregorianToJulianMicros(laterMicros)
+      assert(optRebasedLaterMicros === rebasedLaterMicros)
     }
   }
 }
