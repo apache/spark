@@ -326,27 +326,25 @@ object RebaseDateTime {
    */
   private[sql] def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
     val instant = microsToInstant(micros)
-    var ldt = instant.atZone(zoneId).toLocalDateTime
+    val zonedDateTime = instant.atZone(zoneId)
+    var ldt = zonedDateTime.toLocalDateTime
     if (ldt.isAfter(julianEndTs) && ldt.isBefore(gregorianStartTs)) {
       ldt = LocalDateTime.of(gregorianStartDate, ldt.toLocalTime)
     }
-    val calBuilder = new Calendar.Builder()
-      // `gregory` is a hybrid calendar that supports both
-      // the Julian and Gregorian calendar systems
+    val cal = new Calendar.Builder()
+      // `gregory` is a hybrid calendar that supports both the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
       .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
       .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
-    val zoneRules = zoneId.getRules
-    if (zoneRules.getValidOffsets(ldt).size() > 1) {
-      calBuilder
-        .set(
-          Calendar.ZONE_OFFSET,
-          (zoneRules.getStandardOffset(instant).getTotalSeconds * MILLIS_PER_SECOND).toInt)
-        // Local time-line can overlaps, such as at an autumn daylight savings cutover.
-        // This setting selects the original local timestamp mapped to the given `micros`.
-        .set(Calendar.DST_OFFSET, zoneId.getRules.getDaylightSavings(instant).toMillis.toInt)
+      .build()
+    val trans = zoneId.getRules.getTransition(ldt)
+    if (trans != null && trans.isOverlap) {
+      val cloned = cal.clone().asInstanceOf[Calendar]
+      val shift = if (trans.getOffsetBefore == zonedDateTime.getOffset) -1 else 1
+      cloned.add(Calendar.DAY_OF_MONTH, shift)
+      cal.set(Calendar.ZONE_OFFSET, cloned.get(Calendar.ZONE_OFFSET))
+      cal.set(Calendar.DST_OFFSET, cloned.get(Calendar.DST_OFFSET))
     }
-    val cal = calBuilder.build()
     millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
   }
 
