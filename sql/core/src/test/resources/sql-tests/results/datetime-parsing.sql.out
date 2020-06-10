@@ -91,11 +91,11 @@ struct<to_timestamp(2020-30-365, yyyy-dd-DDD):timestamp>
 
 
 -- !query
-select to_timestamp('2020-11-350', 'yyyy-MM-DDD')
+select to_timestamp('2020-12-350', 'yyyy-MM-DDD')
 -- !query schema
-struct<to_timestamp(2020-11-350, yyyy-MM-DDD):timestamp>
+struct<to_timestamp(2020-12-350, yyyy-MM-DDD):timestamp>
 -- !query output
-NULL
+2020-12-15 00:00:00
 
 
 -- !query
