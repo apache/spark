@@ -252,10 +252,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
       checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
     }
-
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "false") {
-      assert(!cast(cast(1.toDouble, TimestampType), DoubleType).resolved)
-    }
   }
 
   test("cast from string") {
@@ -334,20 +330,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
         ByteType), TimestampType), LongType), StringType), ShortType),
         5.toShort)
-    }
-
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "false") {
-      assert(!cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
-        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType).resolved)
-
-      checkEvaluation(
-        cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
-          DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-        null)
-
-      assert(!cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
-        ByteType), TimestampType), LongType), StringType), ShortType).resolved)
-
     }
 
     checkEvaluation(cast("23", DoubleType), 23d)
@@ -434,20 +416,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
       checkEvaluation(cast(Float.NaN, TimestampType), null)
       checkEvaluation(cast(1.0f / 0.0f, TimestampType), null)
-    }
-
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "false") {
-      assert(!cast(cast(tss, ShortType), TimestampType).resolved)
-      assert(!cast(cast(tss, IntegerType), TimestampType).resolved)
-      assert(!cast(cast(tss, LongType), TimestampType).resolved)
-      assert(!cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType).resolved)
-      assert(!cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType).resolved)
-      assert(!cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT).resolved)
-      assert(!cast(cast(0.000001, TimestampType), DoubleType).resolved)
-      assert(!cast(Double.NaN, TimestampType).resolved)
-      assert(!cast(1.0 / 0.0, TimestampType).resolved)
-      assert(!cast(Float.NaN, TimestampType).resolved)
-      assert(!cast(1.0f / 0.0f, TimestampType).resolved)
     }
   }
 
@@ -1080,11 +1048,6 @@ class CastSuite extends CastSuiteBase {
     withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
       checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
       checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
-    }
-
-    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "false") {
-      assert(!cast(cast(1000, TimestampType), LongType).resolved)
-      assert(!cast(cast(-1200, TimestampType), LongType).resolved)
     }
 
     checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
