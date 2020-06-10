@@ -599,6 +599,12 @@ private[spark] class AppStatusListener(
     liveUpdate(task, now)
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
+      if (event.taskInfo.speculative) {
+        stage.speculationStageSummary.numActiveTasks += 1
+        stage.speculationStageSummary.numTasks += 1
+      }
+      maybeUpdate(stage.speculationStageSummary, now)
+
       stage.activeTasks += 1
       stage.firstLaunchTime = math.min(stage.firstLaunchTime, event.taskInfo.launchTime)
 
@@ -744,6 +750,24 @@ private[spark] class AppStatusListener(
         update(esummary, now)
       } else {
         maybeUpdate(esummary, now)
+      }
+
+      val speculationStageSummary = stage.speculationStageSummary
+      if (event.taskInfo.speculative) {
+        speculationStageSummary.numActiveTasks -= 1
+        speculationStageSummary.numCompletedTasks += completedDelta
+        speculationStageSummary.numFailedTasks += failedDelta
+        speculationStageSummary.numKilledTasks += killedDelta
+      }
+      speculationStageSummary.killedTasksSummary = killedTaskSummaryForSpeculationStageSummary(
+        event.reason,
+        speculationStageSummary.killedTasksSummary,
+        event.taskInfo.speculative)
+
+      if (stage.activeTasks == 0) {
+        update(stage.speculationStageSummary, now)
+      } else {
+        maybeUpdate(stage.speculationStageSummary, now)
       }
 
       if (!stage.cleaning && stage.savedTasks.get() > maxTasksPerStage) {
@@ -1203,6 +1227,24 @@ private[spark] class AppStatusListener(
       case denied: TaskCommitDenied =>
         val reason = denied.toErrorString
         oldSummary.updated(reason, oldSummary.getOrElse(reason, 0) + 1)
+      case _ =>
+        oldSummary
+    }
+  }
+
+  private def killedTaskSummaryForSpeculationStageSummary(
+      reason: TaskEndReason,
+      oldSummary: Map[String, Int],
+      isSpeculative: Boolean): Map[String, Int] = {
+    reason match {
+      case k: TaskKilled if k.reason.contains("another attempt succeeded") =>
+        if (isSpeculative) {
+          oldSummary.updated("original attempt succeeded",
+            oldSummary.getOrElse("original attempt succeeded", 0) + 1)
+        } else {
+          oldSummary.updated("speculated attempt succeeded",
+            oldSummary.getOrElse("speculated attempt succeeded", 0) + 1)
+        }
       case _ =>
         oldSummary
     }

@@ -19,7 +19,10 @@ package org.apache.spark.status
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.{TaskInfo, TaskLocality}
+import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
+import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.scheduler.{SparkListenerStageSubmitted, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
+import org.apache.spark.status.api.v1.SpeculationStageSummary
 import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.kvstore._
 
@@ -136,6 +139,54 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
+  test("speculation summary") {
+    val store = new InMemoryStore()
+    store.write(newSpeculationSummaryData(stageId, attemptId))
+
+    val appStore = new AppStatusStore(store)
+    val info = appStore.speculationSummary(stageId, attemptId)
+    assert(info.isDefined)
+    info.foreach { metric =>
+      assert(metric.numTasks == 10)
+      assert(metric.numActiveTasks == 2)
+      assert(metric.numCompletedTasks == 5)
+      assert(metric.numFailedTasks == 1)
+      assert(metric.numKilledTasks == 2)
+      assert(metric.killedTasksSummary == Map("original attempt succeeded" -> 1,
+        "speculation attempt succeeded" -> 1
+      ))
+    }
+  }
+
+  test("speculation summary without any task completed") {
+    val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
+    val statusStore = AppStatusStore.createLiveStore(conf)
+
+    val listener = statusStore.listener.get
+
+    // Simulate a stage in job progress listener
+    val stageInfo = new StageInfo(stageId = 0, attemptId = 0, name = "dummy", numTasks = 1,
+      rddInfos = Seq.empty, parentIds = Seq.empty, details = "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    (1 to 2).foreach {
+      taskId =>
+        val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY,
+          false)
+        listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
+        listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
+    }
+
+    assert(statusStore.speculationSummary(0, 0).isDefined)
+  }
+
+  test("speculation summary for unknown stages" +
+      " like SKIPPED stages should not fail with NoSuchElementException") {
+    val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
+    val statusStore = AppStatusStore.createLiveStore(conf)
+
+    assert(statusStore.speculationSummary(0, 0).isEmpty)
+  }
+
   private def compareQuantiles(count: Int, quantiles: Array[Double]): Unit = {
     val store = new InMemoryStore()
     val values = (0 until count).map { i =>
@@ -204,4 +255,15 @@ class AppStatusStoreSuite extends SparkFunSuite {
     taskMetrics.shuffleWriteMetrics.incRecordsWritten(i)
     taskMetrics
   }
+
+  private def newSpeculationSummaryData(
+      stageId: Int,
+      stageAttemptId: Int): SpeculationStageSummaryWrapper = {
+    val speculationStageSummary = new SpeculationStageSummary(10, 2, 5, 1, 2,
+      Map("original attempt succeeded" -> 1,
+        "speculation attempt succeeded" -> 1
+      ))
+    new SpeculationStageSummaryWrapper(stageId, stageAttemptId, speculationStageSummary)
+  }
+
 }
