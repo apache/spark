@@ -27,19 +27,18 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{date, UTC}
 
 trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers {
   import DateTimeFormatterHelper._
+  import LegacyDateFormats._
   def checkFormatterCreation(pattern: String, isParsing: Boolean): Unit
 
-  private def dateFormatter(pattern: String): DateFormatter = {
-    DateFormatter(
-      pattern,
-      UTC,
-      DateFormatter.defaultLocale,
-      LegacyDateFormats.FAST_DATE_FORMAT,
-      isParsing = true)
+  private def dateFormatter(
+      pattern: String,
+      ldf: LegacyDateFormat = FAST_DATE_FORMAT): DateFormatter = {
+    DateFormatter(pattern, UTC, DateFormatter.defaultLocale, ldf, isParsing = true)
   }
 
-  private def timestampFormatter(pattern: String): TimestampFormatter = {
-    TimestampFormatter(pattern, UTC, LegacyDateFormats.SIMPLE_DATE_FORMAT, isParsing = true)
+  private def timestampFormatter(
+      pattern: String, ldf: LegacyDateFormat = SIMPLE_DATE_FORMAT): TimestampFormatter = {
+    TimestampFormatter(pattern, UTC, legacyFormat = ldf, isParsing = true)
   }
 
   protected def useDateFormatter: Boolean
@@ -55,12 +54,22 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
 
   private def assertError(pattern: String, datetimeStr: String, expectedMsg: String): Unit = {
     if (useDateFormatter) {
-      // legacy DateFormatter is lenient by default
-      val e = intercept[SparkUpgradeException](dateFormatter(pattern).parse(datetimeStr))
-      assert(e.getCause.getMessage.contains(expectedMsg))
+      LegacyDateFormats.values.foreach { ldf =>
+        // The legacy DateFormatter is always lenient by default
+        val e = intercept[SparkUpgradeException](dateFormatter(pattern, ldf).parse(datetimeStr))
+        assert(e.getCause.getMessage.contains(expectedMsg))
+      }
     } else {
+      // In strict mode, the legacy TimestampFormatter fails too
       val e = intercept[DateTimeException](timestampFormatter(pattern).parse(datetimeStr))
       assert(e.getMessage.contains(expectedMsg))
+      // In lenient mode, the legacy TimestampFormatter does not fail
+      Seq(FAST_DATE_FORMAT, LENIENT_SIMPLE_DATE_FORMAT).foreach { ldf =>
+        val e = intercept[SparkUpgradeException] {
+          timestampFormatter(pattern, ldf).parse(datetimeStr)
+        }
+        assert(e.getCause.getMessage.contains(expectedMsg))
+      }
     }
   }
 
