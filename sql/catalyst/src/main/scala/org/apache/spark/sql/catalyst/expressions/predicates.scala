@@ -204,13 +204,12 @@ trait PredicateHelper extends Logging {
   /**
    * Convert an expression into conjunctive normal form.
    * Definition and algorithm: https://en.wikipedia.org/wiki/Conjunctive_normal_form
-   * CNF can explode exponentially in the size of the input expression when converting Or clauses.
-   * Use a configuration MAX_CNF_NODE_COUNT to prevent such cases.
+   * CNF can explode exponentially in the size of the input expression when converting [[Or]]
+   * clauses. Use a configuration [[SQLConf.MAX_CNF_NODE_COUNT]] to prevent such cases.
    *
-   * @param condition to be conversed into CNF.
-   * @return If the number of expressions exceeds threshold on converting Or, return Seq.empty.
-   *         If the conversion repeatedly expands nondeterministic expressions, return Seq.empty.
-   *         Otherwise, return the converted result as sequence of disjunctive expressions.
+   * @param condition to be converted into CNF.
+   * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
+   *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
    */
   def conjunctiveNormalForm(condition: Expression): Seq[Expression] = {
     val postOrderNodes = postOrderTraversal(condition)
@@ -220,20 +219,23 @@ trait PredicateHelper extends Logging {
     while (postOrderNodes.nonEmpty) {
       val cnf = postOrderNodes.pop() match {
         case _: And =>
-          val right: Seq[Expression] = resultStack.pop()
-          val left: Seq[Expression] = resultStack.pop()
+          val right = resultStack.pop()
+          val left = resultStack.pop()
           left ++ right
         case _: Or =>
           // For each side, there is no need to expand predicates of the same references.
-          // So here we can aggregate predicates of the same references as one single predicate,
+          // So here we can aggregate predicates of the same qualifier as one single predicate,
           // for reducing the size of pushed down predicates and corresponding codegen.
           val right = groupExpressionsByQualifier(resultStack.pop())
           val left = groupExpressionsByQualifier(resultStack.pop())
           // Stop the loop whenever the result exceeds the `maxCnfNodeCount`
           if (left.size * right.size > maxCnfNodeCount) {
+            logInfo(s"As the result size exceeds the threshold $maxCnfNodeCount. " +
+              "The CNF conversion is skipped and returning Seq.empty now. To avoid this, you can " +
+              s"raise the limit ${SQLConf.MAX_CNF_NODE_COUNT.key}.")
             return Seq.empty
           } else {
-            for {x <- left; y <- right} yield Or(x, y)
+            for { x <- left; y <- right } yield Or(x, y)
           }
         case other => other :: Nil
       }
@@ -247,8 +249,7 @@ trait PredicateHelper extends Logging {
     resultStack.top
   }
 
-  private def groupExpressionsByQualifier(
-    expressions: Seq[Expression]): Seq[Expression] = {
+  private def groupExpressionsByQualifier(expressions: Seq[Expression]): Seq[Expression] = {
     expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq
   }
 

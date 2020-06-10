@@ -58,7 +58,7 @@ class FilterPushdownSuite extends PlanTest {
 
   val testRelation1 = LocalRelation(attrD)
 
-  val simpleDisjuncitvePredicate =
+  val simpleDisjunctivePredicate =
     ("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)
   val expectedCNFPredicatePushDownResult = {
     val left = testRelation.where(('a > 3 || 'a > 1)).subquery('x)
@@ -1251,10 +1251,7 @@ class FilterPushdownSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
-    val originalQuery = {
-      x.join(y)
-        .where(("x.b".attr === "y.b".attr) && (simpleDisjuncitvePredicate))
-    }
+    val originalQuery = x.join(y).where(("x.b".attr === "y.b".attr) && (simpleDisjunctivePredicate))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, expectedCNFPredicatePushDownResult)
@@ -1264,9 +1261,8 @@ class FilterPushdownSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
-    val originalQuery = {
-      x.join(y, condition = Some(("x.b".attr === "y.b".attr) && (simpleDisjuncitvePredicate)))
-    }
+    val originalQuery =
+      x.join(y, condition = Some(("x.b".attr === "y.b".attr) && (simpleDisjunctivePredicate)))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, expectedCNFPredicatePushDownResult)
@@ -1296,11 +1292,10 @@ class FilterPushdownSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
-    val originalQuery = {
+    val originalQuery =
       x.join(y, condition = Some(("x.b".attr === "y.b".attr)
         && Not(("x.a".attr > 3)
         && ("x.a".attr < 2 || ("y.a".attr > 13)) || ("x.a".attr > 1) && ("y.a".attr > 11))))
-    }
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation.where('a <= 3 || 'a >= 2).subquery('x)
@@ -1317,10 +1312,9 @@ class FilterPushdownSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
-    val originalQuery = {
+    val originalQuery =
       x.join(y, joinType = LeftOuter, condition = Some(("x.b".attr === "y.b".attr)
-        && simpleDisjuncitvePredicate))
-    }
+        && simpleDisjunctivePredicate))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation.subquery('x)
@@ -1337,10 +1331,9 @@ class FilterPushdownSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
-    val originalQuery = {
+    val originalQuery =
       x.join(y, joinType = RightOuter, condition = Some(("x.b".attr === "y.b".attr)
-        && simpleDisjuncitvePredicate))
-    }
+        && simpleDisjunctivePredicate))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation.where('a > 3 || 'a > 1).subquery('x)
@@ -1357,10 +1350,9 @@ class FilterPushdownSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
-    val originalQuery = {
+    val originalQuery =
       x.join(y, condition = Some(("x.b".attr === "y.b".attr) && ((("x.a".attr > 3) &&
         ("x.a".attr < 13) && ("y.c".attr <= 5)) || (("y.a".attr > 2) && ("y.c".attr < 1)))))
-    }
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation.subquery('x)
@@ -1376,11 +1368,10 @@ class FilterPushdownSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
-    val originalQuery = {
+    val originalQuery =
       x.join(y, condition = Some(("x.b".attr === "y.b".attr)
         && ((("x.a".attr > 3) && ("x.a".attr < 13) && ("y.c".attr <= 5))
         || (("y.a".attr > 2) && ("y.c".attr < 1)))))
-    }
 
     Seq(0, 10).foreach { count =>
       withSQLConf(SQLConf.MAX_CNF_NODE_COUNT.key -> count.toString) {
