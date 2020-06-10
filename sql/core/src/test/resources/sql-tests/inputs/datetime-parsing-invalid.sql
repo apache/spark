@@ -3,7 +3,8 @@
 -- parsing invalid values with pattern 'D'
 select to_timestamp('366', 'D');
 select to_timestamp('9', 'DD');
-select to_timestamp('100', 'DD');
+-- in java 8 this case is invalid, but valid in java 11, disabled for jenkins
+-- select to_timestamp('100', 'DD');
 select to_timestamp('366', 'DD');
 select to_timestamp('9', 'DDD');
 select to_timestamp('99', 'DDD');
