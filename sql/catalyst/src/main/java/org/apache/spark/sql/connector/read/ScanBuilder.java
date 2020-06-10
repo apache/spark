@@ -23,6 +23,8 @@ import org.apache.spark.annotation.Evolving;
  * An interface for building the {@link Scan}. Implementations can mixin SupportsPushDownXYZ
  * interfaces to do operator pushdown, and keep the operator pushdown result in the returned
  * {@link Scan}.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface ScanBuilder {

@@ -192,6 +192,11 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.next())
         assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.00"))
       }
+      testExecuteStatementWithProtocolVersion(version,
+        "SELECT cast(null as decimal) ") { rs =>
+        assert(rs.next())
+        assert(rs.getBigDecimal(1) === null)
+      }
     }
 
     test(s"$version get string type") {

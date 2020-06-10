@@ -19,15 +19,17 @@ package org.apache.spark.sql.connector.expressions;
 
 import java.util.Arrays;
 
+import org.apache.spark.annotation.Evolving;
 import scala.collection.JavaConverters;
 
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.types.DataType;
 
 /**
  * Helper methods to create logical transforms to pass into Spark.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public class Expressions {
   private Expressions() {
   }

@@ -21,11 +21,11 @@ import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
 
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -56,16 +56,18 @@ class JacksonParser(
 
   private val factory = options.buildJsonFactory()
 
-  private val timestampFormatter = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
-  private val dateFormatter = DateFormatter(
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+  private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
@@ -230,7 +232,15 @@ class JacksonParser(
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          timestampFormatter.parse(parser.getText)
+          try {
+            timestampFormatter.parse(parser.getText)
+          } catch {
+            case NonFatal(e) =>
+              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility.
+              val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(parser.getText))
+              DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
+          }
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L
@@ -239,7 +249,23 @@ class JacksonParser(
     case DateType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          dateFormatter.parse(parser.getText)
+          try {
+            dateFormatter.parse(parser.getText)
+          } catch {
+            case NonFatal(e) =>
+              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility.
+              val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(parser.getText))
+              DateTimeUtils.stringToDate(str, options.zoneId).getOrElse {
+                // In Spark 1.5.0, we store the data as number of days since epoch in string.
+                // So, we just convert it to Int.
+                try {
+                  RebaseDateTime.rebaseJulianToGregorianDays(parser.getText.toInt)
+                } catch {
+                  case _: NumberFormatException => throw e
+                }
+              }.asInstanceOf[Integer]
+          }
       }
 
     case BinaryType =>
@@ -359,6 +385,7 @@ class JacksonParser(
           try {
             row.update(index, fieldConverters(index).apply(parser))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(e) =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
@@ -430,6 +457,7 @@ class JacksonParser(
         }
       }
     } catch {
+      case e: SparkUpgradeException => throw e
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by

@@ -241,6 +241,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
           assert(nextProgress.numInputRows === 0)
           assert(nextProgress.stateOperators.head.numRowsTotal === 2)
           assert(nextProgress.stateOperators.head.numRowsUpdated === 0)
+          assert(nextProgress.sink.numOutputRows === 0)
         }
       } finally {
         query.stop()

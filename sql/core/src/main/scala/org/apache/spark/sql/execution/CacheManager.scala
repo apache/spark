@@ -26,6 +26,7 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
@@ -45,7 +46,7 @@ case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
  *
  * Internal to Spark SQL.
  */
-class CacheManager extends Logging {
+class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /**
    * Maintains the list of cached plans as an immutable sequence.  Any updates to the list
@@ -79,20 +80,16 @@ class CacheManager extends Logging {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
-      val sparkSession = query.sparkSession
-      val qe = sparkSession.sessionState.executePlan(planToCache)
-      val originalValue = sparkSession.sessionState.conf.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
-      val inMemoryRelation = try {
-        // Avoiding changing the output partitioning, here disable AQE.
-        sparkSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
+      // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
+      val sessionWithAqeOff = getOrCloneSessionWithAqeOff(query.sparkSession)
+      val inMemoryRelation = sessionWithAqeOff.withActive {
+        val qe = sessionWithAqeOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
-          sparkSession.sessionState.conf.useCompression,
-          sparkSession.sessionState.conf.columnBatchSize, storageLevel,
+          sessionWithAqeOff.sessionState.conf.useCompression,
+          sessionWithAqeOff.sessionState.conf.columnBatchSize, storageLevel,
           qe.executedPlan,
           tableName,
           optimizedPlan = qe.optimizedPlan)
-      } finally {
-        sparkSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, originalValue)
       }
 
       this.synchronized {
@@ -194,10 +191,14 @@ class CacheManager extends Logging {
     }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      val qe = spark.sessionState.executePlan(cd.plan)
-      val newCache = InMemoryRelation(
-        cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
-        optimizedPlan = qe.optimizedPlan)
+      // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
+      val sessionWithAqeOff = getOrCloneSessionWithAqeOff(spark)
+      val newCache = sessionWithAqeOff.withActive {
+        val qe = sessionWithAqeOff.sessionState.executePlan(cd.plan)
+        InMemoryRelation(
+          cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
+          optimizedPlan = qe.optimizedPlan)
+      }
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       this.synchronized {
         if (lookupCachedData(recomputedPlan.plan).nonEmpty) {

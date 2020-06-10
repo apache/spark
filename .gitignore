@@ -72,7 +72,6 @@ scalastyle-on-compile.generated.xml
 scalastyle-output.xml
 scalastyle.txt
 spark-*-bin-*.tgz
-spark-resources/
 spark-tests.log
 src_managed/
 streaming-tests.log

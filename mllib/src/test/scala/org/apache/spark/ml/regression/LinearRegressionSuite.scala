@@ -660,6 +660,26 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
     testPredictionModelSinglePrediction(model, datasetWithDenseFeature)
   }
 
+  test("LinearRegression on blocks") {
+    for (dataset <- Seq(datasetWithDenseFeature, datasetWithStrongNoise,
+      datasetWithDenseFeatureWithoutIntercept, datasetWithSparseFeature, datasetWithWeight,
+      datasetWithWeightConstantLabel, datasetWithWeightZeroLabel, datasetWithOutlier);
+         fitIntercept <- Seq(true, false);
+         loss <- Seq("squaredError", "huber")) {
+      val lir = new LinearRegression()
+        .setFitIntercept(fitIntercept)
+        .setLoss(loss)
+        .setMaxIter(3)
+      val model = lir.fit(dataset)
+      Seq(4, 16, 64).foreach { blockSize =>
+        val model2 = lir.setBlockSize(blockSize).fit(dataset)
+        assert(model.intercept ~== model2.intercept relTol 1e-9)
+        assert(model.coefficients ~== model2.coefficients relTol 1e-9)
+        assert(model.scale ~== model2.scale relTol 1e-9)
+      }
+    }
+  }
+
   test("linear regression model with constant label") {
     /*
        R code:

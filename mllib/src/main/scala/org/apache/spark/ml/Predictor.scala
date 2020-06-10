@@ -17,8 +17,9 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -71,7 +72,7 @@ private[ml] trait PredictorParams extends Params
     val w = this match {
       case p: HasWeightCol =>
         if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
-          col($(p.weightCol)).cast(DoubleType)
+          checkNonNegativeWeight((col($(p.weightCol)).cast(DoubleType)))
         } else {
           lit(1.0)
         }
@@ -99,7 +100,6 @@ private[ml] trait PredictorParams extends Params
 }
 
 /**
- * :: DeveloperApi ::
  * Abstraction for prediction problems (regression and classification). It accepts all NumericType
  * labels and will automatically cast it to DoubleType in `fit()`. If this predictor supports
  * weights, it accepts all NumericType weights, which will be automatically casted to DoubleType
@@ -112,7 +112,6 @@ private[ml] trait PredictorParams extends Params
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
  *            parameter to specify the concrete type for the corresponding model.
  */
-@DeveloperApi
 abstract class Predictor[
     FeaturesType,
     Learner <: Predictor[FeaturesType, Learner, M],
@@ -190,7 +189,6 @@ abstract class Predictor[
 }
 
 /**
- * :: DeveloperApi ::
  * Abstraction for a model for prediction tasks (regression and classification).
  *
  * @tparam FeaturesType  Type of features.
@@ -198,7 +196,6 @@ abstract class Predictor[
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
  *            parameter to specify the concrete type for the corresponding model.
  */
-@DeveloperApi
 abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
   extends Model[M] with PredictorParams {
 

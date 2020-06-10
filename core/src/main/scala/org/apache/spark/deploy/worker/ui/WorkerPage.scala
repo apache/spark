@@ -79,9 +79,9 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     // This is until we integrate the notion of drivers and applications in the UI.
 
     val content =
-      <div class="row-fluid"> <!-- Worker Details -->
-        <div class="span12">
-          <ul class="unstyled">
+      <div class="row"> <!-- Worker Details -->
+        <div class="col-12">
+          <ul class="list-unstyled">
             <li><strong>ID:</strong> {workerState.workerId}</li>
             <li><strong>
               Master URL:</strong> {workerState.masterUrl}
@@ -95,8 +95,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
           <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
         </div>
       </div>
-      <div class="row-fluid"> <!-- Executors and Drivers -->
-        <div class="span12">
+      <div class="row"> <!-- Executors and Drivers -->
+        <div class="col-12">
           <span class="collapse-aggregated-runningExecutors collapse-table"
               onClick="collapseTable('collapse-aggregated-runningExecutors',
               'aggregated-runningExecutors')">
@@ -174,7 +174,7 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       </td>
       <td>{formatResourcesAddresses(executor.resources)}</td>
       <td>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           <li><strong>ID:</strong> {executor.appId}</li>
           <li><strong>Name:</strong>
           {

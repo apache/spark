@@ -32,15 +32,34 @@ import org.apache.avro.util.Utf8
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
  */
-class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
+class AvroDeserializer(
+    rootAvroType: Schema,
+    rootCatalystType: DataType,
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value) {
+
+  def this(rootAvroType: Schema, rootCatalystType: DataType) {
+    this(rootAvroType, rootCatalystType,
+      LegacyBehaviorPolicy.withName(
+        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ)))
+  }
+
   private lazy val decimalConversions = new DecimalConversion()
+
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
+    datetimeRebaseMode, "Avro")
+
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+    datetimeRebaseMode, "Avro")
 
   private val converter: Any => Any = rootCatalystType match {
     // A shortcut for empty schema.
@@ -89,20 +108,21 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
       case (INT, DateType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, value.asInstanceOf[Int])
+        updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
 
       case (LONG, LongType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
 
       case (LONG, TimestampType) => avroType.getLogicalType match {
-        case _: TimestampMillis => (updater, ordinal, value) =>
-          updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+        // For backward compatibility, if the Avro type is Long and it is not logical type
+        // (the `null` case), the value is processed as timestamp type with millisecond precision.
+        case null | _: TimestampMillis => (updater, ordinal, value) =>
+          val millis = value.asInstanceOf[Long]
+          val micros = DateTimeUtils.millisToMicros(millis)
+          updater.setLong(ordinal, timestampRebaseFunc(micros))
         case _: TimestampMicros => (updater, ordinal, value) =>
-          updater.setLong(ordinal, value.asInstanceOf[Long])
-        case null => (updater, ordinal, value) =>
-          // For backward compatibility, if the Avro type is Long and it is not logical type,
-          // the value is processed as timestamp type with millisecond precision.
-          updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+          val micros = value.asInstanceOf[Long]
+          updater.setLong(ordinal, timestampRebaseFunc(micros))
         case other => throw new IncompatibleSchemaException(
           s"Cannot convert Avro logical type ${other} to Catalyst Timestamp type.")
       }

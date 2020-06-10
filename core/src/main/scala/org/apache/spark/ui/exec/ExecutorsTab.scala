@@ -47,14 +47,12 @@ private[ui] class ExecutorsPage(
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =
-      <div>
-        {
-          <div id="active-executors" class="row-fluid"></div> ++
-          <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
-          <script src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
-          <script>setThreadDumpEnabled({threadDumpEnabled})</script>
-        }
-      </div>
+      {
+        <div id="active-executors"></div> ++
+        <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
+        <script src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
+        <script>setThreadDumpEnabled({threadDumpEnabled})</script>
+      }
 
     UIUtils.headerSparkPage(request, "Executors", content, parent, useDataTables = true)
   }

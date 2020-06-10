@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
@@ -56,8 +57,14 @@ private[sql] trait LookupCatalog extends Logging {
    * Extract session catalog and identifier from a multi-part identifier.
    */
   object SessionCatalogAndIdentifier {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
     def unapply(parts: Seq[String]): Option[(CatalogPlugin, Identifier)] = parts match {
       case CatalogAndIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
+        if (ident.namespace.length != 1) {
+          throw new AnalysisException(
+            s"The namespace in session catalog must have exactly one name part: ${parts.quoted}")
+        }
         Some(catalog, ident)
       case _ => None
     }
@@ -94,6 +101,10 @@ private[sql] trait LookupCatalog extends Logging {
    * Extract catalog and identifier from a multi-part name with the current catalog if needed.
    * Catalog name takes precedence over identifier, but for a single-part name, identifier takes
    * precedence over catalog name.
+   *
+   * Note that, this pattern is used to look up permanent catalog objects like table, view,
+   * function, etc. If you need to look up temp objects like temp view, please do it separately
+   * before calling this pattern, as temp objects don't belong to any catalog.
    */
   object CatalogAndIdentifier {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
@@ -103,16 +114,7 @@ private[sql] trait LookupCatalog extends Logging {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Identifier)] = {
       assert(nameParts.nonEmpty)
       if (nameParts.length == 1) {
-        // If the current catalog is session catalog, the current namespace is not used because
-        // the single-part name could be referencing a temp view, which doesn't belong to any
-        // namespaces. An empty namespace will be resolved inside the session catalog
-        // implementation when a relation is looked up.
-        val ns = if (CatalogV2Util.isSessionCatalog(currentCatalog)) {
-          Array.empty[String]
-        } else {
-          catalogManager.currentNamespace
-        }
-        Some((currentCatalog, Identifier.of(ns, nameParts.head)))
+        Some((currentCatalog, Identifier.of(catalogManager.currentNamespace, nameParts.head)))
       } else if (nameParts.head.equalsIgnoreCase(globalTempDB)) {
         // Conceptually global temp views are in a special reserved catalog. However, the v2 catalog
         // API does not support view yet, and we have to use v1 commands to deal with global temp

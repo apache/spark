@@ -54,7 +54,6 @@ from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
-from pyspark.resourceinformation import ResourceInformation
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.status import *
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
@@ -113,11 +112,11 @@ def keyword_only(func):
 
 
 # for back compatibility
-from pyspark.sql import SQLContext, Row
+from pyspark.sql import SQLContext, HiveContext, Row
 
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
     "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
-    "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "ResourceInformation",
+    "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo",
 ]
