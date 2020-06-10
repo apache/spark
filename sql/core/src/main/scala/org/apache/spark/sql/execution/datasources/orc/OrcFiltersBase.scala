@@ -52,14 +52,14 @@ trait OrcFiltersBase {
 
     def getPrimitiveFields(
         fields: Seq[StructField],
-        parentFieldNames: Array[String] = Array.empty): Seq[(String, DataType)] = {
+        parentFieldNames: Seq[String] = Seq.empty): Seq[(String, DataType)] = {
       fields.flatMap { f =>
         f.dataType match {
           case st: StructType =>
-            getPrimitiveFields(st.fields.toSeq, parentFieldNames :+ f.name)
+            getPrimitiveFields(st.fields, parentFieldNames :+ f.name)
           case BinaryType => None
           case _: AtomicType =>
-            Some(((parentFieldNames :+ f.name).toSeq.quoted, f.dataType))
+            Some(((parentFieldNames :+ f.name).quoted, f.dataType))
           case _ => None
         }
       }
