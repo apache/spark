@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
-import org.apache.spark.sql.functions.{lit, udf}
+import org.apache.spark.sql.functions.{lit, struct, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
@@ -628,22 +628,28 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   test("more input fields than expect for case class") {
     val f = (t: TestData2) => t.a * t.b
     val myUdf = udf(f)
-    val df = Seq(("data", TestData4(50, 2, 2))).toDF("col1", "col2")
-    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+    val df = spark.range(1)
+      .select(lit(50).as("a"), lit(2).as("b"), lit(2).as("c"))
+      .select(struct("a", "b", "c").as("col"))
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Nil)
   }
 
   test("less input fields than expect for case class") {
-    val f = (t: TestData4) => t.a * t.b * t.c
+    val f = (t: TestData2) => t.a * t.b
     val myUdf = udf(f)
-    val df = Seq(("data", TestData2(50, 2))).toDF("col1", "col2")
-    val error = intercept[AnalysisException] (df.select(myUdf(Column("col2"))))
-    assert(error.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"))
+    val df = spark.range(1)
+      .select(lit(50).as("a"))
+      .select(struct("a").as("col"))
+    val error = intercept[AnalysisException] (df.select(myUdf(Column("col"))))
+    assert(error.getMessage.contains("cannot resolve '`b`' given input columns: [a]"))
   }
 
   test("wrong order of input fields for case class") {
     val f = (t: TestData) => t.key * t.value.toInt
     val myUdf = udf(f)
-    val df = Seq(("data", TestData5("2", 50))).toDF("col1", "col2")
-    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+    val df = spark.range(1)
+      .select(lit("2").as("value"), lit(50).as("key"))
+      .select(struct("value", "key").as("col"))
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Nil)
   }
 }
