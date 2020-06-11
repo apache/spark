@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object PushCNFPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case j @ Join(left, right, joinType, Some(joinCondition), hint) if joinType != FullOuter =>
+    case j @ Join(left, right, joinType, Some(joinCondition), hint) =>
       val predicates = conjunctiveNormalForm(joinCondition)
       if (predicates.isEmpty) {
         j
@@ -53,6 +53,7 @@ object PushCNFPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelpe
             Join(newLeft, right, RightOuter, Some(joinCondition), hint)
           case LeftOuter | LeftAnti | ExistenceJoin(_) =>
             Join(left, newRight, joinType, Some(joinCondition), hint)
+          case FullOuter => j
           case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
           case UsingJoin(_, _) => sys.error("Untransformed Using join node")
         }
