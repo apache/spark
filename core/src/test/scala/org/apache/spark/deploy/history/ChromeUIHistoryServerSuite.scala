@@ -15,17 +15,36 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.deploy.history
+
+import org.openqa.selenium.WebDriver
+import org.openqa.selenium.chrome.{ChromeDriver, ChromeOptions}
+
+import org.apache.spark.tags.ChromeUITest
 
 /**
- * Physical execution operators for join operations.
+ * Tests for HistoryServer with Chrome.
  */
-package object joins {
+@ChromeUITest
+class ChromeUIHistoryServerSuite
+  extends RealBrowserUIHistoryServerSuite("webdriver.chrome.driver") {
 
-  sealed abstract class BuildSide
+  override var webDriver: WebDriver = _
 
-  case object BuildRight extends BuildSide
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    val chromeOptions = new ChromeOptions
+    chromeOptions.addArguments("--headless", "--disable-gpu")
+    webDriver = new ChromeDriver(chromeOptions)
+  }
 
-  case object BuildLeft extends BuildSide
-
+  override def afterAll(): Unit = {
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
+    }
+  }
 }

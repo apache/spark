@@ -18,6 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -131,7 +132,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
         col($(rawPredictionCol)),
         col($(labelCol)).cast(DoubleType),
         if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0)
-        else col($(weightCol)).cast(DoubleType)).rdd.map {
+        else checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))).rdd.map {
         case Row(rawPrediction: Vector, label: Double, weight: Double) =>
           (rawPrediction(1), label, weight)
         case Row(rawPrediction: Double, label: Double, weight: Double) =>

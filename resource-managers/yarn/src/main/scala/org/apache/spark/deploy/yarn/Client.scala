@@ -635,7 +635,12 @@ private[spark] class Client(
       distribute(args.primaryPyFile, appMasterOnly = true)
     }
 
-    pySparkArchives.foreach { f => distribute(f) }
+    pySparkArchives.foreach { f =>
+      val uri = Utils.resolveURI(f)
+      if (uri.getScheme != Utils.LOCAL_SCHEME) {
+        distribute(f)
+      }
+    }
 
     // The python files list needs to be treated especially. All files that are not an
     // archive need to be placed in a subdirectory that will be added to PYTHONPATH.
