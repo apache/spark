@@ -210,6 +210,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case AddNodeToDecommission(hostname, terminationTimeMs, nodeDecommissionReason) =>
         decommissionTracker.foreach { tracker =>
           tracker.addNodeToDecommission(hostname, terminationTimeMs, nodeDecommissionReason)
+          // handle the cached RDD on Decommission nodes
           val nodeDecommissionState = tracker.getDecommissionedNodeState(hostname)
           if(nodeDecommissionState.isDefined &&
             !nodeDecommissionState.contains(NodeDecommissionState.TERMINATED)) {
@@ -484,9 +485,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       shouldDisable
     }
 
-    /**
-      * Move cached Rdd from Decommission executors
-      */
+    // Move cached Rdd from Decommission executors
     private def moveCachedRddFromDecommissionExecutor(executorId: String): Unit = {
       if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
         try {
