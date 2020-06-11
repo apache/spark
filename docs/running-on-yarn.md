@@ -85,9 +85,9 @@ Binary distributions can be downloaded from the [downloads page](https://spark.a
 There are two variants of Spark binary distributions you can download. One is pre-built with a certain
 version of Apache Hadoop; this Spark distribution contains built-in Hadoop runtime, so we call it <code>with-hadoop</code> Spark
 distribution. The other one is pre-built with user-provided Hadoop; since this Spark distribution
-doesn't contain built-in Hadoop runtime, it's smaller, but users have to provide a Hadoop installation separately.
+doesn't contain a built-in Hadoop runtime, it's smaller, but users have to provide a Hadoop installation separately.
 We call this variant <code>no-hadoop</code> Spark distribution. For <code>with-hadoop</code> Spark distribution, since
-it contains built-in Hadoop runtime already, by default, when a job is submitted to Hadoop Yarn cluster, to prevent jar conflict, it will not
+it contains a built-in Hadoop runtime already, by default, when a job is submitted to Hadoop Yarn cluster, to prevent jar conflict, it will not
 populate Yarn's classpath into Spark. To override this behavior, you can set <code>spark.yarn.populateHadoopClasspath</code> to <code>true</code>.
 For <code>no-hadoop</code> Spark distribution, Spark will populate Yarn's classpath by default in order to get Hadoop runtime. Note that some features such
 as Hive support are not available in <code>no-hadoop</code> Spark distribution. For <code>with-hadoop</code> Spark distribution,
