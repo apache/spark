@@ -540,7 +540,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val message = intercept[java.io.IOException] {
         spark.readStream.option("fs.defaultFS", defaultFs).text(path)
       }.getMessage
-      assert(message == expectMessage)
+      assert(message.filterNot(Set(':', '"').contains) == expectMessage)
     }
   }
 
