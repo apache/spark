@@ -24,6 +24,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.io.Source
 import scala.xml.Node
 
+import com.gargoylesoftware.css.parser.CSSParseException
 import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
 import org.json4s._
 import org.json4s.jackson.JsonMethods
@@ -33,7 +34,6 @@ import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
-import org.w3c.css.sac.CSSParseException
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
