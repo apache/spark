@@ -21,6 +21,8 @@ import shutil
 import tempfile
 import unittest
 
+import py4j
+
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import UserDefinedFunction, udf
@@ -356,6 +358,32 @@ class UDFTests(ReusedSQLTestCase):
             df.selectExpr("add_four(id) AS plus_four").collect(),
             df.select(add_four("id").alias("plus_four")).collect()
         )
+
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)
+    def test_register_java_function(self):
+        self.spark.udf.registerJavaFunction(
+            "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType())
+        [value] = self.spark.sql("SELECT javaStringLength('test')").first()
+        self.assertEqual(value, 4)
+
+        self.spark.udf.registerJavaFunction(
+            "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength")
+        [value] = self.spark.sql("SELECT javaStringLength2('test')").first()
+        self.assertEqual(value, 4)
+
+        self.spark.udf.registerJavaFunction(
+            "javaStringLength3", "test.org.apache.spark.sql.JavaStringLength", "integer")
+        [value] = self.spark.sql("SELECT javaStringLength3('test')").first()
+        self.assertEqual(value, 4)
+
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)
+    def test_register_java_udaf(self):
+        self.spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
+        df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "a")], ["id", "name"])
+        df.createOrReplaceTempView("df")
+        row = self.spark.sql(
+            "SELECT name, javaUDAF(id) as avg from df group by name order by name desc").first()
+        self.assertEqual(row.asDict(), Row(name='b', avg=102.0).asDict())
 
     def test_non_existed_udf(self):
         spark = self.spark
