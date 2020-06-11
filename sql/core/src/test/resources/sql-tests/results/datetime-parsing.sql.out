@@ -5,7 +5,7 @@
 -- !query
 select to_timestamp('9', 'D')
 -- !query schema
-struct<to_timestamp(9, D):timestamp>
+struct<to_timestamp('9', 'D'):timestamp>
 -- !query output
 1970-01-09 00:00:00
 
@@ -13,7 +13,7 @@ struct<to_timestamp(9, D):timestamp>
 -- !query
 select to_timestamp('300', 'D')
 -- !query schema
-struct<to_timestamp(300, D):timestamp>
+struct<to_timestamp('300', 'D'):timestamp>
 -- !query output
 1970-10-27 00:00:00
 
@@ -21,7 +21,7 @@ struct<to_timestamp(300, D):timestamp>
 -- !query
 select to_timestamp('09', 'DD')
 -- !query schema
-struct<to_timestamp(09, DD):timestamp>
+struct<to_timestamp('09', 'DD'):timestamp>
 -- !query output
 1970-01-09 00:00:00
 
@@ -29,7 +29,7 @@ struct<to_timestamp(09, DD):timestamp>
 -- !query
 select to_timestamp('99', 'DD')
 -- !query schema
-struct<to_timestamp(99, DD):timestamp>
+struct<to_timestamp('99', 'DD'):timestamp>
 -- !query output
 1970-04-09 00:00:00
 
@@ -37,7 +37,7 @@ struct<to_timestamp(99, DD):timestamp>
 -- !query
 select to_timestamp('009', 'DDD')
 -- !query schema
-struct<to_timestamp(009, DDD):timestamp>
+struct<to_timestamp('009', 'DDD'):timestamp>
 -- !query output
 1970-01-09 00:00:00
 
@@ -45,7 +45,7 @@ struct<to_timestamp(009, DDD):timestamp>
 -- !query
 select to_timestamp('365', 'DDD')
 -- !query schema
-struct<to_timestamp(365, DDD):timestamp>
+struct<to_timestamp('365', 'DDD'):timestamp>
 -- !query output
 1970-12-31 00:00:00
 
@@ -53,7 +53,7 @@ struct<to_timestamp(365, DDD):timestamp>
 -- !query
 select to_timestamp('31-365', 'dd-DDD')
 -- !query schema
-struct<to_timestamp(31-365, dd-DDD):timestamp>
+struct<to_timestamp('31-365', 'dd-DDD'):timestamp>
 -- !query output
 1970-12-31 00:00:00
 
@@ -61,7 +61,7 @@ struct<to_timestamp(31-365, dd-DDD):timestamp>
 -- !query
 select to_timestamp('12-365', 'MM-DDD')
 -- !query schema
-struct<to_timestamp(12-365, MM-DDD):timestamp>
+struct<to_timestamp('12-365', 'MM-DDD'):timestamp>
 -- !query output
 1970-12-31 00:00:00
 
@@ -69,7 +69,7 @@ struct<to_timestamp(12-365, MM-DDD):timestamp>
 -- !query
 select to_timestamp('2020-365', 'yyyy-DDD')
 -- !query schema
-struct<to_timestamp(2020-365, yyyy-DDD):timestamp>
+struct<to_timestamp('2020-365', 'yyyy-DDD'):timestamp>
 -- !query output
 2020-12-30 00:00:00
 
@@ -77,7 +77,7 @@ struct<to_timestamp(2020-365, yyyy-DDD):timestamp>
 -- !query
 select to_timestamp('12-31-365', 'MM-dd-DDD')
 -- !query schema
-struct<to_timestamp(12-31-365, MM-dd-DDD):timestamp>
+struct<to_timestamp('12-31-365', 'MM-dd-DDD'):timestamp>
 -- !query output
 1970-12-31 00:00:00
 
@@ -85,7 +85,7 @@ struct<to_timestamp(12-31-365, MM-dd-DDD):timestamp>
 -- !query
 select to_timestamp('2020-30-365', 'yyyy-dd-DDD')
 -- !query schema
-struct<to_timestamp(2020-30-365, yyyy-dd-DDD):timestamp>
+struct<to_timestamp('2020-30-365', 'yyyy-dd-DDD'):timestamp>
 -- !query output
 2020-12-30 00:00:00
 
@@ -93,7 +93,7 @@ struct<to_timestamp(2020-30-365, yyyy-dd-DDD):timestamp>
 -- !query
 select to_timestamp('2020-12-350', 'yyyy-MM-DDD')
 -- !query schema
-struct<to_timestamp(2020-12-350, yyyy-MM-DDD):timestamp>
+struct<to_timestamp('2020-12-350', 'yyyy-MM-DDD'):timestamp>
 -- !query output
 2020-12-15 00:00:00
 
@@ -101,6 +101,6 @@ struct<to_timestamp(2020-12-350, yyyy-MM-DDD):timestamp>
 -- !query
 select to_timestamp('2020-12-31-366', 'yyyy-MM-dd-DDD')
 -- !query schema
-struct<to_timestamp(2020-12-31-366, yyyy-MM-dd-DDD):timestamp>
+struct<to_timestamp('2020-12-31-366', 'yyyy-MM-dd-DDD'):timestamp>
 -- !query output
 2020-12-31 00:00:00
