@@ -142,7 +142,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
     val message = intercept[java.io.IOException] {
       dataSource invokePrivate checkAndGlobPathIfNecessary(false, false)
     }.getMessage
-    val expectMessage = "No FileSystem for scheme nonexistFS"
+    val expectMessage = "No FileSystem for scheme nonexistsFs"
     assert(message.filterNot(Set(':', '"').contains) == expectMessage)
   }
 }
