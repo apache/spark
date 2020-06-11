@@ -28,6 +28,7 @@ import org.apache.hive.service.cli.thrift.ThriftCLIService
 
 import org.apache.spark.sql.test.SharedSparkSession
 
+
 trait SharedThriftServer extends SharedSparkSession {
 
   private var hiveServer2: HiveThriftServer2 = _
