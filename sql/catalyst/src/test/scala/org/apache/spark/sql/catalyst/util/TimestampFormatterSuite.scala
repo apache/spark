@@ -33,6 +33,8 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     TimestampFormatter(pattern, UTC, isParsing)
   }
 
+  override protected def useDateFormatter: Boolean = false
+
   test("parsing timestamps using time zones") {
     val localDate = "2018-12-02T10:11:12.001234"
     val expectedMicros = Map(
