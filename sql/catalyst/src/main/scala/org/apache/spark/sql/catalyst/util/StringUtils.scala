@@ -124,9 +124,9 @@ object StringUtils extends Logging {
           strings.append(stringToAppend)
         }
 
-        // Cap the length at  ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH. Otherwise, we
-        // will overflow length causing StringIndexOutOfBoundsException in the substring call
-        // above.
+        // Keeps the total length of appended strings. Note that we need to cap the length at
+        // `ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH`; otherwise, we will overflow
+        // length causing StringIndexOutOfBoundsException in the substring call above.
         length = Math.min(length.toLong + sLen, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH).toInt
       }
     }
