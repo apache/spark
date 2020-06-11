@@ -124,7 +124,7 @@ case class GenerateExec(
     }
   }
 
-  override def supportCodegen: Boolean = true
+  override def supportCodegen: Boolean = super.supportCodegen && generator.supportCodegen
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
