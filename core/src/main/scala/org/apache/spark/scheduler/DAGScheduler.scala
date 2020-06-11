@@ -1430,21 +1430,21 @@ private[spark] class DAGScheduler(
 
   /**
    * Check [[SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL]] in job properties to see if we should
-   * interrupt running tasks. Returns `false` if the property value is not a boolean value
+   * interrupt running tasks. Returns `true` if the property value is not a boolean value
    */
   private def shouldInterruptTaskThread(job: ActiveJob): Boolean = {
     if (job.properties == null) {
-      false
+      true
     } else {
       val shouldInterruptThread =
-        job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
+        job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
       try {
         shouldInterruptThread.toBoolean
       } catch {
         case e: IllegalArgumentException =>
           logWarning(s"${SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL} in Job ${job.jobId} " +
-            s"is invalid: $shouldInterruptThread. Using 'false' instead", e)
-          false
+            s"is invalid: $shouldInterruptThread. Using 'true' instead", e)
+          true
       }
     }
   }
