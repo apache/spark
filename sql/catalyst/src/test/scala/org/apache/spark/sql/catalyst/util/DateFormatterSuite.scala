@@ -31,8 +31,6 @@ class DateFormatterSuite extends DatetimeFormatterSuite {
     DateFormatter(pattern, UTC, isParsing)
   }
 
-  override protected def useDateFormatter: Boolean = true
-
   test("parsing dates") {
     outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
