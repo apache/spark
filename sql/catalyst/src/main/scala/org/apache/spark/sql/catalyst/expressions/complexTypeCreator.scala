@@ -545,10 +545,9 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 /**
  * Adds/replaces field in struct by name.
  */
-case class WithField(structExpr: Expression, fieldName: String, valueExpr: Expression)
+case class WithField(structExpr: Expression, fieldPath: Seq[String], valueExpr: Expression)
   extends Unevaluable {
-
-  private lazy val fieldPath = CatalystSqlParser.parseMultipartIdentifier(fieldName)
+  assert(fieldPath.nonEmpty)
 
   lazy val toCreateNamedStruct: Expression = toCreateNamedStruct(structExpr, fieldPath)
 
@@ -562,15 +561,8 @@ case class WithField(structExpr: Expression, fieldName: String, valueExpr: Expre
 
   override def prettyName: String = "with_field"
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (fieldName == null) {
-      TypeCheckResult.TypeCheckFailure("fieldName argument should not be null.")
-    } else if (fieldName.isEmpty) {
-      TypeCheckResult.TypeCheckFailure("fieldName argument should not be empty.")
-    } else {
-      checkIntermediateDataTypesAreStruct(structExpr.dataType, fieldPath)
-    }
-  }
+  override def checkInputDataTypes(): TypeCheckResult =
+    checkIntermediateDataTypesAreStruct(structExpr.dataType, fieldPath)
 
   private val resolver = SQLConf.get.resolver
 

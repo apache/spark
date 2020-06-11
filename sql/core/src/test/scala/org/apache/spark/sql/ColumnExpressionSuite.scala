@@ -969,15 +969,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should throw an exception if fieldName is null") {
-    intercept[AnalysisException] {
+    intercept[IllegalArgumentException] {
       structLevel1.withColumn("a", $"a".withField(null, lit(2)))
-    }.getMessage should include("fieldName argument should not be null.")
+    }.getMessage should include("requirement failed")
   }
 
   test("withField should throw an exception if fieldName is empty") {
-    intercept[AnalysisException] {
+    intercept[IllegalArgumentException] {
       structLevel1.withColumn("a", $"a".withField("", lit(2)))
-    }.getMessage should include("fieldName argument should not be empty.")
+    }.getMessage should include("requirement failed")
   }
 
   test("withField should throw an exception if any intermediate structs don't exist") {

@@ -900,7 +900,8 @@ class Column(val expr: Expression) extends Logging {
    * @since 3.1.0
    */
   def withField(fieldName: String, fieldValue: Column): Column = withExpr {
-    WithField(expr, fieldName, fieldValue.expr)
+    require(fieldName != null && fieldName.nonEmpty)
+    WithField(expr, CatalystSqlParser.parseMultipartIdentifier(fieldName), fieldValue.expr)
   }
 
   /**
