@@ -326,12 +326,22 @@ private[spark] object JsonProtocol {
         case v: Long => JInt(v)
         // We only have 3 kind of internal accumulator types, so if it's not int or long, it must be
         // the blocks accumulator, whose type is `java.util.List[(BlockId, BlockStatus)]`
-        case v =>
-          JArray(v.asInstanceOf[java.util.List[(BlockId, BlockStatus)]].asScala.toList.map {
-            case (id, status) =>
-              ("Block ID" -> id.toString) ~
-              ("Status" -> blockStatusToJson(status))
+        case v: java.util.List[_] =>
+          JArray(v.asScala.toList.flatMap {
+            case (id: BlockId, status: BlockStatus) =>
+              Some(
+                ("Block ID" -> id.toString) ~
+                ("Status" -> blockStatusToJson(status))
+              )
+            case _ =>
+              // Ignore unsupported types. A user may put `METRICS_PREFIX` in the name. We should
+              // not crash.
+              None
           })
+        case _ =>
+          // Ignore unsupported types. A user may put `METRICS_PREFIX` in the name. We should not
+          // crash.
+          JNothing
       }
     } else {
       // For all external accumulators, just use strings

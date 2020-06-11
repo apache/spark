@@ -3283,8 +3283,8 @@ class Dataset[T] private[sql](
   private[sql] def collectAsArrowToPython(): Array[Any] = {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
 
-    withAction("collectAsArrowToPython", queryExecution) { plan =>
-      PythonRDD.serveToStreamWithSync("serve-Arrow") { out =>
+    PythonRDD.serveToStreamWithSync("serve-Arrow") { out =>
+      withAction("collectAsArrowToPython", queryExecution) { plan =>
         val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
         val arrowBatchRdd = toArrowBatchRdd(plan)
         val numPartitions = arrowBatchRdd.partitions.length
