@@ -24,6 +24,7 @@ import scala.concurrent.duration._
 import scala.util.Try
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.thrift.ThriftCLIService
 
 import org.apache.spark.sql.test.SharedSparkSession
@@ -52,13 +53,14 @@ trait SharedThriftServer extends SharedSparkSession {
       hiveServer2.stop()
     } finally {
       super.afterAll()
+      SessionState.detachSession()
     }
   }
 
   protected def jdbcUri: String = if (mode == ServerMode.http) {
     s"jdbc:hive2://localhost:$serverPort/default;transportMode=http;httpPath=cliservice"
   } else {
-    s"jdbc:hive2://localhost:$serverPort"
+    s"jdbc:hive2://localhost:$serverPort/"
   }
 
   protected def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
@@ -77,7 +79,7 @@ trait SharedThriftServer extends SharedSparkSession {
   }
 
   private def startThriftServer(attempt: Int): Unit = {
-    logInfo(s"Trying to start HiveThriftServer2:, attempt=$attempt")
+    logInfo(s"Trying to start HiveThriftServer2: mode=$mode, attempt=$attempt")
     val sqlContext = spark.newSession().sqlContext
     // Set the HIVE_SERVER2_THRIFT_PORT and HIVE_SERVER2_THRIFT_HTTP_PORT to 0, so it could
     // randomly pick any free port to use.
@@ -91,7 +93,7 @@ trait SharedThriftServer extends SharedSparkSession {
       hiveServer2.getServices.asScala.foreach {
         case t: ThriftCLIService =>
           serverPort = t.getPortNumber
-          logInfo(s"Started HiveThriftServer2: port=$serverPort, attempt=$attempt")
+          logInfo(s"Started HiveThriftServer2: mode=$mode, port=$serverPort, attempt=$attempt")
         case _ =>
       }
 
