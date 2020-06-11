@@ -66,9 +66,8 @@ public class LevelDB implements KVStore {
   private final ConcurrentMap<Class<?>, LevelDBTypeInfo> types;
 
   /**
-   * Track active level db iterators. If level db is closed, level db iterator is in invalid
-   * state and JNI resources held by it can't be released. This servers the purpose: all active
-   * iterators are correctly closed, before DB is closed.
+   * If level db is closed, level db iterator will be invalid and trying to close it will cause
+   * JVM crashes. Track active iterators to make sure they are correctly closed.
    */
   private final ConcurrentLinkedQueue<LevelDBIterator<?>> iteratorTracker;
 

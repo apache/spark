@@ -299,9 +299,7 @@ public class LevelDBSuite {
     }
     dbForCloseTest.close();
     assertTrue(dbpathForCloseTest.exists());
-    if (dbpathForCloseTest != null) {
-      FileUtils.deleteQuietly(dbpathForCloseTest);
-    }
+    FileUtils.deleteQuietly(dbpathForCloseTest);
     assertTrue(!dbpathForCloseTest.exists());
   }
 
