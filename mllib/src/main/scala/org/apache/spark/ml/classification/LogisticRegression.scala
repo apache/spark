@@ -1545,7 +1545,10 @@ sealed trait LogisticRegressionSummary extends Serializable {
  */
 sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary {
 
-  /** objective function (scaled loss + regularization) at each iteration. */
+  /**
+   *  objective function (scaled loss + regularization) at each iteration.
+   *  It contains one more element, the initial state, than number of iterations.
+   */
   @Since("1.5.0")
   def objectiveHistory: Array[Double]
 
