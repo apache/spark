@@ -382,7 +382,8 @@ class SparkConversionMixin(object):
 
         from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
         from pyspark.sql.types import TimestampType
-        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
+        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type, \
+            _try_arrow_array_protocol
         from pyspark.sql.pandas.utils import require_minimum_pandas_version, \
             require_minimum_pyarrow_version
 
@@ -394,8 +395,16 @@ class SparkConversionMixin(object):
 
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
-            inferred_types = [pa.infer_type(s, mask=s.isna(), from_pandas=True)
-                              for s in (pdf[c] for c in pdf)]
+            inferred_types = []
+            for s in (pdf[c] for c in pdf):
+                s_array = _try_arrow_array_protocol(s[:0])
+                if s_array is not None:
+                    t = s_array.type
+                    if isinstance(t, pa.ExtensionType):
+                        t = t.storage_type
+                else:
+                    t = pa.infer_type(s, mask=s.isna(), from_pandas=True)
+                inferred_types.append(t)
             struct = StructType()
             for name, t in zip(schema, inferred_types):
                 # nullability is not determined on types inferred by Arrow or

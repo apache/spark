@@ -268,3 +268,11 @@ def _check_series_convert_timestamps_tz_local(s, timezone):
     :return pandas.Series where if it is a timestamp, has been converted to tz-naive
     """
     return _check_series_convert_timestamps_localize(s, timezone, None)
+
+
+def _try_arrow_array_protocol(s, t=None):
+    arrow_array = None
+    s_array = getattr(s, 'array', s._values)
+    if hasattr(s_array, "__arrow_array__"):
+        arrow_array = s_array.__arrow_array__(type=t)
+    return arrow_array
