@@ -208,8 +208,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         makeOffers(executorId)
 
       case AddNodeToDecommission(hostname, terminationTimeMs, nodeDecommissionReason) =>
-        decommissionTracker.foreach(
-          _.addNodeToDecommission(hostname, terminationTimeMs, nodeDecommissionReason))
+        decommissionTracker.foreach { tracker =>
+          tracker.addNodeToDecommission(hostname, terminationTimeMs, nodeDecommissionReason)
+          val nodeDecommissionState = tracker.getDecommissionedNodeState(hostname)
+          if(nodeDecommissionState.isDefined &&
+            !nodeDecommissionState.contains(NodeDecommissionState.TERMINATED)) {
+            val exe = scheduler.getExecutorsAliveOnHost(hostname)
+            exe match {
+              case Some(set) =>
+                for (e <- set) {
+                  moveCachedRddFromDecommissionExecutor(e)
+                }
+              case None => logInfo("There is active no executor available" +
+                " in decommission node for moving the cached RDD")
+            }
+          }
+        }
 
       case RemoveNodeToDecommission(hostname) =>
         decommissionTracker.foreach(_.removeNodeToDecommission(hostname))
@@ -463,23 +477,29 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             logError(s"Unexpected error during decommissioning ${e.toString}", e)
         }
         logInfo(s"Finished decommissioning executor $executorId.")
-
-        if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
-          try {
-            logInfo("Starting decommissioning block manager corresponding to " +
-              s"executor $executorId.")
-            scheduler.sc.env.blockManager.master.decommissionBlockManagers(Seq(executorId))
-          } catch {
-            case e: Exception =>
-              logError("Unexpected error during block manager " +
-                s"decommissioning for executor $executorId: ${e.toString}", e)
-          }
-          logInfo(s"Acknowledged decommissioning block manager corresponding to $executorId.")
-        }
+        moveCachedRddFromDecommissionExecutor(executorId)
       } else {
         logInfo(s"Skipping decommissioning of executor $executorId.")
       }
       shouldDisable
+    }
+
+    /**
+      * Move cached Rdd from Decommission executors
+      */
+    private def moveCachedRddFromDecommissionExecutor(executorId: String): Unit = {
+      if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+        try {
+          logInfo("Starting decommissioning block manager corresponding to " +
+            s"executor $executorId.")
+          scheduler.sc.env.blockManager.master.decommissionBlockManagers(Seq(executorId))
+        } catch {
+          case e: Exception =>
+            logError("Unexpected error during block manager " +
+              s"decommissioning for executor $executorId: ${e.toString}", e)
+        }
+        logInfo(s"Acknowledged decommissioning block manager corresponding to $executorId.")
+      }
     }
 
     /**
