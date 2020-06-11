@@ -76,10 +76,11 @@ package object config extends Logging {
     .doc("Whether to populate Hadoop classpath from `yarn.application.classpath` and " +
       "`mapreduce.application.classpath` Note that if this is set to `false`, it requires " +
       "a `with-Hadoop` Spark distribution that bundles Hadoop runtime or user has to provide " +
-      "a Hadoop installation separately.")
+      "a Hadoop installation separately. By default, for `with-hadoop` Spark distribution, " +
+      "this is set to `false`; for `no-hadoop` distribution, this is set to `true`.")
     .version("2.4.6")
     .booleanConf
-    .createWithDefault(IS_HADOOP_PROVIDED)
+    .createWithDefault(isHadoopProvided())
 
   private[spark] val GATEWAY_ROOT_PATH = ConfigBuilder("spark.yarn.config.gatewayPath")
     .doc("Root of configuration paths that is present on gateway nodes, and will be replaced " +
@@ -395,18 +396,20 @@ package object config extends Logging {
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
   private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."
-  lazy val IS_HADOOP_PROVIDED: Boolean = {
+
+  def isHadoopProvided(): Boolean = IS_HADOOP_PROVIDED
+
+  private lazy val IS_HADOOP_PROVIDED: Boolean = {
     val configPath = "org/apache/spark/deploy/yarn/config.properties"
     val propertyKey = "spark.yarn.isHadoopProvided"
     try {
       val prop = new Properties()
-      prop.load(ClassLoader.getSystemClassLoader.
-        getResourceAsStream(configPath))
+      prop.load(ClassLoader.getSystemClassLoader.getResourceAsStream(configPath))
       prop.getProperty(propertyKey).toBoolean
     } catch {
       case e: Exception =>
         log.warn(s"Can not load the default value of `$propertyKey` from " +
-          s"$configPath with error, ${e.toString}. Using false as a default value.")
+          s"`$configPath` with error, ${e.toString}. Using `false` as a default value.")
         false
     }
   }
