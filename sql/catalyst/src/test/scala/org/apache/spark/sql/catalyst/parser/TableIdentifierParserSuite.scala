@@ -305,6 +305,14 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
 
   private def parseAntlrGrammars(startTag: String, endTag: String)
       (f: PartialFunction[String, Option[String]]): Set[String] = {
+    // We need to map a symbol string to actual literal strings
+    // in case that they have different strings.
+    val symbolsToNeedRemap = Map(
+      "DATABASES" -> Seq("DATABASES", "SCHEMAS"),
+      "RLIKE" -> Seq("RLIKE", "REGEXP"),
+      "SETMINUS" -> Seq("MINUS"),
+      "TEMPORARY" -> Seq("TEMPORARY", "TEMP")
+    )
     val keywords = new mutable.ArrayBuffer[String]
     val default = (_: String) => None
     var start = false
@@ -314,7 +322,13 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
       } else if (line.trim.startsWith(endTag)) {
         start = false
       } else if (start) {
-        f.applyOrElse(line, default).foreach(keywords += _)
+        f.applyOrElse(line, default).foreach { symbol =>
+          if (symbolsToNeedRemap.contains(symbol)) {
+            keywords ++= symbolsToNeedRemap(symbol)
+          } else {
+            keywords += symbol
+          }
+        }
       }
     }
     keywords.map(_.trim.toLowerCase(Locale.ROOT)).toSet
@@ -324,27 +338,25 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     val kwDef = """\s*[\|:]\s*([A-Z_]+)\s*""".r
     parseAntlrGrammars(startTag, endTag) {
       // Parses a pattern, e.g., `    | AFTER`
-      case kwDef(literal) => Some(literal)
+      case kwDef(symbol) => Some(symbol)
     }
   }
 
   // All the SQL keywords defined in `SqlBase.g4`
   val allCandidateKeywords = {
     val kwDef = """([A-Z_]+):.+;""".r
-    parseAntlrGrammars("//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
-      // Parses a pattern, e.g., `RLIKE: 'RLIKE' | 'REGEXP';`
-      case kwDef(literal) => Some(literal)
+    val keywords = parseAntlrGrammars(
+        "//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
+      // Parses a pattern, e.g., `AFTER: 'AFTER';`
+      case kwDef(symbol) => Some(symbol)
     }
+    keywords
   }
 
   val nonReservedKeywordsInAnsiMode = parseSyntax(
     "//--ANSI-NON-RESERVED-START", "//--ANSI-NON-RESERVED-END")
 
-  val reservedKeywordsInAnsiMode = {
-    val strictNonReservedKeywordsInAnsiMode = parseSyntax(
-      "//--ANSI-STRICT-NON-RESERVED-START", "//--ANSI-STRICT-NON-RESERVED-END")
-    allCandidateKeywords -- nonReservedKeywordsInAnsiMode -- strictNonReservedKeywordsInAnsiMode
-  }
+  val reservedKeywordsInAnsiMode = allCandidateKeywords -- nonReservedKeywordsInAnsiMode
 
   test("table identifier") {
     // Regular names.

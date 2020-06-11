@@ -1199,7 +1199,6 @@ ansiNonReserved
 // The non-reserved keywords are listed in `nonReserved`.
 // These 2 together contain all the keywords.
 strictNonReserved
-//--ANSI-STRICT-NON-RESERVED-START
     : ANTI
     | CROSS
     | EXCEPT
@@ -1215,7 +1214,6 @@ strictNonReserved
     | SETMINUS
     | UNION
     | USING
-//--ANSI-STRICT-NON-RESERVED-END
     ;
 
 nonReserved
