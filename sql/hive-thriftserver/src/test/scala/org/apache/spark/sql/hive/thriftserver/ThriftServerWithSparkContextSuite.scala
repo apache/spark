@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
+class ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("SPARK-29911: Uncache cached tables when session closed") {
     val cacheManager = spark.sharedState.cacheManager
@@ -41,13 +41,4 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(cacheManager.isEmpty)
     }
   }
-}
-
-
-class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {
-  override def mode: ServerMode.Value = ServerMode.binary
-}
-
-class ThriftServerWithSparkContextInHttpSuite extends ThriftServerWithSparkContextSuite {
-  override def mode: ServerMode.Value = ServerMode.http
 }

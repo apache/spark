@@ -54,9 +54,6 @@ import org.apache.spark.sql.types._
  */
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
 
-
-  override def mode: ServerMode.Value = ServerMode.binary
-
   override protected def testFile(fileName: String): String = {
     val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
     // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
