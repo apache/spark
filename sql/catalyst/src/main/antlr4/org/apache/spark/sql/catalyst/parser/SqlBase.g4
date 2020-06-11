@@ -1009,6 +1009,7 @@ alterColumnAction
 // You can find the full keywords list by searching "Start of the keywords list" in this file.
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
+//--ANSI-NON-RESERVED-START
     : ADD
     | AFTER
     | ALTER
@@ -1185,6 +1186,7 @@ ansiNonReserved
     | VIEW
     | VIEWS
     | WINDOW
+//--ANSI-NON-RESERVED-END
     ;
 
 // When `SQL_standard_keyword_behavior=false`, there are 2 kinds of keywords in Spark SQL.
@@ -1197,6 +1199,7 @@ ansiNonReserved
 // The non-reserved keywords are listed in `nonReserved`.
 // These 2 together contain all the keywords.
 strictNonReserved
+//--ANSI-STRICT-NON-RESERVED-START
     : ANTI
     | CROSS
     | EXCEPT
@@ -1212,6 +1215,7 @@ strictNonReserved
     | SETMINUS
     | UNION
     | USING
+//--ANSI-STRICT-NON-RESERVED-END
     ;
 
 nonReserved
@@ -1462,6 +1466,7 @@ nonReserved
 //============================
 // Start of the keywords list
 //============================
+//--SPARK-KEYWORD-LIST-START
 ADD: 'ADD';
 AFTER: 'AFTER';
 ALL: 'ALL';
@@ -1714,6 +1719,7 @@ WHERE: 'WHERE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
 YEAR: 'YEAR';
+//--SPARK-KEYWORD-LIST-END
 //============================
 // End of the keywords list
 //============================
