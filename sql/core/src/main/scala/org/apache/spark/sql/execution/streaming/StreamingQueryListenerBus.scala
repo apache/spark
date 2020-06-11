@@ -35,7 +35,7 @@ import org.apache.spark.util.ListenerBus
  * and StreamingQueryManager. So this bus will dispatch events to registered listeners for only
  * those queries that were started in the associated SparkSession.
  */
-class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
+class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus], live: Boolean = true)
   extends SparkListener with ListenerBus[StreamingQueryListener, StreamingQueryListener.Event] {
 
   import StreamingQueryListener._
@@ -98,7 +98,7 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
         //
         // When loaded by Spark History Server, we should process all event coming from replay
         // listener bus.
-        if (sparkListenerBus.isEmpty) {
+        if (!live) {
           postToAll(e)
         } else if (!LiveListenerBus.withinListenerThread.value ||
             !e.isInstanceOf[QueryStartedEvent]) {
@@ -116,15 +116,7 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
       listener: StreamingQueryListener,
       event: StreamingQueryListener.Event): Unit = {
     def shouldReport(runId: UUID): Boolean = {
-      // When loaded by Spark History Server, we should process all event coming from replay
-      // listener bus.
-      if (sparkListenerBus.isEmpty) {
-        true
-      } else {
-        activeQueryRunIds.synchronized {
-          activeQueryRunIds.contains(runId)
-        }
-      }
+      !live || activeQueryRunIds.synchronized { activeQueryRunIds.contains(runId) }
     }
 
     event match {

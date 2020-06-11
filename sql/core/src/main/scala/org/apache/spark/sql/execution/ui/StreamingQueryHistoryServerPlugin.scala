@@ -28,7 +28,7 @@ import org.apache.spark.ui.SparkUI
 class StreamingQueryHistoryServerPlugin extends AppHistoryServerPlugin {
 
   override def createListeners(conf: SparkConf, store: ElementTrackingStore): Seq[SparkListener] = {
-    val listenerBus = new StreamingQueryListenerBus(None)
+    val listenerBus = new StreamingQueryListenerBus(None, live = false)
     listenerBus.addListener(new StreamingQueryStatusListener(conf, store))
     Seq(listenerBus)
   }
