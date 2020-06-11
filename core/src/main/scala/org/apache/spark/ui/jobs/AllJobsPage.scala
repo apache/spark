@@ -162,7 +162,11 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
   private def makeTimeline(
       jobs: Seq[v1.JobData],
       executors: Seq[v1.ExecutorSummary],
-      startTime: Long): Seq[Node] = {
+      startTime: Long,
+      page: Int,
+      pageSize: Int,
+      totalPages: Int,
+      totalJobs: Int): Seq[Node] = {
 
     val jobEventJsonAsStrSeq = makeJobEvent(jobs)
     val executorEventJsonAsStrSeq = makeExecutorEvent(executors)
@@ -195,6 +199,30 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         <div id="application-timeline-zoom-lock">
           <input type="checkbox"></input>
           <span>Enable zooming</span>
+        </div>
+        <div>
+          <form id={s"form-event-timeline-page"}
+                method="get"
+                action=""
+                class="form-inline justify-content-end"
+                style="width: 50%; margin-left: auto; margin-bottom: 0px;">
+            <label>Jobs: {totalJobs}. {totalPages} Pages. Jump to</label>
+            <input type="text"
+                   name="jobs.eventTimelinePageNumber"
+                   id={s"form-event-timeline-page-no"}
+                   value={page.toString}
+                   class="col-1 form-control" />
+            <label>. Show </label>
+            <input type="text"
+                   id={s"form-event-timeline-page-size"}
+                   name="jobs.eventTimelinePageSize"
+                   value={pageSize.toString}
+                   class="col-1 form-control" />
+            <label>items in a page.</label>
+            <button type="submit" id="form-event-timeline-page-button" class="btn btn-spark">
+              Go
+            </button>
+          </form>
         </div>
       </div>
     </div> ++
@@ -256,6 +284,22 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         case _ =>
           activeJobs += job
       }
+    }
+
+    val eventTimelineParameterJobsPage = request.getParameter("jobs.eventTimelinePageNumber")
+    val eventTimelineParameterJobsPageSize = request.getParameter("jobs.eventTimelinePageSize")
+    var eventTimelineJobsPage = Option(eventTimelineParameterJobsPage).map(_.toInt).getOrElse(1)
+    var eventTimelineJobsPageSize =
+      Option(eventTimelineParameterJobsPageSize).map(_.toInt).getOrElse(100)
+
+    val totalJobs = completedJobs.size + failedJobs.size + activeJobs.size
+    if (eventTimelineJobsPageSize < 1 || eventTimelineJobsPageSize > totalJobs) {
+      eventTimelineJobsPageSize = totalJobs
+    }
+    val eventTimelineTotalPages =
+      (totalJobs + eventTimelineJobsPageSize - 1) / eventTimelineJobsPageSize
+    if (eventTimelineJobsPage < 1 || eventTimelineJobsPage > eventTimelineTotalPages) {
+      eventTimelineJobsPage = 1
     }
 
     val activeJobsTable =
@@ -329,9 +373,16 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         </ul>
       </div>
 
+    val from = (eventTimelineJobsPage - 1) * eventTimelineJobsPageSize
+    val to = from + eventTimelineJobsPageSize
     var content = summary
-    content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
-      store.executorList(false), startTime)
+    content ++= makeTimeline(
+      (activeJobs ++ completedJobs ++ failedJobs).sortBy(_.submissionTime).slice(from, to),
+      store.executorList(false),
+      startTime, eventTimelineJobsPage,
+      eventTimelineJobsPageSize,
+      eventTimelineTotalPages,
+      totalJobs)
 
     if (shouldShowActiveJobs) {
       content ++=
