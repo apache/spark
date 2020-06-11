@@ -290,10 +290,6 @@ public class LevelDBSuite {
     for (int i = 0; i < 8192; i++) {
       dbForCloseTest.write(createCustomType1(i));
     }
-
-    String key = dbForCloseTest.view(CustomType1.class).iterator().next().key;
-    assertEquals("key0", key);
-    System.gc(); // Make a best effort to trigger gc.
     Iterator<CustomType1> it1 = dbForCloseTest
       .view(CustomType1.class).iterator();
     assertEquals("key0", it1.next().key);
