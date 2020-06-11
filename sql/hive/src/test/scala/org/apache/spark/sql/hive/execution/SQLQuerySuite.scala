@@ -2544,6 +2544,19 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assert(e.getMessage.contains("Cannot modify the value of a static config"))
     }
   }
+
+  test("SPARK-29295: dynamic partition map parsed from partition path should be case insensitive") {
+    withTable("t") {
+      withSQLConf("hive.exec.dynamic.partition" -> "true",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        withTempDir { loc =>
+          sql(s"CREATE TABLE t(c1 INT) PARTITIONED BY(P1 STRING) LOCATION '${loc.getAbsolutePath}'")
+          sql("INSERT OVERWRITE TABLE t PARTITION(P1) VALUES(1, 'caseSensitive')")
+          checkAnswer(sql("select * from t"), Row(1, "caseSensitive"))
+        }
+      }
+    }
+  }
 }
 
 class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite

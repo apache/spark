@@ -39,6 +39,18 @@ trait DateTimeFormatterHelper {
     }
   }
 
+  private def verifyLocalDate(
+      accessor: TemporalAccessor, field: ChronoField, candidate: LocalDate): Unit = {
+    if (accessor.isSupported(field)) {
+      val actual = accessor.get(field)
+      val expected = candidate.get(field)
+      if (actual != expected) {
+        throw new DateTimeException(s"Conflict found: Field $field $actual differs from" +
+          s" $field $expected derived from $candidate")
+      }
+    }
+  }
+
   protected def toLocalDate(accessor: TemporalAccessor): LocalDate = {
     val localDate = accessor.query(TemporalQueries.localDate())
     // If all the date fields are specified, return the local date directly.
@@ -48,9 +60,17 @@ trait DateTimeFormatterHelper {
     // later, and we should provide default values for missing fields.
     // To be compatible with Spark 2.4, we pick 1970 as the default value of year.
     val year = getOrDefault(accessor, ChronoField.YEAR, 1970)
-    val month = getOrDefault(accessor, ChronoField.MONTH_OF_YEAR, 1)
-    val day = getOrDefault(accessor, ChronoField.DAY_OF_MONTH, 1)
-    LocalDate.of(year, month, day)
+    if (accessor.isSupported(ChronoField.DAY_OF_YEAR)) {
+      val dayOfYear = accessor.get(ChronoField.DAY_OF_YEAR)
+      val date = LocalDate.ofYearDay(year, dayOfYear)
+      verifyLocalDate(accessor, ChronoField.MONTH_OF_YEAR, date)
+      verifyLocalDate(accessor, ChronoField.DAY_OF_MONTH, date)
+      date
+    } else {
+      val month = getOrDefault(accessor, ChronoField.MONTH_OF_YEAR, 1)
+      val day = getOrDefault(accessor, ChronoField.DAY_OF_MONTH, 1)
+      LocalDate.of(year, month, day)
+    }
   }
 
   private def toLocalTime(accessor: TemporalAccessor): LocalTime = {

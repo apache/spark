@@ -97,11 +97,8 @@ class UnknownException(CapturedException):
 def convert_exception(e):
     s = e.toString()
     c = e.getCause()
+    stacktrace = SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(e)
 
-    jvm = SparkContext._jvm
-    jwriter = jvm.java.io.StringWriter()
-    e.printStackTrace(jvm.java.io.PrintWriter(jwriter))
-    stacktrace = jwriter.toString()
     if s.startswith('org.apache.spark.sql.AnalysisException: '):
         return AnalysisException(s.split(': ', 1)[1], stacktrace, c)
     if s.startswith('org.apache.spark.sql.catalyst.analysis'):
@@ -119,8 +116,8 @@ def convert_exception(e):
             # To make sure this only catches Python UDFs.
             and any(map(lambda v: "org.apache.spark.sql.execution.python" in v.toString(),
                         c.getStackTrace()))):
-        msg = ("\n  An exception was thrown from Python worker in the executor. "
-               "The below is the Python worker stacktrace.\n%s" % c.getMessage())
+        msg = ("\n  An exception was thrown from the Python worker. "
+               "Please see the stack trace below.\n%s" % c.getMessage())
         return PythonException(msg, stacktrace)
     return UnknownException(s, stacktrace, c)
 
