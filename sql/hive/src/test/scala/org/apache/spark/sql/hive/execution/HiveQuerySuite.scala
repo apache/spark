@@ -50,8 +50,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
-//  private val originalLegacyAllowCastNumericToTimestamp =
-//    TestHive.conf.legacyAllowCastNumericToTimestamp
 
   def spark: SparkSession = sparkSession
 
@@ -60,7 +58,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     TestHive.setCacheTables(true)
     // Ensures that cross joins are enabled so that we can test them
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
-//    TestHive.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
   }
 
   override def afterAll(): Unit = {
@@ -68,8 +65,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       TestHive.setCacheTables(false)
       sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
-//      TestHive.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
-//        originalLegacyAllowCastNumericToTimestamp)
     } finally {
       super.afterAll()
     }
@@ -186,7 +181,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   createQueryTest("constant null testing",
     """set spark.sql.legacy.allowCastNumericToTimestamp=true;
-      |SELECT
+      | SELECT
       |IF(FALSE, CAST(NULL AS STRING), CAST(1 AS STRING)) AS COL1,
       |IF(TRUE, CAST(NULL AS STRING), CAST(1 AS STRING)) AS COL2,
       |IF(FALSE, CAST(NULL AS INT), CAST(1 AS INT)) AS COL3,
@@ -562,44 +557,32 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     assert(1 == res.getDouble(0))
   }
 
-  createQueryTest("timestamp cast #2",
-    """
-      |set spark.sql.legacy.allowCastNumericToTimestamp=true;
-      |SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1
-    """.stripMargin)
-
-  test("timestamp cast #3") {
-    val res = sql("SELECT CAST(TIMESTAMP_SECONDS(1200) AS INT) FROM src LIMIT 1").collect().head
-    assert(1200 == res.getInt(0))
-  }
-
-  createQueryTest("timestamp cast #4",
-    """
-      |set spark.sql.legacy.allowCastNumericToTimestamp=true;
-      |SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1
-    """.stripMargin)
-
-  test("timestamp cast #5") {
+  test("timestamp cast #2") {
     val res = sql("SELECT CAST(TIMESTAMP_SECONDS(-1) AS DOUBLE) FROM src LIMIT 1").collect().head
     assert(-1 == res.get(0))
   }
 
-  createQueryTest("timestamp cast #6",
+  createQueryTest("timestamp cast #3",
+    """
+      |set spark.sql.legacy.allowCastNumericToTimestamp=true;
+      |SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1
+    """.stripMargin)
+
+  createQueryTest("timestamp cast #4",
     """
       |set spark.sql.legacy.allowCastNumericToTimestamp=true;
       |SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1
     """.stripMargin)
 
-  test("timestamp cast #7") {
+  test("timestamp cast #5") {
+    val res = sql("SELECT CAST(TIMESTAMP_SECONDS(1200) AS INT) FROM src LIMIT 1").collect().head
+    assert(1200 == res.getInt(0))
+  }
+
+  test("timestamp cast #6") {
     val res = sql("SELECT CAST(TIMESTAMP_SECONDS(-1200) AS INT) FROM src LIMIT 1").collect().head
     assert(-1200 == res.getInt(0))
   }
-
-  createQueryTest("timestamp cast #8",
-    """
-      |set spark.sql.legacy.allowCastNumericToTimestamp=true;
-      |SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1
-    """.stripMargin)
 
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
