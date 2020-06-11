@@ -66,8 +66,9 @@ public class LevelDB implements KVStore {
   private final ConcurrentMap<Class<?>, LevelDBTypeInfo> types;
 
   /**
-   * Track level db iterators, make sure iterators are closed before DB is closed. This would
-   * prevent JNI resource leaking (file handle on Windows) by level db iterators.
+   * Track active level db iterators. If level db is closed, level db iterator is in invalid
+   * state and JNI resources held by it can't be released. This servers the purpose: all active
+   * iterators are correctly closed, before DB is closed.
    */
   private final ConcurrentLinkedQueue<LevelDBIterator<?>> iteratorTracker;
 
@@ -240,6 +241,10 @@ public class LevelDB implements KVStore {
     return idx.getCount(idx.end(null, indexedValue));
   }
 
+  /**
+   * Trying to close a JNI LevelDB handle with a closed DB can cause JVM crashes,
+   * this ensures that all iterators are correctly closed before DB is closed.
+   */
   @Override
   public void close() throws IOException {
     synchronized (this._db) {
@@ -264,18 +269,11 @@ public class LevelDB implements KVStore {
   }
 
   /**
-   * Closes the given iterator if the DB is still open. Trying to close a JNI LevelDB handle
-   * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
+   * Remove iterator from iterator tracker. `LevelDBIterator` calls it to notify
+   * iterator is closed.
    */
-  void closeIterator(LevelDBIterator<?> it) throws IOException {
-    synchronized (this._db) {
-      DB _db = this._db.get();
-      if (_db != null) {
-        it.close();
-      }
-
-      iteratorTracker.remove(it);
-    }
+  void notifyIteratorClosed(LevelDBIterator<?> it) {
+    iteratorTracker.remove(it);
   }
 
   /** Returns metadata about indices for the given type. */

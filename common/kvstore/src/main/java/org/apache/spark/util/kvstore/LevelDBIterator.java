@@ -189,17 +189,18 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       it.close();
       closed = true;
     }
+    db.notifyIteratorClosed(this);
   }
 
   /**
    * Because it's tricky to expose closeable iterators through many internal APIs, especially
-   * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
-   * the iterator will eventually be released.
+   * when Scala wrappers are used. This makes sure that, if iterator is not explicitly
+   * closed, it still has chance to be closed by GC (before DB is closed).
    */
   @SuppressWarnings("deprecation")
   @Override
   protected void finalize() throws Throwable {
-    db.closeIterator(this);
+    close();
   }
 
   private byte[] loadNext() {
