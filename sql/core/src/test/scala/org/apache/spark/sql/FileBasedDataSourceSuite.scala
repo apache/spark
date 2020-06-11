@@ -843,6 +843,26 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  test("SPARK-31935: Hadoop file system config should be effective in data source options") {
+    Seq("parquet", "").foreach { format =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> format) {
+        withTempDir { dir =>
+          val path = dir.getCanonicalPath
+          val defaultFs = "nonexistFS://nonexistFS"
+          val expectMessage = "No FileSystem for scheme nonexistFS"
+          val message1 = intercept[java.io.IOException] {
+            spark.range(10).write.option("fs.defaultFS", defaultFs).parquet(path)
+          }.getMessage
+          assert(message1.filterNot(Set(':', '"').contains) == expectMessage)
+          val message2 = intercept[java.io.IOException] {
+            spark.read.option("fs.defaultFS", defaultFs).parquet(path)
+          }.getMessage
+          assert(message2.filterNot(Set(':', '"').contains) == expectMessage)
+        }
+      }
+    }
+  }
+
   test("SPARK-31116: Select nested schema with case insensitive mode") {
     // This test case failed at only Parquet. ORC is added for test coverage parity.
     Seq("orc", "parquet").foreach { format =>
