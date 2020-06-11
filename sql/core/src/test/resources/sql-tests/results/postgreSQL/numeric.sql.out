@@ -4536,16 +4536,15 @@ SELECT
     width_bucket(operand_num, -25, 25, 10) AS wb_5,
     width_bucket(operand_f8, -25, 25, 10) AS wb_5f
     FROM width_bucket_test
+    ORDER BY operand_num ASC
 -- !query schema
 struct<operand_num:decimal(30,15),wb_1:bigint,wb_1f:bigint,wb_2:bigint,wb_2f:bigint,wb_3:bigint,wb_3f:bigint,wb_4:bigint,wb_4f:bigint,wb_5:bigint,wb_5f:bigint>
 -- !query output
--0.000000000100000	0	0	6	6	0	0	0	0	5	5
 -5.200000000000000	0	0	6	6	0	0	0	0	4	4
+-0.000000000100000	0	0	6	6	0	0	0	0	5	5
 0.000000000001000	1	1	5	5	0	0	0	0	6	6
 1.000000000000000	1	1	5	5	0	0	0	0	6	6
 1.999999999999990	1	1	5	5	0	0	0	0	6	6
-10.000000000000000	6	6	1	1	5	5	21	21	8	8
-10.000000000000100	6	6	0	0	5	5	21	21	8	8
 2.000000000000000	2	2	5	5	1	1	0	0	6	6
 2.000000000000010	2	2	4	4	1	1	0	0	6	6
 3.000000000000000	2	2	4	4	1	1	0	0	6	6
@@ -4558,6 +4557,8 @@ struct<operand_num:decimal(30,15),wb_1:bigint,wb_1f:bigint,wb_2:bigint,wb_2f:big
 8.000000000000000	5	5	2	2	5	5	21	21	7	7
 9.000000000000000	5	5	1	1	5	5	21	21	7	7
 9.999999999999990	5	5	1	1	5	5	21	21	7	7
+10.000000000000000	6	6	1	1	5	5	21	21	8	8
+10.000000000000100	6	6	0	0	5	5	21	21	8	8
 
 
 -- !query

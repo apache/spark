@@ -828,7 +828,8 @@ SELECT
     width_bucket(operand_f8, 5.0, 5.5, 20) AS wb_4f,
     width_bucket(operand_num, -25, 25, 10) AS wb_5,
     width_bucket(operand_f8, -25, 25, 10) AS wb_5f
-    FROM width_bucket_test;
+    FROM width_bucket_test
+    ORDER BY operand_num ASC;
 
 -- for float8 only, check positive and negative infinity: we require
 -- finite bucket bounds, but allow an infinite operand

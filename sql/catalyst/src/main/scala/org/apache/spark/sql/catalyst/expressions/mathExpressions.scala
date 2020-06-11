@@ -1364,18 +1364,23 @@ object WidthBucket {
  * otherwise, the method will return null.
  *  - `numBucket` must be greater than zero and be less than Long.MaxValue
  *  - `value`, `min`, and `max` cannot be NaN
- *  - `min` bound cannot equal `max
+ *  - `min` bound cannot equal `max`
  *  - `min` and `max` must be finite
  *
- * @param expr is the expression to compute a bucket number in the histogram
+ * Note: If `minValue` > `maxValue`, a return value is as follows;
+ *  if `value` > `minValue`, it returns 0.
+ *  if `value` <= `maxValue`, it returns `numBucket` + 1.
+ *  otherwise, it returns (`numBucket` * (`minValue` - `value`) / (`minValue` - `maxValue`)) + 1
+ *
+ * @param value is the expression to compute a bucket number in the histogram
  * @param minValue is the minimum value of the histogram
  * @param maxValue is the maximum value of the histogram
  * @param numBucket is the number of buckets
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, min_value, max_value, num_bucket) - Returns the `bucket` to which
-      operand would be assigned in an equiwidth histogram with `num_bucket` buckets,
+    _FUNC_(value, min_value, max_value, num_bucket) - Returns the bucket number to which
+      `value` would be assigned in an equiwidth histogram with `num_bucket` buckets,
       in the range `min_value` to `max_value`."
   """,
   examples = """
@@ -1391,13 +1396,13 @@ object WidthBucket {
   """,
   since = "3.1.0")
 case class WidthBucket(
-    expr: Expression,
+    value: Expression,
     minValue: Expression,
     maxValue: Expression,
     numBucket: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def children: Seq[Expression] = Seq(expr, minValue, maxValue, numBucket)
+  override def children: Seq[Expression] = Seq(value, minValue, maxValue, numBucket)
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
