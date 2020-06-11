@@ -248,7 +248,6 @@ case class GenerateExec(
     attributes: Seq[Attribute],
     variables: Seq[ExprCode],
     required: AttributeSet): Seq[ExprCode] = {
-    assert(attributes.size == variables.size)
     variables.zipWithIndex.flatMap { case (ev, i) =>
       if (required.contains(attributes(i))) Seq(ev) else Seq()
     }
