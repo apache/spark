@@ -19,6 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
@@ -290,18 +291,15 @@ public class LevelDBSuite {
       dbForCloseTest.write(createCustomType1(i));
     }
 
-    KVStoreIterator<CustomType1> it = dbForCloseTest
-      .view(CustomType1.class).closeableIterator();
-    assertEquals("key0", it.next().key);
-    KVStoreIterator<CustomType1> it1 = dbForCloseTest
-      .view(CustomType1.class).closeableIterator();
+    String key = dbForCloseTest.view(CustomType1.class).iterator().next().key;
+    assertEquals("key0", key);
+    System.gc(); // Make a best effort to trigger gc.
+    Iterator<CustomType1> it1 = dbForCloseTest
+      .view(CustomType1.class).iterator();
     assertEquals("key0", it1.next().key);
     try(KVStoreIterator<CustomType1> it2 = dbForCloseTest
-      .view(CustomType1.class).closeableIterator();
-        KVStoreIterator<CustomType1> it3 = dbForCloseTest
-          .view(CustomType1.class).closeableIterator();) {
+      .view(CustomType1.class).closeableIterator()) {
       assertEquals("key0", it2.next().key);
-      assertEquals("key0", it3.next().key);
     }
     dbForCloseTest.close();
     assertTrue(dbpathForCloseTest.exists());
