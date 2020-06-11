@@ -925,9 +925,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   def checkAnswerAndSchema(
-    df: => DataFrame,
-    expectedAnswer: Seq[Row],
-    expectedSchema: StructType): Unit = {
+      df: => DataFrame,
+      expectedAnswer: Seq[Row],
+      expectedSchema: StructType): Unit = {
 
     checkAnswer(df, expectedAnswer)
     assert(df.schema == expectedSchema)
@@ -1098,7 +1098,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           nullable = false))))
   }
 
-  test( "withField should replace field in struct") {
+  test("withField should replace field in struct") {
     checkAnswerAndSchema(
       structLevel1.withColumn("a", 'a.withField("b", lit(2))),
       Row(Row(1, 2, 3)) :: Nil,

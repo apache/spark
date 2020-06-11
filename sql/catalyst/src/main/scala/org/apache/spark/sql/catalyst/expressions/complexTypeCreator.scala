@@ -575,9 +575,9 @@ case class WithField(structExpr: Expression, fieldName: String, valueExpr: Expre
   private val resolver = SQLConf.get.resolver
 
   private def checkIntermediateDataTypesAreStruct(
-    dataType: DataType,
-    remainingFields: Seq[String],
-    checkedFields: Seq[String] = Nil): TypeCheckResult = dataType match {
+      dataType: DataType,
+      remainingFields: Seq[String],
+      checkedFields: Seq[String] = Nil): TypeCheckResult = dataType match {
     case st: StructType => if (remainingFields.length == 1) {
       TypeCheckResult.TypeCheckSuccess
     } else {
