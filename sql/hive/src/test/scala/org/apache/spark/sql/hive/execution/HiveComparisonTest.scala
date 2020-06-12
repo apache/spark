@@ -315,6 +315,7 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
         val hiveCacheFiles = queryList.zipWithIndex.map {
           case (queryString, i) =>
             val cachedAnswerName = s"$testCaseName-$i-${getMd5(queryString)}"
+            print(cachedAnswerName)
             new File(answerCache, cachedAnswerName)
         }
 
