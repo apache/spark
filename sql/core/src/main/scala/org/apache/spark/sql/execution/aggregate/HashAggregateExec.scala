@@ -409,6 +409,9 @@ case class HashAggregateExec(
   private var fastHashMapTerm: String = _
   private var isFastHashMapEnabled: Boolean = false
 
+  private var avoidSpillInPartialAggregateTerm: String = _
+  private var outputFunc: String = _
+
   // whether a vectorized hashmap is used instead
   // we have decided to always use the row-based hashmap,
   // but the vectorized hashmap can still be switched on for testing and benchmarking purposes.
@@ -680,6 +683,8 @@ case class HashAggregateExec(
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
+    avoidSpillInPartialAggregateTerm = ctx.
+      addMutableState(CodeGenerator.JAVA_BOOLEAN, "avoidPartialAggregate")
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
     } else if (sqlContext.conf.enableVectorizedHashMap) {
@@ -750,6 +755,7 @@ case class HashAggregateExec(
       finishRegularHashMap
     }
 
+    outputFunc = generateResultFunction(ctx)
     val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
          |private void $doAgg() throws java.io.IOException {
@@ -761,7 +767,6 @@ case class HashAggregateExec(
     // generate code for output
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
-    val outputFunc = generateResultFunction(ctx)
 
     def outputFromFastHashMap: String = {
       if (isFastHashMapEnabled) {
@@ -879,6 +884,9 @@ case class HashAggregateExec(
 
     val oomeClassName = classOf[SparkOutOfMemoryError].getName
 
+    val thisPlan = ctx.addReferenceObj("plan", this)
+    val spillInPartialAggregateDisabled = sqlContext.conf.spillInPartialAggregationDisabled
+
     val findOrInsertRegularHashMap: String =
       s"""
          |// generate grouping key
@@ -892,19 +900,25 @@ case class HashAggregateExec(
          |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
          |// aggregation after processing all input rows.
          |if ($unsafeRowBuffer == null) {
-         |  if ($sorterTerm == null) {
-         |    $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
+         |  // If sort/spill to disk is disabled, do not create the sorter
+         |  if (!$avoidSpillInPartialAggregateTerm && $spillInPartialAggregateDisabled) {
+         |    $avoidSpillInPartialAggregateTerm = true;
+         |    $unsafeRowBuffer = (UnsafeRow) $thisPlan.getEmptyAggregationBuffer();
          |  } else {
-         |    $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
-         |  }
-         |  $resetCounter
-         |  // the hash map had be spilled, it should have enough memory now,
-         |  // try to allocate buffer again.
-         |  $unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
-         |    $unsafeRowKeys, $unsafeRowKeyHash);
-         |  if ($unsafeRowBuffer == null) {
-         |    // failed to allocate the first page
-         |    throw new $oomeClassName("No enough memory for aggregation");
+         |    if ($sorterTerm == null) {
+         |      $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
+         |    } else {
+         |      $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
+         |    }
+         |    $resetCounter
+         |    // the hash map had be spilled, it should have enough memory now,
+         |    // try to allocate buffer again.
+         |    $unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
+         |      $unsafeRowKeys, $unsafeRowKeyHash);
+         |    if ($unsafeRowBuffer == null) {
+         |      // failed to allocate the first page
+         |      throw new $oomeClassName("No enough memory for aggregation");
+         |    }
          |  }
          |}
        """.stripMargin
@@ -1005,7 +1019,7 @@ case class HashAggregateExec(
     }
 
     val updateRowInHashMap: String = {
-      if (isFastHashMapEnabled) {
+      val updateRowinMap = if (isFastHashMapEnabled) {
         if (isVectorizedHashMapEnabled) {
           ctx.INPUT_ROW = fastRowBuffer
           val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
@@ -1080,6 +1094,12 @@ case class HashAggregateExec(
       } else {
         updateRowInRegularHashMap
       }
+      s"""
+        |$updateRowinMap
+        |if ($avoidSpillInPartialAggregateTerm) {
+        |  $outputFunc(${unsafeRowKeyCode.value}, $unsafeRowBuffer);
+        |}
+        |""".stripMargin
     }
 
     val declareRowBuffer: String = if (isFastHashMapEnabled) {

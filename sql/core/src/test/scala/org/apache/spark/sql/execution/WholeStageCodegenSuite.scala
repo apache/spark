@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAnd
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
@@ -162,6 +163,26 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           p.asInstanceOf[WholeStageCodegenExec].child.children(0)
             .isInstanceOf[SortMergeJoinExec]).isEmpty)
       assert(df.collect() === Array(Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-: Avoid spill in partial aggregation " +
+    "when spark.sql.aggregate.spill.partialaggregate.disabled is set") {
+    withSQLConf((SQLConf.SPILL_PARTIAL_AGGREGATE_DISABLED.key, "true"),
+      (SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key, "false")) {
+      // Create Dataframes
+      val arrayData = Seq(("James", 1), ("James", 1), ("Phil", 1))
+      val srcDF = arrayData.toDF("name", "values")
+      val aggDF = srcDF.groupBy("name").sum("values")
+
+      val results = aggDF.collect()
+      val hashAggNode = aggDF.queryExecution.executedPlan.find {
+        case h: HashAggregateExec => !h.child.isInstanceOf[ShuffleExchangeExec]
+        case _ => false
+      }
+      assert(hashAggNode.isDefined)
+      assert(hashAggNode.get.metrics("spillSize").value == 0)
+      assert(results === Seq(Row("James", 2), Row("Phil", 1)))
     }
   }
 
