@@ -278,8 +278,8 @@ trait PredicateHelper extends Logging {
           // For each side, there is no need to expand predicates of the same references.
           // So here we can aggregate predicates of the same qualifier as one single predicate,
           // for reducing the size of pushed down predicates and corresponding codegen.
-          val right = groupExpressionsByQualifier(resultStack.pop())
-          val left = groupExpressionsByQualifier(resultStack.pop())
+          val right = groupExpressionsByReference(resultStack.pop())
+          val left = groupExpressionsByReference(resultStack.pop())
           // Stop the loop whenever the result exceeds the `maxCnfNodeCount`
           if (left.size * right.size > maxCnfNodeCount) {
             logInfo(s"As the result size exceeds the threshold $maxCnfNodeCount. " +
