@@ -899,10 +899,10 @@ case class HashAggregateExec(
          |}
          |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
          |// aggregation after processing all input rows.
-         |if ($unsafeRowBuffer == null) {
+         |if ($unsafeRowBuffer == null && !$avoidSpillInPartialAggregateTerm) {
          |  // If sort/spill to disk is disabled, nothing is done.
          |  // Aggregation buffer is created later
-         |  if (!$avoidSpillInPartialAggregateTerm && $spillInPartialAggregateDisabled) {
+         |  if ($spillInPartialAggregateDisabled) {
          |    $avoidSpillInPartialAggregateTerm = true;
          |  } else {
          |    if ($sorterTerm == null) {
