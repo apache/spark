@@ -121,15 +121,38 @@ trait ConstraintHelper {
     }
 
     var inferredConstraints = Set.empty[Expression]
-    Seq(greaterThans, lessThans).foreach { comparisons =>
-      comparisons.foreach {
-        case b @ BinaryComparison(l: Attribute, r: Expression) if r.foldable =>
-          inferredConstraints ++= replaceInequalityConstraints(comparisons, l, r, b)
-        case b @ BinaryComparison(l @ Cast(_: Attribute, _, _), r: Expression) if r.foldable =>
-          inferredConstraints ++= replaceInequalityConstraints(comparisons, l, r, b)
-        case _ => // No inference
+    greaterThans.foreach {
+      case op @ BinaryComparison(source: Attribute, destination: Expression)
+        if destination.foldable =>
+        inferredConstraints ++= (greaterThans - op).map {
+          case GreaterThan(l, r) if r.semanticEquals(source) =>
+            GreaterThan(l, destination)
+          case GreaterThanOrEqual(l, r)
+            if r.semanticEquals(source) && op.isInstanceOf[GreaterThan] =>
+            GreaterThan(l, destination)
+          case GreaterThanOrEqual(l, r) if r.semanticEquals(source) =>
+            GreaterThanOrEqual(l, destination)
+          case other => other
       }
+      case _ => // No inference
     }
+
+    lessThans.foreach {
+      case op @ BinaryComparison(source: Attribute, destination: Expression)
+        if destination.foldable =>
+        inferredConstraints ++= (lessThans - op).map {
+          case LessThan(l, r) if r.semanticEquals(source) =>
+            LessThan(l, destination)
+          case LessThanOrEqual(l, r)
+            if r.semanticEquals(source) && op.isInstanceOf[LessThan] =>
+            LessThan(l, destination)
+          case LessThanOrEqual(l, r) if r.semanticEquals(source) =>
+            LessThanOrEqual(l, destination)
+          case other => other
+        }
+      case _ => // No inference
+    }
+
     (inferredConstraints -- constraints -- greaterThans -- lessThans)
       .filterNot(i => constraints.exists(_.semanticEquals(i)))
   }
@@ -140,26 +163,6 @@ trait ConstraintHelper {
       destination: Expression): Set[Expression] = constraints.map(_ transform {
     case e: Expression if e.semanticEquals(source) => destination
   })
-
-  private def replaceInequalityConstraints(
-      constraints: Set[Expression],
-      source: Expression,
-      destination: Expression,
-      op: BinaryComparison): Set[Expression] = (constraints - op).map {
-    case gt @ GreaterThan(l, r) if r.semanticEquals(source) =>
-      gt.copy(l, destination)
-    case GreaterThanOrEqual(l, r) if r.semanticEquals(source) && op.isInstanceOf[GreaterThan] =>
-      op.makeCopy(Array(l, destination))
-    case gt @ GreaterThanOrEqual(l, r) if r.semanticEquals(source) =>
-      gt.copy(l, destination)
-    case lt @ LessThan(l, r) if r.semanticEquals(source) =>
-      lt.copy(l, destination)
-    case LessThanOrEqual(l, r) if r.semanticEquals(source) && op.isInstanceOf[LessThan] =>
-      op.makeCopy(Array(l, destination))
-    case lt @ LessThanOrEqual(l, r) if r.semanticEquals(source) =>
-      lt.copy(l, destination)
-    case other => other
-  }
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
