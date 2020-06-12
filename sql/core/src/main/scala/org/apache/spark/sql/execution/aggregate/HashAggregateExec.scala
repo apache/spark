@@ -900,10 +900,10 @@ case class HashAggregateExec(
          |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
          |// aggregation after processing all input rows.
          |if ($unsafeRowBuffer == null) {
-         |  // If sort/spill to disk is disabled, do not create the sorter
+         |  // If sort/spill to disk is disabled, nothing is done.
+         |  // Aggregation buffer is created later
          |  if (!$avoidSpillInPartialAggregateTerm && $spillInPartialAggregateDisabled) {
          |    $avoidSpillInPartialAggregateTerm = true;
-         |    $unsafeRowBuffer = (UnsafeRow) $thisPlan.getEmptyAggregationBuffer();
          |  } else {
          |    if ($sorterTerm == null) {
          |      $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
@@ -920,6 +920,10 @@ case class HashAggregateExec(
          |      throw new $oomeClassName("No enough memory for aggregation");
          |    }
          |  }
+         |}
+         |// Create an empty aggregation buffer
+         |if ($avoidSpillInPartialAggregateTerm) {
+         |  $unsafeRowBuffer = (UnsafeRow) $thisPlan.getEmptyAggregationBuffer();
          |}
        """.stripMargin
 
