@@ -23,6 +23,7 @@ import javax.servlet.DispatcherType
 import javax.servlet.http._
 
 import scala.language.implicitConversions
+import scala.util.Try
 import scala.xml.Node
 
 import org.eclipse.jetty.client.HttpClient
@@ -500,7 +501,11 @@ private[spark] case class ServerInfo(
     threadPool match {
       case pool: QueuedThreadPool =>
         // Workaround for SPARK-30385 to avoid Jetty's acceptor thread shrink.
-        pool.setIdleTimeout(0)
+        // As of Jetty 9.4.21, the implementation of
+        // QueuedThreadPool#setIdleTimeout is changed and IllegalStateException
+        // will be thrown if we try to set idle timeout after the server has started.
+        // But this workaround works for Jetty 9.4.28 by ignoring the exception.
+        Try(pool.setIdleTimeout(0))
       case _ =>
     }
     server.stop()
