@@ -303,18 +303,10 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     fileToString(sqlBasePath).split("\n")
   }
 
-  private def parseAntlrGrammars(startTag: String, endTag: String)
-      (f: PartialFunction[String, Option[String]]): Set[String] = {
-    // We need to map a symbol string to actual literal strings
-    // in case that they have different strings.
-    val symbolsToNeedRemap = Map(
-      "DATABASES" -> Seq("DATABASES", "SCHEMAS"),
-      "RLIKE" -> Seq("RLIKE", "REGEXP"),
-      "SETMINUS" -> Seq("MINUS"),
-      "TEMPORARY" -> Seq("TEMPORARY", "TEMP")
-    )
-    val keywords = new mutable.ArrayBuffer[String]
-    val default = (_: String) => None
+  private def parseAntlrGrammars[T](startTag: String, endTag: String)
+      (f: PartialFunction[String, Seq[T]]): Set[T] = {
+    val keywords = new mutable.ArrayBuffer[T]
+    val default = (_: String) => Nil
     var startTagFound = false
     var parseFinished = false
     val lineIter = sqlSyntaxDefs.toIterator
@@ -326,18 +318,42 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
         parseFinished = true
       } else if (startTagFound) {
         f.applyOrElse(line, default).foreach { symbol =>
-          if (symbolsToNeedRemap.contains(symbol)) {
-            keywords ++= symbolsToNeedRemap(symbol)
-          } else {
-            keywords += symbol
-          }
+          keywords += symbol
         }
       }
     }
     assert(keywords.nonEmpty && startTagFound && parseFinished, "cannot extract keywords from " +
       s"the `SqlBase.g4` file, so please check if the start/end tags (`$startTag` and `$endTag`) " +
       "are placed correctly in the file.")
-    keywords.map(_.trim.toLowerCase(Locale.ROOT)).toSet
+    keywords.toSet
+  }
+
+  // If a symbol does not have the same string with its literal (e.g., `SETMINUS: 'MINUS';`),
+  // we need to map a symbol to actual literal strings.
+  val symbolsToExpandIntoDifferentLiterals = {
+    val kwDef = """([A-Z_]+):(.+);""".r
+    val keywords = parseAntlrGrammars(
+        "//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
+      case kwDef(symbol, literalDef) =>
+        val splitDefs = literalDef.split("""\|""")
+        val hasMultipleLiterals = splitDefs.length > 1
+        // The case where a symbol has multiple literal definitions,
+        // e.g., `DATABASES: 'DATABASES' | 'SCHEMAS';`.
+        if (hasMultipleLiterals) {
+          val literals = splitDefs.map(_.replaceAll("'", "").trim).toSeq
+          (symbol, literals) :: Nil
+        } else {
+          val literal = literalDef.replaceAll("'", "").trim
+          // The case where a symbol string and its literal string are different,
+          // e.g., `SETMINUS: 'MINUS';`.
+          if (symbol != literal) {
+            (symbol, literal :: Nil) :: Nil
+          } else {
+            Nil
+          }
+        }
+    }
+    keywords.toMap
   }
 
   // All the SQL keywords defined in `SqlBase.g4`
@@ -346,7 +362,12 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     val keywords = parseAntlrGrammars(
         "//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
       // Parses a pattern, e.g., `AFTER: 'AFTER';`
-      case kwDef(symbol) => Some(symbol)
+      case kwDef(symbol) =>
+        if (symbolsToExpandIntoDifferentLiterals.contains(symbol)) {
+          symbolsToExpandIntoDifferentLiterals(symbol)
+        } else {
+          symbol :: Nil
+        }
     }
     keywords
   }
@@ -355,14 +376,19 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     val kwDef = """\s*[\|:]\s*([A-Z_]+)\s*""".r
     parseAntlrGrammars("//--ANSI-NON-RESERVED-START", "//--ANSI-NON-RESERVED-END") {
       // Parses a pattern, e.g., `    | AFTER`
-      case kwDef(symbol) => Some(symbol)
+      case kwDef(symbol) =>
+        if (symbolsToExpandIntoDifferentLiterals.contains(symbol)) {
+          symbolsToExpandIntoDifferentLiterals(symbol)
+        } else {
+          symbol :: Nil
+        }
     }
   }
 
   val reservedKeywordsInAnsiMode = allCandidateKeywords -- nonReservedKeywordsInAnsiMode
 
   test("check # of reserved keywords") {
-    val numReservedKeywords = 77
+    val numReservedKeywords = 78
     assert(reservedKeywordsInAnsiMode.size == numReservedKeywords,
       s"The expected number of reserved keywords is $numReservedKeywords, but " +
         s"${reservedKeywordsInAnsiMode.size} found.")
