@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object PushCNFPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case j @ Join(left, right, joinType, Some(joinCondition), hint) =>
-      val predicates = conjunctiveNormalForm(joinCondition)
+      val predicates = conjunctiveNormalFormAndGroupExpsByQualifier(joinCondition)
       if (predicates.isEmpty) {
         j
       } else {

@@ -43,7 +43,7 @@ class ConjunctiveNormalFormPredicateSuite extends SparkFunSuite with PredicateHe
 
   // Check CNF conversion with expected expression, assuming the input has non-empty result.
   private def checkCondition(input: Expression, expected: Expression): Unit = {
-    val cnf = conjunctiveNormalForm(input)
+    val cnf = conjunctiveNormalFormAndGroupExpsByQualifier(input)
     assert(cnf.nonEmpty)
     val result = cnf.reduceLeft(And)
     assert(result.semanticEquals(expected))
@@ -113,14 +113,14 @@ class ConjunctiveNormalFormPredicateSuite extends SparkFunSuite with PredicateHe
     Seq(8, 9, 10, 35, 36, 37).foreach { maxCount =>
       withSQLConf(SQLConf.MAX_CNF_NODE_COUNT.key -> maxCount.toString) {
         if (maxCount < 36) {
-          assert(conjunctiveNormalForm(input).isEmpty)
+          assert(conjunctiveNormalFormAndGroupExpsByQualifier(input).isEmpty)
         } else {
-          assert(conjunctiveNormalForm(input).nonEmpty)
+          assert(conjunctiveNormalFormAndGroupExpsByQualifier(input).nonEmpty)
         }
         if (maxCount < 9) {
-          assert(conjunctiveNormalForm(input2).isEmpty)
+          assert(conjunctiveNormalFormAndGroupExpsByQualifier(input2).isEmpty)
         } else {
-          assert(conjunctiveNormalForm(input2).nonEmpty)
+          assert(conjunctiveNormalFormAndGroupExpsByQualifier(input2).nonEmpty)
         }
       }
     }
