@@ -99,7 +99,10 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   }
 
   override def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
-    Seq(PushCNFPredicateThroughHiveTableScan, new PruneHiveTablePartitions(session))
+    Seq(new PruneHiveTablePartitions(session))
+
+  override def customFinalScanFilterConvertRules: Seq[Rule[LogicalPlan]] =
+    Seq(PushCNFPredicateThroughHiveTableScan)
 
   /**
    * Planner that takes into account Hive-specific strategies.

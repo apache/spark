@@ -31,14 +31,18 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object PushCNFPredicateThroughHiveTableScan extends Rule[LogicalPlan] with PredicateHelper {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case ScanOperation(projectList, conditions, relation: HiveTableRelation)
-      if conditions.nonEmpty =>
-      val predicates = conjunctiveNormalFormAndGroupExpsByReference(conditions.reduceLeft(And))
-      if (predicates.isEmpty) {
-        plan
-      } else {
-        Project(projectList, Filter(predicates.reduceLeft(And), relation))
-      }
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    var resolved = false
+    plan resolveOperatorsDown {
+      case ScanOperation(projectList, conditions, relation: HiveTableRelation)
+        if conditions.nonEmpty && !resolved =>
+        resolved = true
+        val predicates = conjunctiveNormalFormAndGroupExpsByReference(conditions.reduceLeft(And))
+        if (predicates.isEmpty) {
+          plan
+        } else {
+          Project(projectList, Filter(predicates.reduceLeft(And), relation))
+        }
+    }
   }
 }

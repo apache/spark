@@ -207,7 +207,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CollapseProject,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
-    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
+    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
+    Batch("Final Filter Convert CNF", Once, finalScanFilterConvertRules: _*)
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -272,6 +273,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * Override to provide additional rules for early projection and filter pushdown to scans.
    */
   def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
+   * Override to provide additional rules for final filter convert to CNF.
+   */
+  def finalScanFilterConvertRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Returns (defaultBatches - (excludedRules - nonExcludableRules)), the rule batches that
