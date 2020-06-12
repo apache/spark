@@ -2419,7 +2419,11 @@ private[spark] object Utils extends Logging {
       effectiveUser.equals(currentUgi.getUserName())) {
       return currentUgi
     } else {
-      return UserGroupInformation.createProxyUser(effectiveUser, currentUgi)
+      val proxyUser = UserGroupInformation.createProxyUser(effectiveUser, currentUgi)
+      // Also clone Hadoop Delegation Token to effectiveUser, as Hadoop RPC client
+      // does not pick the Hadoop Delegation Token from realUser (currentUgi).
+      proxyUser.addCredentials(currentUgi.getCredentials())
+      return proxyUser
     }
   }
 
