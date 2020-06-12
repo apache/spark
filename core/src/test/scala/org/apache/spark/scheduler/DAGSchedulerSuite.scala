@@ -458,9 +458,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mapStageC.parents === List(mapStageA, mapStageB))
     assert(finalStage.parents === List(mapStageC))
 
-    completeShuffleMapStageSuccessfully(0, 0, 1, Seq("hostA"))
-    completeShuffleMapStageSuccessfully(1, 0, 1, Seq("hostA"))
-    completeShuffleMapStageSuccessfully(2, 0, 1, Seq("hostA"))
+    completeShuffleMapStageSuccessfully(0, 0, 1)
+    completeShuffleMapStageSuccessfully(1, 0, 1)
+    completeShuffleMapStageSuccessfully(2, 0, 1)
     complete(taskSets(3), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty()
@@ -743,7 +743,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
-    completeShuffleMapStageSuccessfully(0, 0, 1, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, 1)
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     complete(taskSets(1), Seq((Success, 42)))
@@ -758,7 +758,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
     completeShuffleMapStageSuccessfully(
-      0, 0, reduceRdd.partitions.length, Seq("hostA", "hostB"))
+      0, 0, reduceRdd.partitions.length)
     // the 2nd ResultTask failed
     complete(taskSets(1), Seq(
       (Success, 42),
@@ -803,7 +803,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       val shuffleId = shuffleDep.shuffleId
       val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
       submit(reduceRdd, Array(0))
-      completeShuffleMapStageSuccessfully(0, 0, 1, Seq("hostA", "hostB"))
+      completeShuffleMapStageSuccessfully(0, 0, 1)
       runEvent(ExecutorLost("hostA-exec", event))
       if (expectFileLoss) {
         intercept[MetadataFetchFailedException] {
@@ -1148,8 +1148,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
-    completeShuffleMapStageSuccessfully(
-      0, 0, reduceRdd.partitions.length, hostNames = Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, reduceRdd.partitions.length)
     // The MapOutputTracker should know about both map output locations.
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
       HashSet("hostA", "hostB"))
@@ -1176,8 +1175,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
-    completeShuffleMapStageSuccessfully(
-      0, 0, reduceRdd.partitions.length, hostNames = Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, reduceRdd.partitions.length)
     assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
 
     // The first result task fails, with a fetch failure for the output from the first mapper.
@@ -1271,7 +1269,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // The map stage should have been submitted.
     assert(countSubmittedMapStageAttempts() === 1)
 
-    completeShuffleMapStageSuccessfully(0, 0, 2, hostNames = Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, 2)
     // The MapOutputTracker should know about both map output locations.
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
       HashSet("hostA", "hostB"))
@@ -1330,7 +1328,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(countSubmittedMapStageAttempts() === 1)
 
     // Complete the map stage.
-    completeShuffleMapStageSuccessfully(0, 0, 2, hostNames = Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, 2)
 
     // The reduce stage should have been submitted.
     assert(countSubmittedReduceStageAttempts() === 1)
@@ -1762,7 +1760,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // correct behavior.
     val job1Id = 0  // TaskSet priority for Stages run with "job1" as the ActiveJob
     checkJobPropertiesAndPriority(taskSets(0), "job1", job1Id)
-    completeShuffleMapStageSuccessfully(0, 0, 1, Seq("hostA"))
+    completeShuffleMapStageSuccessfully(0, 0, 1)
 
     shuffleDep1
   }
@@ -1779,7 +1777,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // the stage.
     checkJobPropertiesAndPriority(taskSets(1), "job2", 1)
 
-    completeShuffleMapStageSuccessfully(1, 0, 1, Seq("hostA"))
+    completeShuffleMapStageSuccessfully(1, 0, 1)
     assert(taskSets(2).properties != null)
     complete(taskSets(2), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
@@ -1811,9 +1809,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     checkJobPropertiesAndPriority(taskSets(2), "job2", job2Id)
 
     // run the rest of the stages normally, checking that they have the correct properties
-    completeShuffleMapStageSuccessfully(0, 1, 1, Seq("hostA"))
+    completeShuffleMapStageSuccessfully(0, 1, 1)
     checkJobPropertiesAndPriority(taskSets(3), "job2", job2Id)
-    completeShuffleMapStageSuccessfully(1, 1, 1, Seq("hostA"))
+    completeShuffleMapStageSuccessfully(1, 1, 1)
     checkJobPropertiesAndPriority(taskSets(4), "job2", job2Id)
     complete(taskSets(4), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
@@ -1836,7 +1834,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     submit(reduceRdd, Array(0))
     // Tell the DAGScheduler that hostA was lost.
     runEvent(ExecutorLost("hostA-exec", ExecutorKilled))
-    completeShuffleMapStageSuccessfully(0, 0, 1, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, 1)
 
     // At this point, no more tasks are running for the stage (and the TaskSetManager considers the
     // stage complete), but the tasks that ran on HostA need to be re-run, so the DAGScheduler
@@ -1872,7 +1870,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo), tracker = mapOutputTracker)
     submit(finalRdd, Array(0))
     // have the first stage complete normally
-    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, 2)
     // have the second stage complete normally
     completeShuffleMapStageSuccessfully(1, 0, 1, Seq("hostA", "hostC"))
     // fail the third stage because hostA went down
@@ -1900,9 +1898,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     cacheLocations(shuffleTwoRdd.id -> 0) = Seq(makeBlockManagerId("hostD"))
     cacheLocations(shuffleTwoRdd.id -> 1) = Seq(makeBlockManagerId("hostC"))
     // complete stage 0
-    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, 2)
     // complete stage 1
-    completeShuffleMapStageSuccessfully(1, 0, 1, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(1, 0, 1)
     // pretend stage 2 failed because hostA went down
     complete(taskSets(2), Seq(
       (FetchFailed(makeBlockManagerId("hostA"),
@@ -2153,7 +2151,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
-    completeShuffleMapStageSuccessfully(0, 0, 1, Seq("hostA"))
+    completeShuffleMapStageSuccessfully(0, 0, 1)
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA")))
 
@@ -2198,7 +2196,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep, narrowDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
-    completeShuffleMapStageSuccessfully(0, 0, 1, Seq("hostA"))
+    completeShuffleMapStageSuccessfully(0, 0, 1)
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA")))
 
@@ -2301,8 +2299,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     // Submit a map stage by itself
     submitMapStage(shuffleDep)
-    completeShuffleMapStageSuccessfully(
-      0, 0, reduceRdd.partitions.length, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, reduceRdd.partitions.length)
     assert(results.size === 1)
     results.clear()
     assertDataStructuresEmpty()
@@ -2359,8 +2356,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     // Complete the first stage
     assert(taskSets(0).stageId === 0)
-    completeShuffleMapStageSuccessfully(
-      0, 0, rdd1.partitions.length, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, rdd1.partitions.length)
     assert(mapOutputTracker.getMapSizesByExecutorId(dep1.shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     assert(listener1.results.size === 1)
@@ -2422,8 +2418,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     // Complete the stage0.
     assert(taskSets(0).stageId === 0)
-    completeShuffleMapStageSuccessfully(
-      0, 0, rdd1.partitions.length, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, rdd1.partitions.length)
     assert(mapOutputTracker.getMapSizesByExecutorId(dep1.shuffleId, 0).map(_._1).toSet ===
         HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     assert(listener1.results.size === 1)
@@ -2804,7 +2799,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     submit(finalRdd, Array(0, 1))
 
     // Finish the first shuffle map stage.
-    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, 2)
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
 
     // Finish the second shuffle map stage.
@@ -2867,7 +2862,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(taskSets(4).tasks.length == 2)
 
     // Finish all stage.
-    completeShuffleMapStageSuccessfully(0, 1, 2, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 1, 2)
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
 
     completeShuffleMapStageSuccessfully(1, 2, 2, Seq("hostC", "hostD"))
@@ -2902,7 +2897,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     // Finish the first 2 shuffle map stages.
 
-    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
+    completeShuffleMapStageSuccessfully(0, 0, 2)
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
 
     completeShuffleMapStageSuccessfully(1, 0, 2, Seq("hostB", "hostD"))
@@ -2925,7 +2920,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       assert(taskSets(taskSetIndex).stageId == stageId)
       assert(taskSets(taskSetIndex).stageAttemptId == 1)
       assert(taskSets(taskSetIndex).tasks.length == 2)
-      completeShuffleMapStageSuccessfully(stageId, 1, 2, Seq("hostA", "hostB"))
+      completeShuffleMapStageSuccessfully(stageId, 1, 2)
       assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
     }
 
