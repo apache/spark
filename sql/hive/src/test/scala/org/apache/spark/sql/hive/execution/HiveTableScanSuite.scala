@@ -189,7 +189,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
     }
   }
 
-  test("Convert scan predicate to CNF") {
+  test("SPARK-28169: Convert scan predicate condition to CNF") {
     withTable("t", "temp") {
       sql(
         s"""
