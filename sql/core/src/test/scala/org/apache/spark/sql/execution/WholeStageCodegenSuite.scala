@@ -166,7 +166,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("SPARK-: Avoid spill in partial aggregation " +
+  test("SPARK-31973: Avoid spill in partial aggregation " +
     "when spark.sql.aggregate.spill.partialaggregate.disabled is set") {
     withSQLConf((SQLConf.SPILL_PARTIAL_AGGREGATE_DISABLED.key, "true"),
       (SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key, "false")) {
