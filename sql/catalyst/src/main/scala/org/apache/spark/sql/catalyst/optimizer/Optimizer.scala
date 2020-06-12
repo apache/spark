@@ -51,7 +51,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
   override protected val blacklistedOnceBatches: Set[String] =
     Set(
       "PartitionPruning",
-      "Extract Python UDFs")
+      "Extract Python UDFs",
+      "Push CNF predicate through join")
 
   protected def fixedPoint =
     FixedPoint(
@@ -118,7 +119,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Infer Filters", Once,
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        rulesWithoutInferFiltersFromConstraints: _*) :: Nil
+        rulesWithoutInferFiltersFromConstraints: _*) ::
+      // Set strategy to Once to avoid pushing filter every time because we do not change the
+      // join condition.
+      Batch("Push CNF predicate through join", Once,
+        PushCNFPredicateThroughJoin) :: Nil
     }
 
     val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::

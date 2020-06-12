@@ -513,6 +513,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "transform",
     "true",
     "truncate",
+    "type",
     "unarchive",
     "unbounded",
     "uncache",
