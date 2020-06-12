@@ -757,8 +757,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0, 1))
-    completeShuffleMapStageSuccessfully(
-      0, 0, reduceRdd.partitions.length)
+    completeShuffleMapStageSuccessfully(0, 0, reduceRdd.partitions.length)
     // the 2nd ResultTask failed
     complete(taskSets(1), Seq(
       (Success, 42),
@@ -2896,7 +2895,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     submit(finalRdd, Array(0, 1), properties = new Properties())
 
     // Finish the first 2 shuffle map stages.
-
     completeShuffleMapStageSuccessfully(0, 0, 2)
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
 
