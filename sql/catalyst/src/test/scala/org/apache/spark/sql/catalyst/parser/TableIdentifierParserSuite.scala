@@ -363,7 +363,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
 
   test("check # of reserved keywords") {
     val numReservedKeywords = 77
-    assert(reservedKeywordsInAnsiMode.size == 77,
+    assert(reservedKeywordsInAnsiMode.size == numReservedKeywords,
       s"The expected number of reserved keywords is $numReservedKeywords, but " +
         s"${reservedKeywordsInAnsiMode.size} found.")
   }
