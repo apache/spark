@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.ui
 
-import org.apache.spark.sql.streaming.ui.StreamingQueryUIData
+import org.apache.spark.sql.streaming.ui.{StreamingQueryProgressWrapper, StreamingQuerySummary, StreamingQueryUIData}
 import org.apache.spark.status.{ElementTrackingStore, KVUtils}
 
 /**
@@ -26,20 +26,34 @@ import org.apache.spark.status.{ElementTrackingStore, KVUtils}
  * application.
  */
 class StreamingQueryStatusStore(store: ElementTrackingStore) {
-  def allQueryStatus: Seq[StreamingQueryUIData] = synchronized {
-    val view = store.view(classOf[StreamingQueryUIData]).index("startTimestamp").first(0L)
-    KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(_.setKVStore(store))
+
+  def queriesCount(): Long = store.count(classOf[StreamingQuerySummary])
+
+  def allQueryUIData: Seq[StreamingQueryUIData] = synchronized {
+    val view = store.view(classOf[StreamingQuerySummary]).index("startTimestamp").first(0L)
+    KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(makeUIData)
   }
 
-  def queriesCount(): Long = store.count(classOf[StreamingQueryUIData])
-
-  private[sql] def activeQuery(): Seq[StreamingQueryUIData] = {
-    val view = store.view(classOf[StreamingQueryUIData]).index("startTimestamp").first(0L)
-    KVUtils.viewToSeq(view, Int.MaxValue)(_.isActive).map(_.setKVStore(store))
+  private[sql] def activeQueryUIData(): Seq[StreamingQueryUIData] = {
+    allQueryUIData.filter(_.summary.isActive)
   }
 
-  private[sql] def inactiveQuery(): Seq[StreamingQueryUIData] = {
-    val view = store.view(classOf[StreamingQueryUIData]).index("startTimestamp").first(0L)
-    KVUtils.viewToSeq(view, Int.MaxValue)(!_.isActive).map(_.setKVStore(store))
+  private[sql] def inactiveQueryUIData(): Seq[StreamingQueryUIData] = {
+    allQueryUIData.filter(!_.summary.isActive)
+  }
+
+  private def makeUIData(summary: StreamingQuerySummary): StreamingQueryUIData = {
+    val recentProgress = summary.progressIds.map { uniqueId =>
+      store.read(classOf[StreamingQueryProgressWrapper], uniqueId).progress
+    }.toArray
+
+    val lastProgress = if (summary.progressIds.nonEmpty) {
+      store.read(classOf[StreamingQueryProgressWrapper],
+        summary.progressIds.last).progress
+    } else {
+      null
+    }
+
+    StreamingQueryUIData(summary, recentProgress, lastProgress)
   }
 }

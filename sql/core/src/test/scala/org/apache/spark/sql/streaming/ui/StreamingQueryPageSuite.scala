@@ -41,20 +41,20 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(tab.store).thenReturn(store)
 
     val streamQuery = createStreamQueryUIData(id)
-    when(store.allQueryStatus).thenReturn(Seq(streamQuery))
+    when(store.allQueryUIData).thenReturn(Seq(streamQuery))
     var html = renderStreamingQueryPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (1)"))
 
-    when(streamQuery.isActive).thenReturn(false)
-    when(streamQuery.exception).thenReturn(None)
+    when(streamQuery.summary.isActive).thenReturn(false)
+    when(streamQuery.summary.exception).thenReturn(None)
     html = renderStreamingQueryPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("completed streaming queries (1)"))
     assert(html.contains("finished"))
 
-    when(streamQuery.isActive).thenReturn(false)
-    when(streamQuery.exception).thenReturn(Option("exception in query"))
+    when(streamQuery.summary.isActive).thenReturn(false)
+    when(streamQuery.summary.exception).thenReturn(Option("exception in query"))
     html = renderStreamingQueryPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("completed streaming queries (1)"))
@@ -73,7 +73,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(tab.store).thenReturn(store)
 
     val streamQuery = createStreamQueryUIData(id)
-    when(store.allQueryStatus).thenReturn(Seq(streamQuery))
+    when(store.allQueryUIData).thenReturn(Seq(streamQuery))
     val html = renderStreamingQueryStatisticsPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
 
@@ -91,15 +91,18 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(progress.batchId).thenReturn(2)
     when(progress.prettyJson).thenReturn("""{"a":1}""")
 
+    val summary = mock(classOf[StreamingQuerySummary], RETURNS_SMART_NULLS)
+    when(summary.isActive).thenReturn(true)
+    when(summary.name).thenReturn("query")
+    when(summary.id).thenReturn(id)
+    when(summary.runId).thenReturn(id)
+    when(summary.startTimestamp).thenReturn(1L)
+    when(summary.exception).thenReturn(None)
+
     val streamQuery = mock(classOf[StreamingQueryUIData], RETURNS_SMART_NULLS)
-    when(streamQuery.isActive).thenReturn(true)
-    when(streamQuery.name).thenReturn("query")
-    when(streamQuery.id).thenReturn(id)
-    when(streamQuery.runId).thenReturn(id)
-    when(streamQuery.startTimestamp).thenReturn(1L)
+    when(streamQuery.summary).thenReturn(summary)
     when(streamQuery.lastProgress).thenReturn(progress)
     when(streamQuery.recentProgress).thenReturn(Array(progress))
-    when(streamQuery.exception).thenReturn(None)
 
     streamQuery
   }

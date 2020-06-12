@@ -35,7 +35,6 @@ import org.apache.spark.util.kvstore.KVIndex
 /**
  * A customized StreamingQueryListener used in structured streaming UI, which contains all
  * UI data for both active and inactive query.
- * TODO: Add support for history server.
  */
 private[sql] class StreamingQueryStatusListener(
     conf: SparkConf,
@@ -45,7 +44,7 @@ private[sql] class StreamingQueryStatusListener(
     conf.get(StaticSQLConf.STREAMING_UI_RETAINED_PROGRESS_UPDATES)
   private val inactiveQueryStatusRetention = conf.get(StaticSQLConf.STREAMING_UI_RETAINED_QUERIES)
 
-  store.addTrigger(classOf[StreamingQueryUIData], inactiveQueryStatusRetention) { count =>
+  store.addTrigger(classOf[StreamingQuerySummary], inactiveQueryStatusRetention) { count =>
     cleanupInactiveQueries(count)
   }
 
@@ -55,10 +54,10 @@ private[sql] class StreamingQueryStatusListener(
       return
     }
 
-    val view = store.view(classOf[StreamingQueryUIData]).index("startTimestamp").first(0L)
+    val view = store.view(classOf[StreamingQuerySummary]).index("startTimestamp").first(0L)
     val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt)(_.isActive == false)
     toDelete.foreach { e =>
-      store.delete(e.getClass(), e.runId)
+      store.delete(e.getClass, e.runId)
       store.removeAllByIndexValues(
         classOf[StreamingQueryProgressWrapper], "runId", e.runId.toString)
     }
@@ -66,7 +65,7 @@ private[sql] class StreamingQueryStatusListener(
 
   override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
     val startTimestamp = parseProgressTimestamp(event.timestamp)
-    val querySummary = new StreamingQueryUIData(
+    val querySummary = new StreamingQuerySummary(
       event.name,
       event.id,
       event.runId,
@@ -81,20 +80,20 @@ private[sql] class StreamingQueryStatusListener(
     val runId = event.progress.runId
     val batchId = event.progress.batchId
     val timestamp = event.progress.timestamp
-    val querySummary = store.read(classOf[StreamingQueryUIData], runId)
-    val progressIdQueue =
-      querySummary.progressIdQueue ++ Seq(getUniqueId(runId, batchId, timestamp))
+    val querySummary = store.read(classOf[StreamingQuerySummary], runId)
+    val progressIds =
+      querySummary.progressIds ++ Seq(getUniqueId(runId, batchId, timestamp))
     store.write(new StreamingQueryProgressWrapper(event.progress))
-    while(progressIdQueue.length >= streamingProgressRetention) {
-      val uniqueId = progressIdQueue.dequeue
+    while(progressIds.length >= streamingProgressRetention) {
+      val uniqueId = progressIds.dequeue
       store.delete(classOf[StreamingQueryProgressWrapper], uniqueId)
     }
-    store.delete(classOf[StreamingQueryUIData], runId)
-    store.write(new StreamingQueryUIData(
+    store.delete(classOf[StreamingQuerySummary], runId)
+    store.write(new StreamingQuerySummary(
       querySummary.name,
       querySummary.id,
       querySummary.runId,
-      progressIdQueue,
+      progressIds,
       querySummary.startTimestamp,
       querySummary.isActive,
       querySummary.exception
@@ -103,13 +102,13 @@ private[sql] class StreamingQueryStatusListener(
 
   override def onQueryTerminated(
       event: StreamingQueryListener.QueryTerminatedEvent): Unit = synchronized {
-    val querySummary = store.read(classOf[StreamingQueryUIData], event.runId)
-    store.delete(classOf[StreamingQueryUIData], event.runId)
-    store.write(new StreamingQueryUIData(
+    val querySummary = store.read(classOf[StreamingQuerySummary], event.runId)
+    store.delete(classOf[StreamingQuerySummary], event.runId)
+    store.write(new StreamingQuerySummary(
       querySummary.name,
       querySummary.id,
       querySummary.runId,
-      querySummary.progressIdQueue,
+      querySummary.progressIds,
       querySummary.startTimestamp,
       false,
       querySummary.exception
@@ -117,49 +116,30 @@ private[sql] class StreamingQueryStatusListener(
   }
 }
 
+private[sql] class StreamingQuerySummary(
+    val name: String,
+    val id: UUID,
+    @KVIndexParam val runId: UUID,
+    val progressIds: Queue[String],
+    val startTimestamp: Long,
+    val isActive: Boolean,
+    val exception: Option[String]) {
+  @JsonIgnore @KVIndex("startTimestamp")
+  private def startTimestampIndex: Long = startTimestamp
+}
+
 /**
  * This class contains all message related to UI display, each instance corresponds to a single
  * [[org.apache.spark.sql.streaming.StreamingQuery]].
  */
-private[sql] class StreamingQueryUIData(
-    val name: String,
-    val id: UUID,
-    @KVIndexParam val runId: UUID,
-    val progressIdQueue: Queue[String],
-    val startTimestamp: Long,
-    val isActive: Boolean,
-    val exception: Option[String]) {
-
-  private var storeOption: Option[ElementTrackingStore] = None
-
-  @JsonIgnore @KVIndex("startTimestamp")
-  private def startTimestampIndex: Long = startTimestamp
-
-  def recentProgress: Array[StreamingQueryProgress] = {
-    storeOption.map { store => progressIdQueue.map { uniqueId =>
-      store.read(classOf[StreamingQueryProgressWrapper], uniqueId).progress
-    }.toArray }.getOrElse(Array.empty)
-  }
-
-  def lastProgress: StreamingQueryProgress = {
-    if (progressIdQueue.nonEmpty) {
-      storeOption.map(_.read(classOf[StreamingQueryProgressWrapper], progressIdQueue.last).progress)
-        .orNull
-    } else {
-      null
-    }
-  }
-
-  def setKVStore(store: ElementTrackingStore): StreamingQueryUIData = {
-    storeOption = Option(store)
-    this
-  }
-}
+private[sql] case class StreamingQueryUIData(
+    summary: StreamingQuerySummary,
+    recentProgress: Array[StreamingQueryProgress],
+    lastProgress: StreamingQueryProgress)
 
 private[sql] class StreamingQueryProgressWrapper(val progress: StreamingQueryProgress) {
   @KVIndexParam("batchId") val batchId: Long = progress.batchId
   @KVIndexParam("runId") val runId: String = progress.runId.toString
-
   @JsonIgnore @KVIndex
   def uniqueId: String = getUniqueId(progress.runId, progress.batchId, progress.timestamp)
 }

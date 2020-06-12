@@ -40,8 +40,8 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
   }
 
   private def generateStreamingQueryTable(request: HttpServletRequest): Seq[Node] = {
-    val (activeQueries, inactiveQueries) = parent.store.allQueryStatus
-      .partition(_.isActive)
+    val activeQueries = parent.store.activeQueryUIData()
+    val inactiveQueries = parent.store.inactiveQueryUIData()
 
     val content = mutable.ListBuffer[Node]()
     // show active queries table only if there is at least one active query
@@ -176,7 +176,7 @@ class StreamingQueryPagedTable(
     val streamingQuery = query.streamingUIData
     val statisticsLink = "%s/%s/statistics?id=%s"
       .format(SparkUIUtils.prependBaseUri(request, parent.basePath), parent.prefix,
-        streamingQuery.runId)
+        streamingQuery.summary.runId)
 
     def details(detail: Any): Seq[Node] = {
       if (isActive) {
@@ -194,14 +194,14 @@ class StreamingQueryPagedTable(
     <tr>
       <td>{UIUtils.getQueryName(streamingQuery)}</td>
       <td>{UIUtils.getQueryStatus(streamingQuery)}</td>
-      <td>{streamingQuery.id}</td>
-      <td><a href={statisticsLink}>{streamingQuery.runId}</a></td>
-      <td>{SparkUIUtils.formatDate(streamingQuery.startTimestamp)}</td>
+      <td>{streamingQuery.summary.id}</td>
+      <td><a href={statisticsLink}>{streamingQuery.summary.runId}</a></td>
+      <td>{SparkUIUtils.formatDate(streamingQuery.summary.startTimestamp)}</td>
       <td>{query.duration}</td>
       <td>{withNoProgress(streamingQuery, {query.avgInput.formatted("%.2f")}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {query.avgProcess.formatted("%.2f")}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {streamingQuery.lastProgress.batchId}, "NaN")}</td>
-      {details(streamingQuery.exception.getOrElse("-"))}
+      {details(streamingQuery.summary.exception.getOrElse("-"))}
     </tr>
   }
 }
@@ -222,31 +222,32 @@ class StreamingQueryDataSource(uiData: Seq[StreamingQueryUIData], sortColumn: St
 
   override def sliceData(from: Int, to: Int): Seq[StructuredStreamingRow] = data.slice(from, to)
 
-  private def streamingRow(query: StreamingQueryUIData): StructuredStreamingRow = {
+  private def streamingRow(uiData: StreamingQueryUIData): StructuredStreamingRow = {
     val duration = if (isActive) {
-      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query.startTimestamp)
+      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - uiData.summary.startTimestamp)
     } else {
-      withNoProgress(query, {
-        val endTimeMs = query.lastProgress.timestamp
-        SparkUIUtils.formatDurationVerbose(parseProgressTimestamp(endTimeMs) - query.startTimestamp)
+      withNoProgress(uiData, {
+        val endTimeMs = uiData.lastProgress.timestamp
+        val durationMS = parseProgressTimestamp(endTimeMs) - uiData.summary.startTimestamp
+        SparkUIUtils.formatDurationVerbose(durationMS)
       }, "-")
     }
 
-    val avgInput = (query.recentProgress.map(p => withNumberInvalid(p.inputRowsPerSecond)).sum /
-      query.recentProgress.length)
+    val avgInput = (uiData.recentProgress.map(p => withNumberInvalid(p.inputRowsPerSecond)).sum /
+      uiData.recentProgress.length)
 
-    val avgProcess = (query.recentProgress.map(p =>
-      withNumberInvalid(p.processedRowsPerSecond)).sum / query.recentProgress.length)
+    val avgProcess = (uiData.recentProgress.map(p =>
+      withNumberInvalid(p.processedRowsPerSecond)).sum / uiData.recentProgress.length)
 
-    StructuredStreamingRow(duration, avgInput, avgProcess, query)
+    StructuredStreamingRow(duration, avgInput, avgProcess, uiData)
   }
 
   private def ordering(sortColumn: String, desc: Boolean): Ordering[StructuredStreamingRow] = {
     val ordering: Ordering[StructuredStreamingRow] = sortColumn match {
       case "Name" => Ordering.by(q => UIUtils.getQueryName(q.streamingUIData))
-      case "ID" => Ordering.by(_.streamingUIData.id)
-      case "Run ID" => Ordering.by(_.streamingUIData.runId)
-      case "Start Time" => Ordering.by(_.streamingUIData.startTimestamp)
+      case "ID" => Ordering.by(_.streamingUIData.summary.id)
+      case "Run ID" => Ordering.by(_.streamingUIData.summary.runId)
+      case "Start Time" => Ordering.by(_.streamingUIData.summary.startTimestamp)
       case "Duration" => Ordering.by(_.duration)
       case "Avg Input /sec" => Ordering.by(_.avgInput)
       case "Avg Process /sec" => Ordering.by(_.avgProcess)

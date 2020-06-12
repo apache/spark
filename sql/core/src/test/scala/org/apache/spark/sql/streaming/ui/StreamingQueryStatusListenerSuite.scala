@@ -42,8 +42,9 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryStarted(startEvent)
 
     // result checking
-    assert(queryStore.activeQuery().length == 1)
-    assert(queryStore.activeQuery().exists(q => q.runId == runId && q.name.equals("test")))
+    assert(queryStore.activeQueryUIData().length == 1)
+    assert(queryStore.activeQueryUIData().exists(uiData =>
+      uiData.summary.runId == runId && uiData.summary.name.equals("test")))
 
     // handle query progress event
     val progress = mock(classOf[StreamingQueryProgress], RETURNS_SMART_NULLS)
@@ -58,9 +59,9 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryProgress(processEvent)
 
     // result checking
-    val activeQuery = queryStore.activeQuery().find(_.runId == runId)
+    val activeQuery = queryStore.activeQueryUIData().find(_.summary.runId == runId)
     assert(activeQuery.isDefined)
-    assert(activeQuery.get.isActive)
+    assert(activeQuery.get.summary.isActive)
     assert(activeQuery.get.recentProgress.length == 1)
     assert(activeQuery.get.lastProgress.id == id)
     assert(activeQuery.get.lastProgress.runId == runId)
@@ -74,9 +75,9 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     val terminateEvent = new StreamingQueryListener.QueryTerminatedEvent(id, runId, None)
     listener.onQueryTerminated(terminateEvent)
 
-    assert(!queryStore.inactiveQuery().head.isActive)
-    assert(queryStore.inactiveQuery().head.runId == runId)
-    assert(queryStore.inactiveQuery().head.id == id)
+    assert(!queryStore.inactiveQueryUIData().head.summary.isActive)
+    assert(queryStore.inactiveQueryUIData().head.summary.runId == runId)
+    assert(queryStore.inactiveQueryUIData().head.summary.id == id)
   }
 
   test("same query start multiple times") {
@@ -102,11 +103,12 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryStarted(startEvent1)
 
     // result checking
-    assert(queryStore.activeQuery().length == 1)
-    assert(queryStore.inactiveQuery().length == 1)
-    assert(queryStore.activeQuery().exists(_.runId == runId1))
-    assert(queryStore.activeQuery().exists(q => q.runId == runId1 && q.id == id))
-    assert(queryStore.inactiveQuery().head.runId == runId0)
-    assert(queryStore.inactiveQuery().head.id == id)
+    assert(queryStore.activeQueryUIData().length == 1)
+    assert(queryStore.inactiveQueryUIData().length == 1)
+    assert(queryStore.activeQueryUIData().exists(_.summary.runId == runId1))
+    assert(queryStore.activeQueryUIData().exists(uiData =>
+      uiData.summary.runId == runId1 && uiData.summary.id == id))
+    assert(queryStore.inactiveQueryUIData().head.summary.runId == runId0)
+    assert(queryStore.inactiveQueryUIData().head.summary.id == id)
   }
 }

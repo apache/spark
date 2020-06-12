@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.ui
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.Status.ASYNC_TRACKING_ENABLED
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.sql.execution.streaming.StreamingQueryListenerBus
 import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
@@ -34,8 +33,7 @@ class StreamingQueryHistoryServerPlugin extends AppHistoryServerPlugin {
   }
 
   override def setupUI(ui: SparkUI): Unit = {
-    val replayConf = ui.conf.clone().set(ASYNC_TRACKING_ENABLED, false)
-    val trackingStore = new ElementTrackingStore(ui.store.store, replayConf)
+    val trackingStore = new ElementTrackingStore(ui.store.store, ui.conf)
     val streamingQueryStatusStore = new StreamingQueryStatusStore(trackingStore)
     new StreamingQueryTab(streamingQueryStatusStore, ui)
   }

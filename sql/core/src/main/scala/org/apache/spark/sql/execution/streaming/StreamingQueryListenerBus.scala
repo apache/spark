@@ -98,10 +98,8 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus], live:
         //
         // When loaded by Spark History Server, we should process all event coming from replay
         // listener bus.
-        if (!live) {
-          postToAll(e)
-        } else if (!LiveListenerBus.withinListenerThread.value ||
-            !e.isInstanceOf[QueryStartedEvent]) {
+        if (!live || !LiveListenerBus.withinListenerThread.value ||
+          !e.isInstanceOf[QueryStartedEvent])  {
           postToAll(e)
         }
       case _ =>
