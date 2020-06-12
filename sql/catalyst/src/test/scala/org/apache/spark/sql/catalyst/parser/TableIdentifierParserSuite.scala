@@ -315,13 +315,16 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     )
     val keywords = new mutable.ArrayBuffer[String]
     val default = (_: String) => None
-    var start = false
-    for (line <- sqlSyntaxDefs) {
+    var startTagFound = false
+    var parseFinished = false
+    val lineIter = sqlSyntaxDefs.toIterator
+    while (!parseFinished && lineIter.hasNext) {
+      val line = lineIter.next()
       if (line.trim.startsWith(startTag)) {
-        start = true
+        startTagFound = true
       } else if (line.trim.startsWith(endTag)) {
-        start = false
-      } else if (start) {
+        parseFinished = true
+      } else if (startTagFound) {
         f.applyOrElse(line, default).foreach { symbol =>
           if (symbolsToNeedRemap.contains(symbol)) {
             keywords ++= symbolsToNeedRemap(symbol)
@@ -331,6 +334,9 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
         }
       }
     }
+    assert(keywords.nonEmpty && startTagFound && parseFinished, "cannot extract keywords from " +
+      s"the `SqlBase.g4` file, so please check if the start/end tags (`$startTag` and `$endTag`) " +
+      "are placed correctly in the file.")
     keywords.map(_.trim.toLowerCase(Locale.ROOT)).toSet
   }
 
@@ -357,6 +363,13 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "//--ANSI-NON-RESERVED-START", "//--ANSI-NON-RESERVED-END")
 
   val reservedKeywordsInAnsiMode = allCandidateKeywords -- nonReservedKeywordsInAnsiMode
+
+  test("check # of reserved keywords") {
+    val numReservedKeywords = 77
+    assert(reservedKeywordsInAnsiMode.size == 77,
+      s"The expected number of reserved keywords is $numReservedKeywords, " +
+        s"${reservedKeywordsInAnsiMode.size} found.")
+  }
 
   test("table identifier") {
     // Regular names.
