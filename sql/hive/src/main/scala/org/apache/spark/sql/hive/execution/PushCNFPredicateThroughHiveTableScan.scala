@@ -33,9 +33,14 @@ object PushCNFPredicateThroughHiveTableScan extends Rule[LogicalPlan] with Predi
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan transform {
-      case ScanOperation(projectList, conditions, relation: HiveTableRelation) =>
+      case ScanOperation(projectList, conditions, relation: HiveTableRelation)
+        if conditions.nonEmpty =>
         val predicates = conjunctiveNormalFormForPartitionPruning(conditions.reduceLeft(And))
-        return Project(projectList, Filter(predicates.reduceLeft(And), relation))
+        if (predicates.isEmpty) {
+          return plan
+        } else {
+          return Project(projectList, Filter(predicates.reduceLeft(And), relation))
+        }
     }
   }
 }

@@ -34,9 +34,15 @@ object PushCNFPredicateThroughFileScan extends Rule[LogicalPlan] with PredicateH
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan transform {
-      case ScanOperation(projectList, conditions, relation: LogicalRelation) =>
+      case ScanOperation(projectList, conditions, relation: LogicalRelation)
+        if conditions.nonEmpty =>
         val predicates = conjunctiveNormalFormForPartitionPruning(conditions.reduceLeft(And))
-        return Project(projectList, Filter(predicates.reduceLeft(And), relation))
+        if (predicates.isEmpty) {
+          return plan
+        } else {
+          return Project(projectList, Filter(predicates.reduceLeft(And), relation))
+        }
+
     }
   }
 }

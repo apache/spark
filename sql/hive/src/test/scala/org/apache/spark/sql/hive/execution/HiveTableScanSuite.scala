@@ -214,6 +214,11 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
         "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '3' and i = 3 )")
       val scan4 = getHiveTableScanExec(
         "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '2' or p = '3')")
+      val scan5 = getHiveTableScanExec(
+        "SELECT * FROM t")
+      val scan6 = getHiveTableScanExec(
+        "SELECT * FROM t where p = '1' and i = 2")
+
 
       assert(scan1.prunedPartitions.map(_.toString) ==
         Stream("t(p=1)", "t(p=2)"))
@@ -223,6 +228,10 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
         Stream("t(p=1)", "t(p=3)"))
       assert(scan4.prunedPartitions.map(_.toString) ==
         Stream("t(p=1)", "t(p=2)", "t(p=3)"))
+      assert(scan5.prunedPartitions.map(_.toString) ==
+        Stream("t(p=1)", "t(p=2)", "t(p=3)", "t(p=4)"))
+      assert(scan6.prunedPartitions.map(_.toString) ==
+        Stream("t(p=1)"))
     }
   }
 
