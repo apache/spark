@@ -48,7 +48,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   LevelDBIterator(Class<T> type, LevelDB db, KVStoreView<T> params) throws Exception {
     this.db = db;
     this.ascending = params.ascending;
-    this.it = db.db().iterator();
+    this.it = db.createIterator();
     this.type = type;
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
@@ -107,7 +107,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public boolean hasNext() {
-    if (!checkedNext && !closed) {
+    if (!checkedNext && !closed && !db.isClosed()) {
       next = loadNext();
       checkedNext = true;
     }
@@ -186,10 +186,20 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   @Override
   public synchronized void close() throws IOException {
     if (!closed) {
-      it.close();
+      db.closeIterator(it);
       closed = true;
     }
-    db.notifyIteratorClosed(this);
+  }
+
+  /**
+   * Because it's tricky to expose closeable iterators through many internal APIs, especially
+   * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
+   * the iterator will eventually be released.
+   */
+  @SuppressWarnings("deprecation")
+  @Override
+  protected void finalize() throws Throwable {
+    close();
   }
 
   private byte[] loadNext() {

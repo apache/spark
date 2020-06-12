@@ -31,6 +31,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.iq80.leveldb.DB;
+import org.iq80.leveldb.DBIterator;
 import org.iq80.leveldb.Options;
 import org.iq80.leveldb.WriteBatch;
 
@@ -66,10 +67,10 @@ public class LevelDB implements KVStore {
   private final ConcurrentMap<Class<?>, LevelDBTypeInfo> types;
 
   /**
-   * If level db is closed, level db iterator will be invalid and trying to close it will cause
-   * JVM crashes. Track active iterators to make sure they are correctly closed.
+   * If level db is closed, level db iterator will be marked ended and trying to close it will
+   * cause JVM crashes. Track active iterators to make sure they are correctly closed.
    */
-  private final ConcurrentLinkedQueue<LevelDBIterator<?>> iteratorTracker;
+  private final ConcurrentLinkedQueue<DBIterator> iteratorTracker;
 
   public LevelDB(File path) throws Exception {
     this(path, new KVStoreSerializer());
@@ -198,9 +199,7 @@ public class LevelDB implements KVStore {
       @Override
       public Iterator<T> iterator() {
         try {
-          LevelDBIterator<T> iterator = new LevelDBIterator<>(type, LevelDB.this, this);
-          iteratorTracker.add(iterator);
-          return iterator;
+          return new LevelDBIterator<>(type, LevelDB.this, this);
         } catch (Exception e) {
           throw Throwables.propagate(e);
         }
@@ -254,7 +253,7 @@ public class LevelDB implements KVStore {
 
       try {
         if (iteratorTracker != null) {
-          for (LevelDBIterator<?> it: iteratorTracker) {
+          for (DBIterator it: iteratorTracker) {
             it.close();
           }
         }
@@ -267,12 +266,28 @@ public class LevelDB implements KVStore {
     }
   }
 
+  public boolean isClosed() {
+    return this._db.get() == null;
+  }
+
   /**
-   * Remove iterator from iterator tracker. `LevelDBIterator` calls it to notify
-   * iterator is closed.
+   * Closes the given iterator if the DB is still open. Trying to close a JNI LevelDB handle
+   * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
    */
-  void notifyIteratorClosed(LevelDBIterator<?> it) {
+  public void closeIterator(DBIterator it) throws IOException {
+    synchronized (this._db) {
+      DB _db = this._db.get();
+      if (_db != null) {
+        it.close();
+      }
+    }
     iteratorTracker.remove(it);
+  }
+
+  public DBIterator createIterator() {
+    DBIterator it = db().iterator();
+    iteratorTracker.add(it);
+    return it;
   }
 
   /** Returns metadata about indices for the given type. */
