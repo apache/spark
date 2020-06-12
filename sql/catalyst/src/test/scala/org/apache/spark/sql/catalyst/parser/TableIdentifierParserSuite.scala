@@ -16,8 +16,11 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import java.io.File
+import java.nio.file.Files
 import java.util.Locale
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
@@ -392,6 +395,18 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     assert(reservedKeywordsInAnsiMode.size == numReservedKeywords,
       s"The expected number of reserved keywords is $numReservedKeywords, but " +
         s"${reservedKeywordsInAnsiMode.size} found.")
+  }
+
+  test("should follow reserved keywords in SQL:2016") {
+    withTempDir { dir =>
+      val tmpFile = new File(dir, "tmp")
+      val is = Thread.currentThread().getContextClassLoader
+        .getResourceAsStream("ansi-sql-2016-reserved-keywords.txt")
+      Files.copy(is, tmpFile.toPath)
+      val reservedKeywordsInSql2016 = Files.readAllLines(tmpFile.toPath)
+        .asScala.filterNot(_.startsWith("--")).map(_.trim.toLowerCase(Locale.ROOT)).toSet
+      assert((reservedKeywordsInAnsiMode -- reservedKeywordsInSql2016).isEmpty)
+    }
   }
 
   test("table identifier") {
