@@ -202,7 +202,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CollapseProject,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
-    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
+    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
+    Batch("CombineWithFields", fixedPoint, CombineWithFields) :+
+    Batch("WithFieldsToCreateNamedStruct", Once, WithFieldsToCreateNamedStruct)
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -235,7 +237,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       PullupCorrelatedPredicates.ruleName ::
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
-      NormalizeFloatingNumbers.ruleName :: Nil
+      NormalizeFloatingNumbers.ruleName ::
+      CombineWithFields.ruleName ::
+      WithFieldsToCreateNamedStruct.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -1786,5 +1790,24 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
+  }
+}
+
+/**
+ * Combines all adjacent [[WithFields]] expression into a single [[WithFields]] expression.
+ */
+object CombineWithFields extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
+      WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
+  }
+}
+
+/**
+ * [[WithFields]] expression to [[CreateNamedStruct]].
+ */
+object WithFieldsToCreateNamedStruct extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case e: WithFields => e.toCreateNamedStruct
   }
 }

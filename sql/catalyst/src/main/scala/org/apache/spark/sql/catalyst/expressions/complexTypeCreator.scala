@@ -545,78 +545,78 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 /**
  * Adds/replaces field in struct by name.
  */
-case class WithField(structExpr: Expression, fieldPath: Seq[String], valueExpr: Expression)
-  extends Unevaluable {
-  assert(fieldPath.nonEmpty)
+case class WithFields(
+  structExpr: Expression,
+  nameExprs: Seq[Expression],
+  valExprs: Seq[Expression]) extends Unevaluable {
 
-  lazy val toCreateNamedStruct: Expression = toCreateNamedStruct(structExpr, fieldPath)
-
-  override def children: Seq[Expression] = Seq(structExpr, valueExpr)
-
-  override def dataType: StructType = toCreateNamedStruct.dataType.asInstanceOf[StructType]
-
-  override def foldable: Boolean = toCreateNamedStruct.foldable
-
-  override def nullable: Boolean = toCreateNamedStruct.nullable
-
-  override def prettyName: String = "with_field"
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    checkIntermediateDataTypesAreStruct(structExpr.dataType, fieldPath)
-
-  private val resolver = SQLConf.get.resolver
-
-  private def checkIntermediateDataTypesAreStruct(
-      dataType: DataType,
-      remainingFields: Seq[String],
-      checkedFields: Seq[String] = Nil): TypeCheckResult = dataType match {
-    case st: StructType => if (remainingFields.length == 1) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      val fieldName = remainingFields.head
-      val newCheckedFields = checkedFields :+ fieldName
-      val matchingFieldsCheckResults = st.collect { case f if resolver(f.name, fieldName) =>
-        checkIntermediateDataTypesAreStruct(f.dataType, remainingFields.tail, newCheckedFields)
-      }
-      if (matchingFieldsCheckResults.isEmpty) {
-        TypeCheckResult.TypeCheckFailure(
-          s"Intermediate field ${newCheckedFields.quoted} does not exist.")
-      } else {
-        matchingFieldsCheckResults.find(_.isFailure).getOrElse(TypeCheckResult.TypeCheckSuccess)
-      }
-    }
-    case dt =>
-      val fieldName = if (checkedFields.isEmpty) {
-        "struct argument"
-      } else {
-        s"Intermediate field ${checkedFields.quoted}"
-      }
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val expectedStructType = StructType(Nil).typeName
+    if (structExpr.dataType.typeName != expectedStructType) {
       TypeCheckResult.TypeCheckFailure(
-        s"$fieldName should be struct type, got: ${dt.catalogString}.")
+        "struct argument should be struct type, got: " + structExpr.dataType.catalogString)
+    } else if (!nameExprs.forall(e => e.foldable && e.dataType == StringType)) {
+      TypeCheckResult.TypeCheckFailure(
+        s"nameExprs argument should contain only foldable ${StringType.catalogString} expressions")
+    } else if (nameExprs.length != valExprs.length) {
+      TypeCheckResult.TypeCheckFailure(
+        s"nameExprs argument and valExprs argument should be the same length")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
   }
 
-  private def toCreateNamedStruct(struct: Expression, fieldPath: Seq[String]): Expression = {
-    val existingFields = struct.dataType.asInstanceOf[StructType].fieldNames
-    val expr = if (fieldPath.length == 1) {
-      val newField = Seq(Literal(fieldPath.head), valueExpr)
-      val fields = existingFields.zipWithIndex.flatMap {
-        case (name, _) if resolver(name, fieldPath.head) => newField
-        case (name, i) => Seq(Literal(name), GetStructField(struct, i, Some(name)))
-      }
-      if (existingFields.exists(resolver(_, fieldPath.head))) {
-        CreateNamedStruct(fields)
-      } else {
-        CreateNamedStruct(fields ++ newField)
-      }
-    } else {
-      CreateNamedStruct(existingFields.zipWithIndex.flatMap {
-        case (name, i) if resolver(name, fieldPath.head) =>
-          val innerStruct = GetStructField(struct, i, Some(fieldPath.head))
-          Seq(Literal(fieldPath.head), toCreateNamedStruct(innerStruct, fieldPath.tail))
-        case (name, i) => Seq(Literal(name), GetStructField(struct, i, Some(name)))
-      })
-    }
+  override def children: Seq[Expression] = structExpr +: (nameExprs ++ valExprs)
 
-    if (struct.nullable) If(IsNull(struct), Literal(null, expr.dataType), expr) else expr
+  private lazy val names = nameExprs.map(e => e.eval().toString)
+  private lazy val addOrReplaceExprs = names.zip(valExprs)
+
+  override def dataType: StructType = {
+    val existingStructFields: Seq[(String, StructField)] = structExpr.dataType
+      .asInstanceOf[StructType].map(f => (f.name, f))
+    val addOrReplaceStructFields: Seq[(String, StructField)] = addOrReplaceExprs.map {
+      case (name, expr) => (name, StructField(name, expr.dataType, expr.nullable))
+    }
+    StructType(addOrReplace(existingStructFields, addOrReplaceStructFields).map(_._2))
+  }
+
+  override def foldable: Boolean = structExpr.foldable && valExprs.forall(_.foldable)
+
+  override def nullable: Boolean = structExpr.nullable
+
+  override def prettyName: String = "with_fields"
+
+  lazy val toCreateNamedStruct: Expression = {
+    val existingExprs = structExpr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
+      case (name, i) => (name, GetStructField(structExpr, i, Some(name)))
+    }
+    val newExprs = addOrReplace(existingExprs, addOrReplaceExprs).flatMap {
+      case (name, valExpr) => Seq(Literal(name), valExpr)
+    }
+    val expr = CreateNamedStruct(newExprs)
+
+    if (structExpr.nullable) {
+      If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+    } else {
+      expr
+    }
+  }
+
+  private lazy val resolver = SQLConf.get.resolver
+
+  private def addOrReplace[T](
+      existingFields: Seq[(String, T)],
+      addOrReplaceFields: Seq[(String, T)]): Seq[(String, T)] = {
+    addOrReplaceFields.foldLeft(existingFields) {
+      case (resultFields, newField @ (newFieldName, _)) =>
+        if (resultFields.exists(x => resolver(x._1, newFieldName))) {
+          resultFields.map {
+            case (name, _) if resolver(name, newFieldName) => newField
+            case x => x
+          }
+        } else {
+          resultFields :+ newField
+        }
+    }
   }
 }

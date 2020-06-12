@@ -953,6 +953,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         StructField("a", structType, nullable = false))),
         nullable = false))))
 
+  private lazy val nullStructLevel2: DataFrame = spark.createDataFrame(
+    sparkContext.parallelize(Row(Row(null)) :: Nil),
+    StructType(Seq(
+      StructField("a", StructType(Seq(
+        StructField("a", structType, nullable = true))),
+        nullable = false))))
+
   private lazy val structLevel3: DataFrame = spark.createDataFrame(
     sparkContext.parallelize(Row(Row(Row(Row(1, null, 3)))) :: Nil),
     StructType(Seq(
@@ -965,35 +972,37 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("withField should throw an exception if called on a non-StructType column") {
     intercept[AnalysisException] {
       testData.withColumn("key", $"key".withField("a", lit(2)))
-    }.getMessage should include("struct argument should be struct type, got: int.")
+    }.getMessage should include("struct argument should be struct type, got: int")
   }
 
-  test("withField should throw an exception if fieldName is null") {
-    intercept[IllegalArgumentException] {
+  test("withField should throw an exception if either fieldName or col argument are null") {
+    an[java.lang.NullPointerException] should be thrownBy {
       structLevel1.withColumn("a", $"a".withField(null, lit(2)))
-    }.getMessage should include("requirement failed")
-  }
+    }
 
-  test("withField should throw an exception if fieldName is empty") {
-    intercept[IllegalArgumentException] {
-      structLevel1.withColumn("a", $"a".withField("", lit(2)))
-    }.getMessage should include("requirement failed")
+    an[java.lang.NullPointerException] should be thrownBy {
+      structLevel1.withColumn("a", $"a".withField("b", null))
+    }
+
+    an[java.lang.NullPointerException] should be thrownBy {
+      structLevel1.withColumn("a", $"a".withField(null, null))
+    }
   }
 
   test("withField should throw an exception if any intermediate structs don't exist") {
     intercept[AnalysisException] {
       structLevel2.withColumn("a", 'a.withField("x.b", lit(2)))
-    }.getMessage should include("Intermediate field x does not exist.")
+    }.getMessage should include("No such struct field x in a")
 
     intercept[AnalysisException] {
       structLevel3.withColumn("a", 'a.withField("a.x.b", lit(2)))
-    }.getMessage should include("Intermediate field a.x does not exist.")
+    }.getMessage should include("No such struct field x in a")
   }
 
   test("withField should throw an exception if any intermediate field is not a struct") {
     intercept[AnalysisException] {
       structLevel1.withColumn("a", 'a.withField("b.a", lit(2)))
-    }.getMessage should include("Intermediate field b should be struct type, got: int.")
+    }.getMessage should include("struct argument should be struct type, got: int")
 
     intercept[AnalysisException] {
       val structLevel2: DataFrame = spark.createDataFrame(
@@ -1005,7 +1014,20 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             nullable = false))))
 
       structLevel2.withColumn("a", 'a.withField("a.b", lit(2)))
-    }.getMessage should include("Intermediate field a should be struct type, got: int.")
+    }.getMessage should include("Ambiguous reference to fields")
+  }
+
+  test("withField should add field with no name") {
+    checkAnswerAndSchema(
+      structLevel1.withColumn("a", $"a".withField("", lit(4))),
+      Row(Row(1, null, 3, 4)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
+          StructField("", IntegerType, nullable = false))),
+          nullable = false))))
   }
 
   test("withField should add field to struct") {
@@ -1027,11 +1049,26 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Row(null) :: Nil,
       StructType(Seq(
         StructField("a", StructType(Seq(
-          StructField("a", IntegerType, nullable = true),
+          StructField("a", IntegerType, nullable = false),
           StructField("b", IntegerType, nullable = true),
-          StructField("c", IntegerType, nullable = true),
+          StructField("c", IntegerType, nullable = false),
           StructField("d", IntegerType, nullable = false))),
           nullable = true))))
+  }
+
+  test("withField should add field to nested null struct") {
+    checkAnswerAndSchema(
+      nullStructLevel2.withColumn("a", $"a".withField("a.d", lit(4))),
+      Row(Row(null)) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = true),
+            StructField("c", IntegerType, nullable = false),
+            StructField("d", IntegerType, nullable = false))),
+            nullable = true))),
+          nullable = false))))
   }
 
   test("withField should add null field to struct") {
@@ -1116,10 +1153,24 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Row(null) :: Nil,
       StructType(Seq(
         StructField("a", StructType(Seq(
-          StructField("a", IntegerType, nullable = true),
+          StructField("a", IntegerType, nullable = false),
           StructField("b", IntegerType, nullable = false),
-          StructField("c", IntegerType, nullable = true))),
+          StructField("c", IntegerType, nullable = false))),
           nullable = true))))
+  }
+
+  test("withField should replace field in nested null struct") {
+    checkAnswerAndSchema(
+      nullStructLevel2.withColumn("a", $"a".withField("a.b", lit(2))),
+      Row(Row(null)) :: Nil,
+      StructType(
+        Seq(StructField("a", StructType(Seq(
+          StructField("a", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = false),
+            StructField("c", IntegerType, nullable = false))),
+            nullable = true))),
+          nullable = false))))
   }
 
   test("withField should replace field with null value in struct") {
@@ -1253,7 +1304,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
     intercept[AnalysisException] {
       df.withColumn("a", 'a.withField("a.b.e.f", lit(2)))
-    }.getMessage should include("Intermediate field a does not exist.")
+    }.getMessage should include("No such struct field a in a.b")
   }
 
   private lazy val mixedCaseStructLevel1: DataFrame = spark.createDataFrame(
@@ -1362,11 +1413,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
       intercept[AnalysisException] {
         mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2)))
-      }.getMessage should include("Intermediate field A does not exist.")
+      }.getMessage should include("No such struct field A in a, B")
 
       intercept[AnalysisException] {
         mixedCaseStructLevel2.withColumn("a", 'a.withField("b.a", lit(2)))
-      }.getMessage should include("Intermediate field b does not exist.")
+      }.getMessage should include("No such struct field b in a, B")
     }
   }
 }

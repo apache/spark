@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 /**
  * Simplify redundant [[CreateNamedStruct]], [[CreateArray]] and [[CreateMap]] expressions.
@@ -39,7 +41,18 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
       // Remove redundant field extraction.
       case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
         createNamedStruct.valExprs(ordinal)
-
+      case GetStructField(WithFields(struct, nameExprs, valExprs), ordinal, maybeName) =>
+        val extractFieldName = maybeName.getOrElse(
+          struct.dataType.asInstanceOf[StructType](ordinal).name)
+        val resolver = SQLConf.get.resolver
+        val names = nameExprs.map(e => e.eval().toString)
+        if (names.exists(n => resolver(n, extractFieldName))) {
+          names.zip(valExprs).collect {
+            case (name, valExpr) if resolver(name, extractFieldName) => valExpr
+          }.last
+        } else {
+          GetStructField(struct, ordinal, Some(extractFieldName))
+        }
       // Remove redundant array indexing.
       case GetArrayStructFields(CreateArray(elems, useStringTypeWhenEmpty), field, ordinal, _, _) =>
         // Instead of selecting the field on the entire array, select it from each member

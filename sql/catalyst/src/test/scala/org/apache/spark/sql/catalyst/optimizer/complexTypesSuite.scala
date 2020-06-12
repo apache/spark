@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -451,5 +452,92 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(mb1, Literal(Array[Byte](1, 2))), null)
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
+  }
+
+  test("simplify GetStructField on WithFields that is not changing the attribute being extracted") {
+    val query = relation.select(
+      GetStructField(
+        WithFields('id, Seq("c"), Seq(Literal(1))),
+        0,
+        Some("a")) as "outerAtt")
+    val expected = relation.select(GetStructField('id, 0, Some("a")) as "outerAtt")
+
+    checkRule(query, expected)
+  }
+
+  test("simplify GetStructField on WithFields that is changing the attribute being extracted") {
+    val query = relation.select(
+      GetStructField(
+        WithFields('id, Seq("c"), Seq(Literal(1))),
+        0,
+        Some("c")) as "outerAtt")
+    val expected = relation.select(Literal(1) as "outerAtt")
+
+    checkRule(query, expected)
+  }
+
+  test(
+    "simplify GetStructField on WithFields that is changing the attribute being extracted twice") {
+    val query = relation.select(
+      GetStructField(
+        WithFields('id, Seq("c", "c"), Seq(Literal(1), Literal(2))),
+        0,
+        Some("c")) as "outerAtt")
+    val expected = relation.select(Literal(2) as "outerAtt")
+
+    checkRule(query, expected)
+  }
+
+  test("collapse multiple GetStructField on the same WithFields") {
+    val query = relation
+      .select(CreateNamedStruct(Seq("att1", 'id, "att2", 'id * 'id)) as "struct1")
+      .select(WithFields('struct1, Seq("att3"), Seq(Literal(3))) as "struct2")
+      .select(
+        GetStructField('struct2, 0, Some("att1")) as "struct1Att1",
+        GetStructField('struct2, 1, Some("att2")) as "struct1Att2",
+        GetStructField('struct2, 2, Some("att3")) as "struct1Att3")
+
+    val expected = relation
+      .select(
+        'id as "struct1Att1",
+        ('id * 'id) as "struct1Att2",
+        Literal(3) as "struct1Att3")
+
+    checkRule(query, expected)
+  }
+
+  test("collapse multiple GetStructField on different WithFields") {
+    val query = relation
+      .select(CreateNamedStruct(Seq("att1", 'id)) as "struct1")
+      .select(
+        WithFields('struct1, Seq("att2"), Seq(Literal(2))) as "struct2",
+        WithFields('struct1, Seq("att2"), Seq(Literal(3))) as "struct3")
+      .select(
+        GetStructField('struct2, 0, Some("att1")) as "struct2Att1",
+        GetStructField('struct2, 1, Some("att2")) as "struct2Att2",
+        GetStructField('struct3, 0, Some("att1")) as "struct3Att1",
+        GetStructField('struct3, 1, Some("att2")) as "struct3Att2")
+
+    val expected = relation
+      .select(
+        'id as "struct2Att1",
+        Literal(2) as "struct2Att2",
+        'id as "struct3Att1",
+        Literal(3) as "struct3Att2")
+
+    checkRule(query, expected)
+  }
+
+  test("WIP write tests for ensuring case sensitivity is respected") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
+      val query = relation.select(
+        GetStructField(
+          WithFields('id, Seq("c"), Seq(Literal(1))),
+          2,
+          Some("C")) as "outerAtt")
+      val expected = relation.select(GetStructField('id, 2, Some("C")) as "outerAtt")
+
+      checkRule(query, expected)
+    }
   }
 }
