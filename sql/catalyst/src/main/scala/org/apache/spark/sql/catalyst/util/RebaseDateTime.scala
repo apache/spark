@@ -427,18 +427,18 @@ object RebaseDateTime {
       .`with`(ChronoField.ERA, cal.get(Calendar.ERA))
       .plusDays(cal.get(Calendar.DAY_OF_MONTH) - 1)
     val zonedDateTime = localDateTime.atZone(zoneId)
-    // Assuming the daylight saving switchover time is 2:00, the local clock will go back to
-    // 2:00 after hitting 2:59. This means the local time between [2:00, 3:00) appears twice, and
-    // can map to two different physical times (seconds from the UTC epoch).
-    // Java 8 time API resolves the ambiguity by picking the earlier physical time. This is the same
-    // as Java 7 time API, except for 2:00 where Java 7 picks the later physical time.
-    // Here we detect the "2:00" case and pick the latter physical time, to be compatible with the
-    // Java 7 date-time.
-    val adjustedZdt = if (cal.get(Calendar.DST_OFFSET) == 0) {
-      zonedDateTime.withLaterOffsetAtOverlap()
-    } else {
-      zonedDateTime
-    }
+    val trans = zoneId.getRules.getTransition(localDateTime)
+    val adjustedZdt = if (trans != null && trans.isOverlap) {
+      val dstOffset = cal.get(Calendar.DST_OFFSET)
+      val zoneOffset = cal.get(Calendar.ZONE_OFFSET)
+      cal.add(Calendar.DAY_OF_MONTH, 1)
+      if (zoneOffset == cal.get(Calendar.ZONE_OFFSET) &&
+          dstOffset == cal.get(Calendar.DST_OFFSET)) {
+        zonedDateTime.withLaterOffsetAtOverlap()
+      } else {
+        zonedDateTime.withEarlierOffsetAtOverlap()
+      }
+    } else zonedDateTime
     instantToMicros(adjustedZdt.toInstant)
   }
 
