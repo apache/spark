@@ -161,6 +161,6 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
     val e = intercept[AnalysisException](Seq((3, 2)).toDF("a", "b").
       write.mode("append")
       .partitionBy("b", "b").csv("/tmp"))
-    assert(e.getMessage.contains("Found partition b is duplicate in WrappedArray(b, b);"))
+    assert(e.getMessage.contains("Found duplicate partition column(s) `b`;"))
   }
 }

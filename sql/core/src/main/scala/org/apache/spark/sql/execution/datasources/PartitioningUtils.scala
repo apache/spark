@@ -545,15 +545,17 @@ object PartitioningUtils {
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
 
-    val existsCols = new mutable.HashSet[String]
-    partitionColumns.foreach(col => {
-      if (existsCols.contains(col)) {
-        throw new AnalysisException(s"" +
-          s"Found partition ${col} is duplicate in ${partitionColumns}")
-      } else {
-        existsCols.add(col)
+    // scalastyle:off caselocale
+    val names = if (caseSensitive) partitionColumns else partitionColumns.map(_.toLowerCase)
+    // scalastyle:on caselocale
+
+    if (names.distinct.length != names.length) {
+      val duplicateColumns = names.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => s"`$x`"
       }
-    })
+      throw new AnalysisException(
+        s"Found duplicate partition column(s) ${duplicateColumns.mkString(", ")}")
+    }
 
     partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
       field => field.dataType match {
