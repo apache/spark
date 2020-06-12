@@ -74,15 +74,19 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
 
     val bmDecomManager = new BlockManagerDecommissioner(sparkConf, bm)
 
-    bmDecomManager.start()
+    try {
+      bmDecomManager.start()
 
-    eventually(timeout(5.second), interval(10.milliseconds)) {
-      assert(bmDecomManager.shufflesToMigrate.isEmpty == true)
-      verify(bm, times(1)).replicateBlock(
-        mc.eq(storedBlockId1), mc.any(), mc.any(), mc.eq(Some(3)))
-      verify(blockTransferService, times(2))
-        .uploadBlockSync(mc.eq("host2"), mc.eq(bmPort), mc.eq("exec2"), mc.any(), mc.any(),
-          mc.eq(StorageLevel.DISK_ONLY), mc.isNull())
+      eventually(timeout(5.second), interval(10.milliseconds)) {
+        assert(bmDecomManager.shufflesToMigrate.isEmpty == true)
+        verify(bm, times(1)).replicateBlock(
+          mc.eq(storedBlockId1), mc.any(), mc.any(), mc.eq(Some(3)))
+        verify(blockTransferService, times(2))
+          .uploadBlockSync(mc.eq("host2"), mc.eq(bmPort), mc.eq("exec2"), mc.any(), mc.any(),
+            mc.eq(StorageLevel.DISK_ONLY), mc.isNull())
+      }
+    } finally {
+        bmDecomManager.stop()
     }
   }
 }
