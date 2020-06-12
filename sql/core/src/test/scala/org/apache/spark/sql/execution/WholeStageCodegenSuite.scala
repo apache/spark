@@ -50,7 +50,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(df.collect() === Array(Row(9, 4.5)))
   }
 
-  test("GenerateExec should be included in WholeStageCodegen") {
+  test("SPARK-31897: GenerateExec should be included in WholeStageCodegen") {
     import testImplicits._
     val arrayData = Seq(("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown")))
     val df = arrayData.toDF("name", "knownLanguages", "properties")
