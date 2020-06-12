@@ -904,7 +904,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
         val hostName = if (idx < hostNames.size) {
           hostNames(idx)
         } else {
-          "host" + ('A' + idx).toChar
+          s"host${('A' + idx).toChar}"
         }
         (Success, makeMapStatus(hostName, numShufflePartitions))
     }.toSeq)
