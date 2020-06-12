@@ -456,11 +456,8 @@ class AirflowKubernetesScheduler(LoggingMixin):
         key, command, kube_executor_config = next_job
         dag_id, task_id, execution_date, try_number = key
 
-        if isinstance(command, str):
-            command = [command]
-
-        if command[0] != "airflow":
-            raise ValueError('The first element of command must be equal to "airflow".')
+        if command[0:3] != ["airflow", "tasks", "run"]:
+            raise ValueError('The command must start with ["airflow", "tasks", "run"].')
 
         pod = PodGenerator.construct_pod(
             namespace=self.namespace,
