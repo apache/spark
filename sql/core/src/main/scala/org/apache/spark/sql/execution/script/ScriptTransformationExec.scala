@@ -174,20 +174,7 @@ private class ScriptTransformationWriterThread(
         var i = 1
         while (i < len) {
           sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-          val columnType = inputSchema(i)
-          val fieldValue = row.get(i, columnType)
-          val fieldStringValue = columnType match {
-            case _: DateType =>
-              val dateFormatter = DateFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
-              dateFormatter.format(fieldValue.asInstanceOf[Int])
-            case _: TimestampType =>
-              DateTimeUtils.timestampToString(
-                TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId),
-                fieldValue.asInstanceOf[SQLTimestamp])
-            case _ =>
-              fieldValue.toString
-          }
-          sb.append(fieldStringValue)
+          sb.append(row.get(i, inputSchema(i)))
           i += 1
         }
         sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))

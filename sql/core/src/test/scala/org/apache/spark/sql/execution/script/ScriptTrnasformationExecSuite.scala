@@ -147,38 +147,6 @@ class ScriptTransformationSuite extends SparkPlanTest with SharedSparkSession
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-25990: TRANSFORM should handle different data types correctly") {
-    assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = getTestResourcePath("test_script.py")
-
-    withTempView("v") {
-      val df = Seq(
-        (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1), Date.valueOf("2015-05-21")),
-        (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2), Date.valueOf("2015-05-22")),
-        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3), Date.valueOf("2015-05-23"))
-      ).toDF("a", "b", "c", "d", "e", "f") // Note column d's data type is Decimal(38, 18)
-      df.createTempView("v")
-
-      val query = sql(
-        s"""
-           |SELECT
-           |TRANSFORM(a, b, c, d, e, f)
-           |USING 'python $scriptFilePath' AS (a, b, c, d, e, f)
-           |FROM v
-        """.stripMargin)
-
-      val decimalToString: Column => Column = c => c.cast("string")
-
-      checkAnswer(query, identity, df.select(
-        'a.cast("string"),
-        'b.cast("string"),
-        'c.cast("string"),
-        decimalToString('d),
-        'e.cast("string"),
-        'f.cast("string")).collect())
-    }
-  }
-
   // only add no-serde test here
   test("SPARK-30973: TRANSFORM should wait for the termination of the script (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
