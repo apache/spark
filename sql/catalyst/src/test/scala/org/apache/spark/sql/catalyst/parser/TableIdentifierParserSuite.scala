@@ -340,14 +340,6 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     keywords.map(_.trim.toLowerCase(Locale.ROOT)).toSet
   }
 
-  private def parseSyntax(startTag: String, endTag: String): Set[String] = {
-    val kwDef = """\s*[\|:]\s*([A-Z_]+)\s*""".r
-    parseAntlrGrammars(startTag, endTag) {
-      // Parses a pattern, e.g., `    | AFTER`
-      case kwDef(symbol) => Some(symbol)
-    }
-  }
-
   // All the SQL keywords defined in `SqlBase.g4`
   val allCandidateKeywords = {
     val kwDef = """([A-Z_]+):.+;""".r
@@ -359,8 +351,13 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     keywords
   }
 
-  val nonReservedKeywordsInAnsiMode = parseSyntax(
-    "//--ANSI-NON-RESERVED-START", "//--ANSI-NON-RESERVED-END")
+  val nonReservedKeywordsInAnsiMode = {
+    val kwDef = """\s*[\|:]\s*([A-Z_]+)\s*""".r
+    parseAntlrGrammars("//--ANSI-NON-RESERVED-START", "//--ANSI-NON-RESERVED-END") {
+      // Parses a pattern, e.g., `    | AFTER`
+      case kwDef(symbol) => Some(symbol)
+    }
+  }
 
   val reservedKeywordsInAnsiMode = allCandidateKeywords -- nonReservedKeywordsInAnsiMode
 
