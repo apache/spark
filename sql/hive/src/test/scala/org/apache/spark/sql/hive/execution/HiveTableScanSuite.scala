@@ -219,6 +219,12 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
       val scan6 = getHiveTableScanExec(
         "SELECT * FROM t where p = '1' and i = 2")
 
+      val scan7 = getHiveTableScanExec(
+        """
+          |SELECT i, COUNT(1) FROM (
+          |SELECT * FROM t where  p = '1' OR (p = '2' AND i = 1)
+          |) TMP GROUP BY i
+        """.stripMargin)
 
       assert(scan1.prunedPartitions.map(_.toString) ==
         Stream("t(p=1)", "t(p=2)"))
@@ -232,6 +238,8 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
         Stream("t(p=1)", "t(p=2)", "t(p=3)", "t(p=4)"))
       assert(scan6.prunedPartitions.map(_.toString) ==
         Stream("t(p=1)"))
+      assert(scan7.prunedPartitions.map(_.toString) ==
+        Stream("t(p=1)", "t(p=2)"))
     }
   }
 
