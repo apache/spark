@@ -3504,19 +3504,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(Row(Short.MinValue.toLong * -1)))
   }
 
-  test("test") {
-    withTable("t") {
-      sql(
-        """
-          |create table t(id int, dt string) using orc partitioned by (dt)
-        """.stripMargin)
+  test("normalize special floating numbers in subquery") {
+    withTempView("v1", "v2", "v3") {
+      Seq(-0.0).toDF("d").createTempView("v1")
+      Seq(0.0).toDF("d").createTempView("v2")
+      spark.range(2).createTempView("v3")
 
-      sql(
-        """
-          |select * from t where dt = '1' or (dt = '2' and id = 1)
-        """.stripMargin).explain(true)
+      // non-correlated subquery
+      checkAnswer(sql("SELECT (SELECT v1.d FROM v1 JOIN v2 ON v1.d = v2.d)"), Row(-0.0))
+      // correlated subquery
+      checkAnswer(
+        sql(
+          """
+            |SELECT id FROM v3 WHERE EXISTS
+            |  (SELECT v1.d FROM v1 JOIN v2 ON v1.d = v2.d WHERE id > 0)
+            |""".stripMargin), Row(1))
     }
-
   }
 }
 

@@ -1325,3 +1325,99 @@ case class BRound(child: Expression, scale: Expression)
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
 }
+
+object WidthBucket {
+
+  def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
+    if (numBucket <= 0 || numBucket == Long.MaxValue || jl.Double.isNaN(value) || min == max ||
+        jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
+        jl.Double.isNaN(max) || jl.Double.isInfinite(max)) {
+      return null
+    }
+
+    val lower = Math.min(min, max)
+    val upper = Math.max(min, max)
+
+    if (min < max) {
+      if (value < lower) {
+        0L
+      } else if (value >= upper) {
+        numBucket + 1L
+      } else {
+        (numBucket.toDouble * (value - lower) / (upper - lower)).toLong + 1L
+      }
+    } else { // `min > max` case
+      if (value > upper) {
+        0L
+      } else if (value <= lower) {
+        numBucket + 1L
+      } else {
+        (numBucket.toDouble * (upper - value) / (upper - lower)).toLong + 1L
+      }
+    }
+  }
+}
+
+/**
+ * Returns the bucket number into which the value of this expression would fall
+ * after being evaluated. Note that input arguments must follow conditions listed below;
+ * otherwise, the method will return null.
+ *  - `numBucket` must be greater than zero and be less than Long.MaxValue
+ *  - `value`, `min`, and `max` cannot be NaN
+ *  - `min` bound cannot equal `max`
+ *  - `min` and `max` must be finite
+ *
+ * Note: If `minValue` > `maxValue`, a return value is as follows;
+ *  if `value` > `minValue`, it returns 0.
+ *  if `value` <= `maxValue`, it returns `numBucket` + 1.
+ *  otherwise, it returns (`numBucket` * (`minValue` - `value`) / (`minValue` - `maxValue`)) + 1
+ *
+ * @param value is the expression to compute a bucket number in the histogram
+ * @param minValue is the minimum value of the histogram
+ * @param maxValue is the maximum value of the histogram
+ * @param numBucket is the number of buckets
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(value, min_value, max_value, num_bucket) - Returns the bucket number to which
+      `value` would be assigned in an equiwidth histogram with `num_bucket` buckets,
+      in the range `min_value` to `max_value`."
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(5.3, 0.2, 10.6, 5);
+       3
+      > SELECT _FUNC_(-2.1, 1.3, 3.4, 3);
+       0
+      > SELECT _FUNC_(8.1, 0.0, 5.7, 4);
+       5
+      > SELECT _FUNC_(-0.9, 5.2, 0.5, 2);
+       3
+  """,
+  since = "3.1.0")
+case class WidthBucket(
+    value: Expression,
+    minValue: Expression,
+    maxValue: Expression,
+    numBucket: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def children: Seq[Expression] = Seq(value, minValue, maxValue, numBucket)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
+  override def dataType: DataType = LongType
+  override def nullable: Boolean = true
+
+  override protected def nullSafeEval(input: Any, min: Any, max: Any, numBucket: Any): Any = {
+    WidthBucket.computeBucketNumber(
+      input.asInstanceOf[Double],
+      min.asInstanceOf[Double],
+      max.asInstanceOf[Double],
+      numBucket.asInstanceOf[Long])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (input, min, max, numBucket) =>
+      "org.apache.spark.sql.catalyst.expressions.WidthBucket" +
+        s".computeBucketNumber($input, $min, $max, $numBucket)")
+  }
+}

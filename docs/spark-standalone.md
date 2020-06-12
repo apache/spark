@@ -374,6 +374,25 @@ To run an interactive Spark shell against the cluster, run the following command
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
+# Client Properties
+
+Spark applications supports the following configuration properties specific to standalone mode: 
+
+<table class="table">
+  <tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr>
+  <tr>
+  <td><code>spark.standalone.submit.waitAppCompletion</code></td>
+  <td><code>false</code></td>
+  <td>
+  In standalone cluster mode, controls whether the client waits to exit until the application completes.
+  If set to <code>true</code>, the client process will stay alive polling the driver's status.
+  Otherwise, the client process will exit after submission.
+  </td>
+  <td>3.1.0</td>
+  </tr>
+</table>
+
+
 # Launching Spark Applications
 
 The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
