@@ -92,12 +92,9 @@ BASE_DIR=$(pwd)
 init_java
 init_maven_sbt
 
-# Only clone repo fresh if not present, otherwise use checkout from the tag step
-if [ ! -d spark ]; then
-  git clone "$ASF_REPO"
-fi
+rm -rf spark
+git clone "$ASF_REPO"
 cd spark
-git fetch
 git checkout $GIT_REF
 git_hash=`git rev-parse --short HEAD`
 echo "Checked out Spark git hash $git_hash"
