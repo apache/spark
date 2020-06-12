@@ -48,7 +48,8 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   LevelDBIterator(Class<T> type, LevelDB db, KVStoreView<T> params) throws Exception {
     this.db = db;
     this.ascending = params.ascending;
-    this.it = db.createIterator();
+    this.it = db.db().iterator();
+    db.notifyIteratorCreated(it);
     this.type = type;
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
