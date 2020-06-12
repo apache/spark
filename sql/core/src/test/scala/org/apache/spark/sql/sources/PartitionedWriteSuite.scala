@@ -158,9 +158,11 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-31968:duplicate partition columns check") {
-    val e = intercept[AnalysisException](Seq((3, 2)).toDF("a", "b").
-      write.mode("append")
-      .partitionBy("b", "b").csv("/tmp"))
-    assert(e.getMessage.contains("Found duplicate partition column(s) `b`;"))
+    val ds = Seq((3, 2)).toDF("a", "b")
+    val e = intercept[AnalysisException](ds
+      .write.mode(org.apache.spark.sql.SaveMode.Overwrite)
+      .partitionBy("b", "b").csv("/tmp/111"))
+    assert(e.getMessage.contains(
+      "Found duplicate column(s) b,b: `b`;"))
   }
 }
