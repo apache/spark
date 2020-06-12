@@ -2613,7 +2613,7 @@ object SQLConf {
       .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The difference must be positive.")
-      .createWithDefault(10)
+      .createWithDefault(4)
 
   /**
    * Holds information about keys that have been deprecated.
