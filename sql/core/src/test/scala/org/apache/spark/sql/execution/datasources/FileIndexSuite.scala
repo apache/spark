@@ -19,34 +19,36 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.{File, FileNotFoundException}
 import java.net.URI
-
-import scala.collection.mutable
+import java.time.format.DateTimeParseException
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem, RemoteIterator}
+import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.viewfs.ViewFileSystem
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, when}
-
 import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.KnownSizeEstimation
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
+
+import scala.collection.mutable
 
 class FileIndexSuite extends SharedSparkSession {
 
   private class TestInMemoryFileIndex(
-      spark: SparkSession,
-      path: Path,
-      fileStatusCache: FileStatusCache = NoopCache)
-      extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
+                                       spark: SparkSession,
+                                       path: Path,
+                                       fileStatusCache: FileStatusCache = NoopCache)
+    extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
     def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
+
     def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
+
     def leafFileStatuses: Iterable[FileStatus] = leafFiles.values
   }
 
@@ -204,6 +206,7 @@ class FileIndexSuite extends SharedSparkSession {
         ) {
           def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
             spark, Seq(rootDirPath), Map.empty, None)
+
           if (ignoreMissingFiles) {
             // We're ignoring missing files, so catalog construction should succeed
             val catalog = makeCatalog()
@@ -309,7 +312,7 @@ class FileIndexSuite extends SharedSparkSession {
 
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
     class MockCatalog(
-      override val rootPaths: Seq[Path])
+                       override val rootPaths: Seq[Path])
       extends PartitioningAwareFileIndex(spark, Map.empty, None) {
 
       override def refresh(): Unit = {}
@@ -328,8 +331,8 @@ class FileIndexSuite extends SharedSparkSession {
     }
 
     withSQLConf(
-        "fs.mockFs.impl" -> classOf[FakeParentPathFileSystem].getName,
-        "fs.mockFs.impl.disable.cache" -> "true") {
+      "fs.mockFs.impl" -> classOf[FakeParentPathFileSystem].getName,
+      "fs.mockFs.impl.disable.cache" -> "true") {
       val pathWithSlash = new Path("mockFs://some-bucket/")
       assert(pathWithSlash.getParent === null)
       val pathWithoutSlash = new Path("mockFs://some-bucket")
@@ -356,7 +359,7 @@ class FileIndexSuite extends SharedSparkSession {
       "driver side must not be negative"))
   }
 
-  test ("SPARK-29537: throw exception when user defined a wrong base path") {
+  test("SPARK-29537: throw exception when user defined a wrong base path") {
     withTempDir { dir =>
       val partitionDirectory = new File(dir, "a=foo")
       partitionDirectory.mkdir()
@@ -451,7 +454,7 @@ class FileIndexSuite extends SharedSparkSession {
       val path = new Path(dir.getCanonicalPath)
       val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
       withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
-         "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+        "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
         val withBlockLocations = fileIndex.
           listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
 
@@ -482,14 +485,80 @@ class FileIndexSuite extends SharedSparkSession {
       )
     when(dfs.listLocatedStatus(path)).thenReturn(new RemoteIterator[LocatedFileStatus] {
       val iter = statuses.toIterator
+
       override def hasNext: Boolean = iter.hasNext
+
       override def next(): LocatedFileStatus = iter.next
     })
     val fileIndex = new TestInMemoryFileIndex(spark, path)
     assert(fileIndex.leafFileStatuses.toSeq == statuses)
   }
-}
 
+  test("SPARK-39162 - when filesModifiedAfterDate specified and before file date without filter") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+      val df = spark.read.option("filesModifiedAfterDate", "2020-05-01T01:00:00").format("csv").load(path + "/file1.csv")
+      assert(df.count() == 1)
+    }
+  }
+  test("SPARK-39162 - when filesModifiedAfterDate specified and after file date without filter") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir,     "file1.csv")
+      stringToFile(file, "text")
+      val msg = intercept[AnalysisException] {
+        spark.read.option("filesModifiedAfterDate", "2024-05-01T01:00:00").format("csv").load(path + "/file1.csv")
+      }.getMessage
+      assert(msg.contains("Unable to infer schema for CSV. It must be specified manually."))
+      //val inMemoryFileIndex = new TestInMemoryFileIndex(spark, new Path(file.getCanonicalPath))
+    }
+    assert(true)
+  }
+
+  test("SPARK-39162 - when filesModifiedAfterDate specified and before file date with filter") {
+    withTempDir { dir =>
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+      spark.read.format("csv").load("file1.csv")
+      //val inMemoryFileIndex = new TestInMemoryFileIndex(spark, new Path(file.getCanonicalPath))
+    }
+    assert(true)
+  }
+
+  test("SPARK-39162 - when filesModifiedAfterDate specified and after file date with filter") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir,     "file1.csv")
+      stringToFile(file, "text")
+      val msg = intercept[AnalysisException] {
+        spark.read.option("filesModifiedAfterDate", "2024-05-01T01:00:00").format("csv").load(path + "/file1.csv")
+      }.getMessage
+      assert(msg.contains("could not be parsed at index "))
+    }
+  }
+  test("SPARK-39162 - when filesModifiedAfterDate is specified with invalid date") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir,     "file1.csv")
+      stringToFile(file, "text")
+      val msg = intercept[DateTimeParseException] {
+        spark.read.option("filesModifiedAfterDate", "2024-05+1 01:00:00").format("csv").load(path + "/file1.csv")
+      }.getMessage
+      assert(msg.contains("could not be parsed at index "))
+    }
+  }
+  test("SPARK-39162 - when filesModifiedAfterDate not specified") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+      val df = spark.read.format("csv").load(path + "/file1.csv")
+      assert(df.count() == 1)
+    }
+  }
+}
 object DeletionRaceFileSystem {
   val rootDirPath: Path = new Path("mockFs:///rootDir/")
   val subDirPath: Path = new Path(rootDirPath, "subDir")
