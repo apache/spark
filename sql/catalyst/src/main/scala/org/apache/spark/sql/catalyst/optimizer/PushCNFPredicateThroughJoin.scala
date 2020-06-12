@@ -30,14 +30,14 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object PushCNFPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
-  private def canHandleJoinType(joinType: JoinType): Boolean = joinType match {
+  private def canPushThrough(joinType: JoinType): Boolean = joinType match {
     case _: InnerLike | LeftSemi | RightOuter | LeftOuter | LeftAnti | ExistenceJoin(_) => true
     case _ => false
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case j @ Join(left, right, joinType, Some(joinCondition), hint)
-        if canHandleJoinType(joinType) =>
+        if canPushThrough(joinType) =>
       val predicates = conjunctiveNormalForm(joinCondition)
       if (predicates.isEmpty) {
         j
