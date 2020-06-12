@@ -897,7 +897,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val stageAttemptOpt = taskSets.find(compareStageAttempt(_))
     assert(stageAttemptOpt.isDefined)
     val stageAttempt = stageAttemptOpt.get
-    checkStageId(stageId, attemptIdx, stageAttempt)
     complete(stageAttempt, stageAttempt.tasks.zipWithIndex.map {
       case (task, idx) =>
         val hostName = if (idx < hostNames.size) {
