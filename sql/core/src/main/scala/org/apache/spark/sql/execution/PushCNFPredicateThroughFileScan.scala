@@ -32,14 +32,14 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  */
 object PushCNFPredicateThroughFileScan extends Rule[LogicalPlan] with PredicateHelper {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp  {
     case ScanOperation(projectList, conditions, relation: LogicalRelation)
       if conditions.nonEmpty =>
       val predicates = conjunctiveNormalFormForPartitionPruning(conditions.reduceLeft(And))
       if (predicates.isEmpty) {
-        return plan
+        plan
       } else {
-        return Project(projectList, Filter(predicates.reduceLeft(And), relation))
+        Project(projectList, Filter(predicates.reduceLeft(And), relation))
       }
   }
 }
