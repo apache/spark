@@ -545,6 +545,15 @@ object PartitioningUtils {
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
 
+    val existsCols = new mutable.HashSet[String]
+    partitionColumns.foreach(col => {
+      if (existsCols.contains(col)) {
+        throw new AnalysisException(s"partition ${col} is duplicate")
+      } else {
+        existsCols.add(col)
+      }
+    })
+
     partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
       field => field.dataType match {
         case _: AtomicType => // OK
