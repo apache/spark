@@ -133,7 +133,7 @@ class InMemoryFileIndex(
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch, hadoopConf, filter, sparkSession, areRootPaths = true)
+      pathsToFetch, hadoopConf, filter, sparkSession, areRootPaths = true, parameters = parameters)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -379,7 +379,8 @@ object InMemoryFileIndex extends Logging {
             hadoopConf,
             filter,
             session,
-            areRootPaths = false
+            areRootPaths = false,
+            parameters = parameters
           ).flatMap(_._2)
         case _ =>
           dirs.flatMap { dir =>
