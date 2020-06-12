@@ -18,15 +18,15 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.FileNotFoundException
+import java.time.{LocalDateTime, ZoneOffset}
+import java.time.format.DateTimeFormatter
 
 import scala.collection.mutable
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
-
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
@@ -179,6 +179,24 @@ object InMemoryFileIndex extends Logging {
       filter: PathFilter,
       sparkSession: SparkSession,
       areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
+    bulkListLeafFiles(paths, hadoopConf, filter, sparkSession, areRootPaths, Map[String,String]())
+  }
+
+  /**
+   * Lists a collection of paths recursively. Picks the listing strategy adaptively depending
+   * on the number of paths to list.
+   *
+   * This may only be called on the driver.
+   *
+   * @return for each input path, the set of discovered files for the path
+   */
+  private[sql] def bulkListLeafFiles(
+      paths: Seq[Path],
+      hadoopConf: Configuration,
+      filter: PathFilter,
+      sparkSession: SparkSession,
+      areRootPaths: Boolean,
+      parameters: Map[String,String]): Seq[(Path, Seq[FileStatus])] = {
 
     val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
     val ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality
@@ -193,7 +211,8 @@ object InMemoryFileIndex extends Logging {
           Some(sparkSession),
           ignoreMissingFiles = ignoreMissingFiles,
           ignoreLocality = ignoreLocality,
-          isRootPath = areRootPaths)
+          isRootPath = areRootPaths,
+          parameters = parameters)
         (path, leafFiles)
       }
     }
@@ -235,7 +254,8 @@ object InMemoryFileIndex extends Logging {
               None,
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
-              isRootPath = areRootPaths)
+              isRootPath = areRootPaths,
+              parameters = parameters)
             (path, leafFiles)
           }.iterator
         }.map { case (path, statuses) =>
@@ -296,13 +316,14 @@ object InMemoryFileIndex extends Logging {
    * @return all children of path that match the specified filter.
    */
   private def listLeafFiles(
-      path: Path,
-      hadoopConf: Configuration,
-      filter: PathFilter,
-      sessionOpt: Option[SparkSession],
-      ignoreMissingFiles: Boolean,
-      ignoreLocality: Boolean,
-      isRootPath: Boolean): Seq[FileStatus] = {
+                               path: Path,
+                               hadoopConf: Configuration,
+                               filter: PathFilter,
+                               sessionOpt: Option[SparkSession],
+                               ignoreMissingFiles: Boolean,
+                               ignoreLocality: Boolean,
+                               isRootPath: Boolean,
+                               parameters: Map[String, String]):  Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
 
@@ -369,13 +390,40 @@ object InMemoryFileIndex extends Logging {
               sessionOpt,
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
-              isRootPath = false)
+              isRootPath = false,
+              parameters = parameters)
           }
       }
       val allFiles = topLevelFiles ++ nestedFiles
-      if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
+      val hasFilter = filter != null
+      val filesModifiedAfterDate = parameters.get("filesModifiedAfterDate")
+      val hasModifiedDateOption = filesModifiedAfterDate.isDefined
+      var afterDateSeconds = 0L
+      /**
+      SPARK-31962 - Provide option to load files after a specified date when reading from a folder path
+			When specifying the filesModifiedAfterDate option in yyyy-mm-ddThh:mm:ss format,
+			all files having modification dates before this date will not be returned when loading from a
+			folder path.
+			Ex:  spark.read
+							 .option("header", "true")
+							 .option("delimiter", "\t")
+							 .option("filesModifiedAfterDate", "2020-05-01T12:00:00")
+							 .format("csv")
+							 .load("/mnt/Deltas")
+       */
+      if (hasModifiedDateOption) {
+        filesModifiedAfterDate.foreach(fileDate => {
+          val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+          afterDateSeconds = LocalDateTime.parse(fileDate, formatter).toEpochSecond(ZoneOffset.UTC) * 1000
+        })
+      }
+      val shouldFilter = hasFilter || hasModifiedDateOption
+      if (shouldFilter) allFiles.filter(f => {
+        val filterResult = if (hasFilter) filter.accept(f.getPath) else true
+        val afterDateResult = if (hasModifiedDateOption)  ( f.getModificationTime - afterDateSeconds) > 0 else true
+        filterResult && afterDateResult
+      }) else allFiles
     }
-
     val missingFiles = mutable.ArrayBuffer.empty[String]
     val filteredLeafStatuses = allLeafStatuses.filterNot(
       status => shouldFilterOut(status.getPath.getName))
