@@ -548,7 +548,8 @@ object PartitioningUtils {
     val existsCols = new mutable.HashSet[String]
     partitionColumns.foreach(col => {
       if (existsCols.contains(col)) {
-        throw new AnalysisException(s"partition ${col} is duplicate")
+        throw new AnalysisException(s"" +
+          s"Found partition ${col} is duplicate in ${partitionColumns}")
       } else {
         existsCols.add(col)
       }
