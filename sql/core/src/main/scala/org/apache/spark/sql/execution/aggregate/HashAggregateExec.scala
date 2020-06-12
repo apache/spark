@@ -835,9 +835,11 @@ case class HashAggregateExec(
 
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
+    val spillInPartialAggregateDisabled = sqlContext.conf.spillInPartialAggregationDisabled
     s"""
        |if (!$initAgg) {
        |  $initAgg = true;
+       |  $avoidSpillInPartialAggregateTerm = $spillInPartialAggregateDisabled;
        |  $createFastHashMap
        |  $hashMapTerm = $thisPlan.createHashMap();
        |  long $beforeAgg = System.nanoTime();
@@ -885,7 +887,6 @@ case class HashAggregateExec(
     val oomeClassName = classOf[SparkOutOfMemoryError].getName
 
     val thisPlan = ctx.addReferenceObj("plan", this)
-    val spillInPartialAggregateDisabled = sqlContext.conf.spillInPartialAggregationDisabled
 
     val findOrInsertRegularHashMap: String =
       s"""
@@ -900,9 +901,8 @@ case class HashAggregateExec(
          |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
          |// aggregation after processing all input rows.
          |if ($unsafeRowBuffer == null) {
-         |  // If sort/spill to disk is disabled, do not create the sorter
-         |  if (!$avoidSpillInPartialAggregateTerm && $spillInPartialAggregateDisabled) {
-         |    $avoidSpillInPartialAggregateTerm = true;
+         |  if ($avoidSpillInPartialAggregateTerm) {
+         |    // If sort/spill to disk is disabled, do not sort/spil to disk
          |    $unsafeRowBuffer = (UnsafeRow) $thisPlan.getEmptyAggregationBuffer();
          |  } else {
          |    if ($sorterTerm == null) {
