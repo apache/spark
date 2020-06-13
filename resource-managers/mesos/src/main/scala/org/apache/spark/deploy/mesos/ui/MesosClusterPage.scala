@@ -50,8 +50,8 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
     val retryTable = UIUtils.listingTable(retryHeaders, retryRow, state.pendingRetryDrivers)
     val content =
       <p>Mesos Framework ID: {state.frameworkId}</p>
-      <div class="row-fluid">
-        <div class="span12">
+      <div class="row">
+        <div class="col-12">
           <h4>Queued Drivers:</h4>
           {queuedTable}
           <h4>Launched Drivers:</h4>

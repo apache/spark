@@ -29,6 +29,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.functions.{count, window}
@@ -592,6 +593,33 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
+  test("SPARK-27340 Alias on TimeWindow expression cause watermark metadata lost") {
+    val inputData = MemoryStream[Int]
+    val aliasWindow = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .select(window($"eventTime", "5 seconds") as 'aliasWindow)
+    // Check the eventTime metadata is kept in the top level alias.
+    assert(aliasWindow.logicalPlan.output.exists(
+      _.metadata.contains(EventTimeWatermark.delayKey)))
+
+    val windowedAggregation = aliasWindow
+      .groupBy('aliasWindow)
+      .agg(count("*") as 'count)
+      .select($"aliasWindow".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10, 11, 12, 13, 14, 15),
+      CheckNewAnswer(),
+      AddData(inputData, 25), // Advance watermark to 15 seconds
+      CheckNewAnswer((10, 5)),
+      assertNumStateRows(2),
+      AddData(inputData, 10), // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      assertNumStateRows(2)
+    )
+  }
+
   test("test no-data flag") {
     val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
 
@@ -773,7 +801,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   }
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(ju.TimeZone.getTimeZone("UTC"))
+  timestampFormat.setTimeZone(ju.TimeZone.getTimeZone(UTC))
 
   private def formatTimestamp(sec: Long): String = {
     timestampFormat.format(new ju.Date(sec * 1000))

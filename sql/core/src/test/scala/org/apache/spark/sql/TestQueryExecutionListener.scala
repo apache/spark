@@ -28,7 +28,7 @@ class TestQueryExecutionListener extends QueryExecutionListener {
     OnSuccessCall.isOnSuccessCalled.set(true)
   }
 
-  override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = { }
+  override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = { }
 }
 
 /**

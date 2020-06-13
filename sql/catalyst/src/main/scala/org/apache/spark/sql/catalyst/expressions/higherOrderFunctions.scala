@@ -533,6 +533,8 @@ case class ArrayExists(
       SQLConf.get.getConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC))
   }
 
+  override def stringArgs: Iterator[Any] = super.stringArgs.take(2)
+
   override def nullable: Boolean =
     if (followThreeValuedLogic) {
       super.nullable || function.nullable

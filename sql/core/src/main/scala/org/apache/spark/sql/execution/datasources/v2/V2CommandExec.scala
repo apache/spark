@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.SparkPlan
 
 /**
  * A physical operator that executes run() and saves the result to prevent multiple executions.
  * Any V2 commands that do not require triggering a spark job should extend this class.
  */
-abstract class V2CommandExec extends LeafExecNode {
+abstract class V2CommandExec extends SparkPlan {
 
   /**
    * Abstract method that each concrete command needs to implement to compute the result.
@@ -53,4 +53,6 @@ abstract class V2CommandExec extends LeafExecNode {
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(result, 1)
   }
+
+  override def children: Seq[SparkPlan] = Nil
 }

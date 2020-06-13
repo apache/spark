@@ -177,7 +177,7 @@ public class InMemoryStore implements KVStore {
      * iterators.  https://bugs.openjdk.java.net/browse/JDK-8078645
      */
     private static class CountingRemoveIfForEach<T> implements BiConsumer<Comparable<Object>, T> {
-      private final ConcurrentMap<Comparable<Object>, T> data;
+      private final InstanceList<T> instanceList;
       private final Predicate<? super T> filter;
 
       /**
@@ -189,17 +189,15 @@ public class InMemoryStore implements KVStore {
        */
       private int count = 0;
 
-      CountingRemoveIfForEach(
-          ConcurrentMap<Comparable<Object>, T> data,
-          Predicate<? super T> filter) {
-        this.data = data;
+      CountingRemoveIfForEach(InstanceList<T> instanceList, Predicate<? super T> filter) {
+        this.instanceList = instanceList;
         this.filter = filter;
       }
 
       @Override
       public void accept(Comparable<Object> key, T value) {
         if (filter.test(value)) {
-          if (data.remove(key, value)) {
+          if (instanceList.delete(key, value)) {
             count++;
           }
         }
@@ -231,11 +229,16 @@ public class InMemoryStore implements KVStore {
     }
 
     int countingRemoveAllByIndexValues(String index, Collection<?> indexValues) {
-      if (hasNaturalParentIndex && naturalParentIndexName.equals(index)) {
+      int count = 0;
+      if (KVIndex.NATURAL_INDEX_NAME.equals(index)) {
+        for (Object naturalKey : indexValues) {
+          count += delete(asKey(naturalKey)) ? 1 : 0;
+        }
+        return count;
+      } else if (hasNaturalParentIndex && naturalParentIndexName.equals(index)) {
         // If there is a parent index for the natural index and `index` happens to be it,
         // Spark can use the `parentToChildrenMap` to get the related natural keys, and then
         // delete them from `data`.
-        int count = 0;
         for (Object indexValue : indexValues) {
           Comparable<Object> parentKey = asKey(indexValue);
           NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
@@ -248,7 +251,7 @@ public class InMemoryStore implements KVStore {
         return count;
       } else {
         Predicate<? super T> filter = getPredicate(ti.getAccessor(index), indexValues);
-        CountingRemoveIfForEach<T> callback = new CountingRemoveIfForEach<>(data, filter);
+        CountingRemoveIfForEach<T> callback = new CountingRemoveIfForEach<>(this, filter);
 
         // Go through all the values in `data` and delete objects that meets the predicate `filter`.
         // This can be slow when there is a large number of entries in `data`.
@@ -271,11 +274,26 @@ public class InMemoryStore implements KVStore {
       }
     }
 
-    public void delete(Object key) {
-      data.remove(asKey(key));
+    public boolean delete(Object key) {
+      boolean entryExists = data.remove(asKey(key)) != null;
+      if (entryExists) {
+        deleteParentIndex(key);
+      }
+      return entryExists;
+    }
+
+    public boolean delete(Object key, T value) {
+      boolean entryExists = data.remove(asKey(key), value);
+      if (entryExists) {
+        deleteParentIndex(key);
+      }
+      return entryExists;
+    }
+
+    private void deleteParentIndex(Object key) {
       if (hasNaturalParentIndex) {
         for (NaturalKeys v : parentToChildrenMap.values()) {
-          if (v.remove(asKey(key))) {
+          if (v.remove(asKey(key)) != null) {
             // `v` can be empty after removing the natural key and we can remove it from
             // `parentToChildrenMap`. However, `parentToChildrenMap` is a ConcurrentMap and such
             // checking and deleting can be slow.

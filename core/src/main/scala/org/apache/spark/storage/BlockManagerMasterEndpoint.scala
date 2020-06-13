@@ -65,6 +65,9 @@ class BlockManagerMasterEndpoint(
   // Mapping from executor ID to block manager ID.
   private val blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId]
 
+  // Set of block managers which are decommissioning
+  private val decommissioningBlockManagerSet = new mutable.HashSet[BlockManagerId]
+
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
@@ -152,6 +155,13 @@ class BlockManagerMasterEndpoint(
     case RemoveExecutor(execId) =>
       removeExecutor(execId)
       context.reply(true)
+
+    case DecommissionBlockManagers(executorIds) =>
+      decommissionBlockManagers(executorIds.flatMap(blockManagerIdByExecutor.get))
+      context.reply(true)
+
+    case GetReplicateInfoForRDDBlocks(blockManagerId) =>
+      context.reply(getReplicateInfoForRDDBlocks(blockManagerId))
 
     case StopBlockManagerMaster =>
       context.reply(true)
@@ -257,6 +267,7 @@ class BlockManagerMasterEndpoint(
 
     // Remove the block manager from blockManagerIdByExecutor.
     blockManagerIdByExecutor -= blockManagerId.executorId
+    decommissioningBlockManagerSet.remove(blockManagerId)
 
     // Remove it from blockManagerInfo and remove all the blocks.
     blockManagerInfo.remove(blockManagerId)
@@ -297,6 +308,39 @@ class BlockManagerMasterEndpoint(
   private def removeExecutor(execId: String): Unit = {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
+  }
+
+  /**
+   * Decommission the given Seq of blockmanagers
+   *    - Adds these block managers to decommissioningBlockManagerSet Set
+   *    - Sends the DecommissionBlockManager message to each of the [[BlockManagerSlaveEndpoint]]
+   */
+  def decommissionBlockManagers(blockManagerIds: Seq[BlockManagerId]): Future[Seq[Unit]] = {
+    val newBlockManagersToDecommission = blockManagerIds.toSet.diff(decommissioningBlockManagerSet)
+    val futures = newBlockManagersToDecommission.map { blockManagerId =>
+      decommissioningBlockManagerSet.add(blockManagerId)
+      val info = blockManagerInfo(blockManagerId)
+      info.slaveEndpoint.ask[Unit](DecommissionBlockManager)
+    }
+    Future.sequence{ futures.toSeq }
+  }
+
+  /**
+   * Returns a Seq of ReplicateBlock for each RDD block stored by given blockManagerId
+   * @param blockManagerId - block manager id for which ReplicateBlock info is needed
+   * @return Seq of ReplicateBlock
+   */
+  private def getReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
+    val info = blockManagerInfo(blockManagerId)
+
+    val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
+    rddBlocks.map { blockId =>
+      val currentBlockLocations = blockLocations.get(blockId)
+      val maxReplicas = currentBlockLocations.size + 1
+      val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
+      val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
+      replicateMsg
+    }.toSeq
   }
 
   // Remove a block from the slaves that have it. This can only be used to remove
@@ -536,7 +580,11 @@ class BlockManagerMasterEndpoint(
   private def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
     val blockManagerIds = blockManagerInfo.keySet
     if (blockManagerIds.contains(blockManagerId)) {
-      blockManagerIds.filterNot { _.isDriver }.filterNot { _ == blockManagerId }.toSeq
+      blockManagerIds
+        .filterNot { _.isDriver }
+        .filterNot { _ == blockManagerId }
+        .diff(decommissioningBlockManagerSet)
+        .toSeq
     } else {
       Seq.empty
     }

@@ -185,13 +185,14 @@ You can optionally configure the cluster further by setting environment variable
 SPARK_MASTER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.deploy.retainedApplications</code></td>
   <td>200</td>
   <td>
     The maximum number of completed applications to display. Older applications will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.retainedDrivers</code></td>
@@ -199,6 +200,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
    The maximum number of completed drivers to display. Older drivers will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.spreadOut</code></td>
@@ -208,6 +210,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     to consolidate them onto as few nodes as possible. Spreading out is usually better for
     data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
   </td>
+  <td>0.6.1</td>
 </tr>
 <tr>
   <td><code>spark.deploy.defaultCores</code></td>
@@ -219,6 +222,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     Set this lower on a shared cluster to prevent users from grabbing
     the whole cluster by default. <br/>
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.maxExecutorRetries</code></td>
@@ -234,6 +238,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     <code>-1</code>.
     <br/>
   </td>
+  <td>1.6.3</td>
 </tr>
 <tr>
   <td><code>spark.worker.timeout</code></td>
@@ -242,6 +247,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     Number of seconds after which the standalone deploy master considers a worker lost if it
     receives no heartbeats.
   </td>
+  <td>0.6.2</td>
 </tr>
 <tr>
   <td><code>spark.worker.resource.{resourceName}.amount</code></td>
@@ -249,6 +255,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Amount of a particular resource to use on the worker.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
@@ -257,6 +264,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     Path to resource discovery script, which is used to find a particular resource while worker starting up.
     And the output of the script should be formatted like the <code>ResourceInformation</code> class.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.resourcesFile</code></td>
@@ -269,13 +277,14 @@ SPARK_MASTER_OPTS supports the following system properties:
     find that resource. If the discovery script also does not find the resources, the worker will fail
     to start up.
   </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
 SPARK_WORKER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
@@ -284,6 +293,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
     This should be enabled if spark.shuffle.service.db.enabled is "true"
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.interval</code></td>
@@ -292,6 +302,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     Controls the interval, in seconds, at which the worker cleans up old application work dirs
     on the local machine.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.appDataTtl</code></td>
@@ -302,6 +313,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
     especially if you run jobs very frequently.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.enabled</code></td>
@@ -312,6 +324,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
     eventually gets cleaned up.  This config may be removed in the future.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
@@ -322,8 +335,9 @@ SPARK_WORKER_OPTS supports the following system properties:
     overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
     local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
     all files/subdirectories of a stopped and timeout application.
-    This only affects Standalone mode, support of other cluster manangers can be added in the future.
+    This only affects Standalone mode, support of other cluster managers can be added in the future.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
@@ -333,6 +347,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     Spark caches the uncompressed file size of compressed log files. This property controls the cache
     size.
   </td>
+  <td>2.0.2</td>
 </tr>
 </table>
 
@@ -358,6 +373,25 @@ To run an interactive Spark shell against the cluster, run the following command
     ./bin/spark-shell --master spark://IP:PORT
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
+
+# Client Properties
+
+Spark applications supports the following configuration properties specific to standalone mode: 
+
+<table class="table">
+  <tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr>
+  <tr>
+  <td><code>spark.standalone.submit.waitAppCompletion</code></td>
+  <td><code>false</code></td>
+  <td>
+  In standalone cluster mode, controls whether the client waits to exit until the application completes.
+  If set to <code>true</code>, the client process will stay alive polling the driver's status.
+  Otherwise, the client process will exit after submission.
+  </td>
+  <td>3.1.0</td>
+  </tr>
+</table>
+
 
 # Launching Spark Applications
 
@@ -484,14 +518,16 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
 <table class="table">
-  <tr><th style="width:21%">System property</th><th>Meaning</th></tr>
+  <tr><th style="width:21%">System property</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>Set to FILESYSTEM to enable single-node recovery mode (default: NONE).</td>
+    <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.</td>
+    <td>0.8.1</td>
   </tr>
 </table>
 

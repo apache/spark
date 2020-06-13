@@ -175,12 +175,11 @@ object DecimalPrecision extends TypeCoercionRule {
         resultType, nullOnOverflow)
 
     case expr @ IntegralDivide(
-        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), returnLong) =>
+        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
       val widerType = widerDecimalType(p1, s1, p2, s2)
       val promotedExpr = IntegralDivide(
         promotePrecision(e1, widerType),
-        promotePrecision(e2, widerType),
-        returnLong)
+        promotePrecision(e2, widerType))
       if (expr.dataType.isInstanceOf[DecimalType]) {
         // This follows division rule
         val intDig = p1 - s1 + s2

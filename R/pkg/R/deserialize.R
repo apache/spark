@@ -57,7 +57,7 @@ readTypedObject <- function(con, type) {
     "s" = readStruct(con),
     "n" = NULL,
     "j" = getJobj(readString(con)),
-    stop(paste("Unsupported type for deserialization", type)))
+    stop("Unsupported type for deserialization ", type))
 }
 
 readStringData <- function(con, len) {

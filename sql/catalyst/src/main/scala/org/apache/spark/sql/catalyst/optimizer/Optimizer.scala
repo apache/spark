@@ -51,7 +51,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
   override protected val blacklistedOnceBatches: Set[String] =
     Set(
       "PartitionPruning",
-      "Extract Python UDFs")
+      "Extract Python UDFs",
+      "Push CNF predicate through join")
 
   protected def fixedPoint =
     FixedPoint(
@@ -118,7 +119,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Infer Filters", Once,
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        rulesWithoutInferFiltersFromConstraints: _*) :: Nil
+        rulesWithoutInferFiltersFromConstraints: _*) ::
+      // Set strategy to Once to avoid pushing filter every time because we do not change the
+      // join condition.
+      Batch("Push CNF predicate through join", Once,
+        PushCNFPredicateThroughJoin) :: Nil
     }
 
     val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
@@ -133,7 +138,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       ComputeCurrentTime,
-      GetCurrentDatabase(catalogManager),
+      GetCurrentDatabaseAndCatalog(catalogManager),
       RewriteDistinctAggregates,
       ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -223,7 +228,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView.ruleName ::
       ReplaceExpressions.ruleName ::
       ComputeCurrentTime.ruleName ::
-      GetCurrentDatabase(catalogManager).ruleName ::
+      GetCurrentDatabaseAndCatalog(catalogManager).ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
       ReplaceIntersectWithSemiJoin.ruleName ::
@@ -609,24 +614,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
         .map(_._2)
       p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
-    // prune unrequired nested fields
-    case p @ Project(projectList, g: Generate) if SQLConf.get.nestedPruningOnExpressions &&
-        NestedColumnAliasing.canPruneGenerator(g.generator) =>
-      val exprsToPrune = projectList ++ g.generator.children
-      NestedColumnAliasing.getAliasSubMap(exprsToPrune, g.qualifiedGeneratorOutput).map {
-        case (nestedFieldToAlias, attrToAliases) =>
-          val newGenerator = g.generator.transform {
-            case f: ExtractValue if nestedFieldToAlias.contains(f) =>
-              nestedFieldToAlias(f).toAttribute
-          }.asInstanceOf[Generator]
-
-          // Defer updating `Generate.unrequiredChildIndex` to next round of `ColumnPruning`.
-          val newGenerate = g.copy(generator = newGenerator)
-
-          val newChild = NestedColumnAliasing.replaceChildrenWithAliases(newGenerate, attrToAliases)
-
-          Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
-      }.getOrElse(p)
+    // prune unrequired nested fields from `Generate`.
+    case GeneratorNestedColumnAliasing(p) => p
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>
@@ -660,8 +649,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
-    case p @ NestedColumnAliasing(nestedFieldToAlias, attrToAliases) =>
-      NestedColumnAliasing.replaceToAliases(p, nestedFieldToAlias, attrToAliases)
+    case NestedColumnAliasing(p) => p
 
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
@@ -1204,9 +1192,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
   def getAliasMap(plan: Aggregate): AttributeMap[Expression] = {
     // Find all the aliased expressions in the aggregate list that don't include any actual
-    // AggregateExpression, and create a map from the alias to the expression
+    // AggregateExpression or PythonUDF, and create a map from the alias to the expression
     val aliasMap = plan.aggregateExpressions.collect {
-      case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
+      case a: Alias if a.child.find(e => e.isInstanceOf[AggregateExpression] ||
+          PythonUDF.isGroupedAggPandasUDF(e)).isEmpty =>
         (a.toAttribute, a.child)
     }
     AttributeMap(aliasMap)

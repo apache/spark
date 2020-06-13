@@ -23,6 +23,7 @@ import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.control.NonFatal
 
+import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkException
@@ -53,6 +54,15 @@ import org.apache.spark.sql.types._
  */
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
 
+  override protected def testFile(fileName: String): String = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
+    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
+    val file = File.createTempFile("thriftserver-test", ".data")
+    file.deleteOnExit()
+    FileUtils.copyURLToFile(url, file)
+    file.getAbsolutePath
+  }
+
   /** List of test cases to ignore, in lower cases. */
   override def blackList: Set[String] = super.blackList ++ Set(
     // Missing UDF
@@ -79,8 +89,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
     withJdbcStatement { statement =>
-
-      loadTestData(statement)
 
       configSet.foreach { case (k, v) =>
         statement.execute(s"SET $k = $v")
@@ -260,61 +268,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     } else {
       ("", answer)
     }
-  }
-
-  /** Load built-in test tables. */
-  private def loadTestData(statement: Statement): Unit = {
-    // Prepare the data
-    statement.execute(
-      """
-        |CREATE OR REPLACE TEMPORARY VIEW testdata as
-        |SELECT id AS key, CAST(id AS string) AS value FROM range(1, 101)
-      """.stripMargin)
-    statement.execute(
-      """
-        |CREATE OR REPLACE TEMPORARY VIEW arraydata as
-        |SELECT * FROM VALUES
-        |(ARRAY(1, 2, 3), ARRAY(ARRAY(1, 2, 3))),
-        |(ARRAY(2, 3, 4), ARRAY(ARRAY(2, 3, 4))) AS v(arraycol, nestedarraycol)
-      """.stripMargin)
-    statement.execute(
-      """
-        |CREATE OR REPLACE TEMPORARY VIEW mapdata as
-        |SELECT * FROM VALUES
-        |MAP(1, 'a1', 2, 'b1', 3, 'c1', 4, 'd1', 5, 'e1'),
-        |MAP(1, 'a2', 2, 'b2', 3, 'c2', 4, 'd2'),
-        |MAP(1, 'a3', 2, 'b3', 3, 'c3'),
-        |MAP(1, 'a4', 2, 'b4'),
-        |MAP(1, 'a5') AS v(mapcol)
-      """.stripMargin)
-    statement.execute(
-      s"""
-         |CREATE TEMPORARY VIEW aggtest
-         |  (a int, b float)
-         |USING csv
-         |OPTIONS (path '${baseResourcePath.getParent}/test-data/postgresql/agg.data',
-         |  header 'false', delimiter '\t')
-      """.stripMargin)
-    statement.execute(
-      s"""
-         |CREATE OR REPLACE TEMPORARY VIEW onek
-         |  (unique1 int, unique2 int, two int, four int, ten int, twenty int, hundred int,
-         |    thousand int, twothousand int, fivethous int, tenthous int, odd int, even int,
-         |    stringu1 string, stringu2 string, string4 string)
-         |USING csv
-         |OPTIONS (path '${baseResourcePath.getParent}/test-data/postgresql/onek.data',
-         |  header 'false', delimiter '\t')
-      """.stripMargin)
-    statement.execute(
-      s"""
-         |CREATE OR REPLACE TEMPORARY VIEW tenk1
-         |  (unique1 int, unique2 int, two int, four int, ten int, twenty int, hundred int,
-         |    thousand int, twothousand int, fivethous int, tenthous int, odd int, even int,
-         |    stringu1 string, stringu2 string, string4 string)
-         |USING csv
-         |  OPTIONS (path '${baseResourcePath.getParent}/test-data/postgresql/tenk.data',
-         |  header 'false', delimiter '\t')
-      """.stripMargin)
   }
 
   // Returns true if sql is retrieving data.
