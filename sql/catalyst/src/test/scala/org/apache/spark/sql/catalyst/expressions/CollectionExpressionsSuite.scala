@@ -1841,8 +1841,17 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Date.valueOf("2018-01-01")),
       Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval 1 day"))),
+      Seq(Date.valueOf("2018-01-01")))
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
       Literal(stringToInterval("interval 1 month"))),
-      Seq(
-        Date.valueOf("2018-01-01")))
+      Seq(Date.valueOf("2018-01-01")))
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval 1 year"))),
+      Seq(Date.valueOf("2018-01-01")))
   }
 }
