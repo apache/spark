@@ -18,30 +18,11 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.network.client.StreamCallbackWithID
-import org.apache.spark.serializer.SerializerManager
-import org.apache.spark.storage.BlockId
 
 /**
  * :: Experimental ::
- * An experimental trait to allow Spark to migrate shuffle blocks.
+ * An experimental case class used by MigratableResolver to return the shuffleId and mapId in a
+ * type safe way.
  */
 @Experimental
-trait MigratableResolver {
-  /**
-   * Get the shuffle ids that are stored locally. Used for block migrations.
-   */
-  def getStoredShuffles(): Set[ShuffleBlockInfo]
-
-  /**
-   * Write a provided shuffle block as a stream. Used for block migrations.
-   */
-  def putShuffleBlockAsStream(blockId: BlockId, serializerManager: SerializerManager):
-      StreamCallbackWithID
-
-  /**
-   * Get the blocks for migration for a particular shuffle and map.
-   */
-  def getMigrationBlocks(shuffleBlockInfo: ShuffleBlockInfo): List[(BlockId, ManagedBuffer)]
-}
+case class ShuffleBlockInfo(shuffleId: Int, mapId: Long)

@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.shuffle.MigratableResolver
+import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo}
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.util.ThreadUtils
 
@@ -60,7 +60,7 @@ private[storage] class BlockManagerDecommissioner(
   private class ShuffleMigrationRunnable(peer: BlockManagerId) extends Runnable {
     @volatile var running = true
     override def run(): Unit = {
-      var migrating: Option[(Int, Long)] = None
+      var migrating: Option[ShuffleBlockInfo] = None
       logInfo(s"Starting migration thread for ${peer}")
       // Once a block fails to transfer to an executor stop trying to transfer more blocks
       try {
@@ -73,10 +73,10 @@ private[storage] class BlockManagerDecommissioner(
               // will finish being committed.
               val SLEEP_TIME_SECS = 1
               Thread.sleep(SLEEP_TIME_SECS * 1000L)
-            case Some((shuffleId, mapId)) =>
-              logInfo(s"Trying to migrate shuffle ${shuffleId},${mapId} to ${peer}")
+            case Some(shuffleBlockInfo) =>
+              logInfo(s"Trying to migrate shuffle ${shuffleBlockInfo} to ${peer}")
               val blocks =
-                bm.migratableResolver.getMigrationBlocks(shuffleId, mapId)
+                bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
               logInfo(s"Got migration sub-blocks ${blocks}")
               blocks.foreach { case (blockId, buffer) =>
                 logInfo(s"Migrating sub-block ${blockId}")
@@ -90,7 +90,7 @@ private[storage] class BlockManagerDecommissioner(
                   null)// class tag, we don't need for shuffle
                 logInfo(s"Migrated sub block ${blockId}")
               }
-              logInfo(s"Migrated ${shuffleId},${mapId} to ${peer}")
+              logInfo(s"Migrated ${shuffleBlockInfo} to ${peer}")
           }
         }
         // This catch is intentionally outside of the while running block.
@@ -109,11 +109,11 @@ private[storage] class BlockManagerDecommissioner(
   }
 
   // Shuffles which are either in queue for migrations or migrated
-  private val migratingShuffles = mutable.HashSet[(Int, Long)]()
+  private val migratingShuffles = mutable.HashSet[ShuffleBlockInfo]()
 
   // Shuffles which are queued for migration
   private[storage] val shufflesToMigrate =
-    new java.util.concurrent.ConcurrentLinkedQueue[(Int, Long)]()
+    new java.util.concurrent.ConcurrentLinkedQueue[ShuffleBlockInfo]()
 
   @volatile private var stopped = false
 

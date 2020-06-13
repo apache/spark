@@ -28,7 +28,7 @@ import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.shuffle.MigratableResolver
+import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo}
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 
 class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
@@ -44,10 +44,10 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       ids: Set[(Int, Long, Int)]): Unit = {
 
     when(mockMigratableShuffleResolver.getStoredShuffles())
-      .thenReturn(ids.map(triple => (triple._1, triple._2)).toSet)
+      .thenReturn(ids.map(triple => ShuffleBlockInfo(triple._1, triple._2)).toSet)
 
     ids.foreach { case (shuffleId: Int, mapId: Long, reduceId: Int) =>
-      when(mockMigratableShuffleResolver.getMigrationBlocks(mc.any(), mc.any()))
+      when(mockMigratableShuffleResolver.getMigrationBlocks(mc.any()))
         .thenReturn(List(
           (ShuffleIndexBlockId(shuffleId, mapId, reduceId), mock(classOf[ManagedBuffer])),
           (ShuffleDataBlockId(shuffleId, mapId, reduceId), mock(classOf[ManagedBuffer]))))

@@ -61,7 +61,7 @@ private[spark] class IndexShuffleBlockResolver(
   /**
    * Get the shuffle files that are stored locally. Used for block migrations.
    */
-  override def getStoredShuffles(): Set[(Int, Long)] = {
+  override def getStoredShuffles(): Set[ShuffleBlockInfo] = {
     // Matches ShuffleIndexBlockId name
     val pattern = "shuffle_(\\d+)_(\\d+)_.+\\.index".r
     val rootDirs = blockManager.diskBlockManager.localDirs
@@ -71,7 +71,7 @@ private[spark] class IndexShuffleBlockResolver(
     logDebug(s"Got block files ${filenames.toList}")
     filenames.flatMap { fname =>
       pattern.findAllIn(fname).matchData.map {
-        matched => (matched.group(1).toInt, matched.group(2).toLong)
+        matched => ShuffleBlockInfo(matched.group(1).toInt, matched.group(2).toLong)
       }
     }.toSet
   }
@@ -229,7 +229,9 @@ private[spark] class IndexShuffleBlockResolver(
   /**
    * Get the index & data block for migration.
    */
-  def getMigrationBlocks(shuffleId: Int, mapId: Long): List[(BlockId, ManagedBuffer)] = {
+  def getMigrationBlocks(shuffleBlockInfo: ShuffleBlockInfo): List[(BlockId, ManagedBuffer)] = {
+    val shuffleId = shuffleBlockInfo.shuffleId
+    val mapId = shuffleBlockInfo.mapId
     // Load the index block
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
