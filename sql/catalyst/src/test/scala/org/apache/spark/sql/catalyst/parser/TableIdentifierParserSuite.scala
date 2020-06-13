@@ -405,7 +405,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
       Files.copy(is, tmpFile.toPath)
       val reservedKeywordsInSql2016 = Files.readAllLines(tmpFile.toPath)
         .asScala.filterNot(_.startsWith("--")).map(_.trim).toSet
-      assert((reservedKeywordsInAnsiMode -- reservedKeywordsInSql2016).isEmpty)
+      assert(((reservedKeywordsInAnsiMode -- Set("!")) -- reservedKeywordsInSql2016).isEmpty)
     }
   }
 
