@@ -536,7 +536,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> from pyspark.sql.functions import timestamp_seconds
         >>> sdf.select('name', timestamp_seconds(sdf.time).alias('time')) \
-        ...     .withWatermark('time', '10 minutes')
+        ...    .withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
         """
         if not eventTime or type(eventTime) is not str:
