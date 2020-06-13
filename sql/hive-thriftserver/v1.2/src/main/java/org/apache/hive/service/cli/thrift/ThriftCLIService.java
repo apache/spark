@@ -175,7 +175,6 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   public synchronized void start() {
     super.start();
     if (!isStarted && !isEmbedded) {
-      initializeServer();
       new Thread(this).start();
       isStarted = true;
     }
@@ -633,8 +632,6 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     }
     return resp;
   }
-
-  protected abstract void initializeServer();
 
   @Override
   public abstract void run();
