@@ -49,7 +49,6 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     this.db = db;
     this.ascending = params.ascending;
     this.it = db.db().iterator();
-    db.notifyIteratorCreated(it);
     this.type = type;
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
@@ -108,7 +107,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public boolean hasNext() {
-    if (!checkedNext && !closed && !db.isClosed()) {
+    if (!checkedNext && !closed) {
       next = loadNext();
       checkedNext = true;
     }
@@ -186,8 +185,9 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public synchronized void close() throws IOException {
+    db.notifyIteratorClosed(this);
     if (!closed) {
-      db.closeIterator(it);
+      it.close();
       closed = true;
     }
   }
@@ -200,7 +200,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   @SuppressWarnings("deprecation")
   @Override
   protected void finalize() throws Throwable {
-    close();
+    db.closeIterator(this);
   }
 
   private byte[] loadNext() {
