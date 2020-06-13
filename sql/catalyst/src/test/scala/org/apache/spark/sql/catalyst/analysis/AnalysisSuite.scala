@@ -829,6 +829,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("throw user facing error when use WindowFunction directly") {
     assertAnalysisError(testRelation2.select(RowNumber()),
-      Seq("Window function 'row_number()' call requires an OVER clause."))
+      Seq("Window function row_number() call requires an OVER clause."))
   }
 }
