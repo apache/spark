@@ -1397,7 +1397,11 @@ sealed trait LogisticRegressionSummary extends ClassificationSummary {
 
   /** Field in "predictions" which gives the probability of each class as a vector. */
   @Since("1.5.0")
-  def probabilityCol: String = scoreCol
+  def probabilityCol: String
+
+  /** Field in "predictions" which gives the features of each instance as a vector. */
+  @Since("1.6.0")
+  def featuresCol: String
 }
 
 /**
@@ -1412,6 +1416,12 @@ sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
  */
 sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary
   with BinaryClassificationSummary {
+
+  override def scoreCol: String = if (probabilityCol.nonEmpty) {
+    probabilityCol
+  } else {
+    throw new SparkException(s"probabilityCol is required for BinaryLogisticRegressionSummary.")
+  }
 }
 
 /**
@@ -1449,7 +1459,7 @@ private class LogisticRegressionTrainingSummaryImpl(
  * Multiclass logistic regression results for a given model.
  *
  * @param predictions dataframe output by the model's `transform` method.
- * @param scoreCol field in "predictions" which gives the probability of
+ * @param probabilityCol field in "predictions" which gives the probability of
  *                 each class as a vector.
  * @param predictionCol field in "predictions" which gives the prediction for a data instance as a
  *                      double.
@@ -1459,7 +1469,7 @@ private class LogisticRegressionTrainingSummaryImpl(
  */
 private class LogisticRegressionSummaryImpl(
     @transient override val predictions: DataFrame,
-    override val scoreCol: String,
+    override val probabilityCol: String,
     override val predictionCol: String,
     override val labelCol: String,
     override val featuresCol: String,

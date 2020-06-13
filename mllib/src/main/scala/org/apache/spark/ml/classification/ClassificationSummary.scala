@@ -36,12 +36,6 @@ private[classification] trait ClassificationSummary extends Serializable {
   @Since("3.1.0")
   def predictions: DataFrame
 
-  /**
-   * Field in "predictions" which gives the probability or rawPrediction of each class as a vector.
-   */
-  @Since("3.1.0")
-  def scoreCol: String
-
   /** Field in "predictions" which gives the prediction of each class. */
   @Since("3.1.0")
   def predictionCol: String
@@ -49,10 +43,6 @@ private[classification] trait ClassificationSummary extends Serializable {
   /** Field in "predictions" which gives the true label of each instance (if available). */
   @Since("3.1.0")
   def labelCol: String
-
-  /** Field in "predictions" which gives the features of each instance as a vector. */
-  @Since("3.1.0")
-  def featuresCol: String
 
   /** Field in "predictions" which gives the weight of each instance as a vector. */
   @Since("3.1.0")
@@ -193,8 +183,12 @@ trait BinaryClassificationSummary extends ClassificationSummary {
   private val sparkSession = predictions.sparkSession
   import sparkSession.implicits._
 
-  // TODO: Allow the user to vary the number of bins using a setBins method in
-  // BinaryClassificationMetrics. For now the default is set to 100.
+  /**
+   *  Field in "predictions" which gives the probability or rawPrediction of each class as a
+   *  vector.
+   */
+  def scoreCol: String = null
+
   @transient private val binaryMetrics = {
     val weightColumn = if (predictions.schema.fieldNames.contains(weightCol)) {
       col(weightCol).cast(DoubleType)
@@ -202,10 +196,12 @@ trait BinaryClassificationSummary extends ClassificationSummary {
       lit(1.0)
     }
 
+    // TODO: Allow the user to vary the number of bins using a setBins method in
+    // BinaryClassificationMetrics. For now the default is set to 1000.
     new BinaryClassificationMetrics(
       predictions.select(col(scoreCol), col(labelCol).cast(DoubleType), weightColumn).rdd.map {
         case Row(score: Vector, label: Double, weight: Double) => (score(1), label, weight)
-      }, 100
+      }, 1000
     )
   }
 
