@@ -391,7 +391,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
   val reservedKeywordsInAnsiMode = allCandidateKeywords -- nonReservedKeywordsInAnsiMode
 
   test("check # of reserved keywords") {
-    val numReservedKeywords = 78
+    val numReservedKeywords = 75
     assert(reservedKeywordsInAnsiMode.size == numReservedKeywords,
       s"The expected number of reserved keywords is $numReservedKeywords, but " +
         s"${reservedKeywordsInAnsiMode.size} found.")
@@ -404,7 +404,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
         .getResourceAsStream("ansi-sql-2016-reserved-keywords.txt")
       Files.copy(is, tmpFile.toPath)
       val reservedKeywordsInSql2016 = Files.readAllLines(tmpFile.toPath)
-        .asScala.filterNot(_.startsWith("--")).map(_.trim.toLowerCase(Locale.ROOT)).toSet
+        .asScala.filterNot(_.startsWith("--")).map(_.trim).toSet
       assert((reservedKeywordsInAnsiMode -- reservedKeywordsInSql2016).isEmpty)
     }
   }
