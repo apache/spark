@@ -25,9 +25,11 @@ import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.util.control.NonFatal
 
+import org.mockito.Mockito._
 import org.mockito.Mockito.spy
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
+import org.roaringbitmap.RoaringBitmap
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
@@ -334,8 +336,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
        * Schedules shuffle merge finalize.
        */
       override private[scheduler] def scheduleShuffleMergeFinalize(
-          shuffleMapStage: ShuffleMapStage): Unit = {
-          handleShuffleMergeFinalized(shuffleMapStage.shuffleDep.shuffleId)
+        shuffleMapStage: ShuffleMapStage): Unit = {
+        for (part <- 0 until shuffleMapStage.shuffleDep.partitioner.numPartitions) {
+          mapOutputTracker.registerMergeResult(shuffleMapStage.shuffleDep.shuffleId, part,
+            makeMergeStatus(""))
+        }
+        handleShuffleMergeFinalized(shuffleMapStage.shuffleDep.shuffleId)
       }
     }
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
@@ -3408,25 +3414,90 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     conf.set("spark.shuffle.push.based.enabled", "true")
     conf.set("spark.shuffle.service.enabled", "true")
     init(conf)
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    cacheLocations(shuffleMapRdd.id -> 0) = Seq(makeBlockManagerId("hostA"))
-    cacheLocations(shuffleMapRdd.id -> 1) = Seq(makeBlockManagerId("hostB"))
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
 
-    // Submit a map stage by itself
-    submitMapStage(shuffleDep)
-    completeShuffleMapStageSuccessfully(0, 0, 1)
-    assert(results.size === 1)
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+    completeShuffleMapStageSuccessfully(0, 0, parts)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == parts)
+    completeNextResultStageWithSuccess(1, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
     results.clear()
     assertDataStructuresEmpty()
+  }
 
-    // Submit a reduce job that depends on this map stage; it should directly do the reduce
-    submit(reduceRdd, Array(0))
-    completeNextResultStageWithSuccess(2, 0)
-    assert(results === Map(0 -> 42))
-    results.clear()
-    assertDataStructuresEmpty()
+  test("unregister statuses on a host when shuffle chunk failure occurs") {
+    afterEach()
+    val conf = new SparkConf()
+    conf.set("spark.shuffle.push.based.enabled", "true")
+    conf.set("spark.shuffle.service.enabled", "true")
+    init(conf)
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, (0 until parts).toArray)
+    assert(taskSets.length == 1)
+
+    // Complete shuffle map stage successfully on hostA
+    complete(taskSets.head, taskSets.head.tasks.zipWithIndex.map {
+      case (_, _) =>
+        (Success, makeMapStatus("hostA", parts))
+    }.toSeq)
+
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) == parts)
+
+    // Finish the first task
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0), Success, makeMapStatus("hostA", parts),
+      Seq.empty, Array.emptyLongArray, createFakeTaskInfoWithId(0)))
+
+    // The second task fails with FetchFailed.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      FetchFailed(
+        BlockManagerId("", "hostA", 12345), shuffleDep.shuffleId, -1, 0, 0,
+          "shuffle chunk failure"), null))
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) == 0)
+  }
+
+  test("metadata fetch failure should not unregister map status") {
+    afterEach()
+    val conf = new SparkConf()
+    conf.set("spark.shuffle.push.based.enabled", "true")
+    conf.set("spark.shuffle.service.enabled", "true")
+    init(conf)
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, (0 until parts).toArray)
+    assert(taskSets.length == 1)
+
+    // Complete shuffle map stage successfully on hostA
+    complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
+      case (task, _) =>
+        (Success, makeMapStatus("hostA", parts))
+    }.toSeq)
+
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) == parts)
+
+    // Finish the first task
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0), Success, makeMapStatus("hostA", parts),
+      Seq.empty, Array.emptyLongArray, createFakeTaskInfoWithId(0L)))
+ 
+    // The second task fails with Metadata Failed exception.
+    val metadataFetchFailedEx = new MetadataFetchFailedException(
+      shuffleDep.shuffleId, 1, "metadata failure");
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1), metadataFetchFailedEx.toTaskFailedReason, null))
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) == parts)
   }
 
   /**
@@ -3490,6 +3561,9 @@ object DAGSchedulerSuite {
   def makeBlockManagerId(host: String): BlockManagerId = {
     BlockManagerId(host + "-exec", host, 12345)
   }
+
+  def makeMergeStatus(host: String, size: Long = 1000): MergeStatus =
+    MergeStatus(makeBlockManagerId(host), mock(classOf[RoaringBitmap]), size)
 }
 
 object FailThisAttempt {

@@ -2016,7 +2016,8 @@ private[spark] class DAGScheduler(
               // proceed with unconditional removal of shuffle outputs from all executors on that
               // host, including from those that we still haven't confirmed as lost due to heartbeat
               // delays.
-              ignoreShuffleFileLostEpoch = isHostDecommissioned)
+              ignoreShuffleFileLostEpoch = isHostDecommissioned,
+              bmAddress = Some(bmAddress))
           }
         }
 
@@ -2198,7 +2199,8 @@ private[spark] class DAGScheduler(
       fileLost: Boolean,
       hostToUnregisterOutputs: Option[String],
       maybeEpoch: Option[Long] = None,
-      ignoreShuffleFileLostEpoch: Boolean = false): Unit = {
+      ignoreShuffleFileLostEpoch: Boolean = false,
+      bmAddress: Option[BlockManagerId] = None): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     logDebug(s"Considering removal of executor $execId; " +
       s"fileLost: $fileLost, currentEpoch: $currentEpoch")
@@ -2225,7 +2227,22 @@ private[spark] class DAGScheduler(
             mapOutputTracker.removeOutputsOnHost(host)
           case None =>
             logInfo(s"Shuffle files lost for executor: $execId (epoch $currentEpoch)")
-            mapOutputTracker.removeOutputsOnExecutor(execId)
+            if (execId.isEmpty && bmAddress.isDefined) {
+              // execId is empty for merged shuffle blocks or chunks of merged shuffle blocks. If
+              // the execution reaches here, it indicates that there was a fetch failure of a
+              // ShuffleChunk. Currently, the executors don't fallback to retrieve original shuffle
+              // blocks when this happens, so the scheduler also needs to handle failures of shuffle
+              // chunk. The scheduler will unregister all the map and merge statuses on the shuffle
+              // service host since the fetch failure at this point indicates that the shuffle
+              // service is not responsive.
+              // TODO: This is only needed until the fallback mechanism for shuffle chunk failures
+              //  in the executors is implemented.
+              logInfo(s"The failure is due to a fetch of shuffle chunk, " +
+                s"so removing the outputs on the host ${bmAddress.get.host}")
+              mapOutputTracker.removeOutputsOnHost(bmAddress.get.host)
+            } else {
+              mapOutputTracker.removeOutputsOnExecutor(execId)
+            }
         }
       }
     }

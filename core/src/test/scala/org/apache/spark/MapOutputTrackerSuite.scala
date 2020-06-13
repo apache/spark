@@ -356,7 +356,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
-  test("remote fetch with merged shuffle result") {
+  test("get map statuses from merged shuffle") {
     conf.set("spark.shuffle.push.based.enabled", "true")
     conf.set("spark.shuffle.service.enabled", "true")
     val hostname = "localhost"
@@ -371,23 +371,34 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     slaveTracker.trackerEndpoint =
         slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
-    masterTracker.registerShuffle(10, 1, 1)
+    masterTracker.registerShuffle(10, 4, 1)
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     // This is expected to fail because no outputs have been registered for the shuffle.
     intercept[FetchFailedException] { slaveTracker.getMapSizesByExecutorId(10, 0) }
     val bitmap = new RoaringBitmap()
     bitmap.add(0)
-    masterTracker.registerMapOutput(10, 0, MapStatus(
-      BlockManagerId("a", "hostA", 1000), Array(1000L), 0))
-    masterTracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000),
-      bitmap, 1000L))
+    bitmap.add(1)
+    bitmap.add(2)
+    bitmap.add(3)
+
+    val blockMgrId = BlockManagerId("a", "hostA", 1000)
+    masterTracker.registerMapOutput(
+      10, 0, MapStatus(blockMgrId, Array(1000L), 0))
+    masterTracker.registerMapOutput(
+      10, 1, MapStatus(blockMgrId, Array(1000L), 1))
+    masterTracker.registerMapOutput(
+      10, 2, MapStatus(blockMgrId, Array(1000L), 2))
+    masterTracker.registerMapOutput(
+      10, 3, MapStatus(blockMgrId, Array(1000L), 3))
+
+    masterTracker.registerMergeResult(10, 0, MergeStatus(blockMgrId,
+      bitmap, 4000L))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
-      Seq((BlockManagerId("a", "hostA", 1000), Seq((ShuffleBlockId(10, -1, 0), 1000L, -1)))))
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     assert(slaveTracker.getMapSizesForMergeResult(10, 0) ===
-      Seq((BlockManagerId("a", "hostA", 1000), Seq((ShuffleBlockId(10, 0, 0), size1000, 0))))
-    )
+      Seq((blockMgrId, ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000, 0),
+        (ShuffleBlockId(10, 1, 0), size1000, 1), (ShuffleBlockId(10, 2, 0), size1000, 2),
+        (ShuffleBlockId(10, 3, 0), size1000, 3)))))
     masterTracker.stop()
     slaveTracker.stop()
     rpcEnv.shutdown()
