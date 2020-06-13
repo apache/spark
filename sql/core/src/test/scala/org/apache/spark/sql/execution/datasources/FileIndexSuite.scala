@@ -494,15 +494,16 @@ class FileIndexSuite extends SharedSparkSession {
     assert(fileIndex.leafFileStatuses.toSeq == statuses)
   }
 
-  test("SPARK-39162 - when filesModifiedAfterDate specified and before file date without filter") {
+  test("SPARK-39162 - when filesModifiedAfterDate specified and before file date without extra filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
-      val df = spark.read.option("filesModifiedAfterDate", "2020-05-01T01:00:00").format("csv").load(path + "/file1.csv")
+      val df = spark.read.option("filesModifiedAfterDate", "2020-05-01T01:00:00").format("csv").load(path.toString())
       assert(df.count() == 1)
     }
   }
+
   test("SPARK-39162 - when filesModifiedAfterDate specified and after file date without filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
@@ -512,7 +513,6 @@ class FileIndexSuite extends SharedSparkSession {
         spark.read.option("filesModifiedAfterDate", "2024-05-01T01:00:00").format("csv").load(path + "/file1.csv")
       }.getMessage
       assert(msg.contains("Unable to infer schema for CSV. It must be specified manually."))
-      //val inMemoryFileIndex = new TestInMemoryFileIndex(spark, new Path(file.getCanonicalPath))
     }
     assert(true)
   }
@@ -538,6 +538,7 @@ class FileIndexSuite extends SharedSparkSession {
       assert(msg.contains("could not be parsed at index "))
     }
   }
+
   test("SPARK-39162 - when filesModifiedAfterDate is specified with invalid date") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
@@ -549,6 +550,7 @@ class FileIndexSuite extends SharedSparkSession {
       assert(msg.contains("could not be parsed at index "))
     }
   }
+
   test("SPARK-39162 - when filesModifiedAfterDate not specified") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)

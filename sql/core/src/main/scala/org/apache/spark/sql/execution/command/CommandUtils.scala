@@ -21,9 +21,7 @@ import java.net.URI
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -33,21 +31,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.pathfilters.PathFilterIgnoreNonData
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.{SQLConf, SessionState}
 import org.apache.spark.sql.types._
 
-/**
- * For the purpose of calculating total directory sizes, use this filter to
- * ignore some irrelevant files.
- * @param stagingDir hive staging dir
- */
-class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serializable {
-  override def accept(path: Path): Boolean = {
-    val fileName = path.getName
-    !fileName.startsWith(stagingDir) && DataSourceUtils.isDataFile(fileName)
-  }
-}
+import scala.collection.parallel.mutable.ParArray
 
 object CommandUtils extends Logging {
 
@@ -161,9 +150,13 @@ object CommandUtils extends Logging {
       paths: Seq[Option[Path]]): Seq[Long] = {
     val stagingDir = sparkSession.sessionState.conf
       .getConfString("hive.exec.stagingdir", ".hive-staging")
-    val filter = new PathFilterIgnoreNonData(stagingDir)
-    val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
-      sparkSession.sessionState.newHadoopConf(), filter, sparkSession, areRootPaths = true).map {
+
+    val sizes = InMemoryFileIndex.bulkListLeafFiles(
+      paths.flatten,
+      sparkSession.sessionState.newHadoopConf(),
+      ParArray[PathFilter](new PathFilterIgnoreNonData(stagingDir)),
+      sparkSession,
+      areRootPaths = true).map {
       case (_, files) => files.map(_.getLen).sum
     }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined
