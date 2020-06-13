@@ -188,44 +188,52 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val eventArrayAsStr =
       (jobEventJsonAsStrSeq ++ executorEventJsonAsStrSeq).mkString("[", ",", "]")
 
-    <span class="expand-application-timeline">
-      <span class="expand-application-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="top">
-        Event Timeline
-      </a>
-    </span> ++
-    <div id="application-timeline" class="collapsed">
-      <div class="control-panel">
-        <div id="application-timeline-zoom-lock">
-          <input type="checkbox"></input>
-          <span>Enable zooming</span>
+    if (totalPages > 0) {
+      <span class="expand-application-timeline">
+        <span class="expand-application-timeline-arrow arrow-closed"></span>
+        <a data-toggle="tooltip" title={ToolTips.JOB_TIMELINE} data-placement="top">
+          Event Timeline
+        </a>
+      </span> ++
+        <div id="application-timeline" class="collapsed">
+          <div class="control-panel">
+            <div id="application-timeline-zoom-lock">
+              <input type="checkbox"></input>
+              <span>Enable zooming</span>
+            </div>
+            <div>
+              <form id={s"form-event-timeline-page"}
+                    method="get"
+                    action=""
+                    class="form-inline justify-content-end"
+                    style="width: 50%; margin-left: auto; margin-bottom: 0px;">
+                <label>Jobs:
+                  {totalJobs}
+                  .
+                  {totalPages}
+                  Pages. Jump to</label>
+                <input type="text"
+                       name="jobs.eventTimelinePageNumber"
+                       id={s"form-event-timeline-page-no"}
+                       value={page.toString}
+                       class="col-1 form-control"/>
+                <label>. Show</label>
+                <input type="text"
+                       id={s"form-event-timeline-page-size"}
+                       name="jobs.eventTimelinePageSize"
+                       value={pageSize.toString}
+                       class="col-1 form-control"/>
+                <label>items in a page.</label>
+                <button type="submit" id="form-event-timeline-page-button" class="btn btn-spark">
+                  Go
+                </button>
+              </form>
+            </div>
+          </div>
         </div>
-        <div>
-          <form id={s"form-event-timeline-page"}
-                method="get"
-                action=""
-                class="form-inline justify-content-end"
-                style="width: 50%; margin-left: auto; margin-bottom: 0px;">
-            <label>Jobs: {totalJobs}. {totalPages} Pages. Jump to</label>
-            <input type="text"
-                   name="jobs.eventTimelinePageNumber"
-                   id={s"form-event-timeline-page-no"}
-                   value={page.toString}
-                   class="col-1 form-control" />
-            <label>. Show </label>
-            <input type="text"
-                   id={s"form-event-timeline-page-size"}
-                   name="jobs.eventTimelinePageSize"
-                   value={pageSize.toString}
-                   class="col-1 form-control" />
-            <label>items in a page.</label>
-            <button type="submit" id="form-event-timeline-page-button" class="btn btn-spark">
-              Go
-            </button>
-          </form>
-        </div>
-      </div>
-    </div> ++
+    } else {
+      Seq.empty
+    } ++
     <script type="text/javascript">
       {Unparsed(s"drawApplicationTimeline(${groupJsonArrayAsStr}," +
       s"${eventArrayAsStr}, ${startTime}, ${UIUtils.getTimeZoneOffset()});")}
@@ -296,8 +304,11 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     if (eventTimelineJobsPageSize < 1 || eventTimelineJobsPageSize > totalJobs) {
       eventTimelineJobsPageSize = totalJobs
     }
-    val eventTimelineTotalPages =
+    val eventTimelineTotalPages = if (eventTimelineJobsPageSize > 0) {
       (totalJobs + eventTimelineJobsPageSize - 1) / eventTimelineJobsPageSize
+    } else {
+      0
+    }
     if (eventTimelineJobsPage < 1 || eventTimelineJobsPage > eventTimelineTotalPages) {
       eventTimelineJobsPage = 1
     }
