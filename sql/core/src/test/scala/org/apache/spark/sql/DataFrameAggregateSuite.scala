@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.sql.Timestamp
+
 import scala.util.Random
 
 import org.scalatest.Matchers.the
@@ -31,7 +33,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -342,6 +343,12 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       emptyTableData.agg(avg($"a"), sumDistinct($"b")), // non-partial
       Row(null, null))
+  }
+
+  test("timestamp average") {
+    checkAnswer(
+      timestampData.agg(avg($"ts")),
+      Row(new Timestamp(712697100000L))) // 1992-08-01 21:25:00.0
   }
 
   test("count") {

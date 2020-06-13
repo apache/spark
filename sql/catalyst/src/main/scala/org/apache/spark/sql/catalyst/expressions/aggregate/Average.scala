@@ -40,10 +40,12 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, TimestampType)
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function average")
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case _: TimestampType => TypeCheckResult.TypeCheckSuccess
+    case _ => TypeUtils.checkForNumericExpr(child.dataType, "function average")
+  }
 
   override def nullable: Boolean = true
 
@@ -53,6 +55,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
+    case TimestampType => TimestampType
     case _ => DoubleType
   }
 
@@ -77,9 +80,11 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
-  override lazy val evaluateExpression = child.dataType match {
+  override lazy val evaluateExpression: Expression = child.dataType match {
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
+    case _: TimestampType =>
+      (sum / count).cast(resultType)
     case _ =>
       sum.cast(resultType) / count.cast(resultType)
   }

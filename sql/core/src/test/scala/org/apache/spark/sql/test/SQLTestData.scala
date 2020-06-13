@@ -18,6 +18,7 @@
 package org.apache.spark.sql.test
 
 import java.nio.charset.StandardCharsets
+import java.sql.Timestamp
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext, SQLImplicits}
@@ -70,6 +71,17 @@ private[sql] trait SQLTestData { self =>
       TestData3(1, None) ::
       TestData3(2, Some(2)) :: Nil).toDF()
     df.createOrReplaceTempView("testData3")
+    df
+  }
+
+  protected lazy val timestampData: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      TestDataTimestamp(new Timestamp(1420140300000L)) :: // 2015-01-01 20:25:00
+        TestDataTimestamp(new Timestamp(1320140300000L)) :: // 2011-11-01 10:38:20
+        TestDataTimestamp(new Timestamp(1520140300000L)) :: // 2018-03-04 06:11:40
+        TestDataTimestamp(new Timestamp(-1409632500000L)) :: // 1925-05-01 19:44:32
+          Nil, 2).toDF()
+    df.createOrReplaceTempView("timestampData")
     df
   }
 
@@ -326,6 +338,7 @@ private[sql] object SQLTestData {
   case class TestData(key: Int, value: String)
   case class TestData2(a: Int, b: Int)
   case class TestData3(a: Int, b: Option[Int])
+  case class TestDataTimestamp(ts: Timestamp)
   case class LargeAndSmallInts(a: Int, b: Int)
   case class DecimalData(a: BigDecimal, b: BigDecimal)
   case class BinaryData(a: Array[Byte], b: Int)
