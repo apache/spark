@@ -27,7 +27,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.shuffle.IndexShuffleBlockResolver
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -83,7 +83,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     assert(dataFile.exists())
     assert(dataFile.length() === 30)
     assert(!dataTmp.exists())
-    assert(storedShuffles === Set((1, 2)))
+    assert(storedShuffles === Set(ShuffleBlockInfo(1, 2)))
 
     val lengths2 = new Array[Long](3)
     val dataTmp2 = File.createTempFile("shuffle", null, tempDir)
