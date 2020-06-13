@@ -41,6 +41,22 @@ private[storage] class BlockManagerDecommissioner(
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
 
+  /**
+   * This runnable consumes any shuffle blocks in the queue for migration. This part of a
+   * producer/consumer where the main migration loop updates the queue of blocks to be migrated
+   * periodically. On migration failure, the current thread will reinsert the block for another
+   * thread to consume. Each thread migrates blocks to a different particular executor to avoid
+   * distribute the blocks as quickly as possible without overwhelming any particular executor.
+   *
+   * There is no preference for which peer a given block is migrated to.
+   * This is notable different than the RDD cache block migration (further down in this file)
+   * which uses the existing priority mechanism for determining where to replicate blocks to.
+   * Generally speaking cache blocks are less impactful as they normally represent narrow
+   * transformations and we normally have less cache present than shuffle data.
+   *
+   * The producer/consumer model is chosen for shuffle block migration to maximize
+   * the chance of migrating all shuffle blocks before the executor is forced to exit.
+   */
   private class ShuffleMigrationRunnable(peer: BlockManagerId) extends Runnable {
     @volatile var running = true
     override def run(): Unit = {
