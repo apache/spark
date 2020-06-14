@@ -1000,7 +1000,7 @@ object functions {
    * This is equivalent to the nth_value function in SQL.
    *
    * @group window_funcs
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def nth_value(columnName: String, offset: Int): Column = {
     nth_value(Column(columnName), offset)

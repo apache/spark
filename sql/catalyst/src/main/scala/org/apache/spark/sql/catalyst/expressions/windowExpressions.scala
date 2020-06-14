@@ -495,7 +495,7 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
       null, null is returned. If there is no such an offset row (e.g., when the offset is 10,
       size of the window frame less than 10), null is returned.
   """,
-  since = "3.0.0")
+  since = "3.1.0")
 case class NthValue(input: Expression, offset: Expression)
     extends OffsetWindowFunction {
 
