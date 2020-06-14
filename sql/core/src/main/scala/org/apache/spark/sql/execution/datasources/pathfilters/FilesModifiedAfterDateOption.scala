@@ -36,7 +36,8 @@ object FilesModifiedAfterDateOption {
 		  sparkSession: SparkSession,
 		  hadoopConf: Configuration): ParArray[PathFilter] = {
 		var afterDateSeconds = 0L
-		val filesModifiedAfterDate = parameters.get("filesModifiedAfterDate")
+		val option = "filesModifiedAfterDate"
+		val filesModifiedAfterDate = parameters.get(option)
 		val hasModifiedDateOption = filesModifiedAfterDate.isDefined
 
 		if (hasModifiedDateOption) {
@@ -50,7 +51,7 @@ object FilesModifiedAfterDateOption {
 				hadoopConf,
 				afterDateSeconds)
 
-			ParArray[PathFilter](fileFilter)
+			return ParArray[PathFilter](fileFilter)
 		}
 		ParArray[PathFilter]()
 	}
