@@ -428,6 +428,11 @@ object RebaseDateTime {
       .`with`(ChronoField.ERA, cal.get(ERA))
       .plusDays(cal.get(DAY_OF_MONTH) - 1)
     val zonedDateTime = localDateTime.atZone(zoneId)
+    // In the case of local timestamp overlapping, we need to choose the correct time instant
+    // which is related to the original local timestamp. We look ahead of 1 day, and if the next
+    // date has the same standard zone and DST offsets, the current local timestamp belongs to
+    // the period after the transition. In that case, we take the later zoned date time otherwise
+    // earlier one. Here, we assume that transitions happen not often than once per day.
     val trans = zoneId.getRules.getTransition(localDateTime)
     val adjustedZdt = if (trans != null && trans.isOverlap) {
       val dstOffset = cal.get(DST_OFFSET)
