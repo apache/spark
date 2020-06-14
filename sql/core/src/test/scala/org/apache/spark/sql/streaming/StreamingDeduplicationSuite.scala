@@ -54,13 +54,13 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     testStream(result, Append)(
       AddData(inputData, "a" -> 1),
       CheckLastBatch("a" -> 1),
-      assertNumStateRows(total = 1, updated = 1),
+      assertNumStateRows(total = 1, updated = 1, lateInput = 0),
       AddData(inputData, "a" -> 2), // Dropped
       CheckLastBatch(),
-      assertNumStateRows(total = 1, updated = 0),
+      assertNumStateRows(total = 1, updated = 0, lateInput = 0),
       AddData(inputData, "b" -> 1),
       CheckLastBatch("b" -> 1),
-      assertNumStateRows(total = 2, updated = 1)
+      assertNumStateRows(total = 2, updated = 1, lateInput = 0)
     )
   }
 
@@ -102,7 +102,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
       AddData(inputData, 10), // Should not emit anything as data less than watermark
       CheckNewAnswer(),
-      assertNumStateRows(total = 1, updated = 0),
+      assertNumStateRows(total = 1, updated = 0, lateInput = 1),
 
       AddData(inputData, 45), // Advance watermark to 35 seconds, no-data-batch drops row 25
       CheckNewAnswer(45),
@@ -136,7 +136,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
       AddData(inputData, 10), // Should not emit anything as data less than watermark
       CheckLastBatch(),
-      assertNumStateRows(total = Seq(2L, 1L), updated = Seq(0L, 0L)),
+      assertNumStateRows(total = Seq(2L, 1L), updated = Seq(0L, 0L), lateInputs = Seq(0L, 1L)),
 
       AddData(inputData, 40), // Advance watermark to 30 seconds
       CheckLastBatch((15 -> 1), (25 -> 1)),
