@@ -797,7 +797,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // 2) empty input batch
       p.inputRowsPerSecond == 0
     }.lastOption.get
-    assert(progressWithData.stateOperators(0).numDroppedRowsByWatermark === numDroppedRowsByWatermark)
+    assert(progressWithData.stateOperators(0).numDroppedRowsByWatermark
+      === numDroppedRowsByWatermark)
     true
   }
 
