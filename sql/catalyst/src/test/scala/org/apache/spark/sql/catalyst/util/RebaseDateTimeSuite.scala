@@ -255,7 +255,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 
     case class RebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
-    val rebaseRecords = ThreadUtils.parmap(ALL_TIMEZONES, "julian-greg", 16) { zid =>
+    val rebaseRecords = ThreadUtils.parmap(ALL_TIMEZONES, "JSON-rebase-gen", 16) { zid =>
       withDefaultTimeZone(zid) {
         val start = adjustFunc(instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0)
           .atZone(zid)
