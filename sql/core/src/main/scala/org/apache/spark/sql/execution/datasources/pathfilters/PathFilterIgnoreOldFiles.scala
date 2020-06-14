@@ -46,6 +46,7 @@ class PathFilterIgnoreOldFiles(
 
 	override def accept(path: Path): Boolean = {
 		val fileName = path.getFileSystem(hadoopConf).getFileStatus(path)
+		println(fileName.getModificationTime + " - " + epochSeconds)
 		(fileName.getModificationTime - epochSeconds) > 0
 	}
 }

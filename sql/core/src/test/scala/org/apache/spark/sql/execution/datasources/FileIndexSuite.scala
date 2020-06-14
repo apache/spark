@@ -41,10 +41,10 @@ import scala.collection.mutable
 class FileIndexSuite extends SharedSparkSession {
 
   private class TestInMemoryFileIndex(
-                                       spark: SparkSession,
-                                       path: Path,
-                                       fileStatusCache: FileStatusCache = NoopCache)
-    extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
+                                         spark: SparkSession,
+                                         path: Path,
+                                         fileStatusCache: FileStatusCache = NoopCache)
+      extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
     def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
 
     def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
@@ -75,7 +75,7 @@ class FileIndexSuite extends SharedSparkSession {
       val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
       val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
       assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
-        partitionValues(0).getString(0) == "4d")
+          partitionValues(0).getString(0) == "4d")
     }
   }
 
@@ -144,7 +144,7 @@ class FileIndexSuite extends SharedSparkSession {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
         val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
         assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
-          partitionValues(0).isNullAt(0))
+            partitionValues(0).isNullAt(0))
       }
     }
   }
@@ -196,7 +196,7 @@ class FileIndexSuite extends SharedSparkSession {
       parDiscoveryThreshold <- Seq(0, 100)
     ) {
       withClue(s"raceCondition=$raceCondition, ignoreMissingFiles=$ignoreMissingFiles, " +
-        s"parDiscoveryThreshold=$parDiscoveryThreshold"
+          s"parDiscoveryThreshold=$parDiscoveryThreshold"
       ) {
         withSQLConf(
           SQLConf.IGNORE_MISSING_FILES.key -> ignoreMissingFiles.toString,
@@ -312,8 +312,8 @@ class FileIndexSuite extends SharedSparkSession {
 
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
     class MockCatalog(
-                       override val rootPaths: Seq[Path])
-      extends PartitioningAwareFileIndex(spark, Map.empty, None) {
+                         override val rootPaths: Seq[Path])
+        extends PartitioningAwareFileIndex(spark, Map.empty, None) {
 
       override def refresh(): Unit = {}
 
@@ -345,7 +345,7 @@ class FileIndexSuite extends SharedSparkSession {
   }
 
   test("InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD" +
-    "is a nonpositive number") {
+      "is a nonpositive number") {
     withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
       new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
     }
@@ -356,7 +356,7 @@ class FileIndexSuite extends SharedSparkSession {
       }
     }.getMessage
     assert(e.contains("The maximum number of paths allowed for listing files at " +
-      "driver side must not be negative"))
+        "driver side must not be negative"))
   }
 
   test("SPARK-29537: throw exception when user defined a wrong base path") {
@@ -420,15 +420,15 @@ class FileIndexSuite extends SharedSparkSession {
     withTempPath { path =>
       val colToUnescape = "Column/#%'?"
       spark
-        .range(1)
-        .select(col("id").as(colToUnescape), col("id"))
-        .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
+          .range(1)
+          .select(col("id").as(colToUnescape), col("id"))
+          .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
       assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
     }
   }
 
   test("SPARK-25062 - InMemoryFileIndex stores BlockLocation objects no matter what subclass " +
-    "the FS returns") {
+      "the FS returns") {
     withSQLConf("fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
       withTempDir { dir =>
         val file = new File(dir, "text.txt")
@@ -456,17 +456,17 @@ class FileIndexSuite extends SharedSparkSession {
       withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
         "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
         val withBlockLocations = fileIndex.
-          listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+            listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
 
         withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true") {
           val withoutBlockLocations = fileIndex.
-            listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+              listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
 
           assert(withBlockLocations.size == withoutBlockLocations.size)
           assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
-            b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
+              b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
           assert(withoutBlockLocations.forall(b => b.isInstanceOf[FileStatus] &&
-            !b.isInstanceOf[LocatedFileStatus]))
+              !b.isInstanceOf[LocatedFileStatus]))
           assert(withoutBlockLocations.forall(withBlockLocations.contains))
         }
       }
@@ -494,7 +494,7 @@ class FileIndexSuite extends SharedSparkSession {
     assert(fileIndex.leafFileStatuses.toSeq == statuses)
   }
 
-  test("SPARK-39162 - when filesModifiedAfterDate specified and before file date without extra filter") {
+  test("SPARK-39162 - with filesModifiedAfterDate option, before file date, single file, without extra filter, folder path") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -504,10 +504,20 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-39162 - when filesModifiedAfterDate specified and after file date without filter") {
+  test("SPARK-39162 - with filesModifiedAfterDate option, before file date, single file, without extra filter, file path") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir,     "file1.csv")
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+      val df = spark.read.option("filesModifiedAfterDate", "2020-05-01T01:00:00").format("csv").load(path + "/file1.csv")
+      assert(df.count() == 1)
+    }
+  }
+
+  test("SPARK-39162 - with filesModifiedAfterDate option, after file date, single file, without extra filter, file path") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
       val msg = intercept[AnalysisException] {
         spark.read.option("filesModifiedAfterDate", "2024-05-01T01:00:00").format("csv").load(path + "/file1.csv")
@@ -517,131 +527,154 @@ class FileIndexSuite extends SharedSparkSession {
     assert(true)
   }
 
-  test("SPARK-39162 - when filesModifiedAfterDate specified and before file date with filter") {
-    withTempDir { dir =>
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      spark.read.format("csv").load("file1.csv")
-      //val inMemoryFileIndex = new TestInMemoryFileIndex(spark, new Path(file.getCanonicalPath))
-    }
-    assert(true)
-  }
-
-  test("SPARK-39162 - when filesModifiedAfterDate specified and after file date with filter") {
+  test("SPARK-39162 - with filesModifiedAfterDate option, after file date, single file, without extra filter, folder path") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir,     "file1.csv")
+      val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
       val msg = intercept[AnalysisException] {
         spark.read.option("filesModifiedAfterDate", "2024-05-01T01:00:00").format("csv").load(path + "/file1.csv")
       }.getMessage
-      assert(msg.contains("could not be parsed at index "))
+      assert(msg.contains("Unable to infer schema for CSV. It must be specified manually."))
+    }
+    assert(true)
+  }
+
+  test("SPARK-39162 - with filesModifiedAfterDate option, before file date, multiple files, without extra filter") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+      val file2 = new File(dir, "file2.csv")
+      stringToFile(file2, "text2")
+      val df = spark.read.option("filesModifiedAfterDate", "2020-05-01T01:00:00").format("csv").load(path.toString())
+      assert(df.count() == 2)
     }
   }
 
-  test("SPARK-39162 - when filesModifiedAfterDate is specified with invalid date") {
+  test("SPARK-39162 - with filesModifiedAfterDate option, after file date, multiple files, without extra filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir,     "file1.csv")
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+      val file2 = new File(dir, "file2.csv")
+      stringToFile(file2, "text2")
+      val msg = intercept[AnalysisException] {
+        spark.read.option("filesModifiedAfterDate", "2024-05-01T01:00:00").format("csv").load(path + "/file1.csv")
+      }.getMessage
+      assert(msg.contains("Unable to infer schema for CSV. It must be specified manually."))
+    }
+    assert(true)
+  }
+
+  test("SPARK-39162 - with filesModifiedAfterDate option, invalid date provided") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
       val msg = intercept[DateTimeParseException] {
-        spark.read.option("filesModifiedAfterDate", "2024-05+1 01:00:00").format("csv").load(path + "/file1.csv")
+        spark.read.option("filesModifiedAfterDate", "20ss24-05+1 01:00:00").format("csv").load(path.toString())
       }.getMessage
       assert(msg.contains("could not be parsed at index "))
     }
   }
 
-  test("SPARK-39162 - when filesModifiedAfterDate not specified") {
+  test("SPARK-39162 - without filesModifiedAfterDate option, one filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
-      val df = spark.read.format("csv").load(path + "/file1.csv")
+      val df = spark.read.format("csv").load(path.toString())
       assert(df.count() == 1)
     }
   }
-}
-object DeletionRaceFileSystem {
-  val rootDirPath: Path = new Path("mockFs:///rootDir/")
-  val subDirPath: Path = new Path(rootDirPath, "subDir")
-  val leafFilePath: Path = new Path(subDirPath, "leafFile")
-  val nonDeletedLeafFilePath: Path = new Path(subDirPath, "nonDeletedLeafFile")
-  val rootListing: Array[FileStatus] =
-    Array(new FileStatus(0, true, 0, 0, 0, subDirPath))
-  val subFolderListing: Array[FileStatus] =
-    Array(
-      new FileStatus(0, false, 0, 100, 0, leafFilePath),
-      new FileStatus(0, false, 0, 100, 0, nonDeletedLeafFilePath))
-}
 
-// Used in SPARK-27676 test to simulate a race where a subdirectory is deleted
-// between back-to-back listing calls.
-class SubdirectoryDeletionRaceFileSystem extends RawLocalFileSystem {
-  import DeletionRaceFileSystem._
+  object DeletionRaceFileSystem {
+    val rootDirPath: Path = new Path("mockFs:///rootDir/")
+    val subDirPath: Path = new Path(rootDirPath, "subDir")
+    val leafFilePath: Path = new Path(subDirPath, "leafFile")
+    val nonDeletedLeafFilePath: Path = new Path(subDirPath, "nonDeletedLeafFile")
+    val rootListing: Array[FileStatus] =
+      Array(new FileStatus(0, true, 0, 0, 0, subDirPath))
+    val subFolderListing: Array[FileStatus] =
+      Array(
+        new FileStatus(0, false, 0, 100, 0, leafFilePath),
+        new FileStatus(0, false, 0, 100, 0, nonDeletedLeafFilePath))
+  }
 
-  override def getScheme: String = "mockFs"
+  // Used in SPARK-27676 test to simulate a race where a subdirectory is deleted
+  // between back-to-back listing calls.
+  class SubdirectoryDeletionRaceFileSystem extends RawLocalFileSystem {
 
-  override def listStatus(path: Path): Array[FileStatus] = {
-    if (path == rootDirPath) {
-      rootListing
-    } else if (path == subDirPath) {
-      throw new FileNotFoundException(subDirPath.toString)
-    } else {
-      throw new IllegalArgumentException()
+    import DeletionRaceFileSystem._
+
+    override def getScheme: String = "mockFs"
+
+    override def listStatus(path: Path): Array[FileStatus] = {
+      if (path == rootDirPath) {
+        rootListing
+      } else if (path == subDirPath) {
+        throw new FileNotFoundException(subDirPath.toString)
+      } else {
+        throw new IllegalArgumentException()
+      }
+    }
+  }
+
+  // Used in SPARK-27676 test to simulate a race where a file is deleted between
+  // being listed and having its size / file status checked.
+  class FileDeletionRaceFileSystem extends RawLocalFileSystem {
+
+    import DeletionRaceFileSystem._
+
+    override def getScheme: String = "mockFs"
+
+    override def listStatus(path: Path): Array[FileStatus] = {
+      if (path == rootDirPath) {
+        rootListing
+      } else if (path == subDirPath) {
+        subFolderListing
+      } else {
+        throw new IllegalArgumentException()
+      }
+    }
+
+    override def getFileBlockLocations(
+                                          file: FileStatus,
+                                          start: Long,
+                                          len: Long): Array[BlockLocation] = {
+      if (file.getPath == leafFilePath) {
+        throw new FileNotFoundException(leafFilePath.toString)
+      } else {
+        Array.empty
+      }
+    }
+  }
+
+  class FakeParentPathFileSystem extends RawLocalFileSystem {
+    override def getScheme: String = "mockFs"
+
+    override def getUri: URI = {
+      URI.create("mockFs://some-bucket")
+    }
+  }
+
+  class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
+
+    class SpecialBlockLocation(
+                                  names: Array[String],
+                                  hosts: Array[String],
+                                  offset: Long,
+                                  length: Long)
+        extends BlockLocation(names, hosts, offset, length)
+
+    override def getFileBlockLocations(
+                                          file: FileStatus,
+                                          start: Long,
+                                          len: Long): Array[BlockLocation] = {
+      Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
     }
   }
 }
 
-// Used in SPARK-27676 test to simulate a race where a file is deleted between
-// being listed and having its size / file status checked.
-class FileDeletionRaceFileSystem extends RawLocalFileSystem {
-  import DeletionRaceFileSystem._
 
-  override def getScheme: String = "mockFs"
-
-  override def listStatus(path: Path): Array[FileStatus] = {
-    if (path == rootDirPath) {
-      rootListing
-    } else if (path == subDirPath) {
-      subFolderListing
-    } else {
-      throw new IllegalArgumentException()
-    }
-  }
-
-  override def getFileBlockLocations(
-      file: FileStatus,
-      start: Long,
-      len: Long): Array[BlockLocation] = {
-    if (file.getPath == leafFilePath) {
-      throw new FileNotFoundException(leafFilePath.toString)
-    } else {
-      Array.empty
-    }
-  }
-}
-
-class FakeParentPathFileSystem extends RawLocalFileSystem {
-  override def getScheme: String = "mockFs"
-
-  override def getUri: URI = {
-    URI.create("mockFs://some-bucket")
-  }
-}
-
-class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
-
-  class SpecialBlockLocation(
-      names: Array[String],
-      hosts: Array[String],
-      offset: Long,
-      length: Long)
-    extends BlockLocation(names, hosts, offset, length)
-
-  override def getFileBlockLocations(
-      file: FileStatus,
-      start: Long,
-      len: Long): Array[BlockLocation] = {
-    Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
-  }
-}
