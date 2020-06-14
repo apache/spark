@@ -268,7 +268,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
         var micros = start
         var diff = Long.MaxValue
-        val maxStep = DAYS_PER_WEEK * MICROS_PER_DAY
+        val maxStep = 30 * MICROS_PER_MINUTE
         var step: Long = MICROS_PER_SECOND
         val switches = new ArrayBuffer[Long]()
         val diffs = new ArrayBuffer[Long]()
