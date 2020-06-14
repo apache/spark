@@ -295,14 +295,14 @@ public class LevelDBSuite {
     assertEquals("key0", key);
     Iterator<CustomType1> it0 = dbForCloseTest
       .view(CustomType1.class).max(1).iterator();
-    while(it0.hasNext()) {
+    while (it0.hasNext()) {
       it0.next();
     }
     System.gc();
     Iterator<CustomType1> it1 = dbForCloseTest
       .view(CustomType1.class).iterator();
     assertEquals("key0", it1.next().key);
-    try(KVStoreIterator<CustomType1> it2 = dbForCloseTest
+    try (KVStoreIterator<CustomType1> it2 = dbForCloseTest
       .view(CustomType1.class).closeableIterator()) {
       assertEquals("key0", it2.next().key);
     }
