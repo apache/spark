@@ -298,11 +298,11 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),   // Advance watermark to 15 seconds
       CheckNewAnswer((10, 5)),
       assertNumStateRows(2),
-      assertnumDroppedRowsByWatermark(0),
+      assertNumDroppedRowsByWatermark(0),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       assertNumStateRows(2),
-      assertnumDroppedRowsByWatermark(1)
+      assertNumDroppedRowsByWatermark(1)
     )
   }
 
@@ -323,15 +323,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),     // Advance watermark to 15 seconds
       CheckNewAnswer((25, 1)),
       assertNumStateRows(2),
-      assertnumDroppedRowsByWatermark(0),
+      assertNumDroppedRowsByWatermark(0),
       AddData(inputData, 10, 25), // Ignore 10 as its less than watermark
       CheckNewAnswer((25, 2)),
       assertNumStateRows(2),
-      assertnumDroppedRowsByWatermark(1),
+      assertNumDroppedRowsByWatermark(1),
       AddData(inputData, 10),     // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       assertNumStateRows(2),
-      assertnumDroppedRowsByWatermark(1)
+      assertNumDroppedRowsByWatermark(1)
     )
   }
 
@@ -788,7 +788,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     true
   }
 
-  private def assertnumDroppedRowsByWatermark(
+  private def assertNumDroppedRowsByWatermark(
       numDroppedRowsByWatermark: Long): AssertOnQuery = AssertOnQuery { q =>
     q.processAllAvailable()
     val progressWithData = q.recentProgress.filterNot { p =>
