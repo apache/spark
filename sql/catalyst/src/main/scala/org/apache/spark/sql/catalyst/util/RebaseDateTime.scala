@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId}
 import java.time.temporal.ChronoField
 import java.util.{Calendar, TimeZone}
+import java.util.Calendar.{DAY_OF_MONTH, DST_OFFSET, ERA, HOUR_OF_DAY, MINUTE, MONTH, SECOND, YEAR, ZONE_OFFSET}
 
 import scala.collection.mutable.AnyRefMap
 
@@ -102,15 +103,15 @@ object RebaseDateTime {
       .setInstant(Math.multiplyExact(days, MILLIS_PER_DAY))
       .build()
     val localDate = LocalDate.of(
-      utcCal.get(Calendar.YEAR),
-      utcCal.get(Calendar.MONTH) + 1,
+      utcCal.get(YEAR),
+      utcCal.get(MONTH) + 1,
       // The number of days will be added later to handle non-existing
       // Julian dates in Proleptic Gregorian calendar.
       // For example, 1000-02-29 exists in Julian calendar because 1000
       // is a leap year but it is not a leap year in Gregorian calendar.
       1)
-      .`with`(ChronoField.ERA, utcCal.get(Calendar.ERA))
-      .plusDays(utcCal.get(Calendar.DAY_OF_MONTH) - 1)
+      .`with`(ChronoField.ERA, utcCal.get(ERA))
+      .plusDays(utcCal.get(DAY_OF_MONTH) - 1)
     Math.toIntExact(localDate.toEpochDay)
   }
 
@@ -350,9 +351,9 @@ object RebaseDateTime {
       // If so, we will take zone offsets from the previous day otherwise from the next day.
       // This assumes that transitions cannot happen often than once per 2 days.
       val shift = if (trans.getOffsetBefore == zonedDateTime.getOffset) -1 else 1
-      cloned.add(Calendar.DAY_OF_MONTH, shift)
-      cal.set(Calendar.ZONE_OFFSET, cloned.get(Calendar.ZONE_OFFSET))
-      cal.set(Calendar.DST_OFFSET, cloned.get(Calendar.DST_OFFSET))
+      cloned.add(DAY_OF_MONTH, shift)
+      cal.set(ZONE_OFFSET, cloned.get(ZONE_OFFSET))
+      cal.set(DST_OFFSET, cloned.get(DST_OFFSET))
     }
     millisToMicros(cal.getTimeInMillis) + ldt.get(ChronoField.MICRO_OF_SECOND)
   }
@@ -413,27 +414,26 @@ object RebaseDateTime {
       .setInstant(microsToMillis(micros))
       .build()
     val localDateTime = LocalDateTime.of(
-      cal.get(Calendar.YEAR),
-      cal.get(Calendar.MONTH) + 1,
+      cal.get(YEAR),
+      cal.get(MONTH) + 1,
       // The number of days will be added later to handle non-existing
       // Julian dates in Proleptic Gregorian calendar.
       // For example, 1000-02-29 exists in Julian calendar because 1000
       // is a leap year but it is not a leap year in Gregorian calendar.
       1,
-      cal.get(Calendar.HOUR_OF_DAY),
-      cal.get(Calendar.MINUTE),
-      cal.get(Calendar.SECOND),
+      cal.get(HOUR_OF_DAY),
+      cal.get(MINUTE),
+      cal.get(SECOND),
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
-      .`with`(ChronoField.ERA, cal.get(Calendar.ERA))
-      .plusDays(cal.get(Calendar.DAY_OF_MONTH) - 1)
+      .`with`(ChronoField.ERA, cal.get(ERA))
+      .plusDays(cal.get(DAY_OF_MONTH) - 1)
     val zonedDateTime = localDateTime.atZone(zoneId)
     val trans = zoneId.getRules.getTransition(localDateTime)
     val adjustedZdt = if (trans != null && trans.isOverlap) {
-      val dstOffset = cal.get(Calendar.DST_OFFSET)
-      val zoneOffset = cal.get(Calendar.ZONE_OFFSET)
-      cal.add(Calendar.DAY_OF_MONTH, 1)
-      if (zoneOffset == cal.get(Calendar.ZONE_OFFSET) &&
-          dstOffset == cal.get(Calendar.DST_OFFSET)) {
+      val dstOffset = cal.get(DST_OFFSET)
+      val zoneOffset = cal.get(ZONE_OFFSET)
+      cal.add(DAY_OF_MONTH, 1)
+      if (zoneOffset == cal.get(ZONE_OFFSET) && dstOffset == cal.get(DST_OFFSET)) {
         zonedDateTime.withLaterOffsetAtOverlap()
       } else {
         zonedDateTime.withEarlierOffsetAtOverlap()
