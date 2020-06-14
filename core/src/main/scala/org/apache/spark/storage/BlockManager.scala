@@ -1890,6 +1890,8 @@ private[spark] class BlockManager(
    * Note: this does not delete the shuffle files in-case there is an in-progress fetch
    * but rather shadows them.
    * Requires an Indexed based shuffle resolver.
+   *
+   * @return true if we have not migrated all shuffle blocks, false otherwise.
    */
   def offloadShuffleBlocks(): Boolean = {
     // Update the queue of shuffles to be migrated

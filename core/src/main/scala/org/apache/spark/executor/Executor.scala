@@ -230,10 +230,10 @@ private[spark] class Executor(
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
   /**
-   * Mark an executor for decommissioning and avoid launching new tasks.
+   * Mark an executor for decommissioning.
    */
   private[spark] def decommission(): Unit = {
-    logInfo("Executor asked to decommission. Starting shutdown thread.")
+    logInfo("Executor asked to decommission.")
     decommissioned = true
   }
 

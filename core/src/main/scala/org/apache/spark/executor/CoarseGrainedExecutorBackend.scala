@@ -289,7 +289,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   private def decommissionSelf(): Boolean = {
     if (!decommissioned) {
-      logInfo("Decommissioning self w/sync")
+      logInfo("Decommissioning self and starting background thread to exit when done.")
       try {
         decommissioned = true
         // Tell master we are are decommissioned so it stops trying to schedule us
