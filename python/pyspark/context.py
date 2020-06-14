@@ -866,16 +866,22 @@ class SparkContext(object):
         if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
             rdds = [x._reserialize() for x in rdds]
         gw = SparkContext._gateway
-        cls = SparkContext._jvm.org.apache.spark.api.java.JavaRDD
-        is_jrdd = is_instance_of(gw, rdds[0]._jrdd, cls)
+        jvm = SparkContext._jvm
+        jrdd_cls = jvm.org.apache.spark.api.java.JavaRDD
+        jpair_rdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
+        jdouble_rdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
+        if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):
+            cls = jrdd_cls
+        elif is_instance_of(gw, rdds[0]._jrdd, jpair_rdd_cls):
+            cls = jpair_rdd_cls
+        elif is_instance_of(gw, rdds[0]._jrdd, jdouble_rdd_cls):
+            cls = jdouble_rdd_cls
+        else:
+            cls_name = rdds[0]._jrdd.getClass().getCanonicalName()
+            raise TypeError("Unsupported Java RDD class %s" % cls_name)
         jrdds = gw.new_array(cls, len(rdds))
         for i in range(0, len(rdds)):
-            if is_jrdd:
-                jrdds[i] = rdds[i]._jrdd
-            else:
-                # zip could return JavaPairRDD hence we ensure `_jrdd`
-                # to be `JavaRDD` by wrapping it in a `map`
-                jrdds[i] = rdds[i].map(lambda x: x)._jrdd
+            jrdds[i] = rdds[i]._jrdd
         return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):

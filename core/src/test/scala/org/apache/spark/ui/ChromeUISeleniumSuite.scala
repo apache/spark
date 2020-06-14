@@ -15,20 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver
+package org.apache.spark.ui
 
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
+import org.openqa.selenium.WebDriver
+import org.openqa.selenium.chrome.{ChromeDriver, ChromeOptions}
+
+import org.apache.spark.tags.ChromeUITest
 
 /**
- * Utils for metadata operations.
+ * Selenium tests for the Spark Web UI with Chrome.
  */
-private[hive] trait SparkMetadataOperationUtils {
+@ChromeUITest
+class ChromeUISeleniumSuite extends RealBrowserUISeleniumSuite("webdriver.chrome.driver") {
 
-  def tableTypeString(tableType: CatalogTableType): String = tableType match {
-    case EXTERNAL | MANAGED => "TABLE"
-    case VIEW => "VIEW"
-    case t =>
-      throw new IllegalArgumentException(s"Unknown table type is found: $t")
+  override var webDriver: WebDriver = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    val chromeOptions = new ChromeOptions
+    chromeOptions.addArguments("--headless", "--disable-gpu")
+    webDriver = new ChromeDriver(chromeOptions)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
+    }
   }
 }

@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.annotation.Evolving
+import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
@@ -37,6 +37,7 @@ import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
  * This is meant to be immutable so user can't change it after building.
  */
 @Evolving
+@Since("3.1.0")
 class ResourceProfile(
     val executorResources: Map[String, ExecutorResourceRequest],
     val taskResources: Map[String, TaskResourceRequest]) extends Serializable with Logging {

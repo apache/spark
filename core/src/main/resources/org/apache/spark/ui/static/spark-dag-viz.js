@@ -173,9 +173,11 @@ function renderDagViz(forJob) {
   });
 
   metadataContainer().selectAll(".barrier-rdd").each(function() {
-    var rddId = d3.select(this).text().trim();
-    var clusterId = VizConstants.clusterPrefix + rddId;
-    svg.selectAll("g." + clusterId).classed("barrier", true)
+    var opId = d3.select(this).text().trim();
+    var opClusterId = VizConstants.clusterPrefix + opId;
+    var stageId = $(this).parents(".stage-metadata").attr("stage-id");
+    var stageClusterId = VizConstants.graphPrefix + stageId;
+    svg.selectAll("g[id=" + stageClusterId + "] g." + opClusterId).classed("barrier", true)
   });
 
   resizeSvg(svg);
@@ -216,7 +218,7 @@ function renderDagVizForJob(svgContainer) {
     var dot = metadata.select(".dot-file").text();
     var stageId = metadata.attr("stage-id");
     var containerId = VizConstants.graphPrefix + stageId;
-    var isSkipped = metadata.attr("skipped") == "true";
+    var isSkipped = metadata.attr("skipped") === "true";
     var container;
     if (isSkipped) {
       container = svgContainer
@@ -225,11 +227,8 @@ function renderDagVizForJob(svgContainer) {
         .attr("skipped", "true");
     } else {
       // Link each graph to the corresponding stage page (TODO: handle stage attempts)
-      // Use the link from the stage table so it also works for the history server
       var attemptId = 0;
-      var stageLink = d3.select("#stage-" + stageId + "-" + attemptId)
-        .select("a.name-link")
-        .attr("href");
+      var stageLink = uiRoot + appBasePath + "/stages/stage/?id=" + stageId + "&attempt=" + attemptId;
       container = svgContainer
         .append("a")
         .attr("xlink:href", stageLink)
