@@ -120,7 +120,8 @@ object SchemaPruning {
   private def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case att: Attribute =>
-        RootField(StructField(att.name, att.dataType, att.nullable), derivedFromAtt = true) :: Nil
+        RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
+          derivedFromAtt = true) :: Nil
       case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
       // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
       // don't actually use any nested fields. These root field accesses might be excluded later
