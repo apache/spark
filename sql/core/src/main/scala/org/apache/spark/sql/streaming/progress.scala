@@ -43,7 +43,7 @@ class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
     val memoryUsedBytes: Long,
-    val numLateInputs: Long,
+    val numDroppedRowsByWatermark: Long,
     val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
 
@@ -63,7 +63,7 @@ class StateOperatorProgress private[sql](
     ("numRowsTotal" -> JInt(numRowsTotal)) ~
     ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
     ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
-    ("numLateInputs" -> JInt(numLateInputs)) ~
+    ("numDroppedRowsByWatermark" -> JInt(numDroppedRowsByWatermark)) ~
     ("customMetrics" -> {
       if (!customMetrics.isEmpty) {
         val keys = customMetrics.keySet.asScala.toSeq.sorted

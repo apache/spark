@@ -77,8 +77,8 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numLateInputs" -> SQLMetrics.createMetric(sparkContext,
-      "number of inputs which are later than watermark ('inputs' are relative to operators)"),
+    "numDroppedRowsByWatermark" -> SQLMetrics.createMetric(sparkContext,
+      "number of rows which are dropped by watermark"),
     "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
     "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
@@ -102,7 +102,7 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
       numRowsTotal = longMetric("numTotalStateRows").value,
       numRowsUpdated = longMetric("numUpdatedStateRows").value,
       memoryUsedBytes = longMetric("stateMemory").value,
-      numLateInputs = longMetric("numLateInputs").value,
+      numDroppedRowsByWatermark = longMetric("numDroppedRowsByWatermark").value,
       javaConvertedCustomMetrics
     )
   }
@@ -137,10 +137,10 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
 
   protected def applyRemovingRowsOlderThanWatermark(
       iter: Iterator[InternalRow],
-      predicateFilterOutLateInput: BasePredicate): Iterator[InternalRow] = {
+      predicateDropRowByWatermark: BasePredicate): Iterator[InternalRow] = {
     iter.filterNot { row =>
-      val lateInput = predicateFilterOutLateInput.eval(row)
-      if (lateInput) longMetric("numLateInputs") += 1
+      val lateInput = predicateDropRowByWatermark.eval(row)
+      if (lateInput) longMetric("numDroppedRowsByWatermark") += 1
       lateInput
     }
   }
