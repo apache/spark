@@ -46,10 +46,11 @@ object MimaExcludes {
     // false positive, no binary incompatibility
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.ChiSqSelector"),
-
     //[SPARK-31840] Add instance weight support in LogisticRegressionSummary
     // weightCol in org.apache.spark.ml.classification.LogisticRegressionSummary is present only in current version
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.weightCol")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.weightCol"),
+    // [SPARK-24634] Add a new metric regarding number of inputs later than watermark plus allowed delay
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StateOperatorProgress.<init>$default$4")
   )
 
   // Exclude rules for 3.0.x

@@ -323,10 +323,7 @@ private[spark] class Executor(
     val threadName = s"Executor task launch worker for task $taskId"
     val taskName = taskDescription.name
     val mdcProperties = taskDescription.properties.asScala
-      .filter(_._1.startsWith("mdc.")).map { item =>
-        val key = item._1.substring(4)
-        (key, item._2)
-      }.toSeq
+      .filter(_._1.startsWith("mdc.")).toSeq
 
     /** If specified, this task has been killed and this option contains the reason. */
     @volatile private var reasonIfKilled: Option[String] = None
@@ -705,7 +702,7 @@ private[spark] class Executor(
     MDC.clear()
     mdc.foreach { case (key, value) => MDC.put(key, value) }
     // avoid overriding the takName by the user
-    MDC.put("taskName", taskName)
+    MDC.put("mdc.taskName", taskName)
   }
 
   /**
