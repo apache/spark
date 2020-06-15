@@ -565,12 +565,14 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   createQueryTest("timestamp cast #3",
     """
-      |SELECT CAST(TIMESTAMP_SECONDS(CAST(1.2 AS INT)) AS DOUBLE) FROM src LIMIT 1
+      |set spark.sql.legacy.allowCastNumericToTimestamp=true;
+      |SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1
     """.stripMargin)
 
   createQueryTest("timestamp cast #4",
     """
-      |SELECT CAST(TIMESTAMP_SECONDS(CAST(-1.2 AS INT)) AS DOUBLE) FROM src LIMIT 1
+      |set spark.sql.legacy.allowCastNumericToTimestamp=true;
+      |SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1
     """.stripMargin)
 
   test("timestamp cast #5") {
