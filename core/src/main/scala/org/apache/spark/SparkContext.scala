@@ -1725,17 +1725,6 @@ class SparkContext(config: SparkConf) extends Logging {
     }
   }
 
-
-  private[spark] def decommissionExecutors(executorIds: Seq[String]): Unit = {
-    schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
-        executorIds.foreach(b.decommissionExecutor)
-      case _ =>
-        logWarning(s"Decommissioning executors is not supported by current scheduler" +
-          s"${schedulerBackend}")
-    }
-  }
-
   /** The version of Spark on which this application is running. */
   def version: String = SPARK_VERSION
 

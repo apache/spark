@@ -68,7 +68,7 @@ private[storage] class BlockManagerDecommissioner(
           val migrating = Option(shufflesToMigrate.poll())
           migrating match {
             case None =>
-              logInfo("Nothing to migrate")
+              logDebug("Nothing to migrate")
               // Nothing to do right now, but maybe a transfer will fail or a new block
               // will finish being committed.
               val SLEEP_TIME_SECS = 1
@@ -88,7 +88,7 @@ private[storage] class BlockManagerDecommissioner(
                   buffer,
                   StorageLevel.DISK_ONLY,
                   null)// class tag, we don't need for shuffle
-                logInfo(s"Migrated sub block ${blockId}")
+                logDebug(s"Migrated sub block ${blockId}")
               }
               logInfo(s"Migrated ${shuffleBlockInfo} to ${peer}")
           }
@@ -127,8 +127,14 @@ private[storage] class BlockManagerDecommissioner(
     val sleepInterval = conf.get(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
 
     override def run(): Unit = {
-      var failures = 0
-      while (!stopped && !Thread.interrupted() && failures < 20) {
+      if (!conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED) &&
+        !conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
+        logWarning("Decommissioning, but no task configured set one or both:\n" +
+          "spark.storage.decommission.shuffle_blocks\n" +
+          "spark.storage.decommission.rdd_blocks")
+        stopped = true
+      }
+      while (!stopped && !Thread.interrupted()) {
         logInfo("Iterating on migrating from the block manager.")
         try {
           // If enabled we migrate shuffle blocks first as they are more expensive.
@@ -142,12 +148,6 @@ private[storage] class BlockManagerDecommissioner(
             decommissionRddCacheBlocks()
             logInfo("Attempt to replicate all cached blocks done")
           }
-          if (!conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED) &&
-            !conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
-            logWarning("Decommissioning, but no task configured set one or both:\n" +
-              "spark.storage.decommission.shuffle_blocks\n" +
-              "spark.storage.decommission.rdd_blocks")
-          }
           logInfo(s"Waiting for ${sleepInterval} before refreshing migrations.")
           Thread.sleep(sleepInterval)
         } catch {
@@ -155,9 +155,9 @@ private[storage] class BlockManagerDecommissioner(
             logInfo("Interrupted during migration, will not refresh migrations.")
             stopped = true
           case NonFatal(e) =>
-            failures += 1
-            logError("Error occurred while trying to replicate cached RDD blocks" +
-              s" for block manager decommissioning (failure count: $failures)", e)
+            logError("Error occurred while trying to replicate for block manager decommissioning.",
+              e)
+            stopped = true
         }
       }
     }

@@ -805,7 +805,7 @@ private[spark] class MapOutputTrackerMaster(
     try {
       sendTracker(StopMapOutputTracker)
     } catch {
-      case e: Exception =>
+      case e: SparkException =>
         logError("Could not tell tracker we are stopping.", e)
     }
     trackerEndpoint = null

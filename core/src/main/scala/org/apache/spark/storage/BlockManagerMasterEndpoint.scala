@@ -336,14 +336,13 @@ class BlockManagerMasterEndpoint(
     val info = blockManagerInfo(blockManagerId)
 
     val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
-    val result = rddBlocks.map { blockId =>
+    rddBlocks.map { blockId =>
       val currentBlockLocations = blockLocations.get(blockId)
       val maxReplicas = currentBlockLocations.size + 1
       val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
       val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
       replicateMsg
     }.toSeq
-    result
   }
 
   // Remove a block from the slaves that have it. This can only be used to remove
@@ -498,7 +497,7 @@ class BlockManagerMasterEndpoint(
       blockId match {
         case ShuffleIndexBlockId(shuffleId, mapId, _) =>
           // Don't update the map output on just the index block
-          logDebug("Received shuffle index block update for ${shuffleId} ${mapId}, ignoring.")
+          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, ignoring.")
           return true
         case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
           logInfo(s"Received shuffle data block update for ${shuffleId} ${mapId}, updating.")

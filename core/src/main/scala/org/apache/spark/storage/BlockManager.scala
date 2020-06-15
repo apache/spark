@@ -371,7 +371,7 @@ private[spark] class BlockManager(
             ThreadUtils.awaitReady(replicationFuture, Duration.Inf)
           } catch {
             case NonFatal(t) =>
-              throw new Exception("Error occurred while waiting for replication to finish", t)
+              throw new SparkException("Error occurred while waiting for replication to finish", t)
           }
         }
         if (blockWasSuccessfullyStored) {
@@ -668,7 +668,7 @@ private[spark] class BlockManager(
       try {
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {
-        case e: ClassCastException => throw new Exception(
+        case e: ClassCastException => throw new SparkException(
           s"Unexpected shuffle block ${blockId} with unsupported shuffle " +
           s"resolver ${shuffleManager.shuffleBlockResolver}")
       }

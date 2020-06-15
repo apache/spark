@@ -54,6 +54,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, SparkListenerBlockUpdated}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
+import org.apache.spark.shuffle.{ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
@@ -109,7 +110,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       master: BlockManagerMaster = this.master,
       transferService: Option[BlockTransferService] = Option.empty,
       testConf: Option[SparkConf] = None,
-      shuffleManager: SortShuffleManager = shuffleManager): BlockManager = {
+      shuffleManager: ShuffleManager = shuffleManager): BlockManager = {
     val bmConf = testConf.map(_.setAll(conf.getAll)).getOrElse(conf)
     bmConf.set(TEST_MEMORY, maxMem)
     bmConf.set(MEMORY_OFFHEAP_SIZE, maxMem)
@@ -1726,6 +1727,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     assert(!result)
     verify(liveListenerBus, never()).post(SparkListenerBlockUpdated(BlockUpdatedInfo(updateInfo)))
+  }
+
+  test("we reject putting blocks when we have the wrong shuffle resolver") {
+    val badShuffleManager = mock(classOf[ShuffleManager])
+    val badShuffleResolver = mock(classOf[ShuffleBlockResolver])
+    when(badShuffleManager.shuffleBlockResolver).thenReturn(badShuffleResolver)
+    val shuffleBlockId = ShuffleDataBlockId(0, 0, 0)
+    val bm = makeBlockManager(100, "exec1", shuffleManager = badShuffleManager)
+    val message = "message"
+    val exception = intercept[SparkException] {
+      bm.putBlockDataAsStream(shuffleBlockId, StorageLevel.DISK_ONLY, ClassTag(message.getClass))
+    }
+    assert(exception.getMessage.contains("unsupported shuffle resolver"))
   }
 
   test("test decommission block manager should not be part of peers") {

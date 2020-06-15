@@ -421,15 +421,15 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val STORAGE_SHUFFLE_DECOMMISSION_ENABLED =
-    ConfigBuilder("spark.storage.decommission.shuffle_blocks")
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.enabled")
       .doc("Whether to transfer shuffle blocks during block manager decommissioning. Requires " +
-        "an indexed shuffle resolver (like sort based shuffe)")
+        "a migratable shuffle resolver (like sort based shuffe)")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val STORAGE_RDD_DECOMMISSION_ENABLED =
-    ConfigBuilder("spark.storage.decommission.rdd_blocks")
+    ConfigBuilder("spark.storage.decommission.rddBlocks.enabled")
       .doc("Whether to transfer RDD blocks during block manager decommissioning.")
       .version("3.1.0")
       .booleanConf
