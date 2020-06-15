@@ -409,8 +409,7 @@ object RebaseDateTime {
    */
   private[sql] def rebaseJulianToGregorianMicros(tz: TimeZone, micros: Long): Long = {
     val cal = new Calendar.Builder()
-      // `gregory` is a hybrid calendar that supports both
-      // the Julian and Gregorian calendar systems
+      // `gregory` is a hybrid calendar that supports both the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
       .setInstant(microsToMillis(micros))
       .setTimeZone(tz)

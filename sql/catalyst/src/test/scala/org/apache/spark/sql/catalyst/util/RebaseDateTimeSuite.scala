@@ -437,11 +437,11 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     val hkTz = TimeZone.getTimeZone(hkZid)
     val rebasedEarlierMicros = rebaseGregorianToJulianMicros(hkTz, earlierMicros)
     val rebasedLaterMicros = rebaseGregorianToJulianMicros(hkTz, laterMicros)
+    assert(rebasedEarlierMicros + overlapInterval === rebasedLaterMicros)
     withDefaultTimeZone(hkZid) {
       def toTsStr(micros: Long): String = toJavaTimestamp(micros).toString
       assert(toTsStr(rebasedEarlierMicros) === expected)
       assert(toTsStr(rebasedLaterMicros) === expected)
-      assert(rebasedEarlierMicros + overlapInterval === rebasedLaterMicros)
       // Check optimized rebasing
       assert(rebaseGregorianToJulianMicros(earlierMicros) === rebasedEarlierMicros)
       assert(rebaseGregorianToJulianMicros(laterMicros) === rebasedLaterMicros)
