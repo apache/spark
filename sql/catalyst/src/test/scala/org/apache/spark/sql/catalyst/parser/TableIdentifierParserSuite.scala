@@ -343,7 +343,12 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
         // The case where a symbol has multiple literal definitions,
         // e.g., `DATABASES: 'DATABASES' | 'SCHEMAS';`.
         if (hasMultipleLiterals) {
-          val literals = splitDefs.map(_.replaceAll("'", "").trim).toSeq
+          // Filters out inappropriate entries, e.g., `!` in `NOT: 'NOT' | '!';`
+          val litDef = """([A-Z_]+)""".r
+          val literals = splitDefs.map(_.replaceAll("'", "").trim).toSeq.flatMap {
+            case litDef(lit) => Some(lit)
+            case _ => None
+          }
           (symbol, literals) :: Nil
         } else {
           val literal = literalDef.replaceAll("'", "").trim
@@ -391,13 +396,13 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
   val reservedKeywordsInAnsiMode = allCandidateKeywords -- nonReservedKeywordsInAnsiMode
 
   test("check # of reserved keywords") {
-    val numReservedKeywords = 75
+    val numReservedKeywords = 74
     assert(reservedKeywordsInAnsiMode.size == numReservedKeywords,
       s"The expected number of reserved keywords is $numReservedKeywords, but " +
         s"${reservedKeywordsInAnsiMode.size} found.")
   }
 
-  test("should follow reserved keywords in SQL:2016") {
+  test("reserved keywords in Spark are also reserved in SQL 2016") {
     withTempDir { dir =>
       val tmpFile = new File(dir, "tmp")
       val is = Thread.currentThread().getContextClassLoader
@@ -405,7 +410,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
       Files.copy(is, tmpFile.toPath)
       val reservedKeywordsInSql2016 = Files.readAllLines(tmpFile.toPath)
         .asScala.filterNot(_.startsWith("--")).map(_.trim).toSet
-      assert(((reservedKeywordsInAnsiMode -- Set("!")) -- reservedKeywordsInSql2016).isEmpty)
+      assert((reservedKeywordsInAnsiMode  -- reservedKeywordsInSql2016).isEmpty)
     }
   }
 
