@@ -42,7 +42,7 @@ private[spark] class AppStatusStore(
       store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
     } catch {
       case _: NoSuchElementException =>
-        throw new SparkException("Failed to get the application information. " +
+        throw new NoSuchElementException("Failed to get the application information. " +
           "If you are starting up Spark, please wait a while until it's ready.")
     }
   }
@@ -525,7 +525,13 @@ private[spark] class AppStatusStore(
   }
 
   def appSummary(): AppSummary = {
-    store.read(classOf[AppSummary], classOf[AppSummary].getName())
+    try {
+      store.read(classOf[AppSummary], classOf[AppSummary].getName())
+    } catch {
+      case _: NoSuchElementException =>
+        throw new NoSuchElementException("Failed to get the application summary. " +
+          "If you are starting up Spark, please wait a while until it's ready.")
+    }
   }
 
   def close(): Unit = {

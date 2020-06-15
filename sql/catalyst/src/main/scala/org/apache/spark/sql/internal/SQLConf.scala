@@ -545,6 +545,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val MAX_CNF_NODE_COUNT =
+    buildConf("spark.sql.optimizer.maxCNFNodeCount")
+      .internal()
+      .doc("Specifies the maximum allowable number of conjuncts in the result of CNF " +
+        "conversion. If the conversion exceeds the threshold, an empty sequence is returned. " +
+        "For example, CNF conversion of (a && b) || (c && d) generates " +
+        "four conjuncts (a || c) && (a || d) && (b || c) && (b || d).")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0,
+        "The depth of the maximum rewriting conjunction normal form must be positive.")
+      .createWithDefault(128)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -2784,7 +2797,15 @@ class SQLConf extends Serializable with Logging {
 
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
-  def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
+  def defaultNumShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
+
+  def numShufflePartitions: Int = {
+    if (adaptiveExecutionEnabled && coalesceShufflePartitionsEnabled) {
+      getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(defaultNumShufflePartitions)
+    } else {
+      defaultNumShufflePartitions
+    }
+  }
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
@@ -2796,9 +2817,6 @@ class SQLConf extends Serializable with Logging {
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
-
-  def initialShufflePartitionNum: Int =
-    getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(numShufflePartitions)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
@@ -2868,6 +2886,8 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  def maxCnfNodeCount: Int = getConf(MAX_CNF_NODE_COUNT)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 

@@ -152,7 +152,7 @@ class StreamingQueryPagedTable(
     val headerAndCss: Seq[(String, Boolean, Option[String])] = {
       Seq(
         ("Name", true, None),
-        ("Status", false, None),
+        ("Status", true, None),
         ("ID", true, None),
         ("Run ID", true, None),
         ("Start Time", true, None),
@@ -197,7 +197,7 @@ class StreamingQueryPagedTable(
       <td>{streamingQuery.summary.id}</td>
       <td><a href={statisticsLink}>{streamingQuery.summary.runId}</a></td>
       <td>{SparkUIUtils.formatDate(streamingQuery.summary.startTimestamp)}</td>
-      <td>{query.duration}</td>
+      <td>{SparkUIUtils.formatDurationVerbose(query.duration)}</td>
       <td>{withNoProgress(streamingQuery, {query.avgInput.formatted("%.2f")}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {query.avgProcess.formatted("%.2f")}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {streamingQuery.lastProgress.batchId}, "NaN")}</td>
@@ -207,7 +207,7 @@ class StreamingQueryPagedTable(
 }
 
 case class StructuredStreamingRow(
-    duration: String,
+    duration: Long,
     avgInput: Double,
     avgProcess: Double,
     streamingUIData: StreamingQueryUIData)
@@ -224,13 +224,12 @@ class StreamingQueryDataSource(uiData: Seq[StreamingQueryUIData], sortColumn: St
 
   private def streamingRow(uiData: StreamingQueryUIData): StructuredStreamingRow = {
     val duration = if (isActive) {
-      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - uiData.summary.startTimestamp)
+      System.currentTimeMillis() - uiData.summary.startTimestamp
     } else {
       withNoProgress(uiData, {
         val endTimeMs = uiData.lastProgress.timestamp
-        val durationMS = parseProgressTimestamp(endTimeMs) - uiData.summary.startTimestamp
-        SparkUIUtils.formatDurationVerbose(durationMS)
-      }, "-")
+        parseProgressTimestamp(endTimeMs) - uiData.summary.startTimestamp
+      }, 0)
     }
 
     val avgInput = (uiData.recentProgress.map(p => withNumberInvalid(p.inputRowsPerSecond)).sum /
@@ -244,7 +243,8 @@ class StreamingQueryDataSource(uiData: Seq[StreamingQueryUIData], sortColumn: St
 
   private def ordering(sortColumn: String, desc: Boolean): Ordering[StructuredStreamingRow] = {
     val ordering: Ordering[StructuredStreamingRow] = sortColumn match {
-      case "Name" => Ordering.by(q => UIUtils.getQueryName(q.streamingUIData))
+      case "Name" => Ordering.by(row => UIUtils.getQueryName(row.streamingUIData))
+      case "Status" => Ordering.by(row => UIUtils.getQueryStatus(row.streamingUIData))
       case "ID" => Ordering.by(_.streamingUIData.summary.id)
       case "Run ID" => Ordering.by(_.streamingUIData.summary.runId)
       case "Start Time" => Ordering.by(_.streamingUIData.summary.startTimestamp)
