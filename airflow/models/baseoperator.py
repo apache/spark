@@ -18,6 +18,7 @@
 """
 Base operator for all operators.
 """
+import abc
 import copy
 import functools
 import logging
@@ -60,9 +61,29 @@ from airflow.utils.weight_rule import WeightRule
 ScheduleInterval = Union[str, timedelta, relativedelta]
 
 
+class BaseOperatorMeta(abc.ABCMeta):
+    """
+    Base metaclass of BaseOperator.
+    """
+
+    def __call__(cls, *args, **kwargs):
+        """
+        Called when you call BaseOperator(). In this way we are able to perform an action
+        after initializing an operator no matter where  the ``super().__init__`` is called
+        (before or after assign of new attributes in a custom operator).
+        """
+        obj: BaseOperator = type.__call__(cls, *args, **kwargs)
+        # Here we set upstream task defined by XComArgs passed to template fields of the operator
+        obj.set_xcomargs_dependencies()
+
+        # Mark instance as instantiated https://docs.python.org/3/tutorial/classes.html#private-variables
+        obj._BaseOperator__instantiated = True
+        return obj
+
+
 # pylint: disable=too-many-instance-attributes,too-many-public-methods
 @functools.total_ordering
-class BaseOperator(Operator, LoggingMixin):
+class BaseOperator(Operator, LoggingMixin, metaclass=BaseOperatorMeta):
     """
     Abstract base class for all operators. Since operators create objects that
     become nodes in the dag, BaseOperator contains many recursive methods for
@@ -291,6 +312,12 @@ class BaseOperator(Operator, LoggingMixin):
 
     # Defines if the operator supports lineage without manual definitions
     supports_lineage = False
+
+    # If True then the class constructor was called
+    __instantiated = False
+
+    # Set to True before calling execute method
+    _lock_for_execution = False
 
     # noinspection PyUnusedLocal
     # pylint: disable=too-many-arguments,too-many-locals, too-many-statements
@@ -547,6 +574,18 @@ class BaseOperator(Operator, LoggingMixin):
 
         return self
 
+    def __setattr__(self, key, value):
+        super().__setattr__(key, value)
+        if self._lock_for_execution:
+            # Skip any custom behaviour during execute
+            return
+        if self.__instantiated and key in self.template_fields:
+            # Resolve upstreams set by assigning an XComArg after initializing
+            # an operator, example:
+            #   op = BashOperator()
+            #   op.bash_command = "sleep 1"
+            self.set_xcomargs_dependencies()
+
     def add_inlets(self, inlets: Iterable[Any]):
         """
         Sets inlets to this operator
@@ -632,6 +671,56 @@ class BaseOperator(Operator, LoggingMixin):
             TriggerRuleDep(),
             NotPreviouslySkippedDep(),
         }
+
+    def prepare_for_execution(self) -> "BaseOperator":
+        """
+        Lock task for execution to disable custom action in __setattr__ and
+        returns a copy of the task
+        """
+        other = copy.copy(self)
+        other._lock_for_execution = True  # pylint: disable=protected-access
+        return other
+
+    def set_xcomargs_dependencies(self) -> None:
+        """
+        Resolves upstream dependencies of a task. In this way passing an ``XComArg``
+        as value for a template field will result in creating upstream relation between
+        two tasks.
+
+        **Example**: ::
+
+            with DAG(...):
+                generate_content = GenerateContentOperator(task_id="generate_content")
+                send_email = EmailOperator(..., html_content=generate_content.output)
+
+            # This is equivalent to
+            with DAG(...):
+                generate_content = GenerateContentOperator(task_id="generate_content")
+                send_email = EmailOperator(
+                    ..., html_content="{{ task_instance.xcom_pull('generate_content') }}"
+                )
+                generate_content >> send_email
+
+        """
+        from airflow.models.xcom_arg import XComArg
+
+        def apply_set_upstream(arg: Any):
+            if isinstance(arg, XComArg):
+                self.set_upstream(arg.operator)
+            elif isinstance(arg, (tuple, set, list)):
+                for elem in arg:
+                    apply_set_upstream(elem)
+            elif isinstance(arg, dict):
+                for elem in arg.values():
+                    apply_set_upstream(elem)
+            elif hasattr(arg, "template_fields"):
+                for elem in arg.template_fields:
+                    apply_set_upstream(elem)
+
+        for field in self.template_fields:
+            if hasattr(self, field):
+                arg = getattr(self, field)
+                apply_set_upstream(arg)
 
     @property
     def priority_weight_total(self) -> int:
@@ -1140,7 +1229,7 @@ class BaseOperator(Operator, LoggingMixin):
 
     @property
     def output(self):
-        """Returns default XComArg for the operator"""
+        """Returns reference to XCom pushed by current operator"""
         from airflow.models.xcom_arg import XComArg
         return XComArg(operator=self)
 
@@ -1205,7 +1294,8 @@ class BaseOperator(Operator, LoggingMixin):
         if not cls.__serialized_fields:
             cls.__serialized_fields = frozenset(
                 vars(BaseOperator(task_id='test')).keys() - {
-                    'inlets', 'outlets', '_upstream_task_ids', 'default_args', 'dag', '_dag'
+                    'inlets', 'outlets', '_upstream_task_ids', 'default_args', 'dag', '_dag',
+                    '_BaseOperator__instantiated',
                 } | {'_task_type', 'subdag', 'ui_color', 'ui_fgcolor', 'template_fields'})
 
         return cls.__serialized_fields
