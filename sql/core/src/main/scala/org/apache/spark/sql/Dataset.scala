@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
@@ -2542,20 +2541,7 @@ class Dataset[T] private[sql](
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
-    // SPARK-31990: We must preserve the input order of `colNames` because of the compatibility
-    // issue (the Streaming's state store depends on the `groupCols` order).
-    val orderPreservingDistinctColNames = {
-      val nameSeen = mutable.Set[String]()
-      colNames.flatMap { colName =>
-        if (nameSeen.contains(colName)) {
-          None
-        } else {
-          nameSeen += colName
-          Some(colName)
-        }
-      }
-    }
-    val groupCols = orderPreservingDistinctColNames.flatMap { (colName: String) =>
+    val groupCols = colNames.distinct.flatMap { (colName: String) =>
       // It is possibly there are more than one columns with the same name,
       // so we call filter instead of find.
       val cols = allColumns.filter(col => resolver(col.name, colName))

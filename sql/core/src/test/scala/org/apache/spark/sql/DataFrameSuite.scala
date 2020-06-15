@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LocalRelation, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -2546,21 +2546,6 @@ class DataFrameSuite extends QueryTest
 
       val df = spark.read.parquet(f.getAbsolutePath).as[BigDecimal]
       assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
-    }
-  }
-
-  test("SPARK-31990: preserves the input order of colNames in dropDuplicates") {
-    val df = Seq((1, 2, 3, 4, 5), (1, 2, 3, 4, 5)).toDF("c", "e", "d", "a", "b")
-    val inputColNames = Seq("c", "b", "c", "d", "b", "c", "b")
-    val distinctDf = df.dropDuplicates(inputColNames)
-    val duplicatePlan = distinctDf.queryExecution.analyzed.collectFirst {
-      case p: Deduplicate => p
-    }.get
-    val keysInDuplicate = duplicatePlan.keys.map(_.name)
-    (0 until keysInDuplicate.length - 1).foreach { i =>
-      val v1 = keysInDuplicate(i)
-      val v2 = keysInDuplicate(i + 1)
-      assert(inputColNames.indexOf(v1) < inputColNames.indexOf(v2))
     }
   }
 }
