@@ -69,7 +69,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private static final Logger logger = LoggerFactory.getLogger(RemoteBlockPushResolver.class);
 
   private final Path[] localDirs;
-  private final ConcurrentMap<String, Path> appsRelativePath;
+  private final ConcurrentMap<String, AppPathsInfo> appsPathInfo;
   private final ConcurrentMap<AppShufflePartitionId, AppShufflePartitionInfo> partitions;
 
   private final Executor directoryCleaner;
@@ -86,7 +86,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.localDirs[i] = Paths.get(localDirs[i]);
     }
     this.partitions = Maps.newConcurrentMap();
-    this.appsRelativePath = Maps.newConcurrentMap();
+    this.appsPathInfo = Maps.newConcurrentMap();
     this.directoryCleaner = Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
         NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
@@ -181,10 +181,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   // TODO should we use subDirsPerLocalDir to potentially reduce inode size?
   private File getFile(String appId, String filename) {
     int hash = JavaUtils.nonNegativeHash(filename);
-    Path localDir = localDirs[hash % localDirs.length];
-    Path relativeMergeDir = Preconditions.checkNotNull(
-        appsRelativePath.get(appId), "application " + appId + " is not registered.");
-    return new File(localDir.resolve(relativeMergeDir).toFile(), filename);
+    // TODO: Change the message when this service is able to handle NM restart
+    AppPathsInfo appPathsInfo = Preconditions.checkNotNull(
+        appsPathInfo.get(appId),
+        "application " + appId + " is not registered or NM was restarted.");
+    Path[] activeLocalDirs = appPathsInfo.getActiveLocalDirs(localDirs);
+    Path localDir = activeLocalDirs[hash % activeLocalDirs.length];
+    return new File(localDir.resolve(appPathsInfo.relativeMergeDir).toFile(), filename);
   }
 
   private File getMergedShuffleFile(AppShufflePartitionId id) {
@@ -200,8 +203,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
-    Path relativeMergeDir = Preconditions.checkNotNull(
-        appsRelativePath.remove(appId), "application " + appId + " is not registered.");
+    // TODO: Change the message when this service is able to handle NM restart
+    AppPathsInfo appPathsInfo = Preconditions.checkNotNull(
+        appsPathInfo.get(appId),
+        "application " + appId + " is not registered or NM was restarted.");
     Iterator<Map.Entry<AppShufflePartitionId, AppShufflePartitionInfo>> iterator =
         partitions.entrySet().iterator();
     while (iterator.hasNext()) {
@@ -219,8 +224,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     if (cleanupLocalDirs) {
-      Path[] dirs = Arrays.stream(localDirs)
-          .map(dir -> dir.resolve(relativeMergeDir)).toArray(Path[]::new);
+      Path[] dirs = Arrays.stream(appPathsInfo.activeLocalDirs)
+          .map(dir -> dir.resolve(appPathsInfo.relativeMergeDir)).toArray(Path[]::new);
       directoryCleaner.execute(() -> deleteExecutorDirs(dirs));
     }
   }
@@ -484,8 +489,21 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
 
       @Override
-      public void onFailure(String streamId, Throwable cause) throws IOException {
-        logger.error("Encountered issue when merging shuffle partition block {}", msg, cause);
+      public void onFailure(String streamId, Throwable throwable) throws IOException {
+        if ((throwable.getMessage() != null &&
+            (throwable.getMessage().contains(
+                BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) ||
+                throwable.getMessage().contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))) ||
+
+            (throwable.getCause() != null && throwable.getCause().getMessage() != null &&
+                (throwable.getCause().getMessage().contains(
+                    BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) ||
+                    throwable.getCause().getMessage().contains(
+                        BlockPushException.TOO_LATE_MESSAGE_SUFFIX)))) {
+          logger.debug("Encountered issue when merging shuffle partition block {}", msg, throwable);
+        } else {
+          logger.error("Encountered issue when merging shuffle partition block {}", msg, throwable);
+        }
         // Only update partitionInfo if the failure corresponds to a valid request. If the
         // request is too late, i.e. received after shuffle merge finalize, #onFailure will
         // also be triggered, and we can just ignore. Also, if we couldn't find an opportunity
@@ -549,7 +567,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public void registerApplication(String appId, String relativeAppPath) {
     logger.debug("register application with RemoteBlockPushResolver {} {}", appId, relativeAppPath);
-    appsRelativePath.put(appId, Paths.get(relativeAppPath));
+    appsPathInfo.put(appId, new AppPathsInfo(Paths.get(relativeAppPath)));
   }
 
   /**
@@ -686,6 +704,36 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         throw ioe;
       }
       this.lastChunkOffset = lastChunkOffset;
+    }
+  }
+
+  /**
+   * Wraps all the information related to the merge_dir of an application.
+   */
+  private static class AppPathsInfo {
+
+    private final Path relativeMergeDir;
+    private Path[] activeLocalDirs;
+
+    AppPathsInfo(Path relativeMergeDir) {
+      this.relativeMergeDir = Preconditions.checkNotNull(
+          relativeMergeDir, "relative merge directory path cannot be null");
+    }
+
+    private Path[] getActiveLocalDirs(Path[] localDirs) {
+      if (activeLocalDirs != null) {
+        return activeLocalDirs;
+      }
+      synchronized (this) {
+        activeLocalDirs = Arrays.stream(localDirs)
+            .filter(rootDir -> rootDir.resolve(relativeMergeDir).toFile().exists())
+            .toArray(Path[]::new);
+        if (activeLocalDirs.length == 0) {
+          throw new RuntimeException(
+            "Did not find any active local directories wrt " + relativeMergeDir);
+        }
+      }
+      return activeLocalDirs;
     }
   }
 }

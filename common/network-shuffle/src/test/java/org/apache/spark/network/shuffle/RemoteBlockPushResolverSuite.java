@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Arrays;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
@@ -82,7 +83,7 @@ public class RemoteBlockPushResolverSuite {
   public void testNoIndexFile() {
     try {
       String appId = "app_NoIndexFile";
-      registerApplication(appId);
+      registerApplication(appId, localDirs);
       pushResolver.getChunkCount(appId, 0, 0);
       removeApplication(appId);
     } catch (Throwable t) {
@@ -94,7 +95,7 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testChunkCountsAndBlockData() throws IOException {
     String appId = "app_ChunkCountsAndBlockData";
-    registerApplication(appId);
+    registerApplication(appId, localDirs);
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
         new PushBlockStream(appId, "shuffle_0_0_0", 0),
         new PushBlockStream(appId, "shuffle_0_1_0", 0),
@@ -113,7 +114,31 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testMultipleBlocksInAChunk() throws IOException {
     String appId = "app_MultipleBlocksInAChunk";
-    registerApplication(appId);
+    registerApplication(appId, localDirs);
+    PushBlockStream[] pushBlocks = new PushBlockStream[] {
+        new PushBlockStream(appId, "shuffle_0_0_0", 0),
+        new PushBlockStream(appId, "shuffle_0_1_0", 0),
+        new PushBlockStream(appId, "shuffle_0_2_0", 0),
+        new PushBlockStream(appId, "shuffle_0_3_0", 0),
+    };
+    ByteBuffer[] buffers = new ByteBuffer[]{
+        ByteBuffer.wrap(new byte[2]),
+        ByteBuffer.wrap(new byte[3]),
+        ByteBuffer.wrap(new byte[5]),
+        ByteBuffer.wrap(new byte[3])
+    };
+    pushBlockHelper(appId, pushBlocks, buffers);
+    int numChunks = pushResolver.getChunkCount(appId, 0, 0);
+    assertEquals(3, numChunks);
+    validateChunks(appId,0, 0, numChunks, new int[]{5, 5, 3});
+    removeApplication(appId);
+  }
+
+  @Test
+  public void testAppUsingFewerLocalDirs() throws IOException {
+    String appId = "app_AppUsingFewerLocalDirs";
+    String[] activeLocalDirs = Arrays.stream(localDirs).skip(1).toArray(String[]::new);
+    registerApplication(appId, activeLocalDirs);
     PushBlockStream[] pushBlocks = new PushBlockStream[] {
         new PushBlockStream(appId, "shuffle_0_0_0", 0),
         new PushBlockStream(appId, "shuffle_0_1_0", 0),
@@ -138,8 +163,8 @@ public class RemoteBlockPushResolverSuite {
    * This is because when the application gets removed, the directory cleaner removes the merged
    * data and file in a different thread which can delete the relevant data of a different test.
    */
-  private void registerApplication(String appId) throws IOException {
-    for (String localDir : localDirs) {
+  private void registerApplication(String appId, String[] activeLocalDirs) throws IOException {
+    for (String localDir : activeLocalDirs) {
       Files.createDirectories(Paths.get(localDir).resolve(appId + "/merge_manager"));
     }
     pushResolver.registerApplication(appId, appId + "/merge_manager");
