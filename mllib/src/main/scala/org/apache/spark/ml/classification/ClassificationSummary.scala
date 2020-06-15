@@ -178,7 +178,7 @@ private[classification] trait TrainingSummary {
 /**
  * Abstraction for binary classification results for a given model.
  */
-trait BinaryClassificationSummary extends ClassificationSummary {
+private[classification] trait BinaryClassificationSummary extends ClassificationSummary {
 
   private val sparkSession = predictions.sparkSession
   import sparkSession.implicits._
