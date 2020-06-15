@@ -166,7 +166,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
 
       AddData(input1, 5),
       CheckNewAnswer(),                             // Same reason as above
-      assertNumStateRows(total = 2, updated = 0)
+      assertNumStateRows(total = 2, updated = 0, lateInput = 1)
     )
   }
 
@@ -219,12 +219,12 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       // (1, 28) ==> passed filter, matched with left (1, 3) and (1, 5), added to state
       AddData(rightInput, (1, 20), (1, 21), (1, 28)),
       CheckNewAnswer((1, 3, 21), (1, 5, 21), (1, 3, 28), (1, 5, 28)),
-      assertNumStateRows(total = 5, updated = 1),
+      assertNumStateRows(total = 5, updated = 1, lateInput = 1),
 
       // New data to left input with leftTime <= 20 should be filtered due to event time watermark
       AddData(leftInput, (1, 20), (1, 21)),
       CheckNewAnswer((1, 21, 28)),
-      assertNumStateRows(total = 6, updated = 1)
+      assertNumStateRows(total = 6, updated = 1, lateInput = 1)
     )
   }
 
@@ -293,7 +293,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
 
       AddData(leftInput, (1, 30), (1, 31)),     // 30 should not be processed or added to state
       CheckNewAnswer((1, 31, 26), (1, 31, 30), (1, 31, 31)),
-      assertNumStateRows(total = 11, updated = 1),  // only 31 added
+      assertNumStateRows(total = 11, updated = 1, lateInput = 1),  // only 31 added
 
       // Advance the watermark
       AddData(rightInput, (1, 80)),
@@ -307,7 +307,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
 
       AddData(rightInput, (1, 46), (1, 50)),     // 46 should not be processed or added to state
       CheckNewAnswer((1, 49, 50), (1, 50, 50)),
-      assertNumStateRows(total = 7, updated = 1)   // 50 added
+      assertNumStateRows(total = 7, updated = 1, lateInput = 1)   // 50 added
     )
   }
 

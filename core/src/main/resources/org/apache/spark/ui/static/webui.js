@@ -87,7 +87,8 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-poolActiveStages','aggregated-poolActiveStages');
   collapseTablePageLoad('collapse-aggregated-tasks','aggregated-tasks');
   collapseTablePageLoad('collapse-aggregated-rdds','aggregated-rdds');
-  collapseTablePageLoad('collapse-aggregated-activeBatches','aggregated-activeBatches');
+  collapseTablePageLoad('collapse-aggregated-waitingBatches','aggregated-waitingBatches');
+  collapseTablePageLoad('collapse-aggregated-runningBatches','aggregated-runningBatches');
   collapseTablePageLoad('collapse-aggregated-completedBatches','aggregated-completedBatches');
   collapseTablePageLoad('collapse-aggregated-runningExecutions','aggregated-runningExecutions');
   collapseTablePageLoad('collapse-aggregated-completedExecutions','aggregated-completedExecutions');

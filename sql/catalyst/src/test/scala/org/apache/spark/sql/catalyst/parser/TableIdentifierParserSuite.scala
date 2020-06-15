@@ -16,9 +16,14 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import java.util.Locale
+
+import scala.collection.mutable
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.internal.SQLConf
 
 class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
@@ -285,334 +290,109 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "where",
     "with")
 
-  // All the keywords in `docs/sql-keywords.md` are listed below:
-  val allCandidateKeywords = Set(
-    "add",
-    "after",
-    "all",
-    "alter",
-    "analyze",
-    "and",
-    "anti",
-    "any",
-    "archive",
-    "array",
-    "as",
-    "asc",
-    "at",
-    "authorization",
-    "between",
-    "both",
-    "bucket",
-    "buckets",
-    "by",
-    "cache",
-    "cascade",
-    "case",
-    "cast",
-    "change",
-    "check",
-    "clear",
-    "cluster",
-    "clustered",
-    "codegen",
-    "collate",
-    "collection",
-    "column",
-    "columns",
-    "comment",
-    "commit",
-    "compact",
-    "compactions",
-    "compute",
-    "concatenate",
-    "constraint",
-    "cost",
-    "create",
-    "cross",
-    "cube",
-    "current",
-    "current_date",
-    "current_time",
-    "current_timestamp",
-    "current_user",
-    "data",
-    "database",
-    "databases",
-    "day",
-    "dbproperties",
-    "defined",
-    "delete",
-    "delimited",
-    "desc",
-    "describe",
-    "dfs",
-    "directories",
-    "directory",
-    "distinct",
-    "distribute",
-    "div",
-    "drop",
-    "else",
-    "end",
-    "escape",
-    "escaped",
-    "except",
-    "exchange",
-    "exists",
-    "explain",
-    "export",
-    "extended",
-    "external",
-    "extract",
-    "false",
-    "fetch",
-    "fields",
-    "fileformat",
-    "first",
-    "following",
-    "for",
-    "foreign",
-    "format",
-    "formatted",
-    "from",
-    "full",
-    "function",
-    "functions",
-    "global",
-    "grant",
-    "group",
-    "grouping",
-    "having",
-    "hour",
-    "if",
-    "ignore",
-    "import",
-    "in",
-    "index",
-    "indexes",
-    "inner",
-    "inpath",
-    "inputformat",
-    "insert",
-    "intersect",
-    "interval",
-    "into",
-    "is",
-    "items",
-    "join",
-    "keys",
-    "last",
-    "lateral",
-    "lazy",
-    "leading",
-    "left",
-    "like",
-    "limit",
-    "lines",
-    "list",
-    "load",
-    "local",
-    "location",
-    "lock",
-    "locks",
-    "logical",
-    "macro",
-    "map",
-    "minus",
-    "minute",
-    "month",
-    "msck",
-    "namespaces",
-    "natural",
-    "no",
-    "not",
-    "null",
-    "nulls",
-    "of",
-    "on",
-    "only",
-    "option",
-    "options",
-    "or",
-    "order",
-    "out",
-    "outer",
-    "outputformat",
-    "over",
-    "overlaps",
-    "overlay",
-    "overwrite",
-    "partition",
-    "partitioned",
-    "partitions",
-    "percent",
-    "pivot",
-    "placing",
-    "position",
-    "preceding",
-    "primary",
-    "principals",
-    "purge",
-    "query",
-    "range",
-    "recordreader",
-    "recordwriter",
-    "recover",
-    "reduce",
-    "references",
-    "refresh",
-    "rename",
-    "repair",
-    "replace",
-    "reset",
-    "restrict",
-    "revoke",
-    "right",
-    "rlike",
-    "role",
-    "roles",
-    "rollback",
-    "rollup",
-    "row",
-    "rows",
-    "schema",
-    "second",
-    "select",
-    "semi",
-    "separated",
-    "serde",
-    "serdeproperties",
-    "session_user",
-    "set",
-    "sets",
-    "show",
-    "skewed",
-    "some",
-    "sort",
-    "sorted",
-    "start",
-    "statistics",
-    "stored",
-    "stratify",
-    "struct",
-    "substr",
-    "substring",
-    "table",
-    "tables",
-    "tablesample",
-    "tblproperties",
-    "temporary",
-    "terminated",
-    "then",
-    "to",
-    "touch",
-    "trailing",
-    "transaction",
-    "transactions",
-    "transform",
-    "true",
-    "truncate",
-    "type",
-    "unarchive",
-    "unbounded",
-    "uncache",
-    "union",
-    "unique",
-    "unknown",
-    "unlock",
-    "unset",
-    "use",
-    "user",
-    "using",
-    "values",
-    "view",
-    "views",
-    "when",
-    "where",
-    "window",
-    "with",
-    "year")
+  private val sqlSyntaxDefs = {
+    val sqlBasePath = {
+      val sparkHome = {
+        assert(sys.props.contains("spark.test.home") ||
+          sys.env.contains("SPARK_HOME"), "spark.test.home or SPARK_HOME is not set.")
+        sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
+      }
+      java.nio.file.Paths.get(sparkHome, "sql", "catalyst", "src", "main", "antlr4", "org",
+        "apache", "spark", "sql", "catalyst", "parser", "SqlBase.g4").toFile
+    }
+    fileToString(sqlBasePath).split("\n")
+  }
 
-  val reservedKeywordsInAnsiMode = Set(
-    "all",
-    "and",
-    "anti",
-    "any",
-    "as",
-    "authorization",
-    "both",
-    "case",
-    "cast",
-    "check",
-    "collate",
-    "column",
-    "constraint",
-    "create",
-    "cross",
-    "current_date",
-    "current_time",
-    "current_timestamp",
-    "current_user",
-    "day",
-    "distinct",
-    "else",
-    "end",
-    "escape",
-    "except",
-    "false",
-    "fetch",
-    "for",
-    "foreign",
-    "from",
-    "full",
-    "grant",
-    "group",
-    "having",
-    "hour",
-    "in",
-    "inner",
-    "intersect",
-    "into",
-    "join",
-    "is",
-    "leading",
-    "left",
-    "minute",
-    "month",
-    "natural",
-    "not",
-    "null",
-    "on",
-    "only",
-    "or",
-    "order",
-    "outer",
-    "overlaps",
-    "primary",
-    "references",
-    "right",
-    "select",
-    "semi",
-    "session_user",
-    "minus",
-    "second",
-    "some",
-    "table",
-    "then",
-    "to",
-    "trailing",
-    "union",
-    "unique",
-    "unknown",
-    "user",
-    "using",
-    "when",
-    "where",
-    "with",
-    "year")
+  private def parseAntlrGrammars[T](startTag: String, endTag: String)
+      (f: PartialFunction[String, Seq[T]]): Set[T] = {
+    val keywords = new mutable.ArrayBuffer[T]
+    val default = (_: String) => Nil
+    var startTagFound = false
+    var parseFinished = false
+    val lineIter = sqlSyntaxDefs.toIterator
+    while (!parseFinished && lineIter.hasNext) {
+      val line = lineIter.next()
+      if (line.trim.startsWith(startTag)) {
+        startTagFound = true
+      } else if (line.trim.startsWith(endTag)) {
+        parseFinished = true
+      } else if (startTagFound) {
+        f.applyOrElse(line, default).foreach { symbol =>
+          keywords += symbol
+        }
+      }
+    }
+    assert(keywords.nonEmpty && startTagFound && parseFinished, "cannot extract keywords from " +
+      s"the `SqlBase.g4` file, so please check if the start/end tags (`$startTag` and `$endTag`) " +
+      "are placed correctly in the file.")
+    keywords.toSet
+  }
 
-  val nonReservedKeywordsInAnsiMode = allCandidateKeywords -- reservedKeywordsInAnsiMode
+  // If a symbol does not have the same string with its literal (e.g., `SETMINUS: 'MINUS';`),
+  // we need to map a symbol to actual literal strings.
+  val symbolsToExpandIntoDifferentLiterals = {
+    val kwDef = """([A-Z_]+):(.+);""".r
+    val keywords = parseAntlrGrammars(
+        "//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
+      case kwDef(symbol, literalDef) =>
+        val splitDefs = literalDef.split("""\|""")
+        val hasMultipleLiterals = splitDefs.length > 1
+        // The case where a symbol has multiple literal definitions,
+        // e.g., `DATABASES: 'DATABASES' | 'SCHEMAS';`.
+        if (hasMultipleLiterals) {
+          val literals = splitDefs.map(_.replaceAll("'", "").trim).toSeq
+          (symbol, literals) :: Nil
+        } else {
+          val literal = literalDef.replaceAll("'", "").trim
+          // The case where a symbol string and its literal string are different,
+          // e.g., `SETMINUS: 'MINUS';`.
+          if (symbol != literal) {
+            (symbol, literal :: Nil) :: Nil
+          } else {
+            Nil
+          }
+        }
+    }
+    keywords.toMap
+  }
+
+  // All the SQL keywords defined in `SqlBase.g4`
+  val allCandidateKeywords = {
+    val kwDef = """([A-Z_]+):.+;""".r
+    val keywords = parseAntlrGrammars(
+        "//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
+      // Parses a pattern, e.g., `AFTER: 'AFTER';`
+      case kwDef(symbol) =>
+        if (symbolsToExpandIntoDifferentLiterals.contains(symbol)) {
+          symbolsToExpandIntoDifferentLiterals(symbol)
+        } else {
+          symbol :: Nil
+        }
+    }
+    keywords
+  }
+
+  val nonReservedKeywordsInAnsiMode = {
+    val kwDef = """\s*[\|:]\s*([A-Z_]+)\s*""".r
+    parseAntlrGrammars("//--ANSI-NON-RESERVED-START", "//--ANSI-NON-RESERVED-END") {
+      // Parses a pattern, e.g., `    | AFTER`
+      case kwDef(symbol) =>
+        if (symbolsToExpandIntoDifferentLiterals.contains(symbol)) {
+          symbolsToExpandIntoDifferentLiterals(symbol)
+        } else {
+          symbol :: Nil
+        }
+    }
+  }
+
+  val reservedKeywordsInAnsiMode = allCandidateKeywords -- nonReservedKeywordsInAnsiMode
+
+  test("check # of reserved keywords") {
+    val numReservedKeywords = 78
+    assert(reservedKeywordsInAnsiMode.size == numReservedKeywords,
+      s"The expected number of reserved keywords is $numReservedKeywords, but " +
+        s"${reservedKeywordsInAnsiMode.size} found.")
+  }
 
   test("table identifier") {
     // Regular names.
