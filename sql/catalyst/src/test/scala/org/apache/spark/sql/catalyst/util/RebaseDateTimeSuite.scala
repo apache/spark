@@ -421,7 +421,8 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       var ldt = LocalDateTime.of(1945, 11, 18, 1, 30, 0)
       var earlierMicros = instantToMicros(ldt.atZone(hkZid).withEarlierOffsetAtOverlap().toInstant)
       var laterMicros = instantToMicros(ldt.atZone(hkZid).withLaterOffsetAtOverlap().toInstant)
-      if (earlierMicros + MICROS_PER_HOUR != laterMicros) {
+      var overlapInterval = MICROS_PER_HOUR
+      if (earlierMicros + overlapInterval != laterMicros) {
         // Old JDK might have an outdated time zone database.
         // See https://bugs.openjdk.java.net/browse/JDK-8228469: "Hong Kong ... Its 1945 transition
         // from JST to HKT was on 11-18 at 02:00, not 09-15 at 00:00"
@@ -429,14 +430,15 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
         ldt = LocalDateTime.of(1945, 9, 14, 23, 30, 0)
         earlierMicros = instantToMicros(ldt.atZone(hkZid).withEarlierOffsetAtOverlap().toInstant)
         laterMicros = instantToMicros(ldt.atZone(hkZid).withLaterOffsetAtOverlap().toInstant)
-        assert(earlierMicros + MICROS_PER_HOUR === laterMicros)
+        // If time zone db doesn't have overlapping at all, set the overlap interval to zero.
+        overlapInterval = laterMicros - earlierMicros
       }
       val rebasedEarlierMicros = rebaseGregorianToJulianMicros(hkZid, earlierMicros)
       val rebasedLaterMicros = rebaseGregorianToJulianMicros(hkZid, laterMicros)
       def toTsStr(micros: Long): String = toJavaTimestamp(micros).toString
       assert(toTsStr(rebasedEarlierMicros) === expected)
       assert(toTsStr(rebasedLaterMicros) === expected)
-      assert(rebasedEarlierMicros + MICROS_PER_HOUR === rebasedLaterMicros)
+      assert(rebasedEarlierMicros + overlapInterval === rebasedLaterMicros)
       // Check optimized rebasing
       assert(rebaseGregorianToJulianMicros(earlierMicros) === rebasedEarlierMicros)
       assert(rebaseGregorianToJulianMicros(laterMicros) === rebasedLaterMicros)
