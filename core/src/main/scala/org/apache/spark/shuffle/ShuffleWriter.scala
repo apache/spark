@@ -209,12 +209,16 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
       }
 
       override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
+        // check the message or it's cause to see it needs to be logged.
         if ((exception.getMessage != null &&
-          exception.getMessage.contains(
-            BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX)) ||
-          (exception.getCause != null && exception.getCause.getMessage != null &&
-            exception.getCause.getMessage.contains(
-              BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))) {
+          (exception.getMessage.contains(
+            BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) ||
+            exception.getMessage.contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))) ||
+            (exception.getCause != null && exception.getCause.getMessage != null &&
+            (exception.getCause.getMessage.contains(
+              BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) ||
+              exception.getCause.getMessage.contains(
+                BlockPushException.TOO_LATE_MESSAGE_SUFFIX)))) {
           logTrace(s"Pushing block $blockId to $address failed.", exception)
         } else {
           logWarning(s"Pushing block $blockId to $address failed.", exception)
@@ -289,6 +293,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
       (pushResult.failure.getCause != null && pushResult.failure.getCause.getMessage != null &&
         pushResult.failure.getCause.getMessage.contains(
           BlockPushException.TOO_LATE_MESSAGE_SUFFIX)))) {
+      logDebug(s"Received after merge is finalized from $address. Not pushing any more blocks.")
       false
     } else {
       remainingBlocks.isEmpty && (pushRequests.nonEmpty || deferredPushRequests.nonEmpty)

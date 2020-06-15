@@ -24,6 +24,7 @@ import java.util.UUID
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.storage.DiskBlockManager.MERGE_MANAGER_DIR
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
@@ -41,8 +42,15 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
    * having really large inodes at the top level. */
   private[spark] val localDirs: Array[File] = createLocalDirs(conf)
-  private[spark] val localDirsForMergedShuffleBlock: Array[File] =
-    createLocalDirsForMergedShuffleBlocks(conf)
+
+  /**
+   * Create merge directories
+   */
+  createLocalDirsForMergedShuffleBlocks(conf)
+
+  private[spark] lazy val activeMergedShuffleDirs: Option[Array[File]] =
+    findActiveMergedShuffleDirs(conf)
+
   if (localDirs.isEmpty) {
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
@@ -101,6 +109,11 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   private def getMergedShuffleFile(appId: String, filename: String): File = {
+    if (activeMergedShuffleDirs.isEmpty) {
+      throw new RuntimeException(
+        s"Cannot read $filename because active merged shuffle dirs is empty")
+    }
+    val localDirsForMergedShuffleBlock = activeMergedShuffleDirs.get
     val hash = Utils.nonNegativeHash(filename)
     val mergedDir = localDirsForMergedShuffleBlock(hash % localDirsForMergedShuffleBlock.length)
     new File(mergedDir, filename)
@@ -178,15 +191,30 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /**
    * Get the list of configured local dirs storing merged shuffle blocks created by external
-   * shuffle services if push based shuffle is enabled. Note that the directories and files
-   * will be created by the external shuffle services. We only get the configured dirs here
-   * without creating them or checking their presence.
+   * shuffle services if push based shuffle is enabled. Note that the files in this directory
+   * will be created by the external shuffle services. We only create the merge_manager directories
+   * here because currently the shuffle service doesn't have permission to create directories
+   * under application local directories.
+   * TODO: These dirs should be created by shuffle service.
    */
-  private def createLocalDirsForMergedShuffleBlocks(conf: SparkConf): Array[File] = {
+  private def createLocalDirsForMergedShuffleBlocks(conf: SparkConf): Unit = {
     if (Utils.isPushBasedShuffleEnabled(conf)) {
-      Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
+      // Will create the merge_manager directory only if it doesn't exist under any local dir.
+      val localDirs = Utils.getConfiguredLocalDirs(conf)
+      for (rootDir <- localDirs) {
+        val mergeDir = new File(rootDir, MERGE_MANAGER_DIR)
+        if (mergeDir.exists()) {
+          logDebug(s"Not creating $mergeDir as it already exists")
+          return
+        }
+      }
+      // Since this executor didn't see any merge_manager directories, it will start creating them.
+      // It's possible that the other executors launched at the same time may also reach here but
+      // we are working on the assumption that the executors launched around the same time will
+      // have the same set of application local directories.
+      localDirs.flatMap { rootDir =>
         try {
-          val mergeDir = new File(rootDir, "merge_manager")
+          val mergeDir = new File(rootDir, MERGE_MANAGER_DIR)
           // Only one container will create this directory. The filesystem will handle any race
           // conditions.
           if (!mergeDir.exists()) {
@@ -203,10 +231,13 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
             None
         }
       }
-      Utils.getConfiguredLocalDirs(conf).map(rootDir => new File(rootDir, "merge_manager"))
-    } else {
-      Array.empty
+      Utils.getConfiguredLocalDirs(conf).map(rootDir => new File(rootDir, MERGE_MANAGER_DIR))
     }
+  }
+
+  private def findActiveMergedShuffleDirs(conf: SparkConf): Option[Array[File]] = {
+    Option(Utils.getConfiguredLocalDirs(conf).map(
+      rootDir => new File(rootDir, "merge_manager")).filter(mergeDir => mergeDir.exists()))
   }
 
   private def addShutdownHook(): AnyRef = {
@@ -245,4 +276,8 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       }
     }
   }
+}
+
+private[spark] object DiskBlockManager {
+  private[spark] val MERGE_MANAGER_DIR = "merge_manager"
 }
