@@ -34,10 +34,12 @@ class StreamingQueryStatusStore(store: ElementTrackingStore) {
     KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(makeUIData)
   }
 
+  // Visible for testing.
   private[sql] def activeQueryUIData(): Seq[StreamingQueryUIData] = {
     allQueryUIData.filter(_.summary.isActive)
   }
 
+  // Visible for testing.
   private[sql] def inactiveQueryUIData(): Seq[StreamingQueryUIData] = {
     allQueryUIData.filter(!_.summary.isActive)
   }

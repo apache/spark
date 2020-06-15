@@ -40,8 +40,8 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
   }
 
   private def generateStreamingQueryTable(request: HttpServletRequest): Seq[Node] = {
-    val activeQueries = parent.store.activeQueryUIData()
-    val inactiveQueries = parent.store.inactiveQueryUIData()
+    val (activeQueries, inactiveQueries) =
+      parent.store.allQueryUIData.partition(_.summary.isActive)
 
     val content = mutable.ListBuffer[Node]()
     // show active queries table only if there is at least one active query
