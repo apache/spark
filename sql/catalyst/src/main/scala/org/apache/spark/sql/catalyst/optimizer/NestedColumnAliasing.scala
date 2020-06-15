@@ -154,9 +154,20 @@ object NestedColumnAliasing {
       .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head)
       .flatMap { case (attr, nestedFields: Seq[ExtractValue]) =>
+        // Remove redundant `ExtractValue`s if they share the same parent nest field.
+        // For example, when `a.b` and `a.b.c` are in project list, we only need to alias `a.b`.
+        // We only need to deal with two `ExtractValue`: `GetArrayStructFields` and
+        // `GetStructField`. Please refer to the method `collectRootReferenceAndExtractValue`.
+        val dedupNestedFields = nestedFields.filter {
+          case e @ (_: GetStructField | _: GetArrayStructFields) =>
+            val child = e.children.head
+            nestedFields.forall(f => child.find(_.semanticEquals(f)).isEmpty)
+          case _ => true
+        }
+
         // Each expression can contain multiple nested fields.
         // Note that we keep the original names to deliver to parquet in a case-sensitive way.
-        val nestedFieldToAlias = nestedFields.distinct.map { f =>
+        val nestedFieldToAlias = dedupNestedFields.distinct.map { f =>
           val exprId = NamedExpression.newExprId
           (f, Alias(f, s"_gen_alias_${exprId.id}")(exprId, Seq.empty, None))
         }

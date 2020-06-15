@@ -1119,7 +1119,8 @@ class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
     def objectiveHistory(self):
         """
         Objective function (scaled loss + regularization) at each
-        iteration.
+        iteration. It contains one more element, the initial state,
+        than number of iterations.
         """
         return self._call_java("objectiveHistory")
 
