@@ -994,6 +994,7 @@ ansiNonReserved
     | AFTER
     | ALTER
     | ANALYZE
+    | ANTI
     | ARCHIVE
     | ARRAY
     | ASC
@@ -1126,10 +1127,12 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SEMI
     | SEPARATED
     | SERDE
     | SERDEPROPERTIES
     | SET
+    | SETMINUS
     | SETS
     | SHOW
     | SKEWED
