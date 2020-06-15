@@ -133,7 +133,10 @@ private[history] class HybridStore extends KVStore {
    * to levelDB. Once the dumping is completed, the underlying kvstore will be
    * switched to levelDB.
    */
-  def switchToLevelDB(listener: HybridStore.SwitchToLevelDBListener): Unit = {
+  def switchToLevelDB(
+      listener: HybridStore.SwitchToLevelDBListener,
+      appId: String,
+      attemptId: Option[String]): Unit = {
     if (closed.get) {
       return
     }
@@ -155,7 +158,7 @@ private[history] class HybridStore extends KVStore {
       }
     })
     backgroundThread.setDaemon(true)
-    backgroundThread.setName("hybridstore-switch-to-leveldb")
+    backgroundThread.setName(s"hybridstore-$appId-$attemptId")
     backgroundThread.start()
   }
 

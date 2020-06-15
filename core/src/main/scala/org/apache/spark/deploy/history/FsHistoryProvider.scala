@@ -1247,7 +1247,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           levelDB.close()
           lease.rollback()
         }
-      })
+      }, appId, attempt.info.attemptId)
     } catch {
       case e: Exception =>
         hybridStore.close()
