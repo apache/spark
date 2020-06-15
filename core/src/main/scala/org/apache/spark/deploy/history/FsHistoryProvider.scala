@@ -108,7 +108,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val historyUiAdminAclsGroups = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS)
   logInfo(s"History server ui acls " + (if (historyUiAclsEnable) "enabled" else "disabled") +
     "; users with admin permissions: " + historyUiAdminAcls.mkString(",") +
-    "; groups with admin permissions" + historyUiAdminAclsGroups.mkString(","))
+    "; groups with admin permissions: " + historyUiAdminAclsGroups.mkString(","))
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   // Visible for testing

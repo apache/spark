@@ -77,6 +77,8 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     }
   }
 
+  protected def replaceIp(s: String): String = s.replace("__IP_ADDRESS_REPLACE_ME__", dockerIp)
+
   protected def copyExecutableResource(
       fileName: String, dir: File, processLine: String => String = identity) = {
     val newEntry = new File(dir.getAbsolutePath, fileName)
@@ -100,7 +102,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
   }
 
   override def dataPreparation(conn: Connection): Unit = {
-    conn.prepareStatement("CREATE TABLE bar (c0 text)").executeUpdate()
+    conn.prepareStatement("CREATE TABLE bar (c0 VARCHAR(8))").executeUpdate()
     conn.prepareStatement("INSERT INTO bar VALUES ('hello')").executeUpdate()
   }
 

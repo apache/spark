@@ -179,7 +179,8 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       ("3", Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8))))).toDF)
   }
 
-  test("timestamp provided for starting and ending") {
+  // TODO (SPARK-31729): re-enable it
+  ignore("timestamp provided for starting and ending") {
     val (topic, timestamps) = prepareTimestampRelatedUnitTest
 
     // timestamp both presented: starting "first" ending "finalized"

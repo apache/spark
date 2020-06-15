@@ -60,8 +60,8 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
   test("rows with all empty int arrays") {
     val schema = StructType(Seq(
       StructField("f1", ArrayType(IntegerType)), StructField("f2", ArrayType(IntegerType))))
-    val emptyIntArray =
-      ExpressionEncoder[Array[Int]]().resolveAndBind().toRow(Array.emptyIntArray).getArray(0)
+    val toRow = ExpressionEncoder[Array[Int]]().resolveAndBind().createSerializer()
+    val emptyIntArray = toRow(Array.emptyIntArray).getArray(0)
     val row: UnsafeRow = UnsafeProjection.create(schema).apply(
       InternalRow(emptyIntArray, emptyIntArray))
     testConcat(schema, row, schema, row)

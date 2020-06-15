@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, Except, LogicalPlan, RecursiveRelation, SubqueryAlias, Union, With}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, With}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_CTE_PRECEDENCE_POLICY, LegacyBehaviorPolicy}
@@ -31,66 +34,62 @@ object CTESubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     LegacyBehaviorPolicy.withName(SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {
       case LegacyBehaviorPolicy.EXCEPTION =>
-        assertNoNameConflictsInCTE(plan, inTraverse = false)
-        traverseAndSubstituteCTE(plan, inTraverse = false)
+        assertNoNameConflictsInCTE(plan)
+        traverseAndSubstituteCTE(plan)
       case LegacyBehaviorPolicy.LEGACY =>
         legacyTraverseAndSubstituteCTE(plan)
       case LegacyBehaviorPolicy.CORRECTED =>
-        traverseAndSubstituteCTE(plan, inTraverse = false)
+        traverseAndSubstituteCTE(plan)
     }
   }
 
   /**
-   * Check the plan to be traversed has naming conflicts in nested CTE or not, traverse through
-   * child, innerChildren and subquery for the current plan.
+   * Spark 3.0 changes the CTE relations resolution, and inner relations take precedence. This is
+   * correct but we need to warn users about this behavior change under EXCEPTION mode, when we see
+   * CTE relations with conflicting names.
+   *
+   * Note that, before Spark 3.0 the parser didn't support CTE in the FROM clause. For example,
+   * `WITH ... SELECT * FROM (WITH ... SELECT ...)` was not supported. We should not fail for this
+   * case, as Spark versions before 3.0 can't run it anyway. The parameter `startOfQuery` is used
+   * to indicate where we can define CTE relations before Spark 3.0, and we should only check
+   * name conflicts when `startOfQuery` is true.
    */
   private def assertNoNameConflictsInCTE(
       plan: LogicalPlan,
-      inTraverse: Boolean,
-      cteNames: Set[String] = Set.empty): Unit = {
-    plan.foreach {
-      case w @ With(child, relations, _) =>
-        val newNames = relations.map {
-          case (cteName, _) =>
-            if (cteNames.contains(cteName)) {
-              throw new AnalysisException(s"Name $cteName is ambiguous in nested CTE. " +
+      outerCTERelationNames: Seq[String] = Nil,
+      startOfQuery: Boolean = true): Unit = {
+    val resolver = SQLConf.get.resolver
+    plan match {
+      case With(child, relations, _) =>
+        val newNames = mutable.ArrayBuffer.empty[String]
+        newNames ++= outerCTERelationNames
+        relations.foreach {
+          case (name, relation) =>
+            if (startOfQuery && outerCTERelationNames.exists(resolver(_, name))) {
+              throw new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
                 s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
                 "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
                 "definitions will take precedence. See more details in SPARK-28228.")
-            } else {
-              cteName
             }
-        }.toSet
-        child.transformExpressions {
-          case e: SubqueryExpression =>
-            assertNoNameConflictsInCTE(e.plan, inTraverse = true, cteNames ++ newNames)
-            e
+            // CTE relation is defined as `SubqueryAlias`. Here we skip it and check the child
+            // directly, so that `startOfQuery` is set correctly.
+            assertNoNameConflictsInCTE(relation.child, newNames)
+            newNames += name
         }
-        w.innerChildren.foreach { p =>
-          assertNoNameConflictsInCTE(p, inTraverse = true, cteNames ++ newNames)
-        }
+        assertNoNameConflictsInCTE(child, newNames, startOfQuery = false)
 
-      case other if inTraverse =>
-        other.transformExpressions {
-          case e: SubqueryExpression =>
-            assertNoNameConflictsInCTE(e.plan, inTraverse = true, cteNames)
-            e
-        }
-
-      case _ =>
+      case other =>
+        other.subqueries.foreach(assertNoNameConflictsInCTE(_, outerCTERelationNames))
+        other.children.foreach(
+          assertNoNameConflictsInCTE(_, outerCTERelationNames, startOfQuery = false))
     }
   }
 
   private def legacyTraverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case With(child, relations, allowRecursion) =>
-        // substitute CTE expressions right-to-left to resolve references to previous CTEs:
-        // with a as (select * from t), b as (select * from a) select * from b
-        relations.foldRight(child) {
-          case ((cteName, ctePlan), currentPlan) =>
-            val recursionHandledPlan = handleRecursion(ctePlan, cteName, allowRecursion)
-            substituteCTE(currentPlan, cteName, recursionHandledPlan)
-        }
+      case With(child, relations, _) =>
+        val resolvedCTERelations = resolveCTERelations(relations, isLegacy = true)
+        substituteCTE(child, resolvedCTERelations)
     }
   }
 
@@ -133,79 +132,92 @@ object CTESubstitution extends Rule[LogicalPlan] {
    *     SELECT * FROM t
    *   )
    * @param plan the plan to be traversed
-   * @param inTraverse whether the current traverse is called from another traverse, only in this
-   *                   case name collision can occur
    * @return the plan where CTE substitution is applied
    */
-  private def traverseAndSubstituteCTE(plan: LogicalPlan, inTraverse: Boolean): LogicalPlan = {
+  private def traverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
       case With(child: LogicalPlan, relations, allowRecursion) =>
-        // child might contain an inner CTE that has priority so traverse and substitute inner CTEs
-        // in child first
-        val traversedChild: LogicalPlan = child transformExpressions {
-          case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan, true))
-        }
+        val resolvedCTERelations = resolveCTERelations(relations, isLegacy = false, allowRecursion)
+        substituteCTE(child, resolvedCTERelations)
 
-        // Substitute CTE definitions from last to first as a CTE definition can reference a
-        // previous one
-        relations.foldRight(traversedChild) {
-          case ((cteName, ctePlan), currentPlan) =>
-            // A CTE definition might contain an inner CTE that has priority, so traverse and
-            // substitute CTE defined in ctePlan.
-            // A CTE definition might not be used at all or might be used multiple times. To avoid
-            // computation if it is not used and to avoid multiple recomputation if it is used
-            // multiple times we use a lazy construct with call-by-name parameter passing.
-            lazy val substitutedCTEPlan = traverseAndSubstituteCTE(ctePlan, true)
-            lazy val recursionHandledPlan =
-              handleRecursion(substitutedCTEPlan, cteName, allowRecursion)
-            substituteCTE(currentPlan, cteName, recursionHandledPlan)
-        }
-
-      // CTE name collision can occur only when inTraverse is true, it helps to avoid eager CTE
-      // substitution in a subquery expression.
-      case other if inTraverse =>
+      case other =>
         other.transformExpressions {
-          case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan, true))
+          case e: SubqueryExpression =>
+            e.withNewPlan(traverseAndSubstituteCTE(e.plan))
         }
     }
   }
+
+  private def resolveCTERelations(
+      relations: Seq[(String, SubqueryAlias)],
+      isLegacy: Boolean,
+      allowRecursion: Boolean = false): Seq[(String, LogicalPlan)] = {
+    val resolvedCTERelations = new mutable.ArrayBuffer[(String, LogicalPlan)](relations.size)
+    for ((name, relation) <- relations) {
+      val innerCTEResolved = if (isLegacy) {
+        // In legacy mode, outer CTE relations take precedence. Here we don't resolve the inner
+        // `With` nodes, later we will substitute `UnresolvedRelation`s with outer CTE relations.
+        // Analyzer will run this rule multiple times until all `With` nodes are resolved.
+        relation
+      } else {
+        // A CTE definition might contain an inner CTE that has a higher priority, so traverse and
+        // substitute CTE defined in `relation` first.
+        traverseAndSubstituteCTE(relation)
+      }
+      val recursionHandled = if (allowRecursion) {
+        handleRecursion(innerCTEResolved, name)
+      } else {
+        innerCTEResolved
+      }
+      // CTE definition can reference a previous one
+      resolvedCTERelations += (name -> substituteCTE(recursionHandled, resolvedCTERelations))
+    }
+    resolvedCTERelations
+  }
+
+  private def substituteCTE(
+      plan: LogicalPlan,
+      cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan =
+    plan resolveOperatorsUp {
+      case u @ UnresolvedRelation(Seq(table)) =>
+        cteRelations.find(r => SQLConf.get.resolver(r._1, table)).map(_._2).getOrElse(u)
+
+      case other =>
+        // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
+        other transformExpressions {
+          case e: SubqueryExpression => e.withNewPlan(substituteCTE(e.plan, cteRelations))
+        }
+    }
 
   /**
    * If recursion is allowed, recursion handling starts with inserting unresolved self-references
    * ([[UnresolvedRecursiveReference]]) to places where a reference to the CTE definition itself is
    * found.
    * If there is a self-reference then we need to check if structure of the query satisfies the SQL
-   * recursion rules and insert the appropriate [[RecursiveRelation]] finally.
+   * recursion rules and insert a [[RecursiveRelation]] finally.
    */
-  private def handleRecursion(
-      ctePlan: => LogicalPlan,
-      cteName: String,
-      allowRecursion: Boolean) = {
-    if (allowRecursion) {
-      // check if there is any reference to the CTE and if there is then treat the CTE as recursive
-      val (recursiveReferencesPlan, recursiveReferenceCount) =
-        insertRecursiveReferences(ctePlan, cteName)
-      if (recursiveReferenceCount > 0) {
-        // if there is a reference then the CTE needs to follow one of these structures
-        recursiveReferencesPlan match {
-          case SubqueryAlias(_, u: Union) =>
-            insertRecursiveRelation(cteName, Seq.empty, false, u)
-          case SubqueryAlias(_, Distinct(u: Union)) =>
-            insertRecursiveRelation(cteName, Seq.empty, true, u)
-          case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(columnNames, u: Union)) =>
-            insertRecursiveRelation(cteName, columnNames, false, u)
-          case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(columnNames, Distinct(u: Union))) =>
-            insertRecursiveRelation(cteName, columnNames, true, u)
-          case _ =>
-            throw new AnalysisException(s"Recursive query ${cteName} should contain UNION or " +
-              "UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT " +
-              "keywords used on result of UNION or UNION ALL.")
-        }
-      } else {
-        ctePlan
+  private def handleRecursion(plan: LogicalPlan, cteName: String) = {
+    // check if there is any reference to the CTE and if there is then treat the CTE as recursive
+    val (recursiveReferencesPlan, recursiveReferenceCount) =
+      insertRecursiveReferences(plan, cteName)
+    if (recursiveReferenceCount > 0) {
+      // if there is a reference then the CTE needs to follow one of these structures
+      recursiveReferencesPlan match {
+        case SubqueryAlias(_, u: Union) =>
+          insertRecursiveRelation(cteName, Seq.empty, false, u)
+        case SubqueryAlias(_, Distinct(u: Union)) =>
+          insertRecursiveRelation(cteName, Seq.empty, true, u)
+        case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(columnNames, u: Union)) =>
+          insertRecursiveRelation(cteName, columnNames, false, u)
+        case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(columnNames, Distinct(u: Union))) =>
+          insertRecursiveRelation(cteName, columnNames, true, u)
+        case _ =>
+          throw new AnalysisException(s"Recursive query $cteName should contain UNION or UNION " +
+            "ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords " +
+            "used on result of UNION or UNION ALL.")
       }
     } else {
-      ctePlan
+      plan
     }
   }
 
@@ -214,21 +226,20 @@ object CTESubstitution extends Rule[LogicalPlan] {
    * [[UnresolvedRecursiveReference]]. The replacement process also checks possible references in
    * subqueries and reports them as errors.
    */
-  private def insertRecursiveReferences(
-      ctePlan: LogicalPlan,
-      cteName: String): (LogicalPlan, Int) = {
+  private def insertRecursiveReferences(plan: LogicalPlan, cteName: String): (LogicalPlan, Int) = {
+    val resolver = SQLConf.get.resolver
+
     var recursiveReferenceCount = 0
-    val resolver = ctePlan.conf.resolver
-    val newPlan = ctePlan resolveOperators {
-      case UnresolvedRelation(Seq(table)) if (ctePlan.conf.resolver(cteName, table)) =>
+    val newPlan = plan resolveOperators {
+      case UnresolvedRelation(Seq(table)) if (resolver(cteName, table)) =>
         recursiveReferenceCount += 1
         UnresolvedRecursiveReference(cteName, false)
 
       case other =>
         other.subqueries.foreach(checkAndTraverse(_, {
-          case UnresolvedRelation(Seq(name)) if (resolver(cteName, name)) =>
-            throw new AnalysisException(s"Recursive query ${cteName} should not contain " +
-              "recursive references in its subquery.")
+          case UnresolvedRelation(Seq(table)) if resolver(cteName, table) =>
+            throw new AnalysisException(s"Recursive query $cteName should not contain recursive " +
+              "references in its subquery.")
           case _ => true
         }))
         other
@@ -250,10 +261,10 @@ object CTESubstitution extends Rule[LogicalPlan] {
     val anchorTerm :: recursiveTerm :: Nil = union.children
 
     // The anchor term shouldn't contain a recursive reference that matches the name of the CTE,
-    // except if it is nested to another RecursiveRelation
+    // except if it is nested under an other RecursiveRelation with the same name.
     checkAndTraverse(anchorTerm, {
       case UnresolvedRecursiveReference(name, _) if name == cteName =>
-        throw new AnalysisException(s"Recursive query ${cteName} should not contain recursive " +
+        throw new AnalysisException(s"Recursive query $cteName should not contain recursive " +
           "references in its anchor (first) term.")
       case RecursiveRelation(name, _, _) if name == cteName => false
       case _ => true
@@ -279,7 +290,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
   }
 
   /**
-   * Taverses the plan including subqueries until the check function returns true.
+   * Taverses the plan including subqueries and run the check while it returns true.
    */
   private def checkAndTraverse(plan: LogicalPlan, check: LogicalPlan => Boolean): Unit = {
     if (check(plan)) {
@@ -287,18 +298,4 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan.subqueries.foreach(checkAndTraverse(_, check))
     }
   }
-
-  private def substituteCTE(
-      plan: LogicalPlan,
-      cteName: String,
-      ctePlan: => LogicalPlan): LogicalPlan =
-    plan resolveOperatorsUp {
-      case UnresolvedRelation(Seq(table)) if plan.conf.resolver(cteName, table) => ctePlan
-
-      case other =>
-        // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
-        other transformExpressions {
-          case e: SubqueryExpression => e.withNewPlan(substituteCTE(e.plan, cteName, ctePlan))
-        }
-    }
 }

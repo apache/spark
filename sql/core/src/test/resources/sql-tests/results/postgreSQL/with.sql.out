@@ -546,7 +546,7 @@ UNION ALL
 SELECT t1.id, t2.path, struct(t2.*) FROM t AS t1 JOIN t AS t2 ON
 (t1.id=t2.id)
 -- !query schema
-struct<id:int,path:array<int>,named_struct(id, id, path, path):struct<id:int,path:array<int>>>
+struct<id:int,path:array<int>,struct(id, path):struct<id:int,path:array<int>>>
 -- !query output
 1	[]	{"id":1,"path":[]}
 10	[2,4,10]	{"id":10,"path":[2,4,10]}

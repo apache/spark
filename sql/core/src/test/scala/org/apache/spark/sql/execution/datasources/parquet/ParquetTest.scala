@@ -69,7 +69,9 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   protected def withParquetDataFrame(df: DataFrame, testVectorized: Boolean = true)
       (f: DataFrame => Unit): Unit = {
     withTempPath { file =>
-      df.write.format(dataSourceName).save(file.getCanonicalPath)
+      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+        df.write.format(dataSourceName).save(file.getCanonicalPath)
+      }
       readFile(file.getCanonicalPath, testVectorized)(f)
     }
   }
@@ -156,7 +158,17 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   }
 
   protected def readResourceParquetFile(name: String): DataFrame = {
-    val url = Thread.currentThread().getContextClassLoader.getResource(name)
-    spark.read.parquet(url.toString)
+    spark.read.parquet(getResourceParquetFilePath(name))
+  }
+
+  protected def getResourceParquetFilePath(name: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(name).toString
+  }
+
+  def withAllParquetReaders(code: => Unit): Unit = {
+    // test the row-based reader
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false")(code)
+    // test the vectorized reader
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
   }
 }

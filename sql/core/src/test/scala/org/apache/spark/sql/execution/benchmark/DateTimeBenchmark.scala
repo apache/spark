@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate}
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA}
+import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -58,6 +62,48 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
     withDefaultTimeZone(LA) {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId) {
         val N = 10000000
+        runBenchmark("datetime +/- interval") {
+          val benchmark = new Benchmark("datetime +/- interval", N, output = output)
+          val ts = "cast(id as timestamp)"
+          val dt = s"cast($ts as date)"
+          benchmark.addCase("date + interval(m)") { _ =>
+            doBenchmark(N, s"$dt + interval 1 month")
+          }
+          benchmark.addCase("date + interval(m, d)") { _ =>
+            doBenchmark(N, s"$dt + interval 1 month 2 day")
+          }
+          benchmark.addCase("date + interval(m, d, ms)") { _ =>
+            doBenchmark(N, s"$dt + interval 1 month 2 day 5 hour")
+          }
+          benchmark.addCase("date - interval(m)") { _ =>
+            doBenchmark(N, s"$dt - interval 1 month")
+          }
+          benchmark.addCase("date - interval(m, d)") { _ =>
+            doBenchmark(N, s"$dt - interval 1 month 2 day")
+          }
+          benchmark.addCase("date - interval(m, d, ms)") { _ =>
+            doBenchmark(N, s"$dt - interval 1 month 2 day 5 hour")
+          }
+          benchmark.addCase("timestamp + interval(m)") { _ =>
+            doBenchmark(N, s"$ts + interval 1 month")
+          }
+          benchmark.addCase("timestamp + interval(m, d)") { _ =>
+            doBenchmark(N, s"$ts + interval 1 month 2 day")
+          }
+          benchmark.addCase("timestamp + interval(m, d, ms)") { _ =>
+            doBenchmark(N, s"$ts + interval 1 month 2 day 5 hour")
+          }
+          benchmark.addCase("timestamp - interval(m)") { _ =>
+            doBenchmark(N, s"$ts - interval 1 month")
+          }
+          benchmark.addCase("timestamp - interval(m, d)") { _ =>
+            doBenchmark(N, s"$ts - interval 1 month 2 day")
+          }
+          benchmark.addCase("timestamp - interval(m, d, ms)") { _ =>
+            doBenchmark(N, s"$ts - interval 1 month 2 day 5 hour")
+          }
+          benchmark.run()
+        }
         runBenchmark("Extract components") {
           run(N, "cast to timestamp", "cast(id as timestamp)")
           run(N, "year")
@@ -133,23 +179,68 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
           val numIters = 3
           val benchmark = new Benchmark("To/from Java's date-time", rowsNum, output = output)
           benchmark.addCase("From java.sql.Date", numIters) { _ =>
-            spark.range(rowsNum)
-              .map(millis => new java.sql.Date(millis))
-              .noop()
+            spark.range(rowsNum).map(millis => new Date(millis)).noop()
+          }
+          benchmark.addCase("From java.time.LocalDate", numIters) { _ =>
+            spark.range(rowsNum).map(millis => LocalDate.ofEpochDay(millis / MILLIS_PER_DAY)).noop()
+          }
+          def dates = {
+            spark.range(0, rowsNum, 1, 1).map(millis => new Date(millis))
+          }
+          benchmark.addCase("Collect java.sql.Date", numIters) { _ =>
+            dates.collect()
+          }
+          def localDates = {
+            spark.range(0, rowsNum, 1, 1)
+              .map(millis => LocalDate.ofEpochDay(millis / MILLIS_PER_DAY))
+          }
+          benchmark.addCase("Collect java.time.LocalDate", numIters) { _ =>
+            withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+              localDates.collect()
+            }
           }
           benchmark.addCase("From java.sql.Timestamp", numIters) { _ =>
-            spark.range(rowsNum)
-              .map(millis => new Timestamp(millis))
-              .noop()
+            spark.range(rowsNum).map(millis => new Timestamp(millis)).noop()
+          }
+          benchmark.addCase("From java.time.Instant", numIters) { _ =>
+            spark.range(rowsNum).map(millis => Instant.ofEpochMilli(millis)).noop()
           }
           benchmark.addCase("Collect longs", numIters) { _ =>
             spark.range(0, rowsNum, 1, 1)
               .collect()
           }
-          benchmark.addCase("Collect timestamps", numIters) { _ =>
-            spark.range(0, rowsNum, 1, 1)
-              .map(millis => new Timestamp(millis))
-              .collect()
+          def timestamps = {
+            spark.range(0, rowsNum, 1, 1).map(millis => new Timestamp(millis))
+          }
+          benchmark.addCase("Collect java.sql.Timestamp", numIters) { _ =>
+            timestamps.collect()
+          }
+          def instants = {
+            spark.range(0, rowsNum, 1, 1).map(millis => Instant.ofEpochMilli(millis))
+          }
+          benchmark.addCase("Collect java.time.Instant", numIters) { _ =>
+            withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+              instants.collect()
+            }
+          }
+          def toHiveString(df: Dataset[_]): Unit = {
+            HiveResult.hiveResultString(df.queryExecution.executedPlan)
+          }
+          benchmark.addCase("java.sql.Date to Hive string", numIters) { _ =>
+            toHiveString(dates)
+          }
+          benchmark.addCase("java.time.LocalDate to Hive string", numIters) { _ =>
+            withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+              toHiveString(localDates)
+            }
+          }
+          benchmark.addCase("java.sql.Timestamp to Hive string", numIters) { _ =>
+            toHiveString(timestamps)
+          }
+          benchmark.addCase("java.time.Instant to Hive string", numIters) { _ =>
+            withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+              toHiveString(instants)
+            }
           }
           benchmark.run()
         }

@@ -232,8 +232,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           collect(left, negate) ++ collect(right, !negate)
         case TimeAdd(left, right, _) =>
           collect(left, negate) ++ collect(right, negate)
-        case TimeSub(left, right, _) =>
-          collect(left, negate) ++ collect(right, !negate)
+        case DatetimeSub(_, _, child) => collect(child, negate)
         case UnaryMinus(child) =>
           collect(child, !negate)
         case CheckOverflow(child, _, _) =>

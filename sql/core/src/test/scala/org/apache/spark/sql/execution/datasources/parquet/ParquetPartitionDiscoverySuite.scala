@@ -60,7 +60,7 @@ abstract class ParquetPartitionDiscoverySuite
   val timeZoneId = ZoneId.systemDefault()
   val df = DateFormatter(timeZoneId)
   val tf = TimestampFormatter(
-    timestampPartitionPattern, timeZoneId, needVarLengthSecondFraction = true)
+    timestampPartitionPattern, timeZoneId, isParsing = true)
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()

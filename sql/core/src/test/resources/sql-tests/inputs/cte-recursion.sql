@@ -331,33 +331,6 @@ WITH RECURSIVE t AS (
 SELECT * FROM t;
 
 -- name collision of nested recursions
-SET spark.sql.legacy.ctePrecedencePolicy=legacy;
-WITH RECURSIVE r(level) AS (
-  WITH RECURSIVE r(level) AS (
-    VALUES (0)
-    UNION ALL
-    SELECT level + 1 FROM r WHERE level < 10
-  )
-  SELECT * FROM r
-  UNION ALL
-  SELECT level + 1 FROM r WHERE level < 10
-)
-SELECT * FROM r;
-
-SET spark.sql.legacy.ctePrecedencePolicy=corrected;
-WITH RECURSIVE r(level) AS (
-  WITH RECURSIVE r(level) AS (
-    VALUES (0)
-    UNION ALL
-    SELECT level + 1 FROM r WHERE level < 10
-  )
-  SELECT * FROM r
-  UNION ALL
-  SELECT level + 1 FROM r WHERE level < 10
-)
-SELECT * FROM r;
-
-SET spark.sql.legacy.ctePrecedencePolicy=exception;
 WITH RECURSIVE r(level) AS (
   WITH RECURSIVE r(level) AS (
     VALUES (0)
@@ -371,33 +344,6 @@ WITH RECURSIVE r(level) AS (
 SELECT * FROM r;
 
 -- name collision of nested recursions 2
-SET spark.sql.legacy.ctePrecedencePolicy=legacy;
-WITH RECURSIVE r(level) AS (
-  (WITH RECURSIVE r(level) AS (
-    VALUES (0)
-    UNION ALL
-    SELECT level + 1 FROM r WHERE level < 10
-  )
-  SELECT * FROM r)
-  UNION ALL
-  SELECT level + 1 FROM r WHERE level < 10
-)
-SELECT * FROM r;
-
-SET spark.sql.legacy.ctePrecedencePolicy=corrected;
-WITH RECURSIVE r(level) AS (
-  (WITH RECURSIVE r(level) AS (
-    VALUES (0)
-    UNION ALL
-    SELECT level + 1 FROM r WHERE level < 10
-  )
-  SELECT * FROM r)
-  UNION ALL
-  SELECT level + 1 FROM r WHERE level < 10
-)
-SELECT * FROM r;
-
-SET spark.sql.legacy.ctePrecedencePolicy=exception;
 WITH RECURSIVE r(level) AS (
   (WITH RECURSIVE r(level) AS (
     VALUES (0)

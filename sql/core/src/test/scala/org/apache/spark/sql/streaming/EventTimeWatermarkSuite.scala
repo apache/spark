@@ -298,9 +298,11 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),   // Advance watermark to 15 seconds
       CheckNewAnswer((10, 5)),
       assertNumStateRows(2),
+      assertNumLateInputs(0),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
-      assertNumStateRows(2)
+      assertNumStateRows(2),
+      assertNumLateInputs(1)
     )
   }
 
@@ -321,12 +323,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),     // Advance watermark to 15 seconds
       CheckNewAnswer((25, 1)),
       assertNumStateRows(2),
+      assertNumLateInputs(0),
       AddData(inputData, 10, 25), // Ignore 10 as its less than watermark
       CheckNewAnswer((25, 2)),
       assertNumStateRows(2),
+      assertNumLateInputs(1),
       AddData(inputData, 10),     // Should not emit anything as data less than watermark
       CheckNewAnswer(),
-      assertNumStateRows(2)
+      assertNumStateRows(2),
+      assertNumLateInputs(1)
     )
   }
 
@@ -593,6 +598,33 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
+  test("SPARK-27340 Alias on TimeWindow expression cause watermark metadata lost") {
+    val inputData = MemoryStream[Int]
+    val aliasWindow = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .select(window($"eventTime", "5 seconds") as 'aliasWindow)
+    // Check the eventTime metadata is kept in the top level alias.
+    assert(aliasWindow.logicalPlan.output.exists(
+      _.metadata.contains(EventTimeWatermark.delayKey)))
+
+    val windowedAggregation = aliasWindow
+      .groupBy('aliasWindow)
+      .agg(count("*") as 'count)
+      .select($"aliasWindow".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10, 11, 12, 13, 14, 15),
+      CheckNewAnswer(),
+      AddData(inputData, 25), // Advance watermark to 15 seconds
+      CheckNewAnswer((10, 5)),
+      assertNumStateRows(2),
+      AddData(inputData, 10), // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      assertNumStateRows(2)
+    )
+  }
+
   test("test no-data flag") {
     val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
 
@@ -753,6 +785,18 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     q.processAllAvailable()
     val progressWithData = q.recentProgress.lastOption.get
     assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
+    true
+  }
+
+  private def assertNumLateInputs(numLateInputs: Long): AssertOnQuery = AssertOnQuery { q =>
+    q.processAllAvailable()
+    val progressWithData = q.recentProgress.filterNot { p =>
+      // filter out batches which are falling into one of types:
+      // 1) doesn't execute the batch run
+      // 2) empty input batch
+      p.inputRowsPerSecond == 0
+    }.lastOption.get
+    assert(progressWithData.stateOperators(0).numLateInputs === numLateInputs)
     true
   }
 

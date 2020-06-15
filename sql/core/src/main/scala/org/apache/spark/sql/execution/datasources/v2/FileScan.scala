@@ -94,8 +94,10 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
   override def hashCode(): Int = getClass.hashCode()
 
   override def description(): String = {
+    val maxMetadataValueLength = 100
     val locationDesc =
-      fileIndex.getClass.getSimpleName + fileIndex.rootPaths.mkString("[", ", ", "]")
+      fileIndex.getClass.getSimpleName +
+        Utils.buildLocationMetadata(fileIndex.rootPaths, maxMetadataValueLength)
     val metadata: Map[String, String] = Map(
       "ReadSchema" -> readDataSchema.catalogString,
       "PartitionFilters" -> seqToString(partitionFilters),
@@ -105,7 +107,7 @@ trait FileScan extends Scan with Batch with SupportsReportStatistics with Loggin
       case (key, value) =>
         val redactedValue =
           Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, value)
-        key + ": " + StringUtils.abbreviate(redactedValue, 100)
+        key + ": " + StringUtils.abbreviate(redactedValue, maxMetadataValueLength)
     }.mkString(", ")
     s"${this.getClass.getSimpleName} $metadataStr"
   }

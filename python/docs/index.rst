@@ -16,6 +16,7 @@ Contents:
    pyspark.streaming
    pyspark.ml
    pyspark.mllib
+   pyspark.resource
 
 
 Core classes:

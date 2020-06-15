@@ -25,17 +25,19 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests._
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.Utils.isTesting
 
 /**
  * Manager of resource profiles. The manager allows one place to keep the actual ResourceProfiles
  * and everywhere else we can use the ResourceProfile Id to save on space.
- * Note we never remove a resource profile at this point. Its expected this number if small
+ * Note we never remove a resource profile at this point. Its expected this number is small
  * so this shouldn't be much overhead.
  */
 @Evolving
-private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Logging {
+private[spark] class ResourceProfileManager(sparkConf: SparkConf,
+    listenerBus: LiveListenerBus) extends Logging {
   private val resourceProfileIdToResourceProfile = new HashMap[Int, ResourceProfile]()
 
   private val (readLock, writeLock) = {
@@ -83,6 +85,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf) extends Loggin
       // force the computation of maxTasks and limitingResource now so we don't have cost later
       rp.limitingResource(sparkConf)
       logInfo(s"Added ResourceProfile id: ${rp.id}")
+      listenerBus.post(SparkListenerResourceProfileAdded(rp))
     }
   }
 

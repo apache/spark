@@ -335,7 +335,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
     local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
     all files/subdirectories of a stopped and timeout application.
-    This only affects Standalone mode, support of other cluster manangers can be added in the future.
+    This only affects Standalone mode, support of other cluster managers can be added in the future.
   </td>
   <td>2.4.0</td>
 </tr>
@@ -373,6 +373,25 @@ To run an interactive Spark shell against the cluster, run the following command
     ./bin/spark-shell --master spark://IP:PORT
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
+
+# Client Properties
+
+Spark applications supports the following configuration properties specific to standalone mode: 
+
+<table class="table">
+  <tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr>
+  <tr>
+  <td><code>spark.standalone.submit.waitAppCompletion</code></td>
+  <td><code>false</code></td>
+  <td>
+  In standalone cluster mode, controls whether the client waits to exit until the application completes.
+  If set to <code>true</code>, the client process will stay alive polling the driver's status.
+  Otherwise, the client process will exit after submission.
+  </td>
+  <td>3.1.0</td>
+  </tr>
+</table>
+
 
 # Launching Spark Applications
 

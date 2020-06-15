@@ -93,10 +93,10 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |$formattedNodeName
        |${ExplainUtils.generateFieldString("Output", projectList)}
        |${ExplainUtils.generateFieldString("Input", child.output)}
-     """.stripMargin
+       |""".stripMargin
   }
 }
 
@@ -250,10 +250,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |$formattedNodeName
        |${ExplainUtils.generateFieldString("Input", child.output)}
        |Condition : ${condition}
-     """.stripMargin
+       |""".stripMargin
   }
 }
 
@@ -383,14 +383,6 @@ case class RecursiveRelationExec(
     } else {
       sparkContext.union(accumulatedRDDs)
     }
-  }
-
-  override def verboseStringWithOperatorId(): String = {
-    s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("CTE", cteName)}
-       |${ExplainUtils.generateFieldString("Output", output)}
-     """.stripMargin
   }
 }
 

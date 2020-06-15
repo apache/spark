@@ -36,6 +36,7 @@ BUILD:
   - "!/dev/github_jira_sync.py"
   - "!/dev/merge_spark_pr.py"
   - "!/dev/run-tests-jenkins*"
+  - "!/dev/.rat-excludes"
   - "/build/"
   - "/project/"
   - "/assembly/"
@@ -52,6 +53,8 @@ EXAMPLES:
   - "/bin/run-example*"
 CORE:
   - "/core/"
+  - "!UI.scala"
+  - "!ui/"
   - "/common/kvstore/"
   - "/common/network-common/"
   - "/common/network-shuffle/"
@@ -125,5 +128,6 @@ WINDOWS:
   - "/R/pkg/tests/fulltests/test_Windows.R"
 WEB UI:
   - "ui/"
+  - "UI.scala"
 DEPLOY:
   - "/sbin/"

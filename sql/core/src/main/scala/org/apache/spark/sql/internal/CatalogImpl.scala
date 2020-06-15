@@ -517,7 +517,8 @@ private[sql] object CatalogImpl {
       data: Seq[T],
       sparkSession: SparkSession): Dataset[T] = {
     val enc = ExpressionEncoder[T]()
-    val encoded = data.map(d => enc.toRow(d).copy())
+    val toRow = enc.createSerializer()
+    val encoded = data.map(d => toRow(d).copy())
     val plan = new LocalRelation(enc.schema.toAttributes, encoded)
     val queryExecution = sparkSession.sessionState.executePlan(plan)
     new Dataset[T](queryExecution, enc)

@@ -28,49 +28,44 @@ In case of an external table, only the associated metadata information is remove
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 DROP TABLE [ IF EXISTS ] table_identifier
-{% endhighlight %}
+```
 
 ### Parameter
 
-<dl>
-  <dt><code><em>IF EXISTS</em></code></dt>
-  <dd>
-     If specified, no exception is thrown when the table does not exists.
-  </dd>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies the table name to be dropped. The table name may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **IF EXISTS**
 
-### Example
+    If specified, no exception is thrown when the table does not exist.
 
-{% highlight sql %}
+* **table_identifier**
+
+    Specifies the table name to be dropped. The table name may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+### Examples
+
+```sql
 -- Assumes a table named `employeetable` exists.
 DROP TABLE employeetable;
 
 -- Assumes a table named `employeetable` exists in the `userdb` database
 DROP TABLE userdb.employeetable;
 
--- Assumes a table named `employeetable` does not exists.
+-- Assumes a table named `employeetable` does not exist.
 -- Throws exception
 DROP TABLE employeetable;
-  Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeetable;
-  (state=,code=0)
+Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeetable;
+(state=,code=0)
 
--- Assumes a table named `employeetable` does not exists,Try with IF EXISTS
+-- Assumes a table named `employeetable` does not exist,Try with IF EXISTS
 -- this time it will not throw exception
 DROP TABLE IF EXISTS employeetable;
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
- * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
- * [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+* [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+* [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+* [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
