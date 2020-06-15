@@ -180,7 +180,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1")
 
   createQueryTest("constant null testing",
-    """| SELECT
+    """SELECT
       |IF(FALSE, CAST(NULL AS STRING), CAST(1 AS STRING)) AS COL1,
       |IF(TRUE, CAST(NULL AS STRING), CAST(1 AS STRING)) AS COL2,
       |IF(FALSE, CAST(NULL AS INT), CAST(1 AS INT)) AS COL3,
@@ -205,11 +205,12 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |IF(FALSE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL22,
       |IF(TRUE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL23
       |FROM src LIMIT 1""".stripMargin)
-
   test("constant null testing timestamp") {
-    val r1 = sql("SELECT IF(FALSE, CAST(NULL AS TIMESTAMP)," +
-      "CAST('1969-12-31 16:00:01' AS TIMESTAMP)) AS COL20")
-      .collect().head
+    var r1 = sql(
+      """
+        |SELECT IF(FALSE, CAST(NULL AS TIMESTAMP),
+        |CAST('1969-12-31 16:00:01' AS TIMESTAMP)) AS COL20
+      """.stripMargin).collect().head
     assert(new Timestamp(1000) == r1.getTimestamp(0))
   }
 
