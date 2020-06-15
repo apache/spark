@@ -298,11 +298,11 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),   // Advance watermark to 15 seconds
       CheckNewAnswer((10, 5)),
       assertNumStateRows(2),
-      assertNumDroppedRowsByWatermark(0),
+      assertNumRowsDroppedByWatermark(0),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       assertNumStateRows(2),
-      assertNumDroppedRowsByWatermark(1)
+      assertNumRowsDroppedByWatermark(1)
     )
   }
 
@@ -323,15 +323,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),     // Advance watermark to 15 seconds
       CheckNewAnswer((25, 1)),
       assertNumStateRows(2),
-      assertNumDroppedRowsByWatermark(0),
+      assertNumRowsDroppedByWatermark(0),
       AddData(inputData, 10, 25), // Ignore 10 as its less than watermark
       CheckNewAnswer((25, 2)),
       assertNumStateRows(2),
-      assertNumDroppedRowsByWatermark(1),
+      assertNumRowsDroppedByWatermark(1),
       AddData(inputData, 10),     // Should not emit anything as data less than watermark
       CheckNewAnswer(),
       assertNumStateRows(2),
-      assertNumDroppedRowsByWatermark(1)
+      assertNumRowsDroppedByWatermark(1)
     )
   }
 
@@ -788,8 +788,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     true
   }
 
-  private def assertNumDroppedRowsByWatermark(
-      numDroppedRowsByWatermark: Long): AssertOnQuery = AssertOnQuery { q =>
+  private def assertNumRowsDroppedByWatermark(
+      numRowsDroppedByWatermark: Long): AssertOnQuery = AssertOnQuery { q =>
     q.processAllAvailable()
     val progressWithData = q.recentProgress.filterNot { p =>
       // filter out batches which are falling into one of types:
@@ -797,8 +797,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       // 2) empty input batch
       p.inputRowsPerSecond == 0
     }.lastOption.get
-    assert(progressWithData.stateOperators(0).numDroppedRowsByWatermark
-      === numDroppedRowsByWatermark)
+    assert(progressWithData.stateOperators(0).numRowsDroppedByWatermark
+      === numRowsDroppedByWatermark)
     true
   }
 

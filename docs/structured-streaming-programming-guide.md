@@ -1678,9 +1678,9 @@ emits late rows if the operator uses Append mode.
 Spark provides two ways to check the number of late rows on stateful operators which would help you identify the issue:
 
 1. On Spark UI: check the metrics in stateful operator nodes in query execution details page in SQL tab
-2. On Streaming Query Listener: check "numDroppedRowsByWatermark" in "stateOperators" in QueryProcessEvent.
+2. On Streaming Query Listener: check "numRowsDroppedByWatermark" in "stateOperators" in QueryProcessEvent.
 
-Please note that "numDroppedRowsByWatermark" represents the number of "dropped" rows by watermark, which is not always same as the count of "late input rows" for the operator.
+Please note that "numRowsDroppedByWatermark" represents the number of "dropped" rows by watermark, which is not always same as the count of "late input rows" for the operator.
 It depends on the implementation of the operator - e.g. streaming aggregation does pre-aggregate input rows and checks the late inputs against pre-aggregated inputs,
 hence the number is not same as the number of original input rows. You'd like to just check the fact whether the value is zero or non-zero.
 

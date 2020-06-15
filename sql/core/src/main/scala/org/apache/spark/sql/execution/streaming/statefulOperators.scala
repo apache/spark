@@ -77,7 +77,7 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numDroppedRowsByWatermark" -> SQLMetrics.createMetric(sparkContext,
+    "numRowsDroppedByWatermark" -> SQLMetrics.createMetric(sparkContext,
       "number of rows which are dropped by watermark"),
     "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
@@ -102,7 +102,7 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
       numRowsTotal = longMetric("numTotalStateRows").value,
       numRowsUpdated = longMetric("numUpdatedStateRows").value,
       memoryUsedBytes = longMetric("stateMemory").value,
-      numDroppedRowsByWatermark = longMetric("numDroppedRowsByWatermark").value,
+      numRowsDroppedByWatermark = longMetric("numRowsDroppedByWatermark").value,
       javaConvertedCustomMetrics
     )
   }
@@ -140,7 +140,7 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
       predicateDropRowByWatermark: BasePredicate): Iterator[InternalRow] = {
     iter.filterNot { row =>
       val lateInput = predicateDropRowByWatermark.eval(row)
-      if (lateInput) longMetric("numDroppedRowsByWatermark") += 1
+      if (lateInput) longMetric("numRowsDroppedByWatermark") += 1
       lateInput
     }
   }

@@ -55,8 +55,8 @@ trait StateStoreMetricsTest extends StreamTest {
         val allNumUpdatedRowsSinceLastCheck =
           progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsUpdated))
 
-        val allnumDroppedRowsByWatermarkSinceLastCheck =
-          progressesSinceLastCheck.map(_.stateOperators.map(_.numDroppedRowsByWatermark))
+        val allNumRowsDroppedByWatermarkSinceLastCheck =
+          progressesSinceLastCheck.map(_.stateOperators.map(_.numRowsDroppedByWatermark))
 
         lazy val debugString = "recent progresses:\n" +
           progressesSinceLastCheck.map(_.prettyJson).mkString("\n\n")
@@ -67,9 +67,9 @@ trait StateStoreMetricsTest extends StreamTest {
         val numUpdatedRows = arraySum(allNumUpdatedRowsSinceLastCheck, numStateOperators)
         assert(numUpdatedRows === updated, s"incorrect updates rows, $debugString")
 
-        val numDroppedRowsByWatermark = arraySum(allnumDroppedRowsByWatermarkSinceLastCheck,
+        val numRowsDroppedByWatermark = arraySum(allNumRowsDroppedByWatermarkSinceLastCheck,
           numStateOperators)
-        assert(numDroppedRowsByWatermark === lateInputs,
+        assert(numRowsDroppedByWatermark === lateInputs,
           s"incorrect dropped rows by watermark, $debugString")
 
         lastCheckedRecentProgressIndex = recentProgress.length - 1
