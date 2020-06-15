@@ -136,7 +136,8 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
       AddData(inputData, 10), // Should not emit anything as data less than watermark
       CheckLastBatch(),
-      assertNumStateRows(total = Seq(2L, 1L), updated = Seq(0L, 0L), droppedByWatermark = Seq(0L, 1L)),
+      assertNumStateRows(total = Seq(2L, 1L), updated = Seq(0L, 0L),
+        droppedByWatermark = Seq(0L, 1L)),
 
       AddData(inputData, 40), // Advance watermark to 30 seconds
       CheckLastBatch((15 -> 1), (25 -> 1)),
