@@ -130,8 +130,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
 
-  private val memoryManager = new HistoryServerMemoryManager(conf)
-
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath()).toFile()
@@ -160,6 +158,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val diskManager = storePath.map { path =>
     new HistoryServerDiskManager(conf, path, listing, clock)
+  }
+
+  private var memoryManager: HistoryServerMemoryManager = null
+  if (hybridStoreEnabled) {
+    memoryManager = new HistoryServerMemoryManager(conf)
   }
 
   private val fileCompactor = new EventLogFileCompactor(conf, hadoopConf, fs,
@@ -266,7 +269,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def startPolling(): Unit = {
     diskManager.foreach(_.initialize())
-    memoryManager.initialize()
+    if (memoryManager != null) {
+      memoryManager.initialize()
+    }
 
     // Validate the log directory.
     val path = new Path(logDir)
@@ -1172,7 +1177,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // At this point the disk data either does not exist or was deleted because it failed to
     // load, so the event log needs to be replayed.
 
-    // If hybrid store is enabled, try it first.
+    // If the hybrid store is enabled, try it first and fail back to leveldb store.
     if (hybridStoreEnabled) {
       try {
         return createHybridStore(dm, appId, attempt, metadata)
@@ -1183,34 +1188,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    var retried = false
-    var newStorePath: File = null
-    while (newStorePath == null) {
-      val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
-        attempt.lastIndex)
-      val isCompressed = reader.compressionCodec.isDefined
-      logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
-      val lease = dm.lease(reader.totalSize, isCompressed)
-      try {
-        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata)) { store =>
-          rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
-        }
-        newStorePath = lease.commit(appId, attempt.info.attemptId)
-      } catch {
-        case _: IOException if !retried =>
-          // compaction may touch the file(s) which app rebuild wants to read
-          // compaction wouldn't run in short interval, so try again...
-          logWarning(s"Exception occurred while rebuilding app $appId - trying again...")
-          lease.rollback()
-          retried = true
-
-        case e: Exception =>
-          lease.rollback()
-          throw e
-      }
-    }
-
-    KVUtils.open(newStorePath, metadata)
+    createLevelDBStore(dm, appId, attempt, metadata)
   }
 
   private def createHybridStore(
@@ -1281,6 +1259,41 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     hybridStore
+  }
+
+  private def createLevelDBStore(
+      dm: HistoryServerDiskManager,
+      appId: String,
+      attempt: AttemptInfoWrapper,
+      metadata: AppStatusStoreMetadata): KVStore = {
+    var retried = false
+    var newStorePath: File = null
+    while (newStorePath == null) {
+      val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
+        attempt.lastIndex)
+      val isCompressed = reader.compressionCodec.isDefined
+      logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
+      val lease = dm.lease(reader.totalSize, isCompressed)
+      try {
+        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata)) { store =>
+          rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
+        }
+        newStorePath = lease.commit(appId, attempt.info.attemptId)
+      } catch {
+        case _: IOException if !retried =>
+          // compaction may touch the file(s) which app rebuild wants to read
+          // compaction wouldn't run in short interval, so try again...
+          logWarning(s"Exception occurred while rebuilding app $appId - trying again...")
+          lease.rollback()
+          retried = true
+
+        case e: Exception =>
+          lease.rollback()
+          throw e
+      }
+    }
+
+    KVUtils.open(newStorePath, metadata)
   }
 
   private def createInMemoryStore(attempt: AttemptInfoWrapper): KVStore = {
