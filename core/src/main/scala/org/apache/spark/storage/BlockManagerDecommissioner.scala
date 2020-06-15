@@ -130,8 +130,8 @@ private[storage] class BlockManagerDecommissioner(
       if (!conf.get(config.STORAGE_RDD_DECOMMISSION_ENABLED) &&
         !conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED)) {
         logWarning("Decommissioning, but no task configured set one or both:\n" +
-          "spark.storage.decommission.shuffle_blocks\n" +
-          "spark.storage.decommission.rdd_blocks")
+          s"${config.STORAGE_RDD_DECOMMISSION_ENABLED.key}\n" +
+          s"${config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED.key}")
         stopped = true
       }
       while (!stopped && !Thread.interrupted()) {
