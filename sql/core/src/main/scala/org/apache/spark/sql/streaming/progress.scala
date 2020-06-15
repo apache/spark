@@ -55,9 +55,9 @@ class StateOperatorProgress private[sql](
 
   private[sql] def copy(
       newNumRowsUpdated: Long,
-      newNumLateInputs: Long): StateOperatorProgress =
-    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes, newNumLateInputs,
-      customMetrics)
+      newNumRowsDroppedByWatermark: Long): StateOperatorProgress =
+    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes,
+      newNumRowsDroppedByWatermark, customMetrics)
 
   private[sql] def jsonValue: JValue = {
     ("numRowsTotal" -> JInt(numRowsTotal)) ~

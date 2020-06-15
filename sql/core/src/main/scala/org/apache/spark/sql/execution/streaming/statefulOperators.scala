@@ -139,9 +139,9 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
       iter: Iterator[InternalRow],
       predicateDropRowByWatermark: BasePredicate): Iterator[InternalRow] = {
     iter.filterNot { row =>
-      val lateInput = predicateDropRowByWatermark.eval(row)
-      if (lateInput) longMetric("numRowsDroppedByWatermark") += 1
-      lateInput
+      val shouldDrop = predicateDropRowByWatermark.eval(row)
+      if (shouldDrop) longMetric("numRowsDroppedByWatermark") += 1
+      shouldDrop
     }
   }
 
