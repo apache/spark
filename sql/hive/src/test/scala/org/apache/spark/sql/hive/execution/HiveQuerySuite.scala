@@ -205,6 +205,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |IF(FALSE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL22,
       |IF(TRUE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL23
       |FROM src LIMIT 1""".stripMargin)
+
   test("constant null testing timestamp") {
     var r1 = sql(
       """
@@ -563,24 +564,12 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     assert(-1 == res.get(0))
   }
 
-  createQueryTest("timestamp cast #3",
-    """
-      |set spark.sql.legacy.allowCastNumericToTimestamp=true;
-      |SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1
-    """.stripMargin)
-
-  createQueryTest("timestamp cast #4",
-    """
-      |set spark.sql.legacy.allowCastNumericToTimestamp=true;
-      |SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1
-    """.stripMargin)
-
-  test("timestamp cast #5") {
+  test("timestamp cast #3") {
     val res = sql("SELECT CAST(TIMESTAMP_SECONDS(1200) AS INT) FROM src LIMIT 1").collect().head
     assert(1200 == res.getInt(0))
   }
 
-  test("timestamp cast #6") {
+  test("timestamp cast #4") {
     val res = sql("SELECT CAST(TIMESTAMP_SECONDS(-1200) AS INT) FROM src LIMIT 1").collect().head
     assert(-1200 == res.getInt(0))
   }
