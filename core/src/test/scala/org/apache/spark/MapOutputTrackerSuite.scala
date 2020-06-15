@@ -374,7 +374,8 @@ class MapOutputTrackerSuite extends SparkFunSuite {
         .askSync(ArgumentMatchers.eq(GetMapOutputStatuses(20)))(any())
 
       // Should throw MetadataFetchFailedException because the block is missing.
-      val exception = intercept[MetadataFetchFailedException](workerTracker.getMapSizesByExecutorId(20, 0))
+      val exception = intercept[MetadataFetchFailedException](
+        workerTracker.getMapSizesByExecutorId(20, 0))
       assert(Utils.exceptionString(exception)
         .contains(classOf[BlockNotFoundException].getSimpleName))
     }
