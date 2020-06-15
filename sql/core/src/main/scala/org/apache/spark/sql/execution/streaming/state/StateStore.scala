@@ -246,9 +246,18 @@ object StateStoreProvider {
   /**
    * Use the expected schema to check whether the UnsafeRow is valid.
    */
-  def validateStateRowFormat(row: UnsafeRow, schema: StructType): Unit = {
-    if (SQLConf.get.getConf(SQLConf.STREAMING_STATE_FORMAT_CHECK_ENABLED)) {
-      if (!UnsafeRowUtils.validateStructuralIntegrity(row, schema)) {
+  def validateStateRowFormat(
+      keyRow: UnsafeRow,
+      keySchema: StructType,
+      valueRow: UnsafeRow,
+      valueSchema: StructType,
+      conf: StateStoreConf): Unit = {
+    if (conf.formatValidationEnabled) {
+      if (!UnsafeRowUtils.validateStructuralIntegrity(keyRow, keySchema)) {
+        throw new InvalidUnsafeRowException
+      }
+      if (conf.formatValidationCheckValue &&
+          !UnsafeRowUtils.validateStructuralIntegrity(valueRow, valueSchema)) {
         throw new InvalidUnsafeRowException
       }
     }

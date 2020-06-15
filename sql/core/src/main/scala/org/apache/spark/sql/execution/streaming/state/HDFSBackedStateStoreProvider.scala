@@ -459,8 +459,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
             // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
             valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             if (!isValidated) {
-              StateStoreProvider.validateStateRowFormat(keyRow, keySchema)
-              // StateStoreProvider.validateStateRowFormat(valueRow, valueSchema)
+              StateStoreProvider.validateStateRowFormat(
+                keyRow, keySchema, valueRow, valueSchema, storeConf)
               isValidated = true
             }
             map.put(keyRow, valueRow)
@@ -558,8 +558,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
             // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
             valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             if (!isValidated) {
-              StateStoreProvider.validateStateRowFormat(keyRow, keySchema)
-              // StateStoreProvider.validateStateRowFormat(valueRow, valueSchema)
+              StateStoreProvider.validateStateRowFormat(
+                keyRow, keySchema, valueRow, valueSchema, storeConf)
               isValidated = true
             }
             map.put(keyRow, valueRow)

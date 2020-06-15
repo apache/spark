@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CompletionIterator, NextIterator, Utils}
@@ -453,6 +454,10 @@ case class StreamingDeduplicateExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
+
+    // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
+    // is unrelated to the output schema.
+    sqlContext.sessionState.conf.setConf(SQLConf.STATE_STORE_FORMAT_VALIDATION_CHECK_VALUE, false)
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,

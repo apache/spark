@@ -43,6 +43,12 @@ class StateStoreConf(@transient private val sqlConf: SQLConf)
    */
   val providerClass: String = sqlConf.stateStoreProviderClass
 
+  /** Whether validate the underlying format or not. */
+  val formatValidationEnabled: Boolean = sqlConf.stateStoreFormatValidationEnabled
+
+  /** Whether validate the value format when the format invalidation enabled. */
+  val formatValidationCheckValue: Boolean = sqlConf.stateStoreFormatValidationCheckValue
+
   /**
    * Additional configurations related to state store. This will capture all configs in
    * SQLConf that start with `spark.sql.streaming.stateStore.` */
