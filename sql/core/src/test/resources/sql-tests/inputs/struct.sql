@@ -18,3 +18,10 @@ SELECT ID, STRUCT(ST.*,CAST(ID AS STRING) AS E) NST FROM tbl_x;
 
 -- Prepend a column to a struct
 SELECT ID, STRUCT(CAST(ID AS STRING) AS AA, ST.*) NST FROM tbl_x;
+
+-- Select a column from a struct
+SELECT ID, STRUCT(ST.*).C NST FROM tbl_x;
+SELECT ID, STRUCT(ST.C, ST.D).D NST FROM tbl_x;
+
+-- Select an alias from a struct
+SELECT ID, STRUCT(ST.C as STC, ST.D as STD).STD FROM tbl_x;

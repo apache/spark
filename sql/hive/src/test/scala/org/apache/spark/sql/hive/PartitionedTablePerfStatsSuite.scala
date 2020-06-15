@@ -23,8 +23,8 @@ import java.util.concurrent.{Executors, TimeUnit}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.execution.datasources.FileStatusCache
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.datasources.FileStatusCache
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -417,9 +417,9 @@ class PartitionedTablePerfStatsSuite
       import spark.implicits._
       Seq(1).toDF("a").write.mode("overwrite").save(dir.getAbsolutePath)
       HiveCatalogMetrics.reset()
-      spark.read.parquet(dir.getAbsolutePath)
+      spark.read.load(dir.getAbsolutePath)
       assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 1)
-      assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 1)
+      assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
     }
   }
 }

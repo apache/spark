@@ -19,10 +19,10 @@ package org.apache.spark.network.shuffle;
 
 import java.io.DataInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.nio.file.Files;
 
 /**
  * Keeps the index information for a particular map output
@@ -31,28 +31,38 @@ import java.nio.LongBuffer;
 public class ShuffleIndexInformation {
   /** offsets as long buffer */
   private final LongBuffer offsets;
+  private int size;
 
   public ShuffleIndexInformation(File indexFile) throws IOException {
-    int size = (int)indexFile.length();
+    size = (int)indexFile.length();
     ByteBuffer buffer = ByteBuffer.allocate(size);
     offsets = buffer.asLongBuffer();
-    DataInputStream dis = null;
-    try {
-      dis = new DataInputStream(new FileInputStream(indexFile));
+    try (DataInputStream dis = new DataInputStream(Files.newInputStream(indexFile.toPath()))) {
       dis.readFully(buffer.array());
-    } finally {
-      if (dis != null) {
-        dis.close();
-      }
     }
+  }
+
+  /**
+   * Size of the index file
+   * @return size
+   */
+  public int getSize() {
+    return size;
   }
 
   /**
    * Get index offset for a particular reducer.
    */
   public ShuffleIndexRecord getIndex(int reduceId) {
-    long offset = offsets.get(reduceId);
-    long nextOffset = offsets.get(reduceId + 1);
+    return getIndex(reduceId, reduceId + 1);
+  }
+
+  /**
+   * Get index offset for the reducer range of [startReduceId, endReduceId).
+   */
+  public ShuffleIndexRecord getIndex(int startReduceId, int endReduceId) {
+    long offset = offsets.get(startReduceId);
+    long nextOffset = offsets.get(endReduceId);
     return new ShuffleIndexRecord(offset, nextOffset - offset);
   }
 }

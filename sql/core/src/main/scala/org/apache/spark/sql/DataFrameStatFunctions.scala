@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
@@ -21,7 +21,7 @@ import java.{lang => jl, util => ju}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.functions.col
@@ -33,7 +33,7 @@ import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
  *
  * @since 1.4.0
  */
-@InterfaceStability.Stable
+@Stable
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
@@ -51,7 +51,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
    * optimizations).
-   * The algorithm was first present in <a href="http://dx.doi.org/10.1145/375663.375670">
+   * The algorithm was first present in <a href="https://doi.org/10.1145/375663.375670">
    * Space-efficient Online Computation of Quantile Summaries</a> by Greenwald and Khanna.
    *
    * @param col the name of the numerical column
@@ -218,7 +218,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp,
+   * <a href="https://doi.org/10.1145/762471.762473">here</a>, proposed by Karp,
    * Schenker, and Papadimitriou.
    * The `support` should be greater than 1e-4.
    *
@@ -265,7 +265,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp,
+   * <a href="https://doi.org/10.1145/762471.762473">here</a>, proposed by Karp,
    * Schenker, and Papadimitriou.
    * Uses a `default` support of 1%.
    *
@@ -284,7 +284,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp, Schenker,
+   * <a href="https://doi.org/10.1145/762471.762473">here</a>, proposed by Karp, Schenker,
    * and Papadimitriou.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
@@ -328,7 +328,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp, Schenker,
+   * <a href="https://doi.org/10.1145/762471.762473">here</a>, proposed by Karp, Schenker,
    * and Papadimitriou.
    * Uses a `default` support of 1%.
    *
@@ -370,15 +370,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.5.0
    */
   def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): DataFrame = {
-    require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
-      s"Fractions must be in [0, 1], but got $fractions.")
-    import org.apache.spark.sql.functions.{rand, udf}
-    val c = Column(col)
-    val r = rand(seed)
-    val f = udf { (stratum: Any, x: Double) =>
-      x < fractions.getOrElse(stratum.asInstanceOf[T], 0.0)
-    }
-    df.filter(f(c, r))
+    sampleBy(Column(col), fractions, seed)
   }
 
   /**
@@ -393,6 +385,61 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.5.0
    */
   def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
+    sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
+  }
+
+  /**
+   * Returns a stratified sample without replacement based on the fraction given on each stratum.
+   * @param col column that defines strata
+   * @param fractions sampling fraction for each stratum. If a stratum is not specified, we treat
+   *                  its fraction as zero.
+   * @param seed random seed
+   * @tparam T stratum type
+   * @return a new `DataFrame` that represents the stratified sample
+   *
+   * The stratified sample can be performed over multiple columns:
+   * {{{
+   *    import org.apache.spark.sql.Row
+   *    import org.apache.spark.sql.functions.struct
+   *
+   *    val df = spark.createDataFrame(Seq(("Bob", 17), ("Alice", 10), ("Nico", 8), ("Bob", 17),
+   *      ("Alice", 10))).toDF("name", "age")
+   *    val fractions = Map(Row("Alice", 10) -> 0.3, Row("Nico", 8) -> 1.0)
+   *    df.stat.sampleBy(struct($"name", $"age"), fractions, 36L).show()
+   *    +-----+---+
+   *    | name|age|
+   *    +-----+---+
+   *    | Nico|  8|
+   *    |Alice| 10|
+   *    +-----+---+
+   * }}}
+   *
+   * @since 3.0.0
+   */
+  def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame = {
+    require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
+      s"Fractions must be in [0, 1], but got $fractions.")
+    import org.apache.spark.sql.functions.{rand, udf}
+    val r = rand(seed)
+    val f = udf { (stratum: Any, x: Double) =>
+      x < fractions.getOrElse(stratum.asInstanceOf[T], 0.0)
+    }
+    df.filter(f(col, r))
+  }
+
+  /**
+   * (Java-specific) Returns a stratified sample without replacement based on the fraction given
+   * on each stratum.
+   * @param col column that defines strata
+   * @param fractions sampling fraction for each stratum. If a stratum is not specified, we treat
+   *                  its fraction as zero.
+   * @param seed random seed
+   * @tparam T stratum type
+   * @return a new `DataFrame` that represents the stratified sample
+   *
+   * @since 3.0.0
+   */
+  def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
   }
 
@@ -551,7 +598,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
         )
     }
 
-    singleCol.queryExecution.toRdd.aggregate(zero)(
+    singleCol.queryExecution.toRdd.treeAggregate(zero)(
       (filter: BloomFilter, row: InternalRow) => {
         updater(filter, row)
         filter

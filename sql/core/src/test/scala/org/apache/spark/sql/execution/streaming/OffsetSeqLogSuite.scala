@@ -19,12 +19,11 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
+class OffsetSeqLogSuite extends SharedSparkSession {
 
   /** test string offset type */
   case class StringOffset(override val json: String) extends Offset
@@ -37,16 +36,18 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
     }
 
     // None set
-    assert(OffsetSeqMetadata(0, 0, Map.empty) === OffsetSeqMetadata("""{}"""))
+    assert(new OffsetSeqMetadata(0, 0, Map.empty) === OffsetSeqMetadata("""{}"""))
 
     // One set
-    assert(OffsetSeqMetadata(1, 0, Map.empty) === OffsetSeqMetadata("""{"batchWatermarkMs":1}"""))
-    assert(OffsetSeqMetadata(0, 2, Map.empty) === OffsetSeqMetadata("""{"batchTimestampMs":2}"""))
+    assert(new OffsetSeqMetadata(1, 0, Map.empty) ===
+      OffsetSeqMetadata("""{"batchWatermarkMs":1}"""))
+    assert(new OffsetSeqMetadata(0, 2, Map.empty) ===
+      OffsetSeqMetadata("""{"batchTimestampMs":2}"""))
     assert(OffsetSeqMetadata(0, 0, getConfWith(shufflePartitions = 2)) ===
       OffsetSeqMetadata(s"""{"conf": {"$key":2}}"""))
 
     // Two set
-    assert(OffsetSeqMetadata(1, 2, Map.empty) ===
+    assert(new OffsetSeqMetadata(1, 2, Map.empty) ===
       OffsetSeqMetadata("""{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
     assert(OffsetSeqMetadata(1, 0, getConfWith(shufflePartitions = 3)) ===
       OffsetSeqMetadata(s"""{"batchWatermarkMs":1,"conf": {"$key":3}}"""))

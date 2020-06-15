@@ -41,13 +41,13 @@ object DataFrameExample {
   case class Params(input: String = "data/mllib/sample_libsvm_data.txt")
     extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("DataFrameExample") {
       head("DataFrameExample: an example app using DataFrame for ML.")
       opt[String]("input")
-        .text(s"input path to dataframe")
+        .text("input path to dataframe")
         .action((x, c) => c.copy(input = x))
       checkConfig { params =>
         success
@@ -93,7 +93,7 @@ object DataFrameExample {
     // Load the records back.
     println(s"Loading Parquet file with UDT from $outputDir.")
     val newDF = spark.read.parquet(outputDir)
-    println(s"Schema from Parquet:")
+    println("Schema from Parquet:")
     newDF.printSchema()
 
     spark.stop()

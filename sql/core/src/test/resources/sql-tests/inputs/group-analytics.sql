@@ -38,11 +38,11 @@ SELECT course, year, GROUPING(course), GROUPING(year), GROUPING_ID(course, year)
 GROUP BY CUBE(course, year);
 SELECT course, year, GROUPING(course) FROM courseSales GROUP BY course, year;
 SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY course, year;
-SELECT course, year, grouping__id FROM courseSales GROUP BY CUBE(course, year);
+SELECT course, year, grouping__id FROM courseSales GROUP BY CUBE(course, year) ORDER BY grouping__id, course, year;
 
 -- GROUPING/GROUPING_ID in having clause
 SELECT course, year FROM courseSales GROUP BY CUBE(course, year)
-HAVING GROUPING(year) = 1 AND GROUPING_ID(course, year) > 0;
+HAVING GROUPING(year) = 1 AND GROUPING_ID(course, year) > 0 ORDER BY course, year;
 SELECT course, year FROM courseSales GROUP BY course, year HAVING GROUPING(course) > 0;
 SELECT course, year FROM courseSales GROUP BY course, year HAVING GROUPING_ID(course) > 0;
 SELECT course, year FROM courseSales GROUP BY CUBE(course, year) HAVING grouping__id > 0;
@@ -54,4 +54,9 @@ SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY CUBE(co
 ORDER BY GROUPING(course), GROUPING(year), course, year;
 SELECT course, year FROM courseSales GROUP BY course, year ORDER BY GROUPING(course);
 SELECT course, year FROM courseSales GROUP BY course, year ORDER BY GROUPING_ID(course);
-SELECT course, year FROM courseSales GROUP BY CUBE(course, year) ORDER BY grouping__id;
+SELECT course, year FROM courseSales GROUP BY CUBE(course, year) ORDER BY grouping__id, course, year;
+
+-- Aliases in SELECT could be used in ROLLUP/CUBE/GROUPING SETS
+SELECT a + b AS k1, b AS k2, SUM(a - b) FROM testData GROUP BY CUBE(k1, k2);
+SELECT a + b AS k, b, SUM(a - b) FROM testData GROUP BY ROLLUP(k, b);
+SELECT a + b, b AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k)

@@ -18,8 +18,8 @@
 package org.apache.spark.streaming.receiver
 
 import java.nio.ByteBuffer
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -102,11 +102,11 @@ private[streaming] class ReceiverSupervisorImpl(
 
     def onGenerateBlock(blockId: StreamBlockId): Unit = { }
 
-    def onError(message: String, throwable: Throwable) {
+    def onError(message: String, throwable: Throwable): Unit = {
       reportError(message, throwable)
     }
 
-    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]): Unit = {
       pushArrayBuffer(arrayBuffer, None, Some(blockId))
     }
   }
@@ -116,7 +116,7 @@ private[streaming] class ReceiverSupervisorImpl(
   override private[streaming] def getCurrentRateLimit: Long = defaultBlockGenerator.getCurrentLimit
 
   /** Push a single record of received data into block generator. */
-  def pushSingle(data: Any) {
+  def pushSingle(data: Any): Unit = {
     defaultBlockGenerator.addData(data)
   }
 
@@ -125,7 +125,7 @@ private[streaming] class ReceiverSupervisorImpl(
       arrayBuffer: ArrayBuffer[_],
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
-    ) {
+    ): Unit = {
     pushAndReportBlock(ArrayBufferBlock(arrayBuffer), metadataOption, blockIdOption)
   }
 
@@ -134,7 +134,7 @@ private[streaming] class ReceiverSupervisorImpl(
       iterator: Iterator[_],
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
-    ) {
+    ): Unit = {
     pushAndReportBlock(IteratorBlock(iterator), metadataOption, blockIdOption)
   }
 
@@ -143,7 +143,7 @@ private[streaming] class ReceiverSupervisorImpl(
       bytes: ByteBuffer,
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
-    ) {
+    ): Unit = {
     pushAndReportBlock(ByteBufferBlock(bytes), metadataOption, blockIdOption)
   }
 
@@ -152,29 +152,31 @@ private[streaming] class ReceiverSupervisorImpl(
       receivedBlock: ReceivedBlock,
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
-    ) {
+    ): Unit = {
     val blockId = blockIdOption.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
     val blockStoreResult = receivedBlockHandler.storeBlock(blockId, receivedBlock)
     logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
     val numRecords = blockStoreResult.numRecords
     val blockInfo = ReceivedBlockInfo(streamId, numRecords, metadataOption, blockStoreResult)
-    trackerEndpoint.askSync[Boolean](AddBlock(blockInfo))
+    if (!trackerEndpoint.askSync[Boolean](AddBlock(blockInfo))) {
+      throw new SparkException("Failed to add block to receiver tracker.")
+    }
     logDebug(s"Reported block $blockId")
   }
 
   /** Report error to the receiver tracker */
-  def reportError(message: String, error: Throwable) {
+  def reportError(message: String, error: Throwable): Unit = {
     val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("")
     trackerEndpoint.send(ReportError(streamId, message, errorString))
     logWarning("Reported error " + message + " - " + error)
   }
 
-  override protected def onStart() {
+  override protected def onStart(): Unit = {
     registeredBlockGenerators.asScala.foreach { _.start() }
   }
 
-  override protected def onStop(message: String, error: Option[Throwable]) {
+  override protected def onStop(message: String, error: Option[Throwable]): Unit = {
     receivedBlockHandler match {
       case handler: WriteAheadLogBasedBlockHandler =>
         // Write ahead log should be closed.
@@ -191,7 +193,7 @@ private[streaming] class ReceiverSupervisorImpl(
     trackerEndpoint.askSync[Boolean](msg)
   }
 
-  override protected def onReceiverStop(message: String, error: Option[Throwable]) {
+  override protected def onReceiverStop(message: String, error: Option[Throwable]): Unit = {
     logInfo("Deregistering receiver " + streamId)
     val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
     trackerEndpoint.askSync[Boolean](DeregisterReceiver(streamId, message, errorString))

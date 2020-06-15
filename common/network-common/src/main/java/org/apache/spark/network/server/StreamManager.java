@@ -61,16 +61,6 @@ public abstract class StreamManager {
   }
 
   /**
-   * Associates a stream with a single client connection, which is guaranteed to be the only reader
-   * of the stream. The getChunk() method will be called serially on this connection and once the
-   * connection is closed, the stream will never be used again, enabling cleanup.
-   *
-   * This must be called before the first getChunk() on the stream, but it may be invoked multiple
-   * times with the same channel and stream id.
-   */
-  public void registerChannel(Channel channel, long streamId) { }
-
-  /**
    * Indicates that the given channel has been terminated. After this occurs, we are guaranteed not
    * to read from the associated streams again, so any state can be cleaned up.
    */
@@ -82,5 +72,32 @@ public abstract class StreamManager {
    * @throws SecurityException If client is not authorized.
    */
   public void checkAuthorization(TransportClient client, long streamId) { }
+
+  /**
+   * Return the number of chunks being transferred and not finished yet in this StreamManager.
+   */
+  public long chunksBeingTransferred() {
+    return 0;
+  }
+
+  /**
+   * Called when start sending a chunk.
+   */
+  public void chunkBeingSent(long streamId) { }
+
+  /**
+   * Called when start sending a stream.
+   */
+  public void streamBeingSent(String streamId) { }
+
+  /**
+   * Called when a chunk is successfully sent.
+   */
+  public void chunkSent(long streamId) { }
+
+  /**
+   * Called when a stream is successfully sent.
+   */
+  public void streamSent(String streamId) { }
 
 }

@@ -16,6 +16,7 @@ Contents:
    pyspark.streaming
    pyspark.ml
    pyspark.mllib
+   pyspark.resource
 
 
 Core classes:
@@ -37,7 +38,7 @@ Core classes:
 
     A Discretized Stream (DStream), the basic abstraction in Spark Streaming.
 
-    :class:`pyspark.sql.SQLContext`
+    :class:`pyspark.sql.SparkSession`
 
     Main entry point for DataFrame and SQL functionality.
 

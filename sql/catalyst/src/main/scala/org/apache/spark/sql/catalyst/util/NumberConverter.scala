@@ -169,4 +169,39 @@ object NumberConverter {
     }
     UTF8String.fromBytes(java.util.Arrays.copyOfRange(temp, resultStartPos, temp.length))
   }
+
+  def toBinary(l: Long): Array[Byte] = {
+    val result = new Array[Byte](8)
+    result(0) = (l >>> 56 & 0xFF).toByte
+    result(1) = (l >>> 48 & 0xFF).toByte
+    result(2) = (l >>> 40 & 0xFF).toByte
+    result(3) = (l >>> 32 & 0xFF).toByte
+    result(4) = (l >>> 24 & 0xFF).toByte
+    result(5) = (l >>> 16 & 0xFF).toByte
+    result(6) = (l >>> 8 & 0xFF).toByte
+    result(7) = (l & 0xFF).toByte
+    result
+  }
+
+  def toBinary(i: Int): Array[Byte] = {
+    val result = new Array[Byte](4)
+    result(0) = (i >>> 24 & 0xFF).toByte
+    result(1) = (i >>> 16 & 0xFF).toByte
+    result(2) = (i >>> 8 & 0xFF).toByte
+    result(3) = (i & 0xFF).toByte
+    result
+  }
+
+  def toBinary(s: Short): Array[Byte] = {
+    val result = new Array[Byte](2)
+    result(0) = (s >>> 8 & 0xFF).toByte
+    result(1) = (s & 0xFF).toByte
+    result
+  }
+
+  def toBinary(s: Byte): Array[Byte] = {
+    val result = new Array[Byte](1)
+    result(0) = s
+    result
+  }
 }

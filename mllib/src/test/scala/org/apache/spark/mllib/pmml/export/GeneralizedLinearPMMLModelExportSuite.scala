@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.pmml.export
 
-import org.dmg.pmml.RegressionModel
+import org.dmg.pmml.regression.RegressionModel
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.regression.{LassoModel, LinearRegressionModel, RidgeRegressionModel}

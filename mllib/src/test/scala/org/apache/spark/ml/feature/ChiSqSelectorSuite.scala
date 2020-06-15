@@ -17,16 +17,15 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
 
-class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
-  with DefaultReadWriteTest {
+class ChiSqSelectorSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   @transient var dataset: Dataset[_] = _
 
@@ -111,40 +110,43 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
 
   test("params") {
     ParamsSuite.checkParams(new ChiSqSelector)
-    val model = new ChiSqSelectorModel("myModel",
-      new org.apache.spark.mllib.feature.ChiSqSelectorModel(Array(1, 3, 4)))
+    val model = new ChiSqSelectorModel("myModel", Array(1, 3, 4))
     ParamsSuite.checkParams(model)
   }
 
   test("Test Chi-Square selector: numTopFeatures") {
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("numTopFeatures").setNumTopFeatures(1)
-    val model = ChiSqSelectorSuite.testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
     MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test Chi-Square selector: percentile") {
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("percentile").setPercentile(0.17)
-    ChiSqSelectorSuite.testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test Chi-Square selector: fpr") {
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("fpr").setFpr(0.02)
-    ChiSqSelectorSuite.testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test Chi-Square selector: fdr") {
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("fdr").setFdr(0.12)
-    ChiSqSelectorSuite.testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test Chi-Square selector: fwe") {
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("fwe").setFwe(0.12)
-    ChiSqSelectorSuite.testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("read/write") {
@@ -163,18 +165,30 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
         assert(expected.selectedFeatures === actual.selectedFeatures)
       }
   }
+
+  test("SPARK-25289: ChiSqSelector should not fail when selecting no features with FDR") {
+    val labeledPoints = (0 to 1).map { n =>
+        val v = Vectors.dense((1 to 3).map(_ => n * 1.0).toArray)
+        (n.toDouble, v)
+      }
+    val inputDF = spark.createDataFrame(labeledPoints).toDF("label", "features")
+    val selector = new ChiSqSelector().setSelectorType("fdr").setFdr(0.05)
+    val model = selector.fit(inputDF)
+    assert(model.selectedFeatures.isEmpty)
+  }
+
+  private def testSelector(selector: ChiSqSelector, data: Dataset[_]): ChiSqSelectorModel = {
+    val selectorModel = selector.fit(data)
+    testTransformer[(Double, Vector, Vector)](data.toDF(), selectorModel,
+      "filtered", "topFeature") {
+      case Row(vec1: Vector, vec2: Vector) =>
+        assert(vec1 ~== vec2 absTol 1e-1)
+    }
+    selectorModel
+  }
 }
 
 object ChiSqSelectorSuite {
-
-  private def testSelector(selector: ChiSqSelector, dataset: Dataset[_]): ChiSqSelectorModel = {
-    val selectorModel = selector.fit(dataset)
-    selectorModel.transform(dataset).select("filtered", "topFeature").collect()
-      .foreach { case Row(vec1: Vector, vec2: Vector) =>
-        assert(vec1 ~== vec2 absTol 1e-1)
-      }
-    selectorModel
-  }
 
   /**
    * Mapping from all Params to valid settings which differ from the defaults.

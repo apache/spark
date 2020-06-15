@@ -28,7 +28,6 @@ import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.ml.linalg.Vectors;
-import org.apache.spark.mllib.linalg.DenseVector;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 import org.apache.spark.sql.Dataset;
@@ -67,7 +66,7 @@ public class JavaPCASuite extends SharedSparkSession {
     JavaRDD<Vector> dataRDD = jsc.parallelize(points, 2);
 
     RowMatrix mat = new RowMatrix(dataRDD.map(
-        (Vector vector) -> (org.apache.spark.mllib.linalg.Vector) new DenseVector(vector.toArray())
+        (Vector vector) -> org.apache.spark.mllib.linalg.Vectors.fromML(vector)
     ).rdd());
 
     Matrix pc = mat.computePrincipalComponents(3);

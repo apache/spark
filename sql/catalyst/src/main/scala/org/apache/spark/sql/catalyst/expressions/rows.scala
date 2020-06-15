@@ -50,16 +50,6 @@ trait BaseGenericInternalRow extends InternalRow {
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
 
-  override def anyNull: Boolean = {
-    val len = numFields
-    var i = 0
-    while (i < len) {
-      if (isNullAt(i)) { return true }
-      i += 1
-    }
-    false
-  }
-
   override def toString: String = {
     if (numFields == 0) {
       "[empty row]"
@@ -77,6 +67,17 @@ trait BaseGenericInternalRow extends InternalRow {
       sb.append("]")
       sb.toString()
     }
+  }
+
+  override def copy(): GenericInternalRow = {
+    val len = numFields
+    val newValues = new Array[Any](len)
+    var i = 0
+    while (i < len) {
+      newValues(i) = InternalRow.copyValue(genericGet(i))
+      i += 1
+    }
+    new GenericInternalRow(newValues)
   }
 
   override def equals(o: Any): Boolean = {
@@ -206,6 +207,4 @@ class GenericInternalRow(val values: Array[Any]) extends BaseGenericInternalRow 
   override def setNullAt(i: Int): Unit = { values(i) = null}
 
   override def update(i: Int, value: Any): Unit = { values(i) = value }
-
-  override def copy(): GenericInternalRow = this
 }

@@ -111,7 +111,7 @@ public class JavaKafkaRDDSuite implements Serializable {
         LocationStrategies.PreferConsistent()
     ).map(handler);
 
-    // just making sure the java user apis work; the scala tests handle logic corner cases
+    // just making sure the java user APIs work; the scala tests handle logic corner cases
     long count1 = rdd1.count();
     long count2 = rdd2.count();
     Assert.assertTrue(count1 > 0);

@@ -1,0 +1,40 @@
+================================================================================================
+Properties Cloning
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Empty Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SerializationUtils.clone                              0              0           0          0.1       11539.0       1.0X
+Utils.cloneProperties                                 0              0           0          1.7         572.0      20.2X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+System Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SerializationUtils.clone                              0              0           0          0.0      217514.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.2        5387.0      40.4X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Small Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SerializationUtils.clone                              1              1           0          0.0      634574.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.3        3082.0     205.9X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Medium Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SerializationUtils.clone                              3              3           0          0.0     2576565.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.1       16071.0     160.3X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Large Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SerializationUtils.clone                              5              5           0          0.0     5027248.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.0       31842.0     157.9X
+
+

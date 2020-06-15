@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import java.util.{ArrayList => JArrayList}
 
 import breeze.linalg.{argmax, argtopk, max, DenseMatrix => BDM}
+import org.scalatest.Assertions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.Edge
@@ -151,7 +152,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     // Check: topTopicAssignments
     // Make sure it assigns a topic to each term appearing in each doc.
     val topTopicAssignments: Map[Long, (Array[Int], Array[Int])] =
-      model.topicAssignments.collect().map(x => x._1 -> (x._2, x._3)).toMap
+      model.topicAssignments.collect().map(x => x._1 -> ((x._2, x._3))).toMap
     assert(topTopicAssignments.keys.max < tinyCorpus.length)
     tinyCorpus.foreach { case (docID: Long, doc: Vector) =>
       if (topTopicAssignments.contains(docID)) {
@@ -278,10 +279,10 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
   test("LocalLDAModel logLikelihood") {
     val ldaModel: LocalLDAModel = toyModel
 
-    val docsSingleWord = sc.parallelize(Array(Vectors.sparse(6, Array(0), Array(1)))
+    val docsSingleWord = sc.parallelize(Seq(Vectors.sparse(6, Array(0), Array(1)))
       .zipWithIndex
       .map { case (wordCounts, docId) => (docId.toLong, wordCounts) })
-    val docsRepeatedWord = sc.parallelize(Array(Vectors.sparse(6, Array(0), Array(5)))
+    val docsRepeatedWord = sc.parallelize(Seq(Vectors.sparse(6, Array(0), Array(5)))
       .zipWithIndex
       .map { case (wordCounts, docId) => (docId.toLong, wordCounts) })
 

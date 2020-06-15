@@ -153,7 +153,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
   def context(): StreamingContext = dstream.context
 
   /** Return a new DStream by applying a function to all elements of this DStream. */
-  def map[R](f: JFunction[T, R]): JavaDStream[R] = {
+  def map[U](f: JFunction[T, U]): JavaDStream[U] = {
     new JavaDStream(dstream.map(f)(fakeClassTag))(fakeClassTag)
   }
 
@@ -268,7 +268,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
-  def foreachRDD(foreachFunc: JVoidFunction[R]) {
+  def foreachRDD(foreachFunc: JVoidFunction[R]): Unit = {
     dstream.foreachRDD(rdd => foreachFunc.call(wrapRDD(rdd)))
   }
 
@@ -276,7 +276,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
-  def foreachRDD(foreachFunc: JVoidFunction2[R, Time]) {
+  def foreachRDD(foreachFunc: JVoidFunction2[R, Time]): Unit = {
     dstream.foreachRDD((rdd, time) => foreachFunc.call(wrapRDD(rdd), time))
   }
 

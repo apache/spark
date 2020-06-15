@@ -21,7 +21,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
@@ -41,9 +44,9 @@ class PercentileSuite extends SparkFunSuite {
     val buffer = new OpenHashMap[AnyRef, Long]()
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
 
-    // Check non-empty buffer serializa and deserialize.
+    // Check non-empty buffer serialize and deserialize.
     data.foreach { key =>
-      buffer.changeValue(new Integer(key), 1L, _ + 1L)
+      buffer.changeValue(Integer.valueOf(key), 1L, _ + 1L)
     }
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }
@@ -81,7 +84,7 @@ class PercentileSuite extends SparkFunSuite {
 
   private def runTest(agg: Percentile,
         rows : Seq[Seq[Any]],
-        expectedPercentiles : Seq[Double]) {
+        expectedPercentiles : Seq[Double]): Unit = {
     assert(agg.nullable)
     val group1 = (0 until rows.length / 2)
     val group1Buffer = agg.createAggregationBuffer()
@@ -215,7 +218,7 @@ class PercentileSuite extends SparkFunSuite {
       val percentile2 = new Percentile(child, percentage)
       assertEqual(percentile2.checkInputDataTypes(),
         TypeCheckFailure(s"Percentage(s) must be between 0.0 and 1.0, " +
-        s"but got ${percentage.simpleString}"))
+        s"but got ${percentage.simpleString(100)}"))
     }
 
     val nonFoldablePercentage = Seq(NonFoldableLiteral(0.5),
@@ -232,11 +235,59 @@ class PercentileSuite extends SparkFunSuite {
       BooleanType, StringType, DateType, TimestampType, CalendarIntervalType, NullType)
 
     invalidDataTypes.foreach { dataType =>
-      val percentage = Literal(0.5, dataType)
+      val percentage = Literal.default(dataType)
       val percentile4 = new Percentile(child, percentage)
-      assertEqual(percentile4.checkInputDataTypes(),
-        TypeCheckFailure(s"argument 2 requires double type, however, " +
-          s"'0.5' is of ${dataType.simpleString} type."))
+      val checkResult = percentile4.checkInputDataTypes()
+      assert(checkResult.isFailure)
+      Seq("argument 2 requires double type, however, ",
+          s"is of ${dataType.simpleString} type.").foreach { errMsg =>
+        assert(checkResult.asInstanceOf[TypeCheckFailure].message.contains(errMsg))
+      }
+    }
+  }
+
+  test("class ApproximatePercentile, automatically add type casting for parameters") {
+    val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
+
+    // Compatible percentage types: float, decimal, string
+    val percentageExpressions = Seq(Literal(0.3f), DecimalLiteral(0.5), Literal("0.2"),
+      CreateArray(Seq(Literal(0.3f), Literal(0.5D), DecimalLiteral(0.7))))
+
+    percentageExpressions.foreach { percentageExpression =>
+      val agg = new Percentile(
+        UnresolvedAttribute("a"),
+        percentageExpression)
+      val analyzed = testRelation.select(agg).analyze.expressions.head
+      analyzed match {
+        case Alias(agg: Percentile, _) =>
+          assert(agg.resolved)
+          assert(agg.child.dataType == IntegerType)
+          assert(agg.percentageExpression.dataType == DoubleType ||
+            agg.percentageExpression.dataType == ArrayType(DoubleType, containsNull = false))
+        case _ => fail()
+      }
+    }
+  }
+
+  test("nulls in percentage expression") {
+
+    assert(new Percentile(
+      AttributeReference("a", DoubleType)(),
+      percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
+      TypeCheckFailure("Percentage value must not be null"))
+
+    val nullPercentageExprs =
+      Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))
+
+    nullPercentageExprs.foreach { percentageExpression =>
+        val wrongPercentage = new Percentile(
+          AttributeReference("a", DoubleType)(),
+          percentageExpression = percentageExpression)
+        assert(
+          wrongPercentage.checkInputDataTypes() match {
+            case TypeCheckFailure(msg) if msg.contains("argument 2 requires array<double>") => true
+            case _ => false
+          })
     }
   }
 

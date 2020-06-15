@@ -21,7 +21,6 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.ExecutionContext
-import scala.language.existentials
 import scala.util.{Failure, Success}
 
 import org.apache.spark._
@@ -165,11 +164,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Stop the receiver execution thread. */
   def stop(graceful: Boolean): Unit = synchronized {
-    if (isTrackerStarted) {
-      // First, stop the receivers
-      trackerState = Stopping
+    val isStarted: Boolean = isTrackerStarted
+    trackerState = Stopping
+    if (isStarted) {
       if (!skipReceiverLaunch) {
-        // Send the stop signal to all the receivers
+        // First, stop the receivers. Send the stop signal to all the receivers
         endpoint.askSync[Boolean](StopAllReceivers)
 
         // Wait for the Spark job that runs the receivers to be over
@@ -194,17 +193,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Finally, stop the endpoint
       ssc.env.rpcEnv.stop(endpoint)
       endpoint = null
-      receivedBlockTracker.stop()
-      logInfo("ReceiverTracker stopped")
-      trackerState = Stopped
-    } else if (isTrackerInitialized) {
-      trackerState = Stopping
-      // `ReceivedBlockTracker` is open when this instance is created. We should
-      // close this even if this `ReceiverTracker` is not started.
-      receivedBlockTracker.stop()
-      logInfo("ReceiverTracker stopped")
-      trackerState = Stopped
     }
+
+    // `ReceivedBlockTracker` is open when this instance is created. We should
+    // close this even if this `ReceiverTracker` is not started.
+    receivedBlockTracker.stop()
+    logInfo("ReceiverTracker stopped")
+    trackerState = Stopped
   }
 
   /** Allocate all unallocated blocks to the given batch. */
@@ -228,7 +223,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    * Clean up the data and metadata of blocks and batches that are strictly
    * older than the threshold time. Note that this does not
    */
-  def cleanupOldBlocksAndBatches(cleanupThreshTime: Time) {
+  def cleanupOldBlocksAndBatches(cleanupThreshTime: Time): Unit = {
     // Clean up old block and batch metadata
     receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
 
@@ -259,9 +254,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
   }
 
-  def numReceivers(): Int = {
-    receiverInputStreams.size
-  }
+  def numReceivers(): Int = receiverInputStreams.length
 
   /** Register a receiver */
   private def registerReceiver(
@@ -316,7 +309,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Deregister a receiver */
-  private def deregisterReceiver(streamId: Int, message: String, error: String) {
+  private def deregisterReceiver(streamId: Int, message: String, error: String): Unit = {
     val lastErrorTime =
       if (error == null || error == "") -1 else ssc.scheduler.clock.getTimeMillis()
     val errorInfo = ReceiverErrorInfo(
@@ -352,7 +345,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Report error sent by a receiver */
-  private def reportError(streamId: Int, message: String, error: String) {
+  private def reportError(streamId: Int, message: String, error: String): Unit = {
     val newReceiverTrackingInfo = receiverTrackingInfos.get(streamId) match {
       case Some(oldInfo) =>
         val errorInfo = ReceiverErrorInfo(lastErrorMessage = message, lastError = error,
@@ -453,9 +446,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     endpoint.send(StartAllReceivers(receivers))
   }
 
-  /** Check if tracker has been marked for initiated */
-  private def isTrackerInitialized: Boolean = trackerState == Initialized
-
   /** Check if tracker has been marked for starting */
   private def isTrackerStarted: Boolean = trackerState == Started
 
@@ -523,13 +513,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         context.reply(successful)
       case AddBlock(receivedBlockInfo) =>
         if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf, isDriver = true)) {
-          walBatchingThreadPool.execute(new Runnable {
-            override def run(): Unit = Utils.tryLogNonFatalError {
-              if (active) {
-                context.reply(addBlock(receivedBlockInfo))
-              } else {
-                throw new IllegalStateException("ReceiverTracker RpcEndpoint shut down.")
-              }
+          walBatchingThreadPool.execute(() => Utils.tryLogNonFatalError {
+            if (active) {
+              context.reply(addBlock(receivedBlockInfo))
+            } else {
+              context.sendFailure(
+                new IllegalStateException("ReceiverTracker RpcEndpoint already shut down."))
             }
           })
         } else {
@@ -624,7 +613,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       ssc.sparkContext.setCallSite(Option(ssc.getStartSite()).getOrElse(Utils.getCallSite()))
 
       val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](
-        receiverRDD, startReceiverFunc, Seq(0), (_, _) => Unit, ())
+        receiverRDD, startReceiverFunc, Seq(0), (_, _) => (), ())
       // We will keep restarting the receiver job until ReceiverTracker is stopped
       future.onComplete {
         case Success(_) =>
@@ -664,7 +653,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
     /** Send stop signal to the receivers. */
-    private def stopReceivers() {
+    private def stopReceivers(): Unit = {
       receiverTrackingInfos.values.flatMap(_.endpoint).foreach { _.send(StopReceiver) }
       logInfo("Sent stop signal to all " + receiverTrackingInfos.size + " receivers")
     }

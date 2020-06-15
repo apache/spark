@@ -18,10 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 
-class StringFunctionsSuite extends QueryTest with SharedSQLContext {
+class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("string concat") {
@@ -129,6 +129,37 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("AQIDBA==", bytes))
   }
 
+  test("string overlay function") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("Spark SQL", "Spark的SQL", "_", "CORE", "ANSI ", "tructured", 6, 7, 0, 2, 4)).
+      toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k")
+    checkAnswer(df.select(overlay($"a", $"c", $"g")), Row("Spark_SQL"))
+    checkAnswer(df.select(overlay($"a", $"d", $"h")), Row("Spark CORE"))
+    checkAnswer(df.select(overlay($"a", $"e", $"h", $"i")), Row("Spark ANSI SQL"))
+    checkAnswer(df.select(overlay($"a", $"f", $"j", $"k")), Row("Structured SQL"))
+    checkAnswer(df.select(overlay($"b", $"c", $"g")), Row("Spark_SQL"))
+    // scalastyle:on
+  }
+
+  test("binary overlay function") {
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq((
+      Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9),
+      Array[Byte](-1),
+      Array[Byte](-1, -1, -1, -1),
+      Array[Byte](-1, -1),
+      Array[Byte](-1, -1, -1, -1, -1),
+      6, 7, 0, 2, 4)).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
+    checkAnswer(df.select(overlay($"a", $"b", $"f")), Row(Array[Byte](1, 2, 3, 4, 5, -1, 7, 8, 9)))
+    checkAnswer(df.select(overlay($"a", $"c", $"g")),
+      Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, -1, -1)))
+    checkAnswer(df.select(overlay($"a", $"d", $"g", $"h")),
+      Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, 7, 8, 9)))
+    checkAnswer(df.select(overlay($"a", $"e", $"i", $"j")),
+      Row(Array[Byte](1, -1, -1, -1, -1, -1, 6, 7, 8, 9)))
+  }
+
   test("string / binary substring function") {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
@@ -161,11 +192,23 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("string trim functions") {
-    val df = Seq(("  example  ", "")).toDF("a", "b")
+    val df = Seq(("  example  ", "", "example")).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
       Row("example  ", "  example", "example"))
+
+    checkAnswer(
+      df.select(ltrim($"c", "e"), rtrim($"c", "e"), trim($"c", "e")),
+      Row("xample", "exampl", "xampl"))
+
+    checkAnswer(
+      df.select(ltrim($"c", "xe"), rtrim($"c", "emlp"), trim($"c", "elxp")),
+      Row("ample", "exa", "am"))
+
+    checkAnswer(
+      df.select(trim($"c", "xyz")),
+      Row("example"))
 
     checkAnswer(
       df.selectExpr("ltrim(a)", "rtrim(a)", "trim(a)"),
@@ -242,7 +285,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("string parse_url function") {
 
-    def testUrl(url: String, expected: Row) {
+    def testUrl(url: String, expected: Row): Unit = {
       checkAnswer(Seq[String]((url)).toDF("url").selectExpr(
         "parse_url(url, 'HOST')", "parse_url(url, 'PATH')",
         "parse_url(url, 'QUERY')", "parse_url(url, 'REF')",
@@ -317,16 +360,52 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("   "))
   }
 
-  test("string split function") {
-    val df = Seq(("aa2bb3cc", "[1-9]+")).toDF("a", "b")
+  test("string split function with no limit") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
 
     checkAnswer(
       df.select(split($"a", "[1-9]+")),
-      Row(Seq("aa", "bb", "cc")))
+      Row(Seq("aa", "bb", "cc", "")))
 
     checkAnswer(
       df.selectExpr("split(a, '[1-9]+')"),
-      Row(Seq("aa", "bb", "cc")))
+      Row(Seq("aa", "bb", "cc", "")))
+  }
+
+  test("string split function with limit explicitly set to 0") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(split($"a", "[1-9]+", 0)),
+      Row(Seq("aa", "bb", "cc", "")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+', 0)"),
+      Row(Seq("aa", "bb", "cc", "")))
+  }
+
+  test("string split function with positive limit") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(split($"a", "[1-9]+", 2)),
+      Row(Seq("aa", "bb3cc4")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+', 2)"),
+      Row(Seq("aa", "bb3cc4")))
+  }
+
+  test("string split function with negative limit") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(split($"a", "[1-9]+", -2)),
+      Row(Seq("aa", "bb", "cc", "")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+', -2)"),
+      Row(Seq("aa", "bb", "cc", "")))
   }
 
   test("string / binary length function") {
@@ -387,7 +466,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("6.4817"))
 
     checkAnswer(
-      df.select(format_number(lit(BigDecimal(7.128381)), 4)), // not convert anything
+      df.select(format_number(lit(BigDecimal("7.128381")), 4)), // not convert anything
       Row("7.1284"))
 
     intercept[AnalysisException] {

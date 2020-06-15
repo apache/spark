@@ -27,9 +27,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat, CombineFileRecordReader, CombineFileSplit}
 
-import org.apache.spark.internal.config
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.config
 
 /**
  * A general format for reading whole files in as streams, byte arrays,
@@ -44,14 +44,26 @@ private[spark] abstract class StreamFileInputFormat[T]
    * Allow minPartitions set by end-user in order to keep compatibility with old Hadoop API
    * which is set through setMaxSplitSize
    */
-  def setMinPartitions(sc: SparkContext, context: JobContext, minPartitions: Int) {
+  def setMinPartitions(sc: SparkContext, context: JobContext, minPartitions: Int): Unit = {
     val defaultMaxSplitBytes = sc.getConf.get(config.FILES_MAX_PARTITION_BYTES)
     val openCostInBytes = sc.getConf.get(config.FILES_OPEN_COST_IN_BYTES)
-    val defaultParallelism = sc.defaultParallelism
+    val defaultParallelism = Math.max(sc.defaultParallelism, minPartitions)
     val files = listStatus(context).asScala
     val totalBytes = files.filterNot(_.isDirectory).map(_.getLen + openCostInBytes).sum
     val bytesPerCore = totalBytes / defaultParallelism
     val maxSplitSize = Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
+
+    // For small files we need to ensure the min split size per node & rack <= maxSplitSize
+    val jobConfig = context.getConfiguration
+    val minSplitSizePerNode = jobConfig.getLong(CombineFileInputFormat.SPLIT_MINSIZE_PERNODE, 0L)
+    val minSplitSizePerRack = jobConfig.getLong(CombineFileInputFormat.SPLIT_MINSIZE_PERRACK, 0L)
+
+    if (maxSplitSize < minSplitSizePerNode) {
+      super.setMinSplitSizeNode(maxSplitSize)
+    }
+    if (maxSplitSize < minSplitSizePerRack) {
+      super.setMinSplitSizeRack(maxSplitSize)
+    }
     super.setMaxSplitSize(maxSplitSize)
   }
 
@@ -160,7 +172,7 @@ class PortableDataStream(
 
   @transient private lazy val conf = {
     val bais = new ByteArrayInputStream(confBytes)
-    val nconf = new Configuration()
+    val nconf = new Configuration(false)
     nconf.readFields(new DataInputStream(bais))
     nconf
   }

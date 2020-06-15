@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
@@ -22,18 +22,17 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-
 
 /**
  * Functionality for working with missing data in `DataFrame`s.
  *
  * @since 1.3.1
  */
-@InterfaceStability.Stable
+@Stable
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
@@ -41,7 +40,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def drop(): DataFrame = drop("any", df.columns)
+  def drop(): DataFrame = drop0("any", outputAttributes)
 
   /**
    * Returns a new `DataFrame` that drops rows containing null or NaN values.
@@ -51,7 +50,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def drop(how: String): DataFrame = drop(how, df.columns)
+  def drop(how: String): DataFrame = drop0(how, outputAttributes)
 
   /**
    * Returns a new `DataFrame` that drops rows containing any null or NaN values
@@ -90,11 +89,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def drop(how: String, cols: Seq[String]): DataFrame = {
-    how.toLowerCase(Locale.ROOT) match {
-      case "any" => drop(cols.size, cols)
-      case "all" => drop(1, cols)
-      case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
-    }
+    drop0(how, cols.map(df.resolve(_)))
   }
 
   /**
@@ -120,10 +115,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def drop(minNonNulls: Int, cols: Seq[String]): DataFrame = {
-    // Filtering condition:
-    // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
-    val predicate = AtLeastNNonNulls(minNonNulls, cols.map(name => df.resolve(name)))
-    df.filter(Column(predicate))
+    drop0(minNonNulls, cols.map(df.resolve(_)))
   }
 
   /**
@@ -131,20 +123,20 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 2.2.0
    */
-  def fill(value: Long): DataFrame = fill(value, df.columns)
+  def fill(value: Long): DataFrame = fillValue(value, outputAttributes)
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in numeric columns with `value`.
    * @since 1.3.1
    */
-  def fill(value: Double): DataFrame = fill(value, df.columns)
+  def fill(value: Double): DataFrame = fillValue(value, outputAttributes)
 
   /**
    * Returns a new `DataFrame` that replaces null values in string columns with `value`.
    *
    * @since 1.3.1
    */
-  def fill(value: String): DataFrame = fill(value, df.columns)
+  def fill(value: String): DataFrame = fillValue(value, outputAttributes)
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
@@ -168,7 +160,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 2.2.0
    */
-  def fill(value: Long, cols: Seq[String]): DataFrame = fillValue(value, cols)
+  def fill(value: Long, cols: Seq[String]): DataFrame = fillValue(value, toAttributes(cols))
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
@@ -176,7 +168,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def fill(value: Double, cols: Seq[String]): DataFrame = fillValue(value, cols)
+  def fill(value: Double, cols: Seq[String]): DataFrame = fillValue(value, toAttributes(cols))
 
 
   /**
@@ -193,7 +185,31 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def fill(value: String, cols: Seq[String]): DataFrame = fillValue(value, cols)
+  def fill(value: String, cols: Seq[String]): DataFrame = fillValue(value, toAttributes(cols))
+
+  /**
+   * Returns a new `DataFrame` that replaces null values in boolean columns with `value`.
+   *
+   * @since 2.3.0
+   */
+  def fill(value: Boolean): DataFrame = fillValue(value, outputAttributes)
+
+  /**
+   * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified
+   * boolean columns. If a specified column is not a boolean column, it is ignored.
+   *
+   * @since 2.3.0
+   */
+  def fill(value: Boolean, cols: Seq[String]): DataFrame = fillValue(value, toAttributes(cols))
+
+  /**
+   * Returns a new `DataFrame` that replaces null values in specified boolean columns.
+   * If a specified column is not a boolean column, it is ignored.
+   *
+   * @since 2.3.0
+   */
+  def fill(value: Boolean, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
+
 
   /**
    * Returns a new `DataFrame` that replaces null values.
@@ -236,25 +252,25 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * Replaces values matching keys in `replacement` map with the corresponding values.
-   * Key and value of `replacement` map must have the same type, and
-   * can only be doubles, strings or booleans.
-   * If `col` is "*", then the replacement is applied on all string columns or numeric columns.
    *
    * {{{
    *   import com.google.common.collect.ImmutableMap;
    *
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height".
-   *   df.replace("height", ImmutableMap.of(1.0, 2.0));
+   *   df.na.replace("height", ImmutableMap.of(1.0, 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "name".
-   *   df.replace("name", ImmutableMap.of("UNKNOWN", "unnamed"));
+   *   df.na.replace("name", ImmutableMap.of("UNKNOWN", "unnamed"));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in all string columns.
-   *   df.replace("*", ImmutableMap.of("UNKNOWN", "unnamed"));
+   *   df.na.replace("*", ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
-   * @param col name of the column to apply the value replacement
-   * @param replacement value replacement map, as explained above
+   * @param col name of the column to apply the value replacement. If `col` is "*",
+   *            replacement is applied on all string, numeric or boolean columns.
+   * @param replacement value replacement map. Key and value of `replacement` map must have
+   *                    the same type, and can only be doubles, strings or booleans.
+   *                    The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -264,21 +280,22 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * Replaces values matching keys in `replacement` map with the corresponding values.
-   * Key and value of `replacement` map must have the same type, and
-   * can only be doubles, strings or booleans.
    *
    * {{{
    *   import com.google.common.collect.ImmutableMap;
    *
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
-   *   df.replace(new String[] {"height", "weight"}, ImmutableMap.of(1.0, 2.0));
+   *   df.na.replace(new String[] {"height", "weight"}, ImmutableMap.of(1.0, 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "firstname" and "lastname".
-   *   df.replace(new String[] {"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
+   *   df.na.replace(new String[] {"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
-   * @param cols list of columns to apply the value replacement
-   * @param replacement value replacement map, as explained above
+   * @param cols list of columns to apply the value replacement. If `col` is "*",
+   *             replacement is applied on all string, numeric or boolean columns.
+   * @param replacement value replacement map. Key and value of `replacement` map must have
+   *                    the same type, and can only be doubles, strings or booleans.
+   *                    The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -288,24 +305,23 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * (Scala-specific) Replaces values matching keys in `replacement` map.
-   * Key and value of `replacement` map must have the same type, and
-   * can only be doubles, strings or booleans.
-   * If `col` is "*",
-   * then the replacement is applied on all string columns , numeric columns or boolean columns.
    *
    * {{{
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height".
-   *   df.replace("height", Map(1.0 -> 2.0))
+   *   df.na.replace("height", Map(1.0 -> 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "name".
-   *   df.replace("name", Map("UNKNOWN" -> "unnamed")
+   *   df.na.replace("name", Map("UNKNOWN" -> "unnamed"));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in all string columns.
-   *   df.replace("*", Map("UNKNOWN" -> "unnamed")
+   *   df.na.replace("*", Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
-   * @param col name of the column to apply the value replacement
-   * @param replacement value replacement map, as explained above
+   * @param col name of the column to apply the value replacement. If `col` is "*",
+   *            replacement is applied on all string, numeric or boolean columns.
+   * @param replacement value replacement map. Key and value of `replacement` map must have
+   *                    the same type, and can only be doubles, strings or booleans.
+   *                    The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -319,19 +335,20 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * (Scala-specific) Replaces values matching keys in `replacement` map.
-   * Key and value of `replacement` map must have the same type, and
-   * can only be doubles , strings or booleans.
    *
    * {{{
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
-   *   df.replace("height" :: "weight" :: Nil, Map(1.0 -> 2.0));
+   *   df.na.replace("height" :: "weight" :: Nil, Map(1.0 -> 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "firstname" and "lastname".
-   *   df.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed");
+   *   df.na.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
-   * @param cols list of columns to apply the value replacement
-   * @param replacement value replacement map, as explained above
+   * @param cols list of columns to apply the value replacement. If `col` is "*",
+   *             replacement is applied on all string, numeric or boolean columns.
+   * @param replacement value replacement map. Key and value of `replacement` map must have
+   *                    the same type, and can only be doubles, strings or booleans.
+   *                    The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -342,14 +359,20 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       return df
     }
 
-    // replacementMap is either Map[String, String] or Map[Double, Double] or Map[Boolean,Boolean]
-    val replacementMap: Map[_, _] = replacement.head._2 match {
-      case v: String => replacement
-      case v: Boolean => replacement
-      case _ => replacement.map { case (k, v) => (convertToDouble(k), convertToDouble(v)) }
+    // Convert the NumericType in replacement map to DoubleType,
+    // while leaving StringType, BooleanType and null untouched.
+    val replacementMap: Map[_, _] = replacement.map {
+      case (k, v: String) => (k, v)
+      case (k, v: Boolean) => (k, v)
+      case (k: String, null) => (k, null)
+      case (k: Boolean, null) => (k, null)
+      case (k, null) => (convertToDouble(k), null)
+      case (k, v) => (convertToDouble(k), convertToDouble(v))
     }
 
-    // targetColumnType is either DoubleType or StringType or BooleanType
+    // targetColumnType is either DoubleType, StringType or BooleanType,
+    // depending on the type of first key in replacement map.
+    // Only fields of targetColumnType will perform replacement.
     val targetColumnType = replacement.head._1 match {
       case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long => DoubleType
       case _: jl.Boolean => BooleanType
@@ -403,15 +426,24 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * Returns a [[Column]] expression that replaces null value in `col` with `replacement`.
+   * It selects a column based on its name.
    */
   private def fillCol[T](col: StructField, replacement: T): Column = {
     val quotedColName = "`" + col.name + "`"
-    val colValue = col.dataType match {
+    fillCol(col.dataType, col.name, df.col(quotedColName), replacement)
+  }
+
+  /**
+   * Returns a [[Column]] expression that replaces null value in `expr` with `replacement`.
+   * It uses the given `expr` as a column.
+   */
+  private def fillCol[T](dataType: DataType, name: String, expr: Column, replacement: T): Column = {
+    val colValue = dataType match {
       case DoubleType | FloatType =>
-        nanvl(df.col(quotedColName), lit(null)) // nanvl only supports these types
-      case _ => df.col(quotedColName)
+        nanvl(expr, lit(null)) // nanvl only supports these types
+      case _ => expr
     }
-    coalesce(colValue, lit(replacement).cast(col.dataType)).as(col.name)
+    coalesce(colValue, lit(replacement).cast(dataType)).as(name)
   }
 
   /**
@@ -420,11 +452,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * TODO: This can be optimized to use broadcast join when replacementMap is large.
    */
-  private def replaceCol(col: StructField, replacementMap: Map[_, _]): Column = {
+  private def replaceCol[K, V](col: StructField, replacementMap: Map[K, V]): Column = {
     val keyExpr = df.col(col.name).expr
     def buildExpr(v: Any) = Cast(Literal(v), keyExpr.dataType)
     val branches = replacementMap.flatMap { case (source, target) =>
-      Seq(buildExpr(source), buildExpr(target))
+      Seq(Literal(source), buildExpr(target))
     }.toSeq
     new Column(CaseKeyWhen(keyExpr, branches :+ keyExpr)).as(col.name)
   }
@@ -438,12 +470,37 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       s"Unsupported value type ${v.getClass.getName} ($v).")
   }
 
+  private def toAttributes(cols: Seq[String]): Seq[Attribute] = {
+    cols.map(name => df.col(name).expr).collect {
+      case a: Attribute => a
+    }
+  }
+
+  private def outputAttributes: Seq[Attribute] = {
+    df.queryExecution.analyzed.output
+  }
+
+  private def drop0(how: String, cols: Seq[NamedExpression]): DataFrame = {
+    how.toLowerCase(Locale.ROOT) match {
+      case "any" => drop0(cols.size, cols)
+      case "all" => drop0(1, cols)
+      case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
+    }
+  }
+
+  private def drop0(minNonNulls: Int, cols: Seq[NamedExpression]): DataFrame = {
+    // Filtering condition:
+    // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
+    val predicate = AtLeastNNonNulls(minNonNulls, cols)
+    df.filter(Column(predicate))
+  }
+
   /**
-   * Returns a new `DataFrame` that replaces null or NaN values in specified
-   * numeric, string columns. If a specified column is not a numeric, string column,
+   * Returns a new `DataFrame` that replaces null or NaN values in the specified
+   * columns. If a specified column is not a numeric, string or boolean column,
    * it is ignored.
    */
-  private def fillValue[T](value: T, cols: Seq[String]): DataFrame = {
+  private def fillValue[T](value: T, cols: Seq[Attribute]): DataFrame = {
     // the fill[T] which T is  Long/Double,
     // should apply on all the NumericType Column, for example:
     // val input = Seq[(java.lang.Integer, java.lang.Double)]((null, 164.3)).toDF("a","b")
@@ -452,21 +509,24 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     val targetType = value match {
       case _: Double | _: Long => NumericType
       case _: String => StringType
+      case _: Boolean => BooleanType
       case _ => throw new IllegalArgumentException(
         s"Unsupported value type ${value.getClass.getName} ($value).")
     }
 
-    val columnEquals = df.sparkSession.sessionState.analyzer.resolver
-    val projections = df.schema.fields.map { f =>
-      val typeMatches = (targetType, f.dataType) match {
+    val projections = outputAttributes.map { col =>
+      val typeMatches = (targetType, col.dataType) match {
         case (NumericType, dt) => dt.isInstanceOf[NumericType]
         case (StringType, dt) => dt == StringType
+        case (BooleanType, dt) => dt == BooleanType
+        case _ =>
+          throw new IllegalArgumentException(s"$targetType is not matched at fillValue")
       }
       // Only fill if the column is part of the cols list.
-      if (typeMatches && cols.exists(col => columnEquals(f.name, col))) {
-        fillCol[T](f, value)
+      if (typeMatches && cols.exists(_.semanticEquals(col))) {
+        fillCol(col.dataType, col.name, Column(col), value)
       } else {
-        df.col(f.name)
+        Column(col)
       }
     }
     df.select(projections : _*)

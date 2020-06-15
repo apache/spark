@@ -35,7 +35,7 @@ object FPGrowthExample {
     minSupport: Double = 0.3,
     numPartition: Int = -1) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("FPGrowthExample") {
@@ -74,7 +74,7 @@ object FPGrowthExample {
     println(s"Number of frequent itemsets: ${model.freqItemsets.count()}")
 
     model.freqItemsets.collect().foreach { itemset =>
-      println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
+      println(s"${itemset.items.mkString("[", ",", "]")}, ${itemset.freq}")
     }
 
     sc.stop()

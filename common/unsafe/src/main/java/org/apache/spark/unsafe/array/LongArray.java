@@ -23,7 +23,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 /**
  * An array of long values. Compared with native JVM arrays, this:
  * <ul>
- *   <li>supports using both in-heap and off-heap memory</li>
+ *   <li>supports using both on-heap and off-heap memory</li>
  *   <li>has no bound checking, and thus can crash the JVM process when assert is turned off</li>
  * </ul>
  */
@@ -39,7 +39,7 @@ public final class LongArray {
   private final long length;
 
   public LongArray(MemoryBlock memory) {
-    assert memory.size() < (long) Integer.MAX_VALUE * 8: "Array size > 4 billion elements";
+    assert memory.size() < (long) Integer.MAX_VALUE * 8: "Array size >= Integer.MAX_VALUE elements";
     this.memory = memory;
     this.baseObj = memory.getBaseObject();
     this.baseOffset = memory.getBaseOffset();

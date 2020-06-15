@@ -36,6 +36,8 @@ private[spark] object BlockManagerMessages {
   case class ReplicateBlock(blockId: BlockId, replicas: Seq[BlockManagerId], maxReplicas: Int)
     extends ToBlockManagerSlave
 
+  case object DecommissionBlockManager extends ToBlockManagerSlave
+
   // Remove all blocks belonging to a specific RDD.
   case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave
 
@@ -58,6 +60,7 @@ private[spark] object BlockManagerMessages {
 
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
+      localDirs: Array[String],
       maxOnHeapMemSize: Long,
       maxOffHeapMemSize: Long,
       sender: RpcEndpointRef)
@@ -93,6 +96,23 @@ private[spark] object BlockManagerMessages {
 
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
 
+  case class GetLocationsAndStatus(blockId: BlockId, requesterHost: String)
+    extends ToBlockManagerMaster
+
+  /**
+   * The response message of `GetLocationsAndStatus` request.
+   *
+   * @param localDirs if it is persisted-to-disk on the same host as the requester executor is
+   *                  running on then localDirs will be Some and the cached data will be in a file
+   *                  in one of those dirs, otherwise it is None.
+   */
+  case class BlockLocationsAndStatus(
+      locations: Seq[BlockManagerId],
+      status: BlockStatus,
+      localDirs: Option[Array[String]]) {
+    assert(locations.nonEmpty)
+  }
+
   case class GetLocationsMultipleBlockIds(blockIds: Array[BlockId]) extends ToBlockManagerMaster
 
   case class GetPeers(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
@@ -107,6 +127,11 @@ private[spark] object BlockManagerMessages {
 
   case object GetStorageStatus extends ToBlockManagerMaster
 
+  case class DecommissionBlockManagers(executorIds: Seq[String]) extends ToBlockManagerMaster
+
+  case class GetReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId)
+    extends ToBlockManagerMaster
+
   case class GetBlockStatus(blockId: BlockId, askSlaves: Boolean = true)
     extends ToBlockManagerMaster
 
@@ -115,5 +140,5 @@ private[spark] object BlockManagerMessages {
 
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
-  case class HasCachedBlocks(executorId: String) extends ToBlockManagerMaster
+  case class IsExecutorAlive(executorId: String) extends ToBlockManagerMaster
 }

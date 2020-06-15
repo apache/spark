@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * This [[ManagedBuffer]] wraps a [[BlockData]] instance retrieved from the [[BlockManager]]
@@ -39,7 +38,8 @@ private[storage] class BlockManagerManagedBuffer(
     blockInfoManager: BlockInfoManager,
     blockId: BlockId,
     data: BlockData,
-    dispose: Boolean) extends ManagedBuffer {
+    dispose: Boolean,
+    unlockOnDeallocate: Boolean = true) extends ManagedBuffer {
 
   private val refCount = new AtomicInteger(1)
 
@@ -59,7 +59,9 @@ private[storage] class BlockManagerManagedBuffer(
  }
 
   override def release(): ManagedBuffer = {
-    blockInfoManager.unlock(blockId)
+    if (unlockOnDeallocate) {
+      blockInfoManager.unlock(blockId)
+    }
     if (refCount.decrementAndGet() == 0 && dispose) {
       data.dispose()
     }

@@ -23,9 +23,7 @@ import java.nio.ByteBuffer
 import scala.util.Random
 
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
-import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.AmazonKinesisClient
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.PutRecordRequest
 import org.apache.log4j.{Level, Logger}
 
@@ -34,8 +32,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.streaming.dstream.DStream.toPairDStreamFunctions
-import org.apache.spark.streaming.kinesis.KinesisUtils
-
+import org.apache.spark.streaming.kinesis.KinesisInitialPositions.Latest
+import org.apache.spark.streaming.kinesis.KinesisInputDStream
 
 /**
  * Consumes messages from a Amazon Kinesis streams and does wordcount.
@@ -75,12 +73,12 @@ import org.apache.spark.streaming.kinesis.KinesisUtils
  * the Kinesis Spark Streaming integration.
  */
 object KinesisWordCountASL extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // Check that all required args were passed in.
     if (args.length != 3) {
       System.err.println(
         """
-          |Usage: KinesisWordCountASL <app-name> <stream-name> <endpoint-url> <region-name>
+          |Usage: KinesisWordCountASL <app-name> <stream-name> <endpoint-url>
           |
           |    <app-name> is the name of the consumer app, used to track the read data in DynamoDB
           |    <stream-name> is the name of the Kinesis stream
@@ -135,8 +133,16 @@ object KinesisWordCountASL extends Logging {
 
     // Create the Kinesis DStreams
     val kinesisStreams = (0 until numStreams).map { i =>
-      KinesisUtils.createStream(ssc, appName, streamName, endpointUrl, regionName,
-        InitialPositionInStream.LATEST, kinesisCheckpointInterval, StorageLevel.MEMORY_AND_DISK_2)
+      KinesisInputDStream.builder
+        .streamingContext(ssc)
+        .streamName(streamName)
+        .endpointUrl(endpointUrl)
+        .regionName(regionName)
+        .initialPosition(new Latest())
+        .checkpointAppName(appName)
+        .checkpointInterval(kinesisCheckpointInterval)
+        .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
+        .build()
     }
 
     // Union all the streams
@@ -165,25 +171,25 @@ object KinesisWordCountASL extends Logging {
  *   <endpoint-url> is the endpoint of the Kinesis service
  *     (ie. https://kinesis.us-east-1.amazonaws.com)
  *   <records-per-sec> is the rate of records per second to put onto the stream
- *   <words-per-record> is the rate of records per second to put onto the stream
+ *   <words-per-record> is the number of words per record
  *
  * Example:
  *    $ SPARK_HOME/bin/run-example streaming.KinesisWordProducerASL mySparkStream \
- *         https://kinesis.us-east-1.amazonaws.com us-east-1 10 5
+ *         https://kinesis.us-east-1.amazonaws.com 10 5
  */
 object KinesisWordProducerASL {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 4) {
       System.err.println(
         """
           |Usage: KinesisWordProducerASL <stream-name> <endpoint-url> <records-per-sec>
-                                         <words-per-record>
+          |                              <words-per-record>
           |
           |    <stream-name> is the name of the Kinesis stream
           |    <endpoint-url> is the endpoint of the Kinesis service
           |                   (e.g. https://kinesis.us-east-1.amazonaws.com)
           |    <records-per-sec> is the rate of records per second to put onto the stream
-          |    <words-per-record> is the rate of records per second to put onto the stream
+          |    <words-per-record> is the number of words per record
           |
         """.stripMargin)
 
@@ -263,7 +269,7 @@ object KinesisWordProducerASL {
  */
 private[streaming] object StreamingExamples extends Logging {
   // Set reasonable logging levels for streaming if the user has not configured log4j.
-  def setStreamingLogLevels() {
+  def setStreamingLogLevels(): Unit = {
     val log4jInitialized = Logger.getRootLogger.getAllAppenders.hasMoreElements
     if (!log4jInitialized) {
       // We first log something to initialize Spark's default logging, then we override the

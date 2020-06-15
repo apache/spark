@@ -22,19 +22,18 @@ import java.util.{List => JList}
 import java.util.NoSuchElementException
 
 import scala.annotation.varargs
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.ml.linalg.JsonVectorConverter
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.SparkException
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.linalg.{JsonMatrixConverter, JsonVectorConverter, Matrix, Vector}
 import org.apache.spark.ml.util.Identifiable
 
 /**
- * :: DeveloperApi ::
  * A param with self-contained documentation and optionally default value. Primitive-typed param
  * should use the specialized versions, which are more friendly to Java users.
  *
@@ -45,7 +44,6 @@ import org.apache.spark.ml.util.Identifiable
  *                See [[ParamValidators]] for factory methods for common validation functions.
  * @tparam T param value type
  */
-@DeveloperApi
 class Param[T](val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
   extends Serializable {
 
@@ -94,9 +92,11 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
         compact(render(JString(x)))
       case v: Vector =>
         JsonVectorConverter.toJson(v)
+      case m: Matrix =>
+        JsonMatrixConverter.toJson(m)
       case _ =>
-        throw new NotImplementedError(
-          "The default jsonEncode only supports string and vector. " +
+        throw new UnsupportedOperationException(
+          "The default jsonEncode only supports string, vector and matrix. " +
             s"${this.getClass.getName} must override jsonEncode for ${value.getClass.getName}.")
     }
   }
@@ -122,28 +122,44 @@ private[ml] object Param {
 
   /** Decodes a param value from JSON. */
   def jsonDecode[T](json: String): T = {
-    parse(json) match {
+    val jValue = parse(json)
+    jValue match {
       case JString(x) =>
         x.asInstanceOf[T]
       case JObject(v) =>
         val keys = v.map(_._1)
-        assert(keys.contains("type") && keys.contains("values"),
-          s"Expect a JSON serialized vector but cannot find fields 'type' and 'values' in $json.")
-        JsonVectorConverter.fromJson(json).asInstanceOf[T]
+        if (keys.contains("class")) {
+          implicit val formats = DefaultFormats
+          val className = (jValue \ "class").extract[String]
+          className match {
+            case JsonMatrixConverter.className =>
+              val checkFields = Array("numRows", "numCols", "values", "isTransposed", "type")
+              require(checkFields.forall(keys.contains), s"Expect a JSON serialized Matrix" +
+                s" but cannot find fields ${checkFields.mkString(", ")} in $json.")
+              JsonMatrixConverter.fromJson(json).asInstanceOf[T]
+
+            case s => throw new SparkException(s"unrecognized class $s in $json")
+          }
+        } else {
+          // "class" info in JSON was added in Spark 2.3(SPARK-22289). JSON support for Vector was
+          // implemented before that and does not have "class" attribute.
+          require(keys.contains("type") && keys.contains("values"), s"Expect a JSON serialized" +
+            s" vector/matrix but cannot find fields 'type' and 'values' in $json.")
+          JsonVectorConverter.fromJson(json).asInstanceOf[T]
+        }
+
       case _ =>
-        throw new NotImplementedError(
-          "The default jsonDecode only supports string and vector. " +
+        throw new UnsupportedOperationException(
+          "The default jsonDecode only supports string, vector and matrix. " +
             s"${this.getClass.getName} must override jsonDecode to support its value type.")
     }
   }
 }
 
 /**
- * :: DeveloperApi ::
  * Factory methods for common validation functions for `Param.isValid`.
  * The numerical methods only support Int, Long, Float, and Double.
  */
-@DeveloperApi
 object ParamValidators {
 
   /** (private[param]) Default validation always return true */
@@ -229,15 +245,82 @@ object ParamValidators {
   def arrayLengthGt[T](lowerBound: Double): Array[T] => Boolean = { (value: Array[T]) =>
     value.length > lowerBound
   }
+
+  /**
+   * Utility for Param validity checks for Transformers which have both single- and multi-column
+   * support.  This utility assumes that `inputCol` indicates single-column usage and
+   * that `inputCols` indicates multi-column usage.
+   *
+   * This checks to ensure that exactly one set of Params has been set, and it
+   * raises an `IllegalArgumentException` if not.
+   *
+   * @param singleColumnParams Params which should be set (or have defaults) if `inputCol` has been
+   *                           set.  This does not need to include `inputCol`.
+   * @param multiColumnParams Params which should be set (or have defaults) if `inputCols` has been
+   *                           set.  This does not need to include `inputCols`.
+   */
+  def checkSingleVsMultiColumnParams(
+      model: Params,
+      singleColumnParams: Seq[Param[_]],
+      multiColumnParams: Seq[Param[_]]): Unit = {
+    val name = s"${model.getClass.getSimpleName} $model"
+
+    def checkExclusiveParams(
+        isSingleCol: Boolean,
+        requiredParams: Seq[Param[_]],
+        excludedParams: Seq[Param[_]]): Unit = {
+      val badParamsMsgBuilder = new mutable.StringBuilder()
+
+      val mustUnsetParams = excludedParams.filter(p => model.isSet(p))
+        .map(_.name).mkString(", ")
+      if (mustUnsetParams.nonEmpty) {
+        badParamsMsgBuilder ++=
+          s"The following Params are not applicable and should not be set: $mustUnsetParams."
+      }
+
+      val mustSetParams = requiredParams.filter(p => !model.isDefined(p))
+        .map(_.name).mkString(", ")
+      if (mustSetParams.nonEmpty) {
+        badParamsMsgBuilder ++=
+          s"The following Params must be defined but are not set: $mustSetParams."
+      }
+
+      val badParamsMsg = badParamsMsgBuilder.toString()
+
+      if (badParamsMsg.nonEmpty) {
+        val errPrefix = if (isSingleCol) {
+          s"$name has the inputCol Param set for single-column transform."
+        } else {
+          s"$name has the inputCols Param set for multi-column transform."
+        }
+        throw new IllegalArgumentException(s"$errPrefix $badParamsMsg")
+      }
+    }
+
+    val inputCol = model.getParam("inputCol")
+    val inputCols = model.getParam("inputCols")
+
+    if (model.isSet(inputCol)) {
+      require(!model.isSet(inputCols), s"$name requires " +
+        s"exactly one of inputCol, inputCols Params to be set, but both are set.")
+
+      checkExclusiveParams(isSingleCol = true, requiredParams = singleColumnParams,
+        excludedParams = multiColumnParams)
+    } else if (model.isSet(inputCols)) {
+      checkExclusiveParams(isSingleCol = false, requiredParams = multiColumnParams,
+        excludedParams = singleColumnParams)
+    } else {
+      throw new IllegalArgumentException(s"$name requires " +
+        s"exactly one of inputCol, inputCols Params to be set, but neither is set.")
+    }
+  }
 }
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Double]` for Java.
  */
-@DeveloperApi
 class DoubleParam(parent: String, name: String, doc: String, isValid: Double => Boolean)
   extends Param[Double](parent, name, doc, isValid) {
 
@@ -294,10 +377,8 @@ private[param] object DoubleParam {
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Int]` for Java.
  */
-@DeveloperApi
 class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolean)
   extends Param[Int](parent, name, doc, isValid) {
 
@@ -323,10 +404,8 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Float]` for Java.
  */
-@DeveloperApi
 class FloatParam(parent: String, name: String, doc: String, isValid: Float => Boolean)
   extends Param[Float](parent, name, doc, isValid) {
 
@@ -384,10 +463,8 @@ private object FloatParam {
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Long]` for Java.
  */
-@DeveloperApi
 class LongParam(parent: String, name: String, doc: String, isValid: Long => Boolean)
   extends Param[Long](parent, name, doc, isValid) {
 
@@ -413,10 +490,8 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Boolean]` for Java.
  */
-@DeveloperApi
 class BooleanParam(parent: String, name: String, doc: String) // No need for isValid
   extends Param[Boolean](parent, name, doc) {
 
@@ -436,10 +511,8 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Array[String]]` for Java.
  */
-@DeveloperApi
 class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array[String] => Boolean)
   extends Param[Array[String]](parent, name, doc, isValid) {
 
@@ -461,10 +534,8 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Array[Double]]` for Java.
  */
-@DeveloperApi
 class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array[Double] => Boolean)
   extends Param[Array[Double]](parent, name, doc, isValid) {
 
@@ -491,10 +562,45 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
 }
 
 /**
- * :: DeveloperApi ::
+ * Specialized version of `Param[Array[Array[Double]]]` for Java.
+ */
+class DoubleArrayArrayParam(
+    parent: Params,
+    name: String,
+    doc: String,
+    isValid: Array[Array[Double]] => Boolean)
+  extends Param[Array[Array[Double]]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  /** Creates a param pair with a `java.util.List` of values (for Java and Python). */
+  def w(value: java.util.List[java.util.List[java.lang.Double]]): ParamPair[Array[Array[Double]]] =
+    w(value.asScala.map(_.asScala.map(_.asInstanceOf[Double]).toArray).toArray)
+
+  override def jsonEncode(value: Array[Array[Double]]): String = {
+    import org.json4s.JsonDSL._
+    compact(render(value.toSeq.map(_.toSeq.map(DoubleParam.jValueEncode))))
+  }
+
+  override def jsonDecode(json: String): Array[Array[Double]] = {
+    parse(json) match {
+      case JArray(values) =>
+        values.map {
+          case JArray(values) =>
+            values.map(DoubleParam.jValueDecode).toArray
+          case _ =>
+            throw new IllegalArgumentException(s"Cannot decode $json to Array[Array[Double]].")
+        }.toArray
+      case _ =>
+        throw new IllegalArgumentException(s"Cannot decode $json to Array[Array[Double]].")
+    }
+  }
+}
+
+/**
  * Specialized version of `Param[Array[Int]]` for Java.
  */
-@DeveloperApi
 class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[Int] => Boolean)
   extends Param[Array[Int]](parent, name, doc, isValid) {
 
@@ -529,11 +635,9 @@ case class ParamPair[T] @Since("1.2.0") (
 }
 
 /**
- * :: DeveloperApi ::
  * Trait for components that take parameters. This also provides an internal param map to store
  * parameter values attached to the instance.
  */
-@DeveloperApi
 trait Params extends Identifiable with Serializable {
 
   /**
@@ -737,10 +841,10 @@ trait Params extends Identifiable with Serializable {
   }
 
   /** Internal param map for user-supplied values. */
-  private val paramMap: ParamMap = ParamMap.empty
+  private[ml] val paramMap: ParamMap = ParamMap.empty
 
   /** Internal param map for default values. */
-  private val defaultParamMap: ParamMap = ParamMap.empty
+  private[ml] val defaultParamMap: ParamMap = ParamMap.empty
 
   /** Validates that the input param belongs to this instance. */
   private def shouldOwn(param: Param[_]): Unit = {
@@ -777,14 +881,21 @@ trait Params extends Identifiable with Serializable {
   }
 }
 
+private[ml] object Params {
+  /**
+   * Sets a default param value for a `Params`.
+   */
+  private[ml] final def setDefault[T](params: Params, param: Param[T], value: T): Unit = {
+    params.defaultParamMap.put(param -> value)
+  }
+}
+
 /**
- * :: DeveloperApi ::
  * Java-friendly wrapper for [[Params]].
  * Java developers who need to extend [[Params]] should use this class instead.
  * If you need to extend an abstract class which already extends [[Params]], then that abstract
  * class should be Java-friendly as well.
  */
-@DeveloperApi
 abstract class JavaParams extends Params
 
 /**

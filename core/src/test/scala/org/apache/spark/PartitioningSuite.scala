@@ -70,7 +70,7 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     // 1000 partitions.
     val partitionSizes = List(1, 2, 10, 100, 500, 1000, 1500)
     val partitioners = partitionSizes.map(p => (p, new RangePartitioner(p, rdd)))
-    val decoratedRangeBounds = PrivateMethod[Array[Int]]('rangeBounds)
+    val decoratedRangeBounds = PrivateMethod[Array[Int]](Symbol("rangeBounds"))
     partitioners.foreach { case (numPartitions, partitioner) =>
       val rangeBounds = partitioner.invokePrivate(decoratedRangeBounds())
       for (element <- 1 to 1000) {
@@ -252,6 +252,71 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     assert(stats.min === 2.0)
 
     // Add other tests here for classes that should be able to handle empty partitions correctly
+  }
+
+  test("Number of elements in RDD is less than number of partitions") {
+    val rdd = sc.parallelize(1 to 3).map(x => (x, x))
+    val partitioner = new RangePartitioner(22, rdd)
+    assert(partitioner.numPartitions === 3)
+  }
+
+  test("defaultPartitioner") {
+    val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
+    val rdd2 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
+      .partitionBy(new HashPartitioner(10))
+    val rdd3 = sc.parallelize(Seq((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
+      .partitionBy(new HashPartitioner(100))
+    val rdd4 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
+      .partitionBy(new HashPartitioner(9))
+    val rdd5 = sc.parallelize((1 to 10).map(x => (x, x)), 11)
+
+    val partitioner1 = Partitioner.defaultPartitioner(rdd1, rdd2)
+    val partitioner2 = Partitioner.defaultPartitioner(rdd2, rdd3)
+    val partitioner3 = Partitioner.defaultPartitioner(rdd3, rdd1)
+    val partitioner4 = Partitioner.defaultPartitioner(rdd1, rdd2, rdd3)
+    val partitioner5 = Partitioner.defaultPartitioner(rdd4, rdd5)
+
+    assert(partitioner1.numPartitions == rdd1.getNumPartitions)
+    assert(partitioner2.numPartitions == rdd3.getNumPartitions)
+    assert(partitioner3.numPartitions == rdd3.getNumPartitions)
+    assert(partitioner4.numPartitions == rdd3.getNumPartitions)
+    assert(partitioner5.numPartitions == rdd4.getNumPartitions)
+  }
+
+  test("defaultPartitioner when defaultParallelism is set") {
+    assert(!sc.conf.contains("spark.default.parallelism"))
+    try {
+      sc.conf.set("spark.default.parallelism", "4")
+
+      val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
+      val rdd2 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
+        .partitionBy(new HashPartitioner(10))
+      val rdd3 = sc.parallelize(Seq((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
+        .partitionBy(new HashPartitioner(100))
+      val rdd4 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
+        .partitionBy(new HashPartitioner(9))
+      val rdd5 = sc.parallelize((1 to 10).map(x => (x, x)), 11)
+      val rdd6 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
+        .partitionBy(new HashPartitioner(3))
+
+      val partitioner1 = Partitioner.defaultPartitioner(rdd1, rdd2)
+      val partitioner2 = Partitioner.defaultPartitioner(rdd2, rdd3)
+      val partitioner3 = Partitioner.defaultPartitioner(rdd3, rdd1)
+      val partitioner4 = Partitioner.defaultPartitioner(rdd1, rdd2, rdd3)
+      val partitioner5 = Partitioner.defaultPartitioner(rdd4, rdd5)
+      val partitioner6 = Partitioner.defaultPartitioner(rdd5, rdd5)
+      val partitioner7 = Partitioner.defaultPartitioner(rdd1, rdd6)
+
+      assert(partitioner1.numPartitions == rdd2.getNumPartitions)
+      assert(partitioner2.numPartitions == rdd3.getNumPartitions)
+      assert(partitioner3.numPartitions == rdd3.getNumPartitions)
+      assert(partitioner4.numPartitions == rdd3.getNumPartitions)
+      assert(partitioner5.numPartitions == rdd4.getNumPartitions)
+      assert(partitioner6.numPartitions == sc.defaultParallelism)
+      assert(partitioner7.numPartitions == sc.defaultParallelism)
+    } finally {
+      sc.conf.remove("spark.default.parallelism")
+    }
   }
 }
 

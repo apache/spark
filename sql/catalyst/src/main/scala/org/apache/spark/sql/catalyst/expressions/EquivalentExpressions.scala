@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 
@@ -41,7 +42,7 @@ class EquivalentExpressions {
   }
 
   // For each expression, the set of equivalent expressions.
-  private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.MutableList[Expression]]
+  private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.ArrayBuffer[Expression]]
 
   /**
    * Adds each expression to this data structure, grouping them with existing equivalent
@@ -56,7 +57,7 @@ class EquivalentExpressions {
         f.get += expr
         true
       } else {
-        equivalenceMap.put(e, mutable.MutableList(expr))
+        equivalenceMap.put(e, mutable.ArrayBuffer(expr))
         false
       }
     } else {
@@ -72,7 +73,10 @@ class EquivalentExpressions {
     val skip = expr.isInstanceOf[LeafExpression] ||
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
-      expr.find(_.isInstanceOf[LambdaVariable]).isDefined
+      expr.find(_.isInstanceOf[LambdaVariable]).isDefined ||
+      // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
+      // can cause error like NPE.
+      (expr.isInstanceOf[PlanExpression[_]] && TaskContext.get != null)
 
     // There are some special expressions that we should not recurse into all of its children.
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
@@ -87,8 +91,7 @@ class EquivalentExpressions {
     def childrenToRecurse: Seq[Expression] = expr match {
       case _: CodegenFallback => Nil
       case i: If => i.predicate :: Nil
-      // `CaseWhen` implements `CodegenFallback`, we only need to handle `CaseWhenCodegen` here.
-      case c: CaseWhenCodegen => c.children.head :: Nil
+      case c: CaseWhen => c.children.head :: Nil
       case c: Coalesce => c.children.head :: Nil
       case other => other.children
     }
@@ -103,7 +106,7 @@ class EquivalentExpressions {
    * an empty collection if there are none.
    */
   def getEquivalentExprs(e: Expression): Seq[Expression] = {
-    equivalenceMap.getOrElse(Expr(e), mutable.MutableList())
+    equivalenceMap.getOrElse(Expr(e), Seq.empty)
   }
 
   /**

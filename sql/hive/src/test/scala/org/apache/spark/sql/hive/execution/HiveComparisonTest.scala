@@ -24,13 +24,15 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 
@@ -44,8 +46,9 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  * See the documentation of public vals in this class for information on how test execution can be
  * configured using system properties.
  */
-abstract class HiveComparisonTest
-  extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
+abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
+
+  override protected val enableAutoThreadAudit = false
 
   /**
    * Path to the test datasets. We find this by looking up "hive-test-path-helper.txt" file.
@@ -168,7 +171,7 @@ abstract class HiveComparisonTest
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
       case _: ExplainCommand => answer
-      case _: DescribeTableCommand | ShowColumnsCommand(_, _) =>
+      case _: DescribeCommandBase | ShowColumnsCommand(_, _) =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -192,12 +195,7 @@ abstract class HiveComparisonTest
     "last_modified_by",
     "last_modified_time",
     "Owner:",
-    "COLUMN_STATS_ACCURATE",
     // The following are hive specific schema parameters which we do not need to match exactly.
-    "numFiles",
-    "numRows",
-    "rawDataSize",
-    "totalSize",
     "totalNumberFiles",
     "maxFileSize",
     "minFileSize"
@@ -229,7 +227,7 @@ abstract class HiveComparisonTest
       sql: String,
       reset: Boolean = true,
       tryWithoutResettingFirst: Boolean = false,
-      skip: Boolean = false) {
+      skip: Boolean = false): Unit = {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -346,7 +344,10 @@ abstract class HiveComparisonTest
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
-          try { (query, prepareAnswer(query, query.hiveResultString())) } catch {
+          def getResult(): Seq[String] = {
+            SQLExecution.withNewExecutionId(query)(hiveResultString(query.executedPlan))
+          }
+          try { (query, prepareAnswer(query, getResult())) } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
@@ -370,9 +371,11 @@ abstract class HiveComparisonTest
 
             // We will ignore the ExplainCommand, ShowFunctions, DescribeFunction
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[ShowFunctionsCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeFunctionCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeTableCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[ShowFunctionsStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeFunctionStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeRelation]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeColumnStatement]) &&
                 preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive

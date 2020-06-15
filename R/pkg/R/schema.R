@@ -23,15 +23,20 @@
 #' Create a structType object that contains the metadata for a SparkDataFrame. Intended for
 #' use with createDataFrame and toDF.
 #'
-#' @param x a structField object (created with the field() function)
+#' @param x a structField object (created with the \code{structField} method). Since Spark 2.3,
+#'          this can be a DDL-formatted string, which is a comma separated list of field
+#'          definitions, e.g., "a INT, b STRING".
 #' @param ... additional structField objects
 #' @return a structType object
 #' @rdname structType
-#' @export
 #' @examples
 #'\dontrun{
-#' schema <-  structType(structField("a", "integer"), structField("c", "string"),
+#' schema <- structType(structField("a", "integer"), structField("c", "string"),
 #'                       structField("avg", "double"))
+#' df1 <- gapply(df, list("a", "c"),
+#'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
+#'               schema)
+#' schema <- structType("a INT, c STRING, avg DOUBLE")
 #' df1 <- gapply(df, list("a", "c"),
 #'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
 #'               schema)
@@ -43,7 +48,6 @@ structType <- function(x, ...) {
 
 #' @rdname structType
 #' @method structType jobj
-#' @export
 structType.jobj <- function(x, ...) {
   obj <- structure(list(), class = "structType")
   obj$jobj <- x
@@ -53,7 +57,6 @@ structType.jobj <- function(x, ...) {
 
 #' @rdname structType
 #' @method structType structField
-#' @export
 structType.structField <- function(x, ...) {
   fields <- list(x, ...)
   if (!all(sapply(fields, inherits, "structField"))) {
@@ -65,6 +68,22 @@ structType.structField <- function(x, ...) {
   stObj <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                        "createStructType",
                        sfObjList)
+  structType(stObj)
+}
+
+#' @rdname structType
+#' @method structType character
+structType.character <- function(x, ...) {
+  if (!is.character(x)) {
+    stop("schema must be a DDL-formatted string.")
+  }
+  if (length(list(...)) > 0) {
+    stop("multiple DDL-formatted strings are not supported")
+  }
+
+  stObj <- handledCallJStatic("org.apache.spark.sql.types.StructType",
+                              "fromDDL",
+                              x)
   structType(stObj)
 }
 
@@ -80,10 +99,9 @@ print.structType <- function(x, ...) {
   cat("StructType\n",
       sapply(x$fields(),
              function(field) {
-               paste("|-", "name = \"", field$name(),
-                     "\", type = \"", field$dataType.toString(),
-                     "\", nullable = ", field$nullable(), "\n",
-                     sep = "")
+               paste0("|-", "name = \"", field$name(),
+                      "\", type = \"", field$dataType.toString(),
+                      "\", nullable = ", field$nullable(), "\n")
              }),
       sep = "")
 }
@@ -96,13 +114,12 @@ print.structType <- function(x, ...) {
 #' @param ... additional argument(s) passed to the method.
 #' @return A structField object.
 #' @rdname structField
-#' @export
 #' @examples
 #'\dontrun{
 #' field1 <- structField("a", "integer")
 #' field2 <- structField("c", "string")
 #' field3 <- structField("avg", "double")
-#' schema <-  structType(field1, field2, field3)
+#' schema <- structType(field1, field2, field3)
 #' df1 <- gapply(df, list("a", "c"),
 #'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
 #'               schema)
@@ -114,7 +131,6 @@ structField <- function(x, ...) {
 
 #' @rdname structField
 #' @method structField jobj
-#' @export
 structField.jobj <- function(x, ...) {
   obj <- structure(list(), class = "structField")
   obj$jobj <- x
@@ -132,7 +148,7 @@ checkType <- function(type) {
   } else {
     # Check complex types
     firstChar <- substr(type, 1, 1)
-    switch (firstChar,
+    switch(firstChar,
             a = {
               # Array type
               m <- regexec("^array<(.+)>$", type)
@@ -166,7 +182,7 @@ checkType <- function(type) {
                 # strsplit does not return the final empty string, so check if
                 # the final char is ","
                 if (substr(fieldsString, nchar(fieldsString), nchar(fieldsString)) != ",") {
-                  fields <- strsplit(fieldsString, ",")[[1]]
+                  fields <- strsplit(fieldsString, ",", fixed = TRUE)[[1]]
                   for (field in fields) {
                     m <- regexec("^(.+):(.+)$", field)
                     matchedStrings <- regmatches(field, m)
@@ -183,13 +199,12 @@ checkType <- function(type) {
             })
   }
 
-  stop(paste("Unsupported type for SparkDataframe:", type))
+  stop("Unsupported type for SparkDataframe: ", type)
 }
 
 #' @param type The data type of the field
 #' @param nullable A logical vector indicating whether or not the field is nullable
 #' @rdname structField
-#' @export
 structField.character <- function(x, type, nullable = TRUE, ...) {
   if (class(x) != "character") {
     stop("Field name must be a string.")

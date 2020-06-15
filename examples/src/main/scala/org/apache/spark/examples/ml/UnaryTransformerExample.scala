@@ -22,10 +22,8 @@ package org.apache.spark.examples.ml
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.DoubleParam
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
-import org.apache.spark.sql.functions.col
-// $example off$
 import org.apache.spark.sql.SparkSession
-// $example on$
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{DataType, DataTypes}
 import org.apache.spark.util.Utils
 // $example off$
@@ -84,7 +82,7 @@ object UnaryTransformerExample {
   object MyTransformer extends DefaultParamsReadable[MyTransformer]
   // $example off$
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
       .appName("UnaryTransformerExample")

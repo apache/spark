@@ -46,7 +46,7 @@ private[spark] class FixedLengthBinaryRecordReader
   private var recordKey: LongWritable = null
   private var recordValue: BytesWritable = null
 
-  override def close() {
+  override def close(): Unit = {
     if (fileInputStream != null) {
       fileInputStream.close()
     }
@@ -69,7 +69,7 @@ private[spark] class FixedLengthBinaryRecordReader
     }
   }
 
-  override def initialize(inputSplit: InputSplit, context: TaskAttemptContext) {
+  override def initialize(inputSplit: InputSplit, context: TaskAttemptContext): Unit = {
     // the file input
     val fileSplit = inputSplit.asInstanceOf[FileSplit]
 

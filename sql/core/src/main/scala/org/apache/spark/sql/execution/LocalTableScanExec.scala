@@ -25,15 +25,18 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Physical plan node for scanning data from a local collection.
+ *
+ * `Seq` may not be serializable and ideally we should not send `rows` and `unsafeRows`
+ * to the executors. Thus marking them as transient.
  */
 case class LocalTableScanExec(
     output: Seq[Attribute],
-    rows: Seq[InternalRow]) extends LeafExecNode {
+    @transient rows: Seq[InternalRow]) extends LeafExecNode with InputRDDCodegen {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  private lazy val unsafeRows: Array[InternalRow] = {
+  @transient private lazy val unsafeRows: Array[InternalRow] = {
     if (rows.isEmpty) {
       Array.empty
     } else {
@@ -42,10 +45,14 @@ case class LocalTableScanExec(
     }
   }
 
-  private lazy val numParallelism: Int = math.min(math.max(unsafeRows.length, 1),
-    sqlContext.sparkContext.defaultParallelism)
-
-  private lazy val rdd = sqlContext.sparkContext.parallelize(unsafeRows, numParallelism)
+  @transient private lazy val rdd: RDD[InternalRow] = {
+    if (rows.isEmpty) {
+      sqlContext.sparkContext.emptyRDD
+    } else {
+      val numSlices = math.min(unsafeRows.length, sqlContext.sparkContext.defaultParallelism)
+      sqlContext.sparkContext.parallelize(unsafeRows, numSlices)
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -73,4 +80,15 @@ case class LocalTableScanExec(
     longMetric("numOutputRows").add(taken.size)
     taken
   }
+
+  override def executeTail(limit: Int): Array[InternalRow] = {
+    val taken: Seq[InternalRow] = unsafeRows.takeRight(limit)
+    longMetric("numOutputRows").add(taken.size)
+    taken.toArray
+  }
+
+  // Input is already UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = false
+
+  override def inputRDD: RDD[InternalRow] = rdd
 }

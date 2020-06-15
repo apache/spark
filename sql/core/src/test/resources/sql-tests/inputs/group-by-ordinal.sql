@@ -38,7 +38,9 @@ select a, b, sum(b) from data group by 3;
 select a, b, sum(b) + 2 from data group by 3;
 
 -- negative case: nondeterministic expression
-select a, rand(0), sum(b) from data group by a, 2;
+select a, rand(0), sum(b)
+from 
+(select /*+ REPARTITION(1) */ a, b from data) group by a, 2;
 
 -- negative case: star
 select * from data group by a, b, 1;
@@ -52,7 +54,7 @@ select count(a), a from (select 1 as a) tmp group by 2 having a > 0;
 -- mixed cases: group-by ordinals and aliases
 select a, a AS k, count(b) from data group by k, 1;
 
--- turn of group by ordinal
+-- turn off group by ordinal
 set spark.sql.groupByOrdinal=false;
 
 -- can now group by negative literal

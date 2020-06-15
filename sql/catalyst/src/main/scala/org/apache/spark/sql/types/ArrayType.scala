@@ -21,15 +21,16 @@ import scala.math.Ordering
 
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
 /**
  * Companion object for ArrayType.
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object ArrayType extends AbstractDataType {
   /**
    * Construct a [[ArrayType]] object with the given element type. The `containsNull` is true.
@@ -42,7 +43,7 @@ object ArrayType extends AbstractDataType {
     other.isInstanceOf[ArrayType]
   }
 
-  override private[sql] def simpleString: String = "array"
+  override private[spark] def simpleString: String = "array"
 }
 
 /**
@@ -60,16 +61,21 @@ object ArrayType extends AbstractDataType {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
 
   /** No-arg constructor for kryo. */
   protected def this() = this(null, false)
 
-  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(
-      s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
-    DataType.buildFormattedString(elementType, s"$prefix    |", builder)
+  private[sql] def buildFormattedString(
+      prefix: String,
+      stringConcat: StringConcat,
+      maxDepth: Int): Unit = {
+    if (maxDepth > 0) {
+      stringConcat.append(
+        s"$prefix-- element: ${elementType.typeName} (containsNull = $containsNull)\n")
+      DataType.buildFormattedString(elementType, s"$prefix    |", stringConcat, maxDepth)
+    }
   }
 
   override private[sql] def jsonValue =
@@ -103,7 +109,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
       case a : ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case other =>
-        throw new IllegalArgumentException(s"Type $other does not support ordered operations")
+        throw new IllegalArgumentException(
+          s"Type ${other.catalogString} does not support ordered operations")
     }
 
     def compare(x: ArrayData, y: ArrayData): Int = {

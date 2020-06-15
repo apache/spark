@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
+import org.apache.spark.sql.test.SharedSparkSession
 
-class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
+class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("reflect and java_method") {
@@ -30,6 +31,14 @@ class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
         s"reflect('$className', 'method1', a, b)",
         s"java_method('$className', 'method1', a, b)"),
       Row("m1one", "m1one"))
+  }
+
+  test("version") {
+    val df = sql("SELECT version()")
+    checkAnswer(
+      df,
+      Row(SPARK_VERSION_SHORT + " " + SPARK_REVISION))
+    assert(df.schema.fieldNames === Seq("version()"))
   }
 }
 

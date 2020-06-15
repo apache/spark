@@ -19,8 +19,8 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
 
 /**
  * Compute the singular value decomposition (SVD) of a tall-and-skinny matrix.
@@ -35,7 +35,7 @@ import org.apache.spark.mllib.linalg.Vectors
  * represents a 3-by-2 matrix, whose first row is (0.5, 1.0).
  */
 object TallSkinnySVD {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 1) {
       System.err.println("Usage: TallSkinnySVD <input>")
       System.exit(1)
@@ -54,7 +54,7 @@ object TallSkinnySVD {
     // Compute SVD.
     val svd = mat.computeSVD(mat.numCols().toInt)
 
-    println("Singular values are " + svd.s)
+    println(s"Singular values are ${svd.s}")
 
     sc.stop()
   }

@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, _}
-import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateMutableProjection, GenerateSafeProjection}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
 /**
@@ -324,7 +328,11 @@ case class ScalaUDAF(
     udaf: UserDefinedAggregateFunction,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate with NonSQLExpression with Logging with ImplicitCastInputTypes {
+  extends ImperativeAggregate
+  with NonSQLExpression
+  with Logging
+  with ImplicitCastInputTypes
+  with UserDefinedExpression {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -336,7 +344,7 @@ case class ScalaUDAF(
 
   override def dataType: DataType = udaf.dataType
 
-  override def deterministic: Boolean = udaf.deterministic
+  override lazy val deterministic: Boolean = udaf.deterministic
 
   override val inputTypes: Seq[DataType] = udaf.inputSchema.map(_.dataType)
 
@@ -361,7 +369,7 @@ case class ScalaUDAF(
     val inputAttributes = childrenSchema.toAttributes
     log.debug(
       s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
-    GenerateMutableProjection.generate(children, inputAttributes)
+    MutableProjection.create(children, inputAttributes)
   }
 
   private[this] lazy val inputToScalaConverters: Any => Any =
@@ -445,4 +453,67 @@ case class ScalaUDAF(
   }
 
   override def nodeName: String = udaf.getClass.getSimpleName
+}
+
+case class ScalaAggregator[IN, BUF, OUT](
+    children: Seq[Expression],
+    agg: Aggregator[IN, BUF, OUT],
+    inputEncoderNR: ExpressionEncoder[IN],
+    nullable: Boolean = true,
+    isDeterministic: Boolean = true,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[BUF]
+  with NonSQLExpression
+  with UserDefinedExpression
+  with ImplicitCastInputTypes
+  with Logging {
+
+  private[this] lazy val inputDeserializer = inputEncoderNR.resolveAndBind().createDeserializer()
+  private[this] lazy val bufferEncoder =
+    agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]].resolveAndBind()
+  private[this] lazy val bufferSerializer = bufferEncoder.createSerializer()
+  private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
+  private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
+  private[this] lazy val outputSerializer = outputEncoder.createSerializer()
+
+  def dataType: DataType = outputEncoder.objSerializer.dataType
+
+  def inputTypes: Seq[DataType] = inputEncoderNR.schema.map(_.dataType)
+
+  override lazy val deterministic: Boolean = isDeterministic
+
+  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  private[this] lazy val inputProjection = UnsafeProjection.create(children)
+
+  def createAggregationBuffer(): BUF = agg.zero
+
+  def update(buffer: BUF, input: InternalRow): BUF =
+    agg.reduce(buffer, inputDeserializer(inputProjection(input)))
+
+  def merge(buffer: BUF, input: BUF): BUF = agg.merge(buffer, input)
+
+  def eval(buffer: BUF): Any = {
+    val row = outputSerializer(agg.finish(buffer))
+    if (outputEncoder.isSerializedAsStruct) row else row.get(0, dataType)
+  }
+
+  private[this] lazy val bufferRow = new UnsafeRow(bufferEncoder.namedExpressions.length)
+
+  def serialize(agg: BUF): Array[Byte] =
+    bufferSerializer(agg).asInstanceOf[UnsafeRow].getBytes()
+
+  def deserialize(storageFormat: Array[Byte]): BUF = {
+    bufferRow.pointTo(storageFormat, storageFormat.length)
+    bufferDeserializer(bufferRow)
+  }
+
+  override def toString: String = s"""${nodeName}(${children.mkString(",")})"""
+
+  override def nodeName: String = agg.getClass.getSimpleName
 }

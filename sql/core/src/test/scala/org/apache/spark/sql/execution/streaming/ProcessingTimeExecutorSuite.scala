@@ -19,24 +19,22 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.mutable
-
-import org.eclipse.jetty.util.ConcurrentHashSet
-import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.{Eventually, Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.streaming.ProcessingTime
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
-class ProcessingTimeExecutorSuite extends SparkFunSuite {
+class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   val timeout = 10.seconds
 
   test("nextBatchTime") {
-    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(100))
+    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTimeTrigger(100))
     assert(processingTimeExecutor.nextBatchTime(0) === 100)
     assert(processingTimeExecutor.nextBatchTime(1) === 100)
     assert(processingTimeExecutor.nextBatchTime(99) === 100)
@@ -46,11 +44,11 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite {
   }
 
   test("trigger timing") {
-    val triggerTimes = new ConcurrentHashSet[Int]
+    val triggerTimes = ConcurrentHashMap.newKeySet[Int]()
     val clock = new StreamManualClock()
     @volatile var continueExecuting = true
     @volatile var clockIncrementInTrigger = 0L
-    val executor = ProcessingTimeExecutor(ProcessingTime("1000 milliseconds"), clock)
+    val executor = ProcessingTimeExecutor(ProcessingTimeTrigger("1000 milliseconds"), clock)
     val executorThread = new Thread() {
       override def run(): Unit = {
         executor.execute(() => {
@@ -98,7 +96,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite {
 
   test("calling nextBatchTime with the result of a previous call should return the next interval") {
     val intervalMS = 100
-    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(intervalMS))
+    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTimeTrigger(intervalMS))
 
     val ITERATION = 10
     var nextBatchTime: Long = 0
@@ -112,7 +110,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite {
 
   private def testBatchTermination(intervalMs: Long): Unit = {
     var batchCounts = 0
-    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(intervalMs))
+    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTimeTrigger(intervalMs))
     processingTimeExecutor.execute(() => {
       batchCounts += 1
       // If the batch termination works correctly, batchCounts should be 3 after `execute`
@@ -131,7 +129,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite {
     @volatile var batchFallingBehindCalled = false
     val t = new Thread() {
       override def run(): Unit = {
-        val processingTimeExecutor = new ProcessingTimeExecutor(ProcessingTime(100), clock) {
+        val processingTimeExecutor = new ProcessingTimeExecutor(ProcessingTimeTrigger(100), clock) {
           override def notifyBatchFallingBehind(realElapsedTimeMs: Long): Unit = {
             batchFallingBehindCalled = true
           }
@@ -147,7 +145,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite {
     eventually { assert(clock.isStreamWaitingFor(200)) }
     clock.advance(200)
     waitForThreadJoin(t)
-    assert(batchFallingBehindCalled === true)
+    assert(batchFallingBehindCalled)
   }
 
   private def eventually(body: => Unit): Unit = {

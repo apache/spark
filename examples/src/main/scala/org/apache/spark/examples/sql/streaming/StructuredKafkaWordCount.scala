@@ -18,11 +18,14 @@
 // scalastyle:off println
 package org.apache.spark.examples.sql.streaming
 
+import java.util.UUID
+
 import org.apache.spark.sql.SparkSession
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
  * Usage: StructuredKafkaWordCount <bootstrap-servers> <subscribe-type> <topics>
+ *     [<checkpoint-location>]
  *   <bootstrap-servers> The Kafka "bootstrap.servers" configuration. A
  *   comma-separated list of host:port.
  *   <subscribe-type> There are three kinds of type, i.e. 'assign', 'subscribe',
@@ -36,6 +39,8 @@ import org.apache.spark.sql.SparkSession
  *   |- Only one of "assign, "subscribe" or "subscribePattern" options can be
  *   |  specified for Kafka source.
  *   <topics> Different value format depends on the value of 'subscribe-type'.
+ *   <checkpoint-location> Directory in which to create checkpoints. If not
+ *   provided, defaults to a randomized directory in /tmp.
  *
  * Example:
  *    `$ bin/run-example \
@@ -46,11 +51,13 @@ object StructuredKafkaWordCount {
   def main(args: Array[String]): Unit = {
     if (args.length < 3) {
       System.err.println("Usage: StructuredKafkaWordCount <bootstrap-servers> " +
-        "<subscribe-type> <topics>")
+        "<subscribe-type> <topics> [<checkpoint-location>]")
       System.exit(1)
     }
 
-    val Array(bootstrapServers, subscribeType, topics) = args
+    val Array(bootstrapServers, subscribeType, topics, _*) = args
+    val checkpointLocation =
+      if (args.length > 3) args(3) else "/tmp/temporary-" + UUID.randomUUID.toString
 
     val spark = SparkSession
       .builder
@@ -76,6 +83,7 @@ object StructuredKafkaWordCount {
     val query = wordCounts.writeStream
       .outputMode("complete")
       .format("console")
+      .option("checkpointLocation", checkpointLocation)
       .start()
 
     query.awaitTermination()

@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
@@ -51,8 +51,8 @@ class LocalSparkCluster(
 
     // Disable REST server on Master in this mode unless otherwise specified
     val _conf = conf.clone()
-      .setIfMissing("spark.master.rest.enabled", "false")
-      .set("spark.shuffle.service.enabled", "false")
+      .setIfMissing(config.MASTER_REST_SERVER_ENABLED, false)
+      .set(config.SHUFFLE_SERVICE_ENABLED, false)
 
     /* Start the Master */
     val (rpcEnv, webUiPort, _) = Master.startRpcEnvAndEndpoint(localHostname, 0, 0, _conf)
@@ -64,14 +64,15 @@ class LocalSparkCluster(
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
       val workerEnv = Worker.startRpcEnvAndEndpoint(localHostname, 0, 0, coresPerWorker,
-        memoryPerWorker, masters, null, Some(workerNum), _conf)
+        memoryPerWorker, masters, null, Some(workerNum), _conf,
+        conf.get(config.Worker.SPARK_WORKER_RESOURCE_FILE))
       workerRpcEnvs += workerEnv
     }
 
     masters
   }
 
-  def stop() {
+  def stop(): Unit = {
     logInfo("Shutting down local Spark cluster.")
     // Stop the workers before the master so they don't get upset that it disconnected
     workerRpcEnvs.foreach(_.shutdown())

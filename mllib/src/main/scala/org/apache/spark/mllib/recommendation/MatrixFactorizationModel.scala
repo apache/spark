@@ -20,8 +20,6 @@ package org.apache.spark.mllib.recommendation
 import java.io.IOException
 import java.lang.{Integer => JavaInteger}
 
-import scala.collection.mutable
-
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.hadoop.fs.Path
@@ -33,7 +31,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.linalg.BLAS
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -80,8 +78,13 @@ class MatrixFactorizationModel @Since("0.8.0") (
   /** Predict the rating of one user for one product. */
   @Since("0.8.0")
   def predict(user: Int, product: Int): Double = {
-    val userVector = userFeatures.lookup(user).head
-    val productVector = productFeatures.lookup(product).head
+    val userFeatureSeq = userFeatures.lookup(user)
+    require(userFeatureSeq.nonEmpty, s"userId: $user not found in the model")
+    val productFeatureSeq = productFeatures.lookup(product)
+    require(productFeatureSeq.nonEmpty, s"productId: $product not found in the model")
+
+    val userVector = userFeatureSeq.head
+    val productVector = productFeatureSeq.head
     blas.ddot(rank, userVector, 1, productVector, 1)
   }
 
@@ -166,9 +169,12 @@ class MatrixFactorizationModel @Since("0.8.0") (
    *  recommended the product is.
    */
   @Since("1.1.0")
-  def recommendProducts(user: Int, num: Int): Array[Rating] =
-    MatrixFactorizationModel.recommend(userFeatures.lookup(user).head, productFeatures, num)
+  def recommendProducts(user: Int, num: Int): Array[Rating] = {
+    val userFeatureSeq = userFeatures.lookup(user)
+    require(userFeatureSeq.nonEmpty, s"userId: $user not found in the model")
+    MatrixFactorizationModel.recommend(userFeatureSeq.head, productFeatures, num)
       .map(t => Rating(user, t._1, t._2))
+  }
 
   /**
    * Recommends users to a product. That is, this returns users who are most likely to be
@@ -183,11 +189,12 @@ class MatrixFactorizationModel @Since("0.8.0") (
    *  recommended the user is.
    */
   @Since("1.1.0")
-  def recommendUsers(product: Int, num: Int): Array[Rating] =
-    MatrixFactorizationModel.recommend(productFeatures.lookup(product).head, userFeatures, num)
+  def recommendUsers(product: Int, num: Int): Array[Rating] = {
+    val productFeatureSeq = productFeatures.lookup(product)
+    require(productFeatureSeq.nonEmpty, s"productId: $product not found in the model")
+    MatrixFactorizationModel.recommend(productFeatureSeq.head, userFeatures, num)
       .map(t => Rating(t._1, product, t._2))
-
-  protected override val formatVersion: String = "1.0"
+  }
 
   /**
    * Save this model to the given path.
@@ -263,6 +270,19 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
   /**
    * Makes recommendations for all users (or products).
+   *
+   * Note: the previous approach used for computing top-k recommendations aimed to group
+   * individual factor vectors into blocks, so that Level 3 BLAS operations (gemm) could
+   * be used for efficiency. However, this causes excessive GC pressure due to the large
+   * arrays required for intermediate result storage, as well as a high sensitivity to the
+   * block size used.
+   *
+   * The following approach still groups factors into blocks, but instead computes the
+   * top-k elements per block, using dot product and an efficient [[BoundedPriorityQueue]]
+   * (instead of gemm). This avoids any large intermediate data structures and results
+   * in significantly reduced GC pressure as well as shuffle data, which far outweighs
+   * any cost incurred from not using Level 3 BLAS operations.
+   *
    * @param rank rank
    * @param srcFeatures src features to receive recommendations
    * @param dstFeatures dst features used to make recommendations
@@ -277,46 +297,22 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       num: Int): RDD[(Int, Array[(Int, Double)])] = {
     val srcBlocks = blockify(srcFeatures)
     val dstBlocks = blockify(dstFeatures)
-    /**
-     * The previous approach used for computing top-k recommendations aimed to group
-     * individual factor vectors into blocks, so that Level 3 BLAS operations (gemm) could
-     * be used for efficiency. However, this causes excessive GC pressure due to the large
-     * arrays required for intermediate result storage, as well as a high sensitivity to the
-     * block size used.
-     * The following approach still groups factors into blocks, but instead computes the
-     * top-k elements per block, using a simple dot product (instead of gemm) and an efficient
-     * [[BoundedPriorityQueue]]. This avoids any large intermediate data structures and results
-     * in significantly reduced GC pressure as well as shuffle data, which far outweighs
-     * any cost incurred from not using Level 3 BLAS operations.
-     */
     val ratings = srcBlocks.cartesian(dstBlocks).flatMap { case (srcIter, dstIter) =>
       val m = srcIter.size
       val n = math.min(dstIter.size, num)
       val output = new Array[(Int, (Int, Double))](m * n)
-      var j = 0
+      var i = 0
       val pq = new BoundedPriorityQueue[(Int, Double)](n)(Ordering.by(_._2))
       srcIter.foreach { case (srcId, srcFactor) =>
         dstIter.foreach { case (dstId, dstFactor) =>
-          /*
-           * The below code is equivalent to
-           *    `val score = blas.ddot(rank, srcFactor, 1, dstFactor, 1)`
-           * This handwritten version is as or more efficient as BLAS calls in this case.
-           */
-          var score: Double = 0
-          var k = 0
-          while (k < rank) {
-            score += srcFactor(k) * dstFactor(k)
-            k += 1
-          }
+          // We use F2jBLAS which is faster than a call to native BLAS for vector dot product
+          val score = BLAS.f2jBLAS.ddot(rank, srcFactor, 1, dstFactor, 1)
           pq += dstId -> score
         }
-        val pqIter = pq.iterator
-        var i = 0
-        while (i < n) {
-          output(j + i) = (srcId, pqIter.next())
+        pq.foreach { case (dstId, score) =>
+          output(i) = (srcId, (dstId, score))
           i += 1
         }
-        j += n
         pq.clear()
       }
       output.toSeq

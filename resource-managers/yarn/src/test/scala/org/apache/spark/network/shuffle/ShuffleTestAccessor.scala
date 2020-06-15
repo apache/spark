@@ -31,7 +31,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
  */
 object ShuffleTestAccessor {
 
-  def getBlockResolver(handler: ExternalShuffleBlockHandler): ExternalShuffleBlockResolver = {
+  def getBlockResolver(handler: ExternalBlockHandler): ExternalShuffleBlockResolver = {
     handler.blockManager
   }
 

@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
@@ -41,14 +44,14 @@ public class StreamHandle extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamId, numChunks);
+    return Objects.hash(streamId, numChunks);
   }
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamId", streamId)
-      .add("numChunks", numChunks)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("streamId", streamId)
+      .append("numChunks", numChunks)
       .toString();
   }
 
@@ -56,8 +59,8 @@ public class StreamHandle extends BlockTransferMessage {
   public boolean equals(Object other) {
     if (other != null && other instanceof StreamHandle) {
       StreamHandle o = (StreamHandle) other;
-      return Objects.equal(streamId, o.streamId)
-        && Objects.equal(numChunks, o.numChunks);
+      return Objects.equals(streamId, o.streamId)
+        && Objects.equals(numChunks, o.numChunks);
     }
     return false;
   }

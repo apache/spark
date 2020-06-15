@@ -1,0 +1,670 @@
+================================================================================================
+Pushdown for many distinct value case
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 0 string row (value IS NULL):      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9582           9636          49          1.6         609.2       1.0X
+Parquet Vectorized (Pushdown)                       759            785          40         20.7          48.3      12.6X
+Native ORC Vectorized                              7141           7183          60          2.2         454.0       1.3X
+Native ORC Vectorized (Pushdown)                    513            556          49         30.7          32.6      18.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 0 string row ('7864320' < value < '7864320'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9657           9675          22          1.6         614.0       1.0X
+Parquet Vectorized (Pushdown)                       707            724          26         22.2          44.9      13.7X
+Native ORC Vectorized                              7250           7296          49          2.2         460.9       1.3X
+Native ORC Vectorized (Pushdown)                    503            537          51         31.3          32.0      19.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 string row (value = '7864320'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9636           9657          20          1.6         612.7       1.0X
+Parquet Vectorized (Pushdown)                       679            693          13         23.2          43.2      14.2X
+Native ORC Vectorized                              7327           7359          25          2.1         465.8       1.3X
+Native ORC Vectorized (Pushdown)                    483            512          30         32.6          30.7      20.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 string row (value <=> '7864320'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9688           9710          29          1.6         615.9       1.0X
+Parquet Vectorized (Pushdown)                       674            692          14         23.3          42.8      14.4X
+Native ORC Vectorized                              7315           7343          22          2.2         465.1       1.3X
+Native ORC Vectorized (Pushdown)                    483            498          24         32.6          30.7      20.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 string row ('7864320' <= value <= '7864320'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9611           9638          21          1.6         611.1       1.0X
+Parquet Vectorized (Pushdown)                       670            676           4         23.5          42.6      14.3X
+Native ORC Vectorized                              7261           7313          31          2.2         461.6       1.3X
+Native ORC Vectorized (Pushdown)                    480            518          51         32.8          30.5      20.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select all string rows (value IS NOT NULL):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                18597          18738          91          0.8        1182.4       1.0X
+Parquet Vectorized (Pushdown)                     18864          18915          30          0.8        1199.4       1.0X
+Native ORC Vectorized                             16865          16968          67          0.9        1072.3       1.1X
+Native ORC Vectorized (Pushdown)                  17056          17168         120          0.9        1084.4       1.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 0 int row (value IS NULL):         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8923           8981          48          1.8         567.3       1.0X
+Parquet Vectorized (Pushdown)                       651            670          25         24.1          41.4      13.7X
+Native ORC Vectorized                              6477           6507          46          2.4         411.8       1.4X
+Native ORC Vectorized (Pushdown)                    453            470          26         34.7          28.8      19.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 0 int row (7864320 < value < 7864320):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8979           8989          12          1.8         570.9       1.0X
+Parquet Vectorized (Pushdown)                       659            674          15         23.9          41.9      13.6X
+Native ORC Vectorized                              6502           6522          13          2.4         413.4       1.4X
+Native ORC Vectorized (Pushdown)                    460            479          22         34.2          29.2      19.5X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 int row (value = 7864320):       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9046           9065          23          1.7         575.1       1.0X
+Parquet Vectorized (Pushdown)                       654            662           9         24.1          41.6      13.8X
+Native ORC Vectorized                              6592           6617          24          2.4         419.1       1.4X
+Native ORC Vectorized (Pushdown)                    450            468          20         34.9          28.6      20.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 int row (value <=> 7864320):     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9036           9052          16          1.7         574.5       1.0X
+Parquet Vectorized (Pushdown)                       652            661           9         24.1          41.5      13.9X
+Native ORC Vectorized                              6566           6616          36          2.4         417.4       1.4X
+Native ORC Vectorized (Pushdown)                    456            493          47         34.5          29.0      19.8X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 int row (7864320 <= value <= 7864320):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9024           9062          52          1.7         573.7       1.0X
+Parquet Vectorized (Pushdown)                       657            662           4         23.9          41.8      13.7X
+Native ORC Vectorized                              6575           6606          19          2.4         418.1       1.4X
+Native ORC Vectorized (Pushdown)                    454            464          15         34.6          28.9      19.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 int row (7864319 < value < 7864321):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8992           9012          18          1.7         571.7       1.0X
+Parquet Vectorized (Pushdown)                       651            656           4         24.2          41.4      13.8X
+Native ORC Vectorized                              6615           6622           5          2.4         420.6       1.4X
+Native ORC Vectorized (Pushdown)                    455            467          22         34.5          29.0      19.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 10% int rows (value < 1572864):    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9928           9972          49          1.6         631.2       1.0X
+Parquet Vectorized (Pushdown)                      2416           2427          11          6.5         153.6       4.1X
+Native ORC Vectorized                              7620           7650          21          2.1         484.5       1.3X
+Native ORC Vectorized (Pushdown)                   2094           2161         119          7.5         133.1       4.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 50% int rows (value < 7864320):    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                13110          13154          46          1.2         833.5       1.0X
+Parquet Vectorized (Pushdown)                      9096           9130          34          1.7         578.3       1.4X
+Native ORC Vectorized                             11109          11139          21          1.4         706.3       1.2X
+Native ORC Vectorized (Pushdown)                   8100           8158          40          1.9         515.0       1.6X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 90% int rows (value < 14155776):   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                16372          16424          53          1.0        1040.9       1.0X
+Parquet Vectorized (Pushdown)                     15745          15794          51          1.0        1001.0       1.0X
+Native ORC Vectorized                             14642          14681          31          1.1         930.9       1.1X
+Native ORC Vectorized (Pushdown)                  14209          14239          19          1.1         903.4       1.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select all int rows (value IS NOT NULL):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                17032          17078          45          0.9        1082.9       1.0X
+Parquet Vectorized (Pushdown)                     17495          17509          18          0.9        1112.3       1.0X
+Native ORC Vectorized                             15626          15720          61          1.0         993.5       1.1X
+Native ORC Vectorized (Pushdown)                  15871          15950          71          1.0        1009.1       1.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select all int rows (value > -1):         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                17169          17200          20          0.9        1091.6       1.0X
+Parquet Vectorized (Pushdown)                     17450          17490          33          0.9        1109.4       1.0X
+Native ORC Vectorized                             16062          16134          81          1.0        1021.2       1.1X
+Native ORC Vectorized (Pushdown)                  16225          16281          48          1.0        1031.5       1.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select all int rows (value != -1):        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                17091          17199         102          0.9        1086.6       1.0X
+Parquet Vectorized (Pushdown)                     17394          17480          60          0.9        1105.9       1.0X
+Native ORC Vectorized                             16322          16366          35          1.0        1037.7       1.0X
+Native ORC Vectorized (Pushdown)                  16459          16543          52          1.0        1046.4       1.0X
+
+
+================================================================================================
+Pushdown for few distinct value case (use dictionary encoding)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 0 distinct string row (value IS NULL):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8671           8722          42          1.8         551.3       1.0X
+Parquet Vectorized (Pushdown)                       567            576           9         27.7          36.1      15.3X
+Native ORC Vectorized                              8567           8600          48          1.8         544.7       1.0X
+Native ORC Vectorized (Pushdown)                    846            870          30         18.6          53.8      10.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 0 distinct string row ('100' < value < '100'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8852           8890          30          1.8         562.8       1.0X
+Parquet Vectorized (Pushdown)                       563            567           5         27.9          35.8      15.7X
+Native ORC Vectorized                              8816           8847          25          1.8         560.5       1.0X
+Native ORC Vectorized (Pushdown)                    838            869          41         18.8          53.3      10.6X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 distinct string row (value = '100'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8764           8799          24          1.8         557.2       1.0X
+Parquet Vectorized (Pushdown)                       632            637           6         24.9          40.2      13.9X
+Native ORC Vectorized                              8688           8707          24          1.8         552.4       1.0X
+Native ORC Vectorized (Pushdown)                    907           1073         259         17.3          57.7       9.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 distinct string row (value <=> '100'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8789           8802          11          1.8         558.8       1.0X
+Parquet Vectorized (Pushdown)                       638            646          13         24.6          40.6      13.8X
+Native ORC Vectorized                              8707           8728          16          1.8         553.6       1.0X
+Native ORC Vectorized (Pushdown)                    909            931          26         17.3          57.8       9.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 distinct string row ('100' <= value <= '100'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8888           8901          11          1.8         565.1       1.0X
+Parquet Vectorized (Pushdown)                       632            639           5         24.9          40.2      14.1X
+Native ORC Vectorized                              8835           9125         424          1.8         561.7       1.0X
+Native ORC Vectorized (Pushdown)                    909            951          53         17.3          57.8       9.8X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select all distinct string rows (value IS NOT NULL):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                18995          19038          52          0.8        1207.7       1.0X
+Parquet Vectorized (Pushdown)                     19265          19339          56          0.8        1224.9       1.0X
+Native ORC Vectorized                             19356          19526         130          0.8        1230.6       1.0X
+Native ORC Vectorized (Pushdown)                  19683          19762         105          0.8        1251.4       1.0X
+
+
+================================================================================================
+Pushdown benchmark for StringStartsWith
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+StringStartsWith filter: (value like '10%'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9986          10034          42          1.6         634.9       1.0X
+Parquet Vectorized (Pushdown)                      1539           1553          20         10.2          97.8       6.5X
+Native ORC Vectorized                              7520           7560          30          2.1         478.1       1.3X
+Native ORC Vectorized (Pushdown)                   7717           7764          37          2.0         490.6       1.3X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+StringStartsWith filter: (value like '1000%'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9711           9754          31          1.6         617.4       1.0X
+Parquet Vectorized (Pushdown)                       647            657          12         24.3          41.1      15.0X
+Native ORC Vectorized                              7257           7309          42          2.2         461.4       1.3X
+Native ORC Vectorized (Pushdown)                   7424           7497          56          2.1         472.0       1.3X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+StringStartsWith filter: (value like '786432%'):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9747           9835          94          1.6         619.7       1.0X
+Parquet Vectorized (Pushdown)                       648            656           8         24.3          41.2      15.0X
+Native ORC Vectorized                              7233           7262          50          2.2         459.8       1.3X
+Native ORC Vectorized (Pushdown)                   7463           7539         115          2.1         474.5       1.3X
+
+
+================================================================================================
+Pushdown benchmark for decimal
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 decimal(9, 2) row (value = 7864320):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 4018           4049          32          3.9         255.4       1.0X
+Parquet Vectorized (Pushdown)                       163            178          19         96.6          10.4      24.7X
+Native ORC Vectorized                              4918           4969          39          3.2         312.7       0.8X
+Native ORC Vectorized (Pushdown)                    160            167          11         98.1          10.2      25.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 10% decimal(9, 2) rows (value < 1572864):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 5800           5837          36          2.7         368.8       1.0X
+Parquet Vectorized (Pushdown)                      2764           2787          19          5.7         175.7       2.1X
+Native ORC Vectorized                              7034           7050          13          2.2         447.2       0.8X
+Native ORC Vectorized (Pushdown)                   3179           3191           9          4.9         202.1       1.8X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 50% decimal(9, 2) rows (value < 7864320):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                12173          12215          33          1.3         773.9       1.0X
+Parquet Vectorized (Pushdown)                     11669          11723          31          1.3         741.9       1.0X
+Native ORC Vectorized                             13874          13893          19          1.1         882.1       0.9X
+Native ORC Vectorized (Pushdown)                  13241          13285          33          1.2         841.8       0.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 90% decimal(9, 2) rows (value < 14155776):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                13290          13316          23          1.2         845.0       1.0X
+Parquet Vectorized (Pushdown)                     13335          13367          23          1.2         847.8       1.0X
+Native ORC Vectorized                             15485          15504          18          1.0         984.5       0.9X
+Native ORC Vectorized (Pushdown)                  15576          15605          18          1.0         990.3       0.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 decimal(18, 2) row (value = 7864320):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 4154           4175          32          3.8         264.1       1.0X
+Parquet Vectorized (Pushdown)                       159            162           7         98.9          10.1      26.1X
+Native ORC Vectorized                              4902           4926          25          3.2         311.7       0.8X
+Native ORC Vectorized (Pushdown)                    153            162          23        102.6           9.7      27.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 10% decimal(18, 2) rows (value < 1572864):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 5090           5114          46          3.1         323.6       1.0X
+Parquet Vectorized (Pushdown)                      1509           1533          45         10.4          95.9       3.4X
+Native ORC Vectorized                              5943           5952          11          2.6         377.9       0.9X
+Native ORC Vectorized (Pushdown)                   1649           1686          61          9.5         104.8       3.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 50% decimal(18, 2) rows (value < 7864320):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8887           8938          79          1.8         565.0       1.0X
+Parquet Vectorized (Pushdown)                      6901           6917          13          2.3         438.8       1.3X
+Native ORC Vectorized                             10030          10047          15          1.6         637.7       0.9X
+Native ORC Vectorized (Pushdown)                   7672           7689          12          2.1         487.8       1.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 90% decimal(18, 2) rows (value < 14155776):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                12618          12633          19          1.2         802.2       1.0X
+Parquet Vectorized (Pushdown)                     12296          12315          13          1.3         781.7       1.0X
+Native ORC Vectorized                             14260          14318          43          1.1         906.6       0.9X
+Native ORC Vectorized (Pushdown)                  13661          13678          12          1.2         868.5       0.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 decimal(38, 2) row (value = 7864320):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 6470           6492          29          2.4         411.4       1.0X
+Parquet Vectorized (Pushdown)                       175            178           3         89.8          11.1      36.9X
+Native ORC Vectorized                              4928           4949          17          3.2         313.3       1.3X
+Native ORC Vectorized (Pushdown)                    153            166          23        103.0           9.7      42.4X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 10% decimal(38, 2) rows (value < 1572864):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 7674           7709          60          2.0         487.9       1.0X
+Parquet Vectorized (Pushdown)                      1984           1994          10          7.9         126.1       3.9X
+Native ORC Vectorized                              6245           6259          15          2.5         397.1       1.2X
+Native ORC Vectorized (Pushdown)                   1926           1935          11          8.2         122.5       4.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 50% decimal(38, 2) rows (value < 7864320):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                12485          12497          10          1.3         793.7       1.0X
+Parquet Vectorized (Pushdown)                      9348           9376          26          1.7         594.3       1.3X
+Native ORC Vectorized                             11573          11583          12          1.4         735.8       1.1X
+Native ORC Vectorized (Pushdown)                   9211           9228          10          1.7         585.6       1.4X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 90% decimal(38, 2) rows (value < 14155776):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                17198          17206           7          0.9        1093.4       1.0X
+Parquet Vectorized (Pushdown)                     16613          16629          12          0.9        1056.2       1.0X
+Native ORC Vectorized                             17081          17103          31          0.9        1086.0       1.0X
+Native ORC Vectorized (Pushdown)                  16659          16693          28          0.9        1059.2       1.0X
+
+
+================================================================================================
+Pushdown benchmark for InSet -> InFilters
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 5, distribution: 10):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8986           9024          59          1.8         571.3       1.0X
+Parquet Vectorized (Pushdown)                       662            676          14         23.7          42.1      13.6X
+Native ORC Vectorized                              6568           6589          27          2.4         417.6       1.4X
+Native ORC Vectorized (Pushdown)                    462            475          18         34.0          29.4      19.4X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 5, distribution: 50):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8973           8986          21          1.8         570.5       1.0X
+Parquet Vectorized (Pushdown)                       663            666           5         23.7          42.1      13.5X
+Native ORC Vectorized                              6569           6574           6          2.4         417.6       1.4X
+Native ORC Vectorized (Pushdown)                    462            507          57         34.0          29.4      19.4X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 5, distribution: 90):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9003           9037          37          1.7         572.4       1.0X
+Parquet Vectorized (Pushdown)                       666            671           6         23.6          42.4      13.5X
+Native ORC Vectorized                              6571           6581           8          2.4         417.8       1.4X
+Native ORC Vectorized (Pushdown)                    463            473          18         34.0          29.4      19.5X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 10, distribution: 10):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9015           9022           8          1.7         573.2       1.0X
+Parquet Vectorized (Pushdown)                       687            698          13         22.9          43.7      13.1X
+Native ORC Vectorized                              6592           6611          13          2.4         419.1       1.4X
+Native ORC Vectorized (Pushdown)                    485            497          16         32.5          30.8      18.6X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 10, distribution: 50):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9001           9008          14          1.7         572.3       1.0X
+Parquet Vectorized (Pushdown)                       686            692           5         22.9          43.6      13.1X
+Native ORC Vectorized                              6599           6619          32          2.4         419.6       1.4X
+Native ORC Vectorized (Pushdown)                    473            483          17         33.2          30.1      19.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 10, distribution: 90):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8996           9002           8          1.7         571.9       1.0X
+Parquet Vectorized (Pushdown)                       690            697           6         22.8          43.9      13.0X
+Native ORC Vectorized                              6579           6587           8          2.4         418.3       1.4X
+Native ORC Vectorized (Pushdown)                    481            490          15         32.7          30.6      18.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 50, distribution: 10):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9292           9304           9          1.7         590.8       1.0X
+Parquet Vectorized (Pushdown)                      9558           9567           9          1.6         607.7       1.0X
+Native ORC Vectorized                              6898           6911          10          2.3         438.6       1.3X
+Native ORC Vectorized (Pushdown)                    625            641          15         25.2          39.8      14.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 50, distribution: 50):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9281           9298          12          1.7         590.1       1.0X
+Parquet Vectorized (Pushdown)                      9546           9561          17          1.6         606.9       1.0X
+Native ORC Vectorized                              6877           6897          18          2.3         437.2       1.3X
+Native ORC Vectorized (Pushdown)                    661            668          15         23.8          42.0      14.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 50, distribution: 90):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9322           9335          22          1.7         592.7       1.0X
+Parquet Vectorized (Pushdown)                      9551           9573          18          1.6         607.2       1.0X
+Native ORC Vectorized                              6902           6915          13          2.3         438.8       1.4X
+Native ORC Vectorized (Pushdown)                    659            680          25         23.9          41.9      14.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 100, distribution: 10):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9278           9294          18          1.7         589.9       1.0X
+Parquet Vectorized (Pushdown)                      9520           9560          27          1.7         605.3       1.0X
+Native ORC Vectorized                              6855           6870          16          2.3         435.9       1.4X
+Native ORC Vectorized (Pushdown)                    795            808          16         19.8          50.5      11.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 100, distribution: 50):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9306           9311           4          1.7         591.6       1.0X
+Parquet Vectorized (Pushdown)                      9529           9551          16          1.7         605.8       1.0X
+Native ORC Vectorized                              6875           6882           7          2.3         437.1       1.4X
+Native ORC Vectorized (Pushdown)                    853            865          15         18.4          54.2      10.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+InSet -> InFilters (values count: 100, distribution: 90):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9256           9271           9          1.7         588.5       1.0X
+Parquet Vectorized (Pushdown)                      9500           9520          13          1.7         604.0       1.0X
+Native ORC Vectorized                              6843           6857           9          2.3         435.1       1.4X
+Native ORC Vectorized (Pushdown)                    858            870          14         18.3          54.6      10.8X
+
+
+================================================================================================
+Pushdown benchmark for tinyint
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 tinyint row (value = CAST(63 AS tinyint)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 4303           4312           8          3.7         273.6       1.0X
+Parquet Vectorized (Pushdown)                       208            213           6         75.5          13.2      20.7X
+Native ORC Vectorized                              2950           2958           9          5.3         187.6       1.5X
+Native ORC Vectorized (Pushdown)                    207            212          10         76.1          13.1      20.8X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 10% tinyint rows (value < CAST(12 AS tinyint)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 5125           5162          57          3.1         325.9       1.0X
+Parquet Vectorized (Pushdown)                      1402           1419          16         11.2          89.2       3.7X
+Native ORC Vectorized                              3840           3849           8          4.1         244.1       1.3X
+Native ORC Vectorized (Pushdown)                   1302           1306           3         12.1          82.8       3.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 50% tinyint rows (value < CAST(63 AS tinyint)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8562           8577          12          1.8         544.4       1.0X
+Parquet Vectorized (Pushdown)                      6539           6564          22          2.4         415.8       1.3X
+Native ORC Vectorized                              7300           7320          13          2.2         464.1       1.2X
+Native ORC Vectorized (Pushdown)                   5944           5954          15          2.6         377.9       1.4X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 90% tinyint rows (value < CAST(114 AS tinyint)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                11989          12005          13          1.3         762.2       1.0X
+Parquet Vectorized (Pushdown)                     11637          11686          54          1.4         739.8       1.0X
+Native ORC Vectorized                             10795          10816          18          1.5         686.3       1.1X
+Native ORC Vectorized (Pushdown)                  10592          10599           5          1.5         673.4       1.1X
+
+
+================================================================================================
+Pushdown benchmark for Timestamp
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 timestamp stored as INT96 row (value = CAST(7864320 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 4700           4716          19          3.3         298.8       1.0X
+Parquet Vectorized (Pushdown)                      4745           4758          11          3.3         301.7       1.0X
+Native ORC Vectorized                              2848           2865          22          5.5         181.1       1.7X
+Native ORC Vectorized (Pushdown)                    129            135          12        122.2           8.2      36.5X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 10% timestamp stored as INT96 rows (value < CAST(1572864 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 5575           5590           9          2.8         354.5       1.0X
+Parquet Vectorized (Pushdown)                      5610           5623          10          2.8         356.7       1.0X
+Native ORC Vectorized                              3706           3723          11          4.2         235.6       1.5X
+Native ORC Vectorized (Pushdown)                   1286           1287           2         12.2          81.7       4.3X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 50% timestamp stored as INT96 rows (value < CAST(7864320 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 9872           9887          13          1.6         627.7       1.0X
+Parquet Vectorized (Pushdown)                      9932           9942           8          1.6         631.4       1.0X
+Native ORC Vectorized                              7238           7273          25          2.2         460.2       1.4X
+Native ORC Vectorized (Pushdown)                   5933           5937           6          2.7         377.2       1.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 90% timestamp stored as INT96 rows (value < CAST(14155776 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                12660          12677          12          1.2         804.9       1.0X
+Parquet Vectorized (Pushdown)                     12652          12704          31          1.2         804.4       1.0X
+Native ORC Vectorized                             10842          10870          19          1.5         689.3       1.2X
+Native ORC Vectorized (Pushdown)                  10630          10639           6          1.5         675.9       1.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 timestamp stored as TIMESTAMP_MICROS row (value = CAST(7864320 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 4057           4065           7          3.9         257.9       1.0X
+Parquet Vectorized (Pushdown)                       155            159           7        101.2           9.9      26.1X
+Native ORC Vectorized                              2828           2840           8          5.6         179.8       1.4X
+Native ORC Vectorized (Pushdown)                    126            130           9        124.8           8.0      32.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 10% timestamp stored as TIMESTAMP_MICROS rows (value < CAST(1572864 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 4926           4938           9          3.2         313.2       1.0X
+Parquet Vectorized (Pushdown)                      1415           1422           6         11.1          90.0       3.5X
+Native ORC Vectorized                              3705           3714           7          4.2         235.6       1.3X
+Native ORC Vectorized (Pushdown)                   1279           1285           9         12.3          81.3       3.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 50% timestamp stored as TIMESTAMP_MICROS rows (value < CAST(7864320 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8409           8413           4          1.9         534.6       1.0X
+Parquet Vectorized (Pushdown)                      6489           6497           6          2.4         412.5       1.3X
+Native ORC Vectorized                              7248           7255          10          2.2         460.8       1.2X
+Native ORC Vectorized (Pushdown)                   5922           5932           7          2.7         376.5       1.4X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 90% timestamp stored as TIMESTAMP_MICROS rows (value < CAST(14155776 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                11821          11830           8          1.3         751.5       1.0X
+Parquet Vectorized (Pushdown)                     11478          11490          11          1.4         729.8       1.0X
+Native ORC Vectorized                             10851          10856           4          1.4         689.9       1.1X
+Native ORC Vectorized (Pushdown)                  10620          10628          10          1.5         675.2       1.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 timestamp stored as TIMESTAMP_MILLIS row (value = CAST(7864320 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 4307           4341          75          3.7         273.8       1.0X
+Parquet Vectorized (Pushdown)                       156            161           6        101.1           9.9      27.7X
+Native ORC Vectorized                              2825           2836           8          5.6         179.6       1.5X
+Native ORC Vectorized (Pushdown)                    125            128           9        125.4           8.0      34.3X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 10% timestamp stored as TIMESTAMP_MILLIS rows (value < CAST(1572864 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 5173           5178           3          3.0         328.9       1.0X
+Parquet Vectorized (Pushdown)                      1444           1451           9         10.9          91.8       3.6X
+Native ORC Vectorized                              3707           3715           5          4.2         235.7       1.4X
+Native ORC Vectorized (Pushdown)                   1275           1276           2         12.3          81.0       4.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 50% timestamp stored as TIMESTAMP_MILLIS rows (value < CAST(7864320 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 8645           8655           9          1.8         549.6       1.0X
+Parquet Vectorized (Pushdown)                      6588           6603          11          2.4         418.9       1.3X
+Native ORC Vectorized                              7233           7246          13          2.2         459.9       1.2X
+Native ORC Vectorized (Pushdown)                   5904           5912           8          2.7         375.3       1.5X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 90% timestamp stored as TIMESTAMP_MILLIS rows (value < CAST(14155776 AS timestamp)):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                12057          12069          12          1.3         766.5       1.0X
+Parquet Vectorized (Pushdown)                     11694          11699           5          1.3         743.5       1.0X
+Native ORC Vectorized                             10817          10843          28          1.5         687.7       1.1X
+Native ORC Vectorized (Pushdown)                  10615          10634          11          1.5         674.9       1.1X
+
+
+================================================================================================
+Pushdown benchmark with many filters
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 row with 1 filters:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                  463            468           6          0.0   462711905.0       1.0X
+Parquet Vectorized (Pushdown)                       468            470           3          0.0   468018831.0       1.0X
+Native ORC Vectorized                               447            450           5          0.0   446698170.0       1.0X
+Native ORC Vectorized (Pushdown)                    449            458          11          0.0   448997785.0       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 row with 250 filters:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 1538           1549           9          0.0  1538463215.0       1.0X
+Parquet Vectorized (Pushdown)                      1659           1668           6          0.0  1659315980.0       0.9X
+Native ORC Vectorized                              1513           1517           5          0.0  1512577059.0       1.0X
+Native ORC Vectorized (Pushdown)                   1517           1538          12          0.0  1516938695.0       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_232-8u232-b09-0ubuntu1~18.04.1-b09 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select 1 row with 500 filters:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parquet Vectorized                                 4497           4525          29          0.0  4497410600.0       1.0X
+Parquet Vectorized (Pushdown)                      4945           4955           8          0.0  4945493883.0       0.9X
+Native ORC Vectorized                              4466           4485          23          0.0  4466103057.0       1.0X
+Native ORC Vectorized (Pushdown)                   4477           4496          18          0.0  4476752574.0       1.0X
+
+

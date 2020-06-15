@@ -17,28 +17,28 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.mockito.Matchers.{eq => meq}
-import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, PrivateMethodTester}
+import org.mockito.ArgumentMatchers.{eq => meq}
+import org.mockito.Mockito.{never, reset, times, verify, when}
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
-import org.scalatest.mock.MockitoSugar
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
-import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf}
+import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
+import org.apache.spark.internal.config.Streaming._
+import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{ManualClock, Utils}
 
-
-class ExecutorAllocationManagerSuite extends SparkFunSuite
-  with BeforeAndAfter with BeforeAndAfterAll with MockitoSugar with PrivateMethodTester {
-
-  import ExecutorAllocationManager._
+class ExecutorAllocationManagerSuite extends TestSuiteBase
+  with MockitoSugar with PrivateMethodTester {
 
   private val batchDurationMillis = 1000L
   private var allocationClient: ExecutorAllocationClient = null
   private var clock: StreamManualClock = null
 
-  before {
+  override def beforeEach(): Unit = {
     allocationClient = mock[ExecutorAllocationClient]
     clock = new StreamManualClock()
   }
@@ -57,11 +57,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
         reset(allocationClient)
         when(allocationClient.getExecutorIds()).thenReturn(Seq("1", "2"))
         addBatchProcTime(allocationManager, batchProcTimeMs.toLong)
-        val advancedTime = SCALING_INTERVAL_DEFAULT_SECS * 1000 + 1
+        val advancedTime = STREAMING_DYN_ALLOCATION_SCALING_INTERVAL.defaultValue.get * 1000 + 1
         val expectedWaitTime = clock.getTimeMillis() + advancedTime
         clock.advance(advancedTime)
         // Make sure ExecutorAllocationManager.manageAllocation is called
-        eventually(timeout(10 seconds)) {
+        eventually(timeout(10.seconds)) {
           assert(clock.isStreamWaitingAt(expectedWaitTime))
         }
         body
@@ -72,10 +72,15 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
         if (expectedRequestedTotalExecs.nonEmpty) {
           require(expectedRequestedTotalExecs.get > 0)
           verify(allocationClient, times(1)).requestTotalExecutors(
-            meq(expectedRequestedTotalExecs.get), meq(0), meq(Map.empty))
+              meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+                expectedRequestedTotalExecs.get)),
+              meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)),
+              meq(Map.empty))
         } else {
-          verify(allocationClient, never).requestTotalExecutors(0, 0, Map.empty)
-        }
+          verify(allocationClient, never).requestTotalExecutors(
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
+            Map.empty)}
       }
 
       /** Verify that a particular executor was killed */
@@ -100,25 +105,29 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
       }
 
       // Batch proc time slightly more than the scale up ratio, should increase allocation by 1
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_UP_RATIO_DEFAULT + 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.defaultValue.get + 1) {
         verifyTotalRequestedExecs(Some(3))
         verifyKilledExec(None)
       }
 
       // Batch proc time slightly less than the scale up ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_UP_RATIO_DEFAULT - 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
         verifyKilledExec(None)
       }
 
       // Batch proc time slightly more than the scale down ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_DOWN_RATIO_DEFAULT + 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get + 1) {
         verifyTotalRequestedExecs(None)
         verifyKilledExec(None)
       }
 
       // Batch proc time slightly more than the scale down ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_DOWN_RATIO_DEFAULT - 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
         verifyKilledExec(Some("2"))
       }
@@ -136,8 +145,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
       reset(allocationClient)
       when(allocationClient.getExecutorIds()).thenReturn((1 to numExecs).map(_.toString))
       requestExecutors(allocationManager, numNewExecs)
-      verify(allocationClient, times(1)).requestTotalExecutors(
-        meq(expectedRequestedTotalExecs), meq(0), meq(Map.empty))
+      val defaultProfId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+      verify(allocationClient, times(1)).
+        requestTotalExecutors(
+          meq(Map(defaultProfId -> expectedRequestedTotalExecs)),
+          meq(Map(defaultProfId -> 0)), meq(Map.empty))
     }
 
     withAllocationManager(numReceivers = 1) { case (_, allocationManager) =>
@@ -332,9 +344,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
 
     val confWithBothDynamicAllocationEnabled = new SparkConf()
       .set("spark.streaming.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
-    require(Utils.isDynamicAllocationEnabled(confWithBothDynamicAllocationEnabled) === true)
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_TESTING, true)
+    require(Utils.isDynamicAllocationEnabled(confWithBothDynamicAllocationEnabled))
     withStreamingContext(confWithBothDynamicAllocationEnabled) { ssc =>
       intercept[IllegalArgumentException] {
         ssc.start()
@@ -360,11 +372,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
     }
   }
 
-  private val _addBatchProcTime = PrivateMethod[Unit]('addBatchProcTime)
-  private val _requestExecutors = PrivateMethod[Unit]('requestExecutors)
-  private val _killExecutor = PrivateMethod[Unit]('killExecutor)
+  private val _addBatchProcTime = PrivateMethod[Unit](Symbol("addBatchProcTime"))
+  private val _requestExecutors = PrivateMethod[Unit](Symbol("requestExecutors"))
+  private val _killExecutor = PrivateMethod[Unit](Symbol("killExecutor"))
   private val _executorAllocationManager =
-    PrivateMethod[Option[ExecutorAllocationManager]]('executorAllocationManager)
+    PrivateMethod[Option[ExecutorAllocationManager]](Symbol("executorAllocationManager"))
 
   private def addBatchProcTime(manager: ExecutorAllocationManager, timeMs: Long): Unit = {
     manager invokePrivate _addBatchProcTime(timeMs)
@@ -384,17 +396,13 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
   }
 
   private def withStreamingContext(conf: SparkConf)(body: StreamingContext => Unit): Unit = {
-    conf.setMaster("myDummyLocalExternalClusterManager")
+    conf.setMaster("local-cluster[1,1,1024]")
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
 
-    var ssc: StreamingContext = null
-    try {
-      ssc = new  StreamingContext(conf, Seconds(1))
+    withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
       new DummyInputDStream(ssc).foreachRDD(_ => { })
       body(ssc)
-    } finally {
-      if (ssc != null) ssc.stop()
     }
   }
 }

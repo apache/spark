@@ -49,13 +49,16 @@ except ImportError:
     print("Install using 'sudo pip install unidecode'")
     sys.exit(-1)
 
+if sys.version < '3':
+    input = raw_input  # noqa
+
 # Contributors list file name
 contributors_file_name = "contributors.txt"
 
 
 # Prompt the user to answer yes or no until they do so
 def yesOrNoPrompt(msg):
-    response = raw_input("%s [y/n]: " % msg)
+    response = input("%s [y/n]: " % msg)
     while response != "y" and response != "n":
         return yesOrNoPrompt(msg)
     return response == "y"
@@ -149,7 +152,11 @@ def get_commits(tag):
             if not is_valid_author(author):
                 author = github_username
         # Guard against special characters
-        author = unidecode.unidecode(unicode(author, "UTF-8")).strip()
+        try:               # Python 2
+            author = unicode(author, "UTF-8")
+        except NameError:  # Python 3
+            author = str(author)
+        author = unidecode.unidecode(author).strip()
         commit = Commit(_hash, author, title, pr_number)
         commits.append(commit)
     return commits
@@ -185,6 +192,8 @@ known_components = {
     "graphx": "GraphX",
     "input/output": CORE_COMPONENT,
     "java api": "Java API",
+    "k8s": "Kubernetes",
+    "kubernetes": "Kubernetes",
     "mesos": "Mesos",
     "ml": "MLlib",
     "mllib": "MLlib",
@@ -226,8 +235,8 @@ def translate_component(component, commit_hash, warnings):
 # Parse components in the commit message
 # The returned components are already filtered and translated
 def find_components(commit, commit_hash):
-    components = re.findall("\[\w*\]", commit.lower())
-    components = [translate_component(c, commit_hash)
+    components = re.findall(r"\[\w*\]", commit.lower())
+    components = [translate_component(c, commit_hash, [])
                   for c in components if c in known_components]
     return components
 

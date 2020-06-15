@@ -24,7 +24,6 @@ import java.util.Random;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.Test;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -35,7 +34,7 @@ import org.apache.spark.network.util.TransportConf;
 public class ExternalShuffleCleanupSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
-  private Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
+  private Executor sameThreadExecutor = Runnable::run;
   private TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
   private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 

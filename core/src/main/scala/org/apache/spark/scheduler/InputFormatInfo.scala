@@ -64,7 +64,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     case _ => false
   }
 
-  private def validate() {
+  private def validate(): Unit = {
     logDebug("validate InputFormatInfo : " + inputFormatClazz + ", path  " + path)
 
     try {

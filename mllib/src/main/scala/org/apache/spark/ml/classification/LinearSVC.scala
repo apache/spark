@@ -20,41 +20,52 @@ package org.apache.spark.ml.classification
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
-import breeze.optimize.{CachedDiffFunction, DiffFunction, OWLQN => BreezeOWLQN}
+import breeze.optimize.{CachedDiffFunction, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.linalg.BLAS._
+import org.apache.spark.ml.optim.aggregator._
+import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.storage.StorageLevel
 
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasThreshold with HasAggregationDepth
+  with HasAggregationDepth with HasThreshold with HasBlockSize {
+
+  /**
+   * Param for threshold in binary classification prediction.
+   * For LinearSVC, this threshold is applied to the rawPrediction, rather than a probability.
+   * This threshold can be any real number, where Inf will make all predictions 0.0
+   * and -Inf will make all predictions 1.0.
+   * Default: 0.0
+   *
+   * @group param
+   */
+  final override val threshold: DoubleParam = new DoubleParam(this, "threshold",
+    "threshold in binary classification prediction applied to rawPrediction")
+}
 
 /**
- * :: Experimental ::
- *
  * <a href = "https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM">
  *   Linear SVM Classifier</a>
  *
  * This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
+ * Only supports L2 regularization currently.
  *
  */
 @Since("2.2.0")
-@Experimental
 class LinearSVC @Since("2.2.0") (
     @Since("2.2.0") override val uid: String)
   extends Classifier[Vector, LinearSVC, LinearSVCModel]
@@ -125,7 +136,7 @@ class LinearSVC @Since("2.2.0") (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
-   * Set threshold in binary classification, in range [0, 1].
+   * Set threshold in binary classification.
    *
    * @group setParam
    */
@@ -145,39 +156,63 @@ class LinearSVC @Since("2.2.0") (
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /**
+   * Set block size for stacking input data in matrices.
+   * If blockSize == 1, then stacking will be skipped, and each vector is treated individually;
+   * If blockSize &gt; 1, then vectors will be stacked to blocks, and high-level BLAS routines
+   * will be used if possible (for example, GEMV instead of DOT, GEMM instead of GEMV).
+   * Recommended size is between 10 and 1000. An appropriate choice of the block size depends
+   * on the sparsity and dim of input datasets, the underlying BLAS implementation (for example,
+   * f2jBLAS, OpenBLAS, intel MKL) and its configuration (for example, number of threads).
+   * Note that existing BLAS implementations are mainly optimized for dense matrices, if the
+   * input dataset is sparse, stacking may bring no performance gain, the worse is possible
+   * performance regression.
+   * Default is 1.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.1.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+  setDefault(blockSize -> 1)
+
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
-  override protected[classification] def train(dataset: Dataset[_]): LinearSVCModel = {
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
+  override protected def train(dataset: Dataset[_]): LinearSVCModel = instrumented { instr =>
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
+      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth, blockSize)
 
-    val instr = Instrumentation.create(this, instances)
-    instr.logParams(regParam, maxIter, fitIntercept, tol, standardization, threshold,
-      aggregationDepth)
+    val instances = extractInstances(dataset)
+      .setName("training instances")
 
-    val (summarizer, labelSummarizer) = {
-      val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        instance: Instance) =>
-          (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight))
-
-      val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
-          (c1._1.merge(c2._1), c1._2.merge(c2._2))
-
-      instances.treeAggregate(
-        new MultivariateOnlineSummarizer, new MultiClassSummarizer
-      )(seqOp, combOp, $(aggregationDepth))
+    if (dataset.storageLevel == StorageLevel.NONE && $(blockSize) == 1) {
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
+
+    var requestedMetrics = Seq("mean", "std", "count")
+    if ($(blockSize) != 1) requestedMetrics +:= "numNonZeros"
+    val (summarizer, labelSummarizer) = Summarizer
+      .getClassificationSummarizers(instances, $(aggregationDepth), requestedMetrics)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
     val numFeatures = summarizer.mean.size
-    val numFeaturesPlusIntercept = if (getFitIntercept) numFeatures + 1 else numFeatures
+
+    instr.logNumExamples(summarizer.count)
+    instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
+    instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
+    instr.logSumOfWeights(summarizer.weightSum)
+    if ($(blockSize) > 1) {
+      val scale = 1.0 / summarizer.count / numFeatures
+      val sparsity = 1 - summarizer.numNonzeros.toArray.map(_ * scale).sum
+      instr.logNamedValue("sparsity", sparsity.toString)
+      if (sparsity > 0.5) {
+        instr.logWarning(s"sparsity of input dataset is $sparsity, " +
+          s"which may hurt performance in high-level BLAS.")
+      }
+    }
 
     val numClasses = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
       case Some(n: Int) =>
@@ -191,67 +226,113 @@ class LinearSVC @Since("2.2.0") (
     instr.logNumClasses(numClasses)
     instr.logNumFeatures(numFeatures)
 
-    val (coefficientVector, interceptVector, objectiveHistory) = {
-      if (numInvalid != 0) {
-        val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
-          s"Found $numInvalid invalid labels."
-        logError(msg)
-        throw new SparkException(msg)
-      }
-
-      val featuresStd = summarizer.variance.toArray.map(math.sqrt)
-      val regParamL2 = $(regParam)
-      val bcFeaturesStd = instances.context.broadcast(featuresStd)
-      val costFun = new LinearSVCCostFun(instances, $(fitIntercept),
-        $(standardization), bcFeaturesStd, regParamL2, $(aggregationDepth))
-
-      def regParamL1Fun = (index: Int) => 0D
-      val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
-      val initialCoefWithIntercept = Vectors.zeros(numFeaturesPlusIntercept)
-
-      val states = optimizer.iterations(new CachedDiffFunction(costFun),
-        initialCoefWithIntercept.asBreeze.toDenseVector)
-
-      val scaledObjectiveHistory = mutable.ArrayBuilder.make[Double]
-      var state: optimizer.State = null
-      while (states.hasNext) {
-        state = states.next()
-        scaledObjectiveHistory += state.adjustedValue
-      }
-
-      bcFeaturesStd.destroy(blocking = false)
-      if (state == null) {
-        val msg = s"${optimizer.getClass.getName} failed."
-        logError(msg)
-        throw new SparkException(msg)
-      }
-
-      /*
-         The coefficients are trained in the scaled space; we're converting them back to
-         the original space.
-         Note that the intercept in scaled space and original space is the same;
-         as a result, no scaling is needed.
-       */
-      val rawCoefficients = state.x.toArray
-      val coefficientArray = Array.tabulate(numFeatures) { i =>
-        if (featuresStd(i) != 0.0) {
-          rawCoefficients(i) / featuresStd(i)
-        } else {
-          0.0
-        }
-      }
-
-      val intercept = if ($(fitIntercept)) {
-        rawCoefficients(numFeaturesPlusIntercept - 1)
-      } else {
-        0.0
-      }
-      (Vectors.dense(coefficientArray), intercept, scaledObjectiveHistory.result())
+    if (numInvalid != 0) {
+      val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
+        s"Found $numInvalid invalid labels."
+      instr.logError(msg)
+      throw new SparkException(msg)
     }
 
-    val model = copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
-    instr.logSuccess(model)
-    model
+    val featuresStd = summarizer.std.toArray
+    val getFeaturesStd = (j: Int) => featuresStd(j)
+    val regularization = if ($(regParam) != 0.0) {
+      val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
+      Some(new L2Regularization($(regParam), shouldApply,
+        if ($(standardization)) None else Some(getFeaturesStd)))
+    } else None
+
+    def regParamL1Fun = (index: Int) => 0.0
+    val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
+
+    /*
+       The coefficients are trained in the scaled space; we're converting them back to
+       the original space.
+       Note that the intercept in scaled space and original space is the same;
+       as a result, no scaling is needed.
+     */
+    val (rawCoefficients, objectiveHistory) = if ($(blockSize) == 1) {
+      trainOnRows(instances, featuresStd, regularization, optimizer)
+    } else {
+      trainOnBlocks(instances, featuresStd, regularization, optimizer)
+    }
+    if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
+
+    if (rawCoefficients == null) {
+      val msg = s"${optimizer.getClass.getName} failed."
+      instr.logError(msg)
+      throw new SparkException(msg)
+    }
+
+    val coefficientArray = Array.tabulate(numFeatures) { i =>
+      if (featuresStd(i) != 0.0) rawCoefficients(i) / featuresStd(i) else 0.0
+    }
+    val intercept = if ($(fitIntercept)) rawCoefficients.last else 0.0
+    copyValues(new LinearSVCModel(uid, Vectors.dense(coefficientArray), intercept))
+  }
+
+  private def trainOnRows(
+      instances: RDD[Instance],
+      featuresStd: Array[Double],
+      regularization: Option[L2Regularization],
+      optimizer: BreezeOWLQN[Int, BDV[Double]]): (Array[Double], Array[Double]) = {
+    val numFeatures = featuresStd.length
+    val numFeaturesPlusIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
+
+    val bcFeaturesStd = instances.context.broadcast(featuresStd)
+    val getAggregatorFunc = new HingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
+    val costFun = new RDDLossFunction(instances, getAggregatorFunc,
+      regularization, $(aggregationDepth))
+
+    val states = optimizer.iterations(new CachedDiffFunction(costFun),
+      Vectors.zeros(numFeaturesPlusIntercept).asBreeze.toDenseVector)
+
+    val arrayBuilder = mutable.ArrayBuilder.make[Double]
+    var state: optimizer.State = null
+    while (states.hasNext) {
+      state = states.next()
+      arrayBuilder += state.adjustedValue
+    }
+    bcFeaturesStd.destroy()
+
+    (if (state != null) state.x.toArray else null, arrayBuilder.result)
+  }
+
+  private def trainOnBlocks(
+      instances: RDD[Instance],
+      featuresStd: Array[Double],
+      regularization: Option[L2Regularization],
+      optimizer: BreezeOWLQN[Int, BDV[Double]]): (Array[Double], Array[Double]) = {
+    val numFeatures = featuresStd.length
+    val numFeaturesPlusIntercept = if ($(fitIntercept)) numFeatures + 1 else numFeatures
+
+    val bcFeaturesStd = instances.context.broadcast(featuresStd)
+
+    val standardized = instances.mapPartitions { iter =>
+      val inverseStd = bcFeaturesStd.value.map { std => if (std != 0) 1.0 / std else 0.0 }
+      val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)
+      iter.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
+    }
+    val blocks = InstanceBlock.blokify(standardized, $(blockSize))
+      .persist(StorageLevel.MEMORY_AND_DISK)
+      .setName(s"training blocks (blockSize=${$(blockSize)})")
+
+    val getAggregatorFunc = new BlockHingeAggregator($(fitIntercept))(_)
+    val costFun = new RDDLossFunction(blocks, getAggregatorFunc,
+      regularization, $(aggregationDepth))
+
+    val states = optimizer.iterations(new CachedDiffFunction(costFun),
+      Vectors.zeros(numFeaturesPlusIntercept).asBreeze.toDenseVector)
+
+    val arrayBuilder = mutable.ArrayBuilder.make[Double]
+    var state: optimizer.State = null
+    while (states.hasNext) {
+      state = states.next()
+      arrayBuilder += state.adjustedValue
+    }
+    blocks.unpersist()
+    bcFeaturesStd.destroy()
+
+    (if (state != null) state.x.toArray else null, arrayBuilder.result)
   }
 }
 
@@ -263,11 +344,9 @@ object LinearSVC extends DefaultParamsReadable[LinearSVC] {
 }
 
 /**
- * :: Experimental ::
- * SVM Model trained by [[LinearSVC]]
+ * Linear SVM Model trained by [[LinearSVC]]
  */
 @Since("2.2.0")
-@Experimental
 class LinearSVCModel private[classification] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") val coefficients: Vector,
@@ -283,21 +362,24 @@ class LinearSVCModel private[classification] (
 
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
-
-  @Since("2.2.0")
-  def setWeightCol(value: Double): this.type = set(threshold, value)
+  setDefault(threshold, 0.0)
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, coefficients) + intercept
   }
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     if (margin(features) > $(threshold)) 1.0 else 0.0
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     val m = margin(features)
     Vectors.dense(-m, m)
+  }
+
+  override protected def raw2prediction(rawPrediction: Vector): Double = {
+    if (rawPrediction(1) > $(threshold)) 1.0 else 0.0
   }
 
   @Since("2.2.0")
@@ -308,6 +390,10 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   override def write: MLWriter = new LinearSVCModel.LinearSVCWriter(this)
 
+  @Since("3.0.0")
+  override def toString: String = {
+    s"LinearSVCModel: uid=$uid, numClasses=$numClasses, numFeatures=$numFeatures"
+  }
 }
 
 
@@ -348,194 +434,8 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
       val Row(coefficients: Vector, intercept: Double) =
         data.select("coefficients", "intercept").head()
       val model = new LinearSVCModel(metadata.uid, coefficients, intercept)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
-    }
-  }
-}
-
-/**
- * LinearSVCCostFun implements Breeze's DiffFunction[T] for hinge loss function
- */
-private class LinearSVCCostFun(
-    instances: RDD[Instance],
-    fitIntercept: Boolean,
-    standardization: Boolean,
-    bcFeaturesStd: Broadcast[Array[Double]],
-    regParamL2: Double,
-    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
-
-  override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
-    val coeffs = Vectors.fromBreeze(coefficients)
-    val bcCoeffs = instances.context.broadcast(coeffs)
-    val featuresStd = bcFeaturesStd.value
-    val numFeatures = featuresStd.length
-
-    val svmAggregator = {
-      val seqOp = (c: LinearSVCAggregator, instance: Instance) => c.add(instance)
-      val combOp = (c1: LinearSVCAggregator, c2: LinearSVCAggregator) => c1.merge(c2)
-
-      instances.treeAggregate(
-        new LinearSVCAggregator(bcCoeffs, bcFeaturesStd, fitIntercept)
-      )(seqOp, combOp, aggregationDepth)
-    }
-
-    val totalGradientArray = svmAggregator.gradient.toArray
-    // regVal is the sum of coefficients squares excluding intercept for L2 regularization.
-    val regVal = if (regParamL2 == 0.0) {
-      0.0
-    } else {
-      var sum = 0.0
-      coeffs.foreachActive { case (index, value) =>
-        // We do not apply regularization to the intercepts
-        if (index != numFeatures) {
-          // The following code will compute the loss of the regularization; also
-          // the gradient of the regularization, and add back to totalGradientArray.
-          sum += {
-            if (standardization) {
-              totalGradientArray(index) += regParamL2 * value
-              value * value
-            } else {
-              if (featuresStd(index) != 0.0) {
-                // If `standardization` is false, we still standardize the data
-                // to improve the rate of convergence; as a result, we have to
-                // perform this reverse standardization by penalizing each component
-                // differently to get effectively the same objective function when
-                // the training dataset is not standardized.
-                val temp = value / (featuresStd(index) * featuresStd(index))
-                totalGradientArray(index) += regParamL2 * temp
-                value * temp
-              } else {
-                0.0
-              }
-            }
-          }
-        }
-      }
-      0.5 * regParamL2 * sum
-    }
-    bcCoeffs.destroy(blocking = false)
-
-    (svmAggregator.loss + regVal, new BDV(totalGradientArray))
-  }
-}
-
-/**
- * LinearSVCAggregator computes the gradient and loss for hinge loss function, as used
- * in binary classification for instances in sparse or dense vector in an online fashion.
- *
- * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
- * the corresponding joint dataset.
- *
- * This class standardizes feature values during computation using bcFeaturesStd.
- *
- * @param bcCoefficients The coefficients corresponding to the features.
- * @param fitIntercept Whether to fit an intercept term.
- * @param bcFeaturesStd The standard deviation values of the features.
- */
-private class LinearSVCAggregator(
-    bcCoefficients: Broadcast[Vector],
-    bcFeaturesStd: Broadcast[Array[Double]],
-    fitIntercept: Boolean) extends Serializable {
-
-  private val numFeatures: Int = bcFeaturesStd.value.length
-  private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
-  private var weightSum: Double = 0.0
-  private var lossSum: Double = 0.0
-  @transient private lazy val coefficientsArray = bcCoefficients.value match {
-    case DenseVector(values) => values
-    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
-      s" but got type ${bcCoefficients.value.getClass}.")
-  }
-  private lazy val gradientSumArray = new Array[Double](numFeaturesPlusIntercept)
-
-  /**
-   * Add a new training instance to this LinearSVCAggregator, and update the loss and gradient
-   * of the objective function.
-   *
-   * @param instance The instance of data point to be added.
-   * @return This LinearSVCAggregator object.
-   */
-  def add(instance: Instance): this.type = {
-    instance match { case Instance(label, weight, features) =>
-
-      if (weight == 0.0) return this
-      val localFeaturesStd = bcFeaturesStd.value
-      val localCoefficients = coefficientsArray
-      val localGradientSumArray = gradientSumArray
-
-      val dotProduct = {
-        var sum = 0.0
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-            sum += localCoefficients(index) * value / localFeaturesStd(index)
-          }
-        }
-        if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
-        sum
-      }
-      // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
-      // Therefore the gradient is -(2y - 1)*x
-      val labelScaled = 2 * label - 1.0
-      val loss = if (1.0 > labelScaled * dotProduct) {
-        weight * (1.0 - labelScaled * dotProduct)
-      } else {
-        0.0
-      }
-
-      if (1.0 > labelScaled * dotProduct) {
-        val gradientScale = -labelScaled * weight
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-            localGradientSumArray(index) += value * gradientScale / localFeaturesStd(index)
-          }
-        }
-        if (fitIntercept) {
-          localGradientSumArray(localGradientSumArray.length - 1) += gradientScale
-        }
-      }
-
-      lossSum += loss
-      weightSum += weight
-      this
-    }
-  }
-
-  /**
-   * Merge another LinearSVCAggregator, and update the loss and gradient
-   * of the objective function.
-   * (Note that it's in place merging; as a result, `this` object will be modified.)
-   *
-   * @param other The other LinearSVCAggregator to be merged.
-   * @return This LinearSVCAggregator object.
-   */
-  def merge(other: LinearSVCAggregator): this.type = {
-
-    if (other.weightSum != 0.0) {
-      weightSum += other.weightSum
-      lossSum += other.lossSum
-
-      var i = 0
-      val localThisGradientSumArray = this.gradientSumArray
-      val localOtherGradientSumArray = other.gradientSumArray
-      val len = localThisGradientSumArray.length
-      while (i < len) {
-        localThisGradientSumArray(i) += localOtherGradientSumArray(i)
-        i += 1
-      }
-    }
-    this
-  }
-
-  def loss: Double = if (weightSum != 0) lossSum / weightSum else 0.0
-
-  def gradient: Vector = {
-    if (weightSum != 0) {
-      val result = Vectors.dense(gradientSumArray.clone())
-      scal(1.0 / weightSum, result)
-      result
-    } else {
-      Vectors.dense(new Array[Double](numFeaturesPlusIntercept))
     }
   }
 }

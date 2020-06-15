@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.Channel;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,7 +58,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   private final Map<Long, RpcResponseCallback> outstandingRpcs;
 
-  private final Queue<StreamCallback> streamCallbacks;
+  private final Queue<Pair<String, StreamCallback>> streamCallbacks;
   private volatile boolean streamActive;
 
   /** Records the time (in system nanoseconds) that the last fetch or RPC request was sent. */
@@ -88,9 +90,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     outstandingRpcs.remove(requestId);
   }
 
-  public void addStreamCallback(StreamCallback callback) {
-    timeOfLastRequestNs.set(System.nanoTime());
-    streamCallbacks.offer(callback);
+  public void addStreamCallback(String streamId, StreamCallback callback) {
+    updateTimeOfLastRequest();
+    streamCallbacks.offer(ImmutablePair.of(streamId, callback));
   }
 
   @VisibleForTesting
@@ -104,15 +106,31 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
    */
   private void failOutstandingRequests(Throwable cause) {
     for (Map.Entry<StreamChunkId, ChunkReceivedCallback> entry : outstandingFetches.entrySet()) {
-      entry.getValue().onFailure(entry.getKey().chunkIndex, cause);
+      try {
+        entry.getValue().onFailure(entry.getKey().chunkIndex, cause);
+      } catch (Exception e) {
+        logger.warn("ChunkReceivedCallback.onFailure throws exception", e);
+      }
     }
     for (Map.Entry<Long, RpcResponseCallback> entry : outstandingRpcs.entrySet()) {
-      entry.getValue().onFailure(cause);
+      try {
+        entry.getValue().onFailure(cause);
+      } catch (Exception e) {
+        logger.warn("RpcResponseCallback.onFailure throws exception", e);
+      }
+    }
+    for (Pair<String, StreamCallback> entry : streamCallbacks) {
+      try {
+        entry.getValue().onFailure(entry.getKey(), cause);
+      } catch (Exception e) {
+        logger.warn("StreamCallback.onFailure throws exception", e);
+      }
     }
 
     // It's OK if new fetches appear, as they will fail immediately.
     outstandingFetches.clear();
     outstandingRpcs.clear();
+    streamCallbacks.clear();
   }
 
   @Override
@@ -190,11 +208,12 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       }
     } else if (message instanceof StreamResponse) {
       StreamResponse resp = (StreamResponse) message;
-      StreamCallback callback = streamCallbacks.poll();
-      if (callback != null) {
+      Pair<String, StreamCallback> entry = streamCallbacks.poll();
+      if (entry != null) {
+        StreamCallback callback = entry.getValue();
         if (resp.byteCount > 0) {
-          StreamInterceptor interceptor = new StreamInterceptor(this, resp.streamId, resp.byteCount,
-            callback);
+          StreamInterceptor<ResponseMessage> interceptor = new StreamInterceptor<>(
+            this, resp.streamId, resp.byteCount, callback);
           try {
             TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
               channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
@@ -216,8 +235,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       }
     } else if (message instanceof StreamFailure) {
       StreamFailure resp = (StreamFailure) message;
-      StreamCallback callback = streamCallbacks.poll();
-      if (callback != null) {
+      Pair<String, StreamCallback> entry = streamCallbacks.poll();
+      if (entry != null) {
+        StreamCallback callback = entry.getValue();
         try {
           callback.onFailure(resp.streamId, new RuntimeException(resp.error));
         } catch (IOException ioe) {

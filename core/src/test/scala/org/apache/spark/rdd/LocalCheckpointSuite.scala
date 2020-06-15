@@ -17,6 +17,10 @@
 
 package org.apache.spark.rdd
 
+import scala.concurrent.duration._
+
+import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
+
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
@@ -168,6 +172,10 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     // Collecting the RDD should now fail with an informative exception
     val blockId = RDDBlockId(rdd.id, numPartitions - 1)
     bmm.removeBlock(blockId)
+    // Wait until the block has been removed successfully.
+    eventually(timeout(1.second), interval(100.milliseconds)) {
+      assert(bmm.getBlockStatus(blockId).isEmpty)
+    }
     try {
       rdd.collect()
       fail("Collect should have failed if local checkpoint block is removed...")

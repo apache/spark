@@ -69,7 +69,7 @@ setMethod("initialize", "RDD", function(.Object, jrdd, serializedMode,
 
 setMethod("showRDD", "RDD",
           function(object) {
-              cat(paste(callJMethod(getJRDD(object), "toString"), "\n", sep = ""))
+              cat(paste0(callJMethod(getJRDD(object), "toString"), "\n"))
           })
 
 setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) {
@@ -131,7 +131,7 @@ PipelinedRDD <- function(prev, func) {
 # Return the serialization mode for an RDD.
 setGeneric("getSerializedMode", function(rdd, ...) { standardGeneric("getSerializedMode") })
 # For normal RDDs we can directly read the serializedMode
-setMethod("getSerializedMode", signature(rdd = "RDD"), function(rdd) rdd@env$serializedMode )
+setMethod("getSerializedMode", signature(rdd = "RDD"), function(rdd) rdd@env$serializedMode)
 # For pipelined RDDs if jrdd_val is set then serializedMode should exist
 # if not we return the defaultSerialization mode of "byte" as we don't know the serialization
 # mode at this point in time.
@@ -145,7 +145,7 @@ setMethod("getSerializedMode", signature(rdd = "PipelinedRDD"),
           })
 
 # The jrdd accessor function.
-setMethod("getJRDD", signature(rdd = "RDD"), function(rdd) rdd@jrdd )
+setMethod("getJRDD", signature(rdd = "RDD"), function(rdd) rdd@jrdd)
 setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
           function(rdd, serializedMode = "byte") {
             if (!is.null(rdd@env$jrdd_val)) {
@@ -227,7 +227,7 @@ setMethod("cacheRDD",
 #'
 #' Persist this RDD with the specified storage level. For details of the
 #' supported storage levels, refer to
-#'\url{http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence}.
+#'\url{http://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
 #'
 #' @param x The RDD to persist
 #' @param newLevel The new storage level to be assigned
@@ -893,7 +893,7 @@ setMethod("sampleRDD",
                 if (withReplacement) {
                   count <- stats::rpois(1, fraction)
                   if (count > 0) {
-                    res[ (len + 1) : (len + count) ] <- rep(list(elem), count)
+                    res[(len + 1) : (len + count)] <- rep(list(elem), count)
                     len <- len + count
                   }
                 } else {
@@ -947,7 +947,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
             MAXINT <- .Machine$integer.max
 
             if (num < 0)
-              stop(paste("Negative number of elements requested"))
+              stop("Negative number of elements requested")
 
             if (initialCount > MAXINT - 1) {
               maxSelected <- MAXINT - 1

@@ -21,11 +21,10 @@ import java.util.Locale
 
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
-import org.apache.spark.sql.catalyst.expressions.Expression
-
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The data type representing `java.math.BigDecimal` values.
@@ -40,8 +39,10 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case class DecimalType(precision: Int, scale: Int) extends FractionalType {
+
+  DecimalType.checkNegativeScale(scale)
 
   if (scale > precision) {
     throw new AnalysisException(
@@ -49,7 +50,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   }
 
   if (precision > DecimalType.MAX_PRECISION) {
-    throw new AnalysisException(s"DecimalType can only support precision up to 38")
+    throw new AnalysisException(
+      s"${DecimalType.simpleString} can only support precision up to ${DecimalType.MAX_PRECISION}")
   }
 
   // default constructor for Java
@@ -57,11 +59,13 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   def this() = this(10)
 
   private[sql] type InternalType = Decimal
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
+  @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val numeric = Decimal.DecimalIsFractional
   private[sql] val fractional = Decimal.DecimalIsFractional
   private[sql] val ordering = Decimal.DecimalIsFractional
   private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
+
+  override private[sql] def exactNumeric = DecimalExactNumeric
 
   override def typeName: String = s"decimal($precision,$scale)"
 
@@ -110,7 +114,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object DecimalType extends AbstractDataType {
   import scala.math.min
 
@@ -118,8 +122,10 @@ object DecimalType extends AbstractDataType {
   val MAX_SCALE = 38
   val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 18)
   val USER_DEFAULT: DecimalType = DecimalType(10, 0)
+  val MINIMUM_ADJUSTED_SCALE = 6
 
   // The decimal types compatible with other numeric types
+  private[sql] val BooleanDecimal = DecimalType(1, 0)
   private[sql] val ByteDecimal = DecimalType(3, 0)
   private[sql] val ShortDecimal = DecimalType(5, 0)
   private[sql] val IntDecimal = DecimalType(10, 0)
@@ -137,8 +143,61 @@ object DecimalType extends AbstractDataType {
     case DoubleType => DoubleDecimal
   }
 
+  private[sql] def fromLiteral(literal: Literal): DecimalType = literal.value match {
+    case v: Short => fromDecimal(Decimal(BigDecimal(v)))
+    case v: Int => fromDecimal(Decimal(BigDecimal(v)))
+    case v: Long => fromDecimal(Decimal(BigDecimal(v)))
+    case _ => forType(literal.dataType)
+  }
+
+  private[sql] def fromDecimal(d: Decimal): DecimalType = DecimalType(d.precision, d.scale)
+
   private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
     DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
+  }
+
+  private[sql] def checkNegativeScale(scale: Int): Unit = {
+    if (scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
+      throw new AnalysisException(s"Negative scale is not allowed: $scale. " +
+        s"You can use spark.sql.legacy.allowNegativeScaleOfDecimal=true " +
+        s"to enable legacy mode to allow it.")
+    }
+  }
+
+  /**
+   * Scale adjustment implementation is based on Hive's one, which is itself inspired to
+   * SQLServer's one. In particular, when a result precision is greater than
+   * {@link #MAX_PRECISION}, the corresponding scale is reduced to prevent the integral part of a
+   * result from being truncated.
+   *
+   * This method is used only when `spark.sql.decimalOperations.allowPrecisionLoss` is set to true.
+   */
+  private[sql] def adjustPrecisionScale(precision: Int, scale: Int): DecimalType = {
+    // Assumptions:
+    checkNegativeScale(scale)
+    assert(precision >= scale)
+
+    if (precision <= MAX_PRECISION) {
+      // Adjustment only needed when we exceed max precision
+      DecimalType(precision, scale)
+    } else if (scale < 0) {
+      // Decimal can have negative scale (SPARK-24468). In this case, we cannot allow a precision
+      // loss since we would cause a loss of digits in the integer part.
+      // In this case, we are likely to meet an overflow.
+      DecimalType(MAX_PRECISION, scale)
+    } else {
+      // Precision/scale exceed maximum precision. Result must be adjusted to MAX_PRECISION.
+      val intDigits = precision - scale
+      // If original scale is less than MINIMUM_ADJUSTED_SCALE, use original scale value; otherwise
+      // preserve at least MINIMUM_ADJUSTED_SCALE fractional digits
+      val minScaleValue = Math.min(scale, MINIMUM_ADJUSTED_SCALE)
+      // The resulting scale is the maximum between what is available without causing a loss of
+      // digits for the integer part of the decimal and the minimum guaranteed scale, which is
+      // computed above
+      val adjustedScale = Math.max(MAX_PRECISION - intDigits, minScaleValue)
+
+      DecimalType(MAX_PRECISION, adjustedScale)
+    }
   }
 
   override private[sql] def defaultConcreteType: DataType = SYSTEM_DEFAULT

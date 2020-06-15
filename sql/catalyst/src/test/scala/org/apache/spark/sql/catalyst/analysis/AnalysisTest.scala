@@ -17,26 +17,38 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.net.URI
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
 trait AnalysisTest extends PlanTest {
 
-  protected val caseSensitiveAnalyzer = makeAnalyzer(caseSensitive = true)
-  protected val caseInsensitiveAnalyzer = makeAnalyzer(caseSensitive = false)
+  protected lazy val caseSensitiveAnalyzer = makeAnalyzer(caseSensitive = true)
+  protected lazy val caseInsensitiveAnalyzer = makeAnalyzer(caseSensitive = false)
+
+  protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
   private def makeAnalyzer(caseSensitive: Boolean): Analyzer = {
     val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
-    val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
+    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
+    catalog.createDatabase(
+      CatalogDatabase("default", "", new URI("loc"), Map.empty),
+      ignoreIfExists = false)
     catalog.createTempView("TaBlE", TestRelations.testRelation, overrideIfExists = true)
     catalog.createTempView("TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
+    catalog.createTempView("TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
+    catalog.createGlobalTempView("TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
+    catalog.createGlobalTempView("TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
     new Analyzer(catalog, conf) {
-      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
+      override val extendedResolutionRules = EliminateSubqueryAliases +: extendedAnalysisRules
     }
   }
 
@@ -49,9 +61,16 @@ trait AnalysisTest extends PlanTest {
       expectedPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
     val analyzer = getAnalyzer(caseSensitive)
-    val actualPlan = analyzer.execute(inputPlan)
-    analyzer.checkAnalysis(actualPlan)
+    val actualPlan = analyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
     comparePlans(actualPlan, expectedPlan)
+  }
+
+  protected override def comparePlans(
+      plan1: LogicalPlan,
+      plan2: LogicalPlan,
+      checkAnalysis: Boolean = false): Unit = {
+    // Analysis tests may have not been fully resolved, so skip checkAnalysis.
+    super.comparePlans(plan1, plan2, checkAnalysis)
   }
 
   protected def assertAnalysisSuccess(
@@ -92,6 +111,14 @@ trait AnalysisTest extends PlanTest {
            |
            |  ${e.getMessage}
          """.stripMargin)
+    }
+  }
+
+  protected def interceptParseException(
+      parser: String => Any)(sqlCommand: String, messages: String*): Unit = {
+    val e = intercept[ParseException](parser(sqlCommand))
+    messages.foreach { message =>
+      assert(e.message.contains(message))
     }
   }
 }

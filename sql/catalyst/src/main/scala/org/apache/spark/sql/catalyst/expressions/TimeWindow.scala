@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.UTF8String
 
 case class TimeWindow(
     timeColumn: Expression,
@@ -62,6 +63,7 @@ case class TimeWindow(
   override def dataType: DataType = new StructType()
     .add(StructField("start", TimestampType))
     .add(StructField("end", TimestampType))
+  override def prettyName: String = "window"
 
   // This expression is replaced in the analyzer.
   override lazy val resolved = false
@@ -79,16 +81,13 @@ case class TimeWindow(
       if (slideDuration <= 0) {
         return TypeCheckFailure(s"The slide duration ($slideDuration) must be greater than 0.")
       }
-      if (startTime < 0) {
-        return TypeCheckFailure(s"The start time ($startTime) must be greater than or equal to 0.")
-      }
       if (slideDuration > windowDuration) {
         return TypeCheckFailure(s"The slide duration ($slideDuration) must be less than or equal" +
           s" to the windowDuration ($windowDuration).")
       }
-      if (startTime >= slideDuration) {
-        return TypeCheckFailure(s"The start time ($startTime) must be less than the " +
-          s"slideDuration ($slideDuration).")
+      if (startTime.abs >= slideDuration) {
+        return TypeCheckFailure(s"The absolute value of start time ($startTime) must be less " +
+          s"than the slideDuration ($slideDuration).")
       }
     }
     dataTypeCheck
@@ -106,25 +105,12 @@ object TimeWindow {
    *         precision.
    */
   private def getIntervalInMicroSeconds(interval: String): Long = {
-    if (StringUtils.isBlank(interval)) {
-      throw new IllegalArgumentException(
-        "The window duration, slide duration and start time cannot be null or blank.")
-    }
-    val intervalString = if (interval.startsWith("interval")) {
-      interval
-    } else {
-      "interval " + interval
-    }
-    val cal = CalendarInterval.fromString(intervalString)
-    if (cal == null) {
-      throw new IllegalArgumentException(
-        s"The provided interval ($interval) did not correspond to a valid interval string.")
-    }
-    if (cal.months > 0) {
+    val cal = IntervalUtils.stringToInterval(UTF8String.fromString(interval))
+    if (cal.months != 0) {
       throw new IllegalArgumentException(
         s"Intervals greater than a month is not supported ($interval).")
     }
-    cal.microseconds
+    cal.days * MICROS_PER_DAY + cal.microseconds
   }
 
   /**
@@ -152,17 +138,21 @@ object TimeWindow {
 }
 
 /**
- * Expression used internally to convert the TimestampType to Long without losing
+ * Expression used internally to convert the TimestampType to Long and back without losing
  * precision, i.e. in microseconds. Used in time windowing.
  */
-case class PreciseTimestamp(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-  override def dataType: DataType = LongType
+case class PreciseTimestampConversion(
+    child: Expression,
+    fromType: DataType,
+    toType: DataType) extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  override def inputTypes: Seq[AbstractDataType] = Seq(fromType)
+  override def dataType: DataType = toType
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     ev.copy(code = eval.code +
-      s"""boolean ${ev.isNull} = ${eval.isNull};
-         |${ctx.javaType(dataType)} ${ev.value} = ${eval.value};
+      code"""boolean ${ev.isNull} = ${eval.isNull};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${eval.value};
        """.stripMargin)
   }
+  override def nullSafeEval(input: Any): Any = input
 }

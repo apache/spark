@@ -860,7 +860,7 @@ setMethod("subtractByKey",
                                             other,
                                             numPartitions = numPartitions),
                                     filterFunction),
-                          function (v) { v[[1]] })
+                          function(v) { v[[1]] })
           })
 
 #' Return a subset of this RDD sampled by key.
@@ -906,7 +906,7 @@ setMethod("sampleByKey",
 
             for (elem in fractions) {
               if (elem < 0.0) {
-                stop(paste("Negative fraction value ", fractions[which(fractions == elem)]))
+                stop("Negative fraction value ", fractions[which(fractions == elem)])
               }
             }
 
@@ -925,7 +925,7 @@ setMethod("sampleByKey",
                   if (withReplacement) {
                     count <- stats::rpois(1, frac)
                     if (count > 0) {
-                      res[ (len + 1) : (len + count) ] <- rep(list(elem), count)
+                      res[(len + 1) : (len + count)] <- rep(list(elem), count)
                       len <- len + count
                     }
                   } else {

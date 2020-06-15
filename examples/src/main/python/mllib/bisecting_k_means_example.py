@@ -23,7 +23,7 @@ from numpy import array
 
 from pyspark import SparkContext
 # $example on$
-from pyspark.mllib.clustering import BisectingKMeans, BisectingKMeansModel
+from pyspark.mllib.clustering import BisectingKMeans
 # $example off$
 
 if __name__ == "__main__":

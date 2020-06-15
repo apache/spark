@@ -75,7 +75,7 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     for ((k, v) <- map) {
       set.add((k, v))
     }
-    val expected = (1 to 1000).map(x => (x.toString, x)) :+ (null.asInstanceOf[String], -1)
+    val expected = (1 to 1000).map(x => (x.toString, x)) :+ ((null.asInstanceOf[String], -1))
     assert(set === expected.toSet)
   }
 
@@ -103,7 +103,8 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     for ((k, v) <- map) {
       set.add((k, v))
     }
-    val expected = (1 to 1000).map(_.toString).map(x => (x, x)) :+ (null.asInstanceOf[String], "-1")
+    val expected =
+      (1 to 1000).map(_.toString).map(x => (x, x)) :+ ((null.asInstanceOf[String], "-1"))
     assert(set === expected.toSet)
   }
 
@@ -184,13 +185,49 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     assert(map.contains(null))
   }
 
-  test("support for more than 12M items") {
-    val cnt = 12000000 // 12M
-    val map = new OpenHashMap[Int, Int](cnt)
-    for (i <- 0 until cnt) {
-      map(i) = 1
-    }
-    val numInvalidValues = map.iterator.count(_._2 == 0)
-    assertResult(0)(numInvalidValues)
+  test("distinguish between the 0/0.0/0L and null") {
+    val specializedMap1 = new OpenHashMap[String, Long]
+    specializedMap1("a") = null.asInstanceOf[Long]
+    specializedMap1("b") = 0L
+    assert(specializedMap1.contains("a"))
+    assert(!specializedMap1.contains("c"))
+    // null.asInstance[Long] will return 0L
+    assert(specializedMap1("a") === 0L)
+    assert(specializedMap1("b") === 0L)
+    // If the data type is in @specialized annotation, and
+    // the `key` is not be contained, the `map(key)` will return 0
+    assert(specializedMap1("c") === 0L)
+
+    val specializedMap2 = new OpenHashMap[String, Double]
+    specializedMap2("a") = null.asInstanceOf[Double]
+    specializedMap2("b") = 0.toDouble
+    assert(specializedMap2.contains("a"))
+    assert(!specializedMap2.contains("c"))
+    // null.asInstance[Double] will return 0.0
+    assert(specializedMap2("a") === 0.0)
+    assert(specializedMap2("b") === 0.0)
+    assert(specializedMap2("c") === 0.0)
+
+    val map1 = new OpenHashMap[String, Short]
+    map1("a") = null.asInstanceOf[Short]
+    map1("b") = 0.toShort
+    assert(map1.contains("a"))
+    assert(!map1.contains("c"))
+    // null.asInstance[Short] will return 0
+    assert(map1("a") === 0)
+    assert(map1("b") === 0)
+    // If the data type is not in @specialized annotation, and
+    // the `key` is not be contained, the `map(key)` will return null
+    assert(map1("c") === null)
+
+    val map2 = new OpenHashMap[String, Float]
+    map2("a") = null.asInstanceOf[Float]
+    map2("b") = 0.toFloat
+    assert(map2.contains("a"))
+    assert(!map2.contains("c"))
+    // null.asInstance[Float] will return 0.0
+    assert(map2("a") === 0.0)
+    assert(map2("b") === 0.0)
+    assert(map2("c") === null)
   }
 }

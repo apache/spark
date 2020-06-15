@@ -17,52 +17,48 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileInputStream, FileOutputStream}
+import java.io.{File, FileInputStream, FileNotFoundException, FileOutputStream}
 import java.net.URI
 import java.util.Properties
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
 
-import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse
+import org.apache.hadoop.yarn.api.protocolrecords.{GetNewApplicationResponse, SubmitApplicationRequest}
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.client.api.YarnClientApplication
+import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.event.{Dispatcher, Event, EventHandler}
+import org.apache.hadoop.yarn.server.resourcemanager.{ClientRMService, RMAppManager, RMContext}
+import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter
+import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp
+import org.apache.hadoop.yarn.server.security.ApplicationACLsManager
 import org.apache.hadoop.yarn.util.Records
-import org.mockito.Matchers.{eq => meq, _}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyShort, eq => meq}
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterAll, Matchers}
+import org.mockito.invocation.InvocationOnMock
+import org.scalatest.Matchers
 
-import org.apache.spark.{SparkConf, SparkFunSuite, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TestUtils}
+import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
+import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils.AMOUNT
+import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
-class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
-  with ResetSystemProperties {
+class ClientSuite extends SparkFunSuite with Matchers {
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   import Client._
 
   var oldSystemProperties: Properties = null
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    oldSystemProperties = SerializationUtils.clone(System.getProperties)
-    System.setProperty("SPARK_YARN_MODE", "true")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      System.setProperties(oldSystemProperties)
-      oldSystemProperties = null
-    } finally {
-      super.afterAll()
-    }
-  }
 
   test("default Yarn application classpath") {
     getDefaultYarnApplicationClasspath should be(Fixtures.knownDefYarnAppCP)
@@ -116,12 +112,13 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val cp = env("CLASSPATH").split(":|;|<CPS>")
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
       val uri = new URI(entry)
-      if (LOCAL_SCHEME.equals(uri.getScheme())) {
+      if (Utils.LOCAL_SCHEME.equals(uri.getScheme())) {
         cp should contain (uri.getPath())
       } else {
         cp should not contain (uri.getPath())
       }
     })
+    cp should not contain ("local")
     cp should contain(PWD)
     cp should contain (s"$PWD${Path.SEPARATOR}${LOCALIZED_CONF_DIR}")
     cp should not contain (APP_JAR)
@@ -151,7 +148,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       val expected = ADDED.split(",")
         .map(p => {
           val uri = new URI(p)
-          if (LOCAL_SCHEME == uri.getScheme()) {
+          if (Utils.LOCAL_SCHEME == uri.getScheme()) {
             p
           } else {
             Option(uri.getFragment()).getOrElse(new File(p).getName())
@@ -184,7 +181,6 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   }
 
   test("configuration and args propagate through createApplicationSubmissionContext") {
-    val conf = new Configuration()
     // When parsing tags, duplicates and leading/trailing whitespace should be removed.
     // Spaces between non-comma strings should be preserved as single tags. Empty strings may or
     // may not be removed depending on the version of Hadoop being used.
@@ -193,13 +189,14 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       .set(MAX_APP_ATTEMPTS, 42)
       .set("spark.app.name", "foo-test-app")
       .set(QUEUE_NAME, "staging-queue")
+      .set(APPLICATION_PRIORITY, 1)
     val args = new ClientArguments(Array())
 
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
     val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
 
-    val client = new Client(args, conf, sparkConf)
+    val client = new Client(args, sparkConf, null)
     client.createApplicationSubmissionContext(
       new YarnClientApplication(getNewApplicationResponse, appContext),
       containerLaunchContext)
@@ -208,12 +205,83 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     appContext.getQueue should be ("staging-queue")
     appContext.getAMContainerSpec should be (containerLaunchContext)
     appContext.getApplicationType should be ("SPARK")
-    appContext.getClass.getMethods.filter(_.getName.equals("getApplicationTags")).foreach{ method =>
+    appContext.getClass.getMethods.filter(_.getName == "getApplicationTags").foreach { method =>
       val tags = method.invoke(appContext).asInstanceOf[java.util.Set[String]]
       tags should contain allOf ("tag1", "dup", "tag2", "multi word")
       tags.asScala.count(_.nonEmpty) should be (4)
     }
     appContext.getMaxAppAttempts should be (42)
+    appContext.getPriority.getPriority should be (1)
+  }
+
+  test("specify a more specific type for the application") {
+    // TODO (SPARK-31733) Make this test case pass with Hadoop-3.2
+    assume(!isYarnResourceTypesAvailable)
+    // When the type exceeds 20 characters will be truncated by yarn
+    val appTypes = Map(
+      1 -> ("", ""),
+      2 -> (" ", " "),
+      3 -> ("SPARK-SQL", "SPARK-SQL"),
+      4 -> ("012345678901234567890123", "01234567890123456789"))
+
+    for ((id, (sourceType, targetType)) <- appTypes) {
+      val sparkConf = new SparkConf().set("spark.yarn.applicationType", sourceType)
+      val args = new ClientArguments(Array())
+
+      val appContext = spy(Records.newRecord(classOf[ApplicationSubmissionContext]))
+      val appId = ApplicationId.newInstance(123456, id)
+      appContext.setApplicationId(appId)
+      val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+      val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+      val client = new Client(args, sparkConf, null)
+      val context = client.createApplicationSubmissionContext(
+        new YarnClientApplication(getNewApplicationResponse, appContext),
+        containerLaunchContext)
+
+      val yarnClient = mock(classOf[YarnClient])
+      when(yarnClient.submitApplication(any())).thenAnswer((invocationOnMock: InvocationOnMock) => {
+        val subContext = invocationOnMock.getArguments()(0)
+          .asInstanceOf[ApplicationSubmissionContext]
+        val request = Records.newRecord(classOf[SubmitApplicationRequest])
+        request.setApplicationSubmissionContext(subContext)
+
+        val rmContext = mock(classOf[RMContext])
+        val conf = mock(classOf[Configuration])
+        val map = new ConcurrentHashMap[ApplicationId, RMApp]()
+        when(rmContext.getRMApps).thenReturn(map)
+        val dispatcher = mock(classOf[Dispatcher])
+        when(rmContext.getDispatcher).thenReturn(dispatcher)
+        when[EventHandler[_]](dispatcher.getEventHandler).thenReturn(
+          new EventHandler[Event[_]] {
+            override def handle(event: Event[_]): Unit = {}
+          }
+        )
+        val writer = mock(classOf[RMApplicationHistoryWriter])
+        when(rmContext.getRMApplicationHistoryWriter).thenReturn(writer)
+        val publisher = mock(classOf[SystemMetricsPublisher])
+        when(rmContext.getSystemMetricsPublisher).thenReturn(publisher)
+        when(appContext.getUnmanagedAM).thenReturn(true)
+
+        val rmAppManager = new RMAppManager(rmContext,
+          null,
+          null,
+          mock(classOf[ApplicationACLsManager]),
+          conf)
+        val clientRMService = new ClientRMService(rmContext,
+          null,
+          rmAppManager,
+          null,
+          null,
+          null)
+        clientRMService.submitApplication(request)
+
+        assert(map.get(subContext.getApplicationId).getApplicationType === targetType)
+        null
+      })
+
+      yarnClient.submitApplication(context)
+    }
   }
 
   test("spark.yarn.jars with multiple paths and globs") {
@@ -265,7 +333,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
-    sparkConf.set(SPARK_ARCHIVE, LOCAL_SCHEME + ":" + archive.getPath())
+    sparkConf.set(SPARK_ARCHIVE, Utils.LOCAL_SCHEME + ":" + archive.getPath())
     intercept[IllegalArgumentException] {
       client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
     }
@@ -374,6 +442,179 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
 
+  Seq(
+    "client" -> YARN_AM_RESOURCE_TYPES_PREFIX,
+    "cluster" -> YARN_DRIVER_RESOURCE_TYPES_PREFIX
+  ).foreach { case (deployMode, prefix) =>
+    test(s"custom resource request ($deployMode mode)") {
+      assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+      val resources = Map("fpga" -> 2, "gpu" -> 3)
+      ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+
+      val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, deployMode)
+      resources.foreach { case (name, v) =>
+        conf.set(s"${prefix}${name}.${AMOUNT}", v.toString)
+      }
+
+      val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+      val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+      val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+      val client = new Client(new ClientArguments(Array()), conf, null)
+      client.createApplicationSubmissionContext(
+        new YarnClientApplication(getNewApplicationResponse, appContext),
+        containerLaunchContext)
+
+      resources.foreach { case (name, value) =>
+        ResourceRequestTestHelper.getRequestedValue(appContext.getResource, name) should be (value)
+      }
+    }
+  }
+
+  test("custom driver resource request yarn config and spark config fails") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu", YARN_FPGA_RESOURCE_CONFIG -> "fpga")
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+
+    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    resources.keys.foreach { yarnName =>
+      conf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${yarnName}.${AMOUNT}", "2")
+    }
+    resources.values.foreach { rName =>
+      conf.set(new ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
+    }
+
+    val error = intercept[SparkException] {
+      ResourceRequestHelper.validateResources(conf)
+    }.getMessage()
+
+    assert(error.contains("Do not use spark.yarn.driver.resource.yarn.io/fpga.amount," +
+      " please use spark.driver.resource.fpga.amount"))
+    assert(error.contains("Do not use spark.yarn.driver.resource.yarn.io/gpu.amount," +
+      " please use spark.driver.resource.gpu.amount"))
+  }
+
+  test("custom executor resource request yarn config and spark config fails") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu", YARN_FPGA_RESOURCE_CONFIG -> "fpga")
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+
+    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    resources.keys.foreach { yarnName =>
+      conf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnName}.${AMOUNT}", "2")
+    }
+    resources.values.foreach { rName =>
+      conf.set(new ResourceID(SPARK_EXECUTOR_PREFIX, rName).amountConf, "3")
+    }
+
+    val error = intercept[SparkException] {
+      ResourceRequestHelper.validateResources(conf)
+    }.getMessage()
+
+    assert(error.contains("Do not use spark.yarn.executor.resource.yarn.io/fpga.amount," +
+      " please use spark.executor.resource.fpga.amount"))
+    assert(error.contains("Do not use spark.yarn.executor.resource.yarn.io/gpu.amount," +
+      " please use spark.executor.resource.gpu.amount"))
+  }
+
+
+  test("custom resources spark config mapped to yarn config") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val yarnMadeupResource = "yarn.io/madeup"
+    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu",
+      YARN_FPGA_RESOURCE_CONFIG -> "fpga",
+      yarnMadeupResource -> "madeup")
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+
+    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    resources.values.foreach { rName =>
+      conf.set(new ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
+    }
+    // also just set yarn one that we don't convert
+    conf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}.${AMOUNT}", "5")
+    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+    val client = new Client(new ClientArguments(Array()), conf, null)
+    val newContext = client.createApplicationSubmissionContext(
+      new YarnClientApplication(getNewApplicationResponse, appContext),
+      containerLaunchContext)
+
+    val yarnRInfo = ResourceRequestTestHelper.getResources(newContext.getResource)
+    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
+    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
+    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
+    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).nonEmpty)
+    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 3)
+    assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
+    assert(allResourceInfo.get(yarnMadeupResource).get === 5)
+  }
+
+  test("test yarn jars path not exists") {
+    withTempDir { dir =>
+      val conf = new SparkConf().set(SPARK_JARS, Seq(dir.getAbsolutePath + "/test"))
+      val client = new Client(new ClientArguments(Array()), conf, null)
+      withTempDir { distDir =>
+        intercept[FileNotFoundException] {
+          client.prepareLocalResources(new Path(distDir.getAbsolutePath), Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-31582 Being able to not populate Hadoop classpath") {
+    Seq(true, false).foreach { populateHadoopClassPath =>
+      withAppConf(Fixtures.mapAppConf) { conf =>
+        val sparkConf = new SparkConf()
+          .set(POPULATE_HADOOP_CLASSPATH, populateHadoopClassPath)
+        val env = new MutableHashMap[String, String]()
+        val args = new ClientArguments(Array("--jar", USER))
+        populateClasspath(args, conf, sparkConf, env)
+        if (populateHadoopClassPath) {
+          classpath(env) should
+            (contain (Fixtures.knownYARNAppCP) and contain (Fixtures.knownMRAppCP))
+        } else {
+          classpath(env) should
+            (not contain (Fixtures.knownYARNAppCP) and not contain (Fixtures.knownMRAppCP))
+        }
+      }
+    }
+  }
+
+  private val matching = Seq(
+    ("files URI match test1", "file:///file1", "file:///file2"),
+    ("files URI match test2", "file:///c:file1", "file://c:file2"),
+    ("files URI match test3", "file://host/file1", "file://host/file2"),
+    ("wasb URI match test", "wasb://bucket1@user", "wasb://bucket1@user/"),
+    ("hdfs URI match test", "hdfs:/path1", "hdfs:/path1")
+  )
+
+  matching.foreach { t =>
+      test(t._1) {
+        assert(Client.compareUri(new URI(t._2), new URI(t._3)),
+          s"No match between ${t._2} and ${t._3}")
+      }
+  }
+
+  private val unmatching = Seq(
+    ("files URI unmatch test1", "file:///file1", "file://host/file2"),
+    ("files URI unmatch test2", "file://host/file1", "file:///file2"),
+    ("files URI unmatch test3", "file://host/file1", "file://host2/file2"),
+    ("wasb URI unmatch test1", "wasb://bucket1@user", "wasb://bucket2@user/"),
+    ("wasb URI unmatch test2", "wasb://bucket1@user", "wasb://bucket1@user2/"),
+    ("s3 URI unmatch test", "s3a://user@pass:bucket1/", "s3a://user2@pass2:bucket1/"),
+    ("hdfs URI unmatch test1", "hdfs://namenode1/path1", "hdfs://namenode1:8080/path2"),
+    ("hdfs URI unmatch test2", "hdfs://namenode1:8020/path1", "hdfs://namenode1:8080/path2")
+  )
+
+  unmatching.foreach { t =>
+      test(t._1) {
+        assert(!Client.compareUri(new URI(t._2), new URI(t._3)),
+          s"match between ${t._2} and ${t._3}")
+      }
+  }
+
   object Fixtures {
 
     val knownDefYarnAppCP: Seq[String] =
@@ -393,7 +634,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val mapAppConf = mapYARNAppConf ++ mapMRAppConf
   }
 
-  def withAppConf(m: Map[String, String] = Map())(testCode: (Configuration) => Any) {
+  def withAppConf(m: Map[String, String] = Map())(testCode: (Configuration) => Any): Unit = {
     val conf = new Configuration
     m.foreach { case (k, v) => conf.set(k, v, "ClientSpec") }
     testCode(conf)
@@ -406,16 +647,14 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
   private def createClient(
       sparkConf: SparkConf,
-      conf: Configuration = new Configuration(),
       args: Array[String] = Array()): Client = {
     val clientArgs = new ClientArguments(args)
-    spy(new Client(clientArgs, conf, sparkConf))
+    spy(new Client(clientArgs, sparkConf, null))
   }
 
   private def classpath(client: Client): Array[String] = {
     val env = new MutableHashMap[String, String]()
-    populateClasspath(null, client.hadoopConf, client.sparkConf, env)
+    populateClasspath(null, new Configuration(), client.sparkConf, env)
     classpath(env)
   }
-
 }

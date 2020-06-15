@@ -3,7 +3,7 @@
   "index" : 10,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:06.916GMT",
-  "duration" : 73,
+  "duration" : 99,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -20,6 +20,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -33,6 +34,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -41,13 +43,16 @@
       "writeTime" : 94709,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 18,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 11,
   "index" : 11,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:06.918GMT",
-  "duration" : 75,
+  "duration" : 89,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -64,6 +69,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -77,6 +83,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -85,13 +92,16 @@
       "writeTime" : 94507,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 8,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 12,
   "index" : 12,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:06.923GMT",
-  "duration" : 77,
+  "duration" : 93,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -108,6 +118,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -121,6 +132,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -129,13 +141,16 @@
       "writeTime" : 102476,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 7,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 13,
   "index" : 13,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:06.924GMT",
-  "duration" : 76,
+  "duration" : 138,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -152,6 +167,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -165,6 +181,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -173,13 +190,16 @@
       "writeTime" : 95004,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 53,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 14,
   "index" : 14,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:06.925GMT",
-  "duration" : 83,
+  "duration" : 94,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -196,6 +216,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -209,6 +230,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -217,13 +239,16 @@
       "writeTime" : 95646,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 5,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 15,
   "index" : 15,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:06.928GMT",
-  "duration" : 76,
+  "duration" : 83,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -240,6 +265,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -253,6 +279,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -261,13 +288,16 @@
       "writeTime" : 602780,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 4,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 16,
   "index" : 16,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.001GMT",
-  "duration" : 84,
+  "duration" : 98,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -284,6 +314,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -297,6 +328,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -305,13 +337,16 @@
       "writeTime" : 108320,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 4,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 17,
   "index" : 17,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.005GMT",
-  "duration" : 91,
+  "duration" : 123,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -328,6 +363,7 @@
     "resultSerializationTime" : 1,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -341,6 +377,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -349,13 +386,16 @@
       "writeTime" : 99944,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 20,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 18,
   "index" : 18,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.010GMT",
-  "duration" : 92,
+  "duration" : 105,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -372,6 +412,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -385,6 +426,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -393,13 +435,16 @@
       "writeTime" : 100836,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 3,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 19,
   "index" : 19,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.012GMT",
-  "duration" : 84,
+  "duration" : 94,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -416,6 +461,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -429,6 +475,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -437,13 +484,16 @@
       "writeTime" : 95788,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 5,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 20,
   "index" : 20,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.014GMT",
-  "duration" : 83,
+  "duration" : 90,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -460,6 +510,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -473,6 +524,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -481,13 +533,16 @@
       "writeTime" : 97716,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 4,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 21,
   "index" : 21,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.015GMT",
-  "duration" : 88,
+  "duration" : 96,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -504,6 +559,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -517,6 +573,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -525,13 +582,16 @@
       "writeTime" : 100270,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 3,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 22,
   "index" : 22,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.018GMT",
-  "duration" : 93,
+  "duration" : 101,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -548,6 +608,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -561,6 +622,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -569,13 +631,16 @@
       "writeTime" : 143427,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 3,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 23,
   "index" : 23,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.031GMT",
-  "duration" : 65,
+  "duration" : 84,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -592,6 +657,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -605,6 +671,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -613,13 +680,16 @@
       "writeTime" : 91844,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 16,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 24,
   "index" : 24,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.098GMT",
-  "duration" : 43,
+  "duration" : 52,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -636,6 +706,7 @@
     "resultSerializationTime" : 1,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -649,6 +720,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -657,13 +729,16 @@
       "writeTime" : 157194,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 5,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 25,
   "index" : 25,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.103GMT",
-  "duration" : 49,
+  "duration" : 61,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -680,6 +755,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -693,6 +769,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -701,13 +778,16 @@
       "writeTime" : 94134,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 9,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 26,
   "index" : 26,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.105GMT",
-  "duration" : 38,
+  "duration" : 52,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -724,6 +804,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -737,6 +818,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -745,13 +827,16 @@
       "writeTime" : 108213,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 8,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 27,
   "index" : 27,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.110GMT",
-  "duration" : 32,
+  "duration" : 41,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -768,6 +853,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -781,6 +867,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -789,13 +876,16 @@
       "writeTime" : 102019,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 6,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 28,
   "index" : 28,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.113GMT",
-  "duration" : 29,
+  "duration" : 49,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -812,6 +902,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -825,6 +916,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -833,13 +925,16 @@
       "writeTime" : 104299,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 17,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 29,
   "index" : 29,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.114GMT",
-  "duration" : 39,
+  "duration" : 52,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -856,6 +951,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -869,6 +965,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -877,13 +974,16 @@
       "writeTime" : 114938,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 11,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 30,
   "index" : 30,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.118GMT",
-  "duration" : 34,
+  "duration" : 62,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -900,6 +1000,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -913,6 +1014,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -921,13 +1023,16 @@
       "writeTime" : 119770,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 24,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 31,
   "index" : 31,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.127GMT",
-  "duration" : 24,
+  "duration" : 74,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -944,6 +1049,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -957,6 +1063,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -965,13 +1072,16 @@
       "writeTime" : 92619,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 14,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 32,
   "index" : 32,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.148GMT",
-  "duration" : 17,
+  "duration" : 33,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -988,6 +1098,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1001,6 +1112,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1009,13 +1121,16 @@
       "writeTime" : 89603,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 13,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 33,
   "index" : 33,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.149GMT",
-  "duration" : 43,
+  "duration" : 58,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1032,6 +1147,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1045,6 +1161,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1053,13 +1170,16 @@
       "writeTime" : 118329,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 10,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 34,
   "index" : 34,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.156GMT",
-  "duration" : 27,
+  "duration" : 42,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1076,6 +1196,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1089,6 +1210,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1097,13 +1219,16 @@
       "writeTime" : 127746,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 9,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 35,
   "index" : 35,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.161GMT",
-  "duration" : 35,
+  "duration" : 50,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1120,6 +1245,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1133,6 +1259,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1141,13 +1268,16 @@
       "writeTime" : 160963,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 10,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 36,
   "index" : 36,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.164GMT",
-  "duration" : 29,
+  "duration" : 40,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1164,6 +1294,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1177,6 +1308,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1185,13 +1317,16 @@
       "writeTime" : 123855,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 6,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 37,
   "index" : 37,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.165GMT",
-  "duration" : 32,
+  "duration" : 42,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1208,6 +1343,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1221,6 +1357,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1229,13 +1366,16 @@
       "writeTime" : 111869,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 6,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 38,
   "index" : 38,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.166GMT",
-  "duration" : 31,
+  "duration" : 47,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1252,6 +1392,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1265,6 +1406,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1273,13 +1415,16 @@
       "writeTime" : 131158,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 13,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 39,
   "index" : 39,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.180GMT",
-  "duration" : 17,
+  "duration" : 32,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1296,6 +1441,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1309,6 +1455,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1317,13 +1464,16 @@
       "writeTime" : 98748,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 13,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 40,
   "index" : 40,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.197GMT",
-  "duration" : 14,
+  "duration" : 24,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1340,6 +1490,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1353,6 +1504,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1361,13 +1513,16 @@
       "writeTime" : 94792,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 6,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 41,
   "index" : 41,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.200GMT",
-  "duration" : 16,
+  "duration" : 24,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1384,6 +1539,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1397,6 +1553,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1405,13 +1562,16 @@
       "writeTime" : 90765,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 6,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 42,
   "index" : 42,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.203GMT",
-  "duration" : 17,
+  "duration" : 42,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1428,6 +1588,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1441,6 +1602,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1449,13 +1611,16 @@
       "writeTime" : 103713,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 15,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 43,
   "index" : 43,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.204GMT",
-  "duration" : 16,
+  "duration" : 39,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1472,6 +1637,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1485,6 +1651,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1493,13 +1660,16 @@
       "writeTime" : 171516,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 21,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 44,
   "index" : 44,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.205GMT",
-  "duration" : 18,
+  "duration" : 37,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1516,6 +1686,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1529,6 +1700,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1537,13 +1709,16 @@
       "writeTime" : 98293,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 16,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 45,
   "index" : 45,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.206GMT",
-  "duration" : 19,
+  "duration" : 37,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1560,6 +1735,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1573,6 +1749,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1581,13 +1758,16 @@
       "writeTime" : 92985,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 16,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 46,
   "index" : 46,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.210GMT",
-  "duration" : 31,
+  "duration" : 43,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1604,6 +1784,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1617,6 +1798,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1625,13 +1807,16 @@
       "writeTime" : 113322,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 11,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 47,
   "index" : 47,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.212GMT",
-  "duration" : 18,
+  "duration" : 33,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1648,6 +1833,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1661,6 +1847,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1669,13 +1856,16 @@
       "writeTime" : 103015,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 13,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 48,
   "index" : 48,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.220GMT",
-  "duration" : 24,
+  "duration" : 30,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1692,6 +1882,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1705,6 +1896,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1713,13 +1905,16 @@
       "writeTime" : 139844,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 3,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 49,
   "index" : 49,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.223GMT",
-  "duration" : 23,
+  "duration" : 34,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1736,6 +1931,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1749,6 +1945,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1757,13 +1954,16 @@
       "writeTime" : 94984,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 4,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 50,
   "index" : 50,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.240GMT",
-  "duration" : 18,
+  "duration" : 26,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1780,6 +1980,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1793,6 +1994,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1801,13 +2003,16 @@
       "writeTime" : 90836,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 4,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 51,
   "index" : 51,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.242GMT",
-  "duration" : 17,
+  "duration" : 21,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1824,6 +2029,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1837,6 +2043,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1845,13 +2052,16 @@
       "writeTime" : 96013,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 2,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 52,
   "index" : 52,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.243GMT",
-  "duration" : 18,
+  "duration" : 28,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1868,6 +2078,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1881,6 +2092,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1889,13 +2101,16 @@
       "writeTime" : 89664,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 5,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 53,
   "index" : 53,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.244GMT",
-  "duration" : 18,
+  "duration" : 29,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1912,6 +2127,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1925,6 +2141,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1933,13 +2150,16 @@
       "writeTime" : 92835,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 5,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 54,
   "index" : 54,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.244GMT",
-  "duration" : 18,
+  "duration" : 59,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -1956,6 +2176,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -1969,6 +2190,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -1977,13 +2199,16 @@
       "writeTime" : 90506,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 38,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 55,
   "index" : 55,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.246GMT",
-  "duration" : 21,
+  "duration" : 30,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -2000,6 +2225,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -2013,6 +2239,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -2021,13 +2248,16 @@
       "writeTime" : 108309,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 5,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 56,
   "index" : 56,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.249GMT",
-  "duration" : 20,
+  "duration" : 31,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -2044,6 +2274,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -2057,6 +2288,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -2065,13 +2297,16 @@
       "writeTime" : 90329,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 6,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 57,
   "index" : 57,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.257GMT",
-  "duration" : 16,
+  "duration" : 21,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -2088,6 +2323,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -2101,6 +2337,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -2109,13 +2346,16 @@
       "writeTime" : 96849,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 2,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 58,
   "index" : 58,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.263GMT",
-  "duration" : 16,
+  "duration" : 23,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -2132,6 +2372,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -2145,6 +2386,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -2153,13 +2395,16 @@
       "writeTime" : 97521,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 4,
+  "gettingResultTime" : 0
 }, {
   "taskId" : 59,
   "index" : 59,
   "attempt" : 0,
   "launchTime" : "2015-05-06T13:03:07.265GMT",
-  "duration" : 17,
+  "duration" : 23,
   "executorId" : "driver",
   "host" : "localhost",
   "status" : "SUCCESS",
@@ -2176,6 +2421,7 @@
     "resultSerializationTime" : 0,
     "memoryBytesSpilled" : 0,
     "diskBytesSpilled" : 0,
+    "peakExecutionMemory" : 0,
     "inputMetrics" : {
       "bytesRead" : 70564,
       "recordsRead" : 10000
@@ -2189,6 +2435,7 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToDisk" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
@@ -2197,5 +2444,8 @@
       "writeTime" : 100753,
       "recordsWritten" : 10
     }
-  }
+  },
+  "executorLogs" : { },
+  "schedulerDelay" : 3,
+  "gettingResultTime" : 0
 } ]

@@ -61,7 +61,7 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
    * Set a handler to be called if this PartialResult's job fails. Only one failure handler
    * is supported per PartialResult.
    */
-  def onFail(handler: Exception => Unit) {
+  def onFail(handler: Exception => Unit): Unit = {
     synchronized {
       if (failureHandler.isDefined) {
         throw new UnsupportedOperationException("onFail cannot be called twice")
@@ -85,7 +85,7 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
        override def onComplete(handler: T => Unit): PartialResult[T] = synchronized {
          PartialResult.this.onComplete(handler.compose(f)).map(f)
        }
-      override def onFail(handler: Exception => Unit) {
+      override def onFail(handler: Exception => Unit): Unit = {
         synchronized {
           PartialResult.this.onFail(handler)
         }
@@ -100,7 +100,7 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
     }
   }
 
-  private[spark] def setFinalValue(value: R) {
+  private[spark] def setFinalValue(value: R): Unit = {
     synchronized {
       if (finalValue.isDefined) {
         throw new UnsupportedOperationException("setFinalValue called twice on a PartialResult")
@@ -115,7 +115,7 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
 
   private def getFinalValueInternal() = finalValue
 
-  private[spark] def setFailure(exception: Exception) {
+  private[spark] def setFailure(exception: Exception): Unit = {
     synchronized {
       if (failure.isDefined) {
         throw new UnsupportedOperationException("setFailure called twice on a PartialResult")

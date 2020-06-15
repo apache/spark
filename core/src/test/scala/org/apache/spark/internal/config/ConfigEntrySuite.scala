@@ -70,8 +70,8 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: fallback") {
     val conf = new SparkConf()
-    val parentConf = ConfigBuilder(testKey("parent")).intConf.createWithDefault(1)
-    val confWithFallback = ConfigBuilder(testKey("fallback")).fallbackConf(parentConf)
+    val parentConf = ConfigBuilder(testKey("parent1")).intConf.createWithDefault(1)
+    val confWithFallback = ConfigBuilder(testKey("fallback1")).fallbackConf(parentConf)
     assert(conf.get(confWithFallback) === 1)
     conf.set(confWithFallback, 2)
     assert(conf.get(parentConf) === 1)
@@ -260,5 +260,138 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(iConf) === 0)
     data = 2
     assert(conf.get(iConf) === 2)
+  }
+
+  test("conf entry: alternative keys") {
+    val conf = new SparkConf()
+    val iConf = ConfigBuilder(testKey("a"))
+      .withAlternative(testKey("b"))
+      .withAlternative(testKey("c"))
+      .intConf.createWithDefault(0)
+
+    // no key is set, return default value.
+    assert(conf.get(iConf) === 0)
+
+    // the primary key is set, the alternative keys are not set, return the value of primary key.
+    conf.set(testKey("a"), "1")
+    assert(conf.get(iConf) === 1)
+
+    // the primary key and alternative keys are all set, return the value of primary key.
+    conf.set(testKey("b"), "2")
+    conf.set(testKey("c"), "3")
+    assert(conf.get(iConf) === 1)
+
+    // the primary key is not set, (some of) the alternative keys are set, return the value of the
+    // first alternative key that is set.
+    conf.remove(testKey("a"))
+    assert(conf.get(iConf) === 2)
+    conf.remove(testKey("b"))
+    assert(conf.get(iConf) === 3)
+  }
+
+  test("conf entry: prepend with default separator") {
+    val conf = new SparkConf()
+    val prependedKey = testKey("prepended1")
+    val prependedConf = ConfigBuilder(prependedKey).stringConf.createOptional
+    val derivedConf = ConfigBuilder(testKey("prepend1"))
+      .withPrepended(prependedKey)
+      .stringConf
+      .createOptional
+
+    conf.set(derivedConf, "1")
+    assert(conf.get(derivedConf) === Some("1"))
+
+    conf.set(prependedConf, "2")
+    assert(conf.get(derivedConf) === Some("2 1"))
+  }
+
+  test("conf entry: prepend with custom separator") {
+    val conf = new SparkConf()
+    val prependedKey = testKey("prepended2")
+    val prependedConf = ConfigBuilder(prependedKey).stringConf.createOptional
+    val derivedConf = ConfigBuilder(testKey("prepend2"))
+      .withPrepended(prependedKey, ",")
+      .stringConf
+      .createOptional
+
+    conf.set(derivedConf, "1")
+    assert(conf.get(derivedConf) === Some("1"))
+
+    conf.set(prependedConf, "2")
+    assert(conf.get(derivedConf) === Some("2,1"))
+  }
+
+  test("conf entry: prepend with fallback") {
+    val conf = new SparkConf()
+    val prependedKey = testKey("prepended3")
+    val prependedConf = ConfigBuilder(prependedKey).stringConf.createOptional
+    val derivedConf = ConfigBuilder(testKey("prepend3"))
+      .withPrepended(prependedKey)
+      .stringConf
+      .createOptional
+    val confWithFallback = ConfigBuilder(testKey("fallback2")).fallbackConf(derivedConf)
+
+    assert(conf.get(confWithFallback) === None)
+
+    conf.set(derivedConf, "1")
+    assert(conf.get(confWithFallback) === Some("1"))
+
+    conf.set(prependedConf, "2")
+    assert(conf.get(confWithFallback) === Some("2 1"))
+
+    conf.set(confWithFallback, Some("3"))
+    assert(conf.get(confWithFallback) === Some("3"))
+  }
+
+  test("conf entry: prepend should work only with string type") {
+    var i = 0
+    def testPrependFail(createConf: (String, String) => Unit): Unit = {
+      intercept[IllegalArgumentException] {
+        createConf(testKey(s"prependedFail$i"), testKey(s"prependFail$i"))
+      }.getMessage.contains("type must be string if prepend used")
+      i += 1
+    }
+
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).intConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).longConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).doubleConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).booleanConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).timeConf(TimeUnit.MILLISECONDS)
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).bytesConf(ByteUnit.BYTE)
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).regexConf
+    )
+  }
+
+  test("onCreate") {
+    var onCreateCalled = false
+    ConfigBuilder(testKey("oc1")).onCreate(_ => onCreateCalled = true).intConf.createWithDefault(1)
+    assert(onCreateCalled)
+
+    onCreateCalled = false
+    ConfigBuilder(testKey("oc2")).onCreate(_ => onCreateCalled = true).intConf.createOptional
+    assert(onCreateCalled)
+
+    onCreateCalled = false
+    ConfigBuilder(testKey("oc3")).onCreate(_ => onCreateCalled = true).intConf
+      .createWithDefaultString("1.0")
+    assert(onCreateCalled)
+
+    val fallback = ConfigBuilder(testKey("oc4")).intConf.createWithDefault(1)
+    onCreateCalled = false
+    ConfigBuilder(testKey("oc5")).onCreate(_ => onCreateCalled = true).fallbackConf(fallback)
+    assert(onCreateCalled)
   }
 }

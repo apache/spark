@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.lang.reflect.{Method, Modifier}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
  */
 @ExpressionDescription(
   usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - Calls a method with reflection.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('java.util.UUID', 'randomUUID');
        c33fb387-8500-4bfa-81d2-6e0e3e930df2
@@ -55,7 +55,7 @@ import org.apache.spark.util.Utils
 case class CallMethodViaReflection(children: Seq[Expression])
   extends Expression with CodegenFallback {
 
-  override def prettyName: String = "reflect"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("reflect")
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
@@ -76,7 +76,7 @@ case class CallMethodViaReflection(children: Seq[Expression])
     }
   }
 
-  override def deterministic: Boolean = false
+  override lazy val deterministic: Boolean = false
   override def nullable: Boolean = true
   override val dataType: DataType = StringType
 

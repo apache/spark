@@ -1,0 +1,104 @@
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Invoke extract for timestamp:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to timestamp                                   292            310          16         34.3          29.2       1.0X
+YEAR of timestamp                                   847            875          26         11.8          84.7       0.3X
+YEAROFWEEK of timestamp                             964            981          24         10.4          96.4       0.3X
+QUARTER of timestamp                               1217           1219           2          8.2         121.7       0.2X
+MONTH of timestamp                                  835            844          10         12.0          83.5       0.3X
+WEEK of timestamp                                  1173           1183          15          8.5         117.3       0.2X
+DAY of timestamp                                    851            878          25         11.7          85.1       0.3X
+DAYOFWEEK of timestamp                              946            970          22         10.6          94.6       0.3X
+DOW of timestamp                                    935            959          21         10.7          93.5       0.3X
+DOW_ISO of timestamp                                947            961          13         10.6          94.7       0.3X
+DAYOFWEEK_ISO of timestamp                          965            992          26         10.4          96.5       0.3X
+DOY of timestamp                                    886            904          26         11.3          88.6       0.3X
+HOUR of timestamp                                   697            700           4         14.3          69.7       0.4X
+MINUTE of timestamp                                 654            665          10         15.3          65.4       0.4X
+SECOND of timestamp                                 770            778           8         13.0          77.0       0.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Invoke date_part for timestamp:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to timestamp                                   233            243           9         43.0          23.3       1.0X
+YEAR of timestamp                                   810            826          15         12.3          81.0       0.3X
+YEAROFWEEK of timestamp                             996           1019          21         10.0          99.6       0.2X
+QUARTER of timestamp                               1037           1049          11          9.6         103.7       0.2X
+MONTH of timestamp                                  822            852          30         12.2          82.2       0.3X
+WEEK of timestamp                                  1179           1220          35          8.5         117.9       0.2X
+DAY of timestamp                                    822            825           3         12.2          82.2       0.3X
+DAYOFWEEK of timestamp                              937            941           3         10.7          93.7       0.2X
+DOW of timestamp                                    931            970          34         10.7          93.1       0.2X
+DOW_ISO of timestamp                                927            948          22         10.8          92.7       0.3X
+DAYOFWEEK_ISO of timestamp                          896            918          20         11.2          89.6       0.3X
+DOY of timestamp                                    863            891          25         11.6          86.3       0.3X
+HOUR of timestamp                                   639            645           6         15.7          63.9       0.4X
+MINUTE of timestamp                                 639            647          12         15.7          63.9       0.4X
+SECOND of timestamp                                 785            796          11         12.7          78.5       0.3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Invoke extract for date:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to date                                        690            693           3         14.5          69.0       1.0X
+YEAR of date                                        822            841          17         12.2          82.2       0.8X
+YEAROFWEEK of date                                  967            974           7         10.3          96.7       0.7X
+QUARTER of date                                    1034           1044          11          9.7         103.4       0.7X
+MONTH of date                                       831            836           5         12.0          83.1       0.8X
+WEEK of date                                       1152           1177          34          8.7         115.2       0.6X
+DAY of date                                         836            873          34         12.0          83.6       0.8X
+DAYOFWEEK of date                                   960            992          30         10.4          96.0       0.7X
+DOW of date                                        1011           1016           4          9.9         101.1       0.7X
+DOW_ISO of date                                     969            984          16         10.3          96.9       0.7X
+DAYOFWEEK_ISO of date                               967            986          19         10.3          96.7       0.7X
+DOY of date                                         901            953          47         11.1          90.1       0.8X
+HOUR of date                                       1581           1586           5          6.3         158.1       0.4X
+MINUTE of date                                     1570           1584          13          6.4         157.0       0.4X
+SECOND of date                                     1713           1740          27          5.8         171.3       0.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Invoke date_part for date:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to date                                        756            762           6         13.2          75.6       1.0X
+YEAR of date                                        843            857          13         11.9          84.3       0.9X
+YEAROFWEEK of date                                 1055           1065          16          9.5         105.5       0.7X
+QUARTER of date                                    1066           1073           6          9.4         106.6       0.7X
+MONTH of date                                       856            890          44         11.7          85.6       0.9X
+WEEK of date                                       1155           1204          59          8.7         115.5       0.7X
+DAY of date                                         749            762          12         13.3          74.9       1.0X
+DAYOFWEEK of date                                   850            865          15         11.8          85.0       0.9X
+DOW of date                                         878            893          16         11.4          87.8       0.9X
+DOW_ISO of date                                     865            869           5         11.6          86.5       0.9X
+DAYOFWEEK_ISO of date                               914            967          76         10.9          91.4       0.8X
+DOY of date                                         789            792           4         12.7          78.9       1.0X
+HOUR of date                                       1558           1659         168          6.4         155.8       0.5X
+MINUTE of date                                     1581           1673          80          6.3         158.1       0.5X
+SECOND of date                                     1646           1881         319          6.1         164.6       0.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Invoke extract for interval:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to interval                                    925            941          20         10.8          92.5       1.0X
+YEAR of interval                                    903            919          14         11.1          90.3       1.0X
+MONTH of interval                                   944            958          17         10.6          94.4       1.0X
+DAY of interval                                     917            925           7         10.9          91.7       1.0X
+HOUR of interval                                    925            940          17         10.8          92.5       1.0X
+MINUTE of interval                                  951            962          12         10.5          95.1       1.0X
+SECOND of interval                                 1017           1036          19          9.8         101.7       0.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.15.4
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Invoke date_part for interval:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to interval                                    913            920           8         11.0          91.3       1.0X
+YEAR of interval                                    930            935           4         10.8          93.0       1.0X
+MONTH of interval                                   930            943          14         10.7          93.0       1.0X
+DAY of interval                                     933            946          12         10.7          93.3       1.0X
+HOUR of interval                                    951            953           3         10.5          95.1       1.0X
+MINUTE of interval                                  923            958          30         10.8          92.3       1.0X
+SECOND of interval                                  993            995           1         10.1          99.3       0.9X
+

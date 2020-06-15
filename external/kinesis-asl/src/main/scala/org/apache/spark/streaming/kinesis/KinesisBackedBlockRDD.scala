@@ -17,11 +17,13 @@
 
 package org.apache.spark.streaming.kinesis
 
+import java.util.concurrent.TimeUnit
+
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
+import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.clientlibrary.types.UserRecord
 import com.amazonaws.services.kinesis.model._
@@ -81,9 +83,9 @@ class KinesisBackedBlockRDD[T: ClassTag](
     @transient private val _blockIds: Array[BlockId],
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
     @transient private val isBlockIdValid: Array[Boolean] = Array.empty,
-    val retryTimeoutMs: Int = 10000,
     val messageHandler: Record => T = KinesisInputDStream.defaultMessageHandler _,
-    val kinesisCreds: SparkAWSCredentials = DefaultCredentials
+    val kinesisCreds: SparkAWSCredentials = DefaultCredentials,
+    val kinesisReadConfigs: KinesisReadConfigurations = KinesisReadConfigurations()
   ) extends BlockRDD[T](sc, _blockIds) {
 
   require(_blockIds.length == arrayOfseqNumberRanges.length,
@@ -112,7 +114,7 @@ class KinesisBackedBlockRDD[T: ClassTag](
       val credentials = kinesisCreds.provider.getCredentials
       partition.seqNumberRanges.ranges.iterator.flatMap { range =>
         new KinesisSequenceRangeIterator(credentials, endpointUrl, regionName,
-          range, retryTimeoutMs).map(messageHandler)
+          range, kinesisReadConfigs).map(messageHandler)
       }
     }
     if (partition.isBlockIdValid) {
@@ -135,7 +137,7 @@ class KinesisSequenceRangeIterator(
     endpointUrl: String,
     regionId: String,
     range: SequenceNumberRange,
-    retryTimeoutMs: Int) extends NextIterator[Record] with Logging {
+    kinesisReadConfigs: KinesisReadConfigurations) extends NextIterator[Record] with Logging {
 
   private val client = new AmazonKinesisClient(credentials)
   private val streamName = range.streamName
@@ -251,21 +253,22 @@ class KinesisSequenceRangeIterator(
 
   /** Helper method to retry Kinesis API request with exponential backoff and timeouts */
   private def retryOrTimeout[T](message: String)(body: => T): T = {
-    import KinesisSequenceRangeIterator._
-
-    var startTimeMs = System.currentTimeMillis()
+    val startTimeNs = System.nanoTime()
     var retryCount = 0
-    var waitTimeMs = MIN_RETRY_WAIT_TIME_MS
     var result: Option[T] = None
     var lastError: Throwable = null
+    var waitTimeInterval = kinesisReadConfigs.retryWaitTimeMs
 
-    def isTimedOut = (System.currentTimeMillis() - startTimeMs) >= retryTimeoutMs
-    def isMaxRetryDone = retryCount >= MAX_RETRIES
+    def isTimedOut = {
+      val retryTimeoutNs = TimeUnit.MILLISECONDS.toNanos(kinesisReadConfigs.retryTimeoutMs)
+      (System.nanoTime() - startTimeNs) >= retryTimeoutNs
+    }
+    def isMaxRetryDone = retryCount >= kinesisReadConfigs.maxRetries
 
     while (result.isEmpty && !isTimedOut && !isMaxRetryDone) {
       if (retryCount > 0) {  // wait only if this is a retry
-        Thread.sleep(waitTimeMs)
-        waitTimeMs *= 2  // if you have waited, then double wait time for next round
+        Thread.sleep(waitTimeInterval)
+        waitTimeInterval *= 2  // if you have waited, then double wait time for next round
       }
       try {
         result = Some(body)
@@ -284,17 +287,12 @@ class KinesisSequenceRangeIterator(
     result.getOrElse {
       if (isTimedOut) {
         throw new SparkException(
-          s"Timed out after $retryTimeoutMs ms while $message, last exception: ", lastError)
+          s"Timed out after ${kinesisReadConfigs.retryTimeoutMs} ms while " +
+          s"$message, last exception: ", lastError)
       } else {
         throw new SparkException(
           s"Gave up after $retryCount retries while $message, last exception: ", lastError)
       }
     }
   }
-}
-
-private[streaming]
-object KinesisSequenceRangeIterator {
-  val MAX_RETRIES = 3
-  val MIN_RETRY_WAIT_TIME_MS = 100
 }

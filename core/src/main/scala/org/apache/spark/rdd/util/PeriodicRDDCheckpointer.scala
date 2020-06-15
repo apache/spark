@@ -50,6 +50,7 @@ import org.apache.spark.util.PeriodicCheckpointer
  * {{{
  *  val (rdd1, rdd2, rdd3, ...) = ...
  *  val cp = new PeriodicRDDCheckpointer(2, sc)
+ *  cp.update(rdd1)
  *  rdd1.count();
  *  // persisted: rdd1
  *  cp.update(rdd2)
@@ -72,13 +73,16 @@ import org.apache.spark.util.PeriodicCheckpointer
  *
  * @param checkpointInterval  RDDs will be checkpointed at this interval
  * @tparam T  RDD element type
- *
- * TODO: Move this out of MLlib?
  */
 private[spark] class PeriodicRDDCheckpointer[T](
     checkpointInterval: Int,
-    sc: SparkContext)
+    sc: SparkContext,
+    storageLevel: StorageLevel)
   extends PeriodicCheckpointer[RDD[T]](checkpointInterval, sc) {
+  require(storageLevel != StorageLevel.NONE)
+
+  def this(checkpointInterval: Int, sc: SparkContext) =
+    this(checkpointInterval, sc, StorageLevel.MEMORY_ONLY)
 
   override protected def checkpoint(data: RDD[T]): Unit = data.checkpoint()
 
@@ -86,11 +90,11 @@ private[spark] class PeriodicRDDCheckpointer[T](
 
   override protected def persist(data: RDD[T]): Unit = {
     if (data.getStorageLevel == StorageLevel.NONE) {
-      data.persist()
+      data.persist(storageLevel)
     }
   }
 
-  override protected def unpersist(data: RDD[T]): Unit = data.unpersist(blocking = false)
+  override protected def unpersist(data: RDD[T]): Unit = data.unpersist()
 
   override protected def getCheckpointFiles(data: RDD[T]): Iterable[String] = {
     data.getCheckpointFile.map(x => x)

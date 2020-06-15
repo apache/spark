@@ -21,10 +21,11 @@ import java.util.Locale
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.{DDLUtils, RunnableCommand}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -68,15 +69,15 @@ case class CreateTempViewUsing(
       s"Temporary view '$tableIdent' should not have specified a database")
   }
 
-  override def argString: String = {
+  override def argString(maxFields: Int): String = {
     s"[tableIdent:$tableIdent " +
       userSpecifiedSchema.map(_ + " ").getOrElse("") +
       s"replace:$replace " +
       s"provider:$provider " +
-      CatalogUtils.maskCredentials(options)
+      SQLConf.get.redactOptions(options)
   }
 
-  def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     if (provider.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, " +
         "you can't use it with CREATE TEMP VIEW USING")

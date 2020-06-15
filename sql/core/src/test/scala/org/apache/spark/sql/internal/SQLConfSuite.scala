@@ -1,32 +1,34 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.internal
 
+import scala.language.reflectiveCalls
+
 import org.apache.hadoop.fs.Path
+import org.apache.log4j.Level
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
 
-class SQLConfSuite extends QueryTest with SharedSQLContext {
-  import testImplicits._
+class SQLConfSuite extends QueryTest with SharedSparkSession {
 
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
@@ -114,16 +116,31 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-31234: reset will not change static sql configs and spark core configs") {
+    val conf = spark.sparkContext.getConf.getAll.toMap
+    val appName = conf.get("spark.app.name")
+    val driverHost = conf.get("spark.driver.host")
+    val master = conf.get("spark.master")
+    val warehouseDir = conf.get("spark.sql.warehouse.dir")
+    // ensure the conf here is not default value, and will not be reset to default value later
+    assert(warehouseDir.get.contains(this.getClass.getCanonicalName))
+    sql("RESET")
+    assert(conf.get("spark.app.name") === appName)
+    assert(conf.get("spark.driver.host") === driverHost)
+    assert(conf.get("spark.master") === master)
+    assert(conf.get("spark.sql.warehouse.dir") === warehouseDir)
+  }
+
   test("reset - public conf") {
     spark.sessionState.conf.clear()
     val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
     try {
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL))
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
       assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
       sql(s"reset")
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL))
       assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
     } finally {
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
@@ -169,33 +186,33 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(e.getMessage === s"${SQLConf.CASE_SENSITIVE.key} should be boolean, but was 10")
   }
 
-  test("Test SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE's method") {
+  test("Test ADVISORY_PARTITION_SIZE_IN_BYTES's method") {
     spark.sessionState.conf.clear()
 
-    spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "100")
-    assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 100)
+    spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "100")
+    assert(spark.conf.get(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES) === 100)
 
-    spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1k")
-    assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 1024)
+    spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "1k")
+    assert(spark.conf.get(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES) === 1024)
 
-    spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1M")
-    assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 1048576)
+    spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "1M")
+    assert(spark.conf.get(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES) === 1048576)
 
-    spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1g")
-    assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 1073741824)
+    spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "1g")
+    assert(spark.conf.get(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES) === 1073741824)
 
-    spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-1")
-    assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === -1)
+    spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "-1")
+    assert(spark.conf.get(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES) === -1)
 
     // Test overflow exception
     intercept[IllegalArgumentException] {
       // This value exceeds Long.MaxValue
-      spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "90000000000g")
+      spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "90000000000g")
     }
 
     intercept[IllegalArgumentException] {
       // This value less than Long.MinValue
-      spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-90000000000g")
+      spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "-90000000000g")
     }
 
     spark.sessionState.conf.clear()
@@ -221,35 +238,6 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
-  test("MAX_CASES_BRANCHES") {
-    withTable("tab1") {
-      spark.range(10).write.saveAsTable("tab1")
-      val sql_one_branch_caseWhen = "SELECT CASE WHEN id = 1 THEN 1 END FROM tab1"
-      val sql_two_branch_caseWhen = "SELECT CASE WHEN id = 1 THEN 1 ELSE 0 END FROM tab1"
-
-      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "0") {
-        assert(!sql(sql_one_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-        assert(!sql(sql_two_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-      }
-
-      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "1") {
-        assert(sql(sql_one_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-        assert(!sql(sql_two_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-      }
-
-      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "2") {
-        assert(sql(sql_one_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-        assert(sql(sql_two_branch_caseWhen)
-          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-      }
-    }
-  }
-
   test("static SQL conf comes from SparkConf") {
     val previousValue = sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
     try {
@@ -269,5 +257,130 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(e1.message.contains("Cannot modify the value of a static config"))
     val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
     assert(e2.message.contains("Cannot modify the value of a static config"))
+  }
+
+  test("SPARK-21588 SQLContext.getConf(key, null) should return null") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      assert("1" == spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key, null))
+      assert("1" == spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key, "<undefined>"))
+    }
+
+    assert(spark.conf.getOption("spark.sql.nonexistent").isEmpty)
+    assert(null == spark.conf.get("spark.sql.nonexistent", null))
+    assert("<undefined>" == spark.conf.get("spark.sql.nonexistent", "<undefined>"))
+  }
+
+  test("SPARK-10365: PARQUET_OUTPUT_TIMESTAMP_TYPE") {
+    spark.sessionState.conf.clear()
+
+    // check default value
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.INT96)
+
+    spark.sessionState.conf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "timestamp_micros")
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
+    spark.sessionState.conf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "int96")
+    assert(spark.sessionState.conf.parquetOutputTimestampType ==
+      SQLConf.ParquetOutputTimestampType.INT96)
+
+    // test invalid conf value
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "invalid")
+    }
+
+    spark.sessionState.conf.clear()
+  }
+
+  test("SPARK-22779: correctly compute default value for fallback configs") {
+    val fallback = SQLConf.buildConf("spark.sql.__test__.spark_22779")
+      .fallbackConf(SQLConf.PARQUET_COMPRESSION)
+
+    assert(spark.sessionState.conf.getConfString(fallback.key) ===
+      SQLConf.PARQUET_COMPRESSION.defaultValue.get)
+    assert(spark.sessionState.conf.getConfString(fallback.key, "lzo") === "lzo")
+
+    val displayValue = spark.sessionState.conf.getAllDefinedConfs
+      .find { case (key, _, _, _) => key == fallback.key }
+      .map { case (_, v, _, _) => v }
+      .get
+    assert(displayValue === fallback.defaultValueString)
+
+    spark.sessionState.conf.setConf(SQLConf.PARQUET_COMPRESSION, "gzip")
+    assert(spark.sessionState.conf.getConfString(fallback.key) === "gzip")
+
+    spark.sessionState.conf.setConf(fallback, "lzo")
+    assert(spark.sessionState.conf.getConfString(fallback.key) === "lzo")
+
+    val newDisplayValue = spark.sessionState.conf.getAllDefinedConfs
+      .find { case (key, _, _, _) => key == fallback.key }
+      .map { case (_, v, _, _) => v }
+      .get
+    assert(newDisplayValue === "lzo")
+
+    SQLConf.unregister(fallback)
+  }
+
+  test("SPARK-24783: spark.sql.shuffle.partitions=0 should throw exception ") {
+    val e = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 0)
+    }
+    assert(e.getMessage.contains("spark.sql.shuffle.partitions"))
+    val e2 = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, -1)
+    }
+    assert(e2.getMessage.contains("spark.sql.shuffle.partitions"))
+  }
+
+  test("set removed config to non-default value") {
+    val config = "spark.sql.fromJsonForceNullableSchema"
+    val defaultValue = true
+
+    spark.conf.set(config, defaultValue)
+
+    val e = intercept[AnalysisException] {
+      spark.conf.set(config, !defaultValue)
+    }
+    assert(e.getMessage.contains(config))
+  }
+
+  test("log deprecation warnings") {
+    val logAppender = new LogAppender("deprecated SQL configs")
+    def check(config: String): Unit = {
+      assert(logAppender.loggingEvents.exists(
+        e => e.getLevel == Level.WARN &&
+        e.getRenderedMessage.contains(config)))
+    }
+
+    val config1 = SQLConf.HIVE_VERIFY_PARTITION_PATH.key
+    withLogAppender(logAppender) {
+      spark.conf.set(config1, true)
+    }
+    check(config1)
+
+    val config2 = SQLConf.ARROW_EXECUTION_ENABLED.key
+    withLogAppender(logAppender) {
+      spark.conf.unset(config2)
+    }
+    check(config2)
+  }
+
+  test("spark.sql.session.timeZone should only accept valid zone id") {
+    spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, MIT.getId)
+    assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) === MIT.getId)
+    spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Chicago")
+    assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) ===
+      "America/Chicago")
+
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "pst")
+    }
+    intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "GMT+8:00")
+    }
+    val e = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/shanghai")
+    }
+    assert(e.getMessage === "Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)")
   }
 }

@@ -27,9 +27,9 @@ object ZippedPartitionsSuite {
 
 class ZippedPartitionsSuite extends SparkFunSuite with SharedSparkContext {
   test("print sizes") {
-    val data1 = sc.makeRDD(Array(1, 2, 3, 4), 2)
-    val data2 = sc.makeRDD(Array("1", "2", "3", "4", "5", "6"), 2)
-    val data3 = sc.makeRDD(Array(1.0, 2.0), 2)
+    val data1 = sc.makeRDD(Seq(1, 2, 3, 4), 2)
+    val data2 = sc.makeRDD(Seq("1", "2", "3", "4", "5", "6"), 2)
+    val data3 = sc.makeRDD(Seq(1.0, 2.0), 2)
 
     val zippedRDD = data1.zipPartitions(data2, data3)(ZippedPartitionsSuite.procZippedData)
 

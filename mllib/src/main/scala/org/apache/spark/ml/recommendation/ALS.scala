@@ -31,16 +31,18 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext, SparkException}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -52,7 +54,8 @@ import org.apache.spark.util.random.XORShiftRandom
 /**
  * Common params for ALS and ALSModel.
  */
-private[recommendation] trait ALSModelParams extends Params with HasPredictionCol {
+private[recommendation] trait ALSModelParams extends Params with HasPredictionCol
+  with HasBlockSize {
   /**
    * Param for the column name for user ids. Ids must be integers. Other
    * numeric types are supported for this column, but will be cast to integers as long as they
@@ -123,13 +126,15 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
 
   /** @group expertGetParam */
   def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase(Locale.ROOT)
+
+  setDefault(blockSize -> 4096)
 }
 
 /**
  * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter with HasRegParam
-  with HasPredictionCol with HasCheckpointInterval with HasSeed {
+  with HasCheckpointInterval with HasSeed {
 
   /**
    * Param for rank of the matrix factorization (positive).
@@ -286,11 +291,24 @@ class ALSModel private[ml] (
   @Since("2.2.0")
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
+  /**
+   * Set block size for stacking input data in matrices.
+   * Default is 4096.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.0.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
   private val predict = udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
     if (featuresA != null && featuresB != null) {
-      // TODO(SPARK-19759): try dot-producting on Seqs or another non-converted type for
-      // potential optimization.
-      blas.sdot(rank, featuresA.toArray, 1, featuresB.toArray, 1)
+      var dotProduct = 0.0f
+      var i = 0
+      while (i < rank) {
+        dotProduct += featuresA(i) * featuresB(i)
+        i += 1
+      }
+      dotProduct
     } else {
       Float.NaN
     }
@@ -332,6 +350,11 @@ class ALSModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter = new ALSModel.ALSModelWriter(this)
 
+  @Since("3.0.0")
+  override def toString: String = {
+    s"ALSModel: uid=$uid, rank=$rank"
+  }
+
   /**
    * Returns top `numItems` items recommended for each user, for all users.
    * @param numItems max number of recommendations for each user
@@ -340,7 +363,22 @@ class ALSModel private[ml] (
    */
   @Since("2.2.0")
   def recommendForAllUsers(numItems: Int): DataFrame = {
-    recommendForAll(userFactors, itemFactors, $(userCol), $(itemCol), numItems)
+    recommendForAll(userFactors, itemFactors, $(userCol), $(itemCol), numItems, $(blockSize))
+  }
+
+  /**
+   * Returns top `numItems` items recommended for each user id in the input data set. Note that if
+   * there are duplicate ids in the input dataset, only one set of recommendations per unique id
+   * will be returned.
+   * @param dataset a Dataset containing a column of user ids. The column name must match `userCol`.
+   * @param numItems max number of recommendations for each user.
+   * @return a DataFrame of (userCol: Int, recommendations), where recommendations are
+   *         stored as an array of (itemCol: Int, rating: Float) Rows.
+   */
+  @Since("2.3.0")
+  def recommendForUserSubset(dataset: Dataset[_], numItems: Int): DataFrame = {
+    val srcFactorSubset = getSourceFactorSubset(dataset, userFactors, $(userCol))
+    recommendForAll(srcFactorSubset, itemFactors, $(userCol), $(itemCol), numItems, $(blockSize))
   }
 
   /**
@@ -351,7 +389,40 @@ class ALSModel private[ml] (
    */
   @Since("2.2.0")
   def recommendForAllItems(numUsers: Int): DataFrame = {
-    recommendForAll(itemFactors, userFactors, $(itemCol), $(userCol), numUsers)
+    recommendForAll(itemFactors, userFactors, $(itemCol), $(userCol), numUsers, $(blockSize))
+  }
+
+  /**
+   * Returns top `numUsers` users recommended for each item id in the input data set. Note that if
+   * there are duplicate ids in the input dataset, only one set of recommendations per unique id
+   * will be returned.
+   * @param dataset a Dataset containing a column of item ids. The column name must match `itemCol`.
+   * @param numUsers max number of recommendations for each item.
+   * @return a DataFrame of (itemCol: Int, recommendations), where recommendations are
+   *         stored as an array of (userCol: Int, rating: Float) Rows.
+   */
+  @Since("2.3.0")
+  def recommendForItemSubset(dataset: Dataset[_], numUsers: Int): DataFrame = {
+    val srcFactorSubset = getSourceFactorSubset(dataset, itemFactors, $(itemCol))
+    recommendForAll(srcFactorSubset, userFactors, $(itemCol), $(userCol), numUsers, $(blockSize))
+  }
+
+  /**
+   * Returns a subset of a factor DataFrame limited to only those unique ids contained
+   * in the input dataset.
+   * @param dataset input Dataset containing id column to user to filter factors.
+   * @param factors factor DataFrame to filter.
+   * @param column column name containing the ids in the input dataset.
+   * @return DataFrame containing factors only for those ids present in both the input dataset and
+   *         the factor DataFrame.
+   */
+  private def getSourceFactorSubset(
+      dataset: Dataset[_],
+      factors: DataFrame,
+      column: String): DataFrame = {
+    factors
+      .join(dataset.select(column), factors("id") === dataset(column), joinType = "left_semi")
+      .select(factors("id"), factors("features"))
   }
 
   /**
@@ -363,7 +434,7 @@ class ALSModel private[ml] (
    * relatively efficient, the approach implemented here is significantly more efficient.
    *
    * This approach groups factors into blocks and computes the top-k elements per block,
-   * using a simple dot product (instead of gemm) and an efficient [[BoundedPriorityQueue]].
+   * using dot product and an efficient [[BoundedPriorityQueue]] (instead of gemm).
    * It then computes the global top-k by aggregating the per block top-k elements with
    * a [[TopByKeyAggregator]]. This significantly reduces the size of intermediate and shuffle data.
    * This is the DataFrame equivalent to the approach used in
@@ -382,42 +453,30 @@ class ALSModel private[ml] (
       dstFactors: DataFrame,
       srcOutputColumn: String,
       dstOutputColumn: String,
-      num: Int): DataFrame = {
+      num: Int,
+      blockSize: Int): DataFrame = {
     import srcFactors.sparkSession.implicits._
 
-    val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])])
-    val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])])
+    val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])], blockSize)
+    val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])], blockSize)
     val ratings = srcFactorsBlocked.crossJoin(dstFactorsBlocked)
       .as[(Seq[(Int, Array[Float])], Seq[(Int, Array[Float])])]
       .flatMap { case (srcIter, dstIter) =>
         val m = srcIter.size
         val n = math.min(dstIter.size, num)
         val output = new Array[(Int, Int, Float)](m * n)
-        var j = 0
+        var i = 0
         val pq = new BoundedPriorityQueue[(Int, Float)](num)(Ordering.by(_._2))
         srcIter.foreach { case (srcId, srcFactor) =>
           dstIter.foreach { case (dstId, dstFactor) =>
-            /*
-             * The below code is equivalent to
-             *    `val score = blas.sdot(rank, srcFactor, 1, dstFactor, 1)`
-             * This handwritten version is as or more efficient as BLAS calls in this case.
-             */
-            var score = 0.0f
-            var k = 0
-            while (k < rank) {
-              score += srcFactor(k) * dstFactor(k)
-              k += 1
-            }
+            // We use F2jBLAS which is faster than a call to native BLAS for vector dot product
+            val score = BLAS.f2jBLAS.sdot(rank, srcFactor, 1, dstFactor, 1)
             pq += dstId -> score
           }
-          val pqIter = pq.iterator
-          var i = 0
-          while (i < n) {
-            val (dstId, score) = pqIter.next()
-            output(j + i) = (srcId, dstId, score)
+          pq.foreach { case (dstId, score) =>
+            output(i) = (srcId, dstId, score)
             i += 1
           }
-          j += n
           pq.clear()
         }
         output.toSeq
@@ -437,11 +496,10 @@ class ALSModel private[ml] (
 
   /**
    * Blockifies factors to improve the efficiency of cross join
-   * TODO: SPARK-20443 - expose blockSize as a param?
    */
   private def blockify(
       factors: Dataset[(Int, Array[Float])],
-      blockSize: Int = 4096): Dataset[Seq[(Int, Array[Float])]] = {
+      blockSize: Int): Dataset[Seq[(Int, Array[Float])]] = {
     import factors.sparkSession.implicits._
     factors.mapPartitions(_.grouped(blockSize))
   }
@@ -489,7 +547,7 @@ object ALSModel extends MLReadable[ALSModel] {
 
       val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -516,13 +574,20 @@ object ALSModel extends MLReadable[ALSModel] {
  *
  * For implicit preference data, the algorithm used is based on
  * "Collaborative Filtering for Implicit Feedback Datasets", available at
- * http://dx.doi.org/10.1109/ICDM.2008.22, adapted for the blocked approach used here.
+ * https://doi.org/10.1109/ICDM.2008.22, adapted for the blocked approach used here.
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
  * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
  * r is greater than 0 and 0 if r is less than or equal to 0. The ratings then act as 'confidence'
  * values related to strength of indicated user
  * preferences rather than explicit ratings given to items.
+ *
+ * Note: the input rating dataset to the ALS implementation should be deterministic.
+ * Nondeterministic data can cause failure during fitting ALS model.
+ * For example, an order-sensitive operation like sampling after a repartition makes dataset
+ * output nondeterministic, like `dataset.repartition(2).sample(false, 0.5, 1618)`.
+ * Checkpointing sampled dataset or adding a sort before sampling can help make the dataset
+ * deterministic.
  */
 @Since("1.3.0")
 class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams
@@ -602,6 +667,15 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
   /**
+   * Set block size for stacking input data in matrices.
+   * Default is 4096.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.0.0")
+  def setBlockSize(value: Int): this.type = set(blockSize, value)
+
+  /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
    *
    * @group setParam
@@ -614,7 +688,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   }
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): ALSModel = {
+  override def fit(dataset: Dataset[_]): ALSModel = instrumented { instr =>
     transformSchema(dataset.schema)
     import dataset.sparkSession.implicits._
 
@@ -626,10 +700,11 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
 
-    val instr = Instrumentation.create(this, ratings)
-    instr.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha, userCol,
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha, userCol,
       itemCol, ratingCol, predictionCol, maxIter, regParam, nonnegative, checkpointInterval,
-      seed, intermediateStorageLevel, finalStorageLevel)
+      seed, intermediateStorageLevel, finalStorageLevel, blockSize)
 
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
@@ -640,8 +715,8 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       checkpointInterval = $(checkpointInterval), seed = $(seed))
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
-    val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
-    instr.logSuccess(model)
+    val model = new ALSModel(uid, $(rank), userDF, itemDF).setBlockSize($(blockSize))
+      .setParent(this)
     copyValues(model)
   }
 
@@ -656,21 +731,17 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
 
 /**
- * :: DeveloperApi ::
  * An implementation of ALS that supports generic ID types, specialized for Int and Long. This is
  * exposed as a developer API for users who do need other ID types. But it is not recommended
  * because it increases the shuffle size and memory requirement during training. For simplicity,
  * users and items must have the same type. The number of distinct users/items should be smaller
  * than 2 billion.
  */
-@DeveloperApi
 object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   /**
-   * :: DeveloperApi ::
    * Rating class for better code readability.
    */
-  @DeveloperApi
   case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
 
   @Since("1.6.0")
@@ -753,7 +824,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
      * Given a triangular matrix in the order of fillXtX above, compute the full symmetric square
      * matrix that it represents, storing it into destMatrix.
      */
-    private def fillAtA(triAtA: Array[Double], lambda: Double) {
+    private def fillAtA(triAtA: Array[Double], lambda: Double): Unit = {
       var i = 0
       var pos = 0
       var a = 0.0
@@ -775,11 +846,15 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   /**
    * Representing a normal equation to solve the following weighted least squares problem:
    *
-   * minimize \sum,,i,, c,,i,, (a,,i,,^T^ x - b,,i,,)^2^ + lambda * x^T^ x.
+   * minimize \sum,,i,, c,,i,, (a,,i,,^T^ x - d,,i,,)^2^ + lambda * x^T^ x.
    *
    * Its normal equation is given by
    *
-   * \sum,,i,, c,,i,, (a,,i,, a,,i,,^T^ x - b,,i,, a,,i,,) + lambda * x = 0.
+   * \sum,,i,, c,,i,, (a,,i,, a,,i,,^T^ x - d,,i,, a,,i,,) + lambda * x = 0.
+   *
+   * Distributing and letting b,,i,, = c,,i,, * d,,i,,
+   *
+   * \sum,,i,, c,,i,, a,,i,, a,,i,,^T^ x - b,,i,, a,,i,, + lambda * x = 0.
    */
   private[recommendation] class NormalEquation(val k: Int) extends Serializable {
 
@@ -802,19 +877,19 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     }
 
     /** Adds an observation. */
-    def add(a: Array[Float], b: Double, c: Double = 1.0): this.type = {
+    def add(a: Array[Float], b: Double, c: Double = 1.0): NormalEquation = {
       require(c >= 0.0)
       require(a.length == k)
       copyToDouble(a)
       blas.dspr(upper, k, c, da, 1, ata)
       if (b != 0.0) {
-        blas.daxpy(k, c * b, da, 1, atb, 1)
+        blas.daxpy(k, b, da, 1, atb, 1)
       }
       this
     }
 
     /** Merges another normal equation object. */
-    def merge(other: NormalEquation): this.type = {
+    def merge(other: NormalEquation): NormalEquation = {
       require(other.k == k)
       blas.daxpy(ata.length, 1.0, other.ata, 1, ata, 1)
       blas.daxpy(atb.length, 1.0, other.atb, 1, atb, 1)
@@ -829,7 +904,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   }
 
   /**
-   * :: DeveloperApi ::
    * Implementation of the ALS algorithm.
    *
    * This implementation of the ALS factorization algorithm partitions the two sets of factors among
@@ -854,7 +928,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * "block" as referring to a subset of an RDD containing the ratings rather than a contiguous
    * submatrix of the ratings matrix.
    */
-  @DeveloperApi
   def train[ID: ClassTag]( // scalastyle:ignore
       ratings: RDD[Rating[ID]],
       rank: Int = 10,
@@ -930,7 +1003,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         previousItemFactors.unpersist()
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
-        val deps = itemFactors.dependencies
         if (shouldCheckpoint(iter)) {
           itemFactors.checkpoint() // itemFactors gets materialized in computeFactors
         }
@@ -938,23 +1010,27 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, implicitPrefs, alpha, solver)
         if (shouldCheckpoint(iter)) {
-          ALS.cleanShuffleDependencies(sc, deps)
+          itemFactors.cleanShuffleDependencies()
           deletePreviousCheckpointFile()
           previousCheckpointFile = itemFactors.getCheckpointFile
         }
         previousUserFactors.unpersist()
       }
     } else {
+      var previousCachedItemFactors: Option[RDD[(Int, FactorBlock)]] = None
       for (iter <- 0 until maxIter) {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, solver = solver)
         if (shouldCheckpoint(iter)) {
-          val deps = itemFactors.dependencies
+          itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
-          ALS.cleanShuffleDependencies(sc, deps)
+          itemFactors.cleanShuffleDependencies()
           deletePreviousCheckpointFile()
+
+          previousCachedItemFactors.foreach(_.unpersist())
           previousCheckpointFile = itemFactors.getCheckpointFile
+          previousCachedItemFactors = Option(itemFactors)
         }
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, solver = solver)
@@ -965,7 +1041,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .join(userFactors)
       .mapPartitions({ items =>
         items.flatMap { case (_, (ids, factors)) =>
-          ids.view.zip(factors)
+          ids.iterator.zip(factors.iterator)
         }
       // Preserve the partitioning because IDs are consistent with the partitioners in userInBlocks
       // and userFactors.
@@ -977,20 +1053,20 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .join(itemFactors)
       .mapPartitions({ items =>
         items.flatMap { case (_, (ids, factors)) =>
-          ids.view.zip(factors)
+          ids.iterator.zip(factors.iterator)
         }
       }, preservesPartitioning = true)
       .setName("itemFactors")
       .persist(finalRDDStorageLevel)
     if (finalRDDStorageLevel != StorageLevel.NONE) {
       userIdAndFactors.count()
-      itemFactors.unpersist()
-      itemIdAndFactors.count()
       userInBlocks.unpersist()
       userOutBlocks.unpersist()
-      itemInBlocks.unpersist()
       itemOutBlocks.unpersist()
       blockRatings.unpersist()
+      itemIdAndFactors.count()
+      itemFactors.unpersist()
+      itemInBlocks.unpersist()
     }
     (userIdAndFactors, itemIdAndFactors)
   }
@@ -1184,16 +1260,19 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
     // This appears to create factorizations that have a slightly better reconstruction
     // (<1%) compared picking elements uniformly at random in [0,1].
-    inBlocks.map { case (srcBlockId, inBlock) =>
-      val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
-      val factors = Array.fill(inBlock.srcIds.length) {
-        val factor = Array.fill(rank)(random.nextGaussian().toFloat)
-        val nrm = blas.snrm2(rank, factor, 1)
-        blas.sscal(rank, 1.0f / nrm, factor, 1)
-        factor
+    inBlocks.mapPartitions({ iter =>
+      iter.map {
+        case (srcBlockId, inBlock) =>
+          val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
+          val factors = Array.fill(inBlock.srcIds.length) {
+            val factor = Array.fill(rank)(random.nextGaussian().toFloat)
+            val nrm = blas.snrm2(rank, factor, 1)
+            blas.sscal(rank, 1.0f / nrm, factor, 1)
+            factor
+          }
+          (srcBlockId, factors)
       }
-      (srcBlockId, factors)
-    }
+    }, preservesPartitioning = true)
   }
 
   /**
@@ -1289,7 +1368,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           Iterator.empty
         }
       } ++ {
-        builders.view.zipWithIndex.filter(_._1.size > 0).map { case (block, idx) =>
+        builders.iterator.zipWithIndex.filter(_._1.size > 0).map { case (block, idx) =>
           val srcBlockId = idx % srcPart.numPartitions
           val dstBlockId = idx / srcPart.numPartitions
           ((srcBlockId, dstBlockId), block.build())
@@ -1608,11 +1687,18 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     val YtY = if (implicitPrefs) Some(computeYtY(srcFactorBlocks, rank)) else None
     val srcOut = srcOutBlocks.join(srcFactorBlocks).flatMap {
       case (srcBlockId, (srcOutBlock, srcFactors)) =>
-        srcOutBlock.view.zipWithIndex.map { case (activeIndices, dstBlockId) =>
+        srcOutBlock.iterator.zipWithIndex.map { case (activeIndices, dstBlockId) =>
           (dstBlockId, (srcBlockId, activeIndices.map(idx => srcFactors(idx))))
         }
     }
     val merged = srcOut.groupByKey(new ALSPartitioner(dstInBlocks.partitions.length))
+
+    // SPARK-28927: Nondeterministic RDDs causes inconsistent in/out blocks in case of rerun.
+    // It can cause runtime error when matching in/out user/item blocks.
+    val isBlockRDDNondeterministic =
+      dstInBlocks.outputDeterministicLevel == DeterministicLevel.INDETERMINATE ||
+        srcOutBlocks.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+
     dstInBlocks.join(merged).mapValues {
       case (InBlock(dstIds, srcPtrs, srcEncodedIndices, ratings), srcFactors) =>
         val sortedSrcFactors = new Array[FactorBlock](numSrcBlocks)
@@ -1633,18 +1719,30 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
             val encoded = srcEncodedIndices(i)
             val blockId = srcEncoder.blockId(encoded)
             val localIndex = srcEncoder.localIndex(encoded)
-            val srcFactor = sortedSrcFactors(blockId)(localIndex)
+            var srcFactor: Array[Float] = null
+            try {
+              srcFactor = sortedSrcFactors(blockId)(localIndex)
+            } catch {
+              case a: ArrayIndexOutOfBoundsException if isBlockRDDNondeterministic =>
+                val errMsg = "A failure detected when matching In/Out blocks of users/items. " +
+                  "Because at least one In/Out block RDD is found to be nondeterministic now, " +
+                  "the issue is probably caused by nondeterministic input data. You can try to " +
+                  "checkpoint training data to make it deterministic. If you do `repartition` + " +
+                  "`sample` or `randomSplit`, you can also try to sort it before `sample` or " +
+                  "`randomSplit` to make it deterministic."
+                throw new SparkException(errMsg, a)
+            }
             val rating = ratings(i)
             if (implicitPrefs) {
-              // Extension to the original paper to handle b < 0. confidence is a function of |b|
-              // instead so that it is never negative. c1 is confidence - 1.0.
+              // Extension to the original paper to handle rating < 0. confidence is a function
+              // of |rating| instead so that it is never negative. c1 is confidence - 1.
               val c1 = alpha * math.abs(rating)
-              // For rating <= 0, the corresponding preference is 0. So the term below is only added
-              // for rating > 0. Because YtY is already added, we need to adjust the scaling here.
-              if (rating > 0) {
+              // For rating <= 0, the corresponding preference is 0. So the second argument of add
+              // is only there for rating > 0.
+              if (rating > 0.0) {
                 numExplicits += 1
-                ls.add(srcFactor, (c1 + 1.0) / c1, c1)
               }
+              ls.add(srcFactor, if (rating > 0.0) 1.0 + c1 else 0.0, c1)
             } else {
               ls.add(srcFactor, rating)
               numExplicits += 1
@@ -1715,31 +1813,4 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * satisfies this requirement, we simply use a type alias here.
    */
   private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner
-
-  /**
-   * Private function to clean up all of the shuffles files from the dependencies and their parents.
-   */
-  private[spark] def cleanShuffleDependencies[T](
-      sc: SparkContext,
-      deps: Seq[Dependency[_]],
-      blocking: Boolean = false): Unit = {
-    // If there is no reference tracking we skip clean up.
-    sc.cleaner.foreach { cleaner =>
-      /**
-       * Clean the shuffles & all of its parents.
-       */
-      def cleanEagerly(dep: Dependency[_]): Unit = {
-        if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
-          val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-          cleaner.doCleanupShuffle(shuffleId, blocking)
-        }
-        val rdd = dep.rdd
-        val rddDeps = rdd.dependencies
-        if (rdd.getStorageLevel == StorageLevel.NONE && rddDeps != null) {
-          rddDeps.foreach(cleanEagerly)
-        }
-      }
-      deps.foreach(cleanEagerly)
-    }
-  }
 }

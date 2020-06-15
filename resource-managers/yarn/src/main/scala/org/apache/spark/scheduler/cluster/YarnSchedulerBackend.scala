@@ -17,18 +17,26 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.concurrent.{ExecutionContext, Future}
+import java.util.EnumSet
+import java.util.concurrent.atomic.{AtomicBoolean}
+import javax.servlet.DispatcherType
+
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.UI._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.ui.JettyUtils
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
@@ -40,8 +48,10 @@ private[spark] abstract class YarnSchedulerBackend(
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
+  private val stopped = new AtomicBoolean(false)
+
   override val minRegisteredRatio =
-    if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
+    if (conf.get(config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).isEmpty) {
       0.8
     } else {
       super.minRegisteredRatio
@@ -50,6 +60,7 @@ private[spark] abstract class YarnSchedulerBackend(
   protected var totalExpectedExecutors = 0
 
   private val yarnSchedulerEndpoint = new YarnSchedulerEndpoint(rpcEnv)
+  protected var amEndpoint: Option[RpcEndpointRef] = None
 
   private val yarnSchedulerEndpointRef = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, yarnSchedulerEndpoint)
@@ -62,12 +73,6 @@ private[spark] abstract class YarnSchedulerBackend(
   /** Attempt ID. This is unset for client-mode schedulers */
   private var attemptId: Option[ApplicationAttemptId] = None
 
-  /** Scheduler extension services. */
-  private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
-
-  // Flag to specify whether this schedulerBackend should be reset.
-  private var shouldResetOnAmRegister = false
-
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
    *
@@ -79,21 +84,18 @@ private[spark] abstract class YarnSchedulerBackend(
     this.attemptId = attemptId
   }
 
-  override def start() {
+  protected def startBindings(): Unit = {
     require(appId.isDefined, "application ID unset")
-    val binding = SchedulerExtensionServiceBinding(sc, appId.get, attemptId)
-    services.start(binding)
-    super.start()
   }
 
   override def stop(): Unit = {
     try {
       // SPARK-12009: To prevent Yarn allocator from requesting backup for the executors which
       // was Stopped by SchedulerBackend.
-      requestTotalExecutors(0, 0, Map.empty)
+      requestTotalExecutors(Map.empty, Map.empty, Map.empty)
       super.stop()
     } finally {
-      services.stop()
+      stopped.set(true)
     }
   }
 
@@ -121,21 +123,24 @@ private[spark] abstract class YarnSchedulerBackend(
     }
   }
 
-  private[cluster] def prepareRequestExecutors(requestedTotal: Int): RequestExecutors = {
+  private[cluster] def prepareRequestExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): RequestExecutors = {
     val nodeBlacklist: Set[String] = scheduler.nodeBlacklist()
     // For locality preferences, ignore preferences for nodes that are blacklisted
-    val filteredHostToLocalTaskCount =
-      hostToLocalTaskCount.filter { case (k, v) => !nodeBlacklist.contains(k) }
-    RequestExecutors(requestedTotal, localityAwareTasks, filteredHostToLocalTaskCount,
-      nodeBlacklist)
+    val filteredRPHostToLocalTaskCount = rpHostToLocalTaskCount.map { case (rpid, v) =>
+      (rpid, v.filter { case (host, count) => !nodeBlacklist.contains(host) })
+    }
+    RequestExecutors(resourceProfileToTotalExecs, numLocalityAwareTasksPerResourceProfileId,
+      filteredRPHostToLocalTaskCount, nodeBlacklist)
   }
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
    * This includes executors already pending or running.
    */
-  override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
-    yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(requestedTotal))
+  override def doRequestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
+    yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(resourceProfileToTotalExecs))
   }
 
   /**
@@ -152,7 +157,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * Add filters to the SparkUI.
    */
-  private def addWebUIFilter(
+  private[cluster] def addWebUIFilter(
       filterName: String,
       filterParams: Map[String, String],
       proxyBase: String): Unit = {
@@ -164,15 +169,31 @@ private[spark] abstract class YarnSchedulerBackend(
       filterName != null && filterName.nonEmpty &&
       filterParams != null && filterParams.nonEmpty
     if (hasFilter) {
+      // SPARK-26255: Append user provided filters(spark.ui.filters) with yarn filter.
+      val allFilters = Seq(filterName) ++ conf.get(UI_FILTERS)
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
-      conf.set("spark.ui.filters", filterName)
-      filterParams.foreach { case (k, v) => conf.set(s"spark.$filterName.param.$k", v) }
-      scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
+
+      // For already installed handlers, prepend the filter.
+      scheduler.sc.ui.foreach { ui =>
+        // Lock the UI so that new handlers are not added while this is running. Set the updated
+        // filter config inside the lock so that we're sure all handlers will properly get it.
+        ui.synchronized {
+          filterParams.foreach { case (k, v) =>
+            conf.set(s"spark.$filterName.param.$k", v)
+          }
+          conf.set(UI_FILTERS, allFilters)
+
+          ui.getDelegatingHandlers.foreach { h =>
+            h.addFilter(filterName, filterName, filterParams)
+            h.prependFilterMapping(filterName, "/*", EnumSet.allOf(classOf[DispatcherType]))
+          }
+        }
+      }
     }
   }
 
-  override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
-    new YarnDriverEndpoint(rpcEnv, properties)
+  override def createDriverEndpoint(): DriverEndpoint = {
+    new YarnDriverEndpoint()
   }
 
   /**
@@ -180,9 +201,13 @@ private[spark] abstract class YarnSchedulerBackend(
    * and re-registered itself to driver after a failure. The stale state in driver should be
    * cleaned.
    */
-  override protected def reset(): Unit = {
+  override protected[scheduler] def reset(): Unit = {
     super.reset()
     sc.executorAllocationManager.foreach(_.reset())
+  }
+
+  override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
+    Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
   /**
@@ -190,8 +215,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * This endpoint communicates with the executors and queries the AM for an executor's exit
    * status when the executor is disconnected.
    */
-  private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
-      extends DriverEndpoint(rpcEnv, sparkProperties) {
+  private class YarnDriverEndpoint extends DriverEndpoint {
 
     /**
      * When onDisconnected is received at the driver endpoint, the superclass DriverEndpoint
@@ -206,8 +230,10 @@ private[spark] abstract class YarnSchedulerBackend(
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach { executorId =>
-        if (disableExecutor(executorId)) {
-          yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
+        if (!stopped.get) {
+          if (disableExecutor(executorId)) {
+            yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
+          }
         }
       }
     }
@@ -218,7 +244,6 @@ private[spark] abstract class YarnSchedulerBackend(
    */
   private class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with Logging {
-    private var amEndpoint: Option[RpcEndpointRef] = None
 
     private[YarnSchedulerBackend] def handleExecutorDisconnectedFromDriver(
         executorId: String,
@@ -241,40 +266,24 @@ private[spark] abstract class YarnSchedulerBackend(
           Future.successful(RemoveExecutor(executorId, SlaveLost("AM is not yet registered.")))
       }
 
-      removeExecutorMessage
-        .flatMap { message =>
-          driverEndpoint.ask[Boolean](message)
-        }(ThreadUtils.sameThread)
-        .onFailure {
-          case NonFatal(e) => logError(
-            s"Error requesting driver to remove executor $executorId after disconnection.", e)
-        }(ThreadUtils.sameThread)
+      removeExecutorMessage.foreach { message => driverEndpoint.send(message) }
     }
 
     override def receive: PartialFunction[Any, Unit] = {
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
         amEndpoint = Option(am)
-        if (!shouldResetOnAmRegister) {
-          shouldResetOnAmRegister = true
-        } else {
-          // AM is already registered before, this potentially means that AM failed and
-          // a new one registered after the failure. This will only happen in yarn-client mode.
-          reset()
-        }
+        reset()
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
 
       case r @ RemoveExecutor(executorId, reason) =>
-        logWarning(reason.toString)
-        driverEndpoint.ask[Boolean](r).onFailure {
-          case e =>
-            logError("Error requesting driver to remove executor" +
-              s" $executorId for reason $reason", e)
-        }(ThreadUtils.sameThread)
+        if (!stopped.get) {
+          logWarning(s"Requesting driver to remove executor $executorId for reason $reason")
+          driverEndpoint.send(r)
+        }
     }
-
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case r: RequestExecutors =>
@@ -307,6 +316,9 @@ private[spark] abstract class YarnSchedulerBackend(
 
       case RetrieveLastAllocatedExecutorId =>
         context.reply(currentExecutorIdCounter)
+
+      case RetrieveDelegationTokens =>
+        context.reply(currentDelegationTokens)
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

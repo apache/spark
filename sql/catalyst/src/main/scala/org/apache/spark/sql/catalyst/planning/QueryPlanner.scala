@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
  * Given a [[LogicalPlan]], returns a list of `PhysicalPlan`s that can
- * be used for execution. If this strategy does not apply to the give logical operation then an
+ * be used for execution. If this strategy does not apply to the given logical operation then an
  * empty list should be returned.
  */
 abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends Logging {
@@ -42,9 +42,10 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends L
  * Abstract class for transforming [[LogicalPlan]]s into physical plans.
  * Child classes are responsible for specifying a list of [[GenericStrategy]] objects that
  * each of which can return a list of possible physical plan options.
- * If a given strategy is unable to plan all
- * of the remaining operators in the tree, it can call [[planLater]], which returns a placeholder
- * object that will be filled in using other available strategies.
+ * If a given strategy is unable to plan all of the remaining operators in the tree,
+ * it can call [[GenericStrategy#planLater planLater]], which returns a placeholder
+ * object that will be [[collectPlaceholders collected]] and filled in
+ * using other available strategies.
  *
  * TODO: RIGHT NOW ONLY ONE PLAN IS RETURNED EVER...
  *       PLAN SPACE EXPLORATION WILL BE IMPLEMENTED LATER.
@@ -80,7 +81,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
               childPlans.map { childPlan =>
                 // Replace the placeholder by the child plan
                 candidateWithPlaceholders.transformUp {
-                  case p if p == placeholder => childPlan
+                  case p if p.eq(placeholder) => childPlan
                 }
               }
             }
@@ -93,7 +94,10 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
     pruned
   }
 
-  /** Collects placeholders marked as [[planLater]] by strategy and its [[LogicalPlan]]s */
+  /**
+   * Collects placeholders marked using [[GenericStrategy#planLater planLater]]
+   * by [[strategies]].
+   */
   protected def collectPlaceholders(plan: PhysicalPlan): Seq[(PhysicalPlan, LogicalPlan)]
 
   /** Prunes bad plans to prevent combinatorial explosion. */
