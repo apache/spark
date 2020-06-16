@@ -182,6 +182,40 @@ class StreamingAggregationCompatibilitySuite extends StreamTest {
     )
   }
 
+  test("deduplicate with all columns") {
+    val inputData = MemoryStream[Long]
+    val result = inputData.toDF().toDF("value")
+      .selectExpr(
+        "value",
+        "value + 10 AS key",
+        "CAST(value AS STRING) as topic",
+        "value + 100 AS partition",
+        "value + 5 AS offset")
+      .dropDuplicates()
+      .select("key", "value", "topic", "partition", "offset")
+
+    val checkpointDir = prepareCheckpointDir("deduplicate")
+    inputData.addData(0L, 1L, 2L, 3L, 4L)
+
+    testStream(result)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+      /*
+        Note: The checkpoint was generated using the following input in Spark version 2.4.5
+        AddData(inputData, 0L, 1L, 2L, 3L, 4L),
+        CheckAnswer(
+          Row(10, 0, "0", 100, 5),
+          Row(11, 1, "1", 101, 6),
+          Row(12, 2, "2", 102, 7),
+          Row(13, 3, "3", 103, 8),
+          Row(14, 4, "4", 104, 9))
+       */
+      AddData(inputData, 3L, 4L, 5L, 6L),
+      CheckLastBatch(
+        Row(15, 5, "5", 105, 10),
+        Row(16, 6, "6", 106, 11))
+    )
+  }
+
   test("SPARK-28067 changed the sum decimal unsafe row format") {
     val inputData = MemoryStream[Int]
     val aggregated =
