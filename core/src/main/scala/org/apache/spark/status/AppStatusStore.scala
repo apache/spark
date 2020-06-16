@@ -39,7 +39,13 @@ private[spark] class AppStatusStore(
   def applicationInfo(): v1.ApplicationInfo = {
     try {
       // The ApplicationInfo may not be available when Spark is starting up.
-      store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
+      Utils.tryWithResource(
+        store.view(classOf[ApplicationInfoWrapper])
+          .max(1)
+          .closeableIterator()
+      ) { it =>
+        it.next().info
+      }
     } catch {
       case _: NoSuchElementException =>
         throw new NoSuchElementException("Failed to get the application information. " +
@@ -525,7 +531,13 @@ private[spark] class AppStatusStore(
   }
 
   def appSummary(): AppSummary = {
-    store.read(classOf[AppSummary], classOf[AppSummary].getName())
+    try {
+      store.read(classOf[AppSummary], classOf[AppSummary].getName())
+    } catch {
+      case _: NoSuchElementException =>
+        throw new NoSuchElementException("Failed to get the application summary. " +
+          "If you are starting up Spark, please wait a while until it's ready.")
+    }
   }
 
   def close(): Unit = {

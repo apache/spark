@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.streaming.StreamTest
 
 class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
@@ -33,7 +33,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
   test("SPARK-24156: do not plan a no-data batch again after it has already been planned") {
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as 'window)
       .agg(count("*") as 'count)

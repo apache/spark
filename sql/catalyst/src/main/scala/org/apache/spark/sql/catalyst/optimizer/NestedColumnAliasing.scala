@@ -30,16 +30,21 @@ import org.apache.spark.sql.types._
  */
 object NestedColumnAliasing {
 
-  def unapply(plan: LogicalPlan)
-    : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = plan match {
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
     case Project(projectList, child)
         if SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
       val exprCandidatesToPrune = projectList ++ child.expressions
-      getAliasSubMap(exprCandidatesToPrune, child.producedAttributes.toSeq)
+      getAliasSubMap(exprCandidatesToPrune, child.producedAttributes.toSeq).map {
+        case (nestedFieldToAlias, attrToAliases) =>
+          NestedColumnAliasing.replaceToAliases(plan, nestedFieldToAlias, attrToAliases)
+      }
 
-    case plan if SQLConf.get.nestedSchemaPruningEnabled && canPruneOn(plan) =>
-      val exprCandidatesToPrune = plan.expressions
-      getAliasSubMap(exprCandidatesToPrune, plan.producedAttributes.toSeq)
+    case p if SQLConf.get.nestedSchemaPruningEnabled && canPruneOn(p) =>
+      val exprCandidatesToPrune = p.expressions
+      getAliasSubMap(exprCandidatesToPrune, p.producedAttributes.toSeq).map {
+        case (nestedFieldToAlias, attrToAliases) =>
+          NestedColumnAliasing.replaceToAliases(p, nestedFieldToAlias, attrToAliases)
+      }
 
     case _ => None
   }
@@ -47,7 +52,7 @@ object NestedColumnAliasing {
   /**
    * Replace nested columns to prune unused nested columns later.
    */
-  def replaceToAliases(
+  private def replaceToAliases(
       plan: LogicalPlan,
       nestedFieldToAlias: Map[ExtractValue, Alias],
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = plan match {
@@ -149,9 +154,20 @@ object NestedColumnAliasing {
       .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head)
       .flatMap { case (attr, nestedFields: Seq[ExtractValue]) =>
+        // Remove redundant `ExtractValue`s if they share the same parent nest field.
+        // For example, when `a.b` and `a.b.c` are in project list, we only need to alias `a.b`.
+        // We only need to deal with two `ExtractValue`: `GetArrayStructFields` and
+        // `GetStructField`. Please refer to the method `collectRootReferenceAndExtractValue`.
+        val dedupNestedFields = nestedFields.filter {
+          case e @ (_: GetStructField | _: GetArrayStructFields) =>
+            val child = e.children.head
+            nestedFields.forall(f => child.find(_.semanticEquals(f)).isEmpty)
+          case _ => true
+        }
+
         // Each expression can contain multiple nested fields.
         // Note that we keep the original names to deliver to parquet in a case-sensitive way.
-        val nestedFieldToAlias = nestedFields.distinct.map { f =>
+        val nestedFieldToAlias = dedupNestedFields.distinct.map { f =>
           val exprId = NamedExpression.newExprId
           (f, Alias(f, s"_gen_alias_${exprId.id}")(exprId, Seq.empty, None))
         }

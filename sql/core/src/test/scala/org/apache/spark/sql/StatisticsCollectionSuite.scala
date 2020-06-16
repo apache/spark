@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -468,7 +469,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         withTable(table) {
           TimeZone.setDefault(srcTimeZone)
           spark.range(start, end)
-            .select('id.cast(TimestampType).cast(t).as(column))
+            .select(timestamp_seconds($"id").cast(t).as(column))
             .write.saveAsTable(table)
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
 
