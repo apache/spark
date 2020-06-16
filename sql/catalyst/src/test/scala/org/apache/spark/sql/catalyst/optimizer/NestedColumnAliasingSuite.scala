@@ -261,6 +261,37 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
+  test("SPARK-27633: Do not generate redundant aliases if parent nested field is aliased too") {
+    val nestedRelation = LocalRelation('a.struct('b.struct('c.int,
+      'd.struct('f.int, 'g.int)), 'e.int))
+
+    // `a.b`
+    val first = 'a.getField("b")
+    // `a.b.c` + 1
+    val second = 'a.getField("b").getField("c") + Literal(1)
+    // `a.b.d.f`
+    val last = 'a.getField("b").getField("d").getField("f")
+
+    val query = nestedRelation
+      .limit(5)
+      .select(first, second, last)
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val aliases = collectGeneratedAliases(optimized)
+
+    val expected = nestedRelation
+      .select(first.as(aliases(0)))
+      .limit(5)
+      .select($"${aliases(0)}".as("a.b"),
+        ($"${aliases(0)}".getField("c") + Literal(1)).as("(a.b.c + 1)"),
+        $"${aliases(0)}".getField("d").getField("f").as("a.b.d.f"))
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
+
   test("Nested field pruning for Project and Generate") {
     val query = contact
       .generate(Explode('friends.getField("first")), outputNames = Seq("explode"))

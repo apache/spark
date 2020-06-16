@@ -594,7 +594,7 @@ class LogisticRegression @Since("1.2.0") (
         Vectors.dense(if (numClasses == 2) Double.PositiveInfinity else Double.NegativeInfinity)
       }
       if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
-      return createModel(dataset, numClasses, coefMatrix, interceptVec, Array.empty)
+      return createModel(dataset, numClasses, coefMatrix, interceptVec, Array(0.0))
     }
 
     if (!$(fitIntercept) && isConstantLabel) {
@@ -1545,13 +1545,19 @@ sealed trait LogisticRegressionSummary extends Serializable {
  */
 sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary {
 
-  /** objective function (scaled loss + regularization) at each iteration. */
+  /**
+   *  objective function (scaled loss + regularization) at each iteration.
+   *  It contains one more element, the initial state, than number of iterations.
+   */
   @Since("1.5.0")
   def objectiveHistory: Array[Double]
 
   /** Number of training iterations. */
   @Since("1.5.0")
-  def totalIterations: Int = objectiveHistory.length
+  def totalIterations: Int = {
+    assert(objectiveHistory.length > 0, s"objectiveHistory length should be greater than 1.")
+    objectiveHistory.length - 1
+  }
 
 }
 
