@@ -2688,11 +2688,17 @@ class Analyzer(
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
 
+      case Filter(condition, _) if hasWindowFunction(condition) =>
+        failAnalysis("It is not allowed to use window functions inside WHERE clause")
+
+      case UnresolvedQualify(condition, child) if !hasWindowFunction(condition) =>
+        Filter(condition, child)
+
       case UnresolvedHaving(condition, _) if hasWindowFunction(condition) =>
         failAnalysis("It is not allowed to use window functions inside HAVING clause")
 
       // Filter corresponding to qualify clause may has window expressions
-      case f @ Filter(condition, child) if hasWindowFunction(condition) =>
+      case f @ UnresolvedQualify(condition, child) if hasWindowFunction(condition) =>
         val namedWindowExpr = condition.collect {
           case e: WindowExpression => e
         }.map(we => Alias(we, we.toString)())

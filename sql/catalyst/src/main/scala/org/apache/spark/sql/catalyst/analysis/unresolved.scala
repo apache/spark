@@ -550,3 +550,15 @@ case class UnresolvedHaving(
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
 }
+
+
+/**
+ * Represents unresolved qualify clause, It is turned by the analyzer into a Filter.
+ */
+case class UnresolvedQualify(
+     qualifyCondition: Expression,
+     child: LogicalPlan)
+  extends UnaryNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = child.output
+}
