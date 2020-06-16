@@ -128,7 +128,7 @@ object InExpressionBenchmark extends SqlBasedBenchmark {
 
   private def runTimestampBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems timestamps"
-    val values = (1 to numItems).map(m => s"CAST('1970-01-01 01:00:00.$m' AS timestamp)")
+    val values = (1 to numItems).map(m => s"timestamp_seconds('1970-01-01 01:00:00.$m')")
     val df = spark.range(0, numRows).select($"id".cast(TimestampType))
     runBenchmark(name, df, values, numRows, minNumIters)
   }
