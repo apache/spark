@@ -410,13 +410,6 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
       Files.copy(is, tmpFile.toPath)
       val reservedKeywordsInSql2016 = Files.readAllLines(tmpFile.toPath)
         .asScala.filterNot(_.startsWith("--")).map(_.trim).toSet
-      println(allCandidateKeywords)
-      println("\n\n\n")
-      println(nonReservedKeywordsInAnsiMode)
-      println("\n\n\n")
-      println(reservedKeywordsInAnsiMode)
-      println("\n\n\n")
-      println(reservedKeywordsInSql2016)
       assert((reservedKeywordsInAnsiMode  -- reservedKeywordsInSql2016).isEmpty)
     }
   }
