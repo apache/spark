@@ -29,14 +29,14 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.util.Utils
 
 /**
- * An integrated test for streaming aggregation compatibility.
+ * An integrated test for streaming state store format compatibility.
  * For each PR breaks this test, we need to pay attention to the underlying unsafe row format
- * changing of aggregate functions. All the checkpoint dirs were generated based on Spark version
- * 2.4.5. If we accept the changes, it means the checkpoint for Structured Streaming will become
- * non-reusable. Please add a new test for the issue, just like the test suite "SPARK-28067 changed
- * the sum decimal unsafe row format".
+ * changing. All the checkpoint dirs were generated based on Spark version 2.4.5. If we accept the
+ * changes, it means the checkpoint for Structured Streaming will become non-reusable. Please add
+ * a new test for the issue, just like the test suite "SPARK-28067 changed the sum decimal unsafe
+ * row format".
  */
-class StreamingAggregationCompatibilitySuite extends StreamTest {
+class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
   import testImplicits._
 
   private def prepareCheckpointDir(testName: String): File = {
