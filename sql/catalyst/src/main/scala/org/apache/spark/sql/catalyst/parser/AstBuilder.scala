@@ -166,6 +166,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         ctx.aggregationClause,
         ctx.havingClause,
         ctx.windowClause,
+        ctx.qualifyClause,
         plan
       )
     }
@@ -607,6 +608,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx.aggregationClause,
       ctx.havingClause,
       ctx.windowClause,
+      ctx.qualifyClause,
       from
     )
   }
@@ -700,6 +702,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifierClause: QualifyClauseContext,
       relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Add lateral views.
     val withLateralView = lateralView.asScala.foldLeft(relation)(withGenerate)
@@ -748,8 +751,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Window
     val withWindow = withDistinct.optionalMap(windowClause)(withWindowClause)
 
+    // Qualify
+    val withQualify = withWindow.optionalMap(qualifierClause)(withQualifyClause)
+
     // Hint
-    selectClause.hints.asScala.foldRight(withWindow)(withHints)
+    selectClause.hints.asScala.foldRight(withQualify)(withHints)
   }
 
   /**
@@ -850,6 +856,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Note that mapValues creates a view instead of materialized map. We force materialization by
     // mapping over identity.
     WithWindowDefinition(windowMapView.map(identity), query)
+  }
+
+  /**
+   * Add a [[Filter]] operator for qualify clause to a logical plan.
+   */
+  private def withQualifyClause(
+      ctx: QualifyClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val predicate = expression(ctx.booleanExpression) match {
+      case p: Predicate => p
+      case e => Cast(e, BooleanType)
+    }
+    Filter(predicate, query)
   }
 
   /**

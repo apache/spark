@@ -2688,13 +2688,27 @@ class Analyzer(
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
 
-      case Filter(condition, _) if hasWindowFunction(condition) =>
-        failAnalysis("It is not allowed to use window functions inside WHERE clause")
-
       case UnresolvedHaving(condition, _) if hasWindowFunction(condition) =>
         failAnalysis("It is not allowed to use window functions inside HAVING clause")
 
-      // Aggregate with Having clause. This rule works with an unresolved Aggregate because
+      // Filter corresponding to qualify clause may has window expressions
+      case f @ Filter(condition, child) if hasWindowFunction(condition) =>
+        val namedWindowExpr = condition.collect {
+          case e: WindowExpression => e
+        }.map(we => Alias(we, we.toString)())
+
+        val newPredicate = condition.transform {
+          case e: WindowExpression
+            if namedWindowExpr.exists(_.child == e) =>
+            UnresolvedAttribute(namedWindowExpr.find(_.child == e).get.name)
+        }
+        val (windowExprs, _) = extract(namedWindowExpr)
+        // Add Window operators
+        val withWindow = addWindow(windowExprs, child)
+        val withFilter = Filter(newPredicate, withWindow)
+        Project(child.output, withFilter)
+
+      // Aggregate with Having/Qualify clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
       case f @ UnresolvedHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
         if child.resolved &&

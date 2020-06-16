@@ -502,4 +502,123 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
 
     spark.catalog.dropTempView("nums")
   }
+
+  test("SPARK-31561: window function with qualify without aggregation") {
+    val data = Seq(
+      WindowData(1, "a", 5),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 10)
+    )
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+
+    // test query without qualify
+    checkAnswer(
+      sql(
+        """
+          |select area, sum(product) over (partition by area) as w
+          |from windowData
+        """.stripMargin),
+      Row("a", 11) :: Row("a", 11) :: Row("b", 15) ::
+        Row("b", 15) :: Row("c", 19) :: Row("c", 19) :: Nil)
+
+
+    checkAnswer(
+      sql(
+        """
+          |select distinct area, max(product) over (partition by area) as m
+          |from windowData qualify m > 7
+        """.stripMargin),
+      Row("b", 8) :: Row("c", 10) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |select month, area, max(product) over (partition by area) as m
+          |from windowData qualify m > 7
+        """.stripMargin),
+      Row(3, "b", 8) :: Row(4, "b", 8) :: Row(5, "c", 10) :: Row(6, "c", 10) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |select area, product
+          |from windowData
+          |qualify max(product) over (partition by area) > 7
+        """.stripMargin),
+      Row("b", 7) :: Row("b", 8) :: Row("c", 9) :: Row("c", 10) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |select month, area, product
+          |from windowData
+          |qualify max(product) over (partition by area) > 8
+        """.stripMargin),
+      Row(5, "c", 9) :: Row(6, "c", 10) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |select area, product * sum(product) over (partition by area) as w
+          |from windowData
+          |qualify w > 100
+        """.stripMargin),
+      Row("b", 105) :: Row("b", 120) :: Row("c", 171) :: Row("c", 190) :: Nil)
+  }
+
+  test("SPARK-31561: window function with qualify with aggregation") {
+    val data = Seq(
+      WindowData(1, "a", 5),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 10)
+    )
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+
+    // test query without qualify
+    checkAnswer(
+      sql(
+        """
+          |select area, count(month) over (partition by area) as w
+          |from windowData group by area, month
+          |having sum(product) > 5
+        """.stripMargin),
+      Row("a", 1) :: Row("b", 2) ::
+        Row("b", 2) :: Row("c", 2) :: Row("c", 2) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |select area, count(month) over (partition by area) as w
+          |from windowData group by area, month
+          |having sum(product) > 5
+          |qualify w > 1
+        """.stripMargin),
+      Row("b", 2) :: Row("b", 2) :: Row("c", 2) :: Row("c", 2) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |select area, count(month) over (partition by area) as w
+          |from windowData group by area, month
+          |having sum(product) > 5
+          |qualify w in (select 1)
+        """.stripMargin),
+      Row("a", 1) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |select area, month, sum(product)
+          |from windowData group by area, month
+          |having sum(product) > 5
+          |qualify count(month) over (partition by area) in (select 1)
+        """.stripMargin),
+      Row("a", 2, 6) :: Nil)
+  }
 }
