@@ -336,7 +336,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
               withTempTable("orcTable", "parquetTable") {
                 saveAsTable(df, dir)
 
-                Seq(s"value = CAST($mid AS timestamp)").foreach { whereExpr =>
+                Seq(s"value = timestamp_seconds($mid)").foreach { whereExpr =>
                   val title = s"Select 1 timestamp stored as $fileType row ($whereExpr)"
                     .replace("value AND value", "value")
                   filterPushDownBenchmark(numRows, title, whereExpr)
@@ -348,8 +348,8 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
                   filterPushDownBenchmark(
                     numRows,
                     s"Select $percent% timestamp stored as $fileType rows " +
-                      s"(value < CAST(${numRows * percent / 100} AS timestamp))",
-                    s"value < CAST(${numRows * percent / 100} as timestamp)",
+                      s"(value < timestamp_seconds(${numRows * percent / 100}))",
+                    s"value < timestamp_seconds(${numRows * percent / 100})",
                     selectExpr
                   )
                 }
