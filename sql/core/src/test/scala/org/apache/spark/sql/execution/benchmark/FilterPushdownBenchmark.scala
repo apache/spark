@@ -24,7 +24,7 @@ import scala.util.Random
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.functions.monotonically_increasing_id
+import org.apache.spark.sql.functions.{monotonically_increasing_id, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
@@ -332,7 +332,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
             withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fileType) {
               val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
               val df = spark.range(numRows).selectExpr(columns: _*)
-                .withColumn("value", monotonically_increasing_id().cast(TimestampType))
+                .withColumn("value", timestamp_seconds(monotonically_increasing_id()))
               withTempTable("orcTable", "parquetTable") {
                 saveAsTable(df, dir)
 
