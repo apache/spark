@@ -151,6 +151,7 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
       logError(s"Error starting services $getName", e)
       invoke(classOf[CompositeService], this, "stop",
         classOf[Int] -> new Integer(serviceStartCount))
+      throw new ServiceException("Failed to Start " + getName, e)
     }
 
     // Emulating `AbstractService.start`
