@@ -275,7 +275,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
   }
 
   test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
-    val conf = new SparkConf().set(LOCALITY_WAIT_PROCESS.key, Int.MaxValue + "s")
+    val conf = new SparkConf().set(LOCALITY_WAIT_PROCESS.key, "10s")
     initLocalClusterSparkContext(2, conf)
     val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
     val dep = new OneToOneDependency[Int](rdd0)
