@@ -42,7 +42,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(model.hasSummary)
         s = model.summary
         # test that api is callable and returns expected types
-        self.assertGreater(s.totalIterations, 0)
+        self.assertEqual(s.totalIterations, 0)
         self.assertTrue(isinstance(s.predictions, DataFrame))
         self.assertEqual(s.predictionCol, "prediction")
         self.assertEqual(s.labelCol, "label")

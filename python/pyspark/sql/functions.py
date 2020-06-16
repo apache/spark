@@ -1427,6 +1427,19 @@ def to_utc_timestamp(timestamp, tz):
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
 
 
+@since(3.1)
+def timestamp_seconds(col):
+    """
+    >>> from pyspark.sql.functions import timestamp_seconds
+    >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
+    >>> time_df.select(timestamp_seconds(time_df.unix_time).alias('ts')).collect()
+    [Row(ts=datetime.datetime(2008, 12, 25, 7, 30))]
+    """
+
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.timestamp_seconds(_to_java_column(col)))
+
+
 @since(2.0)
 @ignore_unicode_prefix
 def window(timeColumn, windowDuration, slideDuration=None, startTime=None):

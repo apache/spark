@@ -201,7 +201,7 @@ trait ProgressReporter extends Logging {
 
     if (hasExecuted) {
       // Reset noDataEventTimestamp if we processed any data
-      lastNoExecutionProgressEventTime = Long.MinValue
+      lastNoExecutionProgressEventTime = triggerClock.getTimeMillis()
       updateProgress(newProgress)
     } else {
       val now = triggerClock.getTimeMillis()
@@ -222,7 +222,11 @@ trait ProgressReporter extends Logging {
     lastExecution.executedPlan.collect {
       case p if p.isInstanceOf[StateStoreWriter] =>
         val progress = p.asInstanceOf[StateStoreWriter].getProgress()
-        if (hasExecuted) progress else progress.copy(newNumRowsUpdated = 0)
+        if (hasExecuted) {
+          progress
+        } else {
+          progress.copy(newNumRowsUpdated = 0, newNumRowsDroppedByWatermark = 0)
+        }
     }
   }
 
