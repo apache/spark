@@ -25,13 +25,13 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.internal.config
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 
 class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
-  def initLocalClusterSparkContext(numWorker: Int = 4): Unit = {
-    val conf = new SparkConf()
+  def initLocalClusterSparkContext(numWorker: Int = 4, conf: SparkConf = new SparkConf): Unit = {
+    conf
       // Init local cluster here so each barrier task runs in a separated process, thus `barrier()`
       // call is actually useful.
       .setMaster(s"local-cluster[$numWorker, 1, 1024]")
@@ -275,7 +275,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
   }
 
   test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
-    initLocalClusterSparkContext(2)
+    val conf = new SparkConf().set(LOCALITY_WAIT_PROCESS.key, Int.MaxValue + "s")
+    initLocalClusterSparkContext(2, conf)
     val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
     val dep = new OneToOneDependency[Int](rdd0)
     // set up a barrier stage with 2 tasks and both tasks prefer executor 0 (only 1 core) for
