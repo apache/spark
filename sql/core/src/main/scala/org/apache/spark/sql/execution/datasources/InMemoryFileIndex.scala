@@ -32,7 +32,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.datasources.pathfilters.FilesModifiedDateOption
+import org.apache.spark.sql.execution.datasources.pathfilters.FileModifiedDateOption
 import org.apache.spark.sql.execution.streaming.FileStreamSink
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -398,7 +398,7 @@ object InMemoryFileIndex extends Logging {
               parameters = parameters)
           }
       }
-      val fileFilters = (filters ++ FilesModifiedDateOption.accept(
+      val fileFilters = (filters ++ FileModifiedDateOption.accept(
         parameters,
         sessionOpt.get,
         hadoopConf))
