@@ -1341,8 +1341,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           (rightFilterConditions ++ commonFilterCondition).
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
 
-        case jt =>
-          throw new IllegalStateException(s"Unexpected join type: $jt")
+        case other =>
+          throw new IllegalStateException(s"Unexpected join type: $other")
       }
 
     // push down the join filter into sub query scanning if applicable
@@ -1377,8 +1377,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           Join(newLeft, newRight, joinType, newJoinCond, hint)
 
-        case jt =>
-          throw new IllegalStateException(s"Unexpected join type: $jt")
+        case other =>
+          throw new IllegalStateException(s"Unexpected join type: $other")
       }
   }
 }

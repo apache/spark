@@ -60,8 +60,8 @@ object PushCNFPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelpe
             Join(newLeft, right, RightOuter, Some(joinCondition), hint)
           case LeftOuter | LeftAnti | ExistenceJoin(_) =>
             Join(left, newRight, joinType, Some(joinCondition), hint)
-          case jt =>
-            throw new IllegalStateException(s"Unexpected join type: $jt")
+          case other =>
+            throw new IllegalStateException(s"Unexpected join type: $other")
         }
       }
   }
