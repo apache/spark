@@ -50,7 +50,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(df.collect() === Array(Row(9, 4.5)))
   }
 
-  test("SPARK-31897: GenerateExec should be included in WholeStageCodegen") {
+  test("GenerateExec should be included in WholeStageCodegen") {
     import testImplicits._
     val arrayData = Seq(("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown")))
     val df = arrayData.toDF("name", "knownLanguages", "properties")
@@ -65,7 +65,6 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }.isDefined)
     checkAnswer(expDF, Array(Row("James", "Java", Map("hair" -> "black", "eye" -> "brown")),
       Row("James", "Scala", Map("hair" -> "black", "eye" -> "brown"))))
-
 
     // Map - explode
     expDF = df.select($"name", $"knownLanguages", explode($"properties"))
@@ -100,7 +99,6 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }.isDefined)
     checkAnswer(expDF,
       Array(Row("James", 0, "hair", "black"), Row("James", 1, "eye", "brown")))
-
 
     // Array - explode , selecting all columns
     expDF = df.select($"*", explode($"knownLanguages"))

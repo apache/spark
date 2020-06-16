@@ -226,11 +226,9 @@ case class GenerateExec(
       "0"
     }
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val requiredInput = {
-      input.zipWithIndex.flatMap { case (ev, i) =>
-        if ((parent.inputSet).contains(child.output(i))) Seq(ev) else Seq()
-      }
-    } ++ position ++ values
+    val requiredInput = input.zip(child.output).filter {
+      case(_, output) => parent.inputSet.contains(output)
+    }.map(_._1) ++ position ++ values
     s"""
        |${data.code}
        |$initMapData
