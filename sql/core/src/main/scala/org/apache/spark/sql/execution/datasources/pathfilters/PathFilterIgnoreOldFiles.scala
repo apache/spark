@@ -28,25 +28,24 @@ date when reading from a folder path.  When specifying the
 filesModifiedAfterDate option in yyyy-mm-ddThh:mm:ss format,
 all files having modification dates before this date will not be returned
 when loading from a folder path.
-			Ex:  spark.read
-                  .option("header", "true")
-                  .option("delimiter", "\t")
-                  .option("filesModifiedAfterDate", "2020-05-01T12:00:00")
-                  .format("csv")
-                  .load("/mnt/Deltas")
+Ex:
+spark.read
+.option("header", "true")
+.option("delimiter", "\t")
+.option("filesModifiedAfterDate", "2020-05-01T12:00:00")
+.format("csv")
+.load("/mnt/Deltas")
+  * @param sparkSession SparkSession
+  * @param epochSeconds epoch in milliseconds
+  */
+class PathFilterIgnoreOldFiles(sparkSession: SparkSession,
+                               hadoopConf: Configuration,
+                               epochSeconds: Long)
+    extends PathFilter
+    with Serializable {
 
- * @param sparkSession SparkSession
- * @param epochSeconds epoch in milliseconds
- */
-class PathFilterIgnoreOldFiles(
-    sparkSession: SparkSession,
-	hadoopConf: Configuration,
-	epochSeconds: Long)
-	extends PathFilter with Serializable {
-
-	override def accept(path: Path): Boolean = {
-		val fileName = path.getFileSystem(hadoopConf).getFileStatus(path)
-		println(fileName.getModificationTime + " - " + epochSeconds)
-		(fileName.getModificationTime - epochSeconds) > 0
-	}
+  override def accept(path: Path): Boolean = {
+    val fileName = path.getFileSystem(hadoopConf).getFileStatus(path)
+    (fileName.getModificationTime - epochSeconds) > 0
+  }
 }

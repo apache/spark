@@ -28,10 +28,10 @@ import org.apache.spark.sql.execution.datasources.DataSourceUtils
  * @param stagingDir hive staging dir
  */
 class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serializable {
-	override def accept(path: Path): Boolean = {
-		val fileName = path.getName
-		!fileName.startsWith(stagingDir) && DataSourceUtils.isDataFile(fileName)
-	}
+    override def accept(path: Path): Boolean = {
+        val fileName = path.getName
+        !fileName.startsWith(stagingDir) && DataSourceUtils.isDataFile(fileName)
+    }
 }
 
 
