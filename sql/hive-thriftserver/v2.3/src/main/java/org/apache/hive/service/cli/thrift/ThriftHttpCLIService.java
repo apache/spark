@@ -28,7 +28,6 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Shell;
-import org.apache.hive.service.ServiceException;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.rpc.thrift.TCLIService;
@@ -55,8 +54,13 @@ public class ThriftHttpCLIService extends ThriftCLIService {
     super(cliService, ThriftHttpCLIService.class.getSimpleName());
   }
 
+  /**
+   * Configure Jetty to serve http requests. Example of a client connection URL:
+   * http://localhost:10000/servlets/thrifths2/ A gateway may cause actual target URL to differ,
+   * e.g. http://gateway:port/hive2/servlets/thrifths2/
+   */
   @Override
-  protected void initializeServer() {
+  public void run() {
     try {
       // Server thread pool
       // Start with minWorkerThreads, expand till maxWorkerThreads and reject subsequent requests
@@ -147,19 +151,6 @@ public class ThriftHttpCLIService extends ThriftCLIService {
           + " mode on port " + portNum + " path=" + httpPath + " with " + minWorkerThreads + "..."
           + maxWorkerThreads + " worker threads";
       LOG.info(msg);
-    } catch (Exception t) {
-      throw new ServiceException("Error initializing " + getName(), t);
-    }
-  }
-
-  /**
-   * Configure Jetty to serve http requests. Example of a client connection URL:
-   * http://localhost:10000/servlets/thrifths2/ A gateway may cause actual target URL to differ,
-   * e.g. http://gateway:port/hive2/servlets/thrifths2/
-   */
-  @Override
-  public void run() {
-    try {
       httpServer.join();
     } catch (Throwable t) {
       LOG.error(
