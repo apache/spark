@@ -1133,6 +1133,7 @@ ansiNonReserved
     | PROPERTIES
     | PURGE
     | QUERY
+    | QUALIFY
     | RANGE
     | RECORDREADER
     | RECORDWRITER
