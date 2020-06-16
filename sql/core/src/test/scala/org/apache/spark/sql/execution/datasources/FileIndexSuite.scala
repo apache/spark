@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-
-package org.apache.spark.sql.execution.datasources
 import java.io.{File, FileNotFoundException}
 import java.net.URI
 import java.time.format.DateTimeParseException
