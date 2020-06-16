@@ -429,6 +429,7 @@ object RebaseDateTime {
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
       .`with`(ChronoField.ERA, cal.get(ERA))
       .plusDays(cal.get(DAY_OF_MONTH) - 1)
+    val zoneId = tz.toZoneId
     val zonedDateTime = localDateTime.atZone(zoneId)
     // In the case of local timestamp overlapping, we need to choose the correct time instant
     // which is related to the original local timestamp. We look ahead of 1 day, and if the next
