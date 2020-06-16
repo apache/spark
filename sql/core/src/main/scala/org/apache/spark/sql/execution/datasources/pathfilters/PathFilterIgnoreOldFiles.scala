@@ -32,7 +32,7 @@ Ex:
 spark.read
 .option("header", "true")
 .option("delimiter", "\t")
-.option("filesModifiedAfterDate", "2020-05-01T12:00:00")
+.option("fileModifiedDate", "2020-05-01T12:00:00")
 .format("csv")
 .load("/mnt/Deltas")
   * @param sparkSession SparkSession

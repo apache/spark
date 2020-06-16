@@ -31,12 +31,12 @@ import org.apache.spark.sql.SparkSession
 SPARK-31962 - Provide option to load files after a specified
 date when reading from a folder path.
   */
-object FilesModifiedAfterDateOption {
+object FileModifiedDateOption {
   def accept(parameters: Map[String, String],
              sparkSession: SparkSession,
              hadoopConf: Configuration): ParArray[PathFilter] = {
     var afterDateSeconds = 0L
-    val option = "filesModifiedAfterDate"
+    val option = "fileModifiedDate"
     val filesModifiedAfterDate = parameters.get(option)
     val hasModifiedDateOption = filesModifiedAfterDate.isDefined
 
