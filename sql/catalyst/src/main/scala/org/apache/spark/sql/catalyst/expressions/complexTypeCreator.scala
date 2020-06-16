@@ -544,9 +544,9 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
  * Adds/replaces field in struct by name.
  */
 case class WithFields(
-  structExpr: Expression,
-  nameExprs: Seq[Expression],
-  valExprs: Seq[Expression]) extends Unevaluable {
+    structExpr: Expression,
+    nameExprs: Seq[Expression],
+    valExprs: Seq[Expression]) extends Unevaluable {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val expectedStructType = StructType(Nil).typeName
