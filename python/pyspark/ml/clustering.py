@@ -796,21 +796,6 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return [c.toArray() for c in self._call_java("clusterCenters")]
 
-    @since("2.0.0")
-    def computeCost(self, dataset):
-        """
-        Computes the sum of squared distances between the input points
-        and their corresponding cluster centers.
-
-        .. note:: Deprecated in 3.0.0. It will be removed in future versions. Use
-           ClusteringEvaluator instead. You can also get the cost on the training dataset in the
-           summary.
-        """
-        warnings.warn("Deprecated in 3.0.0. It will be removed in future versions. Use "
-                      "ClusteringEvaluator instead. You can also get the cost on the training "
-                      "dataset in the summary.", DeprecationWarning)
-        return self._call_java("computeCost", dataset)
-
     @property
     @since("2.1.0")
     def summary(self):
@@ -871,8 +856,6 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
-    >>> model.computeCost(df)
-    2.0
     >>> model.hasSummary
     True
     >>> summary = model.summary
