@@ -118,7 +118,7 @@ private[storage] class BlockManagerDecommissioner(
   @volatile private var stopped = false
 
   private val migrationPeers =
-    mutable.HashMap[BlockManagerId, (ShuffleMigrationRunnable, ExecutorService)]()
+    mutable.HashMap[BlockManagerId, ShuffleMigrationRunnable]()
 
   private lazy val blockMigrationExecutor =
     ThreadUtils.newDaemonSingleThreadExecutor("block-manager-decommission")
@@ -163,6 +163,9 @@ private[storage] class BlockManagerDecommissioner(
     }
   }
 
+  lazy val shuffleMigrationPool = ThreadUtils.newDaemonCachedThreadPool(
+    "migrate-shuffles",
+    conf.get(config.STORAGE_SHUFFLE_DECOMMISSION_MAX_THREADS))
   /**
    * Tries to offload all shuffle blocks that are registered with the shuffle service locally.
    * Note: this does not delete the shuffle files in-case there is an in-progress fetch
@@ -186,14 +189,13 @@ private[storage] class BlockManagerDecommissioner(
     val newPeers = livePeerSet.&~(currentPeerSet)
     migrationPeers ++= newPeers.map { peer =>
       logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
-      val executor = ThreadUtils.newDaemonSingleThreadExecutor(s"migrate-shuffle-to-${peer}")
       val runnable = new ShuffleMigrationRunnable(peer)
-      executor.submit(runnable)
-      (peer, (runnable, executor))
+      shuffleMigrationPool.submit(runnable)
+      (peer, runnable)
     }
     // A peer may have entered a decommissioning state, don't transfer any new blocks
     deadPeers.foreach { peer =>
-        migrationPeers.get(peer).foreach(_._1.running = false)
+        migrationPeers.get(peer).foreach(_.running = false)
     }
   }
 
@@ -203,12 +205,9 @@ private[storage] class BlockManagerDecommissioner(
   private[storage] def stopOffloadingShuffleBlocks(): Unit = {
     logInfo("Stopping offloading shuffle blocks.")
     // Stop as gracefully as possible.
-    migrationPeers.values.foreach{case (runnable, service) =>
-      runnable.running = false}
-    migrationPeers.values.foreach{case (runnable, service) =>
-      service.shutdown()}
-    migrationPeers.values.foreach{case (runnable, service) =>
-      service.shutdownNow()}
+    migrationPeers.values.foreach{_.running = false}
+    shuffleMigrationPool.shutdown()
+    shuffleMigrationPool.shutdownNow()
   }
 
   /**

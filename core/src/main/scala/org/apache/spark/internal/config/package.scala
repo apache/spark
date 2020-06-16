@@ -428,6 +428,15 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val STORAGE_SHUFFLE_DECOMMISSION_MAX_THREADS =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxThreads")
+      .doc("Maximum number of threads to use in migrating shuffle files.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ > 0, "The maximum number of threads should be positive")
+      .createWithDefault(10)
+
+
   private[spark] val STORAGE_RDD_DECOMMISSION_ENABLED =
     ConfigBuilder("spark.storage.decommission.rddBlocks.enabled")
       .doc("Whether to transfer RDD blocks during block manager decommissioning.")
