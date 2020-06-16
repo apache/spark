@@ -258,15 +258,6 @@ class _ClassificationSummary(JavaWrapper):
 
     @property
     @since("3.1.0")
-    def scoreCol(self):
-        """
-        Field in "predictions" which gives the probability or raw prediction
-        of each class as a vector.
-        """
-        return self._call_java("scoreCol")
-
-    @property
-    @since("3.1.0")
     def predictionCol(self):
         """
         Field in "predictions" which gives the prediction of each class.
@@ -281,15 +272,6 @@ class _ClassificationSummary(JavaWrapper):
         instance.
         """
         return self._call_java("labelCol")
-
-    @property
-    @since("3.1.0")
-    def featuresCol(self):
-        """
-        Field in "predictions" which gives the features of each instance
-        as a vector.
-        """
-        return self._call_java("featuresCol")
 
     @property
     @since("3.1.0")
@@ -439,6 +421,15 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
     .. versionadded:: 3.1.0
     """
+
+    @property
+    @since("3.1.0")
+    def scoreCol(self):
+        """
+        Field in "predictions" which gives the probability or raw prediction
+        of each class as a vector.
+        """
+        return self._call_java("scoreCol")
 
     @property
     @since("3.1.0")
@@ -1241,6 +1232,15 @@ class LogisticRegressionSummary(_ClassificationSummary):
         of each class as a vector.
         """
         return self._call_java("probabilityCol")
+
+    @property
+    @since("3.1.0")
+    def featuresCol(self):
+        """
+        Field in "predictions" which gives the features of each instance
+        as a vector.
+        """
+        return self._call_java("featuresCol")
 
 
 @inherit_doc
