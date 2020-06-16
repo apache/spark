@@ -611,6 +611,11 @@ class ResolveSessionCatalog(
         CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
           replace)
       }
+
+    case RefreshFunctionStatement(nameParts) =>
+      val FunctionIdentifier(function, database) =
+        parseSessionCatalogFunctionIdentifier(nameParts, "REFRESH FUNCTION")
+      RefreshFunctionCommand(database, function)
   }
 
   // TODO: move function related v2 statements to the new framework.

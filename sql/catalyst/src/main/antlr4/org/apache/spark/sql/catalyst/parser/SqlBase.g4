@@ -229,6 +229,7 @@ statement
         comment=(STRING | NULL)                                        #commentNamespace
     | COMMENT ON TABLE multipartIdentifier IS comment=(STRING | NULL)  #commentTable
     | REFRESH TABLE multipartIdentifier                                #refreshTable
+    | REFRESH FUNCTION multipartIdentifier                             #refreshFunction
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE multipartIdentifier
         (OPTIONS options=tablePropertyList)? (AS? query)?              #cacheTable

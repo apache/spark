@@ -236,6 +236,58 @@ case class ShowFunctionsCommand(
   }
 }
 
+
+/**
+ * A command for users to refresh the persistent function.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    REFRESH FUNCTION functionName
+ * }}}
+ */
+case class RefreshFunctionCommand(
+    databaseName: Option[String],
+    functionName: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {
+      throw new AnalysisException(s"Cannot refresh native function $functionName")
+    } else if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
+      throw new AnalysisException(s"Cannot refresh temp function $functionName")
+    } else {
+      // we only refresh the permanent function.
+      // there are 4 cases:
+      // 1. registry exists externalCatalog exists
+      // 2. registry exists externalCatalog not exists
+      // 3. registry not exists externalCatalog exists
+      // 4. registry not exists externalCatalog not exists
+      val identifier = FunctionIdentifier(
+        functionName, Some(databaseName.getOrElse(catalog.getCurrentDatabase)))
+      val isRegisteredFunction = catalog.isRegisteredFunction(identifier)
+      val isPersistentFunction = catalog.isPersistentFunction(identifier)
+      if (isRegisteredFunction && isPersistentFunction) {
+        // re-register function
+        catalog.unregisterFunction(identifier, true)
+        val func = catalog.getFunctionMetadata(identifier)
+        catalog.registerFunction(func, true)
+      } else if (isRegisteredFunction && !isPersistentFunction) {
+        // unregister function and throw NoSuchFunctionException
+        catalog.unregisterFunction(identifier, true)
+        throw new NoSuchFunctionException(identifier.database.get, functionName)
+      } else if (!isRegisteredFunction && isPersistentFunction) {
+        // register function
+        val func = catalog.getFunctionMetadata(identifier)
+        catalog.registerFunction(func, true)
+      } else {
+        throw new NoSuchFunctionException(identifier.database.get, functionName)
+      }
+    }
+
+    Seq.empty[Row]
+  }
+}
+
 object FunctionsCommand {
   // operators that do not have corresponding functions.
   // They should be handled `DescribeFunctionCommand`, `ShowFunctionsCommand`

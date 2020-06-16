@@ -2113,6 +2113,12 @@ class DDLParserSuite extends AnalysisTest {
       "Operation not allowed: CREATE FUNCTION with resource type 'other'")
   }
 
+  test("REFRESH FUNCTION") {
+    parseCompare("REFRESH FUNCTION c", RefreshFunctionStatement(Seq("c")))
+    parseCompare("REFRESH FUNCTION b.c", RefreshFunctionStatement(Seq("b", "c")))
+    parseCompare("REFRESH FUNCTION a.b.c", RefreshFunctionStatement(Seq("a", "b", "c")))
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],
