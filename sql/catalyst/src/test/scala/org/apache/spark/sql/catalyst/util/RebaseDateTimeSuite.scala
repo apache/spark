@@ -448,9 +448,9 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
       // Check reverse rebasing
       assert(rebaseJulianToGregorianMicros(rebasedEarlierMicros) === earlierMicros)
       assert(rebaseJulianToGregorianMicros(rebasedLaterMicros) === laterMicros)
-      // Check reverse not-optimized rebasing
-      assert(rebaseJulianToGregorianMicros(hkTz, rebasedEarlierMicros) === earlierMicros)
-      assert(rebaseJulianToGregorianMicros(hkTz, rebasedLaterMicros) === laterMicros)
     }
+    // Check reverse not-optimized rebasing
+    assert(rebaseJulianToGregorianMicros(hkTz, rebasedEarlierMicros) === earlierMicros)
+    assert(rebaseJulianToGregorianMicros(hkTz, rebasedLaterMicros) === laterMicros)
   }
 }
