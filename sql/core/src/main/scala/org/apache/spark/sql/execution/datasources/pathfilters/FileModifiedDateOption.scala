@@ -20,39 +20,37 @@ package org.apache.spark.sql.execution.datasources.pathfilters
 import java.time.{LocalDateTime, ZoneOffset}
 import java.time.format.DateTimeFormatter
 
-import org.apache.spark.sql.SparkSession
+import scala.collection.parallel.mutable.ParArray
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.PathFilter
 
-import scala.collection.parallel.mutable.ParArray
+import org.apache.spark.sql.SparkSession
 
 /**
- * SPARK-31962 - Provide option to load files after a specified
- * date when reading from a folder path.
-*/
+SPARK-31962 - Provide option to load files after a specified
+date when reading from a folder path.
+  */
 object FilesModifiedAfterDateOption {
-	def accept(
-		  parameters: Map[String, String],
-		  sparkSession: SparkSession,
-		  hadoopConf: Configuration): ParArray[PathFilter] = {
-		var afterDateSeconds = 0L
-		val option = "filesModifiedAfterDate"
-		val filesModifiedAfterDate = parameters.get(option)
-		val hasModifiedDateOption = filesModifiedAfterDate.isDefined
+  def accept(parameters: Map[String, String],
+             sparkSession: SparkSession,
+             hadoopConf: Configuration): ParArray[PathFilter] = {
+    var afterDateSeconds = 0L
+    val option = "filesModifiedAfterDate"
+    val filesModifiedAfterDate = parameters.get(option)
+    val hasModifiedDateOption = filesModifiedAfterDate.isDefined
 
-		if (hasModifiedDateOption) {
-			filesModifiedAfterDate.foreach(fileDate => {
-				val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
-				val locateDate = LocalDateTime.parse(fileDate, formatter)
-				afterDateSeconds = locateDate.toEpochSecond(ZoneOffset.UTC) * 1000
-			})
-			val fileFilter = new PathFilterIgnoreOldFiles(
-				sparkSession,
-				hadoopConf,
-				afterDateSeconds)
+    if (hasModifiedDateOption) {
+      filesModifiedAfterDate.foreach(fileDate => {
+        val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+        val locateDate = LocalDateTime.parse(fileDate, formatter)
+        afterDateSeconds = locateDate.toEpochSecond(ZoneOffset.UTC) * 1000
+      })
+      val fileFilter =
+        new PathFilterIgnoreOldFiles(sparkSession, hadoopConf, afterDateSeconds)
 
-			return ParArray[PathFilter](fileFilter)
-		}
-		ParArray[PathFilter]()
-	}
+      return ParArray[PathFilter](fileFilter)
+    }
+    ParArray[PathFilter]()
+  }
 }

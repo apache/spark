@@ -119,3 +119,14 @@ To load all files recursively, you can use:
 {% include_example recursive_file_lookup r/RSparkSQLExample.R %}
 </div>
 </div>
+
+### Load Files after Modification Date
+`fileModifiedDate` is an option used to only load files after a specified modification date. 
+This parameter  expects a timestamp in  the following format: `YYYY-MM-DDTHH:mm:ss`.
+
+Example:<br/>
+`spark`<br/>
+`.read` <br/>
+` .format("csv")`<br/>
+` .option('fileModifiedDate','2020-05-13T08:33:05`)<br/>
+          

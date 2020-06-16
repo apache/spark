@@ -20,8 +20,11 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import scala.collection.mutable
+import scala.collection.parallel.mutable.ParArray
 import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -31,12 +34,11 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.pathfilters.PathFilterIgnoreNonData
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
-import org.apache.spark.sql.internal.{SQLConf, SessionState}
+import org.apache.spark.sql.execution.datasources.pathfilters.PathFilterIgnoreNonData
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
 
-import scala.collection.parallel.mutable.ParArray
 
 object CommandUtils extends Logging {
 
