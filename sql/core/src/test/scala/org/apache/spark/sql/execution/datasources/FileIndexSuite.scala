@@ -755,6 +755,31 @@ class FileIndexSuite extends SharedSparkSession {
       assert(df.count() == 1)
     }
   }
+  object DeletionRaceFileSystem {
+    val rootDirPath: Path = new Path("mockFs:///rootDir/")
+    val subDirPath: Path = new Path(rootDirPath, "subDir")
+    val leafFilePath: Path = new Path(subDirPath, "leafFile")
+    val nonDeletedLeafFilePath: Path = new Path(subDirPath, "nonDeletedLeafFile")
+    val rootListing: Array[FileStatus] =
+      Array(new FileStatus(0, true, 0, 0, 0, subDirPath))
+    val subFolderListing: Array[FileStatus] =
+      Array(
+        new FileStatus(0, false, 0, 100, 0, leafFilePath),
+        new FileStatus(0, false, 0, 100, 0, nonDeletedLeafFilePath))
+  }
+
+  object DeletionRaceFileSystem {
+    val rootDirPath: Path = new Path("mockFs:///rootDir/")
+    val subDirPath: Path = new Path(rootDirPath, "subDir")
+    val leafFilePath: Path = new Path(subDirPath, "leafFile")
+    val nonDeletedLeafFilePath: Path = new Path(subDirPath, "nonDeletedLeafFile")
+    val rootListing: Array[FileStatus] =
+      Array(new FileStatus(0, true, 0, 0, 0, subDirPath))
+    val subFolderListing: Array[FileStatus] =
+      Array(
+        new FileStatus(0, false, 0, 100, 0, leafFilePath),
+        new FileStatus(0, false, 0, 100, 0, nonDeletedLeafFilePath))
+  }
 
   // Used in SPARK-27676 test to simulate a race where a subdirectory is deleted
   // between back-to-back listing calls.
@@ -792,9 +817,9 @@ class FileIndexSuite extends SharedSparkSession {
     }
 
     override def getFileBlockLocations(
-                                          file: FileStatus,
-                                          start: Long,
-                                          len: Long): Array[BlockLocation] = {
+        file: FileStatus,
+        start: Long,
+        len: Long): Array[BlockLocation] = {
       if (file.getPath == leafFilePath) {
         throw new FileNotFoundException(leafFilePath.toString)
       } else {
@@ -814,16 +839,17 @@ class FileIndexSuite extends SharedSparkSession {
   class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
 
     class SpecialBlockLocation(
-                                  names: Array[String],
-                                  hosts: Array[String],
-                                  offset: Long,
-                                  length: Long)
+        names: Array[String],
+        hosts: Array[String],
+        offset: Long,
+        length: Long)
         extends BlockLocation(names, hosts, offset, length)
 
     override def getFileBlockLocations(
-                                          file: FileStatus,
-                                          start: Long,
-                                          len: Long): Array[BlockLocation] = {
+        file: FileStatus,
+        start: Long,
+        len: Long): Array[BlockLocation] = {
       Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
     }
   }
+}
