@@ -479,6 +479,7 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
+    "org.apache.spark.sql.hive.thriftserver.ThriftServerWithSparkContextSuite",
     "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite"
   )
 
