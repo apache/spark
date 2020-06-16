@@ -86,7 +86,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
   test("deduplicate with watermark") {
     val inputData = MemoryStream[Int]
     val result = inputData.toDS()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .dropDuplicates()
       .select($"eventTime".cast("long").as[Long])
@@ -113,7 +113,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
   test("deduplicate with aggregate - append mode") {
     val inputData = MemoryStream[Int]
     val windowedaggregate = inputData.toDS()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .dropDuplicates()
       .withWatermark("eventTime", "10 seconds")
@@ -230,7 +230,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
   test("SPARK-19841: watermarkPredicate should filter based on keys") {
     val input = MemoryStream[(Int, Int)]
     val df = input.toDS.toDF("time", "id")
-      .withColumn("time", $"time".cast("timestamp"))
+      .withColumn("time", timestamp_seconds($"time"))
       .withWatermark("time", "1 second")
       .dropDuplicates("id", "time") // Change the column positions
       .select($"id")
@@ -249,7 +249,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
   test("SPARK-21546: dropDuplicates should ignore watermark when it's not a key") {
     val input = MemoryStream[(Int, Int)]
     val df = input.toDS.toDF("id", "time")
-      .withColumn("time", $"time".cast("timestamp"))
+      .withColumn("time", timestamp_seconds($"time"))
       .withWatermark("time", "1 second")
       .dropDuplicates("id")
       .select($"id", $"time".cast("long"))
@@ -265,7 +265,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     def testWithFlag(flag: Boolean): Unit = withClue(s"with $flagKey = $flag") {
       val inputData = MemoryStream[Int]
       val result = inputData.toDS()
-        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withColumn("eventTime", timestamp_seconds($"value"))
         .withWatermark("eventTime", "10 seconds")
         .dropDuplicates()
         .select($"eventTime".cast("long").as[Long])
