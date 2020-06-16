@@ -17,50 +17,38 @@
 
 package org.apache.spark.sql.execution.datasources
 
+
+package org.apache.spark.sql.execution.datasources
 import java.io.{File, FileNotFoundException}
 import java.net.URI
 import java.time.format.DateTimeParseException
 
-import scala.collection.mutable
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.viewfs.ViewFileSystem
-import org.apache.spark.SparkException
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
+import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{
-  IntegerType,
-  StringType,
-  StructField,
-  StructType
-}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.KnownSizeEstimation
 
 class FileIndexSuite extends SharedSparkSession {
 
-  private class TestInMemoryFileIndex(spark: SparkSession,
-                                      path: Path,
-                                      fileStatusCache: FileStatusCache =
-                                        NoopCache)
-      extends InMemoryFileIndex(
-        spark,
-        Seq(path),
-        Map.empty,
-        None,
-        fileStatusCache
-      ) {
+  private class TestInMemoryFileIndex(
+      spark: SparkSession,
+      path: Path,
+      fileStatusCache: FileStatusCache = NoopCache)
+      extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
     def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
-
     def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
-
     def leafFileStatuses: Iterable[FileStatus] = leafFiles.values
   }
 
@@ -754,18 +742,6 @@ class FileIndexSuite extends SharedSparkSession {
       val df = spark.read.format("csv").load(path.toString())
       assert(df.count() == 1)
     }
-  }
-  object DeletionRaceFileSystem {
-    val rootDirPath: Path = new Path("mockFs:///rootDir/")
-    val subDirPath: Path = new Path(rootDirPath, "subDir")
-    val leafFilePath: Path = new Path(subDirPath, "leafFile")
-    val nonDeletedLeafFilePath: Path = new Path(subDirPath, "nonDeletedLeafFile")
-    val rootListing: Array[FileStatus] =
-      Array(new FileStatus(0, true, 0, 0, 0, subDirPath))
-    val subFolderListing: Array[FileStatus] =
-      Array(
-        new FileStatus(0, false, 0, 100, 0, leafFilePath),
-        new FileStatus(0, false, 0, 100, 0, nonDeletedLeafFilePath))
   }
 
   object DeletionRaceFileSystem {
