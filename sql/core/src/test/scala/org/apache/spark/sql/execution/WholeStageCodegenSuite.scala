@@ -65,7 +65,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       assert(partAggNode.isDefined,
       "No HashAggregate node with partial aggregate expression found")
       assert(partAggNode.get.metrics("partialAggSkipped").value == data.size,
-      "Partial aggregation got triggrered in partial hash aggregate node")
+      "Partial aggregation got triggered in partial hash aggregate node")
     }
   }
 
