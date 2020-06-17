@@ -60,6 +60,10 @@ private[jdbc] object ConnectionProvider extends Logging {
           logDebug("DB2 connection provider found")
           new DB2ConnectionProvider(driver, options)
 
+        case MSSQLConnectionProvider.driverClass =>
+          logDebug("MS SQL connection provider found")
+          new MSSQLConnectionProvider(driver, options)
+
         case _ =>
           throw new IllegalArgumentException(s"Driver ${options.driverClass} does not support " +
             "Kerberos authentication")

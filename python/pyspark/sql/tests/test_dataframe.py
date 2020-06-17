@@ -644,7 +644,7 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(col6 AS DOUBLE) AS double,
             CAST(col7 AS BOOLEAN) AS boolean,
             CAST(col8 AS STRING) AS string,
-            CAST(col9 AS TIMESTAMP) AS timestamp
+            timestamp_seconds(col9) AS timestamp
             FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1),
                         (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
             """

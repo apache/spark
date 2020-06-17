@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
+class ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("the scratch dir will be deleted during server start but recreated with new operation") {
     assert(tempScratchDir.exists())
@@ -45,13 +45,4 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(cacheManager.isEmpty)
     }
   }
-}
-
-
-class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {
-  override def mode: ServerMode.Value = ServerMode.binary
-}
-
-class ThriftServerWithSparkContextInHttpSuite extends ThriftServerWithSparkContextSuite {
-  override def mode: ServerMode.Value = ServerMode.http
 }
