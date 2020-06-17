@@ -92,9 +92,9 @@ object HiveResult {
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
   def toHiveString(
-    a: (Any, DataType),
-    nested: Boolean,
-    formatters: TimeFormatters): String = a match {
+      a: (Any, DataType),
+      nested: Boolean,
+      formatters: TimeFormatters): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => formatters.date.format(d)
