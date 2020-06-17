@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
-import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.aggregate.{AggUtils, HashAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
@@ -51,6 +50,27 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
     assert(df.collect() === Array(Row(9, 4.5)))
   }
+
+  test(s"Avoid spill in partial aggregation" ) {
+    withSQLConf((SQLConf.SPILL_PARTIAL_AGGREGATE_DISABLED.key, "true")) {
+      // Create Dataframes
+      val arrayData = Seq(("James", 1), ("James", 1), ("Phil", 1))
+      val srcDF = arrayData.toDF("name", "values")
+      val aggDF = srcDF.groupBy("name").sum("values")
+      val a = aggDF.queryExecution.debug.codegenToSeq()
+      val partAggNode = aggDF.queryExecution.executedPlan.find {
+        case h: HashAggregateExec
+          if AggUtils.areAggExpressionsPartial(h.aggregateExpressions) => true
+        case _ => false
+      }
+      checkAnswer(aggDF, Seq(Row("James", 2), Row("Phil", 1)))
+      assert(partAggNode.isDefined,
+      "No HashAggregate node with partial aggregate expression found")
+      assert(partAggNode.get.metrics("partialAggSkipped").value == 3,
+      "Partial aggregation got triggrered in partial hash aggregate node")
+    }
+  }
+
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {
     val df = spark.range(3).groupBy(col("id") * 2).count().orderBy(col("id") * 2)
@@ -163,26 +183,6 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           p.asInstanceOf[WholeStageCodegenExec].child.children(0)
             .isInstanceOf[SortMergeJoinExec]).isEmpty)
       assert(df.collect() === Array(Row(1), Row(2)))
-    }
-  }
-
-  test("SPARK-31973: Avoid spill in partial aggregation " +
-    "when spark.sql.aggregate.spill.partialaggregate.disabled is set") {
-    withSQLConf((SQLConf.SPILL_PARTIAL_AGGREGATE_DISABLED.key, "true"),
-      (SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key, "false")) {
-      // Create Dataframes
-      val arrayData = Seq(("James", 1), ("James", 1), ("Phil", 1))
-      val srcDF = arrayData.toDF("name", "values")
-      val aggDF = srcDF.groupBy("name").sum("values")
-
-      val results = aggDF.collect()
-      val hashAggNode = aggDF.queryExecution.executedPlan.find {
-        case h: HashAggregateExec => !h.child.isInstanceOf[ShuffleExchangeExec]
-        case _ => false
-      }
-      assert(hashAggNode.isDefined)
-      assert(hashAggNode.get.metrics("spillSize").value == 0)
-      assert(results === Seq(Row("James", 2), Row("Phil", 1)))
     }
   }
 
