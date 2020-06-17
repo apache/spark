@@ -50,7 +50,7 @@ class StateStoreConf(
 
   /** Whether validate the value format when the format invalidation enabled. */
   val formatValidationCheckValue: Boolean =
-    extraOptions.getOrElse(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG, "false") == "true"
+    extraOptions.getOrElse(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG, "true") == "true"
 
   /**
    * Additional configurations related to state store. This will capture all configs in

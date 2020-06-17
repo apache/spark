@@ -464,7 +464,7 @@ case class StreamingDeduplicateExec(
       Some(sqlContext.streams.stateStoreCoordinator),
       // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
       // is unrelated to the output schema.
-      Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "true")) { (store, iter) =>
+      Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false")) { (store, iter) =>
       val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
       val numOutputRows = longMetric("numOutputRows")
       val numTotalStateRows = longMetric("numTotalStateRows")

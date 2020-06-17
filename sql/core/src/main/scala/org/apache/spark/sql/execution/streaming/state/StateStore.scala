@@ -32,7 +32,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -149,7 +148,7 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
  * An exception thrown when an invalid UnsafeRow is detected in state store.
  */
 class InvalidUnsafeRowException
-  extends SparkException("The streaming query failed by state format invalidation. " +
+  extends RuntimeException("The streaming query failed by state format invalidation. " +
     "The following reasons may cause this: 1. An old Spark version wrote the checkpoint that is " +
     "incompatible with the current one; 2. Broken checkpoint files; 3. The query is changed " +
     "among restart. For the first case, you can try to restart the application without " +

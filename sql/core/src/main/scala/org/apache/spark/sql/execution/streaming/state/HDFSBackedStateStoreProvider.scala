@@ -259,6 +259,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
   @volatile private var numberOfVersionsToRetainInMemory: Int = _
+  // TODO: The validation should be moved to a higher level so that it works for all state store
+  // implementations
   @volatile private var isValidated = false
 
   private lazy val loadedMaps = new util.TreeMap[Long, MapType](Ordering[Long].reverse)

@@ -79,7 +79,8 @@ package object state {
         valueSchema,
         indexOrdinal,
         sessionState,
-        storeCoordinator)
+        storeCoordinator,
+        extraOptions)
     }
   }
 }
