@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsNamespaces, Table, TableCatalog}
@@ -50,6 +51,11 @@ case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafN
   override def output: Seq[Attribute] = Nil
 }
 
+case class UnresolvedFunc(multipartIdentifier: Seq[String]) extends LeafNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = Nil
+}
+
 /**
  * A plan containing resolved namespace.
  */
@@ -72,5 +78,10 @@ case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: T
 // TODO: create a generic representation for temp view, v1 view and v2 view, after we add view
 //       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
 case class ResolvedView(identifier: Identifier) extends LeafNode {
+  override def output: Seq[Attribute] = Nil
+}
+
+case class ResolvedFunc(catalog: CatalogPlugin, functionIdentifier: FunctionIdentifier)
+  extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }

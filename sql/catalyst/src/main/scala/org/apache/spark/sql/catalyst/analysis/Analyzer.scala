@@ -217,6 +217,7 @@ class Analyzer(
       ResolveInsertInto ::
       ResolveRelations ::
       ResolveTables ::
+      ResolveFunc(catalogManager) ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -831,6 +832,14 @@ class Analyzer(
         ResolvedNamespace(currentCatalog, Seq.empty[String])
       case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
         ResolvedNamespace(catalog, ns)
+    }
+  }
+
+  case class ResolveFunc(catalogManager: CatalogManager)
+    extends Rule[LogicalPlan] with LookupCatalog {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case UnresolvedFunc(CatalogAndFunctionIdentifier(catalog, identifier)) =>
+        ResolvedFunc(catalog, identifier)
     }
   }
 

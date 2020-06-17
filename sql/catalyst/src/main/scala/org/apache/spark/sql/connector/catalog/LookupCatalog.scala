@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
@@ -153,6 +153,39 @@ private[sql] trait LookupCatalog extends Logging {
         }
       case _ =>
         None
+    }
+  }
+
+  /**
+   * Extract catalog and function identifier from a multi-part name with the current catalog if
+   * needed.
+   *
+   * Note that: now function is only supported in v1 catalog.
+   */
+  object CatalogAndFunctionIdentifier {
+    def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, FunctionIdentifier)] = {
+
+      if (nameParts.length == 1 && catalogManager.v1SessionCatalog.isTempFunction(nameParts.head)) {
+        return Some(currentCatalog, FunctionIdentifier(nameParts.head))
+      }
+
+      nameParts match {
+        case SessionCatalogAndIdentifier(catalog, ident) =>
+          if (nameParts.length == 1) {
+            // If there is only one name part, it means the current catalog is the session catalog.
+            // Here we don't fill the default database, to keep the error message unchanged for
+            // v1 commands.
+            Some(catalog, FunctionIdentifier(nameParts.head, None))
+          } else {
+            ident.namespace match {
+              case Array(db) => Some(catalog, FunctionIdentifier(ident.name, Some(db)))
+              case _ =>
+                throw new AnalysisException(s"Unsupported function name '$ident'")
+            }
+          }
+
+        case _ => throw new AnalysisException(s"Function command is only supported in v1 catalog")
+      }
     }
   }
 }
