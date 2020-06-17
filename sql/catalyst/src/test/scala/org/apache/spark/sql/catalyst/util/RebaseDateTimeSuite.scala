@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
+import org.apache.spark.util.ThreadUtils
 
 class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
@@ -254,11 +255,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 
     case class RebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
-
-    val result = new ArrayBuffer[RebaseRecord]()
-    ALL_TIMEZONES
-      .sortBy(_.getId)
-      .foreach { zid =>
+    val rebaseRecords = ThreadUtils.parmap(ALL_TIMEZONES, "JSON-rebase-gen", 16) { zid =>
       withDefaultTimeZone(zid) {
         val tz = TimeZone.getTimeZone(zid)
         val start = adjustFunc(
@@ -272,7 +269,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
         var micros = start
         var diff = Long.MaxValue
-        val maxStep = DAYS_PER_WEEK * MICROS_PER_DAY
+        val maxStep = 30 * MICROS_PER_MINUTE
         var step: Long = MICROS_PER_SECOND
         val switches = new ArrayBuffer[Long]()
         val diffs = new ArrayBuffer[Long]()
@@ -294,9 +291,11 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
           }
           micros += step
         }
-        result.append(RebaseRecord(zid.getId, switches.toArray, diffs.toArray))
+        RebaseRecord(zid.getId, switches.toArray, diffs.toArray)
       }
     }
+    val result = new ArrayBuffer[RebaseRecord]()
+    rebaseRecords.sortBy(_.tz).foreach(result.append(_))
     val mapper = (new ObjectMapper() with ScalaObjectMapper)
       .registerModule(DefaultScalaModule)
       .writerWithDefaultPrettyPrinter()
