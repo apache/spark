@@ -42,16 +42,15 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
       case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
         createNamedStruct.valExprs(ordinal)
       case GetStructField(WithFields(struct, nameExprs, valExprs), ordinal, maybeName) =>
-        val extractFieldName = maybeName.getOrElse(
+        val getFieldName = maybeName.getOrElse(
           struct.dataType.asInstanceOf[StructType](ordinal).name)
         val resolver = SQLConf.get.resolver
         val names = nameExprs.map(e => e.eval().toString)
-        if (names.exists(n => resolver(n, extractFieldName))) {
-          names.zip(valExprs).collect {
-            case (name, valExpr) if resolver(name, extractFieldName) => valExpr
-          }.last
+        val matches = names.zip(valExprs).filter { case (name, _) => resolver(name, getFieldName) }
+        if (matches.nonEmpty) {
+          matches.last._2
         } else {
-          GetStructField(struct, ordinal, Some(extractFieldName))
+          GetStructField(struct, ordinal, Some(getFieldName))
         }
       // Remove redundant array indexing.
       case GetArrayStructFields(CreateArray(elems, useStringTypeWhenEmpty), field, ordinal, _, _) =>
