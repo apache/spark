@@ -84,6 +84,7 @@ trait SharedThriftServer extends SharedSparkSession {
     sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname, "0")
     sqlContext.setConf(ConfVars.SCRATCHDIR.varname, tempScratchDir.getAbsolutePath)
     sqlContext.setConf(ConfVars.HIVE_START_CLEANUP_SCRATCHDIR.varname, "true")
+
     hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
     hiveServer2.getServices.asScala.foreach {
       case t: ThriftCLIService if t.getPortNumber != 0 =>
@@ -91,9 +92,11 @@ trait SharedThriftServer extends SharedSparkSession {
         logInfo(s"Started HiveThriftServer2: port=$serverPort, attempt=$attempt")
       case _ =>
     }
+
     // the scratch dir will be recreated after the probe sql `SELECT 1` executed, so we
     // check it here first.
-    assert(tempScratchDir.exists())
+    assert(!tempScratchDir.exists())
+
     // Wait for thrift server to be ready to serve the query, via executing simple query
     // till the query succeeds. See SPARK-30345 for more details.
     eventually(timeout(30.seconds), interval(1.seconds)) {
