@@ -563,19 +563,15 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     submit(reduceRdd, Array(0, 1, 2))
     // Map stage completes successfully,
     // two tasks are run on an executor on hostA and one on an executor on hostB
-    complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 3)),
-      (Success, makeMapStatus("hostA", 3)),
-      (Success, makeMapStatus("hostB", 3))))
+    completeShuffleMapStageSuccessfully(0, 0, 3, Seq("hostA", "hostA", "hostB"))
     // Now the executor on hostA is lost
     runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
 
     // The MapOutputTracker has all the shuffle files
     val initialMapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
-    assert(initialMapStatuses.count(_ != null) == 3)
-    assert(initialMapStatuses(0).location.executorId === "hostA-exec")
-    assert(initialMapStatuses(1).location.executorId === "hostA-exec")
-    assert(initialMapStatuses(2).location.executorId === "hostB-exec")
+    assert(initialMapStatuses.count(_ != null) === 3)
+    assert(initialMapStatuses.count(s => s != null && s.location.executorId == "hostA-exec") === 2)
+    assert(initialMapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
 
     // Now a fetch failure from the lost executor occurs
     complete(taskSets(1), Seq(
@@ -584,8 +580,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     // Shuffle files for hostA-exec should be lost
     val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
-    assert(mapStatuses.count(_ != null) == 1)
-    assert(mapStatuses(2).location.executorId === "hostB-exec")
+    assert(mapStatuses.count(_ != null) === 1)
+    assert(initialMapStatuses.count(s => s != null && s.location.executorId == "hostA-exec") === 0)
+    assert(initialMapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
   test("zero split job") {

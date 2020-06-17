@@ -1944,16 +1944,17 @@ private[spark] class DAGScheduler(
     logDebug(s"Removing executor $execId, fileLost: $fileLost, currentEpoch: $currentEpoch")
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
       failedEpoch(execId) = currentEpoch
-      logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
+      logInfo(s"Executor lost: $execId (epoch $currentEpoch)")
       blockManagerMaster.removeExecutor(execId)
     }
     if (fileLost && (!fileLostEpoch.contains(execId) || fileLostEpoch(execId) < currentEpoch)) {
+      fileLostEpoch(execId) = currentEpoch
       hostToUnregisterOutputs match {
         case Some(host) =>
-          logInfo("Shuffle files lost for host: %s (epoch %d)".format(host, currentEpoch))
+          logInfo(s"Shuffle files lost for host: $host (epoch $currentEpoch)")
           mapOutputTracker.removeOutputsOnHost(host)
         case None =>
-          logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
+          logInfo(s"Shuffle files lost for executor: $execId (epoch $currentEpoch)")
           mapOutputTracker.removeOutputsOnExecutor(execId)
       }
       clearCacheLocs()
@@ -1986,9 +1987,7 @@ private[spark] class DAGScheduler(
       logInfo("Host added was in lost list earlier: " + host)
       failedEpoch -= execId
     }
-    if (fileLostEpoch.contains(execId)) {
-      fileLostEpoch -= execId
-    }
+    fileLostEpoch -= execId
   }
 
   private[scheduler] def handleStageCancellation(stageId: Int, reason: Option[String]): Unit = {
