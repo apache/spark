@@ -24,3 +24,4 @@ license: |
  * [CLEAR CACHE statement](sql-ref-syntax-aux-cache-clear-cache.html)
  * [REFRESH TABLE statement](sql-ref-syntax-aux-refresh-table.html)
  * [REFRESH statement](sql-ref-syntax-aux-cache-refresh.html)
+ * [REFRESH FUNCTION statement](sql-ref-syntax-aux-refresh-function.html)q
