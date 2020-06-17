@@ -549,8 +549,7 @@ case class WithFields(
     valExprs: Seq[Expression]) extends Unevaluable {
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val expectedStructType = StructType(Nil).typeName
-    if (structExpr.dataType.typeName != expectedStructType) {
+    if (!structExpr.dataType.isInstanceOf[StructType]) {
       TypeCheckResult.TypeCheckFailure(
         "struct argument should be struct type, got: " + structExpr.dataType.catalogString)
     } else if (!nameExprs.forall(e => e.foldable && e.dataType == StringType)) {
