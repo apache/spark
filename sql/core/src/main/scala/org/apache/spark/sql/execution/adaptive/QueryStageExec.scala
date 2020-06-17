@@ -75,8 +75,12 @@ abstract class QueryStageExec extends LeafExecNode {
    * broadcasting data, etc. The caller side can use the returned [[Future]] to wait until this
    * stage is ready.
    */
-  final def materialize(): Future[Any] = executeQuery {
-    doMaterialize()
+  final def materialize(): Option[Future[Any]] = executeQuery {
+    if (_resultOption.get.isEmpty) {
+      Option(doMaterialize())
+    } else {
+      None
+    }
   }
 
   def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec

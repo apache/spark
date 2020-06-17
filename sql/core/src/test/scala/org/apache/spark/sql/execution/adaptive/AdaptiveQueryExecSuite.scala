@@ -141,6 +141,10 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       checkNumLocalShuffleReaders(adaptivePlan)
+      val localReaders = collect(adaptivePlan) {
+        case reader: CustomShuffleReaderExec if reader.isLocalReader => reader
+      }
+      assert(localReaders.length == 1)
     }
   }
 
@@ -158,21 +162,14 @@ class AdaptiveQueryExecSuite
       val localReaders = collect(adaptivePlan) {
         case reader: CustomShuffleReaderExec if reader.isLocalReader => reader
       }
-      assert(localReaders.length == 2)
+      assert(localReaders.length == 1)
       val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[ShuffledRowRDD]
-      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[ShuffledRowRDD]
       // The pre-shuffle partition size is [0, 0, 0, 72, 0]
       // We exclude the 0-size partitions, so only one partition, advisoryParallelism = 1
       // the final parallelism is
       // math.max(1, advisoryParallelism / numMappers): math.max(1, 1/2) = 1
       // and the partitions length is 1 * numMappers = 2
       assert(localShuffleRDD0.getPartitions.length == 2)
-      // The pre-shuffle partition size is [0, 72, 0, 72, 126]
-      // We exclude the 0-size partitions, so only 3 partition, advisoryParallelism = 3
-      // the final parallelism is
-      // math.max(1, advisoryParallelism / numMappers): math.max(1, 3/2) = 1
-      // and the partitions length is 1 * numMappers = 2
-      assert(localShuffleRDD1.getPartitions.length == 2)
     }
   }
 
@@ -190,15 +187,11 @@ class AdaptiveQueryExecSuite
       val localReaders = collect(adaptivePlan) {
         case reader: CustomShuffleReaderExec if reader.isLocalReader => reader
       }
-      assert(localReaders.length == 2)
+      assert(localReaders.length == 1)
       val localShuffleRDD0 = localReaders(0).execute().asInstanceOf[ShuffledRowRDD]
-      val localShuffleRDD1 = localReaders(1).execute().asInstanceOf[ShuffledRowRDD]
       // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
       // and the partitions length is 2 * numMappers = 4
       assert(localShuffleRDD0.getPartitions.length == 4)
-      // the final parallelism is math.max(1, numReduces / numMappers): math.max(1, 5/2) = 2
-      // and the partitions length is 2 * numMappers = 4
-      assert(localShuffleRDD1.getPartitions.length == 4)
     }
   }
 
@@ -432,9 +425,10 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       checkNumLocalShuffleReaders(adaptivePlan)
-      // Even with local shuffle reader, the query stage reuse can also work.
-      val ex = findReusedExchange(adaptivePlan)
-      assert(ex.size == 1)
+      val localReaders = collect(adaptivePlan) {
+        case reader: CustomShuffleReaderExec if reader.isLocalReader => reader
+      }
+      assert(localReaders.length == 1)
     }
   }
 
@@ -859,11 +853,7 @@ class AdaptiveQueryExecSuite
         val readers = collect(join.right) {
           case r: CustomShuffleReaderExec => r
         }
-        assert(readers.length == 1)
-        val reader = readers.head
-        assert(reader.isLocalReader)
-        assert(reader.metrics.keys.toSeq == Seq("numPartitions"))
-        assert(reader.metrics("numPartitions").value == reader.partitionSpecs.length)
+        assert(readers.length == 0)
       }
 
       withSQLConf(

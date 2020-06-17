@@ -158,7 +158,7 @@ case class AdaptiveSparkPlanExec(
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
       var stagesToReplace = Seq.empty[QueryStageExec]
-      while (!result.allChildStagesMaterialized) {
+      while (!result.newStages.isEmpty) {
         currentPhysicalPlan = result.newPlan
         if (result.newStages.nonEmpty) {
           stagesToReplace = result.newStages ++ stagesToReplace
@@ -167,13 +167,18 @@ case class AdaptiveSparkPlanExec(
           // Start materialization of all new stages and fail fast if any stages failed eagerly
           result.newStages.foreach { stage =>
             try {
-              stage.materialize().onComplete { res =>
+              val stageEval = stage.materialize()
+              stageEval.map(_.onComplete { res =>
                 if (res.isSuccess) {
                   events.offer(StageSuccess(stage, res.get))
                 } else {
                   events.offer(StageFailure(stage, res.failed.get))
                 }
-              }(AdaptiveSparkPlanExec.executionContext)
+              }(AdaptiveSparkPlanExec.executionContext))
+              // This stage was materialized. Just put materialized result.
+              if (stageEval.isEmpty) {
+                events.offer(StageSuccess(stage, stage.resultOption.get().get))
+              }
             } catch {
               case e: Throwable =>
                 cleanUpAndThrowException(Seq(e), Some(stage.id))
@@ -329,13 +334,13 @@ case class AdaptiveSparkPlanExec(
           CreateStageResult(
             newPlan = stage,
             allChildStagesMaterialized = isMaterialized,
-            newStages = if (isMaterialized) Seq.empty else Seq(stage))
+            newStages = Seq(stage))
 
         case _ =>
           val result = createQueryStages(e.child)
           val newPlan = e.withNewChildren(Seq(result.newPlan)).asInstanceOf[Exchange]
-          // Create a query stage only when all the child query stages are ready.
-          if (result.allChildStagesMaterialized) {
+          // Create a query stage only when no query stages are created in the child.
+          if (result.newStages.isEmpty) {
             var newStage = newQueryStage(newPlan)
             if (conf.exchangeReuseEnabled) {
               // Check the `stageCache` again for reuse. If a match is found, ditch the new stage
@@ -350,7 +355,7 @@ case class AdaptiveSparkPlanExec(
             CreateStageResult(
               newPlan = newStage,
               allChildStagesMaterialized = isMaterialized,
-              newStages = if (isMaterialized) Seq.empty else Seq(newStage))
+              newStages = Seq(newStage))
           } else {
             CreateStageResult(newPlan = newPlan,
               allChildStagesMaterialized = false, newStages = result.newStages)
@@ -365,11 +370,25 @@ case class AdaptiveSparkPlanExec(
       if (plan.children.isEmpty) {
         CreateStageResult(newPlan = plan, allChildStagesMaterialized = true, newStages = Seq.empty)
       } else {
-        val results = plan.children.map(createQueryStages)
+        var foundExchange = false
+        val (newPlans, materializedStatuses, newStages) = plan.children.map { child =>
+          if (!foundExchange) {
+            val stage = createQueryStages(child)
+            if (stage.newStages.nonEmpty) {
+              // Once we created a query stage, stopping creating query stages in next calls.
+              foundExchange = true
+              (stage.newPlan, stage.allChildStagesMaterialized, stage.newStages)
+            } else {
+              (child, true, Seq.empty)
+            }
+          } else {
+            (child, true, Seq.empty)
+          }
+        }.unzip3
         CreateStageResult(
-          newPlan = plan.withNewChildren(results.map(_.newPlan)),
-          allChildStagesMaterialized = results.forall(_.allChildStagesMaterialized),
-          newStages = results.flatMap(_.newStages))
+          newPlan = plan.withNewChildren(newPlans),
+          allChildStagesMaterialized = materializedStatuses.forall(x => x),
+          newStages = newStages.flatten)
       }
   }
 
