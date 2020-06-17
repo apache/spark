@@ -612,9 +612,10 @@ class ResolveSessionCatalog(
           replace)
       }
 
-    case RefreshFunctionStatement(nameParts) =>
+    case RefreshFunction(ResolvedNamespace(_, ns)) =>
       val FunctionIdentifier(function, database) =
-        parseSessionCatalogFunctionIdentifier(nameParts, "REFRESH FUNCTION")
+        parseSessionCatalogFunctionIdentifier(ns, "REFRESH FUNCTION")
+      // Fallback to v1 command
       RefreshFunctionCommand(database, function)
   }
 

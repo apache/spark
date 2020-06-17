@@ -480,9 +480,3 @@ case class CreateFunctionStatement(
     isTemp: Boolean,
     ignoreIfExists: Boolean,
     replace: Boolean) extends ParsedStatement
-
-/**
- *  REFRESH FUNCTION statement, as parsed from SQL
- */
-case class RefreshFunctionStatement(
-    functionName: Seq[String]) extends ParsedStatement
