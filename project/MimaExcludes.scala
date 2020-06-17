@@ -55,6 +55,7 @@ object MimaExcludes {
     // [SPARK-24634] Add a new metric regarding number of inputs later than watermark plus allowed delay
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StateOperatorProgress.<init>$default$4"),
 
+    // [SPARK-32009] Remove deprecated method BisectingKMeansModel.computeCost
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.clustering.BisectingKMeansModel.computeCost")
   )
 
