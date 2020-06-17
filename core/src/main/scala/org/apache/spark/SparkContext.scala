@@ -1954,6 +1954,15 @@ class SparkContext(config: SparkConf) extends Logging {
       ShutdownHookManager.removeShutdownHook(_shutdownHookRef)
     }
 
+    val clazz = Utils.classForName("java.lang.ApplicationShutdownHooks")
+    val field = clazz.getDeclaredField("hooks")
+    field.setAccessible(true)
+    val inheritableThreadLocalsField = classOf[Thread].getDeclaredField("inheritableThreadLocals")
+    inheritableThreadLocalsField.setAccessible(true)
+
+    val hooks = field.get(clazz).asInstanceOf[java.util.IdentityHashMap[Thread, Thread]].asScala
+    hooks.keys.map(inheritableThreadLocalsField.set(_, null))
+
     if (listenerBus != null) {
       Utils.tryLogNonFatalError {
         postApplicationEnd()
