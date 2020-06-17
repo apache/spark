@@ -1246,16 +1246,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STATE_STORE_FORMAT_VALIDATION_CHECK_VALUE =
-    buildConf("spark.sql.streaming.stateStore.formatValidation.checkValue")
-      .internal()
-      .doc("When true, check if the value UnsafeRow from the state store is valid or not when " +
-        "running streaming queries. For some operations, we won't check the value format since " +
-        "the state store save fake values, e.g. Deduplicate.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
       .internal()
@@ -2766,9 +2756,6 @@ class SQLConf extends Serializable with Logging {
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
   def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
-
-  def stateStoreFormatValidationCheckValue: Boolean =
-    getConf(STATE_STORE_FORMAT_VALIDATION_CHECK_VALUE)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 

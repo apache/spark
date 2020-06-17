@@ -455,17 +455,16 @@ case class StreamingDeduplicateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
-    // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
-    // is unrelated to the output schema.
-    sqlContext.sessionState.conf.setConf(SQLConf.STATE_STORE_FORMAT_VALIDATION_CHECK_VALUE, false)
-
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
       child.output.toStructType,
       indexOrdinal = None,
       sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
+      Some(sqlContext.streams.stateStoreCoordinator),
+      // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
+      // is unrelated to the output schema.
+      Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "true")) { (store, iter) =>
       val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
       val numOutputRows = longMetric("numOutputRows")
       val numTotalStateRows = longMetric("numTotalStateRows")
