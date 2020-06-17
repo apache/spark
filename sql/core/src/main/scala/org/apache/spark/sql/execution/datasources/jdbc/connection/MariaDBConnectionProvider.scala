@@ -30,7 +30,7 @@ private[jdbc] class MariaDBConnectionProvider(driver: Driver, options: JDBCOptio
   override def setAuthenticationConfigIfNeeded(): Unit = SecurityConfigurationLock.synchronized {
     val (parent, configEntry) = getConfigWithAppEntry()
     /**
-     * Couple of things to mention here:
+     * Couple of things to mention here (v2.5.4 client):
      * 1. MariaDB doesn't support JAAS application name configuration
      * 2. MariaDB sets a default JAAS config if "java.security.auth.login.config" is not set
      */
