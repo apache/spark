@@ -54,10 +54,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   test(s"Avoid spill in partial aggregation" ) {
     withSQLConf((SQLConf.SPILL_PARTIAL_AGGREGATE_DISABLED.key, "true")) {
       // Create Dataframes
-      val arrayData = Seq(("James", 1), ("James", 1), ("Phil", 1))
-      val srcDF = arrayData.toDF("name", "values")
-      val aggDF = srcDF.groupBy("name").sum("values")
-      val a = aggDF.queryExecution.debug.codegenToSeq()
+      val data = Seq(("James", 1), ("James", 1), ("Phil", 1))
+      val aggDF = data.toDF("name", "values").groupBy("name").sum("values")
       val partAggNode = aggDF.queryExecution.executedPlan.find {
         case h: HashAggregateExec
           if AggUtils.areAggExpressionsPartial(h.aggregateExpressions) => true
@@ -66,7 +64,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       checkAnswer(aggDF, Seq(Row("James", 2), Row("Phil", 1)))
       assert(partAggNode.isDefined,
       "No HashAggregate node with partial aggregate expression found")
-      assert(partAggNode.get.metrics("partialAggSkipped").value == 3,
+      assert(partAggNode.get.metrics("partialAggSkipped").value == data.size,
       "Partial aggregation got triggrered in partial hash aggregate node")
     }
   }
