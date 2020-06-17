@@ -835,6 +835,15 @@ object SQLConf {
       .longConf
       .createWithDefault(250 * 1024 * 1024)
 
+  val HIVE_FILESOURCE_PARTITION_FILE_CACHE_TTL =
+    buildConf("spark.sql.hive.filesourcePartitionFileCacheTTL")
+      .doc("When positive, it's used as a TTL (time-to-live) value for the partition file " +
+        "metadata cache. This conf only has an effect when hive filesource partition management " +
+        "is enabled.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(-1)
+
   object HiveCaseSensitiveInferenceMode extends Enumeration {
     val INFER_AND_SAVE, INFER_ONLY, NEVER_INFER = Value
   }
@@ -2899,6 +2908,8 @@ class SQLConf extends Serializable with Logging {
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
+
+  def filesourcePartitionFileCacheTTL: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_TTL)
 
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
     HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
