@@ -548,6 +548,46 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mapStatus2(2).location.host === "hostB")
   }
 
+  test("[SPARK-32003] All shuffle files for executor should be cleaned up on fetch failure") {
+    // reset the test context with the right shuffle service config
+    afterEach()
+    val conf = new SparkConf()
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
+    init(conf)
+
+    val shuffleMapRdd = new MyRDD(sc, 3, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 3, List(shuffleDep), tracker = mapOutputTracker)
+
+    submit(reduceRdd, Array(0, 1, 2))
+    // Map stage completes successfully,
+    // two tasks are run on an executor on hostA and one on an executor on hostB
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 3)),
+      (Success, makeMapStatus("hostA", 3)),
+      (Success, makeMapStatus("hostB", 3))))
+    // Now the executor on hostA is lost
+    runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
+
+    // The MapOutputTracker has all the shuffle files
+    val initialMapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
+    assert(initialMapStatuses.count(_ != null) == 3)
+    assert(initialMapStatuses(0).location.executorId === "hostA-exec")
+    assert(initialMapStatuses(1).location.executorId === "hostA-exec")
+    assert(initialMapStatuses(2).location.executorId === "hostB-exec")
+
+    // Now a fetch failure from the lost executor occurs
+    complete(taskSets(1), Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"), null)
+    ))
+
+    // Shuffle files for hostA-exec should be lost
+    val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
+    assert(mapStatuses.count(_ != null) == 1)
+    assert(mapStatuses(2).location.executorId === "hostB-exec")
+  }
+
   test("zero split job") {
     var numResults = 0
     var failureReason: Option[Exception] = None

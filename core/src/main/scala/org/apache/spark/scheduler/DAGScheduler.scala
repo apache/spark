@@ -177,6 +177,8 @@ private[spark] class DAGScheduler(
   // TODO: Garbage collect information about failure epochs when we know there are no more
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
+  // In addition, track epoch for failed executors that result in lost file output
+  private val fileLostEpoch = new HashMap[String, Long]
 
   private [scheduler] val outputCommitCoordinator = env.outputCommitCoordinator
 
@@ -1939,24 +1941,22 @@ private[spark] class DAGScheduler(
       hostToUnregisterOutputs: Option[String],
       maybeEpoch: Option[Long] = None): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
+    logDebug(s"Removing executor $execId, fileLost: $fileLost, currentEpoch: $currentEpoch")
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
       failedEpoch(execId) = currentEpoch
       logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
       blockManagerMaster.removeExecutor(execId)
-      if (fileLost) {
-        hostToUnregisterOutputs match {
-          case Some(host) =>
-            logInfo("Shuffle files lost for host: %s (epoch %d)".format(host, currentEpoch))
-            mapOutputTracker.removeOutputsOnHost(host)
-          case None =>
-            logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
-            mapOutputTracker.removeOutputsOnExecutor(execId)
-        }
-        clearCacheLocs()
-
-      } else {
-        logDebug("Additional executor lost message for %s (epoch %d)".format(execId, currentEpoch))
+    }
+    if (fileLost && (!fileLostEpoch.contains(execId) || fileLostEpoch(execId) < currentEpoch)) {
+      hostToUnregisterOutputs match {
+        case Some(host) =>
+          logInfo("Shuffle files lost for host: %s (epoch %d)".format(host, currentEpoch))
+          mapOutputTracker.removeOutputsOnHost(host)
+        case None =>
+          logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
+          mapOutputTracker.removeOutputsOnExecutor(execId)
       }
+      clearCacheLocs()
     }
   }
 
@@ -1985,6 +1985,9 @@ private[spark] class DAGScheduler(
     if (failedEpoch.contains(execId)) {
       logInfo("Host added was in lost list earlier: " + host)
       failedEpoch -= execId
+    }
+    if (fileLostEpoch.contains(execId)) {
+      fileLostEpoch -= execId
     }
   }
 
