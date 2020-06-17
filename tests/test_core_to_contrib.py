@@ -1170,6 +1170,26 @@ OPERATORS = [
         'airflow.operators.presto_check_operator.PrestoValueCheckOperator',
     ),
     (
+        'airflow.operators.check_operator.CheckOperator',
+        'airflow.operators.sql.SQLCheckOperator',
+    ),
+    (
+        'airflow.operators.check_operator.IntervalCheckOperator',
+        'airflow.operators.sql.SQLIntervalCheckOperator',
+    ),
+    (
+        'airflow.operators.check_operator.ValueCheckOperator',
+        'airflow.operators.sql.SQLValueCheckOperator',
+    ),
+    (
+        'airflow.operators.check_operator.ThresholdCheckOperator',
+        'airflow.operators.sql.SQLThresholdCheckOperator',
+    ),
+    (
+        'airflow.operators.sql_branch_operator.BranchSqlOperator',
+        'airflow.operators.sql.BranchSQLOperator',
+    ),
+    (
         'airflow.operators.python.BranchPythonOperator',
         'airflow.operators.python_operator.BranchPythonOperator',
     ),
