@@ -2114,12 +2114,9 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("REFRESH FUNCTION") {
-    parseCompare("REFRESH FUNCTION c",
-      RefreshFunction(UnresolvedNamespace(Seq("c"))))
-    parseCompare("REFRESH FUNCTION b.c",
-      RefreshFunction(UnresolvedNamespace(Seq("b", "c"))))
-    parseCompare("REFRESH FUNCTION a.b.c",
-      RefreshFunction(UnresolvedNamespace(Seq("a", "b", "c"))))
+    parseCompare("REFRESH FUNCTION c", RefreshFunction(Seq("c")))
+    parseCompare("REFRESH FUNCTION b.c", RefreshFunction(Seq("b", "c")))
+    parseCompare("REFRESH FUNCTION a.b.c", RefreshFunction(Seq("a", "b", "c")))
   }
 
   private case class TableSpec(
