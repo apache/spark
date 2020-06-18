@@ -21,15 +21,15 @@ import java.io._
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
-import java.time.LocalDate
+import java.time.{LocalDate, ZoneId}
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
-
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
@@ -125,7 +125,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssXXX")))
 
     val ISO8601Date = "1970-01-01"
-    checkTypePromotion(DateTimeUtils.microsToDays(32400000000L),
+    checkTypePromotion(DateTimeUtils.microsToDays(32400000000L, ZoneId.systemDefault),
       enforceCorrectType(ISO8601Date, DateType))
   }
 

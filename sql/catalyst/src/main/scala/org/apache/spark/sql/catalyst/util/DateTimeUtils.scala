@@ -53,10 +53,6 @@ object DateTimeUtils {
   def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
-  def microsToDays(micros: Long): Int = {
-    microsToDays(micros, ZoneId.systemDefault())
-  }
-
   def microsToDays(micros: Long, zoneId: ZoneId): Int = {
     localDateToDays(getLocalDateTime(micros, zoneId).toLocalDate)
   }
