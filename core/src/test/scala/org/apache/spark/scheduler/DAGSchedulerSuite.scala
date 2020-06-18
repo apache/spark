@@ -466,7 +466,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertDataStructuresEmpty()
   }
 
-  test("All shuffle files on the slave should be cleaned up when slave lost") {
+  test("All shuffle files on the replica should be cleaned up when it is lost") {
     // reset the test context with the right shuffle service config
     afterEach()
     val conf = new SparkConf()
@@ -777,9 +777,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   private val shuffleFileLossTests = Seq(
-    ("slave lost with shuffle service", SlaveLost("", false), true, false),
-    ("worker lost with shuffle service", SlaveLost("", true), true, true),
-    ("worker lost without shuffle service", SlaveLost("", true), false, true),
+    ("agent lost with shuffle service", AgentLost("", false), true, false),
+    ("worker lost with shuffle service", AgentLost("", true), true, true),
+    ("worker lost without shuffle service", AgentLost("", true), false, true),
     ("executor failure with shuffle service", ExecutorKilled, true, false),
     ("executor failure without shuffle service", ExecutorKilled, false, true))
 

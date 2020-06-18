@@ -309,7 +309,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     assert(sc.env.blockManager.master.getMatchingBlockIds({
       case BroadcastBlockId(`taskClosureBroadcastId`, _) => true
       case _ => false
-    }, askSlaves = true).isEmpty)
+    }, askReplicas = true).isEmpty)
   }
 
   test("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
@@ -349,7 +349,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     assert(sc.env.blockManager.master.getMatchingBlockIds({
       case BroadcastBlockId(`taskClosureBroadcastId`, _) => true
       case _ => false
-    }, askSlaves = true).isEmpty)
+    }, askReplicas = true).isEmpty)
   }
 }
 
@@ -528,7 +528,7 @@ class CleanerTester(
     blockManager.master.getMatchingBlockIds( _ match {
       case RDDBlockId(`rddId`, _) => true
       case _ => false
-    }, askSlaves = true)
+    }, askReplicas = true)
   }
 
   private def getShuffleBlocks(shuffleId: Int): Seq[BlockId] = {
@@ -536,14 +536,14 @@ class CleanerTester(
       case ShuffleBlockId(`shuffleId`, _, _) => true
       case ShuffleIndexBlockId(`shuffleId`, _, _) => true
       case _ => false
-    }, askSlaves = true)
+    }, askReplicas = true)
   }
 
   private def getBroadcastBlocks(broadcastId: Long): Seq[BlockId] = {
     blockManager.master.getMatchingBlockIds( _ match {
       case BroadcastBlockId(`broadcastId`, _) => true
       case _ => false
-    }, askSlaves = true)
+    }, askReplicas = true)
   }
 
   private def blockManager = sc.env.blockManager

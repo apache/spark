@@ -194,7 +194,7 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
   /**
    * Serialize and deserialize an object. This is useful to verify the objects
    * contents after deserialization (e.g., the contents of an RDD split after
-   * it is sent to a slave along with a task)
+   * it is sent to an executor along with a task)
    */
   protected def serializeDeserialize[T](obj: T): T = {
     val bytes = Utils.serialize(obj)

@@ -415,7 +415,7 @@ class TaskSetManagerSuite
 
     // Now mark host2 as dead
     sched.removeExecutor("exec2")
-    manager.executorLost("exec2", "host2", SlaveLost())
+    manager.executorLost("exec2", "host2", AgentLost())
 
     // nothing should be chosen
     assert(manager.resourceOffer("exec1", "host1", ANY)._1 === None)
@@ -598,10 +598,10 @@ class TaskSetManagerSuite
       Array(PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY)))
     // test if the valid locality is recomputed when the executor is lost
     sched.removeExecutor("execC")
-    manager.executorLost("execC", "host2", SlaveLost())
+    manager.executorLost("execC", "host2", AgentLost())
     assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, NO_PREF, ANY)))
     sched.removeExecutor("execD")
-    manager.executorLost("execD", "host1", SlaveLost())
+    manager.executorLost("execD", "host1", AgentLost())
     assert(manager.myLocalityLevels.sameElements(Array(NO_PREF, ANY)))
   }
 
@@ -814,7 +814,7 @@ class TaskSetManagerSuite
     assert(resubmittedTasks === 0)
     assert(manager.runningTasks === 1)
 
-    manager.executorLost("execB", "host2", new SlaveLost())
+    manager.executorLost("execB", "host2", new AgentLost())
     assert(manager.runningTasks === 0)
     assert(resubmittedTasks === 0)
   }
@@ -923,7 +923,7 @@ class TaskSetManagerSuite
     // Make sure schedBackend.killTask(2, "exec3", true, "another attempt succeeded") gets called
     assert(killTaskCalled)
     // Host 3 Losts, there's only task 2.0 on it, which killed by task 2.1
-    manager.executorLost("exec3", "host3", SlaveLost())
+    manager.executorLost("exec3", "host3", AgentLost())
     // Check the resubmittedTasks
     assert(resubmittedTasks === 0)
   }
@@ -1044,8 +1044,8 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("execB.2", "host2", ANY) !== None)
     sched.removeExecutor("execA")
     sched.removeExecutor("execB.2")
-    manager.executorLost("execA", "host1", SlaveLost())
-    manager.executorLost("execB.2", "host2", SlaveLost())
+    manager.executorLost("execA", "host1", AgentLost())
+    manager.executorLost("execB.2", "host2", AgentLost())
     clock.advance(LOCALITY_WAIT_MS * 4)
     sched.addExecutor("execC", "host3")
     manager.executorAdded()
@@ -1569,7 +1569,7 @@ class TaskSetManagerSuite
 
     assert(resubmittedTasks.isEmpty)
     // Host 2 Losts, meaning we lost the map output task4
-    manager.executorLost("exec2", "host2", SlaveLost())
+    manager.executorLost("exec2", "host2", AgentLost())
     // Make sure that task with index 2 is re-submitted
     assert(resubmittedTasks.contains(2))
 
