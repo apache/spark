@@ -181,4 +181,14 @@ class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkS
         isSortMergeJoin = true))
     }
   }
+
+  test("FileSourceScanExec's metadata should be updated with coalesced info") {
+    val scan = newFileSourceScanExec(RelationSetting(8, None))
+    val value = scan.metadata("SelectedBucketsCount")
+    assert(value === "8 out of 8")
+
+    val scanWithCoalescing = scan.copy(optionalNumCoalescedBuckets = Some(4))
+    val valueWithCoalescing = scanWithCoalescing.metadata("SelectedBucketsCount")
+    assert(valueWithCoalescing == "8 out of 8 (Coalesced to 4)")
+  }
 }

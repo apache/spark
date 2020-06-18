@@ -558,7 +558,7 @@ case class FileSourceScanExec(
         }.getOrElse(Array.empty)
         FilePartition(bucketId, partitionedFiles)
       }
-    } getOrElse {
+    }.getOrElse {
       Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
         FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
       }
