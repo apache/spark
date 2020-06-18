@@ -568,10 +568,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
 
     // The MapOutputTracker has all the shuffle files
-    val initialMapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
-    assert(initialMapStatuses.count(_ != null) === 3)
-    assert(initialMapStatuses.count(s => s != null && s.location.executorId == "hostA-exec") === 2)
-    assert(initialMapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
+    val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
+    assert(mapStatuses.count(_ != null) === 3)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostA-exec") === 2)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
 
     // Now a fetch failure from the lost executor occurs
     complete(taskSets(1), Seq(
@@ -579,10 +579,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     ))
 
     // Shuffle files for hostA-exec should be lost
-    val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
     assert(mapStatuses.count(_ != null) === 1)
-    assert(initialMapStatuses.count(s => s != null && s.location.executorId == "hostA-exec") === 0)
-    assert(initialMapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostA-exec") === 0)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
   test("zero split job") {
