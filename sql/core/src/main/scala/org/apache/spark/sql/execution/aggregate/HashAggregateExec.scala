@@ -256,7 +256,6 @@ case class HashAggregateExec(
     s"""
        |while (!$initAgg) {
        |  $initAgg = true;
-       |  $avoidSpillInPartialAggregateTerm = ${Utils.isTesting} && $isPartial;
        |  long $beforeAgg = System.nanoTime();
        |  $doAggFuncName();
        |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
