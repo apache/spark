@@ -2212,12 +2212,12 @@ class DataSourceV2SQLSuite
 
   test("REFRESH FUNTION: only support session catalog") {
     val e = intercept[AnalysisException] {
-      sql("REFRESH FUNCTION testcat.ns1.ns2.fun as 'f'")
+      sql("REFRESH FUNCTION testcat.ns1.ns2.fun")
     }
     assert(e.message.contains("Function command is only supported in v1 catalog"))
 
     val e1 = intercept[AnalysisException] {
-      sql("REFRESH FUNCTION default.ns1.ns2.fun as 'f'")
+      sql("REFRESH FUNCTION default.ns1.ns2.fun")
     }
     assert(e1.message.contains(
       "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
