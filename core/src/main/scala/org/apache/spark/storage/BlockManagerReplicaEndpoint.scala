@@ -27,17 +27,17 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * An RpcEndpoint to take commands from the master to execute options. For example,
- * this is used to remove blocks from the slave's BlockManager.
+ * this is used to remove blocks from the replica's BlockManager.
  */
 private[storage]
-class BlockManagerSlaveEndpoint(
+class BlockManagerReplicaEndpoint(
     override val rpcEnv: RpcEnv,
     blockManager: BlockManager,
     mapOutputTracker: MapOutputTracker)
   extends IsolatedRpcEndpoint with Logging {
 
   private val asyncThreadPool =
-    ThreadUtils.newDaemonCachedThreadPool("block-manager-slave-async-thread-pool", 100)
+    ThreadUtils.newDaemonCachedThreadPool("block-manager-replica-async-thread-pool", 100)
   private implicit val asyncExecutionContext = ExecutionContext.fromExecutorService(asyncThreadPool)
 
   // Operations that involve removing blocks may be slow and should be done asynchronously

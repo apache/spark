@@ -1912,7 +1912,7 @@ private[spark] class DAGScheduler(
    * modify the scheduler's internal state. Use executorLost() to post a loss event from outside.
    *
    * We will also assume that we've lost all shuffle blocks associated with the executor if the
-   * executor serves its own blocks (i.e., we're not using external shuffle), the entire slave
+   * executor serves its own blocks (i.e., we're not using external shuffle), the entire agent
    * is lost (likely including the shuffle service), or a FetchFailed occurred, in which case we
    * presume all shuffle data related to this executor to be lost.
    *
@@ -2273,7 +2273,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case ExecutorLost(execId, reason) =>
       val workerLost = reason match {
-        case SlaveLost(_, true) => true
+        case AgentLost(_, true) => true
         case _ => false
       }
       dagScheduler.handleExecutorLost(execId, workerLost)
