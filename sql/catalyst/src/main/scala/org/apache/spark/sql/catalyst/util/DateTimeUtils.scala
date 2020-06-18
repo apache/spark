@@ -62,8 +62,7 @@ object DateTimeUtils {
   }
 
   def microsToDays(micros: Long, zoneId: ZoneId): Int = {
-    val instant = microsToInstant(micros)
-    localDateToDays(LocalDateTime.ofInstant(instant, zoneId).toLocalDate)
+    localDateToDays(getLocalDateTime(micros, zoneId).toLocalDate)
   }
 
   def daysToMicros(days: Int): Long = {
@@ -402,9 +401,7 @@ object DateTimeUtils {
     days.toInt
   }
 
-  def localDateToDays(localDate: LocalDate): Int = {
-    Math.toIntExact(localDate.toEpochDay)
-  }
+  def localDateToDays(localDate: LocalDate): Int = Math.toIntExact(localDate.toEpochDay)
 
   def daysToLocalDate(days: Int): LocalDate = LocalDate.ofEpochDay(days)
 
@@ -516,36 +513,28 @@ object DateTimeUtils {
   /**
    * Returns the 'day in year' value for the given number of days since 1970-01-01.
    */
-  def getDayInYear(days: Int): Int = {
-    LocalDate.ofEpochDay(days).getDayOfYear
-  }
+  def getDayInYear(days: Int): Int = daysToLocalDate(days).getDayOfYear
 
   /**
    * Returns the year value for the given number of days since 1970-01-01.
    */
-  def getYear(days: Int): Int = {
-    LocalDate.ofEpochDay(days).getYear
-  }
+  def getYear(days: Int): Int = daysToLocalDate(days).getYear
 
   /**
    * Returns the year which conforms to ISO 8601. Each ISO 8601 week-numbering
    * year begins with the Monday of the week containing the 4th of January.
    */
-  def getWeekBasedYear(days: Int): Int = {
-    daysToLocalDate(days).get(IsoFields.WEEK_BASED_YEAR)
-  }
+  def getWeekBasedYear(days: Int): Int = daysToLocalDate(days).get(IsoFields.WEEK_BASED_YEAR)
 
   /** Returns the quarter for the given number of days since 1970-01-01. */
-  def getQuarter(days: Int): Int = {
-    LocalDate.ofEpochDay(days).get(IsoFields.QUARTER_OF_YEAR)
-  }
+  def getQuarter(days: Int): Int = daysToLocalDate(days).get(IsoFields.QUARTER_OF_YEAR)
 
   /**
    * Split date (expressed in days since 1.1.1970) into four fields:
    * year, month (Jan is Month 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
    */
   def splitDate(days: Int): (Int, Int, Int, Int) = {
-    val ld = LocalDate.ofEpochDay(days)
+    val ld = daysToLocalDate(days)
     (ld.getYear, ld.getMonthValue, ld.getDayOfMonth, ld.lengthOfMonth() - ld.getDayOfMonth)
   }
 
@@ -553,23 +542,19 @@ object DateTimeUtils {
    * Returns the month value for the given number of days since 1970-01-01.
    * January is month 1.
    */
-  def getMonth(days: Int): Int = {
-    LocalDate.ofEpochDay(days).getMonthValue
-  }
+  def getMonth(days: Int): Int = daysToLocalDate(days).getMonthValue
 
   /**
    * Returns the 'day of month' value for the given number of days since 1970-01-01.
    */
-  def getDayOfMonth(days: Int): Int = {
-    LocalDate.ofEpochDay(days).getDayOfMonth
-  }
+  def getDayOfMonth(days: Int): Int = daysToLocalDate(days).getDayOfMonth
 
   /**
    * Add date and year-month interval.
    * Returns a date value, expressed in days since 1.1.1970.
    */
   def dateAddMonths(days: Int, months: Int): Int = {
-    LocalDate.ofEpochDay(days).plusMonths(months).toEpochDay.toInt
+    localDateToDays(daysToLocalDate(days).plusMonths(months))
   }
 
   /**
@@ -602,7 +587,7 @@ object DateTimeUtils {
      interval: CalendarInterval): Int = {
     require(interval.microseconds == 0,
       "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
-    val ld = LocalDate.ofEpochDay(start).plusMonths(interval.months).plusDays(interval.days)
+    val ld = daysToLocalDate(start).plusMonths(interval.months).plusDays(interval.days)
     localDateToDays(ld)
   }
 
@@ -686,7 +671,7 @@ object DateTimeUtils {
 
   /** Returns last day of the month for the given number of days since 1970-01-01. */
   def getLastDayOfMonth(days: Int): Int = {
-    val localDate = LocalDate.ofEpochDay(days)
+    val localDate = daysToLocalDate(days)
     (days - localDate.getDayOfMonth) + localDate.lengthOfMonth()
   }
 
@@ -716,10 +701,10 @@ object DateTimeUtils {
   def truncDate(days: Int, level: Int): Int = {
     level match {
       case TRUNC_TO_WEEK => getNextDateForDayOfWeek(days - 7, MONDAY)
-      case TRUNC_TO_MONTH => days - DateTimeUtils.getDayOfMonth(days) + 1
+      case TRUNC_TO_MONTH => days - getDayOfMonth(days) + 1
       case TRUNC_TO_QUARTER =>
         localDateToDays(daysToLocalDate(days).`with`(IsoFields.DAY_OF_QUARTER, 1L))
-      case TRUNC_TO_YEAR => days - DateTimeUtils.getDayInYear(days) + 1
+      case TRUNC_TO_YEAR => days - getDayInYear(days) + 1
       case _ =>
         // caller make sure that this should never be reached
         sys.error(s"Invalid trunc level: $level")
@@ -901,7 +886,7 @@ object DateTimeUtils {
    *         if the end date is before the start date.
    */
   def subtractDates(endDay: Int, startDay: Int): CalendarInterval = {
-    val period = Period.between(LocalDate.ofEpochDay(startDay), LocalDate.ofEpochDay(endDay))
+    val period = Period.between(daysToLocalDate(startDay), daysToLocalDate(endDay))
     val months = Math.toIntExact(period.toTotalMonths)
     val days = period.getDays
     new CalendarInterval(months, days, 0)
