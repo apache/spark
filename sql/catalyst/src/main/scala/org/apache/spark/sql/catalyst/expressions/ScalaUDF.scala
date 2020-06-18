@@ -105,8 +105,8 @@ case class ScalaUDF(
   private def scalaConverter(i: Int, dataType: DataType): Any => Any = {
     if (inputEncoders.isEmpty || // for untyped Scala UDF
         inputEncoders(i).isEmpty || // for types aren't supported by encoder, e.g. Any
-        isPrimitive(dataType) ||
-        dataType.isInstanceOf[UserDefinedType[_]]) {
+        inputPrimitives(i) || // inputPrimitives is not empty when inputEncoders is not empty
+        dataType.existsRecursively(_.isInstanceOf[UserDefinedType[_]])) {
       createToScalaConverter(dataType)
     } else {
       val enc = inputEncoders(i).get
@@ -1065,14 +1065,32 @@ case class ScalaUDF(
     val (funcArgs, initArgs) = evals.zipWithIndex.zip(children.map(_.dataType)).map {
       case ((eval, i), dt) =>
         val argTerm = ctx.freshName("arg")
-        val initArg = if (isPrimitive(dt)) {
+        // Check `inputPrimitives` when it's not empty in order to figure out the Option
+        // type as non primitive type, e.g., Option[Int]. Fall back to `isPrimitive` when
+        // `inputPrimitives` is empty for other cases, e.g., Java UDF, untyped Scala UDF
+        val primitive = (inputPrimitives.isEmpty && isPrimitive(dt)) ||
+          (inputPrimitives.nonEmpty && inputPrimitives(i))
+        val initArg = if (primitive) {
           val convertedTerm = ctx.freshName("conv")
           s"""
              |${CodeGenerator.boxedType(dt)} $convertedTerm = ${eval.value};
              |Object $argTerm = ${eval.isNull} ? null : $convertedTerm;
            """.stripMargin
         } else {
-          s"Object $argTerm = ${eval.isNull} ? null : $convertersTerm[$i].apply(${eval.value});"
+          s"""
+             |Object $argTerm = null;
+             |// handle the top level Option type specifically
+             |if (${eval.isNull}) {
+             |  try {
+             |    $argTerm = $convertersTerm[$i].apply(null);
+             |  } catch (Exception e) {
+             |    // it's not a scala.Option type
+             |  }
+             |}
+             |if (!($argTerm instanceof scala.Option)) {
+             |  $argTerm = ${eval.isNull} ? null : $convertersTerm[$i].apply(${eval.value});
+             |}
+           """.stripMargin
         }
         (argTerm, initArg)
     }.unzip

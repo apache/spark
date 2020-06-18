@@ -621,8 +621,10 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   test("case class as generic type of Option") {
     val f = (o: Option[TestData]) => o.map(t => t.key * t.value.toInt)
     val myUdf = udf(f)
-    val df = Seq(("data", Some(TestData(50, "2")))).toDF("col1", "col2")
-    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+    val df1 = Seq(("data", Some(TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df1.select(myUdf(Column("col2"))), Row(100) :: Nil)
+    val df2 = Seq(("data", None: Option[TestData])).toDF("col1", "col2")
+    checkAnswer(df2.select(myUdf(Column("col2"))), Row(null) :: Nil)
   }
 
   test("more input fields than expect for case class") {
@@ -650,6 +652,28 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(1)
       .select(lit("2").as("value"), lit(50).as("key"))
       .select(struct("value", "key").as("col"))
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Nil)
+  }
+
+  test("top level Option primitive type") {
+    val f = (i: Option[Int]) => i.map(_ * 10)
+    val myUdf = udf(f)
+    val df = Seq(Some(10), None).toDF("col")
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Row(null) :: Nil)
+  }
+
+  test("top level Option case class") {
+    val f = (i: Option[TestData]) => i.map(t => t.key * t.value.toInt)
+    val myUdf = udf(f)
+    val df = Seq(Some(TestData(50, "2")), None).toDF("col")
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Row(null) :: Nil)
+  }
+
+  test("array Option") {
+    val f = (i: Array[Option[TestData]]) =>
+      i.map(_.map(t => t.key * t.value.toInt).getOrElse(0)).sum
+    val myUdf = udf(f)
+    val df = Seq(Array(Some(TestData(50, "2")), None)).toDF("col")
     checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Nil)
   }
 }
