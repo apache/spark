@@ -524,7 +524,7 @@ object DateTimeUtils {
 
   /**
    * Add date and year-month interval.
-   * Returns a date value, expressed in days since 1.1.1970.
+   * Returns a date value, expressed in days since 1970-01-01.
    */
   def dateAddMonths(days: Int, months: Int): Int = {
     localDateToDays(daysToLocalDate(days).plusMonths(months))
@@ -532,7 +532,7 @@ object DateTimeUtils {
 
   /**
    * Add timestamp and full interval.
-   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
+   * Returns a timestamp value, expressed in microseconds since 1970-01-01 00:00:00.
    */
   def timestampAddInterval(
       start: Long,
@@ -550,7 +550,7 @@ object DateTimeUtils {
 
   /**
    * Add the date and the interval's months and days.
-   * Returns a date value, expressed in days since 1.1.1970.
+   * Returns a date value, expressed in days since 1970-01-01.
    *
    * @throws DateTimeException if the result exceeds the supported date range
    * @throws IllegalArgumentException if the interval has `microseconds` part
@@ -565,7 +565,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Split date (expressed in days since 1.1.1970) into four fields:
+   * Split date (expressed in days since 1970-01-01) into four fields:
    * year, month (Jan is Month 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
    */
   private def splitDate(days: Int): (Int, Int, Int, Int) = {
@@ -575,7 +575,7 @@ object DateTimeUtils {
 
   /**
    * Returns number of months between micros1 and micros2. micros1 and micros2 are expressed in
-   * microseconds since 1.1.1970. If micros1 is later than micros2, the result is positive.
+   * microseconds since 1970-01-01. If micros1 is later than micros2, the result is positive.
    *
    * If micros1 and micros2 are on the same day of month, or both are the last day of month,
    * returns, time of day will be ignored.
