@@ -42,8 +42,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  */
 object DateTimeUtils {
 
-  // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
-  // it's 2440587.5, rounding up to compatible with Hive
+  // See http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
+  // It's 2440587.5, rounding up to be compatible with Hive.
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
@@ -53,10 +53,16 @@ object DateTimeUtils {
   def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
+  /**
+   * Converts microseconds since 1970-01-01 00:00:00Z to days since 1970-01-01 at the given zone ID.
+   */
   def microsToDays(micros: Long, zoneId: ZoneId): Int = {
     localDateToDays(getLocalDateTime(micros, zoneId).toLocalDate)
   }
 
+  /**
+   * Converts days since 1970-01-01 at the given zone ID to microseconds since 1970-01-01 00:00:00Z.
+   */
   def daysToMicros(days: Int, zoneId: ZoneId): Long = {
     val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
     instantToMicros(instant)
@@ -180,7 +186,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Converts the timestamp to milliseconds since epoch. In spark timestamp values have microseconds
+   * Converts the timestamp to milliseconds since epoch. In Spark timestamp values have microseconds
    * precision, so this conversion is lossy.
    */
   def microsToMillis(micros: Long): Long = {
@@ -197,8 +203,8 @@ object DateTimeUtils {
     Math.multiplyExact(millis, MICROS_PER_MILLIS)
   }
 
-  // A method called by JSON/CSV parser to clean up the legacy timestamp string by removing the
-  // "GMT" string.
+  // The method is called by JSON/CSV parser to clean up the legacy timestamp string by removing
+  // the "GMT" string.
   def cleanLegacyTimestampStr(s: String): String = {
     val indexOfGMT = s.indexOf("GMT")
     if (indexOfGMT != -1) {
@@ -213,8 +219,8 @@ object DateTimeUtils {
   }
 
   /**
-   * Trim and parse a given UTF8 date string to the corresponding a corresponding [[Long]] value.
-   * The return type is [[Option]] in order to distinguish between 0L and null. The following
+   * Trims and parses a given UTF8 timestamp string to the corresponding a corresponding [[Long]]
+   * value. The return type is [[Option]] in order to distinguish between 0L and null. The following
    * formats are allowed:
    *
    * `yyyy`
@@ -369,12 +375,21 @@ object DateTimeUtils {
     }
   }
 
+  /**
+   * Gets the number of microseconds since the epoch of 1970-01-01 00:00:00Z from the given
+   * instance of `java.time.Instant`. The epoch microsecond count is a simple incrementing count of
+   * microseconds where microsecond 0 is 1970-01-01 00:00:00Z.
+   */
   def instantToMicros(instant: Instant): Long = {
     val us = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
     val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
     result
   }
 
+  /**
+   * Obtains an instance of `java.time.Instant` using microseconds from
+   * the epoch of 1970-01-01 00:00:00Z.
+   */
   def microsToInstant(micros: Long): Instant = {
     val secs = Math.floorDiv(micros, MICROS_PER_SECOND)
     // Unfolded Math.floorMod(us, MICROS_PER_SECOND) to reuse the result of
@@ -383,12 +398,18 @@ object DateTimeUtils {
     Instant.ofEpochSecond(secs, mos * NANOS_PER_MICROS)
   }
 
+  /**
+   * Converts the local date to the number of days since 1970-01-01.
+   */
   def localDateToDays(localDate: LocalDate): Int = Math.toIntExact(localDate.toEpochDay)
 
+  /**
+   * Obtains an instance of `java.time.LocalDate` from the epoch day count.
+   */
   def daysToLocalDate(days: Int): LocalDate = LocalDate.ofEpochDay(days)
 
   /**
-   * Trim and parse a given UTF8 date string to a corresponding [[Int]] value.
+   * Trims and parses a given UTF8 date string to a corresponding [[Int]] value.
    * The return type is [[Option]] in order to distinguish between 0 and null. The following
    * formats are allowed:
    *
@@ -447,6 +468,8 @@ object DateTimeUtils {
     }
   }
 
+  // Gets the local date-time parts (year, month, day and time) of the instant expressed as the
+  // number of microseconds since the epoch at the given time zone ID.
   private def getLocalDateTime(micros: Long, zoneId: ZoneId): LocalDateTime = {
     microsToInstant(micros).atZone(zoneId).toLocalDateTime
   }
@@ -523,16 +546,17 @@ object DateTimeUtils {
   def getDayOfMonth(days: Int): Int = daysToLocalDate(days).getDayOfMonth
 
   /**
-   * Add date and year-month interval.
-   * Returns a date value, expressed in days since 1970-01-01.
+   * Adds an year-month interval to a date represented as days since 1970-01-01.
+   * @return a date value, expressed in days since 1970-01-01.
    */
   def dateAddMonths(days: Int, months: Int): Int = {
     localDateToDays(daysToLocalDate(days).plusMonths(months))
   }
 
   /**
-   * Add timestamp and full interval.
-   * Returns a timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * Adds a full interval (months, days, microseconds) a timestamp represented as the number of
+   * microseconds since 1970-01-01 00:00:00Z.
+   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
   def timestampAddInterval(
       start: Long,
@@ -549,8 +573,8 @@ object DateTimeUtils {
   }
 
   /**
-   * Add the date and the interval's months and days.
-   * Returns a date value, expressed in days since 1970-01-01.
+   * Adds the interval's months and days to a date expressed as days since the epoch.
+   * @return A date value, expressed in days since 1970-01-01.
    *
    * @throws DateTimeException if the result exceeds the supported date range
    * @throws IllegalArgumentException if the interval has `microseconds` part
@@ -565,7 +589,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Split date (expressed in days since 1970-01-01) into four fields:
+   * Splits date (expressed in days since 1970-01-01) into four fields:
    * year, month (Jan is Month 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
    */
   private def splitDate(days: Int): (Int, Int, Int, Int) = {
@@ -744,11 +768,10 @@ object DateTimeUtils {
   }
 
   /**
-   * Convert the timestamp `micros` from one timezone to another.
+   * Converts the timestamp `micros` from one timezone to another.
    *
-   * TODO: Because of DST, the conversion between UTC and human time is not exactly one-to-one
-   * mapping, the conversion here may return wrong result, we should make the timestamp
-   * timezone-aware.
+   * Time-zone rules, such as daylight savings, mean that not every local date-time
+   * is valid for the `toZone` time zone, thus the local date-time may be adjusted.
    */
   def convertTz(micros: Long, fromZone: ZoneId, toZone: ZoneId): Long = {
     val rebasedDateTime = getLocalDateTime(micros, toZone).atZone(fromZone)
@@ -756,7 +779,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns a timestamp of given timezone from utc timestamp, with the same string
+   * Returns a timestamp of given timezone from UTC timestamp, with the same string
    * representation in their timezone.
    */
   def fromUTCTime(micros: Long, timeZone: String): Long = {
@@ -771,8 +794,14 @@ object DateTimeUtils {
     convertTz(micros, getZoneId(timeZone), ZoneOffset.UTC)
   }
 
+  /**
+   * Obtains the current instant as microseconds since the epoch at the UTC time zone.
+   */
   def currentTimestamp(): Long = instantToMicros(Instant.now())
 
+  /**
+   * Obtains the current date as days since the epoch in the specified time-zone.
+   */
   def currentDate(zoneId: ZoneId): Int = localDateToDays(LocalDate.now(zoneId))
 
   private def today(zoneId: ZoneId): ZonedDateTime = {
@@ -783,6 +812,7 @@ object DateTimeUtils {
 
   /**
    * Extracts special values from an input string ignoring case.
+   *
    * @param input A trimmed string
    * @param zoneId Zone identifier used to get the current date.
    * @return Some special value in lower case or None.
@@ -812,6 +842,7 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
+   *
    * @param input A trimmed string
    * @param zoneId Zone identifier used to get the current date.
    * @return Some of microseconds since the epoch if the conversion completed
@@ -838,6 +869,7 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary dates.
+   *
    * @param input A trimmed string
    * @param zoneId Zone identifier used to get the current date.
    * @return Some of days since the epoch if the conversion completed successfully otherwise None.
@@ -861,7 +893,8 @@ object DateTimeUtils {
   }
 
   /**
-   * Subtracts two dates.
+   * Subtracts two dates expressed as days since 1970-01-01.
+   *
    * @param endDay The end date, exclusive
    * @param startDay The start date, inclusive
    * @return An interval between two dates. The interval can be negative
