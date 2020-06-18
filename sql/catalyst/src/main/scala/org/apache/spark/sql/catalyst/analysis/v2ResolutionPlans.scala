@@ -51,6 +51,10 @@ case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafN
   override def output: Seq[Attribute] = Nil
 }
 
+/**
+ * Holds the name of a function that has yet to be looked up in a catalog.  It will be resolved to
+ * [[ResolvedFunc]] during analysis.
+ */
 case class UnresolvedFunc(multipartIdentifier: Seq[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
