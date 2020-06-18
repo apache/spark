@@ -167,6 +167,7 @@ trait Row extends Serializable {
    *
    *   DateType -> java.sql.Date
    *   TimestampType -> java.sql.Timestamp
+   *   TimeType      -> java.sql.Time
    *
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
@@ -192,6 +193,7 @@ trait Row extends Serializable {
    *
    *   DateType -> java.sql.Date
    *   TimestampType -> java.sql.Timestamp
+   *   TimeType      -> java.sql.Time
    *
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
@@ -295,6 +297,13 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
+
+  /**
+   * Returns the value at position i of date type as java.sql.Time.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getTime(i: Int): java.sql.Time = getAs[java.sql.Time](i)
 
   /**
    * Returns the value at position i of date type as java.time.Instant.

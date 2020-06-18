@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
+import java.sql.{Date, Time, Timestamp}
 import java.time.{Instant, LocalDate}
 
 import org.apache.spark.sql.{Dataset, Row}
@@ -89,7 +89,9 @@ object HiveResult {
       dateFormatter.format(DateTimeUtils.localDateToDays(ld))
     case (t: Timestamp, TimestampType) =>
       timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t))
-    case (i: Instant, TimestampType) =>
+    case (t: Time, TimeType) =>
+      timestampFormatter.format(DateTimeUtils.fromJavaTime(t))
+    case (i: Instant, TimestampType | TimeType) =>
       timestampFormatter.format(DateTimeUtils.instantToMicros(i))
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString

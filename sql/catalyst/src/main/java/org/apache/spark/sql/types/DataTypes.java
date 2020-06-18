@@ -54,6 +54,11 @@ public class DataTypes {
    */
   public static final DataType TimestampType = TimestampType$.MODULE$;
 
+    /**
+     * Gets the TimeType object.
+     */
+    public static final DataType TimeType = TimeType$.MODULE$;
+
   /**
    * Gets the CalendarIntervalType object.
    */

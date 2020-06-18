@@ -118,6 +118,15 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
+  def createDeserializerForSqlTime(path: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      ObjectType(classOf[java.sql.Time]),
+      "toJavaTime",
+      path :: Nil,
+      returnNullable = false)
+  }
+
   def createDeserializerForJavaBigDecimal(
       path: Expression,
       returnNullable: Boolean): Expression = {

@@ -83,6 +83,15 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
+  def createSerializerForSqlTime(inputObject: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      TimeType,
+      "fromJavaTime",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
   def createSerializerForJavaLocalDate(inputObject: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
+import java.sql.{Date, Time, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
 import java.util.{Locale, TimeZone}
@@ -106,10 +106,24 @@ object DateTimeUtils {
   }
 
   /**
+   * Returns a java.sql.Time from number of micros since epoch.
+   */
+  def toJavaTime(us: SQLTimestamp): Time = {
+    new Time(us)
+  }
+
+  /**
    * Returns the number of micros since epoch from java.sql.Timestamp.
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
     instantToMicros(t.toInstant)
+  }
+
+  /**
+   * Returns the number of micros since epoch from java.sql.Time.
+   */
+  def fromJavaTime(t: Time): SQLTimestamp = {
+    TimeToMicros(t)
   }
 
   /**
@@ -324,6 +338,11 @@ object DateTimeUtils {
   def instantToMicros(instant: Instant): Long = {
     val us = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
     val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
+    result
+  }
+
+  def TimeToMicros(t: Time): Long = {
+    val result = Math.multiplyExact(t.getTime, MICROS_PER_MILLIS)
     result
   }
 

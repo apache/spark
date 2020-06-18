@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -1767,7 +1766,7 @@ object CodeGenerator extends Logging {
     case ByteType => JAVA_BYTE
     case ShortType => JAVA_SHORT
     case IntegerType | DateType => JAVA_INT
-    case LongType | TimestampType => JAVA_LONG
+    case LongType | TimestampType | TimeType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
     case _: DecimalType => "Decimal"
@@ -1788,7 +1787,7 @@ object CodeGenerator extends Logging {
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
     case IntegerType | DateType => java.lang.Integer.TYPE
-    case LongType | TimestampType => java.lang.Long.TYPE
+    case LongType | TimestampType | TimeType => java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE
     case _: DecimalType => classOf[Decimal]

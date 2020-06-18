@@ -26,7 +26,7 @@ import java.lang.{Long => JavaLong}
 import java.lang.{Short => JavaShort}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
+import java.sql.{Date, Time, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 import java.util.Objects
@@ -72,6 +72,7 @@ object Literal {
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case i: Instant => Literal(instantToMicros(i), TimestampType)
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
+    case t: Time => Literal(DateTimeUtils.fromJavaTime(t), TimeType)
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
@@ -163,6 +164,7 @@ object Literal {
     case dt: DecimalType => Literal(Decimal(0, dt.precision, dt.scale))
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
+    case TimeType => create(0L, TimeType)
     case StringType => Literal("")
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
@@ -182,7 +184,7 @@ object Literal {
       case ByteType => v.isInstanceOf[Byte]
       case ShortType => v.isInstanceOf[Short]
       case IntegerType | DateType => v.isInstanceOf[Int]
-      case LongType | TimestampType => v.isInstanceOf[Long]
+      case LongType | TimestampType | TimeType => v.isInstanceOf[Long]
       case FloatType => v.isInstanceOf[Float]
       case DoubleType => v.isInstanceOf[Double]
       case _: DecimalType => v.isInstanceOf[Decimal]
@@ -369,7 +371,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           }
         case ByteType | ShortType =>
           ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
-        case TimestampType | LongType =>
+        case TimestampType | TimeType | LongType =>
           toExprCode(s"${value}L")
         case _ =>
           val constRef = ctx.addReferenceObj("literal", value, javaType)
@@ -411,6 +413,10 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       val formatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       s"TIMESTAMP '${formatter.format(v)}'"
+    case (v: Long, TimeType) =>
+      val formatter = TimestampFormatter.getFractionFormatter(
+        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"TIME '${formatter.format(v)}'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"

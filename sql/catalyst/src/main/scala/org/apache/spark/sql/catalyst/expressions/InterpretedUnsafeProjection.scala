@@ -146,7 +146,7 @@ object InterpretedUnsafeProjection {
       case IntegerType | DateType =>
         (v, i) => writer.write(i, v.getInt(i))
 
-      case LongType | TimestampType =>
+      case LongType | TimestampType | TimeType =>
         (v, i) => writer.write(i, v.getLong(i))
 
       case FloatType =>

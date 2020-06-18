@@ -138,7 +138,7 @@ object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
   private val nonDecimalNameToType = {
-    Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
+    Seq(NullType, DateType, TimestampType, TimeType, BinaryType, IntegerType, BooleanType, LongType,
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType)
       .map(t => t.typeName -> t).toMap
   }

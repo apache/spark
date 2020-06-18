@@ -101,6 +101,13 @@ object RowEncoder {
         createSerializerForSqlTimestamp(inputObject)
       }
 
+    case TimeType =>
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        createSerializerForJavaInstant(inputObject)
+      } else {
+        createSerializerForSqlTime(inputObject)
+      }
+
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
         createSerializerForJavaLocalDate(inputObject)
@@ -220,6 +227,12 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Timestamp])
       }
+    case TimeType =>
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        ObjectType(classOf[java.time.Instant])
+      } else {
+        ObjectType(classOf[java.sql.Time])
+      }
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
         ObjectType(classOf[java.time.LocalDate])
@@ -272,6 +285,13 @@ object RowEncoder {
         createDeserializerForInstant(input)
       } else {
         createDeserializerForSqlTimestamp(input)
+      }
+
+    case TimeType =>
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        createDeserializerForInstant(input)
+      } else {
+        createDeserializerForSqlTime(input)
       }
 
     case DateType =>

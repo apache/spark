@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date, Timestamp}
+import java.sql.{Date, Time, Timestamp}
 import java.util.{Calendar, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -68,6 +68,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(StringType, BooleanType)
     checkNullCast(DateType, BooleanType)
     checkNullCast(TimestampType, BooleanType)
+    checkNullCast(TimeType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
 
     checkNullCast(StringType, TimestampType)
@@ -75,14 +76,21 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(DateType, TimestampType)
     numericTypes.foreach(dt => checkNullCast(dt, TimestampType))
 
+    checkNullCast(StringType, TimeType)
+    checkNullCast(BooleanType, TimeType)
+    checkNullCast(DateType, TimeType)
+    numericTypes.foreach(dt => checkNullCast(dt, TimeType))
+
     checkNullCast(StringType, DateType)
     checkNullCast(TimestampType, DateType)
+    checkNullCast(TimeType, DateType)
 
     checkNullCast(StringType, CalendarIntervalType)
     numericTypes.foreach(dt => checkNullCast(StringType, dt))
     numericTypes.foreach(dt => checkNullCast(BooleanType, dt))
     numericTypes.foreach(dt => checkNullCast(DateType, dt))
     numericTypes.foreach(dt => checkNullCast(TimestampType, dt))
+    numericTypes.foreach(dt => checkNullCast(TimeType, dt))
     for (from <- numericTypes; to <- numericTypes) checkNullCast(from, to)
   }
 
@@ -206,6 +214,101 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("cast string to time") {
+    new ParVector(ALL_TIMEZONES.toVector).foreach { tz =>
+      def checkCastStringToTime(str: String, expected: Time): Unit = {
+        checkEvaluation(cast(Literal(str), TimeType, Option(tz.getID)), expected)
+      }
+
+      checkCastStringToTime("123", null)
+
+      var c = Calendar.getInstance(tz)
+      c.set(2015, 0, 1, 0, 0, 0)
+      c.set(Calendar.MILLISECOND, 0)
+      checkCastStringToTime("2015", new Time(c.getTimeInMillis))
+      c = Calendar.getInstance(tz)
+      c.set(2015, 2, 1, 0, 0, 0)
+      c.set(Calendar.MILLISECOND, 0)
+      checkCastStringToTime("2015-03", new Time(c.getTimeInMillis))
+      c = Calendar.getInstance(tz)
+      c.set(2015, 2, 18, 0, 0, 0)
+      c.set(Calendar.MILLISECOND, 0)
+      checkCastStringToTime("2015-03-18", new Time(c.getTimeInMillis))
+      checkCastStringToTime("2015-03-18 ", new Time(c.getTimeInMillis))
+      checkCastStringToTime("2015-03-18T", new Time(c.getTimeInMillis))
+
+      c = Calendar.getInstance(tz)
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkCastStringToTime("2015-03-18 12:03:17", new Time(c.getTimeInMillis))
+      checkCastStringToTime("2015-03-18T12:03:17", new Time(c.getTimeInMillis))
+
+      // If the string value includes timezone string, it represents the timestamp string
+      // in the timezone regardless of the timeZoneId parameter.
+      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkCastStringToTime("2015-03-18T12:03:17Z", new Time(c.getTimeInMillis))
+      checkCastStringToTime("2015-03-18 12:03:17Z", new Time(c.getTimeInMillis))
+
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkCastStringToTime("2015-03-18T12:03:17-1:0", new Time(c.getTimeInMillis))
+      checkCastStringToTime("2015-03-18T12:03:17-01:00", new Time(c.getTimeInMillis))
+
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkCastStringToTime("2015-03-18T12:03:17+07:30", new Time(c.getTimeInMillis))
+
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:03"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 0)
+      checkCastStringToTime("2015-03-18T12:03:17+7:3", new Time(c.getTimeInMillis))
+
+      // tests for the string including milliseconds.
+      c = Calendar.getInstance(tz)
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 123)
+      checkCastStringToTime("2015-03-18 12:03:17.123", new Time(c.getTimeInMillis))
+      checkCastStringToTime("2015-03-18T12:03:17.123", new Time(c.getTimeInMillis))
+
+      // If the string value includes timezone string, it represents the timestamp string
+      // in the timezone regardless of the timeZoneId parameter.
+      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 456)
+      checkCastStringToTime("2015-03-18T12:03:17.456Z", new Time(c.getTimeInMillis))
+      checkCastStringToTime("2015-03-18 12:03:17.456Z", new Time(c.getTimeInMillis))
+
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 123)
+      checkCastStringToTime("2015-03-18T12:03:17.123-1:0", new Time(c.getTimeInMillis))
+      checkCastStringToTime("2015-03-18T12:03:17.123-01:00", new Time(c.getTimeInMillis))
+
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 123)
+      checkCastStringToTime("2015-03-18T12:03:17.123+07:30", new Time(c.getTimeInMillis))
+
+      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:03"))
+      c.set(2015, 2, 18, 12, 3, 17)
+      c.set(Calendar.MILLISECOND, 123)
+      checkCastStringToTime("2015-03-18T12:03:17.123+7:3", new Time(c.getTimeInMillis))
+
+      checkCastStringToTime("2015-03-18 123142", null)
+      checkCastStringToTime("2015-03-18T123123", null)
+      checkCastStringToTime("2015-03-18X", null)
+      checkCastStringToTime("2015/03/18", null)
+      checkCastStringToTime("2015.03.18", null)
+      checkCastStringToTime("20150318", null)
+      checkCastStringToTime("2015-031-8", null)
+      checkCastStringToTime("2015-03-18T12:03:17-0:70", null)
+    }
+  }
+
   test("cast from boolean") {
     checkEvaluation(cast(true, IntegerType), 1)
     checkEvaluation(cast(false, IntegerType), 0)
@@ -240,6 +343,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
     checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
+
+    checkEvaluation(cast(cast(1.toDouble, TimeType), DoubleType), 1.toDouble)
+    checkEvaluation(cast(cast(1.toDouble, TimeType), DoubleType), 1.toDouble)
   }
 
   test("cast from string") {
@@ -247,6 +353,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast("abcdef", BinaryType).nullable === false)
     assert(cast("abcdef", BooleanType).nullable)
     assert(cast("abcdef", TimestampType).nullable)
+    assert(cast("abcdef", TimeType).nullable)
     assert(cast("abcdef", LongType).nullable)
     assert(cast("abcdef", IntegerType).nullable)
     assert(cast("abcdef", ShortType).nullable)
@@ -263,7 +370,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val zts = sd + " 00:00:00"
     val sts = sd + " 00:00:02"
     val nts = sts + ".1"
+    val zt = "00:00:00"
+    val t = "00:00:02"
     val ts = withDefaultTimeZone(TimeZoneGMT)(Timestamp.valueOf(nts))
+    val ts2 = withDefaultTimeZone(TimeZoneGMT)(Time.valueOf(t))
 
     for (tz <- ALL_TIMEZONES) {
       val timeZoneId = Option(tz.getID)
@@ -273,11 +383,19 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
         MILLISECONDS.toMicros(c.getTimeInMillis))
+      checkEvaluation(
+        cast(cast(new Time(c.getTimeInMillis), StringType, timeZoneId),
+          TimeType, timeZoneId),
+        MILLISECONDS.toMicros(c.getTimeInMillis))
       c = Calendar.getInstance(TimeZoneGMT)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
+        MILLISECONDS.toMicros(c.getTimeInMillis))
+      checkEvaluation(
+        cast(cast(new Time(c.getTimeInMillis), StringType, timeZoneId),
+          TimeType, timeZoneId),
         MILLISECONDS.toMicros(c.getTimeInMillis))
     }
 
@@ -285,19 +403,28 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(cast("abdef", StringType), "abdef")
     checkEvaluation(cast("abdef", TimestampType, gmtId), null)
+    checkEvaluation(cast("abdef", TimeType, gmtId), null)
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
     checkEvaluation(cast(cast(nts, TimestampType, gmtId), StringType, gmtId), nts)
+      checkEvaluation(cast(cast(nts, TimeType, gmtId), StringType, gmtId), nts)
     checkEvaluation(
       cast(cast(ts, StringType, gmtId), TimestampType, gmtId),
       DateTimeUtils.fromJavaTimestamp(ts))
+    checkEvaluation(
+          cast(cast(ts2, StringType, gmtId), TimeType, gmtId),
+          DateTimeUtils.fromJavaTime(ts2))
 
     // all convert to string type to check
     checkEvaluation(cast(cast(cast(nts, TimestampType, gmtId), DateType, gmtId), StringType), sd)
     checkEvaluation(
       cast(cast(cast(ts, DateType, gmtId), TimestampType, gmtId), StringType, gmtId),
+      zts)
+    checkEvaluation(cast(cast(cast(nts, TimeType, gmtId), DateType, gmtId), StringType), sd)
+    checkEvaluation(
+      cast(cast(cast(ts2, DateType, gmtId), TimeType, gmtId), StringType, gmtId),
       zts)
 
     checkEvaluation(cast(cast("abdef", BinaryType), StringType), "abdef")
@@ -309,13 +436,25 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       5.toShort)
+      checkEvaluation(
+        cast(cast(cast(cast(cast(cast("5", ByteType), TimeType),
+          DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        5.toShort)
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", TimestampType, gmtId), ByteType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
       null)
+    checkEvaluation(
+          cast(cast(cast(cast(cast(cast("5", TimeType, gmtId), ByteType),
+            DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+          null)
     checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
       ByteType), TimestampType), LongType), StringType), ShortType),
       5.toShort)
+
+      checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
+        ByteType), TimeType), LongType), StringType), ShortType),
+        5.toShort)
 
     checkEvaluation(cast("23", DoubleType), 23d)
     checkEvaluation(cast("23", IntegerType), 23)
@@ -363,6 +502,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     val gmtId = Option("GMT")
     checkEvaluation(cast(cast(d, TimestampType, gmtId), StringType, gmtId), "1970-01-01 00:00:00")
+    checkEvaluation(cast(cast(d, TimeType, gmtId), StringType, gmtId), "1970-01-01 00:00:00")
   }
 
   test("cast from timestamp") {
@@ -398,6 +538,42 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
     checkEvaluation(cast(Float.NaN, TimestampType), null)
     checkEvaluation(cast(1.0f / 0.0f, TimestampType), null)
+  }
+
+  test("cast from time") {
+    val millis = 15 * 1000 + 3
+    val seconds = millis * 1000 + 3
+    val ts = new Time(millis)
+    val tss = new Time(seconds)
+    cast(ts, ShortType)
+    checkEvaluation(cast(ts, ShortType), 15.toShort)
+    checkEvaluation(cast(ts, IntegerType), 15)
+    checkEvaluation(cast(ts, LongType), 15.toLong)
+    checkEvaluation(cast(ts, FloatType), 15.003f)
+    checkEvaluation(cast(ts, DoubleType), 15.003)
+    checkEvaluation(cast(cast(tss, ShortType), TimeType),
+      DateTimeUtils.fromJavaTime(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(cast(cast(tss, IntegerType), TimeType),
+      DateTimeUtils.fromJavaTime(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(cast(cast(tss, LongType), TimeType),
+      DateTimeUtils.fromJavaTime(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimeType), FloatType),
+      millis.toFloat / MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimeType), DoubleType),
+      millis.toDouble / MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(Decimal(1), TimeType), DecimalType.SYSTEM_DEFAULT),
+      Decimal(1))
+
+//    // A test for higher precision than millis
+      checkEvaluation(cast(cast(0.000001, TimeType), DoubleType), 0.000001)
+//
+      checkEvaluation(cast(Double.NaN, TimeType), null)
+      checkEvaluation(cast(1.0 / 0.0, TimeType), null)
+      checkEvaluation(cast(Float.NaN, TimeType), null)
+      checkEvaluation(cast(1.0f / 0.0f, TimeType), null)
   }
 
   test("cast from array") {
@@ -558,6 +734,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val originalSchema = new StructType().add("tsField", TimestampType, nullable = false)
     // nine out of ten times I'm casting a struct, it's to normalize its fields nullability
     val targetSchema = new StructType().add("tsField", TimestampType, nullable = true)
+
+    val inp = Literal.create(InternalRow(0L), originalSchema)
+    val expected = InternalRow(0L)
+    checkEvaluation(cast(inp, targetSchema), expected)
+  }
+
+  test("cast struct with a time field") {
+    val originalSchema = new StructType().add("tsField", TimeType, nullable = false)
+    // nine out of ten times I'm casting a struct, it's to normalize its fields nullability
+    val targetSchema = new StructType().add("tsField", TimeType, nullable = true)
 
     val inp = Literal.create(InternalRow(0L), originalSchema)
     val expected = InternalRow(0L)
@@ -860,6 +1046,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkExceptionInExpression[ArithmeticException](
         cast(Literal(value * MICROS_PER_SECOND, TimestampType), dt), "overflow")
       checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value * MICROS_PER_SECOND, TimeType), dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
         cast(Literal(value * 1.5f, FloatType), dt), "overflow")
       checkExceptionInExpression[ArithmeticException](
         cast(Literal(value * 1.0, DoubleType), dt), "overflow")
@@ -886,6 +1074,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkExceptionInExpression[ArithmeticException](
           cast(Literal(value * MICROS_PER_SECOND, TimestampType), ByteType), "overflow")
         checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value * MICROS_PER_SECOND, TimeType), ByteType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
           cast(Literal(value.toFloat, FloatType), ByteType), "overflow")
         checkExceptionInExpression[ArithmeticException](
           cast(Literal(value.toDouble, DoubleType), ByteType), "overflow")
@@ -896,6 +1086,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(value.toString, ByteType), value)
         checkEvaluation(cast(Decimal(value.toString), ByteType), value)
         checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ByteType), value)
+        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimeType), ByteType), value)
         checkEvaluation(cast(Literal(value.toInt, DateType), ByteType), null)
         checkEvaluation(cast(Literal(value.toFloat, FloatType), ByteType), value)
         checkEvaluation(cast(Literal(value.toDouble, DoubleType), ByteType), value)
@@ -911,6 +1102,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkExceptionInExpression[ArithmeticException](
           cast(Literal(value * MICROS_PER_SECOND, TimestampType), ShortType), "overflow")
         checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value * MICROS_PER_SECOND, TimeType), ShortType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
           cast(Literal(value.toFloat, FloatType), ShortType), "overflow")
         checkExceptionInExpression[ArithmeticException](
           cast(Literal(value.toDouble, DoubleType), ShortType), "overflow")
@@ -921,6 +1114,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(value.toString, ShortType), value)
         checkEvaluation(cast(Decimal(value.toString), ShortType), value)
         checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ShortType), value)
+        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimeType), ShortType), value)
         checkEvaluation(cast(Literal(value.toInt, DateType), ShortType), null)
         checkEvaluation(cast(Literal(value.toFloat, FloatType), ShortType), value)
         checkEvaluation(cast(Literal(value.toDouble, DoubleType), ShortType), value)
@@ -938,6 +1132,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(value.toString, IntegerType), value)
         checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
         checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), IntegerType), value)
+        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimeType), IntegerType), value)
         checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
       }
       checkEvaluation(cast(Int.MaxValue + 0.9D, IntegerType), Int.MaxValue)
@@ -954,6 +1149,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(value.toString, LongType), value)
         checkEvaluation(cast(Decimal(value.toString), LongType), value)
         checkEvaluation(cast(Literal(value, TimestampType), LongType),
+          Math.floorDiv(value, MICROS_PER_SECOND))
+        checkEvaluation(cast(Literal(value, TimeType), LongType),
           Math.floorDiv(value, MICROS_PER_SECOND))
       }
       checkEvaluation(cast(Long.MaxValue + 0.9F, LongType), Long.MaxValue)
@@ -1019,6 +1216,9 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast(1, LongType), 1.toLong)
     checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
     checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
+
+    checkEvaluation(cast(cast(1000, TimeType), LongType), 1000.toLong)
+    checkEvaluation(cast(cast(-1200, TimeType), LongType), -1200.toLong)
 
     checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))

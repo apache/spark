@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
-import java.sql.{Date, Timestamp}
+import java.sql.{Date, Time, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
@@ -331,6 +331,16 @@ object CatalystTypeConverters {
       DateTimeUtils.toJavaTimestamp(row.getLong(column))
   }
 
+  private object TimeConverter extends CatalystTypeConverter[Time, Time, Any] {
+    override def toCatalystImpl(scalaValue: Time): Long =
+      DateTimeUtils.fromJavaTime(scalaValue)
+    override def toScala(catalystValue: Any): Time =
+      if (catalystValue == null) null
+      else DateTimeUtils.toJavaTime(catalystValue.asInstanceOf[Long])
+    override def toScalaImpl(row: InternalRow, column: Int): Time =
+      DateTimeUtils.toJavaTime(row.getLong(column))
+  }
+
   private object InstantConverter extends CatalystTypeConverter[Instant, Instant, Any] {
     override def toCatalystImpl(scalaValue: Instant): Long =
       DateTimeUtils.instantToMicros(scalaValue)
@@ -451,6 +461,7 @@ object CatalystTypeConverters {
     case d: Date => DateConverter.toCatalyst(d)
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
+    case ti: Time => TimeConverter.toCatalyst(ti);
     case i: Instant => InstantConverter.toCatalyst(i)
     case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)

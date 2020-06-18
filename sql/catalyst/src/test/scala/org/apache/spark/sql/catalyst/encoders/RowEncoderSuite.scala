@@ -83,20 +83,22 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   encodeDecodeTest(
     new StructType()
-      .add("null", NullType)
-      .add("boolean", BooleanType)
-      .add("byte", ByteType)
-      .add("short", ShortType)
-      .add("int", IntegerType)
-      .add("long", LongType)
-      .add("float", FloatType)
-      .add("double", DoubleType)
-      .add("decimal", DecimalType.SYSTEM_DEFAULT)
-      .add("string", StringType)
-      .add("binary", BinaryType)
-      .add("date", DateType)
-      .add("timestamp", TimestampType)
-      .add("udt", new ExamplePointUDT))
+//      .add("null", NullType)
+//      .add("boolean", BooleanType)
+//      .add("byte", ByteType)
+//      .add("short", ShortType)
+//      .add("int", IntegerType)
+//      .add("long", LongType)
+//      .add("float", FloatType)
+//      .add("double", DoubleType)
+//      .add("decimal", DecimalType.SYSTEM_DEFAULT)
+//      .add("string", StringType)
+//      .add("binary", BinaryType)
+//      .add("date", DateType)
+//      .add("timestamp", TimestampType)
+      .add("time", TimeType)
+//      .add("udt", new ExamplePointUDT)
+            )
 
   encodeDecodeTest(
     new StructType()
@@ -298,6 +300,13 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       encoder.toRow(Row(Array("a")))
     }
     assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
+
+    val e5 = intercept[RuntimeException] {
+      val schema = new StructType().add("a", ArrayType(TimeType))
+      val encoder = RowEncoder(schema)
+      encoder.toRow(Row(Array("a")))
+    }
+    assert(e5.getMessage.contains("java.lang.String is not a valid external type"))
   }
 
   test("SPARK-25791: Datatype of serializers should be accessible") {
@@ -311,6 +320,18 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   test("encoding/decoding TimestampType to/from java.time.Instant") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val schema = new StructType().add("t", TimestampType)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val instant = java.time.Instant.parse("2019-02-26T16:56:00Z")
+      val row = encoder.toRow(Row(instant))
+      assert(row.getLong(0) === DateTimeUtils.instantToMicros(instant))
+      val readback = encoder.fromRow(row)
+      assert(readback.get(0) === instant)
+    }
+  }
+
+  test("encoding/decoding TimeType to/from java.time.Instant") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val schema = new StructType().add("t", TimeType)
       val encoder = RowEncoder(schema).resolveAndBind()
       val instant = java.time.Instant.parse("2019-02-26T16:56:00Z")
       val row = encoder.toRow(Row(instant))
