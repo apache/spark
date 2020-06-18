@@ -304,12 +304,12 @@ trait MesosSchedulerUtils extends Logging {
    * Match the requirements (if any) to the offer attributes.
    * if attribute requirements are not specified - return true
    * else if attribute is defined and no values are given, simple attribute presence is performed
-   * else if attribute name and value is specified, subset match is performed on slave attributes
+   * else if attribute name and value is specified, subset match is performed on agent attributes
    */
   def matchesAttributeRequirements(
-      slaveOfferConstraints: Map[String, Set[String]],
+      agentOfferConstraints: Map[String, Set[String]],
       offerAttributes: Map[String, GeneratedMessageV3]): Boolean = {
-    slaveOfferConstraints.forall {
+    agentOfferConstraints.forall {
       // offer has the required attribute and subsumes the required values for that attribute
       case (name, requiredValues) =>
         offerAttributes.get(name) match {

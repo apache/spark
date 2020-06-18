@@ -215,7 +215,7 @@ class MesosFineGrainedSchedulerBackendSuite
         .setScalar(Scalar.newBuilder().setValue(cpu))
       builder.setId(OfferID.newBuilder().setValue(s"o${id.toString}").build())
         .setFrameworkId(FrameworkID.newBuilder().setValue("f1"))
-        .setSlaveId(SlaveID.newBuilder().setValue(s"s${id.toString}"))
+        .setAgentId(AgentID.newBuilder().setValue(s"s${id.toString}"))
         .setHostname(s"host${id.toString}").build()
     }
 
@@ -246,12 +246,12 @@ class MesosFineGrainedSchedulerBackendSuite
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](2)
     expectedWorkerOffers += new WorkerOffer(
-      mesosOffers.get(0).getSlaveId.getValue,
+      mesosOffers.get(0).getAgentId.getValue,
       mesosOffers.get(0).getHostname,
       (minCpu - backend.mesosExecutorCores).toInt
     )
     expectedWorkerOffers += new WorkerOffer(
-      mesosOffers.get(2).getSlaveId.getValue,
+      mesosOffers.get(2).getAgentId.getValue,
       mesosOffers.get(2).getHostname,
       (minCpu - backend.mesosExecutorCores).toInt
     )
@@ -296,7 +296,7 @@ class MesosFineGrainedSchedulerBackendSuite
     val cpus = taskInfo.getResourcesList.get(0)
     assert(cpus.getName.equals("cpus"))
     assert(cpus.getScalar.getValue.equals(2.0))
-    assert(taskInfo.getSlaveId.getValue.equals("s1"))
+    assert(taskInfo.getAgentId.getValue.equals("s1"))
 
     // Unwanted resources offered on an existing node. Make sure they are declined
     val mesosOffers2 = new java.util.ArrayList[Offer]
@@ -352,7 +352,7 @@ class MesosFineGrainedSchedulerBackendSuite
       .setScalar(Scalar.newBuilder().setValue(2))
     val offer = builder.setId(OfferID.newBuilder().setValue(s"o${id.toString}").build())
       .setFrameworkId(FrameworkID.newBuilder().setValue("f1"))
-      .setSlaveId(SlaveID.newBuilder().setValue(s"s${id.toString}"))
+      .setAgentId(AgentID.newBuilder().setValue(s"s${id.toString}"))
       .setHostname(s"host${id.toString}").build()
 
     val mesosOffers = new java.util.ArrayList[Offer]
@@ -362,7 +362,7 @@ class MesosFineGrainedSchedulerBackendSuite
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](1)
     expectedWorkerOffers += new WorkerOffer(
-      mesosOffers.get(0).getSlaveId.getValue,
+      mesosOffers.get(0).getAgentId.getValue,
       mesosOffers.get(0).getHostname,
       2 // Deducting 1 for executor
     )

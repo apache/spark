@@ -264,13 +264,13 @@ private[spark] abstract class YarnSchedulerBackend(
               case NonFatal(e) =>
                 logWarning(s"Attempted to get executor loss reason" +
                   s" for executor id ${executorId} at RPC address ${executorRpcAddress}," +
-                  s" but got no response. Marking as slave lost.", e)
-                RemoveExecutor(executorId, SlaveLost())
+                  s" but got no response. Marking as agent lost.", e)
+                RemoveExecutor(executorId, AgentLost())
             }(ThreadUtils.sameThread)
         case None =>
           logWarning("Attempted to check for an executor loss reason" +
             " before the AM has registered!")
-          Future.successful(RemoveExecutor(executorId, SlaveLost("AM is not yet registered.")))
+          Future.successful(RemoveExecutor(executorId, AgentLost("AM is not yet registered.")))
       }
 
       removeExecutorMessage.foreach { message => driverEndpoint.send(message) }

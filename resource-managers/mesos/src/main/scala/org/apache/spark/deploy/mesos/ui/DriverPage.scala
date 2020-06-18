@@ -92,8 +92,8 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
   private def launchedRow(submissionState: Option[MesosClusterSubmissionState]): Seq[Node] = {
     submissionState.map { state =>
       <tr>
-        <td>Mesos Slave ID</td>
-        <td>{state.slaveId.getValue}</td>
+        <td>Mesos Agent ID</td>
+        <td>{state.agentId.getValue}</td>
       </tr>
       <tr>
         <td>Mesos Task ID</td>

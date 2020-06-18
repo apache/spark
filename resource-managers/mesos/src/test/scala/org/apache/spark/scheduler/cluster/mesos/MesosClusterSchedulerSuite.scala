@@ -126,7 +126,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
           .setScalar(Scalar.newBuilder().setValue(500).build()).setName("mem").setType(Type.SCALAR))
       .setId(OfferID.newBuilder().setValue("o1").build())
       .setFrameworkId(FrameworkID.newBuilder().setValue("f1").build())
-      .setSlaveId(SlaveID.newBuilder().setValue("s1").build())
+      .setAgentId(AgentID.newBuilder().setValue("s1").build())
       .setHostname("host1")
       .build()
 
@@ -413,7 +413,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       new MesosDriverDescription("d1", "jar", 100, 1, true, command,
         Map((config.EXECUTOR_HOME.key, "test"), ("spark.app.name", "test")), "s1", new Date()))
     assert(response.success)
-    val slaveId = SlaveID.newBuilder().setValue("s1").build()
+    val agentId = AgentID.newBuilder().setValue("s1").build()
     val offer = Offer.newBuilder()
       .addResources(
         Resource.newBuilder().setRole("*")
@@ -425,7 +425,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
           .setType(Type.SCALAR))
       .setId(OfferID.newBuilder().setValue("o1").build())
       .setFrameworkId(FrameworkID.newBuilder().setValue("f1").build())
-      .setSlaveId(slaveId)
+      .setAgentId(agentId)
       .setHostname("host1")
       .build()
     // Offer the resource to launch the submitted driver
@@ -438,7 +438,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     val taskStatus = TaskStatus.newBuilder()
       .setTaskId(TaskID.newBuilder().setValue(response.submissionId).build())
-      .setSlaveId(slaveId)
+      .setAgentId(agentId)
       .setState(MesosTaskState.TASK_KILLED)
       .build()
     // Update the status of the killed task
@@ -479,11 +479,11 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(state.launchedDrivers.size == 1)
 
     // Signal agent lost with status with TASK_LOST
-    val agent1 = SlaveID.newBuilder().setValue("s1").build()
+    val agent1 = AgentID.newBuilder().setValue("s1").build()
     var taskStatus = TaskStatus.newBuilder()
       .setTaskId(TaskID.newBuilder().setValue(response.submissionId).build())
-      .setSlaveId(agent1)
-      .setReason(TaskStatus.Reason.REASON_SLAVE_REMOVED)
+      .setAgentId(agent1)
+      .setReason(TaskStatus.Reason.REASON_AGENT_REMOVED)
       .setState(MesosTaskState.TASK_LOST)
       .build()
 
@@ -497,10 +497,10 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     Thread.sleep(1500) // sleep to cover nextRetry's default wait time of 1s
     scheduler.resourceOffers(driver, Collections.singletonList(offers(1)))
 
-    val agent2 = SlaveID.newBuilder().setValue("s2").build()
+    val agent2 = AgentID.newBuilder().setValue("s2").build()
     taskStatus = TaskStatus.newBuilder()
       .setTaskId(TaskID.newBuilder().setValue(response.submissionId).build())
-      .setSlaveId(agent2)
+      .setAgentId(agent2)
       .setState(MesosTaskState.TASK_RUNNING)
       .build()
 
@@ -514,7 +514,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     // Agent1 comes back online and sends status update: TASK_FAILED
     taskStatus = TaskStatus.newBuilder()
       .setTaskId(TaskID.newBuilder().setValue(response.submissionId).build())
-      .setSlaveId(agent1)
+      .setAgentId(agent1)
       .setState(MesosTaskState.TASK_FAILED)
       .setMessage("Abnormal executor termination")
       .setReason(TaskStatus.Reason.REASON_EXECUTOR_TERMINATED)
