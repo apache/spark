@@ -545,27 +545,22 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
  */
 case class WithFields(
     structExpr: Expression,
-    nameExprs: Seq[Expression],
+    names: Seq[String],
     valExprs: Seq[Expression]) extends Unevaluable {
+
+  assert(names.length == valExprs.length)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!structExpr.dataType.isInstanceOf[StructType]) {
       TypeCheckResult.TypeCheckFailure(
         "struct argument should be struct type, got: " + structExpr.dataType.catalogString)
-    } else if (!nameExprs.forall(e => e.foldable && e.dataType == StringType)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"nameExprs argument should contain only foldable ${StringType.catalogString} expressions")
-    } else if (nameExprs.length != valExprs.length) {
-      TypeCheckResult.TypeCheckFailure(
-        s"nameExprs argument and valExprs argument should be the same length")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
   }
 
-  override def children: Seq[Expression] = structExpr +: (nameExprs ++ valExprs)
+  override def children: Seq[Expression] = structExpr +: valExprs
 
-  private lazy val names = nameExprs.map(e => e.eval().toString)
   private lazy val addOrReplaceExprs = names.zip(valExprs)
 
   override def dataType: StructType = {

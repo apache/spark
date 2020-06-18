@@ -914,18 +914,17 @@ class Column(val expr: Expression) extends Logging {
       namePartsDone: Seq[String],
       value: Expression) : WithFields = {
     val name = namePartsRemaining.head
-    val litName = Literal(name)
     if (namePartsRemaining.length == 1) {
-      WithFields(struct, litName :: Nil, value :: Nil)
+      WithFields(struct, name :: Nil, value :: Nil)
     } else {
       val newNamesRemaining = namePartsRemaining.tail
       val newNamesDone = namePartsDone :+ name
       val newValue = withFieldHelper(
-        struct = UnresolvedExtractValue(struct, litName),
+        struct = UnresolvedExtractValue(struct, Literal(name)),
         namePartsRemaining = newNamesRemaining,
         namePartsDone = newNamesDone,
         value = value)
-      WithFields(struct, litName :: Nil, newValue :: Nil)
+      WithFields(struct, name :: Nil, newValue :: Nil)
     }
   }
 
