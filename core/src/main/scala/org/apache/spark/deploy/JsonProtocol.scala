@@ -95,6 +95,7 @@ private[deploy] object JsonProtocol {
    *         `submitdate` time in Date that the application is submitted
    *         `state` state of the application, see [[ApplicationState]]
    *         `duration` time in milliseconds that the application has been running
+   * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
   def writeApplicationInfo(obj: ApplicationInfo): JObject = {
     ("id" -> obj.id) ~
@@ -103,7 +104,10 @@ private[deploy] object JsonProtocol {
     ("cores" -> obj.coresGranted) ~
     ("user" -> obj.desc.user) ~
     ("memoryperexecutor" -> obj.desc.memoryPerExecutorMB) ~
+    ("memoryperslave" -> obj.desc.memoryPerExecutorMB) ~
     ("resourcesperexecutor" -> obj.desc.resourceReqsPerExecutor
+      .toList.map(writeResourceRequirement)) ~
+    ("resourcesperslave" -> obj.desc.resourceReqsPerExecutor
       .toList.map(writeResourceRequirement)) ~
     ("submitdate" -> obj.submitDate.toString) ~
     ("state" -> obj.state.toString) ~
@@ -121,12 +125,15 @@ private[deploy] object JsonProtocol {
    *         `resourcesperexecutor` minimal resources required to each executor
    *         `user` name of the user who submitted the application
    *         `command` the command string used to submit the application
+   * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
   def writeApplicationDescription(obj: ApplicationDescription): JObject = {
     ("name" -> obj.name) ~
     ("cores" -> obj.maxCores.getOrElse(0)) ~
     ("memoryperexecutor" -> obj.memoryPerExecutorMB) ~
     ("resourcesperexecutor" -> obj.resourceReqsPerExecutor.toList.map(writeResourceRequirement)) ~
+    ("memoryperslave" -> obj.memoryPerExecutorMB) ~
+    ("resourcesperslave" -> obj.resourceReqsPerExecutor.toList.map(writeResourceRequirement)) ~
     ("user" -> obj.user) ~
     ("command" -> obj.command.toString)
   }

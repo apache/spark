@@ -17,28 +17,30 @@
 # limitations under the License.
 #
 
-# A shell script to stop all workers on a single slave
-#
-# Environment variables
-#
-#   SPARK_WORKER_INSTANCES The number of worker instances that should be
-#                          running on this slave.  Default is 1.
-
-# Usage: stop-slave.sh
-#   Stops all slaves on this worker machine
+# Starts a worker instance on each machine specified in the conf/workers file.
 
 if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
 . "${SPARK_HOME}/sbin/spark-config.sh"
-
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
-if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  "${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker 1
-else
-  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
-  done
+# Find the port number for the master
+if [ "$SPARK_MASTER_PORT" = "" ]; then
+  SPARK_MASTER_PORT=7077
 fi
+
+if [ "$SPARK_MASTER_HOST" = "" ]; then
+  case `uname` in
+      (SunOS)
+          SPARK_MASTER_HOST="`/usr/sbin/check-hostname | awk '{print $NF}'`"
+          ;;
+      (*)
+          SPARK_MASTER_HOST="`hostname -f`"
+          ;;
+  esac
+fi
+
+# Launch the workers
+"${SPARK_HOME}/sbin/workers.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin/start-worker.sh" "spark://$SPARK_MASTER_HOST:$SPARK_MASTER_PORT"

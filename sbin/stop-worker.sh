@@ -17,17 +17,15 @@
 # limitations under the License.
 #
 
-# A shell script to decommission all workers on a single slave
+# A shell script to stop all workers on a single worker
 #
 # Environment variables
 #
 #   SPARK_WORKER_INSTANCES The number of worker instances that should be
-#                          running on this slave.  Default is 1.
+#                          running on this worker machine.  Default is 1.
 
-# Usage: decommission-slave.sh [--block-until-exit]
-#   Decommissions all slaves on this worker machine
-
-set -ex
+# Usage: stop-worker.sh
+#   Stops all workers on this worker machine
 
 if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
@@ -38,20 +36,9 @@ fi
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  "${SPARK_HOME}/sbin"/spark-daemon.sh decommission org.apache.spark.deploy.worker.Worker 1
+  "${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker 1
 else
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "${SPARK_HOME}/sbin"/spark-daemon.sh decommission org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
+    "${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
   done
-fi
-
-# Check if --block-until-exit is set.
-# This is done for systems which block on the decomissioning script and on exit
-# shut down the entire system (e.g. K8s).
-if [ "$1" == "--block-until-exit" ]; then
-  shift
-  # For now we only block on the 0th instance if there multiple instances.
-  instance=$1
-  pid="$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance.pid"
-  wait $pid
 fi

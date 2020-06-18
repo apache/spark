@@ -25,4 +25,4 @@ fi
 
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
-"${SPARK_HOME}/sbin/slaves.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin"/stop-slave.sh
+"${SPARK_HOME}/sbin/workers.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin"/stop-worker.sh

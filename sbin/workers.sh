@@ -17,18 +17,18 @@
 # limitations under the License.
 #
 
-# Run a shell command on all slave hosts.
+# Run a shell command on all worker hosts.
 #
 # Environment Variables
 #
-#   SPARK_SLAVES    File naming remote hosts.
-#     Default is ${SPARK_CONF_DIR}/slaves.
+#   SPARK_WORKERS    File naming remote hosts.
+#     Default is ${SPARK_CONF_DIR}/workers.
 #   SPARK_CONF_DIR  Alternate conf dir. Default is ${SPARK_HOME}/conf.
-#   SPARK_SLAVE_SLEEP Seconds to sleep between spawning remote commands.
+#   SPARK_WORKER_SLEEP Seconds to sleep between spawning remote commands.
 #   SPARK_SSH_OPTS Options passed to ssh when running remote commands.
 ##
 
-usage="Usage: slaves.sh [--config <conf-dir>] command..."
+usage="Usage: workers.sh [--config <conf-dir>] command..."
 
 # if no args specified, show usage
 if [ $# -le 0 ]; then
@@ -42,12 +42,17 @@ fi
 
 . "${SPARK_HOME}/sbin/spark-config.sh"
 
-# If the slaves file is specified in the command line,
+# If the workers file is specified in the command line,
 # then it takes precedence over the definition in
 # spark-env.sh. Save it here.
+if [ -f "$SPARK_WORKERS" ]; then
+  HOSTLIST=`cat "$SPARK_WORKERS"`
+fi
 if [ -f "$SPARK_SLAVES" ]; then
+  >&2 echo "SPARK_SLAVES is deprecated, use SPARK_WORKERS"
   HOSTLIST=`cat "$SPARK_SLAVES"`
 fi
+
 
 # Check if --config is passed as an argument. It is an optional parameter.
 # Exit if the argument is not a directory.
@@ -69,14 +74,22 @@ fi
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
 if [ "$HOSTLIST" = "" ]; then
-  if [ "$SPARK_SLAVES" = "" ]; then
-    if [ -f "${SPARK_CONF_DIR}/slaves" ]; then
+  if [ "$SPARK_SLAVES" = "" ] && [ "$SPARK_WORKERS" = "" ]; then
+    if [ -f "${SPARK_CONF_DIR}/workers" ]; then
+      HOSTLIST=`cat "${SPARK_CONF_DIR}/workers"`
+    elif [ -f "${SPARK_CONF_DIR}/slaves" ]; then
       HOSTLIST=`cat "${SPARK_CONF_DIR}/slaves"`
     else
       HOSTLIST=localhost
     fi
   else
-    HOSTLIST=`cat "${SPARK_SLAVES}"`
+    if [ -f "$SPARK_WORKERS" ]; then
+      HOSTLIST=`cat "$SPARK_WORKERS"`
+    fi
+    if [ -f "$SPARK_SLAVES" ]; then
+      >&2 echo "SPARK_SLAVES is deprecated, use SPARK_WORKERS"
+      HOSTLIST=`cat "$SPARK_SLAVES"`
+    fi
   fi
 fi
 
@@ -87,15 +100,19 @@ if [ "$SPARK_SSH_OPTS" = "" ]; then
   SPARK_SSH_OPTS="-o StrictHostKeyChecking=no"
 fi
 
-for slave in `echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d"`; do
+for host in `echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d"`; do
   if [ -n "${SPARK_SSH_FOREGROUND}" ]; then
-    ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
-      2>&1 | sed "s/^/$slave: /"
+    ssh $SPARK_SSH_OPTS "$host" $"${@// /\\ }" \
+      2>&1 | sed "s/^/$host: /"
   else
-    ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
-      2>&1 | sed "s/^/$slave: /" &
+    ssh $SPARK_SSH_OPTS "$host" $"${@// /\\ }" \
+      2>&1 | sed "s/^/$host: /" &
+  fi
+  if [ "$SPARK_WORKER_SLEEP" != "" ]; then
+    sleep $SPARK_WORKER_SLEEP
   fi
   if [ "$SPARK_SLAVE_SLEEP" != "" ]; then
+    >&2 echo "SPARK_SLAVE_SLEEP is deprecated, use SPARK_WORKER_SLEEP"
     sleep $SPARK_SLAVE_SLEEP
   fi
 done

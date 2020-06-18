@@ -2815,7 +2815,7 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case LOCAL_CLUSTER_REGEX(numWorkers, coresPerWorker, memoryPerWorker) =>
-        checkResourcesPerTask(coresPerExecutor.toInt)
+        checkResourcesPerTask(coresPerWorker.toInt)
         // Check to make sure memory requested <= memoryPerWorker. Otherwise Spark will just hang.
         val memoryPerWorkerInt = memoryPerWorker.toInt
         if (sc.executorMemory > memoryPerWorkerInt) {

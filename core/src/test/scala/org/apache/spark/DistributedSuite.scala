@@ -49,7 +49,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val numWorkers = 3
     val numPartitions = 10
 
-    sc = new SparkContext("local-cluster[%s,1,1024]".format(numWorker), "test")
+    sc = new SparkContext("local-cluster[%s,1,1024]".format(numWorkers), "test")
     val data = sc.parallelize(1 to 100, numPartitions).
       map(x => throw new NotSerializableExn(new NotSerializableClass))
     intercept[SparkException] {

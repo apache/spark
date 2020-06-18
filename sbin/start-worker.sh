@@ -17,12 +17,12 @@
 # limitations under the License.
 #
 
-# Starts a slave on the machine this script is executed on.
+# Starts a worker on the machine this script is executed on.
 #
 # Environment Variables
 #
 #   SPARK_WORKER_INSTANCES  The number of worker instances to run on this
-#                           slave.  Default is 1. Note it has been deprecate since Spark 3.0.
+#                           worker.  Default is 1. Note it has been deprecate since Spark 3.0.
 #   SPARK_WORKER_PORT       The base port number for the first worker. If set,
 #                           subsequent workers will increment this number.  If
 #                           unset, Spark will find a valid port number, but
@@ -40,7 +40,7 @@ fi
 CLASS="org.apache.spark.deploy.worker.Worker"
 
 if [[ $# -lt 1 ]] || [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  echo "Usage: ./sbin/start-slave.sh <master> [options]"
+  echo "Usage: ./sbin/start-worker.sh <master> [options]"
   pattern="Usage:"
   pattern+="\|Using Spark's default log4j profile:"
   pattern+="\|Started daemon with process name"
