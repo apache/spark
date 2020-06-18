@@ -21,9 +21,9 @@ license: |
 
 ### Description
 
-`REFRESH FUNCTION` statement invalidates the cached function entry, which include class name
+`REFRESH FUNCTION` statement invalidates the cached function entry, which includes class name
 and resource location of the given function. The invalidated cache is populated right away.
-Note that, refresh function only works for permanent function. Refresh native function or temporary function will cause exception.
+Note that REFRESH FUNCTION only works for permanent functions. Refreshing native functions or temporary functions will cause an exception.
 
 ### Syntax
 
@@ -35,7 +35,7 @@ REFRESH FUNCTION function_identifier
 
 * **function_identifier**
 
-    Specifies a function name, which is either a qualified or unqualified name. If no database identifier is provided, use the current database.
+    Specifies a function name, which is either a qualified or unqualified name. If no database identifier is provided, uses the current database.
 
     **Syntax:** `[ database_name. ] function_name`
 
