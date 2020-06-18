@@ -275,9 +275,9 @@ trait GetArrayItemUtil {
     if (ordinal.foldable && !ordinal.nullable) {
       val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
       child match {
-        case CreateArray(ar) if intOrdinal < ar.length =>
+        case CreateArray(ar, _) if intOrdinal < ar.length =>
           ar(intOrdinal).nullable
-        case GetArrayStructFields(CreateArray(elements), field, _, _, _)
+        case GetArrayStructFields(CreateArray(elements, _), field, _, _, _)
           if intOrdinal < elements.length =>
           elements(intOrdinal).nullable || field.nullable
         case _ =>

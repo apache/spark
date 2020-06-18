@@ -696,7 +696,7 @@ private[spark] class MapOutputTrackerMaster(
    *
    * @param dep shuffle dependency object
    * @param startMapIndex the start map index
-   * @param endMapIndex the end map index
+   * @param endMapIndex the end map index (exclusive)
    * @return a sequence of locations where task runs.
    */
   def getMapLocation(
@@ -707,7 +707,8 @@ private[spark] class MapOutputTrackerMaster(
     val shuffleStatus = shuffleStatuses.get(dep.shuffleId).orNull
     if (shuffleStatus != null) {
       shuffleStatus.withMapStatuses { statuses =>
-        if (startMapIndex < endMapIndex && (startMapIndex >= 0 && endMapIndex < statuses.length)) {
+        if (startMapIndex < endMapIndex &&
+          (startMapIndex >= 0 && endMapIndex <= statuses.length)) {
           val statusesPicked = statuses.slice(startMapIndex, endMapIndex).filter(_ != null)
           statusesPicked.map(_.location.host).toSeq
         } else {

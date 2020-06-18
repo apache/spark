@@ -60,7 +60,8 @@ object Cast {
     case (StringType, TimestampType) => true
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
-    case (_: NumericType, TimestampType) => true
+    case (_: NumericType, TimestampType) =>
+      SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
 
     case (StringType, TimeType) => true
     case (BooleanType, TimeType) => true
@@ -220,8 +221,13 @@ object Cast {
     case _ => false  // overflow
   }
 
+  /**
+   * Returns `true` if casting non-nullable values from `from` type to `to` type
+   * may return null. Note that the caller side should take care of input nullability
+   * first and only call this method if the input is not nullable.
+   */
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (NullType, _) => true
+    case (NullType, _) => false // empty array or map case
     case (_, _) if from == to => false
 
     case (StringType, BinaryType) => false
@@ -259,7 +265,7 @@ object Cast {
   }
 }
 
-abstract class  CastBase extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
+abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
 
   def child: Expression
 
@@ -275,11 +281,19 @@ abstract class  CastBase extends UnaryExpression with TimeZoneAwareExpression wi
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
-        s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}")
+        if (child.dataType.isInstanceOf[NumericType] && dataType.isInstanceOf[TimestampType]) {
+          s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}," +
+            "you can enable the casting by setting " +
+            s"${SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key} to true," +
+            "but we strongly recommend using function " +
+            "TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead."
+        } else {
+          s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
+        })
     }
   }
 
-  override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
+  override def nullable: Boolean = child.nullable || Cast.forceNullable(child.dataType, dataType)
 
   protected def ansiEnabled: Boolean
 
@@ -288,7 +302,7 @@ abstract class  CastBase extends UnaryExpression with TimeZoneAwareExpression wi
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
 
-  private[this] def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
+  def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
@@ -547,8 +561,15 @@ abstract class  CastBase extends UnaryExpression with TimeZoneAwareExpression wi
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType | TimeType if ansiEnabled =>
-      buildCast[Long](_, t => LongExactNumeric.toInt(timestampToLong(t)))
-    case TimestampType | TimeType =>
+      buildCast[Long](_, t => {
+        val longValue = timestampToLong(t)
+        if (longValue == longValue.toInt) {
+          longValue.toInt
+        } else {
+          throw new ArithmeticException(s"Casting $t to int causes overflow")
+        }
+      })
+    case TimestampType TimeType =>
       buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType if ansiEnabled =>
       b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
@@ -1292,7 +1313,6 @@ abstract class  CastBase extends UnaryExpression with TimeZoneAwareExpression wi
         """
   }
 
-
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
@@ -1747,6 +1767,7 @@ abstract class  CastBase extends UnaryExpression with TimeZoneAwareExpression wi
   """)
 case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
+
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
@@ -1763,6 +1784,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
  */
 case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
+
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
@@ -1772,8 +1794,16 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
 /**
  * Cast the child expression to the target data type, but will throw error if the cast might
  * truncate, e.g. long -> int, timestamp -> data.
+ *
+ * Note: `target` is `AbstractDataType`, so that we can put `object DecimalType`, which means
+ * we accept `DecimalType` with any valid precision/scale.
  */
-case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String] = Nil)
+case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
+
+  def dataType: DataType = target match {
+    case DecimalType => DecimalType.SYSTEM_DEFAULT
+    case _ => target.asInstanceOf[DataType]
+  }
 }

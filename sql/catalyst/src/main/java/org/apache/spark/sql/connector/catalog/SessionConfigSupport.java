@@ -23,6 +23,8 @@ import org.apache.spark.annotation.Evolving;
  * A mix-in interface for {@link TableProvider}. Data sources can implement this interface to
  * propagate session configs with the specified key-prefix to all data source operations in this
  * session.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface SessionConfigSupport extends TableProvider {

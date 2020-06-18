@@ -434,6 +434,32 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
+    "SPARK-30998: unsupported nested inner generators",
+    {
+      val nestedListRelation = LocalRelation(
+        AttributeReference("nestedList", ArrayType(ArrayType(IntegerType)))())
+      nestedListRelation.select(Explode(Explode($"nestedList")))
+    },
+    "Generators are not supported when it's nested in expressions, but got: " +
+      "explode(explode(nestedList))" :: Nil
+  )
+
+  errorTest(
+    "SPARK-30998: unsupported nested inner generators for aggregates",
+    testRelation.select(Explode(Explode(
+      CreateArray(CreateArray(min($"a") :: max($"a") :: Nil) :: Nil)))),
+    "Generators are not supported when it's nested in expressions, but got: " +
+      "explode(explode(array(array(min(a), max(a)))))" :: Nil
+  )
+
+  errorTest(
+    "generator nested in expressions for aggregates",
+    testRelation.select(Explode(CreateArray(min($"a") :: max($"a") :: Nil)) + 1),
+    "Generators are not supported when it's nested in expressions, but got: " +
+      "(explode(array(min(a), max(a))) + 1)" :: Nil
+  )
+
+  errorTest(
     "generator appears in operator which is not Project",
     listRelation.sortBy(Explode($"list").asc),
     "Generators are not supported outside the SELECT clause, but got: Sort" :: Nil
@@ -455,6 +481,14 @@ class AnalysisErrorSuite extends AnalysisTest {
     "more than one generators in SELECT",
     listRelation.select(Explode($"list"), Explode($"list")),
     "Only one generator allowed per select clause but found 2: explode(list), explode(list)" :: Nil
+  )
+
+  errorTest(
+    "more than one generators for aggregates in SELECT",
+    testRelation.select(Explode(CreateArray(min($"a") :: Nil)),
+      Explode(CreateArray(max($"a") :: Nil))),
+    "Only one generator allowed per select clause but found 2: " +
+      "explode(array(min(a))), explode(array(max(a)))" :: Nil
   )
 
   test("SPARK-6452 regression test") {
@@ -578,21 +612,6 @@ class AnalysisErrorSuite extends AnalysisTest {
       LocalRelation(a))
     assertAnalysisError(plan, "Predicate sub-queries can only be used" +
         " in Filter" :: Nil)
-  }
-
-  test("PredicateSubQuery is used is a nested condition") {
-    val a = AttributeReference("a", IntegerType)()
-    val b = AttributeReference("b", IntegerType)()
-    val c = AttributeReference("c", BooleanType)()
-    val plan1 = Filter(Cast(Not(InSubquery(Seq(a), ListQuery(LocalRelation(b)))), BooleanType),
-      LocalRelation(a))
-    assertAnalysisError(plan1,
-      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
-
-    val plan2 = Filter(
-      Or(Not(InSubquery(Seq(a), ListQuery(LocalRelation(b)))), c), LocalRelation(a, c))
-    assertAnalysisError(plan2,
-      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {

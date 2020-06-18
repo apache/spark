@@ -842,7 +842,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .setAppName("test-cluster")
         .set(DRIVER_GPU_ID.amountConf, "3")
         .set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
-        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
 
@@ -908,7 +907,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val discoveryScript = createTempScriptWithExpectedOutput(dir, "resourceDiscoveryScript",
-        """{"name": "gpu","addresses":["0", "1", "2", "3", "4", "5", "6", "7", "8"]}""")
+        """{"name": "gpu","addresses":["0", "1", "2"]}""")
 
       val conf = new SparkConf()
         .setMaster("local-cluster[3, 1, 1024]")
@@ -917,7 +916,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
         .set(TASK_GPU_ID.amountConf, "3")
         .set(EXECUTOR_GPU_ID.amountConf, "3")
-        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
 
@@ -929,7 +927,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         context.resources().get(GPU).get.addresses.iterator
       }
       val gpus = rdd.collect()
-      assert(gpus.sorted === Seq("0", "1", "2", "3", "4", "5", "6", "7", "8"))
+      assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))
 
       eventually(timeout(10.seconds)) {
         assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)

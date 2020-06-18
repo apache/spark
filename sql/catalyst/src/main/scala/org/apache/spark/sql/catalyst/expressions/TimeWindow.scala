@@ -63,6 +63,7 @@ case class TimeWindow(
   override def dataType: DataType = new StructType()
     .add(StructField("start", TimestampType))
     .add(StructField("end", TimestampType))
+  override def prettyName: String = "window"
 
   // This expression is replaced in the analyzer.
   override lazy val resolved = false
@@ -143,7 +144,7 @@ object TimeWindow {
 case class PreciseTimestampConversion(
     child: Expression,
     fromType: DataType,
-    toType: DataType) extends UnaryExpression with ExpectsInputTypes {
+    toType: DataType) extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
   override def inputTypes: Seq[AbstractDataType] = Seq(fromType)
   override def dataType: DataType = toType
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

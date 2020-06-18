@@ -103,7 +103,7 @@ if [ -z "$SPARK_VERSION" ]; then
   # Run $MVN in a separate command so that 'set -e' does the right thing.
   TMP=$(mktemp)
   $MVN help:evaluate -Dexpression=project.version > $TMP
-  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -v Download)
+  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -vi Download)
   rm $TMP
 fi
 
@@ -164,7 +164,7 @@ fi
 DEST_DIR_NAME="$SPARK_PACKAGE_VERSION"
 
 git clean -d -f -x
-rm .gitignore
+rm -f .gitignore
 cd ..
 
 if [[ "$1" == "package" ]]; then
@@ -174,9 +174,9 @@ if [[ "$1" == "package" ]]; then
 
   # For source release in v2.4+, exclude copy of binary license/notice
   if [[ $SPARK_VERSION > "2.4" ]]; then
-    rm spark-$SPARK_VERSION/LICENSE-binary
-    rm spark-$SPARK_VERSION/NOTICE-binary
-    rm -r spark-$SPARK_VERSION/licenses-binary
+    rm -f spark-$SPARK_VERSION/LICENSE-binary
+    rm -f spark-$SPARK_VERSION/NOTICE-binary
+    rm -rf spark-$SPARK_VERSION/licenses-binary
   fi
 
   tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION
@@ -380,7 +380,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "</server></servers></settings>" >> $tmp_settings
 
   # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES deploy
 
@@ -412,7 +412,7 @@ if [[ "$1" == "publish-release" ]]; then
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
   # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   # TODO: revisit for Scala 2.13 support
 

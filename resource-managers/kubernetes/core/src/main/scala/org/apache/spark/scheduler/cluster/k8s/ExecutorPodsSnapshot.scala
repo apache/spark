@@ -64,6 +64,8 @@ object ExecutorPodsSnapshot extends Logging {
           PodFailed(pod)
         case "succeeded" =>
           PodSucceeded(pod)
+        case "terminating" =>
+          PodTerminating(pod)
         case _ =>
           logWarning(s"Received unknown phase $phase for executor pod with name" +
             s" ${pod.getMetadata.getName} in namespace ${pod.getMetadata.getNamespace}")
@@ -72,5 +74,12 @@ object ExecutorPodsSnapshot extends Logging {
     }
   }
 
-  private def isDeleted(pod: Pod): Boolean = pod.getMetadata.getDeletionTimestamp != null
+  private def isDeleted(pod: Pod): Boolean = {
+    (pod.getMetadata.getDeletionTimestamp != null &&
+      (
+        pod.getStatus == null ||
+        pod.getStatus.getPhase == null ||
+        pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating"
+      ))
+  }
 }

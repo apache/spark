@@ -87,7 +87,7 @@ struct<foo:string,CAST(udf(cast(approx_count_distinct(cast(udf(cast(a as string)
 -- !query
 SELECT 'foo', MAX(STRUCT(udf(a))) FROM testData WHERE a = 0 GROUP BY udf(1)
 -- !query schema
-struct<foo:string,max(named_struct(col1, CAST(udf(cast(a as string)) AS INT))):struct<col1:int>>
+struct<foo:string,max(struct(CAST(udf(cast(a as string)) AS INT))):struct<col1:int>>
 -- !query output
 
 

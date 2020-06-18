@@ -75,7 +75,12 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     withCatalogOption.foreach(cName => dfw.option("catalog", cName))
     dfw.partitionBy(partitionBy: _*).save()
 
-    val table = catalog(withCatalogOption.getOrElse(SESSION_CATALOG_NAME)).loadTable("t1")
+    val ident = if (withCatalogOption.isEmpty) {
+      Identifier.of(Array("default"), "t1")
+    } else {
+      Identifier.of(Array(), "t1")
+    }
+    val table = catalog(withCatalogOption.getOrElse(SESSION_CATALOG_NAME)).loadTable(ident)
     val namespace = withCatalogOption.getOrElse("default")
     assert(table.name() === s"$namespace.t1", "Table identifier was wrong")
     assert(table.partitioning().length === partitionBy.length, "Partitioning did not match")
@@ -134,7 +139,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
     dfw.save()
 
-    val table = catalog(SESSION_CATALOG_NAME).loadTable("t1")
+    val table = catalog(SESSION_CATALOG_NAME).loadTable(Identifier.of(Array("default"), "t1"))
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
     assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
     assert(load("t1", None).count() === 0)
@@ -211,7 +216,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         plan = qe.analyzed
       }
-      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
 
     spark.listenerManager.register(listener)
@@ -279,7 +284,12 @@ class CatalogSupportingInMemoryTableProvider
   override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier = {
     val name = options.get("name")
     assert(name != null, "The name should be provided for this table")
-    Identifier.of(Array.empty, name)
+    val namespace = if (options.containsKey("catalog")) {
+      Array[String]()
+    } else {
+      Array("default")
+    }
+    Identifier.of(namespace, name)
   }
 
   override def extractCatalog(options: CaseInsensitiveStringMap): String = {

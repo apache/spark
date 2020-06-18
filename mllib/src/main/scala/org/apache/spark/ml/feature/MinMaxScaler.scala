@@ -144,8 +144,6 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
  *
  * @param originalMin min value for each original column during fitting
  * @param originalMax max value for each original column during fitting
- *
- * TODO: The transformer does not yet set the metadata in the output column (SPARK-8529).
  */
 @Since("1.5.0")
 class MinMaxScalerModel private[ml] (

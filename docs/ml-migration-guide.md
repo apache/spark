@@ -33,9 +33,36 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 
 * `OneHotEncoder` which is deprecated in 2.3, is removed in 3.0 and `OneHotEncoderEstimator` is now renamed to `OneHotEncoder`.
 * `org.apache.spark.ml.image.ImageSchema.readImages` which is deprecated in 2.3, is removed in 3.0, use `spark.read.format('image')` instead.
+* `org.apache.spark.mllib.clustering.KMeans.train` with param Int `runs` which is deprecated in 2.1, is removed in 3.0. Use `train` method without `runs` instead.
+* `org.apache.spark.mllib.classification.LogisticRegressionWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.classification.LogisticRegression` or `spark.mllib.classification.LogisticRegressionWithLBFGS` instead.
+* `org.apache.spark.mllib.feature.ChiSqSelectorModel.isSorted ` which is deprecated in 2.1, is removed in 3.0, is not intended for subclasses to use.
+* `org.apache.spark.mllib.regression.RidgeRegressionWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.regression.LinearRegression` with `elasticNetParam` = 0.0. Note the default `regParam` is 0.01 for `RidgeRegressionWithSGD`, but is 0.0 for `LinearRegression`.
+* `org.apache.spark.mllib.regression.LassoWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.regression.LinearRegression` with `elasticNetParam` = 1.0. Note the default `regParam` is 0.01 for `LassoWithSGD`, but is 0.0 for `LinearRegression`.
+* `org.apache.spark.mllib.regression.LinearRegressionWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.regression.LinearRegression` or `LBFGS` instead.
+* `org.apache.spark.mllib.clustering.KMeans.getRuns` and `setRuns` which are deprecated in 2.1, are removed in 3.0, have no effect since Spark 2.0.0.
+* `org.apache.spark.ml.LinearSVCModel.setWeightCol` which is deprecated in 2.4, is removed in 3.0, is not intended for users.
+* From 3.0, `org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel` extends `MultilayerPerceptronParams` to expose the training params. As a result, `layers` in `MultilayerPerceptronClassificationModel` has been changed from `Array[Int]` to `IntArrayParam`. Users should use `MultilayerPerceptronClassificationModel.getLayers` instead of `MultilayerPerceptronClassificationModel.layers` to retrieve the size of layers.
+* `org.apache.spark.ml.classification.GBTClassifier.numTrees`  which is deprecated in 2.4.5, is removed in 3.0, use `getNumTrees` instead.
+* `org.apache.spark.ml.clustering.KMeansModel.computeCost` which is deprecated in 2.4, is removed in 3.0, use `ClusteringEvaluator` instead.
+* The member variable `precision` in `org.apache.spark.mllib.evaluation.MulticlassMetrics` which is deprecated in 2.0, is removed in 3.0. Use `accuracy` instead.
+* The member variable `recall` in `org.apache.spark.mllib.evaluation.MulticlassMetrics` which is deprecated in 2.0, is removed in 3.0. Use `accuracy` instead.
+* The member variable `fMeasure` in `org.apache.spark.mllib.evaluation.MulticlassMetrics` which is deprecated in 2.0, is removed in 3.0. Use `accuracy` instead.
+* `org.apache.spark.ml.util.GeneralMLWriter.context` which is deprecated in 2.0, is removed in 3.0, use `session` instead.
+* `org.apache.spark.ml.util.MLWriter.context` which is deprecated in 2.0, is removed in 3.0, use `session` instead.
+* `org.apache.spark.ml.util.MLReader.context` which is deprecated in 2.0, is removed in 3.0, use `session` instead.
+* `abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]` is changed to `abstract class UnaryTransformer[IN: TypeTag, OUT: TypeTag, T <: UnaryTransformer[IN, OUT, T]]` in 3.0.
 
-### Changes of behavior
+### Deprecations and changes of behavior
 {:.no_toc}
+
+**Deprecations**
+
+* [SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215):
+`labels` in `StringIndexerModel` is deprecated and will be removed in 3.1.0. Use `labelsArray` instead.
+* [SPARK-25758](https://issues.apache.org/jira/browse/SPARK-25758):
+`computeCost` in `BisectingKMeansModel` is deprecated and will be removed in future versions. Use `ClusteringEvaluator` instead.
+
+**Changes of behavior**
 
 * [SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215):
  In Spark 2.4 and previous versions, when specifying `frequencyDesc` or `frequencyAsc` as
@@ -43,6 +70,28 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
  strings is undefined. Since Spark 3.0, the strings with equal frequency are further
  sorted by alphabet. And since Spark 3.0, `StringIndexer` supports encoding multiple
  columns.
+ * [SPARK-20604](https://issues.apache.org/jira/browse/SPARK-20604):
+ In prior to 3.0 releases, `Imputer` requires input column to be Double or Float. In 3.0, this
+ restriction is lifted so `Imputer` can handle all numeric types.
+* [SPARK-23469](https://issues.apache.org/jira/browse/SPARK-23469):
+In Spark 3.0, the `HashingTF` Transformer uses a corrected implementation of the murmur3 hash
+function to hash elements to vectors. `HashingTF` in Spark 3.0 will map elements to
+different positions in vectors than in Spark 2. However, `HashingTF` created with Spark 2.x
+and loaded with Spark 3.0 will still use the previous hash function and will not change behavior.
+* [SPARK-28969](https://issues.apache.org/jira/browse/SPARK-28969):
+The `setClassifier` method in PySpark's `OneVsRestModel` has been removed in 3.0 for parity with
+the Scala implementation. Callers should not need to set the classifier in the model after
+creation.
+* [SPARK-25790](https://issues.apache.org/jira/browse/SPARK-25790):
+ PCA adds the support for more than 65535 column matrix in Spark 3.0.
+* [SPARK-28927](https://issues.apache.org/jira/browse/SPARK-28927):
+ When fitting ALS model on nondeterministic input data, previously if rerun happens, users
+ would see ArrayIndexOutOfBoundsException caused by mismatch between In/Out user/item blocks.
+ From 3.0, a SparkException with more clear message will be thrown, and original
+ ArrayIndexOutOfBoundsException is wrapped.
+* [SPARK-29232](https://issues.apache.org/jira/browse/SPARK-29232):
+ In prior to 3.0 releases, `RandomForestRegressionModel` doesn't update the parameter maps
+ of the DecisionTreeRegressionModels underneath. This is fixed in 3.0.
 
 ## Upgrading from MLlib 2.2 to 2.3
 

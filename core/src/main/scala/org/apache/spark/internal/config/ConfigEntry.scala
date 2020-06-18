@@ -68,6 +68,7 @@ The followings are best practices of naming configs for some common cases:
  * @param doc the documentation for the configuration
  * @param isPublic if this configuration is public to the user. If it's `false`, this
  *                 configuration is only used internally and we should not expose it to users.
+ * @param version the spark version when the configuration was released.
  * @tparam T the value type
  */
 private[spark] abstract class ConfigEntry[T] (
@@ -78,7 +79,8 @@ private[spark] abstract class ConfigEntry[T] (
     val valueConverter: String => T,
     val stringConverter: T => String,
     val doc: String,
-    val isPublic: Boolean) {
+    val isPublic: Boolean,
+    val version: String) {
 
   import ConfigEntry._
 
@@ -103,7 +105,8 @@ private[spark] abstract class ConfigEntry[T] (
   def defaultValue: Option[T] = None
 
   override def toString: String = {
-    s"ConfigEntry(key=$key, defaultValue=$defaultValueString, doc=$doc, public=$isPublic)"
+    s"ConfigEntry(key=$key, defaultValue=$defaultValueString, doc=$doc, " +
+      s"public=$isPublic, version=$version)"
   }
 }
 
@@ -116,7 +119,8 @@ private class ConfigEntryWithDefault[T] (
     valueConverter: String => T,
     stringConverter: T => String,
     doc: String,
-    isPublic: Boolean)
+    isPublic: Boolean,
+    version: String)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -125,7 +129,8 @@ private class ConfigEntryWithDefault[T] (
     valueConverter,
     stringConverter,
     doc,
-    isPublic
+    isPublic,
+    version
   ) {
 
   override def defaultValue: Option[T] = Some(_defaultValue)
@@ -146,7 +151,8 @@ private class ConfigEntryWithDefaultFunction[T] (
     valueConverter: String => T,
     stringConverter: T => String,
     doc: String,
-    isPublic: Boolean)
+    isPublic: Boolean,
+    version: String)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -155,7 +161,8 @@ private class ConfigEntryWithDefaultFunction[T] (
     valueConverter,
     stringConverter,
     doc,
-    isPublic
+    isPublic,
+    version
   ) {
 
   override def defaultValue: Option[T] = Some(_defaultFunction())
@@ -176,7 +183,8 @@ private class ConfigEntryWithDefaultString[T] (
     valueConverter: String => T,
     stringConverter: T => String,
     doc: String,
-    isPublic: Boolean)
+    isPublic: Boolean,
+    version: String)
   extends ConfigEntry(
     key,
     prependedKey,
@@ -185,7 +193,8 @@ private class ConfigEntryWithDefaultString[T] (
     valueConverter,
     stringConverter,
     doc,
-    isPublic
+    isPublic,
+    version
   ) {
 
   override def defaultValue: Option[T] = Some(valueConverter(_defaultValue))
@@ -210,7 +219,8 @@ private[spark] class OptionalConfigEntry[T](
     val rawValueConverter: String => T,
     val rawStringConverter: T => String,
     doc: String,
-    isPublic: Boolean)
+    isPublic: Boolean,
+    version: String)
   extends ConfigEntry[Option[T]](
     key,
     prependedKey,
@@ -219,7 +229,8 @@ private[spark] class OptionalConfigEntry[T](
     s => Some(rawValueConverter(s)),
     v => v.map(rawStringConverter).orNull,
     doc,
-    isPublic
+    isPublic,
+    version
   ) {
 
   override def defaultValueString: String = ConfigEntry.UNDEFINED
@@ -239,6 +250,7 @@ private[spark] class FallbackConfigEntry[T] (
     alternatives: List[String],
     doc: String,
     isPublic: Boolean,
+    version: String,
     val fallback: ConfigEntry[T])
   extends ConfigEntry[T](
     key,
@@ -248,7 +260,8 @@ private[spark] class FallbackConfigEntry[T] (
     fallback.valueConverter,
     fallback.stringConverter,
     doc,
-    isPublic
+    isPublic,
+    version
   ) {
 
   override def defaultValueString: String = s"<value of ${fallback.key}>"

@@ -133,12 +133,13 @@ class LevelDBTypeInfo {
 
     // First create the parent indices, then the child indices.
     ti.indices().forEach(idx -> {
-      if (idx.parent().isEmpty()) {
+      // In LevelDB, there is no parent index for the NUTURAL INDEX.
+      if (idx.parent().isEmpty() || idx.value().equals(KVIndex.NATURAL_INDEX_NAME)) {
         indices.put(idx.value(), new Index(idx, ti.getAccessor(idx.value()), null));
       }
     });
     ti.indices().forEach(idx -> {
-      if (!idx.parent().isEmpty()) {
+      if (!idx.parent().isEmpty() && !idx.value().equals(KVIndex.NATURAL_INDEX_NAME)) {
         indices.put(idx.value(), new Index(idx, ti.getAccessor(idx.value()),
           indices.get(idx.parent())));
       }

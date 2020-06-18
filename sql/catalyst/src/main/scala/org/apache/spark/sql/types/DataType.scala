@@ -21,20 +21,17 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
-import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
-import com.fasterxml.jackson.databind.`type`.TypeFactory
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
-import org.json4s.jackson.{JValueDeserializer, JValueSerializer}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -460,7 +457,7 @@ object DataType {
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == STRICT =>
         if (!Cast.canUpCast(w, r)) {
-          addError(s"Cannot safely cast '$context': $w to $r")
+          addError(s"Cannot safely cast '$context': ${w.catalogString} to ${r.catalogString}")
           false
         } else {
           true
@@ -470,7 +467,7 @@ object DataType {
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
         if (!Cast.canANSIStoreAssign(w, r)) {
-          addError(s"Cannot safely cast '$context': $w to $r")
+          addError(s"Cannot safely cast '$context': ${w.catalogString} to ${r.catalogString}")
           false
         } else {
           true
@@ -480,35 +477,9 @@ object DataType {
         true
 
       case (w, r) =>
-        addError(s"Cannot write '$context': $w is incompatible with $r")
+        addError(s"Cannot write '$context': " +
+          s"${w.catalogString} is incompatible with ${r.catalogString}")
         false
     }
-  }
-}
-
-/**
- * Jackson serializer for [[DataType]]. Internally this delegates to json4s based serialization.
- */
-class DataTypeJsonSerializer extends JsonSerializer[DataType] {
-  private val delegate = new JValueSerializer
-  override def serialize(
-      value: DataType,
-      gen: JsonGenerator,
-      provider: SerializerProvider): Unit = {
-    delegate.serialize(value.jsonValue, gen, provider)
-  }
-}
-
-/**
- * Jackson deserializer for [[DataType]]. Internally this delegates to json4s based deserialization.
- */
-class DataTypeJsonDeserializer extends JsonDeserializer[DataType] {
-  private val delegate = new JValueDeserializer(classOf[Any])
-
-  override def deserialize(
-      jsonParser: JsonParser,
-      deserializationContext: DeserializationContext): DataType = {
-    val json = delegate.deserialize(jsonParser, deserializationContext)
-    DataType.parseDataType(json.asInstanceOf[JValue])
   }
 }
