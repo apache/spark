@@ -102,23 +102,45 @@ case class ScalaUDF(
     }
   }
 
-  private def createToScalaConverter(i: Int, dataType: DataType): Any => Any = {
-    if (inputEncoders.isEmpty || // for untyped Scala UDF and Java UDF
-        inputEncoders(i).isEmpty || // for types aren't supported by encoder, e.g. Any
-        inputPrimitives(i) || // inputPrimitives is not empty when inputEncoders is not empty
-        dataType.existsRecursively(_.isInstanceOf[UserDefinedType[_]])) {
-      catalystCreateToScalaConverter(dataType)
-    } else {
+  /**
+   * Create the converter which converts the catalyst data type to the scala data type.
+   * We use `CatalystTypeConverters` to create the converter for:
+   *   - UDF which doesn't provide inputEncoders, e.g., untyped Scala UDF and Java UDF
+   *   - type which isn't supported by `ExpressionEncoder`, e.g., Any
+   *   - primitive types, in order to use `identity` for better performance
+   *   - UserDefinedType which isn't fully supported by `ExpressionEncoder`
+   * For other cases like case class, Option[T], we use `ExpressionEncoder` instead since
+   * `CatalystTypeConverters` doesn't support these data types.
+   *
+   * @param i the index of the child
+   * @param dataType the output data type of the i-th child
+   * @return the converter and a boolean value to indicate whether the converter is
+   *         created by using `ExpressionEncoder`.
+   */
+  private def scalaConverter(i: Int, dataType: DataType): (Any => Any, Boolean) = {
+    val useEncoder =
+      !(inputEncoders.isEmpty || // for untyped Scala UDF and Java UDF
+      inputEncoders(i).isEmpty || // for types aren't supported by encoder, e.g. Any
+      inputPrimitives(i) || // for primitive types
+      dataType.existsRecursively(_.isInstanceOf[UserDefinedType[_]]))
+
+    if (useEncoder) {
       val enc = inputEncoders(i).get
       val fromRow = enc.createDeserializer()
-      if (enc.isSerializedAsStructForTopLevel) {
+      val converter = if (enc.isSerializedAsStructForTopLevel) {
         row: Any => fromRow(row.asInstanceOf[InternalRow])
       } else {
         val inputRow = new GenericInternalRow(1)
         value: Any => inputRow.update(0, value); fromRow(inputRow)
       }
+      (converter, true)
+    } else { // use CatalystTypeConverters
+      (catalystCreateToScalaConverter(dataType), false)
     }
   }
+
+  private def createToScalaConverter(i: Int, dataType: DataType): Any => Any =
+    scalaConverter(i, dataType)._1
 
   // scalastyle:off line.size.limit
 
@@ -1047,10 +1069,11 @@ case class ScalaUDF(
       ev: ExprCode): ExprCode = {
     val converterClassName = classOf[Any => Any].getName
 
-    // The type converters for inputs and the result.
-    val converters: Array[Any => Any] = children.zipWithIndex.map { case (c, i) =>
-      createToScalaConverter(i, c.dataType)
-    }.toArray :+ createToCatalystConverter(dataType)
+    // The type converters for inputs and the result
+    val (converters, useEncoders): (Array[Any => Any], Array[Boolean]) =
+      (children.zipWithIndex.map { case (c, i) =>
+        scalaConverter(i, c.dataType)
+      }.toArray :+ (createToCatalystConverter(dataType), false)).unzip
     val convertersTerm = ctx.addReferenceObj("converters", converters, s"$converterClassName[]")
     val errorMsgTerm = ctx.addReferenceObj("errMsg", udfErrorMessage)
     val resultTerm = ctx.freshName("result")
@@ -1077,21 +1100,14 @@ case class ScalaUDF(
              |${CodeGenerator.boxedType(dt)} $convertedTerm = ${eval.value};
              |Object $argTerm = ${eval.isNull} ? null : $convertedTerm;
            """.stripMargin
-        } else {
+        } else if (useEncoders(i)) {
+          val convInput = ctx.freshName("convInput")
           s"""
-             |Object $argTerm = null;
-             |// handle the top level Option type specifically
-             |if (${eval.isNull}) {
-             |  try {
-             |    $argTerm = $convertersTerm[$i].apply(null);
-             |  } catch (Exception e) {
-             |    // it's not a scala.Option type
-             |  }
-             |}
-             |if (!($argTerm instanceof scala.Option)) {
-             |  $argTerm = ${eval.isNull} ? null : $convertersTerm[$i].apply(${eval.value});
-             |}
-           """.stripMargin
+             |Object $convInput = ${eval.isNull} ? null : (Object) ${eval.value};
+             |Object $argTerm = $convertersTerm[$i].apply($convInput);
+          """.stripMargin
+        } else {
+          s"Object $argTerm = ${eval.isNull} ? null : $convertersTerm[$i].apply(${eval.value});"
         }
         (argTerm, initArg)
     }.unzip
