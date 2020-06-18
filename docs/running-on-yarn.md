@@ -89,8 +89,7 @@ doesn't contain a built-in Hadoop runtime, it's smaller, but users have to provi
 We call this variant `no-hadoop` Spark distribution. For `with-hadoop` Spark distribution, since
 it contains a built-in Hadoop runtime already, by default, when a job is submitted to Hadoop Yarn cluster, to prevent jar conflict, it will not
 populate Yarn's classpath into Spark. To override this behavior, you can set <code>spark.yarn.populateHadoopClasspath=true</code>.
-For `no-hadoop` Spark distribution, Spark will populate Yarn's classpath by default in order to get Hadoop runtime. Note that some features such
-as Hive support are not available in `no-hadoop` Spark distribution. For `with-hadoop` Spark distribution,
+For `no-hadoop` Spark distribution, Spark will populate Yarn's classpath by default in order to get Hadoop runtime. For `with-hadoop` Spark distribution,
 if your application depends on certain library that is only available in the cluster, you can try to populate the Yarn classpath by setting
 the property mentioned above. If you run into jar conflict issue by doing so, you will need to turn it off and include this library
 in your application jar.
