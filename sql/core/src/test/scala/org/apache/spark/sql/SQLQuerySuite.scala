@@ -22,7 +22,11 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.{AccumulatorSuite, SparkException}
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
@@ -3519,6 +3523,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |SELECT id FROM v3 WHERE EXISTS
             |  (SELECT v1.d FROM v1 JOIN v2 ON v1.d = v2.d WHERE id > 0)
             |""".stripMargin), Row(1))
+    }
+  }
+
+  test("SPARK-32002: Support Extract valve from nested Array(a:Struct(Array(b:Struct)))") {
+    withTempView("rows") {
+      val df = spark.read
+        .json(Seq(
+          """{"a": [{"b": [{"c": [1,2]}]}]}""",
+          """{"a": [{"b": [{"c": [1]}, {"c": [2]}]}]}""",
+          """{"a":[{}]}""").toDS())
+      df.createOrReplaceTempView("nest")
+
+      checkAnswer(sql(
+        """
+          |SELECT a.b.c FROM nest
+        """.stripMargin),
+        Row(ArrayBuffer(ArrayBuffer(ArrayBuffer(1, 2)))) ::
+          Row(ArrayBuffer(ArrayBuffer(ArrayBuffer(1), ArrayBuffer(2)))) ::
+          Row(ArrayBuffer(null)) :: Nil)
     }
   }
 }

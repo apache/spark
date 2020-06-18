@@ -59,6 +59,23 @@ object ExtractValue {
         GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
           ordinal, fields.length, containsNull)
 
+      case (ExtractNestedArray(StructType(fields), containsNull, containsNullSeq),
+      NonNullLiteral(v, StringType)) =>
+       child match {
+          case ExtractGetArrayStructField(_, num) if num == containsNullSeq.size =>
+            val fieldName = v.toString
+            val ordinal = findField(fields, fieldName, resolver)
+            val row = (0 until num).foldRight(child) { (_, e) =>
+              GetArrayItem(e, Literal(0))
+            }
+            val innerArray = GetArrayStructFields(row, fields(ordinal).copy(name = fieldName),
+              ordinal, fields.length, containsNull)
+            containsNullSeq.foldRight(innerArray: Expression) { (_, expr) =>
+               new CreateArray(Seq(expr))
+            }
+          case _ => GetArrayItem(child, extraction)
+        }
+
       case (_: ArrayType, _) => GetArrayItem(child, extraction)
 
       case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
@@ -94,6 +111,50 @@ object ExtractValue {
 }
 
 trait ExtractValue extends Expression
+
+object ExtractNestedArray {
+
+  type ReturnType = Option[(DataType, Boolean, Seq[Boolean])]
+
+  def unapply(dataType: DataType): ReturnType = {
+     extractArrayType(dataType)
+  }
+
+  def extractArrayType(dataType: DataType): ReturnType = {
+    dataType match {
+      case ArrayType(dt, containsNull) =>
+        extractArrayType(dt) match {
+          case Some((d, cn, seq)) => Some(d, cn, containsNull +: seq)
+          case None => Some(dt, containsNull, Seq.empty[Boolean])
+        }
+      case _ => None
+    }
+  }
+}
+
+/**
+ * Extract GetArrayStructField from Expression
+ */
+object ExtractGetArrayStructField {
+
+  type ReturnType = Option[(Expression, Int)]
+
+  def unapply(expr: Expression): ReturnType = {
+    extractArrayStruct(expr)
+  }
+
+  def extractArrayStruct(expr: Expression): ReturnType = {
+    expr match {
+      case gas @ GetArrayStructFields(child, _, _, _, _) =>
+        extractArrayStruct(child) match {
+          case Some((e, deep)) => Some(e, deep + 1)
+          case None => Some(child, 1)
+        }
+      case _ => None
+    }
+  }
+}
+
 
 /**
  * Returns the value of fields in the Struct `child`.
