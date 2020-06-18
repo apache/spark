@@ -3526,7 +3526,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-32002: Support Extract valve from nested Array(a:Struct(Array(b:Struct)))") {
+  test("SPARK-32002: Support Extract valve from nested ArrayStruct") {
     withTempView("rows") {
       val df = spark.read
         .json(Seq(
