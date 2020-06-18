@@ -114,7 +114,8 @@ case class ScalaUDF(
       if (enc.isSerializedAsStructForTopLevel) {
         row: Any => fromRow(row.asInstanceOf[InternalRow])
       } else {
-        value: Any => fromRow(new GenericInternalRow(Array(value)))
+        val inputRow = new GenericInternalRow(1)
+        value: Any => inputRow.update(0, value); fromRow(inputRow)
       }
     }
   }
