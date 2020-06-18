@@ -218,7 +218,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
             sc.schedulerBackend match {
               case backend: CoarseGrainedSchedulerBackend =>
                 backend.driverEndpoint.send(RemoveExecutor(executorId,
-                  WorkerLost(s"Executor heartbeat timed out after ${now - lastSeenMs} ms")))
+                  AgentLost(s"Executor heartbeat timed out after ${now - lastSeenMs} ms")))
 
               // LocalSchedulerBackend is used locally and only has one single executor
               case _: LocalSchedulerBackend =>
