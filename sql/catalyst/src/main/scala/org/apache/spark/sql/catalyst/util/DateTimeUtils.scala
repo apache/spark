@@ -522,15 +522,6 @@ object DateTimeUtils {
   def getQuarter(days: Int): Int = daysToLocalDate(days).get(IsoFields.QUARTER_OF_YEAR)
 
   /**
-   * Split date (expressed in days since 1.1.1970) into four fields:
-   * year, month (Jan is Month 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
-   */
-  def splitDate(days: Int): (Int, Int, Int, Int) = {
-    val ld = daysToLocalDate(days)
-    (ld.getYear, ld.getMonthValue, ld.getDayOfMonth, ld.lengthOfMonth() - ld.getDayOfMonth)
-  }
-
-  /**
    * Returns the month value for the given number of days since 1970-01-01.
    * January is month 1.
    */
@@ -581,6 +572,15 @@ object DateTimeUtils {
       "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
     val ld = daysToLocalDate(start).plusMonths(interval.months).plusDays(interval.days)
     localDateToDays(ld)
+  }
+
+  /**
+   * Split date (expressed in days since 1.1.1970) into four fields:
+   * year, month (Jan is Month 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
+   */
+  private def splitDate(days: Int): (Int, Int, Int, Int) = {
+    val ld = daysToLocalDate(days)
+    (ld.getYear, ld.getMonthValue, ld.getDayOfMonth, ld.lengthOfMonth() - ld.getDayOfMonth)
   }
 
   /**
