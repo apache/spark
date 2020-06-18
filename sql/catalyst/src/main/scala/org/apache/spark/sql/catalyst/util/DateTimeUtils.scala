@@ -51,9 +51,7 @@ object DateTimeUtils {
   val TIMEZONE_OPTION = "timeZone"
 
   def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
-  def getTimeZone(timeZoneId: String): TimeZone = {
-    TimeZone.getTimeZone(getZoneId(timeZoneId))
-  }
+  def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
   def microsToDays(micros: Long): Int = {
     microsToDays(micros, ZoneId.systemDefault())
@@ -61,10 +59,6 @@ object DateTimeUtils {
 
   def microsToDays(micros: Long, zoneId: ZoneId): Int = {
     localDateToDays(getLocalDateTime(micros, zoneId).toLocalDate)
-  }
-
-  def daysToMicros(days: Int): Long = {
-    daysToMicros(days, ZoneId.systemDefault())
   }
 
   def daysToMicros(days: Int, zoneId: ZoneId): Long = {
