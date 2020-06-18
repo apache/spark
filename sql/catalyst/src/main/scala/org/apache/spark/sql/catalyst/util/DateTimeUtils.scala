@@ -784,7 +784,7 @@ object DateTimeUtils {
    * timezone-aware.
    */
   def convertTz(micros: Long, fromZone: ZoneId, toZone: ZoneId): Long = {
-    val rebasedDateTime = microsToInstant(micros).atZone(toZone).toLocalDateTime.atZone(fromZone)
+    val rebasedDateTime = getLocalDateTime(micros, toZone).atZone(fromZone)
     instantToMicros(rebasedDateTime.toInstant)
   }
 
