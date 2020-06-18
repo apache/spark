@@ -146,6 +146,12 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
         service.start()
         serviceStartCount += 1
       }
+      // Emulating `AbstractService.start`
+      val startTime = new java.lang.Long(System.currentTimeMillis())
+      setAncestorField(this, 3, "startTime", startTime)
+      invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.INITED)
+      invoke(classOf[AbstractService], this, "changeState", classOf[STATE] -> STATE.STARTED)
+      logInfo(s"Service: $getName is started.")
     } catch {
       case NonFatal(e) =>
       logError(s"Error starting services $getName", e)
@@ -153,12 +159,5 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
         classOf[Int] -> new Integer(serviceStartCount))
       throw new ServiceException("Failed to Start " + getName, e)
     }
-
-    // Emulating `AbstractService.start`
-    val startTime = new java.lang.Long(System.currentTimeMillis())
-    setAncestorField(this, 3, "startTime", startTime)
-    invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.INITED)
-    invoke(classOf[AbstractService], this, "changeState", classOf[STATE] -> STATE.STARTED)
-    logInfo(s"Service: $getName is started.")
   }
 }
