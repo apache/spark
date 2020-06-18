@@ -86,7 +86,7 @@ trait SQLHelper {
     }
   }
 
-  lazy val sparkHome: String = {
+  protected lazy val sparkHome: String = {
     if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
       fail("spark.test.home or SPARK_HOME is not set.")
     }
