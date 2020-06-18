@@ -192,6 +192,7 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet"
           href={prependBaseUri("/static/dataTables.bootstrap.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/jsonFormatter.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/webui-dataTables.css")} type="text/css"/>
     <script src={prependBaseUri("/static/jquery.dataTables.1.10.18.min.js")}></script>
     <script src={prependBaseUri("/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri("/static/jquery.blockUI.min.js")}></script>
