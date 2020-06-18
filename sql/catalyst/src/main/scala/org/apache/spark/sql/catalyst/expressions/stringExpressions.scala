@@ -153,6 +153,7 @@ case class ConcatWs(children: Seq[Expression])
             if (eval.isNull == TrueLiteral) {
               ("", "")
             } else {
+              // scalastyle:off line.size.limit
               (s"""
                 if (!$reprForIsNull) {
                   $varargNum += $reprForValueCast.numElements();
@@ -166,6 +167,7 @@ case class ConcatWs(children: Seq[Expression])
                   }
                 }
                 """)
+              // scalastyle:on line.size.limit
             }
         }
 
