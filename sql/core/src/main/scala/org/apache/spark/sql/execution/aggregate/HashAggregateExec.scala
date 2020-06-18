@@ -74,8 +74,8 @@ case class HashAggregateExec(
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
-    "partialAggSkipped" -> SQLMetrics.createMetric(sparkContext, "Num records" +
-      " skipped partial aggregation skipped"),
+    "partialAggSkipped" -> SQLMetrics.createMetric(sparkContext,
+      "number of skipped records for partial aggregates"),
     "avgHashProbe" ->
       SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"))
 

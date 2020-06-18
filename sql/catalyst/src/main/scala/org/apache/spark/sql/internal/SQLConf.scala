@@ -2196,8 +2196,8 @@ object SQLConf {
       .checkValue(bit => bit >= 10 && bit <= 30, "The bit value must be in [10, 30].")
       .createWithDefault(16)
 
-  val SPILL_PARTIAL_AGGREGATE_DISABLED =
-    buildConf("spark.sql.aggregate.spill.partialaggregate.disabled")
+  val SKIP_PARTIAL_AGGREGATE_ENABLED =
+    buildConf("spark.sql.aggregate.partialaggregate.skip.enabled")
       .internal()
       .doc("Avoid sort/spill to disk during partial aggregation")
       .booleanConf
@@ -2929,7 +2929,7 @@ class SQLConf extends Serializable with Logging {
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
-  def spillInPartialAggregationDisabled: Boolean = getConf(SPILL_PARTIAL_AGGREGATE_DISABLED)
+  def spillInPartialAggregationDisabled: Boolean = getConf(SKIP_PARTIAL_AGGREGATE_ENABLED)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 

@@ -52,7 +52,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test(s"Avoid spill in partial aggregation" ) {
-    withSQLConf((SQLConf.SPILL_PARTIAL_AGGREGATE_DISABLED.key, "true")) {
+    withSQLConf((SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key, "true")) {
       // Create Dataframes
       val data = Seq(("James", 1), ("James", 1), ("Phil", 1))
       val aggDF = data.toDF("name", "values").groupBy("name").sum("values")
