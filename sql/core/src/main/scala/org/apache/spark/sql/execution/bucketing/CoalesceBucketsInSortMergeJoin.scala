@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -26,6 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * This rule coalesces one side of the `SortMergeJoin` if the following conditions are met:
  *   - Two bucketed tables are joined.
+ *   - Join keys match with output partition expressions on their respective sides.
  *   - The larger bucket number is divisible by the smaller bucket number.
  *   - COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED is set to true.
  *   - The ratio of the number of buckets is less than the value set in
@@ -85,20 +88,37 @@ object ExtractSortMergeJoinWithBuckets {
   }
 
   private def getBucketSpec(plan: SparkPlan): Option[BucketSpec] = {
-    if (isScanOperation(plan)) {
-      plan.collectFirst {
-        case f: FileSourceScanExec if f.relation.bucketSpec.nonEmpty &&
-            f.optionalNumCoalescedBuckets.isEmpty =>
-          f.relation.bucketSpec.get
-      }
-    } else {
-      None
+    plan.collectFirst {
+      case f: FileSourceScanExec if f.relation.bucketSpec.nonEmpty &&
+          f.optionalNumCoalescedBuckets.isEmpty =>
+        f.relation.bucketSpec.get
     }
+  }
+
+  /**
+   * The join keys should match with expressions for output partitioning. Note that
+   * the ordering does not matter because it will be handled in `EnsureRequirements`.
+   */
+  private def satisfiesOutputPartitioning(
+      keys: Seq[Expression],
+      partitioning: Partitioning): Boolean = {
+    partitioning match {
+      case HashPartitioning(exprs, _) if exprs.length == keys.length =>
+        exprs.forall(e => keys.exists(_.semanticEquals(e)))
+      case _ => false
+    }
+  }
+
+  private def isApplicable(s: SortMergeJoinExec): Boolean = {
+    isScanOperation(s.left) &&
+      isScanOperation(s.right) &&
+      satisfiesOutputPartitioning(s.leftKeys, s.left.outputPartitioning) &&
+      satisfiesOutputPartitioning(s.rightKeys, s.right.outputPartitioning)
   }
 
   def unapply(plan: SparkPlan): Option[(SortMergeJoinExec, Int, Int)] = {
     plan match {
-      case s: SortMergeJoinExec =>
+      case s: SortMergeJoinExec if isApplicable(s) =>
         val leftBucket = getBucketSpec(s.left)
         val rightBucket = getBucketSpec(s.right)
         if (leftBucket.isDefined && rightBucket.isDefined) {

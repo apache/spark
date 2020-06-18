@@ -360,7 +360,8 @@ case class FileSourceScanExec(
         spec.numBuckets
       }
       metadata + ("SelectedBucketsCount" ->
-        s"$numSelectedBuckets out of ${spec.numBuckets}")
+        (s"$numSelectedBuckets out of ${spec.numBuckets}" +
+          optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
     } getOrElse {
       metadata
     }

@@ -942,4 +942,44 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           Some(BucketSpec(7, Seq("i", "j"), Seq("i", "j"))), expectedShuffle = true))
     }
   }
+
+  test("bucket coalescing is applied when join expressions match with partitioning expressions") {
+    withTable("t1", "t2") {
+      df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("t1")
+      df2.write.format("parquet").bucketBy(4, "i", "j").saveAsTable("t2")
+
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+        SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+        def verify(
+            query: String,
+            expectedNumShuffles: Int,
+            expectedCoalescedNumBuckets: Option[Int]): Unit = {
+          val plan = sql(query).queryExecution.executedPlan
+          val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
+          assert(shuffles.length == expectedNumShuffles)
+
+          val scans = plan.collect {
+            case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.isDefined => f
+          }
+          if (expectedCoalescedNumBuckets.isDefined) {
+            assert(scans.length == 1)
+            assert(scans(0).optionalNumCoalescedBuckets == expectedCoalescedNumBuckets)
+          } else {
+            assert(scans.isEmpty)
+          }
+        }
+
+        // Coalescing applied since join expressions match with the bucket columns.
+        verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i AND t1.j = t2.j", 0, Some(4))
+        // Coalescing applied when columns are aliased.
+        verify(
+          "SELECT * FROM t1 JOIN (SELECT i AS x, j AS y FROM t2) ON t1.i = x AND t1.j = y",
+          0,
+          Some(4))
+        // Coalescing is not applied when join expressions do not match with bucket columns.
+        verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i", 2, None)
+      }
+    }
+  }
 }
