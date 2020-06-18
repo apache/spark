@@ -1729,7 +1729,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def version: String = SPARK_VERSION
 
   /**
-   * Return a map from the executor to the max memory available for caching and the remaining
+   * Return a map from the block manager to the max memory available for caching and the remaining
    * memory available for caching.
    */
   def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
