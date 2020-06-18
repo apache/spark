@@ -86,7 +86,7 @@ private class HistoryServerDiskManager(
     // Reading level db would trigger table file compaction, then it may cause size of level db
     // directory changed. When service restarts, "currentUsage" is calculated from real directory
     // size. Update "ApplicationStoreInfo.size" to ensure "currentUsage" equals
-    // sum("ApplicationStoreInfo.size").
+    // sum of "ApplicationStoreInfo.size".
     val changedStoreInfo = listing.view(classOf[ApplicationStoreInfo]).asScala.filter { info =>
       info.size != sizeOf(new File(info.path))
     }.map { info =>
