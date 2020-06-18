@@ -93,7 +93,7 @@ object RawTextHelper {
   }
 
   /**
-   * Warms up the SparkContext in master and slave by running tasks to force JIT kick in
+   * Warms up the SparkContext in master and executor by running tasks to force JIT kick in
    * before real workload starts.
    */
   def warmUp(sc: SparkContext): Unit = {
