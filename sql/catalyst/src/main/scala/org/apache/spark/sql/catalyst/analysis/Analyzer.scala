@@ -217,7 +217,6 @@ class Analyzer(
       ResolveInsertInto ::
       ResolveRelations ::
       ResolveTables ::
-      ResolveFunc(catalogManager) ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -832,14 +831,6 @@ class Analyzer(
         ResolvedNamespace(currentCatalog, Seq.empty[String])
       case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>
         ResolvedNamespace(catalog, ns)
-    }
-  }
-
-  case class ResolveFunc(catalogManager: CatalogManager)
-    extends Rule[LogicalPlan] with LookupCatalog {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case UnresolvedFunc(CatalogAndFunctionIdentifier(catalog, identifier)) =>
-        ResolvedFunc(catalog, identifier)
     }
   }
 
@@ -1899,6 +1890,9 @@ class Analyzer(
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case UnresolvedFunc(CatalogAndFunctionIdentifier(catalog, identifier)) =>
+        ResolvedFunc(catalog, identifier)
+
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
