@@ -1431,7 +1431,7 @@ sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary
   override def scoreCol: String = if (probabilityCol.nonEmpty) {
     probabilityCol
   } else {
-    throw new SparkException(s"probabilityCol is required for BinaryLogisticRegressionSummary.")
+    throw new SparkException("probabilityCol is required for BinaryLogisticRegressionSummary.")
   }
 }
 

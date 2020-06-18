@@ -159,7 +159,7 @@ private[classification] trait TrainingSummary {
   /** Number of training iterations. */
   @Since("3.1.0")
   def totalIterations: Int = {
-    assert(objectiveHistory.length > 0, s"objectiveHistory length should be greater than 1.")
+    assert(objectiveHistory.length > 0, "objectiveHistory length should be greater than 0.")
     objectiveHistory.length - 1
   }
 }

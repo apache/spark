@@ -441,10 +441,6 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
         .. seealso:: `Wikipedia reference
             <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
         """
         return self._call_java("roc")
 
@@ -454,10 +450,6 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         """
         Computes the area under the receiver operating characteristic
         (ROC) curve.
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
         """
         return self._call_java("areaUnderROC")
 
@@ -468,10 +460,6 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         Returns the precision-recall curve, which is a Dataframe
         containing two fields recall, precision with (0.0, 1.0) prepended
         to it.
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
         """
         return self._call_java("pr")
 
@@ -481,10 +469,6 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         """
         Returns a dataframe with two fields (threshold, F-Measure) curve
         with beta = 1.0.
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
         """
         return self._call_java("fMeasureByThreshold")
 
@@ -495,10 +479,6 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         Returns a dataframe with two fields (threshold, precision) curve.
         Every possible probability obtained in transforming the dataset
         are used as thresholds used in calculating the precision.
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
         """
         return self._call_java("precisionByThreshold")
 
@@ -509,10 +489,6 @@ class _BinaryClassificationSummary(_ClassificationSummary):
         Returns a dataframe with two fields (threshold, recall) curve.
         Every possible probability obtained in transforming the dataset
         are used as thresholds used in calculating the recall.
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
         """
         return self._call_java("recallByThreshold")
 
@@ -1234,7 +1210,7 @@ class LogisticRegressionSummary(_ClassificationSummary):
         return self._call_java("probabilityCol")
 
     @property
-    @since("3.1.0")
+    @since("2.0.0")
     def featuresCol(self):
         """
         Field in "predictions" which gives the features of each instance
