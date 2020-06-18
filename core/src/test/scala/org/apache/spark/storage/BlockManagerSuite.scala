@@ -1327,9 +1327,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       "newlist3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
 
     // getLocations and getBlockStatus should yield the same locations
-    assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askReplicas = false).size
+    assert(
+      store.master.getMatchingBlockIds(_.toString.contains("newlist"), askReplicas = false).size
       === 1)
-    assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askReplicas = true).size
+    assert(
+      store.master.getMatchingBlockIds(_.toString.contains("newlist"), askReplicas = true).size
       === 3)
 
     val blockIds = Seq(RDDBlockId(1, 0), RDDBlockId(1, 1), RDDBlockId(2, 0))
