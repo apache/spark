@@ -308,7 +308,7 @@ class HadoopTableReader(
 
   /**
    * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
-   * applied locally on each slave.
+   * applied locally on each executor.
    */
   private def createOldHadoopRDD(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
@@ -330,7 +330,7 @@ class HadoopTableReader(
 
   /**
    * Creates a NewHadoopRDD based on the broadcasted HiveConf and other job properties that will be
-   * applied locally on each slave.
+   * applied locally on each executor.
    */
   private def createNewHadoopRDD(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val newJobConf = new JobConf(hadoopConf)
