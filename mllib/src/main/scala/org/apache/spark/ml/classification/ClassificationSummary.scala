@@ -142,17 +142,6 @@ private[classification] trait ClassificationSummary extends Serializable {
   /** Returns weighted averaged f1-measure. */
   @Since("3.1.0")
   def weightedFMeasure: Double = multiclassMetrics.weightedFMeasure(1.0)
-
-  /**
-   * Convenient method for casting to binary classification summary.
-   * This method will throw an Exception if the summary is not a binary summary.
-   */
-  @Since("3.1.0")
-  def asBinary: BinaryClassificationSummary = this match {
-    case b: BinaryClassificationSummary => b
-    case _ =>
-      throw new RuntimeException("Cannot cast to a binary summary.")
-  }
 }
 
 /**

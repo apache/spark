@@ -1402,6 +1402,17 @@ sealed trait LogisticRegressionSummary extends ClassificationSummary {
   /** Field in "predictions" which gives the features of each instance as a vector. */
   @Since("1.6.0")
   def featuresCol: String
+
+  /**
+   * Convenient method for casting to binary logistic regression summary.
+   * This method will throw an Exception if the summary is not a binary summary.
+   */
+  @Since("2.3.0")
+  def asBinary: BinaryLogisticRegressionSummary = this match {
+    case b: BinaryLogisticRegressionSummary => b
+    case _ =>
+      throw new RuntimeException("Cannot cast to a binary summary.")
+  }
 }
 
 /**
