@@ -138,7 +138,7 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
   }
 
   def startCompositeService(): Unit = {
-    // Emulating `CompositeService.init(hiveConf)`
+    // Emulating `CompositeService.start`
     val serviceList = getAncestorField[JList[Service]](this, 2, "serviceList")
     var serviceStartCount = 0
     try {
@@ -155,6 +155,8 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
     }
 
     // Emulating `AbstractService.start`
+    val startTime = new java.lang.Long(System.currentTimeMillis())
+    setAncestorField(this, 3, "startTime", startTime)
     invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.INITED)
     invoke(classOf[AbstractService], this, "changeState", classOf[STATE] -> STATE.STARTED)
     logInfo(s"Service: $getName is started.")
