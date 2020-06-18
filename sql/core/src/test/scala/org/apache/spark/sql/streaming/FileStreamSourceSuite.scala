@@ -536,11 +536,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
       val defaultFs = "nonexistFS://nonexistFS"
-      val expectMessage = "No FileSystem for scheme: nonexistFS"
+      val expectMessage = "No FileSystem for scheme nonexistFS"
       val message = intercept[java.io.IOException] {
         spark.readStream.option("fs.defaultFS", defaultFs).text(path)
       }.getMessage
-      assert(message == expectMessage)
+      assert(message.filterNot(Set(':', '"').contains) == expectMessage)
     }
   }
 

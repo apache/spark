@@ -587,6 +587,16 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         # Check that all group and window_range values from udf matched expected
         self.assertTrue(all([r[0] for r in result]))
 
+    def test_case_insensitive_grouping_column(self):
+        # SPARK-31915: case-insensitive grouping column should work.
+        def my_pandas_udf(pdf):
+            return pdf.assign(score=0.5)
+
+        df = self.spark.createDataFrame([[1, 1]], ["column", "score"])
+        row = df.groupby('COLUMN').applyInPandas(
+            my_pandas_udf, schema="column integer, score float").first()
+        self.assertEquals(row.asDict(), Row(column=1, score=0.5).asDict())
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_grouped_map import *

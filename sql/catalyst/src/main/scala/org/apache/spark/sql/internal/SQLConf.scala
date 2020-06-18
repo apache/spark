@@ -545,6 +545,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val MAX_CNF_NODE_COUNT =
+    buildConf("spark.sql.optimizer.maxCNFNodeCount")
+      .internal()
+      .doc("Specifies the maximum allowable number of conjuncts in the result of CNF " +
+        "conversion. If the conversion exceeds the threshold, an empty sequence is returned. " +
+        "For example, CNF conversion of (a && b) || (c && d) generates " +
+        "four conjuncts (a || c) && (a || d) && (b || c) && (b || d).")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0,
+        "The depth of the maximum rewriting conjunction normal form must be positive.")
+      .createWithDefault(128)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -2595,15 +2608,21 @@ object SQLConf {
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
 
-  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED =
+  val LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP =
+    buildConf("spark.sql.legacy.allowCastNumericToTimestamp")
+      .internal()
+      .doc("When true, allow casting numeric to timestamp," +
+        "when false, forbid the cast, more details in SPARK-31710")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+    val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED =
     buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.enabled")
       .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
         "the side with a bigger number of buckets will be coalesced to have the same number " +
         "of buckets as the other side. Bucket coalescing is applied only to sort-merge joins " +
         "and only when the bigger number of buckets is divisible by the smaller number of buckets.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
 
   val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO =
     buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.maxBucketRatio")
@@ -2893,6 +2912,8 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  def maxCnfNodeCount: Int = getConf(MAX_CNF_NODE_COUNT)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
@@ -3200,6 +3221,9 @@ class SQLConf extends Serializable with Logging {
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def legacyAllowCastNumericToTimestamp: Boolean =
+    getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -849,15 +849,15 @@ class FileBasedDataSourceSuite extends QueryTest
         withTempDir { dir =>
           val path = dir.getCanonicalPath
           val defaultFs = "nonexistFS://nonexistFS"
-          val expectMessage = "No FileSystem for scheme: nonexistFS"
+          val expectMessage = "No FileSystem for scheme nonexistFS"
           val message1 = intercept[java.io.IOException] {
             spark.range(10).write.option("fs.defaultFS", defaultFs).parquet(path)
           }.getMessage
-          assert(message1 == expectMessage)
+          assert(message1.filterNot(Set(':', '"').contains) == expectMessage)
           val message2 = intercept[java.io.IOException] {
             spark.read.option("fs.defaultFS", defaultFs).parquet(path)
           }.getMessage
-          assert(message2 == expectMessage)
+          assert(message2.filterNot(Set(':', '"').contains) == expectMessage)
         }
       }
     }
