@@ -1549,7 +1549,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 
   def this(left: Expression, format: Expression) {
       this(left, Option(format),
-        Cast(Cast(UnixTimestamp(left, format), TimestampType), DateType))
+        Cast(SecondsToTimestamp(UnixTimestamp(left, format)), DateType))
   }
 
   def this(left: Expression) = {

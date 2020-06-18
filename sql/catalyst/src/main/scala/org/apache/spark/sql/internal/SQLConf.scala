@@ -2616,6 +2616,15 @@ object SQLConf {
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
 
+  val LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP =
+    buildConf("spark.sql.legacy.allowCastNumericToTimestamp")
+      .internal()
+      .doc("When true, allow casting numeric to timestamp," +
+        "when false, forbid the cast, more details in SPARK-31710")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3203,6 +3212,9 @@ class SQLConf extends Serializable with Logging {
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def legacyAllowCastNumericToTimestamp: Boolean =
+    getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
 
   /** ********************** SQLConf functionality methods ************ */
 
