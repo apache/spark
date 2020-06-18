@@ -1176,6 +1176,14 @@ object SQLConf {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
+  val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
+    .doc("The suggested (not guaranteed) minimum number of file split partitions. If not set, " +
+      "the default value is the default parallelism of the Spark cluster. This configuration is " +
+      "effective only when using file-based sources such as Parquet, JSON and ORC.")
+    .version("3.1.0")
+    .intConf
+    .createOptional
+
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
       "encountering corrupted files and the contents that have been read will still be returned. " +
@@ -2781,6 +2789,8 @@ class SQLConf extends Serializable with Logging {
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
+
+  def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
