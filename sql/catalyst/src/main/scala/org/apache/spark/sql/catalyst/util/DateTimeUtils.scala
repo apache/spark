@@ -210,17 +210,6 @@ object DateTimeUtils {
     Math.multiplyExact(millis, MICROS_PER_MILLIS)
   }
 
-  def microsToEpochDays(micros: Long, zoneId: ZoneId): Int = {
-    localDateToDays(microsToInstant(micros).atZone(zoneId).toLocalDate)
-  }
-
-  def epochDaysToMicros(days: Int, zoneId: ZoneId): Long = {
-    val localDate = LocalDate.ofEpochDay(days)
-    val zeroLocalTime = LocalTime.MIDNIGHT
-    val localDateTime = LocalDateTime.of(localDate, zeroLocalTime)
-    instantToMicros(localDateTime.atZone(zoneId).toInstant)
-  }
-
   // A method called by JSON/CSV parser to clean up the legacy timestamp string by removing the
   // "GMT" string.
   def cleanLegacyTimestampStr(s: String): String = {
