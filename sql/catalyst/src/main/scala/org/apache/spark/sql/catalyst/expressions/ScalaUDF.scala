@@ -103,7 +103,7 @@ case class ScalaUDF(
   }
 
   private def createToScalaConverter(i: Int, dataType: DataType): Any => Any = {
-    if (inputEncoders.isEmpty || // for untyped Scala UDF
+    if (inputEncoders.isEmpty || // for untyped Scala UDF and Java UDF
         inputEncoders(i).isEmpty || // for types aren't supported by encoder, e.g. Any
         inputPrimitives(i) || // inputPrimitives is not empty when inputEncoders is not empty
         dataType.existsRecursively(_.isInstanceOf[UserDefinedType[_]])) {
