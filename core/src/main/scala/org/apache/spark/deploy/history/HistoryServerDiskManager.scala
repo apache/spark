@@ -83,6 +83,20 @@ private class HistoryServerDiskManager(
       listing.delete(info.getClass(), info.path)
     }
 
+    // Reading level db would trigger table file compaction, then it may cause size of level db
+    // directory changed. When service restarts, "currentUsage" is calculated from real directory
+    // size. Update "ApplicationStoreInfo.size" to ensure "currentUsage" equals
+    // sum("ApplicationStoreInfo.size").
+    val changedStoreInfo = listing.view(classOf[ApplicationStoreInfo]).asScala.filter { info =>
+      info.size != sizeOf(new File(info.path))
+    }.map { info =>
+      info.copy(size = sizeOf(new File(info.path)))
+    }.toSeq
+
+    changedStoreInfo.foreach { info =>
+      listing.write(info)
+    }
+
     logInfo("Initialized disk manager: " +
       s"current usage = ${Utils.bytesToString(currentUsage.get())}, " +
       s"max usage = ${Utils.bytesToString(maxUsage)}")

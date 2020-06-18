@@ -59,6 +59,24 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
     manager
   }
 
+  test ("SPARK-12345: update ApplicationStoreInfo.size during initializing") {
+    val manager = mockManager()
+    val leaseA = manager.lease(2)
+    doReturn(3L).when(manager).sizeOf(meq(leaseA.tmpPath))
+    val dstA = leaseA.commit("app2", None)
+    assert(manager.free() === 0)
+    assert(manager.committed() === 3)
+    // Simulate service restarts, new disk manager is initialized.
+    val manager1 = mockManager()
+    doReturn(2L).when(manager1).sizeOf(meq(dstA))
+    doReturn(2L).when(manager1).sizeOf(meq(new File(testDir, "apps")))
+    manager1.initialize()
+    val leaseB = manager1.lease(2)
+    assert(manager1.free() === 1)
+    leaseB.rollback()
+    assert(manager1.free() === 3)
+  }
+
   test("leasing space") {
     val manager = mockManager()
 
