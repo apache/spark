@@ -520,4 +520,6 @@ case class CommentOnTable(child: LogicalPlan, comment: String) extends Command {
 /**
  * The logical plan of the REFRESH FUNCTION command that works for v2 catalogs.
  */
-case class RefreshFunction(child: LogicalPlan) extends Command
+case class RefreshFunction(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
