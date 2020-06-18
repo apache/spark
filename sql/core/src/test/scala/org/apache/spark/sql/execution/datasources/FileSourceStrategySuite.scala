@@ -538,6 +538,16 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
         ))
       assert(table.rdd.partitions.length == 1)
     }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1
+        ))
+      assert(table.rdd.partitions.length == 3)
+    }
   }
 
   // Helpers for checking the arguments passed to the FileFormat.
