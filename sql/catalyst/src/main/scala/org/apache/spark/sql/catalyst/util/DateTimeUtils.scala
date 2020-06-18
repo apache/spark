@@ -75,11 +75,6 @@ object DateTimeUtils {
     instantToMicros(instant)
   }
 
-  // Converts the `micros` timestamp to string according to Hive TimestampWritable convention.
-  def timestampToString(tf: TimestampFormatter, micros: Long): String = {
-    tf.format(micros)
-  }
-
   /**
    * Converts a local date at the default JVM time zone to the number of days since 1970-01-01
    * in the hybrid calendar (Julian + Gregorian) by discarding the time part. The resulted days are
