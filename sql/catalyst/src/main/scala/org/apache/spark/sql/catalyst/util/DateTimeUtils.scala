@@ -393,12 +393,6 @@ object DateTimeUtils {
     Instant.ofEpochSecond(secs, mos * NANOS_PER_MICROS)
   }
 
-  def instantToDays(instant: Instant): Int = {
-    val seconds = instant.getEpochSecond
-    val days = Math.floorDiv(seconds, SECONDS_PER_DAY)
-    days.toInt
-  }
-
   def localDateToDays(localDate: LocalDate): Int = Math.toIntExact(localDate.toEpochDay)
 
   def daysToLocalDate(days: Int): LocalDate = LocalDate.ofEpochDay(days)
