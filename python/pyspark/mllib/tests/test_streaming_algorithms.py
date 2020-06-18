@@ -463,7 +463,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
                 return True
             return "Latest errors: " + ", ".join(map(lambda x: str(x), errors))
 
-        eventually(condition)
+        eventually(condition, timeout=180.0)
 
 
 if __name__ == "__main__":

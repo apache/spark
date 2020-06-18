@@ -14,20 +14,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api.v1.sql
 
-import java.util.Date
+package org.apache.spark.ui
 
-class ExecutionData private[spark] (
-    val id: Long,
-    val status: String,
-    val description: String,
-    val planDescription: String,
-    val metrics: Seq[Metrics],
-    val submissionTime: Date,
-    val duration: Long,
-    val runningJobIds: Seq[Int],
-    val successJobIds: Seq[Int],
-    val failedJobIds: Seq[Int])
+import org.openqa.selenium.WebDriver
+import org.openqa.selenium.chrome.{ChromeDriver, ChromeOptions}
 
-case class Metrics private[spark] (metricName: String, metricValue: String)
+import org.apache.spark.tags.ChromeUITest
+
+/**
+ * Selenium tests for the Spark Web UI with Chrome.
+ */
+@ChromeUITest
+class ChromeUISeleniumSuite extends RealBrowserUISeleniumSuite("webdriver.chrome.driver") {
+
+  override var webDriver: WebDriver = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    val chromeOptions = new ChromeOptions
+    chromeOptions.addArguments("--headless", "--disable-gpu")
+    webDriver = new ChromeDriver(chromeOptions)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
+    }
+  }
+}

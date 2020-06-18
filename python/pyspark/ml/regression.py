@@ -53,7 +53,7 @@ class JavaRegressor(JavaPredictor, _JavaPredictorParams):
 class JavaRegressionModel(JavaPredictionModel, _JavaPredictorParams):
     """
     Java Model produced by a ``_JavaRegressor``.
-    To be mixed in with class:`pyspark.ml.JavaModel`
+    To be mixed in with :class:`pyspark.ml.JavaModel`
 
     .. versionadded:: 3.0.0
     """

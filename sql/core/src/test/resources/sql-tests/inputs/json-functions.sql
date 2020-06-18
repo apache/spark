@@ -48,6 +48,21 @@ select from_json('[null, {"a":2}]', 'array<struct<a:int>>');
 select from_json('[{"a": 1}, {"b":2}]', 'array<map<string,int>>');
 select from_json('[{"a": 1}, 2]', 'array<map<string,int>>');
 
+-- from_json - datetime type
+select from_json('{"d": "2012-12-15", "t": "2012-12-15 15:15:15"}', 'd date, t timestamp');
+select from_json(
+  '{"d": "12/15 2012", "t": "12/15 2012 15:15:15"}',
+  'd date, t timestamp',
+  map('dateFormat', 'MM/dd yyyy', 'timestampFormat', 'MM/dd yyyy HH:mm:ss'));
+select from_json(
+  '{"d": "02-29"}',
+  'd date',
+  map('dateFormat', 'MM-dd'));
+select from_json(
+  '{"t": "02-29"}',
+  't timestamp',
+  map('timestampFormat', 'MM-dd'));
+
 -- to_json - array type
 select to_json(array('1', '2', '3'));
 select to_json(array(array(1, 2, 3), array(4)));

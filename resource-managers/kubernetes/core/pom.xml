@@ -29,7 +29,8 @@
   <name>Spark Project Kubernetes</name>
   <properties>
     <sbt.project.name>kubernetes</sbt.project.name>
-    <kubernetes.client.version>4.6.4</kubernetes.client.version>
+    <!-- Note: Please update the kubernetes client version in kubernetes/integration-tests/pom.xml -->
+    <kubernetes.client.version>4.9.2</kubernetes.client.version>
   </properties>
 
   <dependencies>

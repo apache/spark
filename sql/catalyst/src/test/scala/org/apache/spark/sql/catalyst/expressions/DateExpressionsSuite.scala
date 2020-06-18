@@ -41,7 +41,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val JST_OPT = Option(JST.getId)
 
   def toMillis(timestamp: String): Long = {
-    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC)
+    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC, isParsing = true)
     DateTimeUtils.toMillis(tf.parse(timestamp))
   }
   val date = "2015-04-08 13:10:15"
@@ -267,7 +267,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         // Test escaping of format
         GenerateUnsafeProjection.generate(
-          DateFormatClass(Literal(ts), Literal("\"quote"), JST_OPT) :: Nil)
+          DateFormatClass(Literal(ts), Literal("\""), JST_OPT) :: Nil)
 
         // SPARK-28072 The codegen path should work
         checkEvaluation(
@@ -793,7 +793,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
     // Test escaping of format
-    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("unix_timestamp") {
@@ -863,7 +863,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
+      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("to_unix_timestamp") {
@@ -941,7 +941,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
+      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("datediff") {
@@ -1146,5 +1146,44 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal("2020-01-27T20:06:11.847-0800"),
           Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), "Fail to parse")
     }
+  }
+
+  test("Disable week-based date fields and quarter fields for parsing") {
+
+    def checkSparkUpgrade(c: Char): Unit = {
+      checkExceptionInExpression[SparkUpgradeException](
+        new ParseToTimestamp(Literal("1"), Literal(c.toString)).child, "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        new ParseToDate(Literal("1"), Literal(c.toString)).child, "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        ToUnixTimestamp(Literal("1"), Literal(c.toString)), "3.0")
+      checkExceptionInExpression[SparkUpgradeException](
+        UnixTimestamp(Literal("1"), Literal(c.toString)), "3.0")
+    }
+
+    def checkNullify(c: Char): Unit = {
+      checkEvaluation(new ParseToTimestamp(Literal("1"), Literal(c.toString)).child, null)
+      checkEvaluation(new ParseToDate(Literal("1"), Literal(c.toString)).child, null)
+      checkEvaluation(ToUnixTimestamp(Literal("1"), Literal(c.toString)), null)
+      checkEvaluation(UnixTimestamp(Literal("1"), Literal(c.toString)), null)
+    }
+
+    Seq('Y', 'W', 'w', 'E', 'u', 'F').foreach { l =>
+      checkSparkUpgrade(l)
+    }
+
+    Seq('q', 'Q').foreach { l =>
+      checkNullify(l)
+    }
+  }
+
+
+  test("SPARK-31896: Handle am-pm timestamp parsing when hour is missing") {
+    checkEvaluation(
+      new ParseToTimestamp(Literal("PM"), Literal("a")).child,
+      Timestamp.valueOf("1970-01-01 12:00:00.0"))
+    checkEvaluation(
+      new ParseToTimestamp(Literal("11:11 PM"), Literal("mm:ss a")).child,
+      Timestamp.valueOf("1970-01-01 12:11:11.0"))
   }
 }

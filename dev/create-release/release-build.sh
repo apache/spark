@@ -92,9 +92,12 @@ BASE_DIR=$(pwd)
 init_java
 init_maven_sbt
 
-rm -rf spark
-git clone "$ASF_REPO"
+# Only clone repo fresh if not present, otherwise use checkout from the tag step
+if [ ! -d spark ]; then
+  git clone "$ASF_REPO"
+fi
 cd spark
+git fetch
 git checkout $GIT_REF
 git_hash=`git rev-parse --short HEAD`
 echo "Checked out Spark git hash $git_hash"
@@ -380,7 +383,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "</server></servers></settings>" >> $tmp_settings
 
   # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES deploy
 
@@ -412,7 +415,7 @@ if [[ "$1" == "publish-release" ]]; then
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
   # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   # TODO: revisit for Scala 2.13 support
 

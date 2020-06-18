@@ -643,7 +643,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
           format.toString,
           zoneId,
           legacyFormat = SIMPLE_DATE_FORMAT,
-          needVarLengthSecondFraction = false)
+          isParsing = false)
       }
     } else None
   }
@@ -654,7 +654,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
         format.toString,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        needVarLengthSecondFraction = false)
+        isParsing = false)
     } else {
       formatter.get
     }
@@ -799,8 +799,9 @@ abstract class ToTimestamp
         constFormat.toString,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        needVarLengthSecondFraction = true)
+        isParsing = true)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 
@@ -837,7 +838,7 @@ abstract class ToTimestamp
                 formatString,
                 zoneId,
                 legacyFormat = SIMPLE_DATE_FORMAT,
-                needVarLengthSecondFraction = true)
+                isParsing = true)
                 .parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case e: SparkUpgradeException => throw e
@@ -980,8 +981,9 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
         constFormat.toString,
         zoneId,
         legacyFormat = SIMPLE_DATE_FORMAT,
-        needVarLengthSecondFraction = false)
+        isParsing = false)
     } catch {
+      case e: SparkUpgradeException => throw e
       case NonFatal(_) => null
     }
 
@@ -997,6 +999,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           try {
             UTF8String.fromString(formatter.format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(_) => null
           }
         }
@@ -1011,9 +1014,10 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
                 f.toString,
                 zoneId,
                 legacyFormat = SIMPLE_DATE_FORMAT,
-                needVarLengthSecondFraction = false)
+                isParsing = false)
                 .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
+            case e: SparkUpgradeException => throw e
             case NonFatal(_) => null
           }
         }

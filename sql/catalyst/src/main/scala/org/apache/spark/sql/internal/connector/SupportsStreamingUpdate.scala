@@ -15,15 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.status.api.v1.sql
+package org.apache.spark.sql.internal.connector
 
-import javax.ws.rs.Path
+import org.apache.spark.sql.connector.write.WriteBuilder
 
-import org.apache.spark.status.api.v1.ApiRequestContext
-
-@Path("/v1")
-private[v1] class ApiSqlRootResource extends ApiRequestContext {
-
-  @Path("applications/{appId}/sql")
-  def sqlList(): Class[SqlResource] = classOf[SqlResource]
+// An internal `WriteBuilder` mixin to support UPDATE streaming output mode.
+// TODO: design an official API for streaming output mode UPDATE.
+trait SupportsStreamingUpdate extends WriteBuilder {
+  def update(): WriteBuilder
 }
