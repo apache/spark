@@ -160,10 +160,10 @@ private[sql] trait LookupCatalog extends Logging {
    * Extract catalog and function identifier from a multi-part name with the current catalog if
    * needed.
    *
-   * Note that: now function is only supported in v1 catalog.
+   * Note that: function is only supported in v1 catalog.
    */
   object CatalogAndFunctionIdentifier {
-    def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, FunctionIdentifier)] = {
+    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, FunctionIdentifier)] = {
 
       if (nameParts.length == 1 && catalogManager.v1SessionCatalog.isTempFunction(nameParts.head)) {
         return Some(currentCatalog, FunctionIdentifier(nameParts.head))
@@ -184,7 +184,7 @@ private[sql] trait LookupCatalog extends Logging {
             }
           }
 
-        case _ => throw new AnalysisException(s"Function command is only supported in v1 catalog")
+        case _ => throw new AnalysisException("Function command is only supported in v1 catalog")
       }
     }
   }
