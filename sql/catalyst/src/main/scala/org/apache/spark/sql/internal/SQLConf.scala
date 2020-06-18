@@ -1182,6 +1182,7 @@ object SQLConf {
       "effective only when using file-based sources such as Parquet, JSON and ORC.")
     .version("3.1.0")
     .intConf
+    .checkValue(v => v > 0, "The min partition number must be a positive integer.")
     .createOptional
 
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
