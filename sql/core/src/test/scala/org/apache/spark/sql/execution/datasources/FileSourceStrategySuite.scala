@@ -526,17 +526,17 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
         assert(scan.head.scan.readSchema() == StructType(StructField("key", LongType) :: Nil))
       }
     }
+  }
 
-    test("Add spark.sql.files.minPartitionNum config") {
-      withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
-        val table =
-          createTable(files = Seq(
-            "file1" -> 1,
-            "file2" -> 1,
-            "file3" -> 1,
-          ))
-        assert(table.rdd.partitions.length == 1)
-      }
+  test("Add spark.sql.files.minPartitionNum config") {
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1,
+        ))
+      assert(table.rdd.partitions.length == 1)
     }
   }
 
