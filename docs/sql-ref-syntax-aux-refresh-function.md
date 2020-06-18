@@ -23,7 +23,7 @@ license: |
 
 `REFRESH FUNCTION` statement invalidates the cached function entry, which includes class name
 and resource location of the given function. The invalidated cache is populated right away.
-Note that REFRESH FUNCTION only works for permanent functions. Refreshing native functions or temporary functions will cause an exception.
+Note that `REFRESH FUNCTION` only works for permanent functions. Refreshing native functions or temporary functions will cause an exception.
 
 ### Syntax
 
