@@ -44,10 +44,10 @@ spark.sql.codegen.wholeStage	true
 
 -- !query
 EXPLAIN FORMATTED
-  SELECT key, max(val)
-  FROM   explain_temp1
-  WHERE  key > 0
-  GROUP  BY key
+  SELECT key, max(val) 
+  FROM   explain_temp1 
+  WHERE  key > 0 
+  GROUP  BY key 
   ORDER  BY key
 -- !query schema
 struct<plan:string>
@@ -179,7 +179,7 @@ Input [3]: [key#x, max(val)#x, max(val#x)#x]
 -- !query
 EXPLAIN FORMATTED
   SELECT key, val FROM explain_temp1 WHERE key > 0
-  UNION
+  UNION 
   SELECT key, val FROM explain_temp1 WHERE key > 0
 -- !query schema
 struct<plan:string>
@@ -258,9 +258,9 @@ Results [2]: [key#x, val#x]
 
 -- !query
 EXPLAIN FORMATTED
-  SELECT *
-  FROM   explain_temp1 a,
-         explain_temp2 b
+  SELECT * 
+  FROM   explain_temp1 a, 
+         explain_temp2 b 
   WHERE  a.key = b.key
 -- !query schema
 struct<plan:string>
@@ -326,9 +326,9 @@ Join condition: None
 
 -- !query
 EXPLAIN FORMATTED
-  SELECT *
-  FROM   explain_temp1 a
-         LEFT OUTER JOIN explain_temp2 b
+  SELECT * 
+  FROM   explain_temp1 a 
+         LEFT OUTER JOIN explain_temp2 b 
                       ON a.key = b.key
 -- !query schema
 struct<plan:string>
@@ -383,14 +383,14 @@ Join condition: None
 
 -- !query
 EXPLAIN FORMATTED
-  SELECT *
-  FROM   explain_temp1
-  WHERE  key = (SELECT max(key)
-                FROM   explain_temp2
-                WHERE  key = (SELECT max(key)
-                              FROM   explain_temp3
-                              WHERE  val > 0)
-                       AND val = 2)
+  SELECT * 
+  FROM   explain_temp1 
+  WHERE  key = (SELECT max(key) 
+                FROM   explain_temp2 
+                WHERE  key = (SELECT max(key) 
+                              FROM   explain_temp3 
+                              WHERE  val > 0) 
+                       AND val = 2) 
          AND val > 3
 -- !query schema
 struct<plan:string>
@@ -517,11 +517,11 @@ Results [1]: [max(key#x)#x AS max(key)#x]
 
 -- !query
 EXPLAIN FORMATTED
-  SELECT *
-  FROM   explain_temp1
-  WHERE  key = (SELECT max(key)
-                FROM   explain_temp2
-                WHERE  val > 0)
+  SELECT * 
+  FROM   explain_temp1 
+  WHERE  key = (SELECT max(key) 
+                FROM   explain_temp2 
+                WHERE  val > 0) 
          OR
          key = (SELECT avg(key)
                 FROM   explain_temp3
@@ -713,7 +713,7 @@ Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery 
 EXPLAIN FORMATTED
   WITH cte1 AS (
     SELECT *
-    FROM explain_temp1
+    FROM explain_temp1 
     WHERE key > 10
   )
   SELECT * FROM cte1 a, cte1 b WHERE a.key = b.key
@@ -783,7 +783,7 @@ Join condition: None
 EXPLAIN FORMATTED
   WITH cte1 AS (
     SELECT key, max(val)
-    FROM explain_temp1
+    FROM explain_temp1 
     WHERE key > 10
     GROUP BY key
   )
