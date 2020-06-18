@@ -837,9 +837,9 @@ object SQLConf {
 
   val HIVE_FILESOURCE_PARTITION_FILE_CACHE_TTL =
     buildConf("spark.sql.hive.filesourcePartitionFileCacheTTL")
-      .doc("When positive, it's used as a TTL (time-to-live) value for the partition file " +
-        "metadata cache. This conf only has an effect when hive filesource partition management " +
-        "is enabled.")
+      .doc("Time-to-live (TTL) value for the partition file metadata cache. This configuration " +
+           "only has an effect when this value having a positive value and setting `hive` to " +
+           s"${StaticSQLConf.CATALOG_IMPLEMENTATION}.")
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(-1)
