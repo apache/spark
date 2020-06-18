@@ -52,7 +52,7 @@ case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafN
 }
 
 /**
- * Holds the name of a function that has yet to be looked up in a catalog.  It will be resolved to
+ * Holds the name of a function that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedFunc]] during analysis.
  */
 case class UnresolvedFunc(multipartIdentifier: Seq[String]) extends LeafNode {
