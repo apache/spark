@@ -532,7 +532,7 @@ object DateTimeUtils {
 
   /**
    * Add timestamp and full interval.
-   * Returns a timestamp value, expressed in microseconds since 1970-01-01 00:00:00.
+   * Returns a timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
   def timestampAddInterval(
       start: Long,
