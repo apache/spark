@@ -2631,8 +2631,8 @@ object Sequence {
           (num.toLong(start), num.toLong(stop))
         }
         else {
-          (DateTimeUtils.epochDaysToMicros(num.toInt(start), zoneId),
-            DateTimeUtils.epochDaysToMicros(num.toInt(stop), zoneId))
+          (daysToMicros(num.toInt(start), zoneId),
+            daysToMicros(num.toInt(stop), zoneId))
         }
 
         val maxEstimatedArrayLength =

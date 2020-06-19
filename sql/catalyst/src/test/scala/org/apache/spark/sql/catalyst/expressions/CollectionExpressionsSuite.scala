@@ -1863,8 +1863,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Cast(Literal("2011-04-01"), DateType),
           Option(Literal(stringToInterval("interval 1 month"))),
           Option(tz)),
-          Seq(
-            Date.valueOf("2011-03-01"), Date.valueOf("2011-04-01")))
+          Seq(Date.valueOf("2011-03-01"), Date.valueOf("2011-04-01")))
       }
     })
   }
