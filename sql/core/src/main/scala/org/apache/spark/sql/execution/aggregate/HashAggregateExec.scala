@@ -63,7 +63,7 @@ case class HashAggregateExec(
 
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
-  override def needStopCheck: Boolean = sqlContext.conf.skipPartialAggregate
+  override def needStopCheck: Boolean = skipPartialAggregate
 
   override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -415,6 +415,7 @@ case class HashAggregateExec(
 
   private val isPartial = AggUtils.areAggExpressionsPartial(modes)
   private var avoidSpillInPartialAggregateTerm: String = _
+  private val skipPartialAggregate = sqlContext.conf.skipPartialAggregate
   private var childrenConsumed: String = _
   private var outputFunc: String = _
 
@@ -847,7 +848,8 @@ case class HashAggregateExec(
     s"""
        |if (!$initAgg) {
        |  $initAgg = true;
-       |  $avoidSpillInPartialAggregateTerm = ${Utils.isTesting} && $isPartial;
+       |  $avoidSpillInPartialAggregateTerm = ${Utils.isTesting}
+       |    && $isPartial && $skipPartialAggregate;
        |  $createFastHashMap
        |  $hashMapTerm = $thisPlan.createHashMap();
        |  long $beforeAgg = System.nanoTime();
@@ -899,8 +901,7 @@ case class HashAggregateExec(
 
     val oomeClassName = classOf[SparkOutOfMemoryError].getName
 
-    val thisPlan = ctx.addReferenceObj("plan", this)
-    val spillInPartialAggregateDisabled = sqlContext.conf.skipPartialAggregate
+
 
     val findOrInsertRegularHashMap: String =
       s"""
@@ -918,7 +919,7 @@ case class HashAggregateExec(
          |  if ($unsafeRowBuffer == null && !$avoidSpillInPartialAggregateTerm) {
          |    // If sort/spill to disk is disabled, nothing is done.
          |    // Aggregation buffer is created later
-         |    if ($spillInPartialAggregateDisabled && $isPartial) {
+         |    if ($skipPartialAggregate && $isPartial) {
          |      $avoidSpillInPartialAggregateTerm = true;
          |    } else {
          |      if ($sorterTerm == null) {
