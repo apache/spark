@@ -211,7 +211,7 @@ trait PredicateHelper extends Logging {
    * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
    *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
    */
-  def conjunctiveNormalForm(
+  protected def conjunctiveNormalForm(
       condition: Expression,
       groupExpsFunc: Seq[Expression] => Seq[Expression] = _.toSeq): Seq[Expression] = {
     val postOrderNodes = postOrderTraversal(condition)

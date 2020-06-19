@@ -166,7 +166,6 @@
     <dependency>
       <groupId>com.microsoft.sqlserver</groupId>
       <artifactId>mssql-jdbc</artifactId>
-      <version>7.2.1.jre8</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
