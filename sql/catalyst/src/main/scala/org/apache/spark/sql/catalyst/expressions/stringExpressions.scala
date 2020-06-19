@@ -140,7 +140,7 @@ case class ConcatWs(children: Seq[Expression])
 
         val (varCount, varBuild) = child.dataType match {
           case StringType =>
-            val reprForValueCast = s"((UTF8String) $valueArgs[$idx])"
+            val reprForValueCast = s"((UTF8String) $reprForValue)"
             ("", // we count all the StringType arguments num at once below.
               if (eval.isNull == TrueLiteral) {
                 ""
@@ -148,7 +148,7 @@ case class ConcatWs(children: Seq[Expression])
                 s"$array[$idxVararg ++] = $reprForIsNull ? (UTF8String) null : $reprForValueCast;"
               })
           case _: ArrayType =>
-            val reprForValueCast = s"((ArrayData) $valueArgs[$idx])"
+            val reprForValueCast = s"((ArrayData) $reprForValue)"
             val size = ctx.freshName("n")
             if (eval.isNull == TrueLiteral) {
               ("", "")
