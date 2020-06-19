@@ -354,7 +354,7 @@ object AggUtils {
     finalAndCompleteAggregate :: Nil
   }
 
-  def areAggExpressionsPartial(exprs: Seq[AggregateExpression]): Boolean = {
-    exprs.forall(e => e.mode == Partial)
+  def areAggExpressionsPartial(modes: Seq[AggregateMode]): Boolean = {
+    modes.nonEmpty && modes.forall(_ == Partial)
   }
 }

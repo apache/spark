@@ -63,7 +63,7 @@ case class HashAggregateExec(
 
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
-  override def needStopCheck: Boolean = sqlContext.conf.spillInPartialAggregationDisabled
+  override def needStopCheck: Boolean = sqlContext.conf.skipPartialAggregate
 
   override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -413,7 +413,7 @@ case class HashAggregateExec(
   private var fastHashMapTerm: String = _
   private var isFastHashMapEnabled: Boolean = false
 
-  private val isPartial = AggUtils.areAggExpressionsPartial(aggregateExpressions)
+  private val isPartial = AggUtils.areAggExpressionsPartial(modes)
   private var avoidSpillInPartialAggregateTerm: String = _
   private var childrenConsumed: String = _
   private var outputFunc: String = _
@@ -900,7 +900,7 @@ case class HashAggregateExec(
     val oomeClassName = classOf[SparkOutOfMemoryError].getName
 
     val thisPlan = ctx.addReferenceObj("plan", this)
-    val spillInPartialAggregateDisabled = sqlContext.conf.spillInPartialAggregationDisabled
+    val spillInPartialAggregateDisabled = sqlContext.conf.skipPartialAggregate
 
     val findOrInsertRegularHashMap: String =
       s"""
