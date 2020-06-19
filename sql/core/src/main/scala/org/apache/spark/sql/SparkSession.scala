@@ -755,6 +755,7 @@ class SparkSession private(
    * previous session on completion.
    */
   private[sql] def withActive[T](block: => T): T = {
+    sparkContext.assertNotStopped()
     // Use the active session thread local directly to make sure we get the session that is actually
     // set and not the default session. This to prevent that we promote the default session to the
     // active session once we are done.
