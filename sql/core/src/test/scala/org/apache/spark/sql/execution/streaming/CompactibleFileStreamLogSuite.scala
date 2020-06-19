@@ -298,5 +298,5 @@ class FakeCompactibleFileStreamLog(
 
   override protected val minBatchesToRetain: Int = _defaultMinBatchesToRetain
 
-  override def compactLogs(logs: Seq[String]): Seq[String] = logs
+  override def shouldRetain(log: String): Boolean = true
 }
