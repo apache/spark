@@ -60,7 +60,7 @@ trait BaseAggregateExec extends UnaryExecNode {
     }
   }
 
-  protected def inputAggBufferAttributes: Seq[Attribute] = {
+  private val inputAggBufferAttributes: Seq[Attribute] = {
     aggregateExpressions
       // there're exactly four cases needs `inputAggBufferAttributes` from child according to the
       // agg planning in `AggUtils`: Partial -> Final, PartialMerge -> Final,
