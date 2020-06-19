@@ -347,23 +347,23 @@ case class MergeIntoTable(
 }
 
 sealed abstract class MergeAction(
-    condition: Option[Expression]) extends Expression with Unevaluable {
+    val condition: Option[Expression]) extends Expression with Unevaluable {
   override def foldable: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException(this, "nullable")
   override def children: Seq[Expression] = condition.toSeq
 }
 
-case class DeleteAction(condition: Option[Expression]) extends MergeAction(condition)
+case class DeleteAction(override val condition: Option[Expression]) extends MergeAction(condition)
 
 case class UpdateAction(
-    condition: Option[Expression],
+    override val condition: Option[Expression],
     assignments: Seq[Assignment]) extends MergeAction(condition) {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 }
 
 case class InsertAction(
-    condition: Option[Expression],
+    override val condition: Option[Expression],
     assignments: Seq[Assignment]) extends MergeAction(condition) {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 }

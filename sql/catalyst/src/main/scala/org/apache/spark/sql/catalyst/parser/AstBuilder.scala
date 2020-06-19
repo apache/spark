@@ -411,12 +411,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     val mergeCondition = expression(ctx.mergeCondition)
 
-    val matchedClauses = ctx.matchedClause()
-    if (matchedClauses.size() > 2) {
-      throw new ParseException("There should be at most 2 'WHEN MATCHED' clauses.",
-        matchedClauses.get(2))
-    }
-    val matchedActions = matchedClauses.asScala.map {
+    val whenClauses = ctx.matchedOrNotMatchedClause()
+    val matchedClauses = whenClauses.asScala.map(_.matchedClause()).filter(_ != null)
+    val matchedActions = matchedClauses.map {
       clause => {
         if (clause.matchedAction().DELETE() != null) {
           DeleteAction(Option(clause.matchedCond).map(expression))
@@ -435,12 +432,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         }
       }
     }
-    val notMatchedClauses = ctx.notMatchedClause()
-    if (notMatchedClauses.size() > 1) {
-      throw new ParseException("There should be at most 1 'WHEN NOT MATCHED' clause.",
-        notMatchedClauses.get(1))
-    }
-    val notMatchedActions = notMatchedClauses.asScala.map {
+    val notMatchedClauses = whenClauses.asScala.map(_.notMatchedClause()).filter(_ != null)
+    val notMatchedActions = notMatchedClauses.map {
       clause => {
         if (clause.notMatchedAction().INSERT() != null) {
           val condition = Option(clause.notMatchedCond).map(expression)
@@ -468,13 +461,25 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       throw new ParseException("There must be at least one WHEN clause in a MERGE statement", ctx)
     }
     // children being empty means that the condition is not set
-    if (matchedActions.length == 2 && matchedActions.head.children.isEmpty) {
-      throw new ParseException("When there are 2 MATCHED clauses in a MERGE statement, " +
-        "the first MATCHED clause must have a condition", ctx)
-    }
-    if (matchedActions.groupBy(_.getClass).mapValues(_.size).exists(_._2 > 1)) {
+    val matchedActionSize = matchedActions.length
+    if (matchedActionSize >= 2 && !matchedActions.init.forall(_.condition.nonEmpty)) {
       throw new ParseException(
-        "UPDATE and DELETE can appear at most once in MATCHED clauses in a MERGE statement", ctx)
+        s"When there are $matchedActionSize MATCHED clauses in a MERGE statement, " +
+            s"${if (matchedActionSize == 2) {
+              "the first MATCHED clause must have a condition"
+            } else {
+              s"the first ${matchedActionSize - 1} MATCHED clauses must have conditions"
+            }}", ctx)
+    }
+    val notMatchedActionSize = notMatchedActions.length
+    if (notMatchedActionSize >= 2 && !notMatchedActions.init.forall(_.condition.nonEmpty)) {
+      throw new ParseException(
+        s"When there are $notMatchedActionSize NOT MATCHED clauses in a MERGE statement, " +
+            s"${if (notMatchedActionSize == 2) {
+              "the first NOT MATCHED clause must have a condition"
+            } else {
+              s"the first ${notMatchedActionSize - 1} NOT MATCHED clauses must have conditions"
+            }}", ctx)
     }
 
     MergeIntoTable(

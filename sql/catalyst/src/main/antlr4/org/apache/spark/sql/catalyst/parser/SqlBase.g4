@@ -437,8 +437,7 @@ dmlStatementNoWith
         USING (source=multipartIdentifier |
           '(' sourceQuery=query')') sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
-        matchedClause*
-        notMatchedClause*                                                          #mergeIntoTable
+        matchedOrNotMatchedClause*                                                 #mergeIntoTable
     ;
 
 queryOrganization
@@ -524,6 +523,11 @@ selectClause
 
 setClause
     : SET assignmentList
+    ;
+
+matchedOrNotMatchedClause
+    : matchedClause
+    | notMatchedClause
     ;
 
 matchedClause
