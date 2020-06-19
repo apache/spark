@@ -1237,6 +1237,16 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
+  val STATE_STORE_FORMAT_VALIDATION_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.formatValidation.enabled")
+      .internal()
+      .doc("When true, check if the UnsafeRow from the state store is valid or not when running " +
+        "streaming queries. This can happen if the state store format has been changed. Note, " +
+        "the feature is only effective in the build-in HDFS state store provider now.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
       .internal()
@@ -1543,18 +1553,18 @@ object SQLConf {
 
   val STREAMING_CHECKPOINT_FILE_MANAGER_CLASS =
     buildConf("spark.sql.streaming.checkpointFileManagerClass")
+      .internal()
       .doc("The class used to write checkpoint files atomically. This class must be a subclass " +
         "of the interface CheckpointFileManager.")
       .version("2.4.0")
-      .internal()
       .stringConf
 
   val STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.escapedPathCheck.enabled")
+      .internal()
       .doc("Whether to detect a streaming query may pick up an incorrect checkpoint path due " +
         "to SPARK-26824.")
       .version("3.0.0")
-      .internal()
       .booleanConf
       .createWithDefault(true)
 
@@ -2745,6 +2755,8 @@ class SQLConf extends Serializable with Logging {
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
+
+  def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
