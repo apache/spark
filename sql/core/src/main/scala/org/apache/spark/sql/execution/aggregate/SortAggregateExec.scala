@@ -49,7 +49,7 @@ case class SortAggregateExec(
   override def producedAttributes: AttributeSet =
     AttributeSet(aggregateAttributes) ++
       AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
-      AttributeSet(aggregateBufferAttributes)
+      AttributeSet(aggregateBufferAttributes) ++ super.producedAttributes
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))

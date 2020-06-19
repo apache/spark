@@ -82,7 +82,7 @@ case class HashAggregateExec(
   override def producedAttributes: AttributeSet =
     AttributeSet(aggregateAttributes) ++
     AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
-    AttributeSet(aggregateBufferAttributes)
+    AttributeSet(aggregateBufferAttributes) ++ super.producedAttributes
 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {

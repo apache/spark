@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
 import org.apache.spark.sql.execution.{ExplainUtils, UnaryExecNode}
 
@@ -53,15 +53,24 @@ trait BaseAggregateExec extends UnaryExecNode {
       // can't bind the `mergeExpressions` with the output of the partial aggregate, as they use
       // the `inputAggBufferAttributes` of the original `DeclarativeAggregate` before copy. Instead,
       // we shall use `inputAggBufferAttributes` after copy to match the new `mergeExpressions`.
-      val aggAttrs = aggregateExpressions
-        // there're exactly four cases needs `inputAggBufferAttributes` from child according to the
-        // agg planning in `AggUtils`: Partial -> Final, PartialMerge -> Final,
-        // Partial -> PartialMerge, PartialMerge -> PartialMerge.
-        .filter(a => a.mode == Final || a.mode == PartialMerge).map(_.aggregateFunction)
-        .flatMap(_.inputAggBufferAttributes)
+      val aggAttrs = inputAggBufferAttributes
       child.output.dropRight(aggAttrs.length) ++ aggAttrs
     } else {
       child.output
     }
   }
+
+  protected def inputAggBufferAttributes: Seq[Attribute] = {
+    aggregateExpressions
+      // there're exactly four cases needs `inputAggBufferAttributes` from child according to the
+      // agg planning in `AggUtils`: Partial -> Final, PartialMerge -> Final,
+      // Partial -> PartialMerge, PartialMerge -> PartialMerge.
+      .filter(a => a.mode == Final || a.mode == PartialMerge)
+      .flatMap(_.aggregateFunction.inputAggBufferAttributes)
+  }
+
+  override def producedAttributes: AttributeSet =
+  // it's not empty when the inputAggBufferAttributes is from the child Aggregate, which contains
+  // subquery in AggregateFunction. See SPARK-31620 for more details.
+    AttributeSet(inputAggBufferAttributes.filterNot(child.output.contains))
 }
