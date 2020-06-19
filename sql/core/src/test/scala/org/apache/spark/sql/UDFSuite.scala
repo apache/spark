@@ -642,7 +642,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(1)
       .select(lit(50).as("a"))
       .select(struct("a").as("col"))
-    val error = intercept[AnalysisException] (df.select(myUdf(Column("col"))))
+    val error = intercept[AnalysisException](df.select(myUdf(Column("col"))))
     assert(error.getMessage.contains("cannot resolve '`b`' given input columns: [a]"))
   }
 
@@ -659,13 +659,6 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val f = (i: Option[Int]) => i.map(_ * 10)
     val myUdf = udf(f)
     val df = Seq(Some(10), None).toDF("col")
-    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Row(null) :: Nil)
-  }
-
-  test("top level Option case class") {
-    val f = (i: Option[TestData]) => i.map(t => t.key * t.value.toInt)
-    val myUdf = udf(f)
-    val df = Seq(Some(TestData(50, "2")), None).toDF("col")
     checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Row(null) :: Nil)
   }
 
