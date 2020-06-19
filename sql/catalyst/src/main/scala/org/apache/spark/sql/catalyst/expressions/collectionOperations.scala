@@ -2635,7 +2635,11 @@ object Sequence {
         var i = 0
 
         while (t < exclusiveItem ^ stepSign < 0) {
-          arr(i) = fromLong(Math.round(t / scale.toFloat))
+          arr(i) = if (scale == 1) {
+            fromLong(t / scale)
+          } else {
+            fromLong(Math.round(t / scale.toFloat))
+          }
           i += 1
           t = timestampAddInterval(
             startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
@@ -2698,7 +2702,11 @@ object Sequence {
          |  int $i = 0;
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
-         |    $arr[$i] = ($elemType) (Math.round($t / (float)${scale}L));
+         |    if (${scale}L == 1L) {
+         |      $arr[$i] = ($elemType) ($t / ${scale}L);
+         |    } else {
+         |      $arr[$i] = ($elemType) (Math.round($t / (float)${scale}L));
+         |    }
          |    $i += 1;
          |    $t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
          |       $startMicros, $i * $stepMonths, $i * $stepDays, $i * $stepMicros, $zid);
