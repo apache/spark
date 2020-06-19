@@ -528,7 +528,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
     }
   }
 
-  test("Add spark.sql.files.minPartitionNum config") {
+  test("SPARK-32019: Add spark.sql.files.minPartitionNum config") {
     withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
       val table =
         createTable(files = Seq(
@@ -547,6 +547,18 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
           "file3" -> 1
         ))
       assert(table.rdd.partitions.length == 3)
+    }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "16") {
+      val partitions = (1 to 100).map(i => s"file$i" -> 128*1024*1024)
+      val table = createTable(files = partitions)
+      assert(table.rdd.partitions.length == 16)
+    }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "32") {
+      val partitions = (1 to 500).map(i => s"file$i" -> 4*1024*1024)
+      val table = createTable(files = partitions)
+      assert(table.rdd.partitions.length == 32)
     }
   }
 
