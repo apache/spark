@@ -1941,7 +1941,8 @@ private[spark] class DAGScheduler(
       hostToUnregisterOutputs: Option[String],
       maybeEpoch: Option[Long] = None): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
-    logDebug(s"Removing executor $execId, fileLost: $fileLost, currentEpoch: $currentEpoch")
+    logDebug(s"Considering removal of executor $execId; " +
+      s"fileLost: $fileLost, currentEpoch: $currentEpoch")
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
       failedEpoch(execId) = currentEpoch
       logInfo(s"Executor lost: $execId (epoch $currentEpoch)")
