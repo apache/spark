@@ -1101,10 +1101,13 @@ case class ScalaUDF(
              |Object $argTerm = ${eval.isNull} ? null : $convertedTerm;
            """.stripMargin
         } else if (useEncoders(i)) {
-          val convInput = ctx.freshName("convInput")
           s"""
-             |Object $convInput = ${eval.isNull} ? null : (Object) ${eval.value};
-             |Object $argTerm = $convertersTerm[$i].apply($convInput);
+             |Object $argTerm = null;
+             |if (${eval.isNull}) {
+             |  $argTerm = $convertersTerm[$i].apply(null);
+             |} else {
+             |  $argTerm = $convertersTerm[$i].apply(${eval.value});
+             |}
           """.stripMargin
         } else {
           s"Object $argTerm = ${eval.isNull} ? null : $convertersTerm[$i].apply(${eval.value});"
