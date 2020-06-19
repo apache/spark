@@ -454,90 +454,87 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
   }
 
-  test("simplify GetStructField on WithFields that is not changing the attribute being extracted") {
-    val query = relation.select(
-      GetStructField(
-        WithFields('id, Seq("c"), Seq(Literal(1))),
-        0,
-        Some("a")) as "outerAtt")
-    val expected = relation.select(GetStructField('id, 0, Some("a")) as "outerAtt")
+  private val structAttr = 'struct1.struct('a.int)
+  private val testStructRelation = LocalRelation(structAttr)
 
+  test("simplify GetStructField on WithFields that is not changing the attribute being extracted") {
+    val query = testStructRelation.select(
+      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 0, Some("a")) as "outerAtt")
+    val expected = testStructRelation.select(GetStructField('struct1, 0, Some("a")) as "outerAtt")
     checkRule(query, expected)
   }
 
   test("simplify GetStructField on WithFields that is changing the attribute being extracted") {
-    val query = relation.select(
-      GetStructField(
-        WithFields('id, Seq("c"), Seq(Literal(1))),
-        0,
-        Some("c")) as "outerAtt")
-    val expected = relation.select(Literal(1) as "outerAtt")
-
+    val query = testStructRelation.select(
+      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 1, Some("b")) as "outerAtt")
+    val expected = testStructRelation.select(Literal(1) as "outerAtt")
     checkRule(query, expected)
   }
 
   test(
     "simplify GetStructField on WithFields that is changing the attribute being extracted twice") {
-    val query = relation.select(
-      GetStructField(
-        WithFields('id, Seq("c", "c"), Seq(Literal(1), Literal(2))),
-        0,
-        Some("c")) as "outerAtt")
-    val expected = relation.select(Literal(2) as "outerAtt")
-
+    val query = testStructRelation
+      .select(GetStructField(WithFields('struct1, Seq("b", "b"), Seq(Literal(1), Literal(2))), 1,
+        Some("b")) as "outerAtt")
+    val expected = testStructRelation.select(Literal(2) as "outerAtt")
     checkRule(query, expected)
   }
 
   test("collapse multiple GetStructField on the same WithFields") {
-    val query = relation
-      .select(CreateNamedStruct(Seq("att1", 'id, "att2", 'id * 'id)) as "struct1")
-      .select(WithFields('struct1, Seq("att3"), Seq(Literal(3))) as "struct2")
+    val query = testStructRelation
+      .select(WithFields('struct1, Seq("b"), Seq(Literal(2))) as "struct2")
       .select(
-        GetStructField('struct2, 0, Some("att1")) as "struct1Att1",
-        GetStructField('struct2, 1, Some("att2")) as "struct1Att2",
-        GetStructField('struct2, 2, Some("att3")) as "struct1Att3")
-
-    val expected = relation
-      .select(
-        'id as "struct1Att1",
-        ('id * 'id) as "struct1Att2",
-        Literal(3) as "struct1Att3")
-
+        GetStructField('struct2, 0, Some("a")) as "struct1A",
+        GetStructField('struct2, 1, Some("b")) as "struct1B")
+    val expected = testStructRelation.select(
+      GetStructField('struct1, 0, Some("a")) as "struct1A",
+      Literal(2) as "struct1B")
     checkRule(query, expected)
   }
 
   test("collapse multiple GetStructField on different WithFields") {
-    val query = relation
-      .select(CreateNamedStruct(Seq("att1", 'id)) as "struct1")
+    val query = testStructRelation
       .select(
-        WithFields('struct1, Seq("att2"), Seq(Literal(2))) as "struct2",
-        WithFields('struct1, Seq("att2"), Seq(Literal(3))) as "struct3")
+        WithFields('struct1, Seq("b"), Seq(Literal(2))) as "struct2",
+        WithFields('struct1, Seq("b"), Seq(Literal(3))) as "struct3")
       .select(
-        GetStructField('struct2, 0, Some("att1")) as "struct2Att1",
-        GetStructField('struct2, 1, Some("att2")) as "struct2Att2",
-        GetStructField('struct3, 0, Some("att1")) as "struct3Att1",
-        GetStructField('struct3, 1, Some("att2")) as "struct3Att2")
-
-    val expected = relation
+        GetStructField('struct2, 0, Some("a")) as "struct2A",
+        GetStructField('struct2, 1, Some("b")) as "struct2B",
+        GetStructField('struct3, 0, Some("a")) as "struct3A",
+        GetStructField('struct3, 1, Some("b")) as "struct3B")
+    val expected = testStructRelation
       .select(
-        'id as "struct2Att1",
-        Literal(2) as "struct2Att2",
-        'id as "struct3Att1",
-        Literal(3) as "struct3Att2")
-
+        GetStructField('struct1, 0, Some("a")) as "struct2A",
+        Literal(2) as "struct2B",
+        GetStructField('struct1, 0, Some("a")) as "struct3A",
+        Literal(3) as "struct3B")
     checkRule(query, expected)
   }
 
-  test("WIP write tests for ensuring case sensitivity is respected") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
-      val query = relation.select(
-        GetStructField(
-          WithFields('id, Seq("c"), Seq(Literal(1))),
-          2,
-          Some("C")) as "outerAtt")
-      val expected = relation.select(GetStructField('id, 2, Some("C")) as "outerAtt")
+  test("case sensitive config should be respected when simplifying GetStructField on WithFields") {
+    val query1 = testStructRelation.select(
+      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 1, Some("B")) as "outerAtt")
+    val query2 = testStructRelation.select(
+      GetStructField(WithFields('struct1, Seq("B"), Seq(Literal(1))), 1, Some("b")) as "outerAtt")
+    val query3 = testStructRelation.select(
+      GetStructField(WithFields('struct1, Seq("B"), Seq(Literal(1))), 1, Some("B")) as "outerAtt")
+    val query4 = testStructRelation.select(
+      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 1, Some("b")) as "outerAtt")
 
-      checkRule(query, expected)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
+      checkRule(query1,
+        testStructRelation.select(GetStructField('struct1, 1, Some("B")) as "outerAtt"))
+      checkRule(query2,
+        testStructRelation.select(GetStructField('struct1, 1, Some("b")) as "outerAtt"))
+      checkRule(query3, testStructRelation.select(Literal(1) as "outerAtt"))
+      checkRule(query4, testStructRelation.select(Literal(1) as "outerAtt"))
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> false.toString) {
+      checkRule(query1, testStructRelation.select(Literal(1) as "outerAtt"))
+      checkRule(query2, testStructRelation.select(Literal(1) as "outerAtt"))
+      checkRule(query3, testStructRelation.select(Literal(1) as "outerAtt"))
+      checkRule(query4, testStructRelation.select(Literal(1) as "outerAtt"))
     }
   }
 }
