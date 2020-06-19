@@ -268,12 +268,12 @@ case class RefreshFunctionCommand(
       val isPersistentFunction = catalog.isPersistentFunction(identifier)
       if (isRegisteredFunction && isPersistentFunction) {
         // re-register function
-        catalog.unregisterFunction(identifier, true)
+        catalog.unregisterFunction(identifier)
         val func = catalog.getFunctionMetadata(identifier)
         catalog.registerFunction(func, true)
       } else if (isRegisteredFunction && !isPersistentFunction) {
         // unregister function and throw NoSuchFunctionException
-        catalog.unregisterFunction(identifier, true)
+        catalog.unregisterFunction(identifier)
         throw new NoSuchFunctionException(identifier.database.get, functionName)
       } else if (!isRegisteredFunction && isPersistentFunction) {
         // register function
