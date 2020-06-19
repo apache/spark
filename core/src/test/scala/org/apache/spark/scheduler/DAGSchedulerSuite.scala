@@ -24,12 +24,10 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, At
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.util.control.NonFatal
-
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
-
-import org.apache.spark._
+import org.apache.spark.{TaskEndReason, _}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
@@ -405,6 +403,15 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     runEvent(JobCancelled(jobId, None))
   }
 
+  /** Make task set success and check result. */
+  private def checkAnswer(
+    taskSet: TaskSet,
+    results: Seq[(TaskEndReason, Any)],
+    expected: Map[Int, Any]): Unit = {
+    complete(taskSet, results)
+    assert(this.results === expected)
+  }
+
   test("[SPARK-3353] parent stage should have lower stage id") {
     sc.parallelize(1 to 10).map(x => (x, x)).reduceByKey(_ + _, 4).count()
     val stageByOrderOfExecution = sparkListener.stageByOrderOfExecution
@@ -461,8 +468,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     completeShuffleMapStageSuccessfully(0, 0, 1)
     completeShuffleMapStageSuccessfully(1, 0, 1)
     completeShuffleMapStageSuccessfully(2, 0, 1)
-    complete(taskSets(3), Seq((Success, 42)))
-    assert(results === Map(0 -> 42))
+    checkAnswer(taskSets(3), Seq((Success, 42)), Map(0 -> 42))
     assertDataStructuresEmpty()
   }
 
@@ -558,8 +564,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   test("run trivial job") {
     submit(new MyRDD(sc, 1, Nil), Array(0))
-    complete(taskSets(0), List((Success, 42)))
-    assert(results === Map(0 -> 42))
+    checkAnswer(taskSets(0), Seq((Success, 42)), Map(0 -> 42))
     assertDataStructuresEmpty()
   }
 
@@ -567,8 +572,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val baseRdd = new MyRDD(sc, 1, Nil)
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
     submit(finalRdd, Array(0))
-    complete(taskSets(0), Seq((Success, 42)))
-    assert(results === Map(0 -> 42))
+    checkAnswer(taskSets(0), Seq((Success, 42)), Map(0 -> 42))
     assertDataStructuresEmpty()
   }
 
@@ -592,8 +596,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     submit(finalRdd, Array(0))
     val taskSet = taskSets(0)
     assertLocations(taskSet, Seq(Seq("hostA", "hostB")))
-    complete(taskSet, Seq((Success, 42)))
-    assert(results === Map(0 -> 42))
+    checkAnswer(taskSet, Seq((Success, 42)), Map(0 -> 42))
     assertDataStructuresEmpty()
   }
 
@@ -729,8 +732,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(failure === null)
 
     // When the task set completes normally, state should be correctly updated.
-    complete(taskSets(0), Seq((Success, 42)))
-    assert(results === Map(0 -> 42))
+    checkAnswer(taskSets(0), Seq((Success, 42)), Map(0 -> 42))
     assertDataStructuresEmpty()
 
     assert(sparkListener.failedStages.isEmpty)
@@ -746,8 +748,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     completeShuffleMapStageSuccessfully(0, 0, 1)
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
-    complete(taskSets(1), Seq((Success, 42)))
-    assert(results === Map(0 -> 42))
+    checkAnswer(taskSets(1), Seq((Success, 42)), Map(0 -> 42))
     assertDataStructuresEmpty()
   }
 
@@ -771,8 +772,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // we can see both result blocks now
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
       HashSet("hostA", "hostB"))
-    complete(taskSets(3), Seq((Success, 43)))
-    assert(results === Map(0 -> 42, 1 -> 43))
+    checkAnswer(taskSets(3), Seq((Success, 43)), Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
   }
 
@@ -1454,8 +1454,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       HashSet(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
 
     // finish the next stage normally, which completes the job
-    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
-    assert(results === Map(0 -> 42, 1 -> 43))
+    checkAnswer(taskSets(1), Seq((Success, 42), (Success, 43)), Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
   }
 
