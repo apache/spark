@@ -2627,6 +2627,26 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED =
+    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.enabled")
+      .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
+        "the side with a bigger number of buckets will be coalesced to have the same number " +
+        "of buckets as the other side. Bucket coalescing is applied only to sort-merge joins " +
+        "and only when the bigger number of buckets is divisible by the smaller number of buckets.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO =
+    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.maxBucketRatio")
+      .doc("The ratio of the number of two buckets being coalesced should be less than or " +
+        "equal to this value for bucket coalescing to be applied. This configuration only " +
+        s"has an effect when '${COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key}' is set to true.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ > 0, "The difference must be positive.")
+      .createWithDefault(4)
+
   /**
    * Holds information about keys that have been deprecated.
    *
