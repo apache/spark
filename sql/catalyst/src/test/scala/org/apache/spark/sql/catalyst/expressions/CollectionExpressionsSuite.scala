@@ -1854,17 +1854,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal(Date.valueOf("2018-01-01")),
       Literal(stringToInterval("interval 1 year"))),
       Seq(Date.valueOf("2018-01-01")))
-=======
+
   test("SPARK-31982: sequence doesn't handle date increments that cross DST") {
     Array("America/Chicago", "GMT", "Asia/Shanghai").foreach(tz => {
-      checkEvaluation(Sequence(
-        Cast(Literal("2011-03-01"), DateType),
-        Cast(Literal("2011-04-01"), DateType),
-        Option(Literal(stringToInterval("interval 1 month"))),
-        Option(tz)),
-        Seq(
-          Date.valueOf("2011-03-01"), Date.valueOf("2011-04-01")))
+      DateTimeTestUtils.withDefaultTimeZone(DateTimeUtils.getTimeZone(tz).toZoneId) {
+        checkEvaluation(Sequence(
+          Cast(Literal("2011-03-01"), DateType),
+          Cast(Literal("2011-04-01"), DateType),
+          Option(Literal(stringToInterval("interval 1 month"))),
+          Option(tz)),
+          Seq(
+            Date.valueOf("2011-03-01"), Date.valueOf("2011-04-01")))
+      }
     })
->>>>>>> Asia timezone fix
   }
 }

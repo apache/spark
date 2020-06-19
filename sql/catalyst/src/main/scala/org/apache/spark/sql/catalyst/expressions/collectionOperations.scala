@@ -2625,6 +2625,16 @@ object Sequence {
           stepMicros + stepMonths * microsPerMonth + stepDays * microsPerDay
         val startMicros: Long = num.toLong(start) * scale
         val stopMicros: Long = num.toLong(stop) * scale
+
+        // Date to timestamp is not equal from GMT and Chicago timezones
+        val (startMicros, stopMicros) = if (scale == 1) {
+          (num.toLong(start), num.toLong(stop))
+        }
+        else {
+          (DateTimeUtils.epochDaysToMicros(num.toInt(start), zoneId),
+            DateTimeUtils.epochDaysToMicros(num.toInt(stop), zoneId))
+        }
+
         val maxEstimatedArrayLength =
           getSequenceLength(startMicros, stopMicros, intervalStepInMicros)
 
