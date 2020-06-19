@@ -216,6 +216,7 @@ case class ConcatWs(children: Seq[Expression])
         $varargCounts
         UTF8String[] $array = new UTF8String[$varargNum];
         $varargBuilds
+        ${evals.head.code}
         UTF8String ${ev.value} = UTF8String.concatWs(${evals.head.value}, $array);
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
