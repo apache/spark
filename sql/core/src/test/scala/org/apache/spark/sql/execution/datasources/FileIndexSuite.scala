@@ -39,31 +39,31 @@ import org.mockito.Mockito.{mock, when}
 import scala.collection.mutable
 
 class FileIndexSuite extends SharedSparkSession {
-
+  
   private class TestInMemoryFileIndex(
-                                       spark: SparkSession,
-                                       path: Path,
-                                       fileStatusCache: FileStatusCache = NoopCache)
-    extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
+      spark: SparkSession,
+      path: Path,
+      fileStatusCache: FileStatusCache = NoopCache)
+      extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
     def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
-
+    
     def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
-
+    
     def leafFileStatuses: Iterable[FileStatus] = leafFiles.values
   }
-
+  
   test("InMemoryFileIndex: leaf files are qualified paths") {
     withTempDir { dir =>
       val file = new File(dir, "text.txt")
       stringToFile(file, "text")
-
+      
       val path = new Path(file.getCanonicalPath)
       val catalog = new TestInMemoryFileIndex(spark, path)
       assert(catalog.leafFilePaths.forall(p => p.toString.startsWith("file:/")))
       assert(catalog.leafDirPaths.forall(p => p.toString.startsWith("file:/")))
     }
   }
-
+  
   test("SPARK-26188: don't infer data types of partition columns if user specifies schema") {
     withTempDir { dir =>
       val partitionDirectory = new File(dir, "a=4d")
