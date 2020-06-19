@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -51,7 +52,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Search the partitioned table scan for a given partition column in a logical plan
    */
-  def getPartitionTableScan(a: Expression, plan: LogicalPlan): Option[LogicalRelation] = {
+  def getPartitionTableScan(a: Expression, plan: LogicalPlan): Option[LogicalPlan] = {
     val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)
     srcInfo.flatMap {
       case (resExp, l: LogicalRelation) =>
@@ -65,6 +66,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
               None
             }
           case _ => None
+        }
+      case (resExp, h: HiveTableRelation) =>
+        if (resExp.references.subsetOf(AttributeSet(h.partitionCols))) {
+          return Some(h)
+        } else {
+          None
         }
       case _ => None
     }
