@@ -1568,15 +1568,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STREAMING_STATE_FORMAT_CHECK_ENABLED =
-    buildConf("spark.sql.streaming.stateFormatCheck.enabled")
-      .doc("Whether to detect a streaming query may try to use an invalid UnsafeRow in the " +
-        "state store.")
-      .version("3.1.0")
-      .internal()
-      .booleanConf
-      .createWithDefault(true)
-
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
