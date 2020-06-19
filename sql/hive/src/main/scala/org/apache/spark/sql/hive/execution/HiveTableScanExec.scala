@@ -85,7 +85,7 @@ case class HiveTableScanExec(
 
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
-  private lazy val boundPruningPred = partitionPruningPredNotDynamic.filterNot(isDynamicPruningFilter)
+  private lazy val boundPruningPred = partitionPruningPredNotDynamic
     .reduceLeftOption(And).map { pred =>
     require(pred.dataType == BooleanType,
       s"Data type of predicate $pred must be ${BooleanType.catalogString} rather than " +
