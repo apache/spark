@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
 import org.apache.spark.sql.execution.{ExplainUtils, UnaryExecNode}
 
@@ -69,7 +69,14 @@ trait BaseAggregateExec extends UnaryExecNode {
       .flatMap(_.aggregateFunction.inputAggBufferAttributes)
   }
 
+  protected val aggregateBufferAttributes: Seq[AttributeReference] = {
+    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+  }
+
   override def producedAttributes: AttributeSet =
+    AttributeSet(aggregateAttributes) ++
+    AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
+    AttributeSet(aggregateBufferAttributes) ++
     // it's not empty when the inputAggBufferAttributes is from the child Aggregate, which contains
     // subquery in AggregateFunction. See SPARK-31620 for more details.
     AttributeSet(inputAggBufferAttributes.filterNot(child.output.contains))
