@@ -70,7 +70,7 @@ trait BaseAggregateExec extends UnaryExecNode {
   }
 
   override def producedAttributes: AttributeSet =
-  // it's not empty when the inputAggBufferAttributes is from the child Aggregate, which contains
-  // subquery in AggregateFunction. See SPARK-31620 for more details.
+    // it's not empty when the inputAggBufferAttributes is from the child Aggregate, which contains
+    // subquery in AggregateFunction. See SPARK-31620 for more details.
     AttributeSet(inputAggBufferAttributes.filterNot(child.output.contains))
 }
