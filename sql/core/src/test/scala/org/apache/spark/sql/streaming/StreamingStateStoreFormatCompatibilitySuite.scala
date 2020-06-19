@@ -241,7 +241,8 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
       AddData(inputData, 10 to 19: _*),
       ExpectFailure[SparkException](e => {
         // Check the exception message to make sure the state store format changing.
-        assert(e.getCause.getMessage.contains("The UnsafeRow format is invalid"))
+        assert(e.getCause.getCause.getMessage.contains(
+          "The streaming query failed by state format invalidation."))
       })
     )
   }
