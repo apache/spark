@@ -171,7 +171,7 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
     doReturn(2L).when(manager1).sizeOf(meq(dstA))
     doReturn(2L).when(manager1).sizeOf(meq(new File(testDir, "apps")))
     manager1.initialize()
-    assert(manager1.free() === 2)
+    assert(manager1.free() === 1)
     // If "ApplicationStoreInfo.size" is not correctly updated, "IllegalStateException"
     // would be thrown.
     val leaseB = manager1.lease(2)
