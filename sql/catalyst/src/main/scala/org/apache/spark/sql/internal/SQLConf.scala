@@ -2197,7 +2197,7 @@ object SQLConf {
       .createWithDefault(16)
 
   val SKIP_PARTIAL_AGGREGATE_ENABLED =
-      buildConf("spark.sql.aggregate.partialaggregate.skip.enabled")
+    buildConf("spark.sql.aggregate.partialaggregate.skip.enabled")
       .internal()
       .doc("Avoid sort/spill to disk during partial aggregation")
       .booleanConf
