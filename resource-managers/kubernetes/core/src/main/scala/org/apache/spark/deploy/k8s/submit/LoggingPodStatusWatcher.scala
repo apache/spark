@@ -44,14 +44,14 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   private var podCompleted = false
 
-  private var resourceToOldReceived = false
+  private var resourceTooOldReceived = false
 
   private var pod = Option.empty[Pod]
 
   private def phase: String = pod.map(_.getStatus.getPhase).getOrElse("unknown")
 
   override def reset(): Unit = {
-    resourceToOldReceived = false
+    resourceTooOldReceived = false
   }
 
   override def eventReceived(action: Action, pod: Pod): Unit = {
@@ -60,8 +60,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
       case Action.DELETED | Action.ERROR =>
         closeWatch()
 
-      case a =>
-        logTrace(s"Received action: $a")
+      case _ =>
         logLongStatus()
         if (hasCompleted()) {
           closeWatch()
@@ -72,7 +71,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
   override def onClose(e: KubernetesClientException): Unit = {
     logDebug(s"Stopping watching application $appId with last-observed phase $phase")
     if(e != null && e.getCode == HTTP_GONE) {
-      resourceToOldReceived = true
+      resourceTooOldReceived = true
       logDebug(s"Got HTTP Gone code, resource version changed in k8s api: $e")
     } else {
       closeWatch()
@@ -96,7 +95,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
     logInfo(s"Waiting for application ${conf.appName} with submission ID $sId to finish...")
     val interval = conf.get(REPORT_INTERVAL)
     synchronized {
-      while (!podCompleted && !resourceToOldReceived) {
+      while (!podCompleted && !resourceTooOldReceived) {
         wait(interval)
         logInfo(s"Application status for $appId (phase: $phase)")
       }
