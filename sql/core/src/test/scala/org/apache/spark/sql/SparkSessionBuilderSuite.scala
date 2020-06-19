@@ -240,4 +240,23 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532-2")
     assert(session.conf.get(WAREHOUSE_PATH) === "SPARK-31532-db-2")
   }
+
+  test("SPARK-32029 make active session null when application end") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-SPARK-32029")
+    val context = new SparkContext(conf)
+    val session = SparkSession
+      .builder()
+      .sparkContext(context)
+      .getOrCreate()
+
+    context.stop()
+    assert(SparkSession.getDefaultSession.isEmpty)
+    assert(SparkSession.getActiveSession.isEmpty)
+    val msg = intercept[IllegalStateException] {
+      session.withActive()
+    }.getMessage
+    assert(msg.contains("Cannot call methods on a stopped SparkContext."))
+  }
 }
