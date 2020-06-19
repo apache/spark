@@ -29,6 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature._
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator._
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
@@ -41,7 +42,7 @@ import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, Multiclas
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils
@@ -593,7 +594,7 @@ class LogisticRegression @Since("1.2.0") (
         Vectors.dense(if (numClasses == 2) Double.PositiveInfinity else Double.NegativeInfinity)
       }
       if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
-      return createModel(dataset, numClasses, coefMatrix, interceptVec, Array.empty)
+      return createModel(dataset, numClasses, coefMatrix, interceptVec, Array(0.0))
     }
 
     if (!$(fitIntercept) && isConstantLabel) {
@@ -729,6 +730,7 @@ class LogisticRegression @Since("1.2.0") (
       objectiveHistory: Array[Double]): LogisticRegressionModel = {
     val model = copyValues(new LogisticRegressionModel(uid, coefficientMatrix, interceptVector,
       numClasses, checkMultinomial(numClasses)))
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
 
     val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
     val logRegSummary = if (numClasses <= 2) {
@@ -738,6 +740,7 @@ class LogisticRegression @Since("1.2.0") (
         predictionColName,
         $(labelCol),
         $(featuresCol),
+        weightColName,
         objectiveHistory)
     } else {
       new LogisticRegressionTrainingSummaryImpl(
@@ -746,6 +749,7 @@ class LogisticRegression @Since("1.2.0") (
         predictionColName,
         $(labelCol),
         $(featuresCol),
+        weightColName,
         objectiveHistory)
     }
     model.setSummary(Some(logRegSummary))
@@ -1185,14 +1189,15 @@ class LogisticRegressionModel private[spark] (
    */
   @Since("2.0.0")
   def evaluate(dataset: Dataset[_]): LogisticRegressionSummary = {
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
     // Handle possible missing or invalid prediction columns
     val (summaryModel, probabilityColName, predictionColName) = findSummaryModel()
     if (numClasses > 2) {
       new LogisticRegressionSummaryImpl(summaryModel.transform(dataset),
-        probabilityColName, predictionColName, $(labelCol), $(featuresCol))
+        probabilityColName, predictionColName, $(labelCol), $(featuresCol), weightColName)
     } else {
       new BinaryLogisticRegressionSummaryImpl(summaryModel.transform(dataset),
-        probabilityColName, predictionColName, $(labelCol), $(featuresCol))
+        probabilityColName, predictionColName, $(labelCol), $(featuresCol), weightColName)
     }
   }
 
@@ -1390,8 +1395,6 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 
 /**
  * Abstraction for logistic regression results for a given model.
- *
- * Currently, the summary ignores the instance weights.
  */
 sealed trait LogisticRegressionSummary extends Serializable {
 
@@ -1417,12 +1420,28 @@ sealed trait LogisticRegressionSummary extends Serializable {
   @Since("1.6.0")
   def featuresCol: String
 
+  /** Field in "predictions" which gives the weight of each instance as a vector. */
+  @Since("3.1.0")
+  def weightCol: String
+
   @transient private val multiclassMetrics = {
-    new MulticlassMetrics(
-      predictions.select(
-        col(predictionCol),
-        col(labelCol).cast(DoubleType))
-        .rdd.map { case Row(prediction: Double, label: Double) => (prediction, label) })
+    if (predictions.schema.fieldNames.contains(weightCol)) {
+      new MulticlassMetrics(
+        predictions.select(
+          col(predictionCol),
+          col(labelCol).cast(DoubleType),
+          checkNonNegativeWeight(col(weightCol).cast(DoubleType))).rdd.map {
+          case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
+        })
+    } else {
+      new MulticlassMetrics(
+        predictions.select(
+          col(predictionCol),
+          col(labelCol).cast(DoubleType),
+          lit(1.0)).rdd.map {
+          case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
+        })
+    }
   }
 
   /**
@@ -1526,20 +1545,24 @@ sealed trait LogisticRegressionSummary extends Serializable {
  */
 sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary {
 
-  /** objective function (scaled loss + regularization) at each iteration. */
+  /**
+   *  objective function (scaled loss + regularization) at each iteration.
+   *  It contains one more element, the initial state, than number of iterations.
+   */
   @Since("1.5.0")
   def objectiveHistory: Array[Double]
 
   /** Number of training iterations. */
   @Since("1.5.0")
-  def totalIterations: Int = objectiveHistory.length
+  def totalIterations: Int = {
+    assert(objectiveHistory.length > 0, s"objectiveHistory length should be greater than 1.")
+    objectiveHistory.length - 1
+  }
 
 }
 
 /**
  * Abstraction for binary logistic regression results for a given model.
- *
- * Currently, the summary ignores the instance weights.
  */
 sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
 
@@ -1548,29 +1571,33 @@ sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
 
   // TODO: Allow the user to vary the number of bins using a setBins method in
   // BinaryClassificationMetrics. For now the default is set to 100.
-  @transient private val binaryMetrics = new BinaryClassificationMetrics(
-    predictions.select(col(probabilityCol), col(labelCol).cast(DoubleType)).rdd.map {
-      case Row(score: Vector, label: Double) => (score(1), label)
-    }, 100
-  )
+  @transient private val binaryMetrics = if (predictions.schema.fieldNames.contains(weightCol)) {
+    new BinaryClassificationMetrics(
+      predictions.select(col(probabilityCol), col(labelCol).cast(DoubleType),
+        checkNonNegativeWeight(col(weightCol).cast(DoubleType))).rdd.map {
+        case Row(score: Vector, label: Double, weight: Double) => (score(1), label, weight)
+      }, 100
+    )
+  } else {
+    new BinaryClassificationMetrics(
+      predictions.select(col(probabilityCol), col(labelCol).cast(DoubleType),
+        lit(1.0)).rdd.map {
+        case Row(score: Vector, label: Double, weight: Double) => (score(1), label, weight)
+      }, 100
+    )
+  }
 
   /**
    * Returns the receiver operating characteristic (ROC) curve,
    * which is a Dataframe having two fields (FPR, TPR)
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
    * See http://en.wikipedia.org/wiki/Receiver_operating_characteristic
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
 
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
@@ -1578,18 +1605,12 @@ sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
   /**
    * Returns the precision-recall curve, which is a Dataframe containing
    * two fields recall, precision with (0.0, 1.0) prepended to it.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val pr: DataFrame = binaryMetrics.pr().toDF("recall", "precision")
 
   /**
    * Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val fMeasureByThreshold: DataFrame = {
@@ -1600,9 +1621,6 @@ sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
    * Returns a dataframe with two fields (threshold, precision) curve.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the precision.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val precisionByThreshold: DataFrame = {
@@ -1613,9 +1631,6 @@ sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
    * Returns a dataframe with two fields (threshold, recall) curve.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the recall.
-   *
-   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val recallByThreshold: DataFrame = {
@@ -1625,8 +1640,6 @@ sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
 
 /**
  * Abstraction for binary logistic regression training results.
- * Currently, the training summary ignores the training weights except
- * for the objective trace.
  */
 sealed trait BinaryLogisticRegressionTrainingSummary extends BinaryLogisticRegressionSummary
   with LogisticRegressionTrainingSummary
@@ -1641,6 +1654,7 @@ sealed trait BinaryLogisticRegressionTrainingSummary extends BinaryLogisticRegre
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 private class LogisticRegressionTrainingSummaryImpl(
@@ -1649,9 +1663,10 @@ private class LogisticRegressionTrainingSummaryImpl(
     predictionCol: String,
     labelCol: String,
     featuresCol: String,
+    weightCol: String,
     override val objectiveHistory: Array[Double])
   extends LogisticRegressionSummaryImpl(
-    predictions, probabilityCol, predictionCol, labelCol, featuresCol)
+    predictions, probabilityCol, predictionCol, labelCol, featuresCol, weightCol)
   with LogisticRegressionTrainingSummary
 
 /**
@@ -1664,13 +1679,15 @@ private class LogisticRegressionTrainingSummaryImpl(
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
  */
 private class LogisticRegressionSummaryImpl(
     @transient override val predictions: DataFrame,
     override val probabilityCol: String,
     override val predictionCol: String,
     override val labelCol: String,
-    override val featuresCol: String)
+    override val featuresCol: String,
+    override val weightCol: String)
   extends LogisticRegressionSummary
 
 /**
@@ -1683,6 +1700,7 @@ private class LogisticRegressionSummaryImpl(
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 private class BinaryLogisticRegressionTrainingSummaryImpl(
@@ -1691,9 +1709,10 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
     predictionCol: String,
     labelCol: String,
     featuresCol: String,
+    weightCol: String,
     override val objectiveHistory: Array[Double])
   extends BinaryLogisticRegressionSummaryImpl(
-    predictions, probabilityCol, predictionCol, labelCol, featuresCol)
+    predictions, probabilityCol, predictionCol, labelCol, featuresCol, weightCol)
   with BinaryLogisticRegressionTrainingSummary
 
 /**
@@ -1706,13 +1725,15 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
  *                      each class as a double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
  */
 private class BinaryLogisticRegressionSummaryImpl(
     predictions: DataFrame,
     probabilityCol: String,
     predictionCol: String,
     labelCol: String,
-    featuresCol: String)
+    featuresCol: String,
+    weightCol: String)
   extends LogisticRegressionSummaryImpl(
-    predictions, probabilityCol, predictionCol, labelCol, featuresCol)
+    predictions, probabilityCol, predictionCol, labelCol, featuresCol, weightCol)
   with BinaryLogisticRegressionSummary

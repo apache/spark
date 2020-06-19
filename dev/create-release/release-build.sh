@@ -164,7 +164,7 @@ fi
 DEST_DIR_NAME="$SPARK_PACKAGE_VERSION"
 
 git clean -d -f -x
-rm .gitignore
+rm -f .gitignore
 cd ..
 
 if [[ "$1" == "package" ]]; then
@@ -174,9 +174,9 @@ if [[ "$1" == "package" ]]; then
 
   # For source release in v2.4+, exclude copy of binary license/notice
   if [[ $SPARK_VERSION > "2.4" ]]; then
-    rm spark-$SPARK_VERSION/LICENSE-binary
-    rm spark-$SPARK_VERSION/NOTICE-binary
-    rm -r spark-$SPARK_VERSION/licenses-binary
+    rm -f spark-$SPARK_VERSION/LICENSE-binary
+    rm -f spark-$SPARK_VERSION/NOTICE-binary
+    rm -rf spark-$SPARK_VERSION/licenses-binary
   fi
 
   tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION

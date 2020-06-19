@@ -56,10 +56,6 @@ import org.apache.spark.sql.types._
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    // A subquery will be rewritten into join later, and will go through this rule
-    // eventually. Here we skip subquery, as we only need to run this rule once.
-    case _: Subquery => plan
-
     case _ => plan transform {
       case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
         // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need

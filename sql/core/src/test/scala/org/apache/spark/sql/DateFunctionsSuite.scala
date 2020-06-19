@@ -639,7 +639,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
         val now = sql("select unix_timestamp()").collect().head.getLong(0)
         checkAnswer(
-          sql(s"select cast ($now as timestamp)"),
+          sql(s"select timestamp_seconds($now)"),
           Row(new java.util.Date(TimeUnit.SECONDS.toMillis(now))))
       }
     }
@@ -689,8 +689,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(secs(ts5.getTime)), Row(null)))
 
         // invalid format
-        checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')"), Seq(
-          Row(null), Row(null), Row(null), Row(null)))
+        val invalid = df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')")
+        val e = intercept[IllegalArgumentException](invalid.collect())
+        assert(e.getMessage.contains('b'))
       }
     }
   }
@@ -715,7 +716,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
 
         checkAnswer(df.select(to_timestamp(col("ss"))),
-          df.select(unix_timestamp(col("ss")).cast("timestamp")))
+          df.select(timestamp_seconds(unix_timestamp(col("ss")))))
         checkAnswer(df.select(to_timestamp(col("ss"))), Seq(
           Row(ts1), Row(ts2)))
         if (legacyParserPolicy == "legacy") {

@@ -662,6 +662,8 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
     DenseVector([-1.080..., -0.646...])
     >>> blorModel.intercept
     3.112...
+    >>> blorModel.evaluate(bdf).accuracy == blorModel.summary.accuracy
+    True
     >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
     >>> mdf = spark.read.format("libsvm").load(data_path)
     >>> mlor = LogisticRegression(regParam=0.1, elasticNetParam=1.0, family="multinomial")
@@ -989,6 +991,15 @@ class LogisticRegressionSummary(JavaWrapper):
         return self._call_java("featuresCol")
 
     @property
+    @since("3.1.0")
+    def weightCol(self):
+        """
+        Field in "predictions" which gives the weight of each instance
+        as a vector.
+        """
+        return self._call_java("weightCol")
+
+    @property
     @since("2.3.0")
     def labels(self):
         """
@@ -1108,7 +1119,8 @@ class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
     def objectiveHistory(self):
         """
         Objective function (scaled loss + regularization) at each
-        iteration.
+        iteration. It contains one more element, the initial state,
+        than number of iterations.
         """
         return self._call_java("objectiveHistory")
 

@@ -37,16 +37,11 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param parentSession a HiveSession from SessionManager
  */
 private[hive] class SparkGetTableTypesOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession)
-  extends GetTableTypesOperation(parentSession) with SparkMetadataOperationUtils with Logging {
-
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.eventManager.onOperationClosed(statementId)
-  }
+  extends GetTableTypesOperation(parentSession)
+  with SparkOperation
+  with Logging {
 
   override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString

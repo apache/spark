@@ -551,4 +551,10 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       errorResponses = Seq("AnalysisException"))(
       ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."))
   }
+
+  test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
+    // If Java 8 time API is enabled via the SQL config `spark.sql.datetime.java8API.enabled`,
+    // the date formatter for `java.sql.LocalDate` must output negative years with sign.
+    runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
+  }
 }

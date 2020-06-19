@@ -156,10 +156,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "fromPrimitiveArray", ObjectType(classOf[Array[Int]]),
         Array[Int](1, 2, 3), UnsafeArrayData.fromPrimitiveArray(Array[Int](1, 2, 3))),
       (DateTimeUtils.getClass, ObjectType(classOf[Date]),
-        "toJavaDate", ObjectType(classOf[DateTimeUtils.SQLDate]), 77777,
+        "toJavaDate", ObjectType(classOf[Int]), 77777,
         DateTimeUtils.toJavaDate(77777)),
       (DateTimeUtils.getClass, ObjectType(classOf[Timestamp]),
-        "toJavaTimestamp", ObjectType(classOf[DateTimeUtils.SQLTimestamp]),
+        "toJavaTimestamp", ObjectType(classOf[Long]),
         88888888.toLong, DateTimeUtils.toJavaTimestamp(88888888))
     ).foreach { case (cls, dataType, methodName, argType, arg, expected) =>
       checkObjectExprEvaluation(StaticInvoke(cls, dataType, methodName,
