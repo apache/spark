@@ -1796,9 +1796,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     // lets say there is a fetch failure in this task set, which makes us go back and
     // run stage 0, attempt 1
-    complete(taskSets(1), Seq(
-      (FetchFailed(makeBlockManagerId("hostA"),
-        shuffleDep1.shuffleId, 0L, 0, 0, "ignored"), null)))
+    completeNextStageWithFetchFailure(1, 0, shuffleDep1)
     scheduler.resubmitFailedStages()
 
     // stage 0, attempt 1 should have the properties of job2
@@ -1872,9 +1870,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // have the second stage complete normally
     completeShuffleMapStageSuccessfully(1, 0, 1, Seq("hostA", "hostC"))
     // fail the third stage because hostA went down
-    complete(taskSets(2), Seq(
-      (FetchFailed(makeBlockManagerId("hostA"),
-        shuffleDepTwo.shuffleId, 0L, 0, 0, "ignored"), null)))
+    completeNextStageWithFetchFailure(2, 0, shuffleDepTwo)
     // TODO assert this:
     // blockManagerMaster.removeExecutor("hostA-exec")
     // have DAGScheduler try again
@@ -1900,9 +1896,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // complete stage 1
     completeShuffleMapStageSuccessfully(1, 0, 1)
     // pretend stage 2 failed because hostA went down
-    complete(taskSets(2), Seq(
-      (FetchFailed(makeBlockManagerId("hostA"),
-        shuffleDepTwo.shuffleId, 0L, 0, 0, "ignored"), null)))
+    completeNextStageWithFetchFailure(2, 0, shuffleDepTwo)
     // TODO assert this:
     // blockManagerMaster.removeExecutor("hostA-exec")
     // DAGScheduler should notice the cached copy of the second shuffle and try to get it rerun.
