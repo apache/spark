@@ -378,12 +378,6 @@ class SelectedFieldSuite extends AnalysisTest {
         StructField("subfield1", IntegerType, nullable = false) :: Nil)) :: Nil)))
   }
 
-  testSelect(arrayWithMultipleFields, "col7.field3.subfield1") {
-    StructField("col7", ArrayType(StructType(
-      StructField("field3", ArrayType(StructType(
-        StructField("subfield1", IntegerType, nullable = false) :: Nil))) :: Nil)))
-  }
-
   // Array with a nested int array
   //  |-- col1: string (nullable = false)
   //  |-- col8: array (nullable = true)
