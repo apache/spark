@@ -57,7 +57,6 @@ private[execution] object SparkPlanInfo {
       case ReusedSubqueryExec(child) => child :: Nil
       case a: AdaptiveSparkPlanExec => a.executedPlan :: Nil
       case stage: QueryStageExec => stage.plan :: Nil
-      case rr: RecursiveRelationExec => rr.anchorTerm +: rr.recursiveTermIterations
       case inMemTab: InMemoryTableScanExec => inMemTab.relation.cachedPlan :: Nil
       case _ => plan.children ++ plan.subqueries
     }
