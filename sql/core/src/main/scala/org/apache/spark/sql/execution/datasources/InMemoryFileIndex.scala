@@ -398,7 +398,7 @@ object InMemoryFileIndex extends Logging {
               parameters = parameters)
           }
       }
-      var fileFilters = ""
+      var fileFilters = ParArray[PathFilter]()
       if (sessionOpt.nonEmpty) {
         fileFilters = (filters ++ FileModifiedDateOption.accept(
           parameters,
