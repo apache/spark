@@ -82,6 +82,18 @@ In `cluster` mode, the driver runs on a different machine than the client, so `S
 
 Running Spark on YARN requires a binary distribution of Spark which is built with YARN support.
 Binary distributions can be downloaded from the [downloads page](https://spark.apache.org/downloads.html) of the project website.
+There are two variants of Spark binary distributions you can download. One is pre-built with a certain
+version of Apache Hadoop; this Spark distribution contains built-in Hadoop runtime, so we call it `with-hadoop` Spark
+distribution. The other one is pre-built with user-provided Hadoop; since this Spark distribution
+doesn't contain a built-in Hadoop runtime, it's smaller, but users have to provide a Hadoop installation separately.
+We call this variant `no-hadoop` Spark distribution. For `with-hadoop` Spark distribution, since
+it contains a built-in Hadoop runtime already, by default, when a job is submitted to Hadoop Yarn cluster, to prevent jar conflict, it will not
+populate Yarn's classpath into Spark. To override this behavior, you can set <code>spark.yarn.populateHadoopClasspath=true</code>.
+For `no-hadoop` Spark distribution, Spark will populate Yarn's classpath by default in order to get Hadoop runtime. For `with-hadoop` Spark distribution,
+if your application depends on certain library that is only available in the cluster, you can try to populate the Yarn classpath by setting
+the property mentioned above. If you run into jar conflict issue by doing so, you will need to turn it off and include this library
+in your application jar.
+
 To build Spark yourself, refer to [Building Spark](building-spark.html).
 
 To make Spark runtime jars accessible from YARN side, you can specify `spark.yarn.archive` or `spark.yarn.jars`. For details please refer to [Spark Properties](running-on-yarn.html#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will create a zip file with all jars under `$SPARK_HOME/jars` and upload it to the distributed cache.
@@ -396,7 +408,10 @@ To use a custom metrics.properties for the application master and executors, upd
 </tr>
 <tr>
   <td><code>spark.yarn.populateHadoopClasspath</code></td>
-  <td>true</td>
+  <td>
+    For <code>with-hadoop</code> Spark distribution, this is set to false; 
+    for <code>no-hadoop</code> distribution, this is set to true.
+  </td>
   <td>
     Whether to populate Hadoop classpath from <code>yarn.application.classpath</code> and
     <code>mapreduce.application.classpath</code> Note that if this is set to <code>false</code>, 

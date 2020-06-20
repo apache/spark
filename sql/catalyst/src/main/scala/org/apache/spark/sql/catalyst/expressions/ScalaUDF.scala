@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters.{createToCatalystConverter, createToScalaConverter => catalystCreateToScalaConverter, isPrimitive}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, UserDefinedType}
 
 /**
  * User-defined function.
@@ -103,20 +102,45 @@ case class ScalaUDF(
     }
   }
 
-  private def createToScalaConverter(i: Int, dataType: DataType): Any => Any = {
-    if (inputEncoders.isEmpty) {
-      // for untyped Scala UDF
-      CatalystTypeConverters.createToScalaConverter(dataType)
-    } else {
-      val encoder = inputEncoders(i)
-      if (encoder.isDefined && encoder.get.isSerializedAsStructForTopLevel) {
-        val fromRow = encoder.get.resolveAndBind().createDeserializer()
+  /**
+   * Create the converter which converts the catalyst data type to the scala data type.
+   * We use `CatalystTypeConverters` to create the converter for:
+   *   - UDF which doesn't provide inputEncoders, e.g., untyped Scala UDF and Java UDF
+   *   - type which isn't supported by `ExpressionEncoder`, e.g., Any
+   *   - primitive types, in order to use `identity` for better performance
+   *   - UserDefinedType which isn't fully supported by `ExpressionEncoder`
+   * For other cases like case class, Option[T], we use `ExpressionEncoder` instead since
+   * `CatalystTypeConverters` doesn't support these data types.
+   *
+   * @param i the index of the child
+   * @param dataType the output data type of the i-th child
+   * @return the converter and a boolean value to indicate whether the converter is
+   *         created by using `ExpressionEncoder`.
+   */
+  private def scalaConverter(i: Int, dataType: DataType): (Any => Any, Boolean) = {
+    val useEncoder =
+      !(inputEncoders.isEmpty || // for untyped Scala UDF and Java UDF
+      inputEncoders(i).isEmpty || // for types aren't supported by encoder, e.g. Any
+      inputPrimitives(i) || // for primitive types
+      dataType.existsRecursively(_.isInstanceOf[UserDefinedType[_]]))
+
+    if (useEncoder) {
+      val enc = inputEncoders(i).get
+      val fromRow = enc.createDeserializer()
+      val converter = if (enc.isSerializedAsStructForTopLevel) {
         row: Any => fromRow(row.asInstanceOf[InternalRow])
       } else {
-        CatalystTypeConverters.createToScalaConverter(dataType)
+        val inputRow = new GenericInternalRow(1)
+        value: Any => inputRow.update(0, value); fromRow(inputRow)
       }
+      (converter, true)
+    } else { // use CatalystTypeConverters
+      (catalystCreateToScalaConverter(dataType), false)
     }
   }
+
+  private def createToScalaConverter(i: Int, dataType: DataType): Any => Any =
+    scalaConverter(i, dataType)._1
 
   // scalastyle:off line.size.limit
 
@@ -1045,10 +1069,11 @@ case class ScalaUDF(
       ev: ExprCode): ExprCode = {
     val converterClassName = classOf[Any => Any].getName
 
-    // The type converters for inputs and the result.
-    val converters: Array[Any => Any] = children.zipWithIndex.map { case (c, i) =>
-      createToScalaConverter(i, c.dataType)
-    }.toArray :+ CatalystTypeConverters.createToCatalystConverter(dataType)
+    // The type converters for inputs and the result
+    val (converters, useEncoders): (Array[Any => Any], Array[Boolean]) =
+      (children.zipWithIndex.map { case (c, i) =>
+        scalaConverter(i, c.dataType)
+      }.toArray :+ (createToCatalystConverter(dataType), false)).unzip
     val convertersTerm = ctx.addReferenceObj("converters", converters, s"$converterClassName[]")
     val errorMsgTerm = ctx.addReferenceObj("errMsg", udfErrorMessage)
     val resultTerm = ctx.freshName("result")
@@ -1064,12 +1089,26 @@ case class ScalaUDF(
     val (funcArgs, initArgs) = evals.zipWithIndex.zip(children.map(_.dataType)).map {
       case ((eval, i), dt) =>
         val argTerm = ctx.freshName("arg")
-        val initArg = if (CatalystTypeConverters.isPrimitive(dt)) {
+        // Check `inputPrimitives` when it's not empty in order to figure out the Option
+        // type as non primitive type, e.g., Option[Int]. Fall back to `isPrimitive` when
+        // `inputPrimitives` is empty for other cases, e.g., Java UDF, untyped Scala UDF
+        val primitive = (inputPrimitives.isEmpty && isPrimitive(dt)) ||
+          (inputPrimitives.nonEmpty && inputPrimitives(i))
+        val initArg = if (primitive) {
           val convertedTerm = ctx.freshName("conv")
           s"""
              |${CodeGenerator.boxedType(dt)} $convertedTerm = ${eval.value};
              |Object $argTerm = ${eval.isNull} ? null : $convertedTerm;
            """.stripMargin
+        } else if (useEncoders(i)) {
+          s"""
+             |Object $argTerm = null;
+             |if (${eval.isNull}) {
+             |  $argTerm = $convertersTerm[$i].apply(null);
+             |} else {
+             |  $argTerm = $convertersTerm[$i].apply(${eval.value});
+             |}
+          """.stripMargin
         } else {
           s"Object $argTerm = ${eval.isNull} ? null : $convertersTerm[$i].apply(${eval.value});"
         }
@@ -1081,7 +1120,7 @@ case class ScalaUDF(
     val resultConverter = s"$convertersTerm[${children.length}]"
     val boxedType = CodeGenerator.boxedType(dataType)
 
-    val funcInvokation = if (CatalystTypeConverters.isPrimitive(dataType)
+    val funcInvokation = if (isPrimitive(dataType)
         // If the output is nullable, the returned value must be unwrapped from the Option
         && !nullable) {
       s"$resultTerm = ($boxedType)$getFuncResult"
@@ -1112,7 +1151,7 @@ case class ScalaUDF(
        """.stripMargin)
   }
 
-  private[this] val resultConverter = CatalystTypeConverters.createToCatalystConverter(dataType)
+  private[this] val resultConverter = createToCatalystConverter(dataType)
 
   lazy val udfErrorMessage = {
     val funcCls = function.getClass.getSimpleName

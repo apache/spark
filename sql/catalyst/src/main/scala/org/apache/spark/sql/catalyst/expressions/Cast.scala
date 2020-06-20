@@ -303,7 +303,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
     case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
     case TimestampType => buildCast[Long](_,
-      t => UTF8String.fromString(DateTimeUtils.timestampToString(timestampFormatter, t)))
+      t => UTF8String.fromString(timestampFormatter.format(t)))
     case ArrayType(et, _) =>
       buildCast[ArrayData](_, array => {
         val builder = new UTF8StringBuilder
@@ -443,7 +443,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case ByteType =>
       buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
-      buildCast[Int](_, d => epochDaysToMicros(d, zoneId))
+      buildCast[Int](_, d => daysToMicros(d, zoneId))
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -480,7 +480,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Long](_, t => microsToEpochDays(t, zoneId))
+      buildCast[Long](_, t => microsToDays(t, zoneId))
   }
 
   // IntervalConverter
@@ -1034,8 +1034,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val tf = JavaCode.global(
           ctx.addReferenceObj("timestampFormatter", timestampFormatter),
           timestampFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($tf, $c));"""
+        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
       case CalendarIntervalType =>
         (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($c.toString());"""
       case ArrayType(et, _) =>
@@ -1120,7 +1119,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val zid = getZoneId()
         (c, evPrim, evNull) =>
           code"""$evPrim =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToEpochDays($c, $zid);"""
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToDays($c, $zid);"""
       case _ =>
         (c, evPrim, evNull) => code"$evNull = true;"
     }
@@ -1247,7 +1246,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         zoneIdClass)
       (c, evPrim, evNull) =>
         code"""$evPrim =
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.epochDaysToMicros($c, $zid);"""
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c, $zid);"""
     case DecimalType() =>
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
