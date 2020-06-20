@@ -145,19 +145,16 @@ object AggUtils {
     // [COUNT(DISTINCT foo), MAX(DISTINCT foo)], but [COUNT(DISTINCT bar), COUNT(DISTINCT foo)] is
     // disallowed because those two distinct aggregates have different column expressions.
     val distinctExpressions = functionsWithDistinct.head.aggregateFunction.children
-    val namedDistinctExpressions = distinctExpressions.map {
-      case ne: NamedExpression => ne
-      case other => Alias(other, other.toString)()
-    }
-    // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
-    // `groupingExpressions` is not extracted during logical phase.
-    val normalizednamedDistinctExpressions = namedDistinctExpressions.map { e =>
+    val normalizedNamedDistinctExpressions = distinctExpressions.map { e =>
+      // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
+      // `groupingExpressions` is not extracted during logical phase.
       NormalizeFloatingNumbers.normalize(e) match {
-        case n: NamedExpression => n
-        case other => Alias(other, e.name)(exprId = e.exprId)
+        case ne: NamedExpression => ne
+        case other => Alias(other, other.toString)()
       }
     }
-    val distinctAttributes = normalizednamedDistinctExpressions.map(_.toAttribute)
+
+    val distinctAttributes = normalizedNamedDistinctExpressions.map(_.toAttribute)
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
     // 1. Create an Aggregate Operator for partial aggregations.
@@ -168,7 +165,7 @@ object AggUtils {
       // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
       // expressions will be [key, value].
       createAggregate(
-        groupingExpressions = groupingExpressions ++ normalizednamedDistinctExpressions,
+        groupingExpressions = groupingExpressions ++ normalizedNamedDistinctExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
