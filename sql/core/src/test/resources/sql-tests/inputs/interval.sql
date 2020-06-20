@@ -29,6 +29,8 @@ select make_interval(1, 2, 3, 4);
 select make_interval(1, 2, 3, 4, 5);
 select make_interval(1, 2, 3, 4, 5, 6);
 select make_interval(1, 2, 3, 4, 5, 6, 7.008009);
+select make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456);
+select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789);
 
 -- cast string to intervals
 select cast('1 second' as interval);
