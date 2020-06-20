@@ -144,7 +144,7 @@ object ResolveHints {
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case h: UnresolvedHint if conf.optimizerHintsEnabled &&
+      case h: UnresolvedHint if !conf.optimizerIgnoreHints &&
           STRATEGY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
         if (h.parameters.isEmpty) {
           // If there is no table alias specified, apply the hint on the entire subtree.
@@ -249,7 +249,7 @@ object ResolveHints {
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case hint @ UnresolvedHint(hintName, _, _) if conf.optimizerHintsEnabled =>
+      case hint @ UnresolvedHint(hintName, _, _) if !conf.optimizerIgnoreHints =>
         hintName.toUpperCase(Locale.ROOT) match {
           case "REPARTITION" =>
             createRepartition(shuffle = true, hint)
