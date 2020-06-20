@@ -252,6 +252,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       .getOrCreate()
 
     context.stop()
+    // wait for application end event
+    Thread.sleep(1000)
     assert(SparkSession.getDefaultSession.isEmpty)
     assert(SparkSession.getActiveSession.isEmpty)
     val msg = intercept[IllegalStateException] {
