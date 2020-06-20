@@ -1080,7 +1080,7 @@ class DataFrameWriterV2(object):
     Interface used to write a class:`pyspark.sql.dataframe.DataFrame`
     to external storage using the v2 API.
 
-    .. versionadded:: 3.0.0
+    .. versionadded:: 3.1.0
     """
 
     def __init__(self, df, table):
@@ -1088,7 +1088,7 @@ class DataFrameWriterV2(object):
         self._spark = df.sql_ctx
         self._jwriter = df._jdf.writeTo(table)
 
-    @since(3.0)
+    @since(3.1)
     def using(self, provider):
         """
         Specifies a provider for the underlying output data source.
@@ -1097,7 +1097,7 @@ class DataFrameWriterV2(object):
         self._jwriter.using(provider)
         return self
 
-    @since(3.0)
+    @since(3.1)
     def option(self, key, value):
         """
         Add a write option.
@@ -1105,7 +1105,7 @@ class DataFrameWriterV2(object):
         self._jwriter.option(key, to_str(value))
         return self
 
-    @since(3.0)
+    @since(3.1)
     def options(self, **options):
         """
         Add write options.
@@ -1114,7 +1114,7 @@ class DataFrameWriterV2(object):
         self._jwriter.options(options)
         return self
 
-    @since(3.0)
+    @since(3.1)
     def partitionedBy(self, col, *cols):
         """
         Partition the output table created by `create`, `createOrReplace`, or `replace` using
@@ -1137,7 +1137,7 @@ class DataFrameWriterV2(object):
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
         return self
 
-    @since(3.0)
+    @since(3.1)
     def create(self):
         """
         Create a new table from the contents of the data frame.
@@ -1147,7 +1147,7 @@ class DataFrameWriterV2(object):
         """
         self._jwriter.create()
 
-    @since(3.0)
+    @since(3.1)
     def replace(self):
         """
         Replace an existing table with the contents of the data frame.
@@ -1157,7 +1157,7 @@ class DataFrameWriterV2(object):
         """
         self._jwriter.replace()
 
-    @since(3.0)
+    @since(3.1)
     def createOrReplace(self):
         """
         Create a new table or replace an existing table with the contents of the data frame.
@@ -1169,14 +1169,14 @@ class DataFrameWriterV2(object):
         """
         self._jwriter.createOrReplace()
 
-    @since(3.0)
+    @since(3.1)
     def append(self):
         """
         Append the contents of the data frame to the output table.
         """
         self._jwriter.append()
 
-    @since(3.0)
+    @since(3.1)
     def overwrite(self, condition):
         """
         Overwrite rows matching the given filter condition with the contents of the data frame in
@@ -1185,7 +1185,7 @@ class DataFrameWriterV2(object):
         condition = _to_java_column(column)
         self._jwriter.overwrite(condition)
 
-    @since(3.0)
+    @since(3.1)
     def overwritePartitions(self):
         """
         Overwrite all partition for which the data frame contains at least one row with the contents

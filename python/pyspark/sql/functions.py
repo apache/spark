@@ -3324,7 +3324,7 @@ def map_zip_with(col1, col2, f):
 
 # ---------------------- Partition transform functions --------------------------------
 
-@since(3.0)
+@since(3.1)
 def years(col):
     """
     Partition transform function: A transform for timestamps and dates
@@ -3338,7 +3338,7 @@ def years(col):
     return Column(sc._jvm.functions.years(_to_java_column(col)))
 
 
-@since(3.0)
+@since(3.1)
 def months(col):
     """
     Partition transform function: A transform for timestamps and dates
@@ -3352,7 +3352,7 @@ def months(col):
     return Column(sc._jvm.functions.months(_to_java_column(col)))
 
 
-@since(3.0)
+@since(3.1)
 def days(col):
     """
     Partition transform function: A transform for timestamps and dates
@@ -3366,7 +3366,7 @@ def days(col):
     return Column(sc._jvm.functions.days(_to_java_column(col)))
 
 
-@since(3.0)
+@since(3.1)
 def hours(col):
     """
     Partition transform function: A transform for timestamps
@@ -3380,7 +3380,7 @@ def hours(col):
     return Column(sc._jvm.functions.hours(_to_java_column(col)))
 
 
-@since(3.0)
+@since(3.1)
 def bucket(numBuckets, col):
     """
     Partition transform function: A transform for any type that partitions
