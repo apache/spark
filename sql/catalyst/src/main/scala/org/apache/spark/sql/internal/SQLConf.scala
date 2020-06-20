@@ -2201,7 +2201,7 @@ object SQLConf {
       .internal()
       .doc("Avoid sort/spill to disk during partial aggregation")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
