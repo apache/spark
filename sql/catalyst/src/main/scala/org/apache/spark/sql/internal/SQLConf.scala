@@ -1177,7 +1177,7 @@ object SQLConf {
     .createWithDefault(4 * 1024 * 1024)
 
   val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
-    .doc("The suggested (not guaranteed) minimum number of splitting file partitions. " +
+    .doc("The suggested (not guaranteed) minimum number of split file partitions. " +
       "If not set, the default value is `spark.default.parallelism`. This configuration is " +
       "effective only when using file-based sources such as Parquet, JSON and ORC.")
     .version("3.1.0")
