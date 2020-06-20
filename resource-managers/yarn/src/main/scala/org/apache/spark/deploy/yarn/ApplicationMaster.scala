@@ -254,9 +254,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       var attemptID: Option[String] = None
 
       if (isClusterMode) {
-        // Set the web ui port to be ephemeral for yarn so we don't conflict with
-        // other spark processes running on the same box
-        System.setProperty("spark.ui.port", "0")
+        // Set the web ui port to be ephemeral for yarn if not set explicitly
+        // so we don't conflict with other spark processes running on the same box
+        if (System.getProperty("spark.ui.port") != null) {
+          System.setProperty("spark.ui.port", "0")
+        }
 
         // Set the master and deploy mode property to match the requested mode.
         System.setProperty("spark.master", "yarn")
