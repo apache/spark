@@ -652,21 +652,15 @@ private[spark] class TaskSchedulerImpl(
                 case Some ((executorId, _)) =>
                   if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
                     blacklistTrackerOpt.foreach(blt => blt.killBlacklistedIdleExecutor(executorId))
-
-                    val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
-                    unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
-                    logInfo(s"Waiting for $timeout ms for completely "
-                      + s"blacklisted task to be schedulable again before aborting $taskSet.")
-                    abortTimer.schedule(
-                      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
+                    updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
                   }
                 case None =>
                   //  Notify ExecutorAllocationManager about the unschedulable task set,
                   // in order to provision more executors to make them schedulable
                   if (Utils.isDynamicAllocationEnabled(conf)) {
                     if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
-                      logInfo(s"Requesting additional executors to schedule unschedulable" +
-                      s" blacklisted task before aborting $taskSet.")
+                      logInfo(s"Notifying ExecutorAllocationManager to add executors to" +
+                        s" schedule the unschedulable blacklisted task before aborting $taskSet.")
                       dagScheduler.unschedulableBlacklistTaskSubmitted(
                         Some(taskSet.taskSet.stageId),
                         Some(taskSet.taskSet.stageAttemptId))
