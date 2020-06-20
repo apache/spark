@@ -557,6 +557,14 @@ class FileIndexSuite extends SharedSparkSession {
       val df = spark.read.format("csv").load(path + "/file1.csv")
       assert(df.count() == 1)
     }
+    test("SPARK-39162 - when filesModifiedAfterDate not specified") {
+      withTempDir { dir =>
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        val df = spark.read.format("csv").load(path + "/file1.csv")
+        assert(df.count() == 1)
+      }
   }
 }
 object DeletionRaceFileSystem {

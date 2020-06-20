@@ -398,12 +398,14 @@ object InMemoryFileIndex extends Logging {
               parameters = parameters)
           }
       }
-      val fileFilters = (filters ++ FileModifiedDateOption.accept(
-        parameters,
-        sessionOpt.get,
-        hadoopConf))
-          .filter(filter => filter !=null)
-
+      var fileFilters = ""
+      if (sessionOpt.nonEmpty) {
+        fileFilters = (filters ++ FileModifiedDateOption.accept(
+          parameters,
+          sessionOpt.get,
+          hadoopConf))
+            .filter(filter => filter != null)
+      }
       val allFiles = topLevelFiles ++ nestedFiles
       if (fileFilters.nonEmpty) allFiles.filter(file => (
           fileFilters.forall(filter => filter != null && filter.accept(file.getPath))))
