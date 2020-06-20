@@ -1012,4 +1012,20 @@ class DataFrameAggregateSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-32038: NormalizeFloatingNumbers should work on distinct aggregate") {
+    withTempView("view") {
+      val POS_NAN_1 = java.lang.Float.intBitsToFloat(0x7f800001)
+      val POS_NAN_2 = java.lang.Float.intBitsToFloat(0x7fffffff)
+
+      Seq(("mithunr", Float.NaN),
+        ("mithunr", POS_NAN_1),
+        ("mithunr", POS_NAN_2),
+        ("abellina", 1.0f),
+        ("abellina", 2.0f)).toDF("uid", "score").createOrReplaceTempView("view")
+
+      val df = spark.sql(" select uid, count(distinct score) from view group by 1 order by 1 asc ")
+      checkAnswer(df, Row("abellina", 2) :: Row("mithunr", 1) :: Nil)
+    }
+  }
 }

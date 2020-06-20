@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
 
@@ -148,7 +149,15 @@ object AggUtils {
       case ne: NamedExpression => ne
       case other => Alias(other, other.toString)()
     }
-    val distinctAttributes = namedDistinctExpressions.map(_.toAttribute)
+    // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
+    // `groupingExpressions` is not extracted during logical phase.
+    val normalizednamedDistinctExpressions = namedDistinctExpressions.map { e =>
+      NormalizeFloatingNumbers.normalize(e) match {
+        case n: NamedExpression => n
+        case other => Alias(other, e.name)(exprId = e.exprId)
+      }
+    }
+    val distinctAttributes = normalizednamedDistinctExpressions.map(_.toAttribute)
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
     // 1. Create an Aggregate Operator for partial aggregations.
@@ -159,7 +168,7 @@ object AggUtils {
       // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
       // expressions will be [key, value].
       createAggregate(
-        groupingExpressions = groupingExpressions ++ namedDistinctExpressions,
+        groupingExpressions = groupingExpressions ++ normalizednamedDistinctExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
