@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.io.File
 import java.sql.{DriverManager, Statement}
 
 import scala.collection.JavaConverters._
@@ -29,11 +30,19 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.thrift.ThriftCLIService
 
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 trait SharedThriftServer extends SharedSparkSession {
 
   private var hiveServer2: HiveThriftServer2 = _
   private var serverPort: Int = 0
+
+  protected val tempScratchDir: File = {
+    val dir = Utils.createTempDir()
+    dir.setWritable(true, false)
+    Utils.createTempDir(dir.getAbsolutePath)
+    dir
+  }
 
   def mode: ServerMode.Value
 
@@ -91,6 +100,8 @@ trait SharedThriftServer extends SharedSparkSession {
     sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname, "0")
     sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT.varname, "0")
     sqlContext.setConf(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname, mode.toString)
+    sqlContext.setConf(ConfVars.SCRATCHDIR.varname, tempScratchDir.getAbsolutePath)
+    sqlContext.setConf(ConfVars.HIVE_START_CLEANUP_SCRATCHDIR.varname, "true")
 
     try {
       hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
@@ -100,6 +111,10 @@ trait SharedThriftServer extends SharedSparkSession {
           logInfo(s"Started HiveThriftServer2: mode=$mode, port=$serverPort, attempt=$attempt")
         case _ =>
       }
+
+      // the scratch dir will be recreated after the probe sql `SELECT 1` executed, so we
+      // check it here first.
+      assert(!tempScratchDir.exists())
 
       // Wait for thrift server to be ready to serve the query, via executing simple query
       // till the query succeeds. See SPARK-30345 for more details.
