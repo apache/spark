@@ -2527,7 +2527,7 @@ object SQLConf {
 
   val JSON_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.json.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to JSON datasource.")
-    .version("")
+    .version("3.1.0")
     .booleanConf
     .createWithDefault(true)
 
