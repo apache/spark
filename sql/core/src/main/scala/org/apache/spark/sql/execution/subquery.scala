@@ -197,30 +197,3 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
     }
   }
 }
-
-/**
- * Find out duplicated subqueries in the spark plan, then use the same subquery result for all the
- * references.
- */
-case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
-
-  def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.subqueryReuseEnabled) {
-      return plan
-    }
-    // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.
-    val subqueries = mutable.HashMap[StructType, ArrayBuffer[BaseSubqueryExec]]()
-    plan transformAllExpressions {
-      case sub: ExecSubqueryExpression =>
-        val sameSchema =
-          subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[BaseSubqueryExec]())
-        val sameResult = sameSchema.find(_.sameResult(sub.plan))
-        if (sameResult.isDefined) {
-          sub.withNewPlan(ReusedSubqueryExec(sameResult.get))
-        } else {
-          sameSchema += sub.plan
-          sub
-        }
-    }
-  }
-}

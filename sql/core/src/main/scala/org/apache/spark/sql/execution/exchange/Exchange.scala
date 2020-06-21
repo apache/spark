@@ -97,20 +97,22 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
 }
 
 /**
- * Find out duplicated exchanges in the spark plan, then use the same exchange for all the
- * references.
+ * Find out duplicated exchanges and subqueries in the spark plan, then use the
+ * same exchange and same subquery result for all the references.
+ *
  */
-case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
+case class ReuseExchangeAndSubquery(conf: SQLConf) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.exchangeReuseEnabled) {
+    if (!conf.exchangeReuseEnabled && !conf.subqueryReuseEnabled) {
       return plan
     }
-    // Build a hash map using schema of exchanges to avoid O(N*N) sameResult calls.
+    // Build a hash map using schema of exchanges and subqueries to avoid O(N*N) sameResult calls.
     val exchanges = mutable.HashMap[StructType, ArrayBuffer[Exchange]]()
+    val subqueries = mutable.HashMap[StructType, ArrayBuffer[BaseSubqueryExec]]()
 
     // Replace a Exchange duplicate with a ReusedExchange
-    def reuse: PartialFunction[Exchange, SparkPlan] = {
+    def reuseExchange: PartialFunction[Exchange, SparkPlan] = {
       case exchange: Exchange =>
         val sameSchema = exchanges.getOrElseUpdate(exchange.schema, ArrayBuffer[Exchange]())
         val samePlan = sameSchema.find { e =>
@@ -126,15 +128,40 @@ case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
         }
     }
 
-    plan transformUp {
-      case exchange: Exchange => reuse(exchange)
-    } transformAllExpressions {
-      // Lookup inside subqueries for duplicate exchanges
-      case in: InSubqueryExec =>
-        val newIn = in.plan.transformUp {
-          case exchange: Exchange => reuse(exchange)
+    def reuseSubquery: PartialFunction[ExecSubqueryExpression, ExecSubqueryExpression] = {
+      case sub: ExecSubqueryExpression =>
+        if (!conf.subqueryReuseEnabled) {
+          sub
+        } else {
+          val sameSchema =
+            subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[BaseSubqueryExec]())
+          val sameResult = sameSchema.find(_.sameResult(sub.plan))
+          if (sameResult.isDefined) {
+            sub.withNewPlan(ReusedSubqueryExec(sameResult.get))
+          } else {
+            sameSchema += sub.plan
+            sub
+          }
         }
-        in.copy(plan = newIn.asInstanceOf[BaseSubqueryExec])
+    }
+
+    def processExpressionsForReuse(node: SparkPlan): SparkPlan = {
+      node.transformExpressions {
+        case in: InSubqueryExec =>
+          val inSubqueryExecPlan = in.plan.transformUp {
+            case exchange: Exchange => reuseExchange(exchange)
+          }
+          reuseSubquery(in.copy(plan = inSubqueryExecPlan.asInstanceOf[BaseSubqueryExec]))
+        case sub: ExecSubqueryExpression =>
+          reuseSubquery(sub)
+      }
+    }
+
+    plan.transformUp {
+      case exchange: Exchange =>
+        reuseExchange(exchange)
+      case other =>
+        processExpressionsForReuse(other)
     }
   }
 }
