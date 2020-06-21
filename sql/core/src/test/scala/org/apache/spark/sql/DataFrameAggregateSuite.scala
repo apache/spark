@@ -1015,12 +1015,12 @@ class DataFrameAggregateSuite extends QueryTest
 
   test("SPARK-32038: NormalizeFloatingNumbers should work on distinct aggregate") {
     withTempView("view") {
-      val POS_NAN_1 = java.lang.Float.intBitsToFloat(0x7f800001)
-      val POS_NAN_2 = java.lang.Float.intBitsToFloat(0x7fffffff)
+      val nan1 = java.lang.Float.intBitsToFloat(0x7f800001)
+      val nan2 = java.lang.Float.intBitsToFloat(0x7fffffff)
 
       Seq(("mithunr", Float.NaN),
-        ("mithunr", POS_NAN_1),
-        ("mithunr", POS_NAN_2),
+        ("mithunr", nan1),
+        ("mithunr", nan2),
         ("abellina", 1.0f),
         ("abellina", 2.0f)).toDF("uid", "score").createOrReplaceTempView("view")
 
