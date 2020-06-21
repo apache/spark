@@ -75,9 +75,13 @@ private class HistoryServerDiskManager(
 
     // Go through the recorded store directories and remove any that may have been removed by
     // external code.
-    val orphans = listing.view(classOf[ApplicationStoreInfo]).asScala.filter { info =>
-      !new File(info.path).exists()
-    }.toSeq
+    val (existing, orphans) = listing
+      .view(classOf[ApplicationStoreInfo])
+      .asScala
+      .toSeq
+      .partition { info =>
+        new File(info.path).exists()
+      }
 
     orphans.foreach { info =>
       listing.delete(info.getClass(), info.path)
@@ -87,11 +91,11 @@ private class HistoryServerDiskManager(
     // directory changed. When service restarts, "currentUsage" is calculated from real directory
     // size. Update "ApplicationStoreInfo.size" to ensure "currentUsage" equals
     // sum of "ApplicationStoreInfo.size".
-    val changedStoreInfo = listing.view(classOf[ApplicationStoreInfo]).asScala.filter { info =>
+    val changedStoreInfo = existing.filter { info =>
       info.size != sizeOf(new File(info.path))
     }.map { info =>
       info.copy(size = sizeOf(new File(info.path)))
-    }.toSeq
+    }
 
     changedStoreInfo.foreach { info =>
       listing.write(info)
