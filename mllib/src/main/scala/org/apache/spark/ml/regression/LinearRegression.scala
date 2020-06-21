@@ -433,7 +433,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         Vectors.dense(Array.fill(dim)(1.0))
     }
 
-    val  (parameters, objectiveHistory) = if ($(blockSize) == 1) {
+    val (parameters, objectiveHistory) = if ($(blockSize) == 1) {
       trainOnRows(instances, yMean, yStd, featuresMean, featuresStd,
         initialValues, regularization, optimizer)
     } else {
@@ -939,8 +939,10 @@ class LinearRegressionTrainingSummary private[regression] (
    * @see `LinearRegression.solver`
    */
   @Since("1.5.0")
-  val totalIterations = objectiveHistory.length
-
+  val totalIterations = {
+    assert(objectiveHistory.length > 0, s"objectiveHistory length should be greater than 1.")
+    objectiveHistory.length - 1
+  }
 }
 
 /**

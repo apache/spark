@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, Collect
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -50,7 +49,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   protected def checkNullCast(from: DataType, to: DataType): Unit = {
-    checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
+    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
+    }
   }
 
   test("null cast") {
@@ -239,7 +240,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1.5, 1.5f)
     checkCast(1.5, "1.5")
 
-    checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
+    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
+    }
   }
 
   test("cast from string") {
@@ -267,13 +270,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     for (tz <- ALL_TIMEZONES) {
       val timeZoneId = Option(tz.getId)
-      var c = Calendar.getInstance(TimeZoneGMT)
+      var c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
         millisToMicros(c.getTimeInMillis))
-      c = Calendar.getInstance(TimeZoneGMT)
+      c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
@@ -290,7 +293,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
       cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
-      DateTimeUtils.fromJavaTimestamp(ts))
+      fromJavaTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(
@@ -305,17 +308,20 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(cast(cast(
       cast(cast("5", ByteType), ShortType), IntegerType), FloatType), DoubleType), LongType),
       5.toLong)
-    checkEvaluation(
-      cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
-        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-      5.toShort)
-    checkEvaluation(
-      cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
-        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-      null)
-    checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
-      ByteType), TimestampType), LongType), StringType), ShortType),
-      5.toShort)
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      checkEvaluation(
+        cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
+          DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        5.toShort)
+      checkEvaluation(
+        cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
+          DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        null)
+      checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
+        ByteType), TimestampType), LongType), StringType), ShortType),
+        5.toShort)
+    }
 
     checkEvaluation(cast("23", DoubleType), 23d)
     checkEvaluation(cast("23", IntegerType), 23)
@@ -376,29 +382,32 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, LongType), 15.toLong)
     checkEvaluation(cast(ts, FloatType), 15.003f)
     checkEvaluation(cast(ts, DoubleType), 15.003)
-    checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-    checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-    checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-    checkEvaluation(
-      cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
-      millis.toFloat / MILLIS_PER_SECOND)
-    checkEvaluation(
-      cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
-      millis.toDouble / MILLIS_PER_SECOND)
-    checkEvaluation(
-      cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
-      Decimal(1))
 
-    // A test for higher precision than millis
-    checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
+    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      checkEvaluation(cast(cast(tss, ShortType), TimestampType),
+        fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
+        fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      checkEvaluation(cast(cast(tss, LongType), TimestampType),
+        fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      checkEvaluation(
+        cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
+        millis.toFloat / MILLIS_PER_SECOND)
+      checkEvaluation(
+        cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
+        millis.toDouble / MILLIS_PER_SECOND)
+      checkEvaluation(
+        cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
+        Decimal(1))
 
-    checkEvaluation(cast(Double.NaN, TimestampType), null)
-    checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
-    checkEvaluation(cast(Float.NaN, TimestampType), null)
-    checkEvaluation(cast(1.0f / 0.0f, TimestampType), null)
+      // A test for higher precision than millis
+      checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
+
+      checkEvaluation(cast(Double.NaN, TimestampType), null)
+      checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
+      checkEvaluation(cast(Float.NaN, TimestampType), null)
+      checkEvaluation(cast(1.0f / 0.0f, TimestampType), null)
+    }
   }
 
   test("cast from array") {
@@ -1026,8 +1035,11 @@ class CastSuite extends CastSuiteBase {
 
   test("cast from int 2") {
     checkEvaluation(cast(1, LongType), 1.toLong)
-    checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
-    checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
+      checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
+      checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
+    }
 
     checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
@@ -1308,6 +1320,20 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
       checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
+    }
+  }
+
+  test("SPARK-31710:fail casting from numeric to timestamp by default") {
+    Seq(true, false).foreach { enable =>
+      withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> enable.toString) {
+        assert(cast(2.toByte, TimestampType).resolved == enable)
+        assert(cast(10.toShort, TimestampType).resolved == enable)
+        assert(cast(3, TimestampType).resolved == enable)
+        assert(cast(10L, TimestampType).resolved == enable)
+        assert(cast(Decimal(1.2), TimestampType).resolved == enable)
+        assert(cast(1.7f, TimestampType).resolved == enable)
+        assert(cast(2.3d, TimestampType).resolved == enable)
+      }
     }
   }
 }
