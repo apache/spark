@@ -2548,6 +2548,40 @@ class DataFrameSuite extends QueryTest
       assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
     }
   }
+
+  test("SPARK-31988 - make sure schema metadata is preserved when writing to datasource v2") {
+    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "avro,csv,json,kafka,orc,text")) {
+      withTempPath{ f =>
+        // create custom dataset
+        val data = Seq(
+          Row("a", "b")
+        )
+        val schema = List(
+          StructField("col_a", StringType, true,
+            new MetadataBuilder().putString("key", "value").build()),
+          StructField("col_b", StringType, true)
+        )
+
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(data),
+          StructType(schema)
+        )
+        // write
+        df.write.parquet(f.getAbsolutePath)
+
+        // read and get the metadata
+        val readDF = spark.read.parquet(f.getAbsolutePath)
+        // write again
+        withTempPath { f =>
+          readDF.write.parquet(f.getAbsolutePath)
+          // read again and verify no metadata
+          val readDF2 = spark.read.parquet(f.getAbsolutePath)
+          // make sure the schema is equal (including the metadata)
+          assert(readDF.schema == readDF2.schema )
+        }
+      }
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
