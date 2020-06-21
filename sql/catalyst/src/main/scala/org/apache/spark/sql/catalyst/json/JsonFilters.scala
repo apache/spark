@@ -117,6 +117,8 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
     var skip = false
     predicates(index).foreach { pred =>
       pred.refCount -= 1
+      assert(pred.refCount >= 0,
+        s"Predicate reference counter cannot be negative but got ${pred.refCount}.")
       if (!skip && pred.refCount == 0) {
         skip = !pred.predicate.eval(row)
       }
