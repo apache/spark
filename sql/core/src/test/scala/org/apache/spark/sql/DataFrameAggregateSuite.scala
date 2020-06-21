@@ -1024,7 +1024,7 @@ class DataFrameAggregateSuite extends QueryTest
         ("abellina", 1.0f),
         ("abellina", 2.0f)).toDF("uid", "score").createOrReplaceTempView("view")
 
-      val df = spark.sql(" select uid, count(distinct score) from view group by 1 order by 1 asc ")
+      val df = spark.sql("select uid, count(distinct score) from view group by 1 order by 1 asc")
       checkAnswer(df, Row("abellina", 2) :: Row("mithunr", 1) :: Nil)
     }
   }
