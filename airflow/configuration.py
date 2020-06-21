@@ -590,10 +590,12 @@ class AirflowConfigParser(ConfigParser):
 
 
 def get_airflow_home():
+    """Get path to Airflow Home"""
     return expand_env_var(os.environ.get('AIRFLOW_HOME', '~/airflow'))
 
 
 def get_airflow_config(airflow_home):
+    """Get Path to airflow.cfg path"""
     if 'AIRFLOW_CONFIG' not in os.environ:
         return os.path.join(airflow_home, 'airflow.cfg')
     return expand_env_var(os.environ['AIRFLOW_CONFIG'])
@@ -641,6 +643,7 @@ def parameterized_config(template):
 
 
 def get_airflow_test_config(airflow_home):
+    """Get path to unittests.cfg"""
     if 'AIRFLOW_TEST_CONFIG' not in os.environ:
         return os.path.join(airflow_home, 'unittests.cfg')
     return expand_env_var(os.environ['AIRFLOW_TEST_CONFIG'])
@@ -714,7 +717,7 @@ if conf.getboolean('core', 'unit_test_mode'):
 
 
 # Historical convenience functions to access config entries
-def load_test_config():
+def load_test_config():   # noqa: D103
     warnings.warn(
         "Accessing configuration method 'load_test_config' directly from the configuration module is "
         "deprecated. Please access the configuration from the 'configuration.conf' object via "
@@ -725,7 +728,7 @@ def load_test_config():
     conf.load_test_config()
 
 
-def get(*args, **kwargs):
+def get(*args, **kwargs):   # noqa: D103
     warnings.warn(
         "Accessing configuration method 'get' directly from the configuration module is "
         "deprecated. Please access the configuration from the 'configuration.conf' object via "
@@ -736,7 +739,7 @@ def get(*args, **kwargs):
     return conf.get(*args, **kwargs)
 
 
-def getboolean(*args, **kwargs):
+def getboolean(*args, **kwargs):   # noqa: D103
     warnings.warn(
         "Accessing configuration method 'getboolean' directly from the configuration module is "
         "deprecated. Please access the configuration from the 'configuration.conf' object via "
@@ -747,7 +750,7 @@ def getboolean(*args, **kwargs):
     return conf.getboolean(*args, **kwargs)
 
 
-def getfloat(*args, **kwargs):
+def getfloat(*args, **kwargs):   # noqa: D103
     warnings.warn(
         "Accessing configuration method 'getfloat' directly from the configuration module is "
         "deprecated. Please access the configuration from the 'configuration.conf' object via "
@@ -758,7 +761,7 @@ def getfloat(*args, **kwargs):
     return conf.getfloat(*args, **kwargs)
 
 
-def getint(*args, **kwargs):
+def getint(*args, **kwargs):   # noqa: D103
     warnings.warn(
         "Accessing configuration method 'getint' directly from the configuration module is "
         "deprecated. Please access the configuration from the 'configuration.conf' object via "
@@ -769,7 +772,7 @@ def getint(*args, **kwargs):
     return conf.getint(*args, **kwargs)
 
 
-def getsection(*args, **kwargs):
+def getsection(*args, **kwargs):   # noqa: D103
     warnings.warn(
         "Accessing configuration method 'getsection' directly from the configuration module is "
         "deprecated. Please access the configuration from the 'configuration.conf' object via "
@@ -780,7 +783,7 @@ def getsection(*args, **kwargs):
     return conf.getint(*args, **kwargs)
 
 
-def has_option(*args, **kwargs):
+def has_option(*args, **kwargs):   # noqa: D103
     warnings.warn(
         "Accessing configuration method 'has_option' directly from the configuration module is "
         "deprecated. Please access the configuration from the 'configuration.conf' object via "
@@ -791,7 +794,7 @@ def has_option(*args, **kwargs):
     return conf.has_option(*args, **kwargs)
 
 
-def remove_option(*args, **kwargs):
+def remove_option(*args, **kwargs):   # noqa: D103
     warnings.warn(
         "Accessing configuration method 'remove_option' directly from the configuration module is "
         "deprecated. Please access the configuration from the 'configuration.conf' object via "
@@ -802,7 +805,7 @@ def remove_option(*args, **kwargs):
     return conf.remove_option(*args, **kwargs)
 
 
-def as_dict(*args, **kwargs):
+def as_dict(*args, **kwargs):   # noqa: D103
     warnings.warn(
         "Accessing configuration method 'as_dict' directly from the configuration module is "
         "deprecated. Please access the configuration from the 'configuration.conf' object via "
@@ -813,7 +816,7 @@ def as_dict(*args, **kwargs):
     return conf.as_dict(*args, **kwargs)
 
 
-def set(*args, **kwargs):
+def set(*args, **kwargs):   # noqa: D103
     warnings.warn(
         "Accessing configuration method 'set' directly from the configuration module is "
         "deprecated. Please access the configuration from the 'configuration.conf' object via "
