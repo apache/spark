@@ -700,6 +700,7 @@ object ScalaReflection extends ScalaReflection {
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if isSubtype(t, localTypeOf[String]) => Schema(StringType, nullable = true)
+      case t if isSubtype(t, localTypeOf[UTF8String]) => Schema(StringType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.Instant]) =>
         Schema(TimestampType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>

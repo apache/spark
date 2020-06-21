@@ -62,6 +62,7 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
+    case u: UTF8String => Literal(u, StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal =>
       val decimal = Decimal(d)
@@ -120,6 +121,7 @@ object Literal {
 
     // other scala classes
     case _ if clz == classOf[String] => StringType
+    case _ if clz == classOf[UTF8String] => StringType
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -138,6 +138,14 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(""), "")
     checkEvaluation(Literal.create("test"), "test")
     checkEvaluation(Literal.create("\u0000"), "\u0000")
+
+    checkEvaluation(Literal(UTF8String.fromString("")), "")
+    checkEvaluation(Literal(UTF8String.fromString("test")), "test")
+    checkEvaluation(Literal(UTF8String.fromString("\u0000")), "\u0000")
+
+    checkEvaluation(Literal.create(UTF8String.fromString("")), "")
+    checkEvaluation(Literal.create(UTF8String.fromString("test")), "test")
+    checkEvaluation(Literal.create(UTF8String.fromString("\u0000")), "\u0000")
   }
 
   test("sum two literals") {
@@ -190,6 +198,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkArrayLiteral(Array(MICROS_PER_DAY, MICROS_PER_HOUR))
     val arr = collection.mutable.WrappedArray.make(Array(1.0, 4.0))
     checkEvaluation(Literal(arr), toCatalyst(arr))
+    checkArrayLiteral(Array(UTF8String.fromString("y"), UTF8String.fromString("t")))
   }
 
   test("seq") {
