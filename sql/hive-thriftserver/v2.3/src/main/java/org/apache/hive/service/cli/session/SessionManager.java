@@ -203,7 +203,6 @@ public class SessionManager extends CompositeService {
   @Override
   public synchronized void stop() {
     super.stop();
-    shutdown = true;
     shutdownTimeoutChecker();
     if (backgroundOperationPool != null) {
       backgroundOperationPool.shutdown();
