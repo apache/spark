@@ -1176,6 +1176,15 @@ object SQLConf {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
+  val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
+    .doc("The suggested (not guaranteed) minimum number of split file partitions. " +
+      "If not set, the default value is `spark.default.parallelism`. This configuration is " +
+      "effective only when using file-based sources such as Parquet, JSON and ORC.")
+    .version("3.1.0")
+    .intConf
+    .checkValue(v => v > 0, "The min partition number must be a positive integer.")
+    .createOptional
+
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
       "encountering corrupted files and the contents that have been read will still be returned. " +
@@ -2633,6 +2642,26 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED =
+    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.enabled")
+      .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
+        "the side with a bigger number of buckets will be coalesced to have the same number " +
+        "of buckets as the other side. Bucket coalescing is applied only to sort-merge joins " +
+        "and only when the bigger number of buckets is divisible by the smaller number of buckets.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO =
+    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.maxBucketRatio")
+      .doc("The ratio of the number of two buckets being coalesced should be less than or " +
+        "equal to this value for bucket coalescing to be applied. This configuration only " +
+        s"has an effect when '${COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key}' is set to true.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ > 0, "The difference must be positive.")
+      .createWithDefault(4)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2799,6 +2828,8 @@ class SQLConf extends Serializable with Logging {
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
+
+  def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
