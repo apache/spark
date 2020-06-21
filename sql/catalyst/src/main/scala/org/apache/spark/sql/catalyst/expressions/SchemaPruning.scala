@@ -66,7 +66,8 @@ object SchemaPruning {
           val leftFieldType = leftStruct(fieldName).dataType
           val rightFieldType = rightStruct(fieldName).dataType
           val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
-          StructField(fieldName, sortedLeftFieldType, nullable = leftStruct(fieldName).nullable)
+          StructField(fieldName, sortedLeftFieldType, nullable = leftStruct(fieldName).nullable,
+            metadata = leftStruct(fieldName).metadata)
         }
         StructType(sortedLeftFields)
       case _ => left

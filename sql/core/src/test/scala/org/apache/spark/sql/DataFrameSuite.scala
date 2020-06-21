@@ -2552,7 +2552,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-31988 - make sure schema metadata is preserved when writing to datasource v2") {
     withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "avro,csv,json,kafka,orc,text")) {
       withTempPath{ f =>
-        // create custom dataset
+        // create custom dataset with schema metadata
         val data = Seq(
           Row("a", "b")
         )
@@ -2566,18 +2566,16 @@ class DataFrameSuite extends QueryTest
           spark.sparkContext.parallelize(data),
           StructType(schema)
         )
-        // write
         df.write.parquet(f.getAbsolutePath)
 
-        // read and get the metadata
+        // read from storage
         val readDF = spark.read.parquet(f.getAbsolutePath)
         // write again
         withTempPath { f =>
           readDF.write.parquet(f.getAbsolutePath)
-          // read again and verify no metadata
+          // read again and verify the schema is equal (including the metadata)
           val readDF2 = spark.read.parquet(f.getAbsolutePath)
-          // make sure the schema is equal (including the metadata)
-          assert(readDF.schema == readDF2.schema )
+          assert(readDF.schema == readDF2.schema)
         }
       }
     }
