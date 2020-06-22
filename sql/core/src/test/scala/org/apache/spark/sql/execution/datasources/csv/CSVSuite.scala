@@ -67,6 +67,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
   private val malformedRowFile = "test-data/malformedRow.csv"
+  private val mixedTypes = "test-data/mixed-types1.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -2340,6 +2341,16 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
       checkAnswer(csv, Row(null))
     }
+  }
+
+  test("Test mixed types") {
+    val cars = spark
+      .read
+      .format("csv")
+      .option("header", "true")
+      .load(testFile(mixedTypes))
+
+    assert(cars.schema.fields.last == StructField("col_mixed_types", StringType, true))
   }
 }
 
