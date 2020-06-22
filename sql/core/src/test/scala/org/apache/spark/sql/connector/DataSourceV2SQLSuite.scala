@@ -2214,7 +2214,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql("REFRESH FUNCTION testcat.ns1.ns2.fun")
     }
-    assert(e.message.contains("REFRESH FUNCTION is only supported in v1 catalog"))
+    assert(e.message.contains("RefreshFunction is only supported in v1 catalog"))
 
     val e1 = intercept[AnalysisException] {
       sql("REFRESH FUNCTION default.ns1.ns2.fun")
