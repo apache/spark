@@ -39,7 +39,8 @@ import org.apache.spark.sql.types.StructType
  * its underlying [[FileScan]]. And the partition filters will be removed in the filters of
  * returned logical plan.
  */
-private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
+private[sql] object PruneFileSourcePartitions
+  extends Rule[LogicalPlan] with PredicateHelper {
 
   private def getPartitionKeyFiltersAndDataFilters(
       sparkSession: SparkSession,
@@ -87,8 +88,17 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
-      val (partitionKeyFilters, _) = getPartitionKeyFiltersAndDataFilters(
-        fsRelation.sparkSession, logicalRelation, partitionSchema, filters, logicalRelation.output)
+      val predicates = conjunctiveNormalFormAndGroupExpsByReference(filters.reduceLeft(And))
+      val (partitionKeyFilters, _) = if (predicates.nonEmpty) {
+        getPartitionKeyFiltersAndDataFilters(
+          fsRelation.sparkSession, logicalRelation, partitionSchema, predicates,
+          logicalRelation.output)
+      } else {
+        getPartitionKeyFiltersAndDataFilters(
+          fsRelation.sparkSession, logicalRelation, partitionSchema, filters,
+          logicalRelation.output)
+      }
+
       if (partitionKeyFilters.nonEmpty) {
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)
         val prunedFsRelation =
@@ -103,6 +113,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       } else {
         op
       }
+
 
     case op @ PhysicalOperation(projects, filters,
         v2Relation @ DataSourceV2ScanRelation(_, scan: FileScan, output))

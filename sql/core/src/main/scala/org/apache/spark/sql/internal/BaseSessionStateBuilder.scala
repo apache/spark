@@ -235,9 +235,6 @@ abstract class BaseSessionStateBuilder(
       override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
         super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 
-      override def finalScanFilterConvertRules: Seq[Rule[LogicalPlan]] =
-        super.finalScanFilterConvertRules ++ customFinalScanFilterConvertRules
-
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }
@@ -260,14 +257,6 @@ abstract class BaseSessionStateBuilder(
    * Note that this may NOT depend on the `optimizer` function.
    */
   protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
-
-  /**
-   * Custom final scan filter convert rules to add to the Optimizer. Prefer overriding this instead
-   * of creating your own Optimizer.
-   *
-   * Note that this may NOT depend on the `optimizer` function.
-   */
-  protected def customFinalScanFilterConvertRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Planner that converts optimized logical plans to physical plans.
