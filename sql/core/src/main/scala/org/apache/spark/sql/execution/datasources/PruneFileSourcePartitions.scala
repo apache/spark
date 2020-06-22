@@ -114,7 +114,6 @@ private[sql] object PruneFileSourcePartitions
         op
       }
 
-
     case op @ PhysicalOperation(projects, filters,
         v2Relation @ DataSourceV2ScanRelation(_, scan: FileScan, output))
         if filters.nonEmpty && scan.readDataSchema.nonEmpty =>
