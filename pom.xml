@@ -139,7 +139,7 @@
     <orc.classifier></orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jetty.version>9.4.18.v20190429</jetty.version>
+    <jetty.version>9.4.28.v20200408</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.9.5</chill.version>
     <ivy.version>2.4.0</ivy.version>
@@ -187,8 +187,8 @@
     <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.7.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>2.52.0</selenium.version>
-    <htmlunit.version>2.22</htmlunit.version>
+    <selenium.version>3.141.59</selenium.version>
+    <htmlunit.version>2.40.0</htmlunit.version>
     <!--
     Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
     -->
@@ -591,12 +591,16 @@
             <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
-        <artifactId>selenium-htmlunit-driver</artifactId>
-        <version>${selenium.version}</version>
+        <artifactId>htmlunit-driver</artifactId>
+        <version>${htmlunit.version}</version>
         <scope>test</scope>
       </dependency>
       <!-- Update htmlunit dependency that selenium uses for better JS support -->
@@ -972,6 +976,12 @@
         <groupId>com.ibm.db2</groupId>
         <artifactId>jcc</artifactId>
         <version>11.5.0.0</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.microsoft.sqlserver</groupId>
+        <artifactId>mssql-jdbc</artifactId>
+        <version>8.2.2.jre8</version>
         <scope>test</scope>
       </dependency>
       <dependency>

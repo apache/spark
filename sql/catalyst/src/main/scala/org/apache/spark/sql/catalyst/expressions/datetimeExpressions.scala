@@ -895,7 +895,7 @@ abstract class ToTimestamp
     } else {
       left.dataType match {
         case DateType =>
-          epochDaysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
+          daysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
         case TimestampType =>
           t.asInstanceOf[Long] / downScaleFactor
         case StringType =>
@@ -975,7 +975,7 @@ abstract class ToTimestamp
           boolean ${ev.isNull} = ${eval1.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.epochDaysToMicros(${eval1.value}, $zid) / $downScaleFactor;
+            ${ev.value} = $dtu.daysToMicros(${eval1.value}, $zid) / $downScaleFactor;
           }""")
     }
   }
@@ -1242,10 +1242,10 @@ case class DateAddInterval(
     if (ansiEnabled || itvl.microseconds == 0) {
       DateTimeUtils.dateAddInterval(start.asInstanceOf[Int], itvl)
     } else {
-      val startTs = DateTimeUtils.epochDaysToMicros(start.asInstanceOf[Int], zoneId)
+      val startTs = DateTimeUtils.daysToMicros(start.asInstanceOf[Int], zoneId)
       val resultTs = DateTimeUtils.timestampAddInterval(
         startTs, itvl.months, itvl.days, itvl.microseconds, zoneId)
-      DateTimeUtils.microsToEpochDays(resultTs, zoneId)
+      DateTimeUtils.microsToDays(resultTs, zoneId)
     }
   }
 
@@ -1261,10 +1261,10 @@ case class DateAddInterval(
          |if ($i.microseconds == 0) {
          |  ${ev.value} = $dtu.dateAddInterval($sd, $i);
          |} else {
-         |  long $startTs = $dtu.epochDaysToMicros($sd, $zid);
+         |  long $startTs = $dtu.daysToMicros($sd, $zid);
          |  long $resultTs =
          |    $dtu.timestampAddInterval($startTs, $i.months, $i.days, $i.microseconds, $zid);
-         |  ${ev.value} = $dtu.microsToEpochDays($resultTs, $zid);
+         |  ${ev.value} = $dtu.microsToDays($resultTs, $zid);
          |}
          |""".stripMargin
     })
@@ -1549,7 +1549,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 
   def this(left: Expression, format: Expression) {
       this(left, Option(format),
-        Cast(Cast(UnixTimestamp(left, format), TimestampType), DateType))
+        Cast(SecondsToTimestamp(UnixTimestamp(left, format)), DateType))
   }
 
   def this(left: Expression) = {

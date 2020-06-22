@@ -480,8 +480,6 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
-    "org.apache.spark.sql.hive.thriftserver.ThriftServerWithSparkContextInHttpSuite",
-    "org.apache.spark.sql.hive.thriftserver.ThriftServerWithSparkContextInBinarySuite",
     "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite"
   )
 
@@ -622,8 +620,9 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
+  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("14.0.1")
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1",
+    dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
     dependencyOverrides += "org.apache.avro" % "avro" % "1.8.2")

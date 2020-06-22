@@ -19,6 +19,10 @@ package org.apache.spark.sql.hive.thriftserver
 
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
+  test("the scratch dir will be deleted during server start but recreated with new operation") {
+    assert(tempScratchDir.exists())
+  }
+
   test("SPARK-29911: Uncache cached tables when session closed") {
     val cacheManager = spark.sharedState.cacheManager
     val globalTempDB = spark.sharedState.globalTempViewManager.database

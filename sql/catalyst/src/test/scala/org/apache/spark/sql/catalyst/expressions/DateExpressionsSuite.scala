@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -803,7 +804,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
+        sdf3.setTimeZone(TimeZoneUTC)
 
         withDefaultTimeZone(UTC) {
           for (zid <- outstandingZoneIds) {
@@ -872,7 +873,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
+        sdf3.setTimeZone(TimeZoneUTC)
 
         withDefaultTimeZone(UTC) {
           for (zid <- outstandingZoneIds) {

@@ -36,7 +36,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
-import org.apache.spark.sql.execution.HiveResult
+import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -73,7 +73,11 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int): Unit = {
+  def addNonNullColumnValue(
+      from: SparkRow,
+      to: ArrayBuffer[Any],
+      ordinal: Int,
+      timeFormatters: TimeFormatters): Unit = {
     dataTypes(ordinal) match {
       case StringType =>
         to += from.getString(ordinal)
@@ -100,13 +104,14 @@ private[hive] class SparkExecuteStatementOperation(
       // - work with spark.sql.datetime.java8API.enabled
       // These types have always been sent over the wire as string, converted later.
       case _: DateType | _: TimestampType =>
-        val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
-        to += hiveString
+        to += toHiveString((from.get(ordinal), dataTypes(ordinal)), false, timeFormatters)
       case CalendarIntervalType =>
-        to += HiveResult.toHiveString((from.getAs[CalendarInterval](ordinal), CalendarIntervalType))
+        to += toHiveString(
+          (from.getAs[CalendarInterval](ordinal), CalendarIntervalType),
+          false,
+          timeFormatters)
       case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
-        val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
-        to += hiveString
+        to += toHiveString((from.get(ordinal), dataTypes(ordinal)), false, timeFormatters)
     }
   }
 
@@ -159,6 +164,7 @@ private[hive] class SparkExecuteStatementOperation(
     if (!iter.hasNext) {
       resultRowSet
     } else {
+      val timeFormatters = getTimeFormatters
       // maxRowsL here typically maps to java.sql.Statement.getFetchSize, which is an int
       val maxRows = maxRowsL.toInt
       var curRow = 0
@@ -170,7 +176,7 @@ private[hive] class SparkExecuteStatementOperation(
           if (sparkRow.isNullAt(curCol)) {
             row += null
           } else {
-            addNonNullColumnValue(sparkRow, row, curCol)
+            addNonNullColumnValue(sparkRow, row, curCol, timeFormatters)
           }
           curCol += 1
         }

@@ -57,10 +57,6 @@ case class HashAggregateExec(
     with BlockingOperatorWithCodegen
     with AliasAwareOutputPartitioning {
 
-  private[this] val aggregateBufferAttributes = {
-    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-  }
-
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
   override lazy val allAttributes: AttributeSeq =
@@ -78,11 +74,6 @@ case class HashAggregateExec(
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
   override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
-
-  override def producedAttributes: AttributeSet =
-    AttributeSet(aggregateAttributes) ++
-    AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
-    AttributeSet(aggregateBufferAttributes)
 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
