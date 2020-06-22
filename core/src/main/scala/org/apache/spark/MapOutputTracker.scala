@@ -936,6 +936,7 @@ private[spark] object MapOutputTracker extends Logging {
    * @param endPartition End of map output partition ID range (excluded from range)
    * @param statuses List of map statuses, indexed by map partition index.
    * @param startMapIndex Start Map index.
+   * @param endMapIndex End Map index.
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
    *         tuples describing the shuffle blocks that are stored at that block manager.
