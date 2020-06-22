@@ -534,20 +534,9 @@ case class DayOfMonth(child: Expression) extends GetDateField {
   group = "datetime_funcs",
   since = "2.3.0")
 // scalastyle:on line.size.limit
-case class DayOfWeek(child: Expression) extends DayWeek {
-
-  override protected def nullSafeEval(date: Any): Any = {
-    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
-    localDate.getDayOfWeek.plus(1).getValue
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, days => {
-      s"""
-        ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().plus(1).getValue();
-      """
-    })
-  }
+case class DayOfWeek(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getDayOfWeek
+  override val funcName = "getDayOfWeek"
 }
 
 // scalastyle:off line.size.limit
@@ -561,27 +550,9 @@ case class DayOfWeek(child: Expression) extends DayWeek {
   group = "datetime_funcs",
   since = "2.4.0")
 // scalastyle:on line.size.limit
-case class WeekDay(child: Expression) extends DayWeek {
-
-  override protected def nullSafeEval(date: Any): Any = {
-    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
-    localDate.getDayOfWeek.ordinal()
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, days => {
-      s"""
-         ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().ordinal();
-      """
-    })
-  }
-}
-
-abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
+case class WeekDay(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getWeekDay
+  override val funcName = "getWeekDay"
 }
 
 // scalastyle:off line.size.limit
@@ -595,26 +566,9 @@ abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes with 
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class WeekOfYear(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
-    localDate.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, days => {
-      s"""
-         |${ev.value} = java.time.LocalDate.ofEpochDay($days).get(
-         |  java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR);
-       """.stripMargin
-    })
-  }
+case class WeekOfYear(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getWeekOfYear
+  override val funcName = "getWeekOfYear"
 }
 
 // scalastyle:off line.size.limit
