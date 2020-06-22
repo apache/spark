@@ -252,36 +252,37 @@ case class RefreshFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {
-      throw new AnalysisException(s"Cannot refresh native function $functionName")
-    } else if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
-      throw new AnalysisException(s"Cannot refresh temp function $functionName")
+      throw new AnalysisException(s"Cannot refresh builtin function $functionName")
+    }
+    if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
+      throw new AnalysisException(s"Cannot refresh temporary function $functionName")
+    }
+
+    // we only refresh the permanent function.
+    // there are 4 cases:
+    // 1. registry exists externalCatalog exists
+    // 2. registry exists externalCatalog not exists
+    // 3. registry not exists externalCatalog exists
+    // 4. registry not exists externalCatalog not exists
+    val identifier = FunctionIdentifier(
+      functionName, Some(databaseName.getOrElse(catalog.getCurrentDatabase)))
+    val isRegisteredFunction = catalog.isRegisteredFunction(identifier)
+    val isPersistentFunction = catalog.isPersistentFunction(identifier)
+    if (isRegisteredFunction && isPersistentFunction) {
+      // re-register function
+      catalog.unregisterFunction(identifier)
+      val func = catalog.getFunctionMetadata(identifier)
+      catalog.registerFunction(func, true)
+    } else if (isRegisteredFunction && !isPersistentFunction) {
+      // unregister function and throw NoSuchFunctionException
+      catalog.unregisterFunction(identifier)
+      throw new NoSuchFunctionException(identifier.database.get, functionName)
+    } else if (!isRegisteredFunction && isPersistentFunction) {
+      // register function
+      val func = catalog.getFunctionMetadata(identifier)
+      catalog.registerFunction(func, true)
     } else {
-      // we only refresh the permanent function.
-      // there are 4 cases:
-      // 1. registry exists externalCatalog exists
-      // 2. registry exists externalCatalog not exists
-      // 3. registry not exists externalCatalog exists
-      // 4. registry not exists externalCatalog not exists
-      val identifier = FunctionIdentifier(
-        functionName, Some(databaseName.getOrElse(catalog.getCurrentDatabase)))
-      val isRegisteredFunction = catalog.isRegisteredFunction(identifier)
-      val isPersistentFunction = catalog.isPersistentFunction(identifier)
-      if (isRegisteredFunction && isPersistentFunction) {
-        // re-register function
-        catalog.unregisterFunction(identifier)
-        val func = catalog.getFunctionMetadata(identifier)
-        catalog.registerFunction(func, true)
-      } else if (isRegisteredFunction && !isPersistentFunction) {
-        // unregister function and throw NoSuchFunctionException
-        catalog.unregisterFunction(identifier)
-        throw new NoSuchFunctionException(identifier.database.get, functionName)
-      } else if (!isRegisteredFunction && isPersistentFunction) {
-        // register function
-        val func = catalog.getFunctionMetadata(identifier)
-        catalog.registerFunction(func, true)
-      } else {
-        throw new NoSuchFunctionException(identifier.database.get, functionName)
-      }
+      throw new NoSuchFunctionException(identifier.database.get, functionName)
     }
 
     Seq.empty[Row]
