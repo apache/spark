@@ -77,7 +77,8 @@ trait BaseAggregateExec extends UnaryExecNode {
     AttributeSet(aggregateAttributes) ++
     AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
     AttributeSet(aggregateBufferAttributes) ++
-    // it's not empty when the inputAggBufferAttributes is from the child Aggregate, which contains
-    // subquery in AggregateFunction. See SPARK-31620 for more details.
+    // it's not empty when the inputAggBufferAttributes is not equal to the aggregate buffer
+    // attributes of the child Aggregate, when the child Aggregate contains the subquery in
+    // AggregateFunction. See SPARK-31620 for more details.
     AttributeSet(inputAggBufferAttributes.filterNot(child.output.contains))
 }
