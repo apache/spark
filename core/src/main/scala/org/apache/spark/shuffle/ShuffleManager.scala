@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark.{ShuffleDependency, TaskContext}
+import org.apache.spark.scheduler.MapStatus
 
 /**
  * Pluggable interface for shuffle systems. A ShuffleManager is created in SparkEnv on the driver
@@ -44,25 +45,13 @@ private[spark] trait ShuffleManager {
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V]
 
   /**
-   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
+   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive) to
+   * read from map output which specified by mapIndexRange.
    * Called on executors by reduce tasks.
    */
   def getReader[K, C](
       handle: ShuffleHandle,
-      startPartition: Int,
-      endPartition: Int,
-      context: TaskContext,
-      metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C]
-
-  /**
-   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive) to
-   * read from map output (startMapIndex to endMapIndex - 1, inclusive).
-   * Called on executors by reduce tasks.
-   */
-  def getReaderForRange[K, C](
-      handle: ShuffleHandle,
-      startMapIndex: Int,
-      endMapIndex: Int,
+      mapIndexRange: Array[MapStatus] => (Int, Int),
       startPartition: Int,
       endPartition: Int,
       context: TaskContext,
