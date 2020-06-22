@@ -205,7 +205,7 @@ object DateTimeUtils {
 
   private final val gmtUtf8 = UTF8String.fromString("GMT")
   // The method is called by JSON/CSV parser to clean up the legacy timestamp string by removing
-  // the "GMT" string.
+  // the "GMT" string. For example, it returns 2000-01-01T00:00+01:00 for 2000-01-01T00:00GMT+01:00.
   def cleanLegacyTimestampStr(s: UTF8String): UTF8String = s.replace(gmtUtf8, UTF8String.EMPTY_UTF8)
 
   /**
