@@ -566,19 +566,24 @@ class ResolveSessionCatalog(
     case ShowTableProperties(r: ResolvedView, propertyKey) =>
       ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
-    case DescribeFunctionStatement(CatalogAndFunctionIdentifier(_, functionIdent), extended) =>
+    case DescribeFunctionStatement(nameParts, extended) =>
+      val functionIdent =
+        parseSessionCatalogFunctionIdentifier(nameParts, "DESCRIBE FUNCTION")
       DescribeFunctionCommand(functionIdent, extended)
 
     case ShowFunctionsStatement(userScope, systemScope, pattern, fun) =>
       val (database, function) = fun match {
-        case Some(CatalogAndFunctionIdentifier(_, FunctionIdentifier(fn, db))) =>
+        case Some(nameParts) =>
+          val FunctionIdentifier(fn, db) =
+            parseSessionCatalogFunctionIdentifier(nameParts, "SHOW FUNCTIONS")
           (db, Some(fn))
         case None => (None, pattern)
       }
       ShowFunctionsCommand(database, function, userScope, systemScope)
 
-    case DropFunctionStatement(
-      CatalogAndFunctionIdentifier(_, FunctionIdentifier(function, database)), ifExists, isTemp) =>
+    case DropFunctionStatement(nameParts, ifExists, isTemp) =>
+      val FunctionIdentifier(function, database) =
+        parseSessionCatalogFunctionIdentifier(nameParts, "DROP FUNCTION")
       DropFunctionCommand(database, function, ifExists, isTemp)
 
     case CreateFunctionStatement(nameParts,
@@ -601,11 +606,10 @@ class ResolveSessionCatalog(
           ignoreIfExists,
           replace)
       } else {
-        nameParts match {
-          case CatalogAndFunctionIdentifier(_, FunctionIdentifier(function, database)) =>
-            CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
-              replace)
-        }
+        val FunctionIdentifier(function, database) =
+          parseSessionCatalogFunctionIdentifier(nameParts, "CREATE FUNCTION")
+        CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
+          replace)
       }
 
     case RefreshFunction(ResolvedFunc(_, func)) =>

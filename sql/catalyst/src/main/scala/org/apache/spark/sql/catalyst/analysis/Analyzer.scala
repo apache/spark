@@ -1890,8 +1890,9 @@ class Analyzer(
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case UnresolvedFunc(CatalogAndFunctionIdentifier(catalog, identifier)) =>
-        ResolvedFunc(catalog, identifier)
+      case RefreshFunction(UnresolvedFunc(multipartIdent)) =>
+        val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent, "REFRESH FUNCTION")
+        ResolveFunctions(ResolvedFunc(currentCatalog, funcIdent))
 
       case q: LogicalPlan =>
         q transformExpressions {
