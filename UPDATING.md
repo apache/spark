@@ -79,6 +79,32 @@ To clean up, modules in `airflow.contrib.utils.log` have been moved into `airflo
 this includes:
 * `TaskHandlerWithCustomFormatter` class
 
+### Deprecated method in Connection
+
+The connection module has new deprecated methods:
+
+- `Connection.parse_from_uri`
+- `Connection.log_info`
+- `Connection.debug_info`
+
+and one deprecated function:
+- `parse_netloc_to_hostname`
+
+Previously, users could create a connection object in two ways
+```
+conn_1 = Connection(conn_id="conn_a", uri="mysql://AAA/")
+# or
+conn_2 = Connection(conn_id="conn_a")
+conn_2.parse_uri(uri="mysql://AAA/")
+```
+Now the second way is not supported.
+
+`Connection.log_info` and `Connection.debug_info` method have been deprecated. Read each Connection field individually or use the
+default representation (`__repr__`).
+
+The old method is still works but can be abandoned at any time. The changes are intended to delete method
+that are rarely used.
+
 ### BaseOperator uses metaclass
 
 `BaseOperator` class uses a `BaseOperatorMeta` as a metaclass. This meta class is based on
