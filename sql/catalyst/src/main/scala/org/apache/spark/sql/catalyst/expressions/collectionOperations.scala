@@ -2589,6 +2589,8 @@ object Sequence {
     }
   }
 
+  // To generate time sequences, we use scale 1 in TemporalSequenceImpl
+  // for `TimestampType`, while MICROS_PER_DAY for `DateType`
   private class TemporalSequenceImpl[T: ClassTag]
       (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
       (implicit num: Integral[T]) extends SequenceImpl {
