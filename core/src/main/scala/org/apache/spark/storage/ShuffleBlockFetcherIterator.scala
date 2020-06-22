@@ -492,13 +492,31 @@ final class ShuffleBlockFetcherIterator(
       addressesAnExecutors.foreach { case (host, port, executorIds) =>
         blockManager.getHostLocalDirs(host, port, executorIds) {
           case Success(dirs) =>
-            immutableHostLocalBlocksWithoutDirs.foreach { case (hostLocalBmId, blockInfos) =>
+            if (blockManager.hostLocalDirManager.isDefined) {
+              immutableHostLocalBlocksWithoutDirs.foreach { case (hostLocalBmId, blockInfos) =>
+                blockInfos.takeWhile { case (blockId, _, mapIndex) =>
+                  logInfo(s"Got local dirs ${dirs.get(hostLocalBmId.executorId).mkString(", ")} " +
+                    s"from ${executorIds.head}:$host:$port through hostLocalDirManager.")
+                  fetchHostLocalBlock(
+                    blockId,
+                    mapIndex,
+                    dirs.get(hostLocalBmId.executorId),
+                    hostLocalBmId)
+                }
+              }
+            } else {
+              // FIXME: write in ugly way temporally
+              val execId = executorIds.head
+              logInfo(s"Got local dirs ${dirs.get(execId).mkString(", ")} " +
+                s"from ${executorIds.head}:$host:$port through executor-executor.")
+              val (bm, blockInfos) =
+                immutableHostLocalBlocksWithoutDirs.find(_._1.executorId == execId).get
               blockInfos.takeWhile { case (blockId, _, mapIndex) =>
                 fetchHostLocalBlock(
                   blockId,
                   mapIndex,
-                  dirs.get(hostLocalBmId.executorId),
-                  hostLocalBmId)
+                  dirs.get(execId),
+                  bm)
               }
             }
             logDebug(s"Got host-local blocks (without cached executors' dir) in " +
