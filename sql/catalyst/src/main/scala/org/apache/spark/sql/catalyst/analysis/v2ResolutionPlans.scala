@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsNamespaces, Table, TableCatalog}
@@ -85,7 +85,7 @@ case class ResolvedView(identifier: Identifier) extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
 
-case class ResolvedFunc(catalog: CatalogPlugin, functionIdentifier: FunctionIdentifier)
+case class ResolvedFunc(catalog: CatalogPlugin, catalogFunction: CatalogFunction)
   extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
