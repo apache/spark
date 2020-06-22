@@ -274,6 +274,27 @@ case class DateSub(startDate: Expression, days: Expression)
   override def prettyName: String = "date_sub"
 }
 
+trait GetTimeField extends UnaryExpression
+  with TimeZoneAwareExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  val func: (Long, ZoneId) => Any
+  val funcName: String
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    func(timestamp.asInstanceOf[Long], zoneId)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.$funcName($c, $zid)")
+  }
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the hour component of the string/timestamp.",
   examples = """
@@ -283,28 +304,11 @@ case class DateSub(startDate: Expression, days: Expression)
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Hour(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
-    with NullIntolerant {
-
+case class Hour(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
   def this(child: Expression) = this(child, None)
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-
-  override def dataType: DataType = IntegerType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getHours(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getHours($c, $zid)")
-  }
+  override def withTimeZone(timeZoneId: String): Hour = copy(timeZoneId = Option(timeZoneId))
+  override val func = DateTimeUtils.getHours
+  override val funcName = "getHours"
 }
 
 @ExpressionDescription(
@@ -316,28 +320,11 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Minute(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
-    with NullIntolerant {
-
+case class Minute(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
   def this(child: Expression) = this(child, None)
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-
-  override def dataType: DataType = IntegerType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getMinutes(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c, $zid)")
-  }
+  override def withTimeZone(timeZoneId: String): Minute = copy(timeZoneId = Option(timeZoneId))
+  override val func = DateTimeUtils.getMinutes
+  override val funcName = "getMinutes"
 }
 
 @ExpressionDescription(
@@ -349,53 +336,22 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Second(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
-    with NullIntolerant {
-
+case class Second(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
   def this(child: Expression) = this(child, None)
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-
-  override def dataType: DataType = IntegerType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getSeconds(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c, $zid)")
-  }
+  override def withTimeZone(timeZoneId: String): Second = copy(timeZoneId = Option(timeZoneId))
+  override val func = DateTimeUtils.getSeconds
+  override val funcName = "getSeconds"
 }
 
 case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
-    with NullIntolerant {
-
+  extends GetTimeField {
   def this(child: Expression) = this(child, None)
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-
   // 2 digits for seconds, and 6 digits for the fractional part with microsecond precision.
   override def dataType: DataType = DecimalType(8, 6)
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+  override def withTimeZone(timeZoneId: String): SecondWithFraction =
     copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getSecondsWithFraction(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getSecondsWithFraction($c, $zid)")
-  }
+  override val func = DateTimeUtils.getSecondsWithFraction
+  override val funcName = "getSecondsWithFraction"
 }
 
 @ExpressionDescription(
