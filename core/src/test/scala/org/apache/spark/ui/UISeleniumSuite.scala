@@ -48,6 +48,10 @@ import org.apache.spark.util.CallSite
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
+  /**
+   * Some libraries have warn/error messages that are too noisy for the tests; exclude them from
+   * normal error handling to avoid logging these.
+   */
   private val cssExcludeList = List("bootstrap.min.css", "vis-timeline-graph2d.min.css")
 
   private def isInExcludeList(uri: String): Boolean = cssExcludeList.exists(uri.endsWith)
