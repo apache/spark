@@ -122,13 +122,13 @@ private[spark] class HostLocalDirManager(
     cacheSize: Int,
     blockStoreClient: BlockStoreClient) extends Logging {
 
-  private[spark] val executorIdToLocalDirsCache =
+  private val executorIdToLocalDirsCache =
     CacheBuilder
       .newBuilder()
       .maximumSize(cacheSize)
       .build[String, Array[String]]()
 
-  private def getCachedHostLocalDirs()
+  private[spark] def getCachedHostLocalDirs()
       : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
     import scala.collection.JavaConverters._
     return executorIdToLocalDirsCache.asMap().asScala
