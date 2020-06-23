@@ -18,7 +18,6 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark.{ShuffleDependency, TaskContext}
-import org.apache.spark.scheduler.MapStatus
 
 /**
  * Pluggable interface for shuffle systems. A ShuffleManager is created in SparkEnv on the driver
