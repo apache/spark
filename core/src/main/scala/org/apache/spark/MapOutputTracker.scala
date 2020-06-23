@@ -322,7 +322,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   // For testing
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
       : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    getMapSizesByExecutorId(shuffleId, mapStatus => (0, mapStatus.length), reduceId, reduceId + 1)
+    getMapSizesByExecutorId(shuffleId, MapOutputTracker.allMapStatus, reduceId, reduceId + 1)
   }
 
   /**
@@ -841,6 +841,9 @@ private[spark] object MapOutputTracker extends Logging {
   val ENDPOINT_NAME = "MapOutputTracker"
   private val DIRECT = 0
   private val BROADCAST = 1
+
+  // return the mapIndexRange[startMapIndex, endMapIndex), which includes all the MapStatus
+  val allMapStatus: Array[MapStatus] => (Int, Int) = mapStatus => (0, mapStatus.length)
 
   // Serialize an array of map output locations into an efficient byte format so that we can send
   // it to reduce tasks. We do this by compressing the serialized bytes using Zstd. They will
