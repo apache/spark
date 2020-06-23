@@ -254,6 +254,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
         .getOrCreate()
       val afterListenerSize = context.listenerBus.listeners.size()
       assert(beforeListenerSize + 1 == afterListenerSize)
+      context.stop()
     }
   }
 }
