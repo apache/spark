@@ -149,6 +149,11 @@ object IntervalBenchmark extends SqlBasedBenchmark {
       cardinality,
       "make_interval(0, 1, 2, 3, *, *, *)",
       s"make_interval(0, 1, 2, 3, ${hmsExprs.mkString(",")})")
+    addCaseExpr(
+      benchmark,
+      cardinality,
+      "make_interval(*, *, *, *, *, *, *)",
+      s"make_interval(${args.mkString(",")})")
 
     benchmark.run()
   }
