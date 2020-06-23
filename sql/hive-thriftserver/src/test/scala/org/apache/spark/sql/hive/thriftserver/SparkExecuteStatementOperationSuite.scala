@@ -18,22 +18,21 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.util
-import java.util.UUID
-import java.util.concurrent.{Future, Semaphore, TimeUnit}
+import java.util.concurrent.Semaphore
+
+import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hive.service.cli.{OperationState, SessionHandle}
-import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl, SessionManager}
+import org.apache.hive.service.cli.OperationState
+import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
 import org.apache.hive.service.rpc.thrift.TProtocolVersion
-import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doReturn, spy, when}
 import org.mockito.invocation.InvocationOnMock
 import org.scalatestplus.mockito.MockitoSugar._
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2EventManager
 import org.apache.spark.sql.types.{IntegerType, NullType, StringType, StructField, StructType}
 
 class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedThriftServer {
@@ -89,7 +88,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedThrif
     }
     assert(executeStatementOperation.getStatus.getState === OperationState.INITIALIZED)
     run.start()
-    eventually {
+    eventually(timeout(5.seconds)) {
       assert(executeStatementOperation.getStatus.getState === OperationState.RUNNING)
     }
     executeStatementOperation.cancel()
