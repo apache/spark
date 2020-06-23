@@ -2216,7 +2216,7 @@ In specific cases where the amount of data that needs to be retained for the str
 ### Task Launching Overheads
 {:.no_toc}
 If the number of tasks launched per second is high (say, 50 or more per second), then the overhead
-of sending out tasks to the slaves may be significant and will make it hard to achieve sub-second
+of sending out tasks to the executors may be significant and will make it hard to achieve sub-second
 latencies. The overhead can be reduced by the following changes:
 
 * **Execution mode**: Running Spark in Standalone mode or coarse-grained Mesos mode leads to

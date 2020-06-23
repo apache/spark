@@ -91,7 +91,7 @@ but Mesos can be run without ZooKeeper using a single master as well.
 ## Verification
 
 To verify that the Mesos cluster is ready for Spark, navigate to the Mesos master webui at port
-`:5050`  Confirm that all expected machines are present in the slaves tab.
+`:5050`  Confirm that all expected machines are present in the agents tab.
 
 
 # Connecting Spark to Mesos
@@ -99,7 +99,7 @@ To verify that the Mesos cluster is ready for Spark, navigate to the Mesos maste
 To use Mesos from Spark, you need a Spark binary package available in a place accessible by Mesos, and
 a Spark driver program configured to connect to Mesos.
 
-Alternatively, you can also install Spark in the same location in all the Mesos slaves, and configure
+Alternatively, you can also install Spark in the same location in all the Mesos agents, and configure
 `spark.mesos.executor.home` (defaults to SPARK_HOME) to point to that location.
 
 ## Authenticating to Mesos
@@ -138,7 +138,7 @@ Then submit happens as described in Client mode or Cluster mode below
 
 ## Uploading Spark Package
 
-When Mesos runs a task on a Mesos slave for the first time, that slave must have a Spark binary
+When Mesos runs a task on a Mesos agent for the first time, that agent must have a Spark binary
 package for running the Spark Mesos executor backend.
 The Spark package can be hosted at any Hadoop-accessible URI, including HTTP via `http://`,
 [Amazon Simple Storage Service](http://aws.amazon.com/s3) via `s3n://`, or HDFS via `hdfs://`.
@@ -237,7 +237,7 @@ For example:
 {% endhighlight %}
 
 
-Note that jars or python files that are passed to spark-submit should be URIs reachable by Mesos slaves, as the Spark driver doesn't automatically upload local jars.
+Note that jars or python files that are passed to spark-submit should be URIs reachable by Mesos agents, as the Spark driver doesn't automatically upload local jars.
 
 # Mesos Run Modes
 
@@ -360,7 +360,7 @@ see [Dynamic Resource Allocation](job-scheduling.html#dynamic-resource-allocatio
 
 The External Shuffle Service to use is the Mesos Shuffle Service. It provides shuffle data cleanup functionality
 on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
-termination. To launch it, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all slave nodes, with `spark.shuffle.service.enabled` set to `true`.
+termination. To launch it, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all agent nodes, with `spark.shuffle.service.enabled` set to `true`.
 
 This can also be achieved through Marathon, using a unique host constraint, and the following command: `./bin/spark-class org.apache.spark.deploy.mesos.MesosExternalShuffleService`.
 
@@ -840,17 +840,17 @@ See the [configuration page](configuration.html) for information on Spark config
 A few places to look during debugging:
 
 - Mesos master on port `:5050`
-  - Slaves should appear in the slaves tab
+  - Agents should appear in the agents tab
   - Spark applications should appear in the frameworks tab
   - Tasks should appear in the details of a framework
   - Check the stdout and stderr of the sandbox of failed tasks
 - Mesos logs
-  - Master and slave logs are both in `/var/log/mesos` by default
+  - Master and agent logs are both in `/var/log/mesos` by default
 
 And common pitfalls:
 
 - Spark assembly not reachable/accessible
-  - Slaves must be able to download the Spark binary package from the `http://`, `hdfs://` or `s3n://` URL you gave
+  - Agents must be able to download the Spark binary package from the `http://`, `hdfs://` or `s3n://` URL you gave
 - Firewall blocking communications
   - Check for messages about failed connections
   - Temporarily disable firewalls for debugging and then poke appropriate holes
