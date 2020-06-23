@@ -1885,7 +1885,8 @@ class Analyzer(
   }
 
   /**
-   * Replaces [[UnresolvedFunction]]s and [[UnresolvedFunc]]s with concrete [[Expression]]s.
+   * Replaces [[UnresolvedFunc]]s with concrete [[LogicalPlan]]s.
+   * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
