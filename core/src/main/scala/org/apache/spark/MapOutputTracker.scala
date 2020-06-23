@@ -725,11 +725,13 @@ private[spark] class MapOutputTrackerMaster(
       startPartition: Int,
       endPartition: Int)
     : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
+    logDebug(s"Fetching outputs for shuffle $shuffleId")
     shuffleStatuses.get(shuffleId) match {
       case Some (shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
           val (startMapIndex, endMapIndex) = mapIndexRange(statuses)
+          logDebug(s"Convert map statuses for shuffle $shuffleId, " +
+            s"partitions $startPartition-$endPartition, mappers $startMapIndex-$endMapIndex")
           MapOutputTracker.convertMapStatuses(
             shuffleId, startPartition, endPartition, statuses, startMapIndex, endMapIndex)
         }
@@ -771,10 +773,12 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       startPartition: Int,
       endPartition: Int)
     : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
+    logDebug(s"Fetching outputs for shuffle $shuffleId")
     val statuses = getStatuses(shuffleId, conf)
     try {
       val (startMapIndex, endMapIndex) = mapIndexRange(statuses)
+      logDebug(s"Convert map statuses for shuffle $shuffleId, " +
+        s"partitions $startPartition-$endPartition, mappers $startMapIndex-$endMapIndex")
       MapOutputTracker.convertMapStatuses(
         shuffleId, startPartition, endPartition, statuses, startMapIndex, endMapIndex)
     } catch {
