@@ -497,7 +497,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
   }
 
   private def filtersPushdownBenchmark(rowsNum: Int, numIters: Int): Unit = {
-    val benchmark = new Benchmark(s"Filters pushdown", rowsNum, output = output)
+    val benchmark = new Benchmark("Filters pushdown", rowsNum, output = output)
     val colsNum = 100
     val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", TimestampType))
     val schema = StructType(StructField("key", IntegerType) +: fields)
@@ -513,7 +513,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
         spark.read.schema(schema).json(path.getAbsolutePath)
       }
 
-      benchmark.addCase(s"w/o filters", numIters) { _ =>
+      benchmark.addCase("w/o filters", numIters) { _ =>
         readback.noop()
       }
 
@@ -523,11 +523,11 @@ object JsonBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      benchmark.addCase(s"pushdown disabled", numIters) { _ =>
+      benchmark.addCase("pushdown disabled", numIters) { _ =>
         withFilter(configEnabled = false)
       }
 
-      benchmark.addCase(s"w/ filters", numIters) { _ =>
+      benchmark.addCase("w/ filters", numIters) { _ =>
         withFilter(configEnabled = true)
       }
 
