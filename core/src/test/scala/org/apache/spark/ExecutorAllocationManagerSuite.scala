@@ -509,7 +509,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
     // Verify that we're capped at number of tasks including the unschedulable ones in the stage
-    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(1), Some(1)))
+    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(1), Some(0)))
     assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
@@ -532,6 +532,77 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+  }
+
+  test("SPARK-31418: remove executors after unschedulable tasks end") {
+    val clock = new ManualClock()
+    val stage = createStageInfo(0, 10)
+    val conf = createConf(0, 6, 0).set(config.EXECUTOR_CORES, 2)
+    val manager = createManager(conf, clock = clock)
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    post(SparkListenerStageSubmitted(stage))
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+
+    (0 to 4).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
+    (0 to 9).map { i => createTaskInfo(i, i, executorId = s"${i / 2}") }.foreach {
+      info => post(SparkListenerTaskStart(0, 0, info))
+    }
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 5)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
+
+    // 8 tasks (0 - 7) finished
+    (0 to 7).map { i => createTaskInfo(i, i, executorId = s"${i / 2}") }.foreach {
+      info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))
+    }
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+    (0 to 3).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString)) }
+    (0 to 3).foreach { i => onExecutorRemoved(manager, i.toString) }
+
+    // Now due to blacklisting, the task becomes unschedulable
+    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(0), Some(0)))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
+
+    // New executor got added
+    onExecutorAddedDefaultProfile(manager, "5")
+
+    // Now once the task becomes schedulable, clear the unschedulableTaskSets
+    // by posting unschedulable event with (None, None)
+    post(SparkListenerUnschedulableBlacklistTaskSubmitted(None, None))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(9, 9, "4"), new ExecutorMetrics, null))
+    // Unschedulable task successfully ran on the new executor provisioned
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(8, 8, "5"), new ExecutorMetrics, null))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    post(SparkListenerStageCompleted(stage))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 0)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 0)
+    assert(removeExecutorDefaultProfile(manager, "4"))
+    onExecutorRemoved(manager, "4")
+    assert(removeExecutorDefaultProfile(manager, "5"))
+    onExecutorRemoved(manager, "5")
   }
 
   test("SPARK-30511 remove executors when speculative tasks end") {

@@ -806,7 +806,7 @@ private[spark] class ExecutorAllocationManager(
           case (Some(stageId), Some(stageAttemptId)) =>
             val stageAttempt = StageAttempt(stageId, stageAttemptId)
             unschedulableTaskSets.add(stageAttempt)
-          case (None, None) =>
+          case (None, _) =>
             // Clear unschedulableTaskSets since atleast one task becomes schedulable now
             unschedulableTaskSets.clear()
         }
