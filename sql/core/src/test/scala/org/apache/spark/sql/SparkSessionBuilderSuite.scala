@@ -242,16 +242,18 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("SPARK-32062: reset listenerRegistered in SparkSession") {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test-SPARK-32062")
-    val context = new SparkContext(conf)
-    val beforeListenerSize = context.listenerBus.listeners.size()
-    SparkSession
-      .builder()
-      .sparkContext(context)
-      .getOrCreate()
-    val afterListenerSize = context.listenerBus.listeners.size()
-    assert(beforeListenerSize + 1 == afterListenerSize)
+    (1 to 2).foreach { i =>
+      val conf = new SparkConf()
+        .setMaster("local")
+        .setAppName(s"test-SPARK-32062-$i")
+      val context = new SparkContext(conf)
+      val beforeListenerSize = context.listenerBus.listeners.size()
+      SparkSession
+        .builder()
+        .sparkContext(context)
+        .getOrCreate()
+      val afterListenerSize = context.listenerBus.listeners.size()
+      assert(beforeListenerSize + 1 == afterListenerSize)
+    }
   }
 }
