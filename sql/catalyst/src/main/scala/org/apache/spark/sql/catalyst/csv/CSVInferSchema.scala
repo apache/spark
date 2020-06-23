@@ -82,7 +82,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   def inferRowType(rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
-      rowSoFar(i) = inferField(rowSoFar(i), next(i))
+      val typeElemInfer = inferField(rowSoFar(i), next(i))
+      rowSoFar(i) = compatibleType(rowSoFar(i), typeElemInfer).getOrElse(StringType)
       i+=1
     }
     rowSoFar
