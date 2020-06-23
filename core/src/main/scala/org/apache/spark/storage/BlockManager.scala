@@ -226,9 +226,9 @@ private[spark] class BlockManager(
   private val maxFailuresBeforeLocationRefresh =
     conf.get(config.BLOCK_FAILURES_BEFORE_LOCATION_REFRESH)
 
-  private val replicaEndpoint = rpcEnv.setupEndpoint(
+  private val storageEndpoint = rpcEnv.setupEndpoint(
     "BlockManagerEndpoint" + BlockManager.ID_GENERATOR.next,
-    new BlockManagerReplicaEndpoint(rpcEnv, this, mapOutputTracker))
+    new BlockManagerStorageEndpoint(rpcEnv, this, mapOutputTracker))
 
   // Pending re-registration action being executed asynchronously or null if none is pending.
   // Accesses should synchronize on asyncReregisterLock.
@@ -465,7 +465,7 @@ private[spark] class BlockManager(
       diskBlockManager.localDirsString,
       maxOnHeapMemory,
       maxOffHeapMemory,
-      replicaEndpoint)
+      storageEndpoint)
 
     blockManagerId = if (idFromMaster != null) idFromMaster else id
 
@@ -543,8 +543,8 @@ private[spark] class BlockManager(
    * an executor crash.
    *
    * This function deliberately fails silently if the master returns false (indicating that
-   * the replica needs to re-register). The error condition will be detected again by the next
-   * heart beat attempt or new block registration and another try to re-register all blocks
+   * the storage endpoint needs to re-register). The error condition will be detected again by the
+   * next heart beat attempt or new block registration and another try to re-register all blocks
    * will be made then.
    */
   private def reportAllBlocks(): Unit = {
@@ -568,7 +568,7 @@ private[spark] class BlockManager(
     // TODO: We might need to rate limit re-registering.
     logInfo(s"BlockManager $blockManagerId re-registering with master")
     master.registerBlockManager(blockManagerId, diskBlockManager.localDirsString, maxOnHeapMemory,
-      maxOffHeapMemory, replicaEndpoint)
+      maxOffHeapMemory, storageEndpoint)
     reportAllBlocks()
   }
 
@@ -718,7 +718,7 @@ private[spark] class BlockManager(
    *
    * droppedMemorySize exists to account for when the block is dropped from memory to disk (so
    * it is still valid). This ensures that update in master will compensate for the increase in
-   * memory on replica.
+   * memory on the storage endpoint.
    */
   private def reportBlockStatus(
       blockId: BlockId,
@@ -736,7 +736,7 @@ private[spark] class BlockManager(
   /**
    * Actually send a UpdateBlockInfo message. Returns the master's response,
    * which will be true if the block was successfully recorded and false if
-   * the replica needs to re-register.
+   * the storage endpoint needs to re-register.
    */
   private def tryToReportBlockStatus(
       blockId: BlockId,
@@ -934,7 +934,7 @@ private[spark] class BlockManager(
     require(blockId != null, "BlockId is null")
 
     // Because all the remote blocks are registered in driver, it is not necessary to ask
-    // all the replica executors to get block status.
+    // all the storage endpoints to get block status.
     val locationsAndStatusOption = master.getLocationsAndStatus(blockId, blockManagerId.host)
     if (locationsAndStatusOption.isEmpty) {
       logDebug(s"Block $blockId is unknown by block manager master")
@@ -1960,7 +1960,7 @@ private[spark] class BlockManager(
     }
     remoteBlockTempFileManager.stop()
     diskBlockManager.stop()
-    rpcEnv.stop(replicaEndpoint)
+    rpcEnv.stop(storageEndpoint)
     blockInfoManager.clear()
     memoryStore.clear()
     futureExecutionContext.shutdownNow()

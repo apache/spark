@@ -40,7 +40,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcEndpointAddress, RpcEndpointRef}
-import org.apache.spark.scheduler.{AgentLost, TaskSchedulerImpl}
+import org.apache.spark.scheduler.{ExecutorProcessLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
@@ -745,7 +745,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       // removeExecutor() internally will send a message to the driver endpoint but
       // the driver endpoint is not available now, otherwise an exception will be thrown.
       if (!stopCalled) {
-        removeExecutor(taskId, AgentLost(reason))
+        removeExecutor(taskId, ExecutorProcessLost(reason))
       }
       agents(agentId).taskIDs.remove(taskId)
     }

@@ -765,7 +765,8 @@ private[spark] class TaskSchedulerImpl(
               })
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(
-                  AgentLost(s"Task $tid was lost, so marking the executor as lost as well."))
+                  ExecutorProcessLost(
+                    s"Task $tid was lost, so marking the executor as lost as well."))
                 removeExecutor(execId, reason.get)
                 failedExecutor = Some(execId)
               }

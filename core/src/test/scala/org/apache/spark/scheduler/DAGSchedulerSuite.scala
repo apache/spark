@@ -777,9 +777,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   private val shuffleFileLossTests = Seq(
-    ("agent lost with shuffle service", AgentLost("", false), true, false),
-    ("worker lost with shuffle service", AgentLost("", true), true, true),
-    ("worker lost without shuffle service", AgentLost("", true), false, true),
+    ("executor process lost with shuffle service", ExecutorProcessLost("", false), true, false),
+    ("worker lost with shuffle service", ExecutorProcessLost("", true), true, true),
+    ("worker lost without shuffle service", ExecutorProcessLost("", true), false, true),
     ("executor failure with shuffle service", ExecutorKilled, true, false),
     ("executor failure without shuffle service", ExecutorKilled, false, true))
 

@@ -30,7 +30,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * this is used to remove blocks from the replica's BlockManager.
  */
 private[storage]
-class BlockManagerReplicaEndpoint(
+class BlockManagerStorageEndpoint(
     override val rpcEnv: RpcEnv,
     blockManager: BlockManager,
     mapOutputTracker: MapOutputTracker)

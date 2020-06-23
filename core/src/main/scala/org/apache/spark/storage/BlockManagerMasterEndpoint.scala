@@ -39,7 +39,7 @@ import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
  * BlockManagerMasterEndpoint is an [[IsolatedRpcEndpoint]] on the master node to track statuses
- * of all replicas' block managers.
+ * of all the storage endpoints' block managers.
  */
 private[spark]
 class BlockManagerMasterEndpoint(
@@ -130,14 +130,14 @@ class BlockManagerMasterEndpoint(
     case GetStorageStatus =>
       context.reply(storageStatus)
 
-    case GetBlockStatus(blockId, askReplicas) =>
-      context.reply(blockStatus(blockId, askReplicas))
+    case GetBlockStatus(blockId, askStorageEndpoints) =>
+      context.reply(blockStatus(blockId, askStorageEndpoints))
 
     case IsExecutorAlive(executorId) =>
       context.reply(blockManagerIdByExecutor.contains(executorId))
 
-    case GetMatchingBlockIds(filter, askReplicas) =>
-      context.reply(getMatchingBlockIds(filter, askReplicas))
+    case GetMatchingBlockIds(filter, askStorageEndpoints) =>
+      context.reply(getMatchingBlockIds(filter, askStorageEndpoints))
 
     case RemoveRdd(rddId) =>
       context.reply(removeRdd(rddId))
@@ -170,14 +170,14 @@ class BlockManagerMasterEndpoint(
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
     // First remove the metadata for the given RDD, and then asynchronously remove the blocks
-    // from the replicas.
+    // from the storage endpoints.
 
-    // The message sent to the replicas to remove the RDD
+    // The message sent to the storage endpoints to remove the RDD
     val removeMsg = RemoveRdd(rddId)
 
     // Find all blocks for the given RDD, remove the block from both blockLocations and
     // the blockManagerInfo that is tracking the blocks and create the futures which asynchronously
-    // remove the blocks from replicas and gives back the number of removed blocks
+    // remove the blocks from storage endpoints and gives back the number of removed blocks
     val blocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
     val blocksToDeleteByShuffleService =
       new mutable.HashMap[BlockManagerId, mutable.HashSet[RDDBlockId]]
@@ -206,7 +206,7 @@ class BlockManagerMasterEndpoint(
       }
     }
     val removeRddFromExecutorsFutures = blockManagerInfo.values.map { bmInfo =>
-      bmInfo.replicaEndpoint.ask[Int](removeMsg).recover {
+      bmInfo.storageEndpoint.ask[Int](removeMsg).recover {
         case e: IOException =>
           logWarning(s"Error trying to remove RDD ${removeMsg.rddId} " +
             s"from block manager ${bmInfo.blockManagerId}", e)
@@ -229,13 +229,12 @@ class BlockManagerMasterEndpoint(
 
     Future.sequence(removeRddFromExecutorsFutures ++ removeRddBlockViaExtShuffleServiceFutures)
   }
-
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
     // Nothing to do in the BlockManagerMasterEndpoint data structures
     val removeMsg = RemoveShuffle(shuffleId)
     Future.sequence(
       blockManagerInfo.values.map { bm =>
-        bm.replicaEndpoint.ask[Boolean](removeMsg)
+        bm.storageEndpoint.ask[Boolean](removeMsg)
       }.toSeq
     )
   }
@@ -251,7 +250,7 @@ class BlockManagerMasterEndpoint(
       removeFromDriver || !info.blockManagerId.isDriver
     }
     val futures = requiredBlockManagers.map { bm =>
-      bm.replicaEndpoint.ask[Int](removeMsg).recover {
+      bm.storageEndpoint.ask[Int](removeMsg).recover {
         case e: IOException =>
           logWarning(s"Error trying to remove broadcast $broadcastId from block manager " +
             s"${bm.blockManagerId}", e)
@@ -295,7 +294,7 @@ class BlockManagerMasterEndpoint(
         blockManagerInfo.get(candidateBMId).foreach { bm =>
           val remainingLocations = locations.toSeq.filter(bm => bm != candidateBMId)
           val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
-          bm.replicaEndpoint.ask[Boolean](replicateMsg)
+          bm.storageEndpoint.ask[Boolean](replicateMsg)
         }
       }
     }
@@ -320,7 +319,7 @@ class BlockManagerMasterEndpoint(
     val futures = newBlockManagersToDecommission.map { blockManagerId =>
       decommissioningBlockManagerSet.add(blockManagerId)
       val info = blockManagerInfo(blockManagerId)
-      info.replicaEndpoint.ask[Unit](DecommissionBlockManager)
+      info.storageEndpoint.ask[Unit](DecommissionBlockManager)
     }
     Future.sequence{ futures.toSeq }
   }
@@ -343,7 +342,7 @@ class BlockManagerMasterEndpoint(
     }.toSeq
   }
 
-  // Remove a block from the replicas that have it. This can only be used to remove
+  // Remove a block from the workers that have it. This can only be used to remove
   // blocks that the master knows about.
   private def removeBlockFromWorkers(blockId: BlockId): Unit = {
     val locations = blockLocations.get(blockId)
@@ -351,10 +350,10 @@ class BlockManagerMasterEndpoint(
       locations.foreach { blockManagerId: BlockManagerId =>
         val blockManager = blockManagerInfo.get(blockManagerId)
         if (blockManager.isDefined) {
-          // Remove the block from the replica's BlockManager.
+          // Remove the block from the BlockManager.
           // Doesn't actually wait for a confirmation and the message might get lost.
           // If message loss becomes frequent, we should add retry logic here.
-          blockManager.get.replicaEndpoint.ask[Boolean](RemoveBlock(blockId))
+          blockManager.get.storageEndpoint.ask[Boolean](RemoveBlock(blockId))
         }
       }
     }
@@ -378,13 +377,13 @@ class BlockManagerMasterEndpoint(
    * Return the block's status for all block managers, if any. NOTE: This is a
    * potentially expensive operation and should only be used for testing.
    *
-   * If askReplicas is true, the master queries each block manager for the most updated block
-   * statuses. This is useful when the master is not informed of the given block by all block
+   * If askStorageEndpoints is true, the master queries each block manager for the most updated
+   * block statuses. This is useful when the master is not informed of the given block by all block
    * managers.
    */
   private def blockStatus(
       blockId: BlockId,
-      askReplicas: Boolean): Map[BlockManagerId, Future[Option[BlockStatus]]] = {
+      askStorageEndpoints: Boolean): Map[BlockManagerId, Future[Option[BlockStatus]]] = {
     val getBlockStatus = GetBlockStatus(blockId)
     /*
      * Rather than blocking on the block status query, master endpoint should simply return
@@ -393,8 +392,8 @@ class BlockManagerMasterEndpoint(
      */
     blockManagerInfo.values.map { info =>
       val blockStatusFuture =
-        if (askReplicas) {
-          info.replicaEndpoint.ask[Option[BlockStatus]](getBlockStatus)
+        if (askStorageEndpoints) {
+          info.storageEndpoint.ask[Option[BlockStatus]](getBlockStatus)
         } else {
           Future { info.getStatus(blockId) }
         }
@@ -406,19 +405,19 @@ class BlockManagerMasterEndpoint(
    * Return the ids of blocks present in all the block managers that match the given filter.
    * NOTE: This is a potentially expensive operation and should only be used for testing.
    *
-   * If askReplicas is true, the master queries each block manager for the most updated block
-   * statuses. This is useful when the master is not informed of the given block by all block
+   * If askStorageEndpoints is true, the master queries each block manager for the most updated
+   * block statuses. This is useful when the master is not informed of the given block by all block
    * managers.
    */
   private def getMatchingBlockIds(
       filter: BlockId => Boolean,
-      askReplicas: Boolean): Future[Seq[BlockId]] = {
+      askStorageEndpoints: Boolean): Future[Seq[BlockId]] = {
     val getMatchingBlockIds = GetMatchingBlockIds(filter)
     Future.sequence(
       blockManagerInfo.values.map { info =>
         val future =
-          if (askReplicas) {
-            info.replicaEndpoint.ask[Seq[BlockId]](getMatchingBlockIds)
+          if (askStorageEndpoints) {
+            info.storageEndpoint.ask[Seq[BlockId]](getMatchingBlockIds)
           } else {
             Future { info.blocks.asScala.keys.filter(filter).toSeq }
           }
@@ -441,7 +440,7 @@ class BlockManagerMasterEndpoint(
       localDirs: Array[String],
       maxOnHeapMemSize: Long,
       maxOffHeapMemSize: Long,
-      replicaEndpoint: RpcEndpointRef): BlockManagerId = {
+      storageEndpoint: RpcEndpointRef): BlockManagerId = {
     // the dummy id is not expected to contain the topology information.
     // we get that info here and respond back with a more fleshed out block manager id
     val id = BlockManagerId(
@@ -476,7 +475,7 @@ class BlockManagerMasterEndpoint(
         }
 
       blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(),
-        maxOnHeapMemSize, maxOffHeapMemSize, replicaEndpoint, externalShuffleServiceBlockStatus)
+        maxOnHeapMemSize, maxOffHeapMemSize, storageEndpoint, externalShuffleServiceBlockStatus)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxOnHeapMemSize + maxOffHeapMemSize,
         Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
@@ -530,7 +529,7 @@ class BlockManagerMasterEndpoint(
       }
     }
 
-    // Remove the block from master tracking if it has been removed on all replicas.
+    // Remove the block from master tracking if it has been removed on all endpoints.
     if (locations.size == 0) {
       blockLocations.remove(blockId)
     }
@@ -598,7 +597,7 @@ class BlockManagerMasterEndpoint(
       blockManagerId <- blockManagerIdByExecutor.get(executorId);
       info <- blockManagerInfo.get(blockManagerId)
     ) yield {
-      info.replicaEndpoint
+      info.storageEndpoint
     }
   }
 
@@ -622,7 +621,7 @@ private[spark] class BlockManagerInfo(
     timeMs: Long,
     val maxOnHeapMem: Long,
     val maxOffHeapMem: Long,
-    val replicaEndpoint: RpcEndpointRef,
+    val storageEndpoint: RpcEndpointRef,
     val externalShuffleServiceBlockStatus: Option[JHashMap[BlockId, BlockStatus]])
   extends Logging {
 

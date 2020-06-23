@@ -136,21 +136,21 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
 
-    val replicaRpcEnv = createRpcEnv("spark-replica", hostname, 0, new SecurityManager(conf))
-    val replicaTracker = new MapOutputTrackerWorker(conf)
-    replicaTracker.trackerEndpoint =
-      replicaRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+    val mapWorkerRpcEnv = createRpcEnv("spark-replica", hostname, 0, new SecurityManager(conf))
+    val mapWorkerTracker = new MapOutputTrackerWorker(conf)
+    mapWorkerTracker.trackerEndpoint =
+      mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
     masterTracker.registerShuffle(10, 1)
-    replicaTracker.updateEpoch(masterTracker.getEpoch)
+    mapWorkerTracker.updateEpoch(masterTracker.getEpoch)
     // This is expected to fail because no outputs have been registered for the shuffle.
-    intercept[FetchFailedException] { replicaTracker.getMapSizesByExecutorId(10, 0) }
+    intercept[FetchFailedException] { mapWorkerTracker.getMapSizesByExecutorId(10, 0) }
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(1000L), 5))
-    replicaTracker.updateEpoch(masterTracker.getEpoch)
-    assert(replicaTracker.getMapSizesByExecutorId(10, 0).toSeq ===
+    mapWorkerTracker.updateEpoch(masterTracker.getEpoch)
+    assert(mapWorkerTracker.getMapSizesByExecutorId(10, 0).toSeq ===
       Seq((BlockManagerId("a", "hostA", 1000),
         ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000, 0)))))
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
@@ -158,17 +158,17 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val masterTrackerEpochBeforeLossOfMapOutput = masterTracker.getEpoch
     masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
     assert(masterTracker.getEpoch > masterTrackerEpochBeforeLossOfMapOutput)
-    replicaTracker.updateEpoch(masterTracker.getEpoch)
-    intercept[FetchFailedException] { replicaTracker.getMapSizesByExecutorId(10, 0) }
+    mapWorkerTracker.updateEpoch(masterTracker.getEpoch)
+    intercept[FetchFailedException] { mapWorkerTracker.getMapSizesByExecutorId(10, 0) }
 
     // failure should be cached
-    intercept[FetchFailedException] { replicaTracker.getMapSizesByExecutorId(10, 0) }
+    intercept[FetchFailedException] { mapWorkerTracker.getMapSizesByExecutorId(10, 0) }
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
     masterTracker.stop()
-    replicaTracker.stop()
+    mapWorkerTracker.stop()
     rpcEnv.shutdown()
-    replicaRpcEnv.shutdown()
+    mapWorkerRpcEnv.shutdown()
   }
 
   test("remote fetch below max RPC message size") {

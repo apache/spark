@@ -201,18 +201,18 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     // Verify that blocks are persisted only on the driver
     def afterCreation(broadcastId: Long, bmm: BlockManagerMaster): Unit = {
       var blockId = BroadcastBlockId(broadcastId)
-      var statuses = bmm.getBlockStatus(blockId, askReplicas = true)
+      var statuses = bmm.getBlockStatus(blockId, askStorageEndpoints = true)
       assert(statuses.size === 1)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
-      statuses = bmm.getBlockStatus(blockId, askReplicas = true)
+      statuses = bmm.getBlockStatus(blockId, askStorageEndpoints = true)
       assert(statuses.size === 1)
     }
 
     // Verify that blocks are persisted in both the executors and the driver
     def afterUsingBroadcast(broadcastId: Long, bmm: BlockManagerMaster): Unit = {
       var blockId = BroadcastBlockId(broadcastId)
-      val statuses = bmm.getBlockStatus(blockId, askReplicas = true)
+      val statuses = bmm.getBlockStatus(blockId, askStorageEndpoints = true)
       assert(statuses.size === numWorkers + 1)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
@@ -224,12 +224,12 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     def afterUnpersist(broadcastId: Long, bmm: BlockManagerMaster): Unit = {
       var blockId = BroadcastBlockId(broadcastId)
       var expectedNumBlocks = if (removeFromDriver) 0 else 1
-      var statuses = bmm.getBlockStatus(blockId, askReplicas = true)
+      var statuses = bmm.getBlockStatus(blockId, askStorageEndpoints = true)
       assert(statuses.size === expectedNumBlocks)
 
       blockId = BroadcastBlockId(broadcastId, "piece0")
       expectedNumBlocks = if (removeFromDriver) 0 else 1
-      statuses = bmm.getBlockStatus(blockId, askReplicas = true)
+      statuses = bmm.getBlockStatus(blockId, askStorageEndpoints = true)
       assert(statuses.size === expectedNumBlocks)
     }
 

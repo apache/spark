@@ -1271,12 +1271,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.master.getLocations("list1").size === 0)
     assert(store.master.getLocations("list2").size === 1)
     assert(store.master.getLocations("list3").size === 1)
-    assert(store.master.getBlockStatus("list1", askReplicas = false).size === 0)
-    assert(store.master.getBlockStatus("list2", askReplicas = false).size === 1)
-    assert(store.master.getBlockStatus("list3", askReplicas = false).size === 1)
-    assert(store.master.getBlockStatus("list1", askReplicas = true).size === 0)
-    assert(store.master.getBlockStatus("list2", askReplicas = true).size === 1)
-    assert(store.master.getBlockStatus("list3", askReplicas = true).size === 1)
+    assert(store.master.getBlockStatus("list1", askStorageEndpoints = false).size === 0)
+    assert(store.master.getBlockStatus("list2", askStorageEndpoints = false).size === 1)
+    assert(store.master.getBlockStatus("list3", askStorageEndpoints = false).size === 1)
+    assert(store.master.getBlockStatus("list1", askStorageEndpoints = true).size === 0)
+    assert(store.master.getBlockStatus("list2", askStorageEndpoints = true).size === 1)
+    assert(store.master.getBlockStatus("list3", askStorageEndpoints = true).size === 1)
 
     // This time don't tell master and see what happens. By LRU, only list5 and list6 remains.
     store.putIterator(
@@ -1287,17 +1287,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       "list6", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
 
     // getLocations should return nothing because the master is not informed
-    // getBlockStatus without asking replicas should have the same result
-    // getBlockStatus with asking replicas, however, should return the actual block statuses
+    // getBlockStatus without asking storage endpoints should have the same result
+    // getBlockStatus with asking storage endpoints, however, should return the actual statuses
     assert(store.master.getLocations("list4").size === 0)
     assert(store.master.getLocations("list5").size === 0)
     assert(store.master.getLocations("list6").size === 0)
-    assert(store.master.getBlockStatus("list4", askReplicas = false).size === 0)
-    assert(store.master.getBlockStatus("list5", askReplicas = false).size === 0)
-    assert(store.master.getBlockStatus("list6", askReplicas = false).size === 0)
-    assert(store.master.getBlockStatus("list4", askReplicas = true).size === 0)
-    assert(store.master.getBlockStatus("list5", askReplicas = true).size === 1)
-    assert(store.master.getBlockStatus("list6", askReplicas = true).size === 1)
+    assert(store.master.getBlockStatus("list4", askStorageEndpoints = false).size === 0)
+    assert(store.master.getBlockStatus("list5", askStorageEndpoints = false).size === 0)
+    assert(store.master.getBlockStatus("list6", askStorageEndpoints = false).size === 0)
+    assert(store.master.getBlockStatus("list4", askStorageEndpoints = true).size === 0)
+    assert(store.master.getBlockStatus("list5", askStorageEndpoints = true).size === 1)
+    assert(store.master.getBlockStatus("list6", askStorageEndpoints = true).size === 1)
   }
 
   test("get matching blocks") {
@@ -1313,9 +1313,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       "list3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
 
     // getLocations and getBlockStatus should yield the same locations
-    assert(store.master.getMatchingBlockIds(_.toString.contains("list"), askReplicas = false).size
+    assert(store.master.getMatchingBlockIds(
+      _.toString.contains("list"), askStorageEndpoints = false).size
       === 3)
-    assert(store.master.getMatchingBlockIds(_.toString.contains("list1"), askReplicas = false).size
+    assert(store.master.getMatchingBlockIds(
+      _.toString.contains("list1"), askStorageEndpoints = false).size
       === 1)
 
     // insert some more blocks
@@ -1328,10 +1330,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // getLocations and getBlockStatus should yield the same locations
     assert(
-      store.master.getMatchingBlockIds(_.toString.contains("newlist"), askReplicas = false).size
+      store.master.getMatchingBlockIds(
+        _.toString.contains("newlist"), askStorageEndpoints = false).size
       === 1)
     assert(
-      store.master.getMatchingBlockIds(_.toString.contains("newlist"), askReplicas = true).size
+      store.master.getMatchingBlockIds(
+        _.toString.contains("newlist"), askStorageEndpoints = true).size
       === 3)
 
     val blockIds = Seq(RDDBlockId(1, 0), RDDBlockId(1, 1), RDDBlockId(2, 0))
@@ -1342,7 +1346,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val matchedBlockIds = store.master.getMatchingBlockIds(_ match {
       case RDDBlockId(1, _) => true
       case _ => false
-    }, askReplicas = true)
+    }, askStorageEndpoints = true)
     assert(matchedBlockIds.toSet === Set(RDDBlockId(1, 0), RDDBlockId(1, 1)))
   }
 

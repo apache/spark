@@ -428,7 +428,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   }
 
   override def agentLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit = {
-    recordAgentLost(d, agentId, AgentLost())
+    recordAgentLost(d, agentId, ExecutorProcessLost())
   }
 
   override def executorLost(
