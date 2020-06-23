@@ -67,7 +67,7 @@ abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructT
   def toRef(attr: String): Option[BoundReference] = {
     schema.getFieldIndex(attr).map { index =>
       val field = schema(index)
-      BoundReference(schema.fieldIndex(attr), field.dataType, field.nullable)
+      BoundReference(index, field.dataType, field.nullable)
     }
   }
 }
