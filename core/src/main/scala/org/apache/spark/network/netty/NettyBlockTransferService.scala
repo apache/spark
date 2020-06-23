@@ -203,36 +203,35 @@ private[spark] class NettyBlockTransferService(
       host: String,
       port: Int,
       execIds: Array[String],
-      hostLocalDirsCompletable: CompletableFuture[util.Map[String, Array[String]]])
-    : Unit = {
+      hostLocalDirsCompletable: CompletableFuture[util.Map[String, Array[String]]]): Unit = {
     val getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds)
     try {
-      val client: TransportClient = clientFactory.createClient(host, port)
+      val client = clientFactory.createClient(host, port)
       client.sendRpc(getLocalDirsMessage.toByteBuffer, new RpcResponseCallback() {
         override def onSuccess(response: ByteBuffer): Unit = {
           try {
-            val msgObj: BlockTransferMessage = BlockTransferMessage.Decoder.fromByteBuffer(response)
+            val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response)
             hostLocalDirsCompletable.complete(
               msgObj.asInstanceOf[LocalDirsForExecutors].getLocalDirsByExec)
           } catch {
             case t: Throwable =>
-              logWarning(s"Error trying to get the host local dirs for " +
-                s"${getLocalDirsMessage.execIds.mkString(", ")} via " +
-                s"external shuffle service", t.getCause)
+              logWarning(s"Error trying to get the host local dirs for executor ${execIds.head}",
+                t.getCause)
               hostLocalDirsCompletable.completeExceptionally(t)
-          } finally client.close()
+          } finally {
+            client.close()
+          }
         }
 
         override def onFailure(t: Throwable): Unit = {
-          logWarning(s"Error trying to get the host local dirs for " +
-            s"${getLocalDirsMessage.execIds.mkString(", ")} via external shuffle service",
+          logWarning(s"Error trying to get the host local dirs for executor ${execIds.head}",
             t.getCause)
           hostLocalDirsCompletable.completeExceptionally(t)
           client.close()
         }
       })
     } catch {
-      case e@(_: IOException | _: InterruptedException) =>
+      case e: IOException | InterruptedException =>
         hostLocalDirsCompletable.completeExceptionally(e)
     }
   }
