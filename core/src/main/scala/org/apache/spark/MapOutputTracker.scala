@@ -731,11 +731,11 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId) match {
       case Some (shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
-          val endMapIndex0 = if (endMapIndex == Int.MaxValue) statuses.length else endMapIndex
+          val actualEndMapIndex = if (endMapIndex == Int.MaxValue) statuses.length else endMapIndex
           logDebug(s"Convert map statuses for shuffle $shuffleId, " +
-            s"partitions $startPartition-$endPartition, mappers $startMapIndex-$endMapIndex0")
+            s"partitions $startPartition-$endPartition, mappers $startMapIndex-$actualEndMapIndex")
           MapOutputTracker.convertMapStatuses(
-            shuffleId, startPartition, endPartition, statuses, startMapIndex, endMapIndex0)
+            shuffleId, startPartition, endPartition, statuses, startMapIndex, actualEndMapIndex)
         }
       case None =>
         Iterator.empty
@@ -779,11 +779,11 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     logDebug(s"Fetching outputs for shuffle $shuffleId")
     val statuses = getStatuses(shuffleId, conf)
     try {
-      val endMapIndex0 = if (endMapIndex == Int.MaxValue) statuses.length else endMapIndex
+      val actualEndMapIndex = if (endMapIndex == Int.MaxValue) statuses.length else endMapIndex
       logDebug(s"Convert map statuses for shuffle $shuffleId, " +
-        s"partitions $startPartition-$endPartition, mappers $startMapIndex-$endMapIndex0")
+        s"partitions $startPartition-$endPartition, mappers $startMapIndex-$actualEndMapIndex")
       MapOutputTracker.convertMapStatuses(
-        shuffleId, startPartition, endPartition, statuses, startMapIndex, endMapIndex0)
+        shuffleId, startPartition, endPartition, statuses, startMapIndex, actualEndMapIndex)
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
