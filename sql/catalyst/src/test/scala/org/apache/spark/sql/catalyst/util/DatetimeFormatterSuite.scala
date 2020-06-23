@@ -45,7 +45,7 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
   private def assertEqual(pattern: String, datetimeStr: String, expected: Long): Unit = {
     if (useDateFormatter) {
       assert(dateFormatter(pattern).parse(datetimeStr) ===
-        DateTimeUtils.microsToEpochDays(expected, UTC))
+        DateTimeUtils.microsToDays(expected, UTC))
     } else {
       assert(timestampFormatter(pattern).parse(datetimeStr) === expected)
     }
