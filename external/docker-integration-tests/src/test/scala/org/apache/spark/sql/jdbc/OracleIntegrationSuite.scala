@@ -55,7 +55,6 @@ import org.apache.spark.tags.DockerTest
  *
  * It has been validated with 18.4.0 Express Edition.
  */
-
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
   import testImplicits._

@@ -42,7 +42,10 @@ private[sql] class OracleConnectionProvider(driver: Driver, options: JDBCOptions
 
   override def getAdditionalProperties(): Properties = {
     val result = new Properties()
-    // This prop needed to turn on kerberos authentication in the JDBC driver
+    // This prop needed to turn on kerberos authentication in the JDBC driver. Please see:
+    // scalastyle:off line.size.limit
+    // https://docs.oracle.com/en/database/oracle/oracle-database/19/jajdb/oracle/jdbc/OracleConnection.html#CONNECTION_PROPERTY_THIN_NET_AUTHENTICATION_SERVICES
+    // scalastyle:on line.size.limit
     result.put("oracle.net.authentication_services", "(KERBEROS5)");
     result
   }
