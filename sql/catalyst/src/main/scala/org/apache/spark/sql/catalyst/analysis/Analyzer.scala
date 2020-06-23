@@ -1885,7 +1885,7 @@ class Analyzer(
   }
 
   /**
-   * Replaces [[UnresolvedFunction]]s and [[UnresolvedFunc]] with concrete [[Expression]]s.
+   * Replaces [[UnresolvedFunction]]s and [[UnresolvedFunc]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
@@ -1893,7 +1893,7 @@ class Analyzer(
       case UnresolvedFunc(multipartIdent) =>
         val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent, s"${plan.nodeName}")
         val info = v1SessionCatalog.lookupFunctionInfo(funcIdent)
-        ResolvedFunc(currentCatalog, CatalogFunction(funcIdent, info.getClassName, Seq()))
+        ResolvedFunc(currentCatalog, CatalogFunction(funcIdent, info.getClassName, Nil))
 
       case q: LogicalPlan =>
         q transformExpressions {
