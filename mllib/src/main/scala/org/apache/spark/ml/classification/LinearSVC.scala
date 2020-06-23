@@ -267,8 +267,7 @@ class LinearSVC @Since("2.2.0") (
       if (featuresStd(i) != 0.0) rawCoefficients(i) / featuresStd(i) else 0.0
     }
     val intercept = if ($(fitIntercept)) rawCoefficients.last else 0.0
-    val vec = Vectors.dense(coefficientArray)
-    return createModel(dataset, vec, intercept, objectiveHistory)
+    createModel(dataset, Vectors.dense(coefficientArray), intercept, objectiveHistory)
   }
 
   private def createModel(
@@ -400,8 +399,7 @@ class LinearSVCModel private[classification] (
    * otherwise it generates new columns for them and sets them as columns on a new copy of
    * the current model
    */
-  private[classification] def findSummaryModel():
-  (LinearSVCModel, String, String) = {
+  private[classification] def findSummaryModel(): (LinearSVCModel, String, String) = {
     val model = if ($(rawPredictionCol).isEmpty && $(predictionCol).isEmpty) {
       copy(ParamMap.empty)
         .setRawPredictionCol("rawPrediction_" + java.util.UUID.randomUUID.toString)
@@ -506,14 +504,12 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
 /**
  * Abstraction for LinearSVC results for a given model.
  */
-sealed trait LinearSVCSummary extends BinaryClassificationSummary {
-}
+sealed trait LinearSVCSummary extends BinaryClassificationSummary
 
 /**
  * Abstraction for LinearSVC training results.
  */
-sealed trait LinearSVCTrainingSummary extends LinearSVCSummary with TrainingSummary {
-}
+sealed trait LinearSVCTrainingSummary extends LinearSVCSummary with TrainingSummary
 
 /**
  * LinearSVC results for a given model.
