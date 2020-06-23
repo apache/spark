@@ -120,9 +120,7 @@ private[spark] class ByteBufferBlockData(
 private[spark] class HostLocalDirManager(
     futureExecutionContext: ExecutionContext,
     cacheSize: Int,
-    externalBlockStoreClient: ExternalBlockStoreClient,
-    host: String,
-    externalShuffleServicePort: Int) extends Logging {
+    blockStoreClient: BlockStoreClient) extends Logging {
 
   private[spark] val executorIdToLocalDirsCache =
     CacheBuilder
@@ -134,6 +132,29 @@ private[spark] class HostLocalDirManager(
       : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
     import scala.collection.JavaConverters._
     return executorIdToLocalDirsCache.asMap().asScala
+  }
+
+  private[spark] def getHostLocalDirs(
+      host: String,
+      port: Int,
+      executorIds: Array[String])(
+      callback: Try[java.util.Map[String, Array[String]]] => Unit): Unit = {
+    val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
+    blockStoreClient.getHostLocalDirs(
+      host,
+      port,
+      executorIds,
+      hostLocalDirsCompletable)
+    hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
+      if (hostLocalDirs != null) {
+        callback(Success(hostLocalDirs))
+        executorIdToLocalDirsCache.synchronized {
+          executorIdToLocalDirsCache.putAll(hostLocalDirs)
+        }
+      } else {
+        callback(Failure(throwable))
+      }
+    }
   }
 }
 
@@ -245,27 +266,6 @@ private[spark] class BlockManager(
   }
 
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
-
-  private[spark] def getHostLocalDirs(
-      host: String,
-      port: Int,
-      executorIds: Array[String])(
-      callback: Try[java.util.Map[String, Array[String]]] => Unit)
-    : Unit = {
-    val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
-    blockStoreClient.getHostLocalDirs(
-      host,
-      port,
-      executorIds,
-      hostLocalDirsCompletable)
-    hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
-      if (hostLocalDirs != null) {
-        callback(Success(hostLocalDirs))
-      } else {
-        callback(Failure(throwable))
-      }
-    }
-  }
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
@@ -496,15 +496,12 @@ private[spark] class BlockManager(
 
     hostLocalDirManager =
       if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
-          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
-        externalBlockStoreClient.map { blockStoreClient =>
-          new HostLocalDirManager(
+          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL) &&
+          (externalBlockStoreClient.isDefined || !conf.get(config.DYN_ALLOCATION_ENABLED)) ) {
+          Some(new HostLocalDirManager(
             futureExecutionContext,
             conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
-            blockStoreClient,
-            blockManagerId.host,
-            externalShuffleServicePort)
-        }
+            blockStoreClient))
       } else {
         None
       }

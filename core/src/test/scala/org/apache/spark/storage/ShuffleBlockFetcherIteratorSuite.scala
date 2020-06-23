@@ -73,9 +73,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val hostLocalDirManager = new HostLocalDirManager(
       futureExecutionContext = global,
       cacheSize = 1,
-      externalBlockStoreClient = mockExternalBlockStoreClient,
-      host = "localhost",
-      externalShuffleServicePort = 7337)
+      blockStoreClient = mockExternalBlockStoreClient)
 
     when(blockManager.hostLocalDirManager).thenReturn(Some(hostLocalDirManager))
     when(mockExternalBlockStoreClient.getHostLocalDirs(any(), any(), any(), any()))
@@ -218,9 +216,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val hostLocalDirManager = new HostLocalDirManager(
       futureExecutionContext = global,
       cacheSize = 1,
-      externalBlockStoreClient = mockExternalBlockStoreClient,
-      host = "localhost",
-      externalShuffleServicePort = 7337)
+      blockStoreClient = mockExternalBlockStoreClient)
 
     when(blockManager.hostLocalDirManager).thenReturn(Some(hostLocalDirManager))
     when(mockExternalBlockStoreClient.getHostLocalDirs(any(), any(), any(), any()))
