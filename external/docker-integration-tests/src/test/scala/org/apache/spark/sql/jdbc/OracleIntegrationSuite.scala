@@ -21,6 +21,8 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.{Properties, TimeZone}
 
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -31,18 +33,25 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * This patch was tested using the Oracle docker. Created this integration suite for the same.
- *
  * The following would be the steps to test this
  * 1. Build Oracle database in Docker, please refer below link about how to.
  *    https://github.com/oracle/docker-images/blob/master/OracleDatabase/SingleInstance/README.md
  * 2. export ORACLE_DOCKER_IMAGE_NAME=$ORACLE_DOCKER_IMAGE_NAME
  *    Pull oracle $ORACLE_DOCKER_IMAGE_NAME image - docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 3. Start docker - sudo service docker start
- * 4. The timeout and interval parameter to be increased to a high value for oracle test in
- *     DockerJDBCIntegrationSuite.scala (Locally tested with timeout(20.minutes), interval(1.second)
- *     and executed successfully).
- * 5. Run spark test - ./build/sbt "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ * 4. Run spark test - ./build/sbt -Pdocker-integration-tests
+ *    "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ *
+ * An actual sequence of commands to run the test is as follows
+ *
+ *  $ git clone https://github.com/oracle/docker-images.git
+ *  // Head SHA: 3e352a22618070595f823977a0fd1a3a8071a83c
+ *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
+ *  $ ./buildDockerImage.sh -v 18.4.0 -x
+ *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
+ *  $ cd $SPARK_HOME
+ *  $ ./build/sbt -Pdocker-integration-tests
+ *    "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
  * It has been validated with 18.4.0 Express Edition.
  */
@@ -62,7 +71,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       s"jdbc:oracle:thin:system/oracle@//$ip:$port/xe"
   }
 
+  override val connectionTimeout = timeout(7.minutes)
+
   override def dataPreparation(conn: Connection): Unit = {
+    // In 18.4.0 Express Edition auto commit is enabled by default.
     conn.setAutoCommit(false)
     conn.prepareStatement("CREATE TABLE datetime (id NUMBER(10), d DATE, t TIMESTAMP)")
       .executeUpdate()

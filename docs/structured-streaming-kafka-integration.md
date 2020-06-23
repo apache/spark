@@ -440,9 +440,10 @@ The following configurations are optional:
 <tr>
   <td>kafkaConsumer.pollTimeoutMs</td>
   <td>long</td>
-  <td>512</td>
+  <td>120000</td>
   <td>streaming and batch</td>
-  <td>The timeout in milliseconds to poll data from Kafka in executors.</td>
+  <td>The timeout in milliseconds to poll data from Kafka in executors. When not defined it falls
+  back to <code>spark.network.timeout</code>.</td>
 </tr>
 <tr>
   <td>fetchOffset.numRetries</td>
