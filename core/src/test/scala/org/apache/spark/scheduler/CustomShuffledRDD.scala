@@ -106,7 +106,7 @@ class CustomShuffledRDD[K, V, C](
     val part = p.asInstanceOf[CustomShuffledRDDPartition]
     val metrics = context.taskMetrics().createTempShuffleReadMetrics()
     SparkEnv.get.shuffleManager.getReader(
-      dependency.shuffleHandle, MapOutputTracker.allMapStatuses, part.startIndexInParent,
+      dependency.shuffleHandle, 0, Int.MaxValue, part.startIndexInParent,
       part.endIndexInParent, context, metrics)
       .read()
       .asInstanceOf[Iterator[(K, C)]]

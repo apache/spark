@@ -185,7 +185,8 @@ class ShuffledRowRDD(
       case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
         SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
-          MapOutputTracker.allMapStatuses,
+          0,
+          Int.MaxValue,
           startReducerIndex,
           endReducerIndex,
           context,
@@ -194,7 +195,8 @@ class ShuffledRowRDD(
       case PartialReducerPartitionSpec(reducerIndex, startMapIndex, endMapIndex, _) =>
         SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
-          _ => (startMapIndex, endMapIndex),
+          startMapIndex,
+          endMapIndex,
           reducerIndex,
           reducerIndex + 1,
           context,
@@ -203,7 +205,8 @@ class ShuffledRowRDD(
       case PartialMapperPartitionSpec(mapIndex, startReducerIndex, endReducerIndex) =>
         SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
-          _ => (mapIndex, mapIndex + 1),
+          mapIndex,
+          mapIndex + 1,
           startReducerIndex,
           endReducerIndex,
           context,

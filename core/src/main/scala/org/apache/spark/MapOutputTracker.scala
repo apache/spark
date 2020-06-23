@@ -322,7 +322,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   // For testing
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
       : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    getMapSizesByExecutorId(shuffleId, MapOutputTracker.allMapStatuses, reduceId, reduceId + 1)
+    getMapSizesByExecutorId(shuffleId, 0, Int.MaxValue, reduceId, reduceId + 1)
   }
 
   /**
@@ -336,7 +336,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    */
   def getMapSizesByExecutorId(
       shuffleId: Int,
-      mapIndexRange: Array[MapStatus] => (Int, Int),
+      startMapIndex: Int,
+      endMapIndex: Int,
       startPartition: Int,
       endPartition: Int)
   : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
@@ -721,7 +722,8 @@ private[spark] class MapOutputTrackerMaster(
   // This method is only called in local-mode.
   def getMapSizesByExecutorId(
       shuffleId: Int,
-      mapIndexRange: Array[MapStatus] => (Int, Int),
+      startMapIndex: Int,
+      endMapIndex: Int,
       startPartition: Int,
       endPartition: Int)
     : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
@@ -729,11 +731,11 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId) match {
       case Some (shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
-          val (startMapIndex, endMapIndex) = mapIndexRange(statuses)
+          val endMapIndex0 = if (endMapIndex == Int.MaxValue) statuses.length else endMapIndex
           logDebug(s"Convert map statuses for shuffle $shuffleId, " +
-            s"partitions $startPartition-$endPartition, mappers $startMapIndex-$endMapIndex")
+            s"partitions $startPartition-$endPartition, mappers $startMapIndex-$endMapIndex0")
           MapOutputTracker.convertMapStatuses(
-            shuffleId, startPartition, endPartition, statuses, startMapIndex, endMapIndex)
+            shuffleId, startPartition, endPartition, statuses, startMapIndex, endMapIndex0)
         }
       case None =>
         Iterator.empty
@@ -769,18 +771,19 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   // Get blocks sizes by executor Id. Note that zero-sized blocks are excluded in the result.
   override def getMapSizesByExecutorId(
       shuffleId: Int,
-      mapIndexRange: Array[MapStatus] => (Int, Int),
+      startMapIndex: Int,
+      endMapIndex: Int,
       startPartition: Int,
       endPartition: Int)
     : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
     val statuses = getStatuses(shuffleId, conf)
     try {
-      val (startMapIndex, endMapIndex) = mapIndexRange(statuses)
+      val endMapIndex0 = if (endMapIndex == Int.MaxValue) statuses.length else endMapIndex
       logDebug(s"Convert map statuses for shuffle $shuffleId, " +
-        s"partitions $startPartition-$endPartition, mappers $startMapIndex-$endMapIndex")
+        s"partitions $startPartition-$endPartition, mappers $startMapIndex-$endMapIndex0")
       MapOutputTracker.convertMapStatuses(
-        shuffleId, startPartition, endPartition, statuses, startMapIndex, endMapIndex)
+        shuffleId, startPartition, endPartition, statuses, startMapIndex, endMapIndex0)
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
@@ -845,9 +848,6 @@ private[spark] object MapOutputTracker extends Logging {
   val ENDPOINT_NAME = "MapOutputTracker"
   private val DIRECT = 0
   private val BROADCAST = 1
-
-  // return the mapIndexRange[startMapIndex, endMapIndex), which includes all MapStatuses
-  val allMapStatuses: Array[MapStatus] => (Int, Int) = mapStatus => (0, mapStatus.length)
 
   // Serialize an array of map output locations into an efficient byte format so that we can send
   // it to reduce tasks. We do this by compressing the serialized bytes using Zstd. They will
