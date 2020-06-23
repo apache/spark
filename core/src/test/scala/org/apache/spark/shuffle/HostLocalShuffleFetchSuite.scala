@@ -17,8 +17,46 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.SparkFunSuite
+import org.scalatest.Matchers
 
-class HostLocalShuffleFetchSuite extends SparkFunSuite {
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, SparkFunSuite, TestUtils}
+import org.apache.spark.internal.config._
+import org.apache.spark.network.netty.NettyBlockTransferService
 
+/**
+ * This test suite is used to test host local shuffle reading with external shuffle service disabled
+ */
+class HostLocalShuffleFetchSuite extends SparkFunSuite with Matchers with LocalSparkContext {
+  test("read host local shuffle from disk with external shuffle service disabled") {
+    val conf = new SparkConf()
+      .set(SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
+      .set(SHUFFLE_SERVICE_ENABLED, false)
+      .set(DYN_ALLOCATION_ENABLED, false)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
+    sc.getConf.get(SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) should equal(true)
+    sc.env.blockManager.externalShuffleServiceEnabled should equal(false)
+    sc.env.blockManager.hostLocalDirManager.isDefined should equal(true)
+    sc.env.blockManager.blockStoreClient.getClass should equal(classOf[NettyBlockTransferService])
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+
+    val rdd = sc.parallelize(0 until 1000, 10)
+      .map { i => (i, 1) }
+      .reduceByKey(_ + _)
+
+    rdd.count()
+    rdd.count()
+
+    val cachedExecutors = rdd.mapPartitions { _ =>
+      SparkEnv.get.blockManager.hostLocalDirManager.map { localDirManager =>
+        localDirManager.getCachedHostLocalDirs().keySet.iterator
+      }.getOrElse(Iterator.empty)
+    }.collect().toSet
+
+    // both executors are caching the dirs of the other one
+    cachedExecutors should equal(sc.getExecutorIds().toSet)
+
+    // Now Spark will not receive FetchFailed as host local blocks are read from the cached local
+    // disk directly
+    rdd.collect().map(_._2).sum should equal(1000)
+  }
 }
