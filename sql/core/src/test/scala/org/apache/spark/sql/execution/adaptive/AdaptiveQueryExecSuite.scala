@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
@@ -1026,13 +1026,46 @@ class AdaptiveQueryExecSuite
     Seq(true, false).foreach { enableAQE =>
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
         SQLConf.SHUFFLE_PARTITIONS.key -> "6",
         SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "7") {
-        val partitionsNum = spark.range(10).repartition($"id").rdd.collectPartitions().length
+        val df = spark.range(10).repartition($"id")
+        val partitionsNum = df.rdd.collectPartitions().length
         if (enableAQE) {
-          assert(partitionsNum === 7)
+          assert(partitionsNum < 6)
+
+          val plan = df.queryExecution.executedPlan
+          assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
+          val shuffle = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan.collect {
+            case s: ShuffleExchangeExec => s
+          }
+          assert(shuffle.size == 1)
+          assert(shuffle(0).outputPartitioning.numPartitions == 7)
         } else {
           assert(partitionsNum === 6)
+        }
+      }
+    }
+  }
+
+  test("SPARK-32056 coalesce partitions for repartition by expressions when AQE is enabled") {
+    Seq(true, false).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "50",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+        val partitionsNum1 = (1 to 10).toDF.repartition($"value")
+          .rdd.collectPartitions().length
+
+        val partitionsNum2 = (1 to 10).toDF.repartitionByRange($"value".asc)
+          .rdd.collectPartitions().length
+        if (enableAQE) {
+          assert(partitionsNum1 < 10)
+          assert(partitionsNum2 < 10)
+        } else {
+          assert(partitionsNum1 === 10)
+          assert(partitionsNum2 === 10)
         }
       }
     }
