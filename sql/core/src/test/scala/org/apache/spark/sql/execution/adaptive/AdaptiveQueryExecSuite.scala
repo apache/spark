@@ -1048,11 +1048,8 @@ class AdaptiveQueryExecSuite
           assert(partitionsNum1 === 6)
         }
 
-        val partitionsNum2 = df2.rdd.collectPartitions().length
-        assert(partitionsNum2 == 10)
-
-        val partitionsNum3 = df3.rdd.collectPartitions().length
-        assert(partitionsNum3 == 10)
+        assert(df2.rdd.collectPartitions().length == 10)
+        assert(df3.rdd.collectPartitions().length == 10)
       }
     }
   }
@@ -1064,17 +1061,22 @@ class AdaptiveQueryExecSuite
         SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
         SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "50",
         SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+
         val partitionsNum1 = (1 to 10).toDF.repartition($"value")
           .rdd.collectPartitions().length
-
         val partitionsNum2 = (1 to 10).toDF.repartitionByRange($"value".asc)
           .rdd.collectPartitions().length
+        val partitionsNum3 = (1 to 10).toDF.repartition($"value" + 1)
+          .rdd.collectPartitions().length
+
         if (enableAQE) {
           assert(partitionsNum1 < 10)
           assert(partitionsNum2 < 10)
+          assert(partitionsNum3 < 10)
         } else {
           assert(partitionsNum1 === 10)
           assert(partitionsNum2 === 10)
+          assert(partitionsNum3 === 10)
         }
       }
     }
