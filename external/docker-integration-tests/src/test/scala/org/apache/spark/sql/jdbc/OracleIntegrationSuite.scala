@@ -21,6 +21,8 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.{Properties, TimeZone}
 
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -67,6 +69,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:oracle:thin:system/oracle@//$ip:$port/xe"
   }
+
+  override val connectionTimeout = timeout(7.minutes)
 
   override def dataPreparation(conn: Connection): Unit = {
     // In 18.4.0 Express Edition auto commit is enabled by default.
