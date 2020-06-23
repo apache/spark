@@ -856,7 +856,14 @@ private[spark] class ExecutorAllocationManager(
 
     def pendingUnschedulableTasksPerResourceProfile(rp: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
-      attempts.filter(attempt => unschedulableTaskSets.contains(attempt)).size
+      val numUnschedulables = attempts
+        .filter(attempt => unschedulableTaskSets.contains(attempt)).size
+      val maxTasksPerExecutor =
+        resourceProfileManager.resourceProfileFromId(rp).maxTasksPerExecutor(conf)
+      // Need an additional executor since the unschedulableTasks cannot be currently
+      // scheduled on the available executors. This is to ensure that we'll always
+      // request for an additional executor.
+      numUnschedulables + maxTasksPerExecutor
     }
 
     def hasPendingUnschedulableTasks: Boolean = {
