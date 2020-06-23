@@ -145,8 +145,7 @@ class CoGroupedRDD[K: ClassTag](
         val metrics = context.taskMetrics().createTempShuffleReadMetrics()
         val it = SparkEnv.get.shuffleManager
           .getReader(
-            shuffleDependency.shuffleHandle, 0, Int.MaxValue,
-            split.index, split.index + 1, context, metrics)
+            shuffleDependency.shuffleHandle, split.index, split.index + 1, context, metrics)
           .read()
         rddIterators += ((it, depNum))
     }
