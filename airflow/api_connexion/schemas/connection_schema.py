@@ -17,7 +17,7 @@
 # under the License.
 from typing import List, NamedTuple
 
-from marshmallow import Schema, fields
+from marshmallow import Schema, ValidationError, fields, validates_schema
 from marshmallow_sqlalchemy import SQLAlchemySchema, auto_field
 
 from airflow.models.connection import Connection
@@ -32,12 +32,22 @@ class ConnectionCollectionItemSchema(SQLAlchemySchema):
         """ Meta """
         model = Connection
 
-    conn_id = auto_field(dump_to='connection_id', load_from='connection_id')
-    conn_type = auto_field()
+    connection_id = auto_field('conn_id', required=True)
+    conn_type = auto_field(required=True)
     host = auto_field()
     login = auto_field()
     schema = auto_field()
     port = auto_field()
+
+    # Marshmallow 2 doesn't have support for excluding extra field
+    # We will be able to remove this when we upgrade to marshmallow 3.
+    # To remove it, we would need to set unknown=EXCLUDE in Meta
+    @validates_schema(pass_original=True)
+    def check_unknown_fields(self, data, original_data):
+        """ Validates unknown field """
+        unknown = set(original_data) - set(self.fields)
+        if unknown:
+            raise ValidationError(f'Extra arguments passed: {list(unknown)}')
 
 
 class ConnectionSchema(ConnectionCollectionItemSchema):  # pylint: disable=too-many-ancestors
