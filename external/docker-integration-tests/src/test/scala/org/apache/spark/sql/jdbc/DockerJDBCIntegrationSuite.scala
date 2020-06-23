@@ -155,7 +155,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
       docker.startContainer(containerId)
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
       var conn: Connection = null
-      eventually(timeout(2.minutes), interval(1.second)) {
+      eventually(timeout(7.minutes), interval(1.second)) {
         conn = getConnection()
       }
       // Run any setup queries:

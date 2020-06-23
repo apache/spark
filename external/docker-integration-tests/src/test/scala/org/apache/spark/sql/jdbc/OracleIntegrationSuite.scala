@@ -37,10 +37,7 @@ import org.apache.spark.tags.DockerTest
  * 2. export ORACLE_DOCKER_IMAGE_NAME=$ORACLE_DOCKER_IMAGE_NAME
  *    Pull oracle $ORACLE_DOCKER_IMAGE_NAME image - docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 3. Start docker - sudo service docker start
- * 4. The timeout and interval parameter to be increased to a high value for oracle test in
- *    DockerJDBCIntegrationSuite.scala (Locally tested with 20 min timeout and 1 sec interval
- *    then executed successfully).
- * 5. Run spark test - ./build/sbt -Pdocker-integration-tests
+ * 4. Run spark test - ./build/sbt -Pdocker-integration-tests
  *    "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
  * An actual sequence of commands to run the test is as follows
