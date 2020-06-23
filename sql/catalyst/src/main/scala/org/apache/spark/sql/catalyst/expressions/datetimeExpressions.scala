@@ -1850,13 +1850,17 @@ case class MakeTimestamp(
       day: Int,
       hour: Int,
       min: Int,
-      secAndNanos: Decimal,
+      secAndMicros: Decimal,
       zoneId: ZoneId): Any = {
     try {
-      val secFloor = secAndNanos.floor
-      val nanosPerSec = Decimal(NANOS_PER_SECOND, 10, 0)
-      val nanos = ((secAndNanos - secFloor) * nanosPerSec).toInt
-      val seconds = secFloor.toInt
+      assert(secAndMicros.scale == 6,
+        s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
+      val unscaledSecFrac = secAndMicros.toUnscaledLong
+      assert(secAndMicros.precision <= 8,
+        s"Seconds and fraction cannot have more than 8 digits but got ${secAndMicros.precision}")
+      val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
+      val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
+      val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
       val ldt = if (seconds == 60) {
         if (nanos == 0) {
           // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
