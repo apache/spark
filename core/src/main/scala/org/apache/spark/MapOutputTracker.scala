@@ -733,7 +733,7 @@ private[spark] class MapOutputTrackerMaster(
         shuffleStatus.withMapStatuses { statuses =>
           val actualEndMapIndex = if (endMapIndex == Int.MaxValue) statuses.length else endMapIndex
           logDebug(s"Convert map statuses for shuffle $shuffleId, " +
-            s"partitions $startPartition-$endPartition, mappers $startMapIndex-$actualEndMapIndex")
+            s"mappers $startMapIndex-$actualEndMapIndex, partitions $startPartition-$endPartition")
           MapOutputTracker.convertMapStatuses(
             shuffleId, startPartition, endPartition, statuses, startMapIndex, actualEndMapIndex)
         }
@@ -781,7 +781,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     try {
       val actualEndMapIndex = if (endMapIndex == Int.MaxValue) statuses.length else endMapIndex
       logDebug(s"Convert map statuses for shuffle $shuffleId, " +
-        s"partitions $startPartition-$endPartition, mappers $startMapIndex-$actualEndMapIndex")
+        s"mappers $startMapIndex-$actualEndMapIndex, partitions $startPartition-$endPartition")
       MapOutputTracker.convertMapStatuses(
         shuffleId, startPartition, endPartition, statuses, startMapIndex, actualEndMapIndex)
     } catch {
