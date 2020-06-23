@@ -64,6 +64,12 @@ public abstract class BlockStoreClient implements Closeable {
     return () -> Collections.emptyMap();
   }
 
+  /**
+   * Request the local disk directories, which are specified by DiskBlockManager, for the executors
+   * from the external shuffle service (when this is a ExternalBlockStoreClient) or BlockManager
+   * (when this is a NettyBlockTransferService). Note there's only one executor when this is a
+   * NettyBlockTransferService.
+   */
   public void getHostLocalDirs(
       String host,
       int port,
