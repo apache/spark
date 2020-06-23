@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -53,7 +54,11 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
-        throw new AnalysisException(s"Table ${table.identifier.unquotedString} already exists.")
+        if (sessionState.catalog.isTemporaryTable(table.identifier)) {
+          throw new TempTableAlreadyExistsException(table.identifier)
+        } else {
+          throw new AnalysisException(s"Table ${table.identifier.unquotedString} already exists.")
+        }
       }
     }
 
@@ -116,7 +121,11 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
-    sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+    if (DDLUtils.isTemporaryTable(table)) {
+      sessionState.catalog.createTempTable(newTable, ignoreIfExists = false)
+    } else {
+      sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+    }
 
     Seq.empty[Row]
   }
@@ -170,6 +179,8 @@ case class CreateDataSourceTableAsSelectCommand(
       sparkSession.sessionState.catalog.validateTableLocation(table)
       val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
         Some(sessionState.catalog.defaultTablePath(table.identifier))
+      } else if (table.tableType == CatalogTableType.TEMPORARY) {
+        Some(sessionState.catalog.defaultTempTablePath(tableIdentWithDB))
       } else {
         table.storage.locationUri
       }
@@ -181,15 +192,19 @@ case class CreateDataSourceTableAsSelectCommand(
         // the schema of df). It is important since the nullability may be changed by the relation
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = result.schema)
-      // Table location is already validated. No need to check it again during table creation.
-      sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
+      if (DDLUtils.isTemporaryTable(table)) {
+        sessionState.catalog.createTempTable(newTable, ignoreIfExists = false)
+      } else {
+        // Table location is already validated. No need to check it again during table creation.
+        sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
 
-      result match {
-        case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
+        result match {
+          case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
             sparkSession.sqlContext.conf.manageFilesourcePartitions =>
-          // Need to recover partitions into the metastore so our saved data is visible.
-          sessionState.executePlan(AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
-        case _ =>
+            // Need to recover partitions into the metastore so our saved data is visible.
+            sessionState.executePlan(AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
+          case _ =>
+        }
       }
     }
 

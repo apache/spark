@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -2439,6 +2439,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val temporary = ctx.TEMPORARY != null
     val ifNotExists = ctx.EXISTS != null
     if (temporary && ifNotExists) {
+      // Unlike CREATE TEMPORARY VIEW USING, CREATE TEMPORARY TABLE does not support
+      // IF NOT EXISTS. Users are not allowed to replace the existing temp table.
       operationNotAllowed("CREATE TEMPORARY TABLE ... IF NOT EXISTS", ctx)
     }
     val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText)
@@ -2708,6 +2710,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         throw new ParseException(s"$PROP_OWNER is a reserved table property, it will be" +
           s" set to the current user", ctx)
       case (PROP_OWNER, _) => false
+      case (PROP_TYPE, _) if !legacyOn =>
+        throw new ParseException(s"$PROP_TYPE is a reserved table property, please use" +
+          s" CREATE [TEMPORARY] TABLE clause to specify it.", ctx)
+      case (PROP_TYPE, _) => false
       case _ => true
     }
   }
@@ -2779,13 +2785,27 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     val schema = Option(ctx.colTypeList()).map(createSchema)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
+    if (temp && provider.isEmpty) {
+      throw new ParseException("CREATE TEMPORARY TABLE without a provider is not allowed.", ctx)
+    }
     val (partitioning, bucketSpec, properties, options, location, comment) =
       visitCreateTableClauses(ctx.createTableClauses())
 
-    Option(ctx.query).map(plan) match {
-      case Some(_) if temp =>
-        operationNotAllowed("CREATE TEMPORARY TABLE ... USING ... AS query", ctx)
+    if (partitioning.nonEmpty && temp) {
+      operationNotAllowed("PARTITIONED BY in temporary table", ctx)
+    }
+    if (location.nonEmpty && temp) {
+      operationNotAllowed("specify LOCATION in temporary table", ctx)
+    }
 
+    val withTempProps =
+      if (temp) {
+        Map(TableCatalog.PROP_TYPE -> CatalogUtils.TEMPORARY_TABLE)
+      } else {
+        Map(TableCatalog.PROP_TYPE -> CatalogUtils.METASTORE_TABLE)
+      } ++ properties
+
+    Option(ctx.query).map(plan) match {
       case Some(_) if schema.isDefined =>
         operationNotAllowed(
           "Schema may not be specified in a Create Table As Select (CTAS) statement",
@@ -2793,17 +2813,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
       case Some(query) =>
         CreateTableAsSelectStatement(
-          table, query, partitioning, bucketSpec, properties, provider, options, location, comment,
-          writeOptions = Map.empty, ifNotExists = ifNotExists)
-
-      case None if temp =>
-        // CREATE TEMPORARY TABLE ... USING ... is not supported by the catalyst parser.
-        // Use CREATE TEMPORARY VIEW ... USING ... instead.
-        operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
+          table, query, partitioning, bucketSpec, withTempProps, provider, options, location,
+          comment, writeOptions = Map.empty, ifNotExists = ifNotExists)
 
       case _ =>
         CreateTableStatement(table, schema.getOrElse(new StructType), partitioning, bucketSpec,
-          properties, provider, options, location, comment, ifNotExists = ifNotExists)
+          withTempProps, provider, options, location, comment, ifNotExists = ifNotExists)
     }
   }
 

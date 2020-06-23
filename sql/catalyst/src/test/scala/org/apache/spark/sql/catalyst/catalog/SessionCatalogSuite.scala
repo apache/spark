@@ -741,7 +741,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("list tables with pattern and includeLocalTempViews") {
+  test("list tables with pattern and includeTempViewsAndTables") {
     withEmptyCatalog { catalog =>
       catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
       catalog.createTable(newTable("tbl1", "mydb"), ignoreIfExists = false)

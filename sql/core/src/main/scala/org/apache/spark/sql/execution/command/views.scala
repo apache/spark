@@ -323,7 +323,7 @@ case class ShowViewsCommand(
     views.map { tableIdent =>
       val namespace = tableIdent.database.toArray.quoted
       val tableName = tableIdent.table
-      val isTemp = catalog.isTemporaryTable(tableIdent)
+      val isTemp = catalog.isTemporaryView(tableIdent)
 
       Row(namespace, tableName, isTemp)
     }

@@ -874,6 +874,19 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(rs.getString(1) === expected.toString)
     }
   }
+
+  test("temporary table is session-bound") {
+    withMultipleConnectionJdbcStatement()({
+      statement =>
+        statement.execute("CREATE TEMPORARY TABLE default.tempTbl1 USING PARQUET AS SELECT 1")
+    }, {
+      statement =>
+        val e = intercept[SQLException] {
+          statement.execute("Table or view not found: default.tempTbl1")
+        }
+        assert(e.getMessage.contains(":"))
+    })
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {

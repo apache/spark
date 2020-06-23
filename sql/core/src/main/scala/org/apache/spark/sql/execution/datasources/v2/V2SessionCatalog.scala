@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, Catal
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -88,7 +89,15 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
-    val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
+    val tableType =
+      if (properties.getOrDefault(TableCatalog.PROP_TYPE,
+          CatalogUtils.METASTORE_TABLE).equals(CatalogUtils.TEMPORARY_TABLE)) {
+        CatalogTableType.TEMPORARY
+      } else if (location.isDefined) {
+        CatalogTableType.EXTERNAL
+      } else {
+        CatalogTableType.MANAGED
+      }
 
     val tableDesc = CatalogTable(
       identifier = ident.asTableIdentifier,
@@ -103,7 +112,11 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       comment = Option(properties.get(TableCatalog.PROP_COMMENT)))
 
     try {
-      catalog.createTable(tableDesc, ignoreIfExists = false)
+      if (DDLUtils.isTemporaryTable(tableDesc)) {
+        catalog.createTempTable(tableDesc, ignoreIfExists = false)
+      } else {
+        catalog.createTable(tableDesc, ignoreIfExists = false)
+      }
     } catch {
       case _: TableAlreadyExistsException =>
         throw new TableAlreadyExistsException(ident)

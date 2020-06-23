@@ -19,6 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.util.Locale
 
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.Utils
 
 
@@ -226,4 +227,22 @@ object StaticSQLConf {
       .version("3.0.0")
       .intConf
       .createWithDefault(100)
+
+  val SPARK_SCRATCH_DIR =
+    buildStaticConf("spark.scratchdir")
+      .doc("Scratch space for Spark temporary table and so on. Similar with hive.exec.scratchdir")
+      .stringConf
+      .createWithDefault("/tmp/spark")
+
+  val TEMPORARY_TABLE_MAX_SIZE_PER_SESSION =
+    buildStaticConf("spark.sql.temporary.table.max.size.per.session")
+      .doc("Maximum total size for temporary tables per session.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(Long.MaxValue)
+
+  val TEMPORARY_TABLE_MAX_NUM_PER_SESSION =
+    buildStaticConf("spark.sql.temporary.table.max.number.per.session")
+      .doc("Maximum total size for temporary tables per session.")
+      .intConf
+      .createWithDefault(10000)
 }

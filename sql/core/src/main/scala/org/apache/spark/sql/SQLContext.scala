@@ -235,6 +235,14 @@ class SQLContext private[sql](val sparkSession: SparkSession)
     sparkSession.catalog.clearCache()
   }
 
+  /**
+   * Removes all temporary tables in this session.
+   * @since 3.1.0
+   */
+  def clearTempTables(): Unit = {
+    sparkSession.sessionState.catalog.clearTempTables()
+  }
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**

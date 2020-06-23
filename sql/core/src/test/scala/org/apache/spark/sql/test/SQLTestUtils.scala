@@ -320,6 +320,24 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
+   * Drops temporary table `tableNames` after calling `f`.
+   */
+  protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      // If the test failed part way, we don't want to mask the failure by failing to remove
+      // temp tables that never got created.
+      tableNames.foreach { name =>
+        try {
+          spark.catalog.dropTempTable(name)
+        } catch {
+          case _: NoSuchTableException => // db.name or `db`.`name` format
+            spark.sql(s"DROP TABLE IF EXISTS $name")
+        }
+      }
+    }
+  }
+
+  /**
    * Drops cache `cacheName` after calling `f`.
    */
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
@@ -335,7 +353,7 @@ private[sql] trait SQLTestUtilsBase
   // Blocking uncache table for tests
   protected def uncacheTable(tableName: String): Unit = {
     val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !spark.sessionState.catalog.isTemporaryTable(tableIdent)
+    val cascade = !spark.sessionState.catalog.isTemporaryView(tableIdent)
     spark.sharedState.cacheManager.uncacheQuery(
       spark,
       spark.table(tableName).logicalPlan,

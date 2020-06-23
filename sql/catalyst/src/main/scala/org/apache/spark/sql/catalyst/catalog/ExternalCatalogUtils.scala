@@ -26,6 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 
 object ExternalCatalogUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since catalyst doesn't
@@ -230,5 +231,13 @@ object CatalogUtils {
       throw new AnalysisException(s"$colType column $colName is not defined in table $tableName, " +
         s"defined table columns are: ${tableCols.mkString(", ")}")
     }
+  }
+
+  val TEMPORARY_TABLE = "temporary"
+  val METASTORE_TABLE = "metastore"
+
+  def isTemporaryTable(table: CatalogTable): Boolean = {
+    table.tableType == CatalogTableType.TEMPORARY ||
+      table.properties.get(TableCatalog.PROP_TYPE).contains(TEMPORARY_TABLE)
   }
 }

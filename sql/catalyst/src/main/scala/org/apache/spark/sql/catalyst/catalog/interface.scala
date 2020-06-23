@@ -608,8 +608,9 @@ object CatalogTableType {
   val EXTERNAL = new CatalogTableType("EXTERNAL")
   val MANAGED = new CatalogTableType("MANAGED")
   val VIEW = new CatalogTableType("VIEW")
+  val TEMPORARY = new CatalogTableType("TEMPORARY")
 
-  val tableTypes = Seq(EXTERNAL, MANAGED, VIEW)
+  val tableTypes = Seq(EXTERNAL, MANAGED, VIEW, TEMPORARY)
 }
 
 

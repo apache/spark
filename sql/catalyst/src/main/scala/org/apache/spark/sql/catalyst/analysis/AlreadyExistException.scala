@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -45,8 +46,15 @@ class TableAlreadyExistsException(message: String) extends AnalysisException(mes
   }
 }
 
-class TempTableAlreadyExistsException(table: String)
+class TempViewAlreadyExistsException(table: String)
   extends TableAlreadyExistsException(s"Temporary view '$table' already exists")
+
+class TempTableAlreadyExistsException(table: TableIdentifier)
+  extends TableAlreadyExistsException(s"Temporary table '${table.unquotedString}' already exists")
+
+class TempTablePartitionUnsupportedException(table: TableIdentifier)
+  extends AnalysisException(
+    s"Partition is unsupported in temporary table '$table'")
 
 class PartitionAlreadyExistsException(db: String, table: String, spec: TablePartitionSpec)
   extends AnalysisException(

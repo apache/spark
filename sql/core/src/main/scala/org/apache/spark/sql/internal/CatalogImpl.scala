@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
@@ -114,7 +115,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     } catch {
       case NonFatal(_) => None
     }
-    val isTemp = sessionCatalog.isTemporaryTable(tableIdent)
+    val isTemp = sessionCatalog.isTemporaryView(tableIdent)
     new Table(
       name = tableIdent.table,
       database = metadata.map(_.identifier.database).getOrElse(tableIdent.database).orNull,
@@ -256,7 +257,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def tableExists(dbName: String, tableName: String): Boolean = {
     val tableIdent = TableIdentifier(tableName, Option(dbName))
-    sessionCatalog.isTemporaryTable(tableIdent) || sessionCatalog.tableExists(tableIdent)
+    sessionCatalog.isTemporaryView(tableIdent) || sessionCatalog.tableExists(tableIdent)
   }
 
   /**
@@ -378,6 +379,26 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Drops the temporary table with the given table name in the catalog.
+   * If the table has been cached/persisted before, it's also unpersisted.
+   *
+   * @param tableName the identifier of the temporary table to be dropped.
+   * @group ddl_ops
+   * @since 3.1.0
+   */
+  override def dropTempTable(tableName: String): Boolean = {
+    sparkSession.sessionState.catalog.getTempTable(tableName).foreach { table =>
+      table.viewText.map(CatalystSqlParser.parsePlan).foreach { plan =>
+        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, plan, true)
+      }
+    }
+    val nameParts = tableName.split("\\.").toSeq
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    val table = nameParts.asTableIdentifier
+    sessionCatalog.dropTempTable(table)
+  }
+
+  /**
    * Recovers all the partitions in the directory of a table and update the catalog.
    * Only works with a partitioned table, and not a temporary view.
    *
@@ -432,7 +453,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def uncacheTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !sessionCatalog.isTemporaryTable(tableIdent)
+    val cascade = !sessionCatalog.isTemporaryView(tableIdent)
     sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName), cascade)
   }
 

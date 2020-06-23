@@ -218,7 +218,7 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val isTempView = catalog.isTemporaryTable(tableName)
+    val isTempView = catalog.isTemporaryView(tableName)
 
     if (!isTempView && catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
@@ -851,6 +851,10 @@ object DDLUtils {
     table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) != HIVE_PROVIDER
   }
 
+  def isTemporaryTable(table: CatalogTable): Boolean = {
+    table.tableType == CatalogTableType.TEMPORARY
+  }
+
   def readHiveTable(table: CatalogTable): HiveTableRelation = {
     HiveTableRelation(
       table,
@@ -891,7 +895,7 @@ object DDLUtils {
       catalog: SessionCatalog,
       tableMetadata: CatalogTable,
       isView: Boolean): Unit = {
-    if (!catalog.isTemporaryTable(tableMetadata.identifier)) {
+    if (!catalog.isTemporaryView(tableMetadata.identifier)) {
       tableMetadata.tableType match {
         case CatalogTableType.VIEW if !isView =>
           throw new AnalysisException(

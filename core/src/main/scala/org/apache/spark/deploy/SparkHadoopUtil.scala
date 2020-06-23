@@ -390,6 +390,14 @@ private[spark] class SparkHadoopUtil extends Logging {
     ugi.getAuthenticationMethod() == UserGroupInformation.AuthenticationMethod.PROXY
   }
 
+  def deletePath(path: Path): Boolean = {
+    val fs = path.getFileSystem(conf)
+    if (fs.exists(path)) {
+      fs.delete(path, true)
+    } else {
+      true
+    }
+  }
 }
 
 private[spark] object SparkHadoopUtil {

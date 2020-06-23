@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
-import java.util.Locale
+import java.util.{Locale, UUID}
 import java.util.concurrent.Callable
 import javax.annotation.concurrent.GuardedBy
 
@@ -26,9 +26,12 @@ import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import com.google.common.cache.{Cache, CacheBuilder}
+import org.apache.commons.lang3.{StringUtils => LangStringUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.security.UserGroupInformation
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
@@ -95,6 +98,13 @@ class SessionCatalog(
   /** List of temporary views, mapping from table name to their logical plan. */
   @GuardedBy("this")
   protected val tempViews = new mutable.HashMap[String, LogicalPlan]
+
+  /** List of temporary table, mapping from table name to their logical plan. */
+  @GuardedBy("this")
+  protected val tempTables = new mutable.HashMap[TableIdentifier, CatalogTable]
+
+  @GuardedBy("this")
+  private val tempTableSessionId = s"temp-${UUID.randomUUID().toString}"
 
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
@@ -341,36 +351,6 @@ class SessionCatalog(
   }
 
   /**
-   * Alter the metadata of an existing metastore table identified by `tableDefinition`.
-   *
-   * If no database is specified in `tableDefinition`, assume the table is in the
-   * current database.
-   *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
-   */
-  def alterTable(tableDefinition: CatalogTable): Unit = {
-    val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
-    val table = formatTableName(tableDefinition.identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db))
-    requireDbExists(db)
-    requireTableExists(tableIdentifier)
-    val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
-      && !tableDefinition.storage.locationUri.get.isAbsolute) {
-      // make the location of the table qualified.
-      val qualifiedTableLocation =
-        makeQualifiedPath(tableDefinition.storage.locationUri.get)
-      tableDefinition.copy(
-        storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
-        identifier = tableIdentifier)
-    } else {
-      tableDefinition.copy(identifier = tableIdentifier)
-    }
-
-    externalCatalog.alterTable(newTableDefinition)
-  }
-
-  /**
    * Alter the data schema of a table identified by the provided table identifier. The new data
    * schema should not have conflict column names with the existing partition columns, and should
    * still contain all the existing data columns.
@@ -405,45 +385,6 @@ class SessionCatalog(
 
   private def columnNameResolved(schema: StructType, colName: String): Boolean = {
     schema.fields.map(_.name).exists(conf.resolver(_, colName))
-  }
-
-  /**
-   * Alter Spark's statistics of an existing metastore table identified by the provided table
-   * identifier.
-   */
-  def alterTableStats(identifier: TableIdentifier, newStats: Option[CatalogStatistics]): Unit = {
-    val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
-    val table = formatTableName(identifier.table)
-    val tableIdentifier = TableIdentifier(table, Some(db))
-    requireDbExists(db)
-    requireTableExists(tableIdentifier)
-    externalCatalog.alterTableStats(db, table, newStats)
-    // Invalidate the table relation cache
-    refreshTable(identifier)
-  }
-
-  /**
-   * Return whether a table/view with the specified name exists. If no database is specified, check
-   * with current database.
-   */
-  def tableExists(name: TableIdentifier): Boolean = synchronized {
-    val db = formatDatabaseName(name.database.getOrElse(currentDb))
-    val table = formatTableName(name.table)
-    externalCatalog.tableExists(db, table)
-  }
-
-  /**
-   * Retrieve the metadata of an existing permanent table/view. If no database is specified,
-   * assume the table/view is in the current database.
-   */
-  @throws[NoSuchDatabaseException]
-  @throws[NoSuchTableException]
-  def getTableMetadata(name: TableIdentifier): CatalogTable = {
-    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
-    val table = formatTableName(name.table)
-    requireDbExists(db)
-    requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.getTable(db, table)
   }
 
   /**
@@ -531,8 +472,12 @@ class SessionCatalog(
       tableDefinition: LogicalPlan,
       overrideIfExists: Boolean): Unit = synchronized {
     val table = formatTableName(name)
+    val tableIdentifier = TableIdentifier(table, Some(currentDb))
+    if (tempTables.contains(tableIdentifier)) {
+      throw new TempTableAlreadyExistsException(tableIdentifier)
+    }
     if (tempViews.contains(table) && !overrideIfExists) {
-      throw new TempTableAlreadyExistsException(name)
+      throw new TempViewAlreadyExistsException(name)
     }
     tempViews.put(table, tableDefinition)
   }
@@ -605,6 +550,228 @@ class SessionCatalog(
     globalTempViewManager.remove(formatTableName(name))
   }
 
+  // ----------------------------------------------
+  // | Methods that interact with temp tables only |
+  // ----------------------------------------------
+
+  def getScratchPath: Path = {
+    new Path(makeQualifiedPath(CatalogUtils.stringToURI(conf.sparkScratchDir)))
+  }
+
+  def defaultTempTableParentPath: Path = {
+    val user = Option(UserGroupInformation.getCurrentUser.getUserName).getOrElse("")
+    val scratchWithUserPath =
+      if (LangStringUtils.isBlank(user)) getScratchPath else new Path(getScratchPath, user)
+    new Path(scratchWithUserPath, tempTableSessionId)
+  }
+
+  def defaultSessionAwareTablePath(parentDir: Path, tableIdent: TableIdentifier): URI = {
+    new Path(parentDir, formatTableName(tableIdent.unquotedString)).toUri
+  }
+
+  def defaultTempTablePath(tableIdent: TableIdentifier): URI = {
+    defaultSessionAwareTablePath(defaultTempTableParentPath, tableIdent)
+  }
+
+  /**
+   * Create a temporary table.
+   */
+  def createTempTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = synchronized {
+    val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(tableDefinition.identifier.table)
+    val tableIdentifier = TableIdentifier(table, Some(db))
+    validateName(table)
+
+    requireDbExists(db)
+    if (tempViews.contains(table)) {
+      throw new TempViewAlreadyExistsException(table)
+    }
+    if (tempTables.contains(tableIdentifier) && !ignoreIfExists) {
+      throw new TempTableAlreadyExistsException(tableIdentifier)
+    }
+    if (tempTables.size >= conf.maxNumberForTemporaryTablesPerSession) {
+      val ex = new AnalysisException("The total number of temporary tables in this session " +
+        s"has reached the number limitation ${conf.maxNumberForTemporaryTablesPerSession}. " +
+        s"Please use 'DROP TABLE' command to drop old temporary tables to release space.")
+      throw ex
+    }
+
+    val tempTableUri = defaultTempTablePath(tableIdentifier)
+    val tempTablePath = new Path(tempTableUri)
+    val fs = tempTablePath.getFileSystem(hadoopConf)
+    fs.mkdirs(tempTablePath)
+
+    val sessionDir = defaultTempTableParentPath
+    val summary = fs.getContentSummary(sessionDir)
+    val totalUsagePerSession = summary.getLength
+    if (totalUsagePerSession > conf.maxSizeForTemporaryTablesPerSession) {
+      val ex = new AnalysisException("The total size of temporary tables in this session " +
+        s"has reached the size limitation ${conf.maxSizeForTemporaryTablesPerSession} bytes. " +
+        s"Current used size is $totalUsagePerSession bytes. Please use 'DROP TABLE' command " +
+        s"to drop old temporary tables to release space.")
+      fs.delete(tempTablePath, true)
+      throw ex
+    }
+
+    logInfo(s"Temporary table ${tableIdentifier.identifier} stored to ${tempTableUri}")
+    tempTables.put(tableIdentifier, tableDefinition.copy(
+      identifier = tableIdentifier,
+      // replace to temporary table default uri
+      storage = tableDefinition.storage.copy(locationUri = Option(tempTableUri))))
+  }
+
+  /**
+   * Drop a temporary table in current database.
+   *
+   * Returns true if this view is dropped successfully, false otherwise.
+   */
+  def dropTempTable(toDrop: TableIdentifier): Boolean = synchronized {
+    val db = formatDatabaseName(toDrop.database.getOrElse(currentDb))
+    val name = formatTableName(toDrop.table)
+    val table = TableIdentifier(name, Some(db))
+    SparkHadoopUtil.get.deletePath(new Path(defaultTempTableParentPath, table.unquotedString))
+
+    tempTables.remove(table).isDefined
+  }
+
+  /**
+   * Drop all existing temporary views.
+   * For testing only.
+   */
+  def clearTempTables(): Unit = synchronized {
+    SparkHadoopUtil.get.deletePath(defaultTempTableParentPath)
+    tempTables.clear()
+  }
+
+  // TODO: merge it with `isTemporaryTable`.
+  def isTempTable(nameParts: Seq[String]): Boolean = {
+    if (nameParts.length > 2) return false
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    isTemporaryTable(nameParts.asTableIdentifier)
+  }
+
+  /**
+   * Return whether a table with the specified name is a temporary table.
+   */
+  def isTemporaryTable(name: TableIdentifier): Boolean = synchronized {
+    val db = formatDatabaseName(name.database.getOrElse(currentDb))
+    val table = formatTableName(name.table)
+    val qualified = TableIdentifier(table, Option(db))
+    tempTables.contains(qualified)
+  }
+
+  def listTempTables(db: String): Seq[TableIdentifier] = listTempTables(db, "*")
+
+  /**
+   * List all temporary tables in the specified database.
+   */
+  def listTempTables(db: String, pattern: String): Seq[TableIdentifier] = {
+    val dbName = formatDatabaseName(db)
+    synchronized {
+      StringUtils.filterPattern(
+        tempTables.keySet.filter(_.database.contains(dbName)).map(_.table).toSeq, pattern)
+          .map { name => TableIdentifier(name, Some(dbName)) }
+    }
+  }
+
+  /**
+   * Return a temporary table exactly in current database.
+   *
+   * For testing only.
+   */
+  private[spark] def getTempTable(tableName: String): Option[CatalogTable] = synchronized {
+    val nameParts = tableName.split("\\.").toSeq
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    val table = nameParts.asTableIdentifier
+    try {
+      Option(getTableMetadata(table))
+    } catch {
+      case _: AnalysisException =>
+        None
+    }
+  }
+
+  // -------------------------------------------------------------------
+  // | Methods that interact with temporary tables and metastore tables |
+  // -------------------------------------------------------------------
+
+  /**
+   * Alter the metadata of an existing metastore table identified by `tableDefinition`.
+   *
+   * If no database is specified in `tableDefinition`, assume the table is in the
+   * current database.
+   *
+   * Note: If the underlying implementation does not support altering a certain field,
+   * this becomes a no-op.
+   */
+  def alterTable(tableDefinition: CatalogTable): Unit = {
+    val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(tableDefinition.identifier.table)
+    val tableIdentifier = TableIdentifier(table, Some(db))
+    requireDbExists(db)
+    requireTableExists(tableIdentifier)
+    val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
+      && !tableDefinition.storage.locationUri.get.isAbsolute) {
+      // make the location of the table qualified.
+      val qualifiedTableLocation =
+        makeQualifiedPath(tableDefinition.storage.locationUri.get)
+      tableDefinition.copy(
+        storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
+        identifier = tableIdentifier)
+    } else {
+      tableDefinition.copy(identifier = tableIdentifier)
+    }
+    if (CatalogUtils.isTemporaryTable(tableDefinition)) {
+      tempTables.put(tableIdentifier, newTableDefinition)
+    } else {
+      externalCatalog.alterTable(newTableDefinition)
+    }
+  }
+
+  /**
+   * Alter Spark's statistics of an existing metastore table identified by the provided table
+   * identifier.
+   */
+  def alterTableStats(identifier: TableIdentifier, newStats: Option[CatalogStatistics]): Unit = {
+    val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(identifier.table)
+    val tableIdentifier = TableIdentifier(table, Some(db))
+    requireDbExists(db)
+    requireTableExists(tableIdentifier)
+    tempTables.get(tableIdentifier) match {
+      case Some(oldTable) =>
+        tempTables(tableIdentifier) = oldTable.copy(stats = newStats)
+      case None =>
+        externalCatalog.alterTableStats(db, table, newStats)
+    }
+    // Invalidate the table relation cache
+    refreshTable(identifier)
+  }
+
+  /**
+   * Return whether a table/view with the specified name exists. If no database is specified, check
+   * with current database.
+   */
+  def tableExists(name: TableIdentifier): Boolean = synchronized {
+    val db = formatDatabaseName(name.database.getOrElse(currentDb))
+    val table = formatTableName(name.table)
+    tempTables.contains(TableIdentifier(table, Some(db))) || externalCatalog.tableExists(db, table)
+  }
+
+  /**
+   * Retrieve the metadata of an existing permanent table/view. If no database is specified,
+   * assume the table/view is in the current database.
+   */
+  @throws[NoSuchDatabaseException]
+  @throws[NoSuchTableException]
+  def getTableMetadata(name: TableIdentifier): CatalogTable = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(name.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Some(db)))
+    tempTables.getOrElse(TableIdentifier(table, Some(db)), externalCatalog.getTable(db, table))
+  }
+
   // -------------------------------------------------------------
   // | Methods that interact with temporary and metastore tables |
   // -------------------------------------------------------------
@@ -665,7 +832,14 @@ class SessionCatalog(
       globalTempViewManager.rename(oldTableName, newTableName)
     } else {
       requireDbExists(db)
-      if (oldName.database.isDefined || !tempViews.contains(oldTableName)) {
+      if (tempTables.contains(oldName)) {
+        requireTableExists(TableIdentifier(oldTableName, Some(db)))
+        requireTableNotExists(TableIdentifier(newTableName, Some(db)))
+        validateName(newTableName)
+        val table = tempTables(oldName)
+        tempTables.remove(oldName)
+        tempTables.put(TableIdentifier(newTableName, Some(db)), table)
+      } else if (oldName.database.isDefined || !tempViews.contains(oldTableName)) {
         requireTableExists(TableIdentifier(oldTableName, Some(db)))
         requireTableNotExists(TableIdentifier(newTableName, Some(db)))
         validateName(newTableName)
@@ -712,6 +886,7 @@ class SessionCatalog(
         // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
         // Instead, log it as an error message.
         if (tableExists(TableIdentifier(table, Option(db)))) {
+          dropTempTable(TableIdentifier(table, Option(db)))
           externalCatalog.dropTable(db, table, ignoreIfNotExists = true, purge = purge)
         } else if (!ignoreIfNotExists) {
           throw new NoSuchTableException(db = db, table = table)
@@ -747,7 +922,8 @@ class SessionCatalog(
           SubqueryAlias(table, db, viewDef)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
-        val metadata = externalCatalog.getTable(db, table)
+        val metadata = tempTables.getOrElse(TableIdentifier(table, Option(db)),
+          externalCatalog.getTable(db, table))
         getRelation(metadata)
       } else {
         SubqueryAlias(table, tempViews(table))
@@ -796,11 +972,11 @@ class SessionCatalog(
     }
   }
 
-  // TODO: merge it with `isTemporaryTable`.
+  // TODO: merge it with `isTemporaryView`.
   def isTempView(nameParts: Seq[String]): Boolean = {
     if (nameParts.length > 2) return false
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    isTemporaryTable(nameParts.asTableIdentifier)
+    isTemporaryView(nameParts.asTableIdentifier)
   }
 
   /**
@@ -809,7 +985,7 @@ class SessionCatalog(
    * Note: The temporary view cache is checked only when database is not
    * explicitly specified.
    */
-  def isTemporaryTable(name: TableIdentifier): Boolean = synchronized {
+  def isTemporaryView(name: TableIdentifier): Boolean = synchronized {
     val table = formatTableName(name.table)
     if (name.database.isEmpty) {
       tempViews.contains(table)
@@ -835,7 +1011,8 @@ class SessionCatalog(
   }
 
   /**
-   * List all tables in the specified database, including local temporary views.
+   * List all tables in the specified database, including local temporary views
+   * and temporary tables.
    *
    * Note that, if the specified database is global temporary view database, we will list global
    * temporary views.
@@ -843,16 +1020,18 @@ class SessionCatalog(
   def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
 
   /**
-   * List all matching tables in the specified database, including local temporary views.
+   * List all matching tables in the specified database, including local temporary views
+   * and temporary tables.
    *
    * Note that, if the specified database is global temporary view database, we will list global
    * temporary views.
    */
-  def listTables(db: String, pattern: String): Seq[TableIdentifier] = listTables(db, pattern, true)
+  def listTables(db: String, pattern: String): Seq[TableIdentifier] =
+    listTables(db, pattern, true)
 
   /**
-   * List all matching tables in the specified database, including local temporary views
-   * if includeLocalTempViews is enabled.
+   * List all matching tables in the specified database, including temporary views
+   * and temporary tables if includeTempViewsAndTables is enabled.
    *
    * Note that, if the specified database is global temporary view database, we will list global
    * temporary views.
@@ -860,7 +1039,7 @@ class SessionCatalog(
   def listTables(
       db: String,
       pattern: String,
-      includeLocalTempViews: Boolean): Seq[TableIdentifier] = {
+      includeTempViewsAndTables: Boolean): Seq[TableIdentifier] = {
     val dbName = formatDatabaseName(db)
     val dbTables = if (dbName == globalTempViewManager.database) {
       globalTempViewManager.listViewNames(pattern).map { name =>
@@ -873,8 +1052,8 @@ class SessionCatalog(
       }
     }
 
-    if (includeLocalTempViews) {
-      dbTables ++ listLocalTempViews(pattern)
+    if (includeTempViewsAndTables) {
+      dbTables ++ listLocalTempViews(pattern) ++ listTempTables(db, pattern)
     } else {
       dbTables
     }
@@ -935,7 +1114,7 @@ class SessionCatalog(
    * Drop all existing temporary views.
    * For testing only.
    */
-  def clearTempTables(): Unit = synchronized {
+  def clearTempViews(): Unit = synchronized {
     tempViews.clear()
   }
 
@@ -961,8 +1140,10 @@ class SessionCatalog(
       ignoreIfExists: Boolean): Unit = {
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
+    val tableIdentifier = TableIdentifier(table, Option(db))
     requireDbExists(db)
-    requireTableExists(TableIdentifier(table, Option(db)))
+    requireTableExists(tableIdentifier)
+    requirePartitionSupported(tableIdentifier)
     requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     requireNonEmptyValueInPartitionSpec(parts.map(_.spec))
     externalCatalog.createPartitions(
@@ -981,8 +1162,10 @@ class SessionCatalog(
       retainData: Boolean): Unit = {
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
+    val tableIdentifier = TableIdentifier(table, Option(db))
     requireDbExists(db)
-    requireTableExists(TableIdentifier(table, Option(db)))
+    requireTableExists(tableIdentifier)
+    requirePartitionSupported(tableIdentifier)
     requirePartialMatchedPartitionSpec(specs, getTableMetadata(tableName))
     requireNonEmptyValueInPartitionSpec(specs)
     externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists, purge, retainData)
@@ -1001,8 +1184,10 @@ class SessionCatalog(
     val tableMetadata = getTableMetadata(tableName)
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
+    val tableIdentifier = TableIdentifier(table, Option(db))
     requireDbExists(db)
-    requireTableExists(TableIdentifier(table, Option(db)))
+    requireTableExists(tableIdentifier)
+    requirePartitionSupported(tableIdentifier)
     requireExactMatchedPartitionSpec(specs, tableMetadata)
     requireExactMatchedPartitionSpec(newSpecs, tableMetadata)
     requireNonEmptyValueInPartitionSpec(specs)
@@ -1022,8 +1207,10 @@ class SessionCatalog(
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
+    val tableIdentifier = TableIdentifier(table, Option(db))
     requireDbExists(db)
-    requireTableExists(TableIdentifier(table, Option(db)))
+    requireTableExists(tableIdentifier)
+    requirePartitionSupported(tableIdentifier)
     requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     requireNonEmptyValueInPartitionSpec(parts.map(_.spec))
     externalCatalog.alterPartitions(db, table, partitionWithQualifiedPath(tableName, parts))
@@ -1145,6 +1332,12 @@ class SessionCatalog(
             s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
             s"in table '${table.identifier}'")
       }
+    }
+  }
+
+  private def requirePartitionSupported(table: TableIdentifier): Unit = {
+    if (isTemporaryTable(table)) {
+      throw new TempTablePartitionUnsupportedException(table)
     }
   }
 
@@ -1534,6 +1727,7 @@ class SessionCatalog(
       }
     }
     clearTempTables()
+    clearTempViews()
     globalTempViewManager.clear()
     functionRegistry.clear()
     tableRelationCache.invalidateAll()
@@ -1559,6 +1753,8 @@ class SessionCatalog(
     target.currentDb = currentDb
     // copy over temporary views
     tempViews.foreach(kv => target.tempViews.put(kv._1, kv._2))
+    // copy over temporary tables
+    tempTables.foreach(kv => target.tempTables.put(kv._1, kv._2))
   }
 
   /**

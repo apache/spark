@@ -187,7 +187,7 @@ case class AlterTableRenameCommand(
     val catalog = sparkSession.sessionState.catalog
     // If this is a temp view, just rename the view.
     // Otherwise, if this is a real table, we also need to uncache and invalidate the table.
-    if (catalog.isTemporaryTable(oldName)) {
+    if (catalog.isTemporaryView(oldName)) {
       catalog.renameTable(oldName, newName)
     } else {
       val table = catalog.getTableMetadata(oldName)
@@ -630,7 +630,7 @@ case class DescribeTableCommand(
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
 
-    if (catalog.isTemporaryTable(table)) {
+    if (catalog.isTemporaryView(table)) {
       if (partitionSpec.nonEmpty) {
         throw new AnalysisException(
           s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
@@ -871,7 +871,7 @@ case class ShowTablesCommand(
       tables.map { tableIdent =>
         val database = tableIdent.database.getOrElse("")
         val tableName = tableIdent.table
-        val isTemp = catalog.isTemporaryTable(tableIdent)
+        val isTemp = catalog.isTemporaryView(tableIdent) || catalog.isTemporaryTable(tableIdent)
         if (isExtended) {
           val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).simpleString
           Row(database, tableName, isTemp, s"$information\n")
@@ -889,7 +889,7 @@ case class ShowTablesCommand(
       val partition = catalog.getPartition(tableIdent, partitionSpec.get)
       val database = table.database.getOrElse("")
       val tableName = table.table
-      val isTemp = catalog.isTemporaryTable(table)
+      val isTemp = catalog.isTemporaryView(table)
       val information = partition.simpleString
       Seq(Row(database, tableName, isTemp, s"$information\n"))
     }
@@ -919,7 +919,7 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (catalog.isTemporaryTable(table)) {
+    if (catalog.isTemporaryView(table)) {
       Seq.empty[Row]
     } else {
       val catalogTable = catalog.getTableMetadata(table)
@@ -1118,7 +1118,7 @@ case class ShowCreateTableCommand(table: TableIdentifier)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (catalog.isTemporaryTable(table)) {
+    if (catalog.isTemporaryView(table)) {
       throw new AnalysisException(
         s"SHOW CREATE TABLE is not supported on a temporary view: ${table.identifier}")
     } else {

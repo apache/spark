@@ -427,6 +427,20 @@ abstract class Catalog {
   def dropGlobalTempView(viewName: String): Boolean
 
   /**
+   * Drops the temporary table with the given table name in the catalog.
+   * If the table has been cached before, then it will also be uncached.
+   *
+   * Temporary table is session-scoped. Its lifetime is the lifetime of the session that
+   * created it, i.e. it will be automatically dropped when the session terminates. It's not
+   * tied to any databases, i.e. we can't use `db1.table1` to reference a temporary table.
+   *
+   * @param tableName the name of the temporary table to be dropped.
+   * @return true if the table is dropped successfully, false otherwise.
+   * @since 3.1.0
+   */
+  def dropTempTable(tableName: String): Boolean
+
+  /**
    * Recovers all the partitions in the directory of a table and update the catalog.
    * Only works with a partitioned table, and not a view.
    *

@@ -87,7 +87,7 @@ private[hive] class SparkGetColumnsOperation(
     }
 
     val db2Tabs = catalog.listDatabases(schemaPattern).map { dbName =>
-      (dbName, catalog.listTables(dbName, tablePattern, includeLocalTempViews = false))
+      (dbName, catalog.listTables(dbName, tablePattern, includeTempViewsAndTables = false))
     }.toMap
 
     if (isAuthV2Enabled) {

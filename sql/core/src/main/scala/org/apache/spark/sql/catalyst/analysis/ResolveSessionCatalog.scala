@@ -663,14 +663,22 @@ class ResolveSessionCatalog(
       comment: Option[String],
       ifNotExists: Boolean): CatalogTable = {
     val storage = CatalogStorageFormat.empty.copy(
-      locationUri = location.map(CatalogUtils.stringToURI),
+      locationUri =
+        if (properties.get(TableCatalog.PROP_TYPE).contains(CatalogUtils.TEMPORARY_TABLE)) {
+          Some(catalogManager.v1SessionCatalog.defaultTempTablePath(table))
+        } else {
+          location.map(CatalogUtils.stringToURI)
+        },
       properties = options)
 
-    val tableType = if (location.isDefined) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
-    }
+    val tableType =
+      if (properties.get(TableCatalog.PROP_TYPE).contains(CatalogUtils.TEMPORARY_TABLE)) {
+        CatalogTableType.TEMPORARY
+      } else if (location.isDefined) {
+        CatalogTableType.EXTERNAL
+      } else {
+        CatalogTableType.MANAGED
+      }
 
     CatalogTable(
       identifier = table,

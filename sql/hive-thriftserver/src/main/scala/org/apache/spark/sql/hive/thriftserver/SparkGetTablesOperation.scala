@@ -88,7 +88,7 @@ private[hive] class SparkGetTablesOperation(
     try {
       // Tables and views
       matchingDbs.foreach { dbName =>
-        val tables = catalog.listTables(dbName, tablePattern, includeLocalTempViews = false)
+        val tables = catalog.listTables(dbName, tablePattern, includeTempViewsAndTables = false)
         catalog.getTablesByName(tables).foreach { table =>
           val tableType = tableTypeString(table.tableType)
           if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(tableType)) {
@@ -102,7 +102,7 @@ private[hive] class SparkGetTablesOperation(
         val globalTempViewDb = catalog.globalTempViewManager.database
         val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
         val tempViews = if (databasePattern.matcher(globalTempViewDb).matches()) {
-          catalog.listTables(globalTempViewDb, tablePattern, includeLocalTempViews = true)
+          catalog.listTables(globalTempViewDb, tablePattern, includeTempViewsAndTables = true)
         } else {
           catalog.listLocalTempViews(tablePattern)
         }

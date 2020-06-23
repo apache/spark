@@ -3251,6 +3251,14 @@ class SQLConf extends Serializable with Logging {
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
 
+  def sparkScratchDir: String = getConf(StaticSQLConf.SPARK_SCRATCH_DIR)
+
+  def maxSizeForTemporaryTablesPerSession: Long =
+    getConf(StaticSQLConf.TEMPORARY_TABLE_MAX_SIZE_PER_SESSION)
+
+  def maxNumberForTemporaryTablesPerSession: Long =
+    getConf(StaticSQLConf.TEMPORARY_TABLE_MAX_NUM_PER_SESSION)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
