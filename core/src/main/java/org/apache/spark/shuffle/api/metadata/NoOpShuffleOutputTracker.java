@@ -15,35 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.sort.io;
+package org.apache.spark.shuffle.api.metadata;
 
-import java.util.Collections;
-import java.util.Map;
-
-import org.apache.spark.SparkConf;
-import org.apache.spark.shuffle.api.ShuffleDriverComponents;
-import org.apache.spark.shuffle.api.metadata.ShuffleOutputTracker;
-
-public class LocalDiskShuffleDriverComponents implements ShuffleDriverComponents {
-
-  private final LocalDiskShuffleOutputTracker outputTracker;
-
-  public LocalDiskShuffleDriverComponents(SparkConf sparkConf) {
-    this.outputTracker = new LocalDiskShuffleOutputTracker(sparkConf);
-  }
+public class NoOpShuffleOutputTracker implements ShuffleOutputTracker {
 
   @Override
-  public Map<String, String> getAddedExecutorSparkConf() {
-    return Collections.emptyMap();
-  }
+  public void registerShuffle(int shuffleId) {}
 
   @Override
-  public void cleanupApplication() {
-    // nothing to clean up
-  }
+  public void unregisterShuffle(int shuffleId, boolean blocking) {}
 
   @Override
-  public ShuffleOutputTracker shuffleOutputTracker() {
-    return outputTracker;
-  }
+  public void registerMapOutput(
+      int shuffleId, int mapIndex, long mapId, MapOutputMetadata mapOutputMetadata) {}
+
+  @Override
+  public void removeMapOutput(int shuffleId, int mapId, long mapTaskAttemptId) {}
 }

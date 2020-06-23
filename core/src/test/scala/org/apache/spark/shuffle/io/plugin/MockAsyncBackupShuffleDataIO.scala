@@ -17,9 +17,12 @@
 
 package org.apache.spark.shuffle.io.plugin
 
+import java.util.{Map => JMap}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents, ShuffleExecutorComponents}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
+import org.apache.spark.util.Utils
 
 class MockAsyncBackupShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
 
@@ -29,12 +32,24 @@ class MockAsyncBackupShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
 
   private val localDelegate: LocalDiskShuffleDataIO = new LocalDiskShuffleDataIO(sparkConf)
 
-  override def executor(): ShuffleExecutorComponents = {
-    new MockAsyncBackupShuffleExecutorComponents(localDelegate.executor())
+  override def initializeShuffleExecutorComponents(
+      appId: String, execId: String, extraConfigs: JMap[String, String])
+      : ShuffleExecutorComponents = {
+    val backupDirPath = extraConfigs.get(MockAsyncBackupShuffleDataIO.BACKUP_DIR)
+    require(
+      backupDirPath != null,
+      s"Backup path must be specified with ${MockAsyncBackupShuffleDataIO.BACKUP_DIR}")
+
+    new MockAsyncBackupShuffleExecutorComponents(
+      localDelegate.initializeShuffleExecutorComponents(
+        appId, execId, extraConfigs),
+      backupDirPath)
   }
 
-  override def driver(): ShuffleDriverComponents = {
-    new MockAsyncBackupShuffleDriverComponents(localDelegate.driver())
+  override def initializeShuffleDriverComponents(): ShuffleDriverComponents = {
+    val backupDir = Utils.createTempDir(namePrefix = "test-shuffle-backups")
+    new MockAsyncBackupShuffleDriverComponents(
+      localDelegate.initializeShuffleDriverComponents(), backupDir)
   }
 }
 

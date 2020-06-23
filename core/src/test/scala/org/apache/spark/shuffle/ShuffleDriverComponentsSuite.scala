@@ -55,14 +55,24 @@ class ShuffleDriverComponentsSuite
 class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
   private val delegate = new LocalDiskShuffleDataIO(sparkConf)
 
-  override def driver(): ShuffleDriverComponents = new TestShuffleDriverComponents()
+  override def initializeShuffleDriverComponents(): ShuffleDriverComponents = {
+    new TestShuffleDriverComponents()
+  }
 
-  override def executor(): ShuffleExecutorComponents =
-    new TestShuffleExecutorComponentsInitialized(delegate.executor())
+  override def initializeShuffleExecutorComponents(
+      appId: String,
+      execId: String,
+      extraConfigs: JMap[String, String]): ShuffleExecutorComponents = {
+    assert(extraConfigs.get("test-plugin-key") == "plugin-set-value")
+    assert(extraConfigs.get("test-user-key") == "user-set-value")
+    new TestShuffleExecutorComponentsInitialized(delegate.initializeShuffleExecutorComponents(
+      appId, execId, extraConfigs))
+  }
+
 }
 
 class TestShuffleDriverComponents extends ShuffleDriverComponents {
-  override def initializeApplication(): JMap[String, String] = {
+  override def getAddedExecutorSparkConf(): JMap[String, String] = {
     ImmutableMap.of("test-plugin-key", "plugin-set-value")
   }
 
@@ -76,16 +86,6 @@ object TestShuffleExecutorComponentsInitialized {
 class TestShuffleExecutorComponentsInitialized(delegate: ShuffleExecutorComponents)
     extends ShuffleExecutorComponents {
 
-  override def initializeExecutor(
-      appId: String,
-      execId: String,
-      extraConfigs: JMap[String, String]): Unit = {
-    delegate.initializeExecutor(appId, execId, extraConfigs)
-    assert(extraConfigs.get("test-plugin-key") == "plugin-set-value", extraConfigs)
-    assert(extraConfigs.get("test-user-key") == "user-set-value")
-    TestShuffleExecutorComponentsInitialized.initialized.set(true)
-  }
-
   override def createMapOutputWriter(
       shuffleId: Int,
       mapTaskId: Long,
@@ -93,3 +93,4 @@ class TestShuffleExecutorComponentsInitialized(delegate: ShuffleExecutorComponen
     delegate.createMapOutputWriter(shuffleId, mapTaskId, numPartitions)
   }
 }
+

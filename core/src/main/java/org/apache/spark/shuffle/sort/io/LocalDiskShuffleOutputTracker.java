@@ -17,34 +17,53 @@
 
 package org.apache.spark.shuffle.sort.io;
 
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
+
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.api.metadata.MapOutputMetadata;
 import org.apache.spark.shuffle.api.metadata.ShuffleOutputTracker;
 import org.apache.spark.storage.BlockManagerMaster;
+import org.apache.spark.util.Utils;
 
 public final class LocalDiskShuffleOutputTracker implements ShuffleOutputTracker {
 
-  private final BlockManagerMaster blockManagerMaster;
+  private final Supplier<SparkEnv> env = Suppliers.memoize(SparkEnv::get);
+  private final Supplier<BlockManagerMaster> blockManagerMaster = Suppliers.memoize(
+      () -> {
+        SparkEnv env = SparkEnv.get();
+        if (env == null) {
+          throw new IllegalStateException("SparkEnv should not be null here.");
+        }
+        return env.blockManager().master();
+      });
+  private final SparkConf sparkConf;
 
-  public LocalDiskShuffleOutputTracker(BlockManagerMaster blockManagerMaster) {
-    this.blockManagerMaster = blockManagerMaster;
+  public LocalDiskShuffleOutputTracker(SparkConf sparkConf) {
+    this.sparkConf = sparkConf;
   }
 
   @Override
-  public void registerShuffle(int shuffleId) {
-  }
+  public void registerShuffle(int shuffleId) {}
 
   @Override
   public void unregisterShuffle(int shuffleId, boolean blocking) {
-    blockManagerMaster.removeShuffle(shuffleId, blocking);
+    // In local mode, we don't want to route to the block manager master, since we end
+    // up with a cycle: The BlockManagerMaster routes to the MapOutputTracker, which in
+    // local mode is the MapOutputTrackerMaster, but that in turn will route to this
+    // ShuffleOutputTracker.
+    if (Utils.isLocalMaster(sparkConf)) {
+      env.get().shuffleManager().unregisterShuffle(shuffleId);
+    } else {
+      blockManagerMaster.get().removeShuffle(shuffleId, blocking);
+    }
   }
 
   @Override
   public void registerMapOutput(
-      int shuffleId, int mapIndex, long mapId, MapOutputMetadata mapOutputMetadata) {
-  }
+      int shuffleId, int mapIndex, long mapId, MapOutputMetadata mapOutputMetadata) {}
 
   @Override
-  public void removeMapOutput(int shuffleId, int mapId, long mapTaskAttemptId) {
-
-  }
+  public void removeMapOutput(int shuffleId, int mapId, long mapTaskAttemptId) {}
 }

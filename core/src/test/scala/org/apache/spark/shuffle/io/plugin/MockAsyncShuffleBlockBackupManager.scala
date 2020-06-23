@@ -26,7 +26,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Success
+import scala.util.{Failure, Success}
 
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.Utils
@@ -62,10 +62,13 @@ class MockAsyncShuffleBlockBackupManager(
   def deleteAllShufflesWithShuffleId(shuffleId: Int): Unit = {
     backupTasksLock.synchronized {
       backupTasks.filterKeys(blockId => blockId.shuffleId == shuffleId)
-        .values
-        .foreach { task =>
+        .foreach { case (blockId, task) =>
           task.onComplete {
-            case Success(file) => Files.delete(file)
+            case Success(file) =>
+              Files.delete(file)
+              backupTasks.remove(blockId)
+            case Failure(_) =>
+              backupTasks.remove(blockId)
           }
         }
       }

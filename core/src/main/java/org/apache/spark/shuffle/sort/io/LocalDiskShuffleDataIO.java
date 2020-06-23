@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle.sort.io;
 
+import java.util.Map;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.shuffle.api.ShuffleDataIO;
 import org.apache.spark.shuffle.api.ShuffleDriverComponents;
@@ -35,12 +37,13 @@ public class LocalDiskShuffleDataIO implements ShuffleDataIO {
   }
 
   @Override
-  public ShuffleExecutorComponents executor() {
+  public ShuffleExecutorComponents initializeShuffleExecutorComponents(
+      String appId, String execId, Map<String, String> extraConfigs) {
     return new LocalDiskShuffleExecutorComponents(sparkConf);
   }
 
   @Override
-  public ShuffleDriverComponents driver() {
-    return new LocalDiskShuffleDriverComponents();
+  public ShuffleDriverComponents initializeShuffleDriverComponents() {
+    return new LocalDiskShuffleDriverComponents(sparkConf);
   }
 }

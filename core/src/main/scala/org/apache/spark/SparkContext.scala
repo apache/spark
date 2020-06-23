@@ -221,7 +221,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
   private var _resources: immutable.Map[String, ResourceInformation] = _
-  private var _shuffleDriverComponents: ShuffleDriverComponents = _
   private var _plugins: Option[PluginContainer] = None
   private var _resourceProfileManager: ResourceProfileManager = _
 
@@ -316,8 +315,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def dagScheduler_=(ds: DAGScheduler): Unit = {
     _dagScheduler = ds
   }
-
-  private[spark] def shuffleDriverComponents: ShuffleDriverComponents = _shuffleDriverComponents
 
   /**
    * A unique identifier for the Spark application.
@@ -517,14 +514,13 @@ class SparkContext(config: SparkConf) extends Logging {
     executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
 
-    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
-    _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
-      _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
+    _env.shuffleDataIO
+      .getOrCreateDriverComponents()
+      .getAddedExecutorSparkConf()
+      .asScala
+      .foreach { case (k, v) =>
+        _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
     }
-    // Should really be done in SparkEnv creation, but initialization ordering is quite
-    // difficult...
-    env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster].setShuffleOutputTracker(
-      _shuffleDriverComponents.shuffleOutputTracker().asScala)
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
@@ -2005,10 +2001,8 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       _heartbeater = null
     }
-    if (_shuffleDriverComponents != null) {
-      Utils.tryLogNonFatalError {
-        _shuffleDriverComponents.cleanupApplication()
-      }
+    Utils.tryLogNonFatalError {
+      env.shuffleDataIO.getOrCreateDriverComponents().cleanupApplication()
     }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {

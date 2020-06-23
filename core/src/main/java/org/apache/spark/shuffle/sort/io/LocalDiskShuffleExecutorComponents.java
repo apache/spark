@@ -17,46 +17,48 @@
 
 package org.apache.spark.shuffle.sort.io;
 
-import java.util.Map;
 import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkEnv;
+import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
-import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
-import org.apache.spark.storage.BlockManager;
 
 public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorComponents {
 
   private final SparkConf sparkConf;
-  private BlockManager blockManager;
-  private IndexShuffleBlockResolver blockResolver;
+  private final Supplier<IndexShuffleBlockResolver> blockResolver;
 
   public LocalDiskShuffleExecutorComponents(SparkConf sparkConf) {
-    this.sparkConf = sparkConf;
+    this(
+        sparkConf,
+        Suppliers.memoize(() -> {
+          if (SparkEnv.get() == null) {
+            throw new IllegalStateException("SparkEnv must be initialized before using the" +
+                " local disk executor components/");
+          }
+          return new IndexShuffleBlockResolver(sparkConf, SparkEnv.get().blockManager());
+        }));
   }
 
   @VisibleForTesting
   public LocalDiskShuffleExecutorComponents(
       SparkConf sparkConf,
-      BlockManager blockManager,
       IndexShuffleBlockResolver blockResolver) {
-    this.sparkConf = sparkConf;
-    this.blockManager = blockManager;
-    this.blockResolver = blockResolver;
+    this(sparkConf, () -> blockResolver);
   }
 
-  @Override
-  public void initializeExecutor(String appId, String execId, Map<String, String> extraConfigs) {
-    blockManager = SparkEnv.get().blockManager();
-    if (blockManager == null) {
-      throw new IllegalStateException("No blockManager available from the SparkEnv.");
-    }
-    blockResolver = new IndexShuffleBlockResolver(sparkConf, blockManager);
+  private LocalDiskShuffleExecutorComponents(
+      SparkConf sparkConf,
+      Supplier<IndexShuffleBlockResolver> blockResolver) {
+    this.sparkConf = sparkConf;
+    this.blockResolver = blockResolver;
   }
 
   @Override
@@ -64,22 +66,15 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
       int shuffleId,
       long mapTaskId,
       int numPartitions) {
-    if (blockResolver == null) {
-      throw new IllegalStateException(
-          "Executor components must be initialized before getting writers.");
-    }
     return new LocalDiskShuffleMapOutputWriter(
-        shuffleId, mapTaskId, numPartitions, blockResolver, sparkConf);
+        shuffleId, mapTaskId, numPartitions, blockResolver.get(), sparkConf);
   }
 
   @Override
   public Optional<SingleSpillShuffleMapOutputWriter> createSingleFileMapOutputWriter(
       int shuffleId,
       long mapId) {
-    if (blockResolver == null) {
-      throw new IllegalStateException(
-          "Executor components must be initialized before getting writers.");
-    }
-    return Optional.of(new LocalDiskSingleSpillMapOutputWriter(shuffleId, mapId, blockResolver));
+    return Optional.of(
+        new LocalDiskSingleSpillMapOutputWriter(shuffleId, mapId, blockResolver.get()));
   }
 }

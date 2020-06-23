@@ -21,6 +21,8 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.shuffle.api.metadata.MapOutputMetadata;
+import org.apache.spark.shuffle.api.metadata.NoOpShuffleOutputTracker;
 import org.apache.spark.shuffle.api.metadata.ShuffleOutputTracker;
 
 /**
@@ -31,25 +33,21 @@ import org.apache.spark.shuffle.api.metadata.ShuffleOutputTracker;
 public interface ShuffleDriverComponents {
 
   /**
-   * Called once in the driver to bootstrap this module that is specific to this application.
-   * This method is called before submitting executor requests to the cluster manager.
-   *
-   * This method should prepare the module with its shuffle components i.e. registering against
-   * an external file servers or shuffle services, or creating tables in a shuffle
-   * storage data database.
+   * Provide additional configuration for the executors when their plugin system is initialized
+   * via {@link ShuffleDataIO#initializeShuffleExecutorComponents(String, String, Map)} ()}
    *
    * @return additional SparkConf settings necessary for initializing the executor components.
    * This would include configurations that cannot be statically set on the application, like
    * the host:port of external services for shuffle storage.
    */
-  Map<String, String> initializeApplication();
+  Map<String, String> getAddedExecutorSparkConf();
 
   /**
    * Called once at the end of the Spark application to clean up any existing shuffle state.
    */
   void cleanupApplication();
 
-  default Optional<ShuffleOutputTracker> shuffleOutputTracker() {
-    return Optional.empty();
+  default ShuffleOutputTracker shuffleOutputTracker() {
+    return new NoOpShuffleOutputTracker();
   }
 }

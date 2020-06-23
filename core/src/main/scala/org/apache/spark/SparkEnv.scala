@@ -43,7 +43,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
-import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.{MemoizingShuffleDataIO, ShuffleDataIOUtils, ShuffleManager}
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
 
@@ -69,7 +69,8 @@ class SparkEnv (
     val metricsSystem: MetricsSystem,
     val memoryManager: MemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
-    val conf: SparkConf) extends Logging {
+    val conf: SparkConf,
+    val shuffleDataIO: MemoizingShuffleDataIO) extends Logging {
 
   @volatile private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
@@ -315,9 +316,14 @@ object SparkEnv extends Logging {
     }
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
+    val shuffleDataIo = new MemoizingShuffleDataIO(ShuffleDataIOUtils.loadShuffleDataIO(conf))
 
     val mapOutputTracker = if (isDriver) {
-      new MapOutputTrackerMaster(conf, broadcastManager, isLocal)
+      new MapOutputTrackerMaster(
+        conf,
+        shuffleDataIo.getOrCreateDriverComponents().shuffleOutputTracker(),
+        broadcastManager,
+        isLocal)
     } else {
       new MapOutputTrackerWorker(conf)
     }
@@ -414,7 +420,6 @@ object SparkEnv extends Logging {
     val outputCommitCoordinatorRef = registerOrLookupEndpoint("OutputCommitCoordinator",
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
-
     val envInstance = new SparkEnv(
       executorId,
       rpcEnv,
@@ -429,7 +434,8 @@ object SparkEnv extends Logging {
       metricsSystem,
       memoryManager,
       outputCommitCoordinator,
-      conf)
+      conf,
+      shuffleDataIo)
 
     // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
     // called, and we only need to do it for driver. Because driver may run as a service, and if we

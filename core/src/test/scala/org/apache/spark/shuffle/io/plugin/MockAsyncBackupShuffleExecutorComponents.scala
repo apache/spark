@@ -27,23 +27,14 @@ import org.apache.spark.shuffle.api.{ShuffleExecutorComponents, ShuffleMapOutput
 import org.apache.spark.util.ThreadUtils
 
 class MockAsyncBackupShuffleExecutorComponents(
-      localDelegate: ShuffleExecutorComponents) extends ShuffleExecutorComponents {
+      localDelegate: ShuffleExecutorComponents,
+      backupDirPath: String) extends ShuffleExecutorComponents {
 
-  private var backupExecutionContext: ExecutionContext = _
-  private var backupManager: MockAsyncShuffleBlockBackupManager = _
-
-  override def initializeExecutor(
-      appId: String, execId: String, extraConfigs: util.Map[String, String]): Unit = {
-    localDelegate.initializeExecutor(appId, execId, extraConfigs)
-    val backupDirPath = extraConfigs.get(MockAsyncBackupShuffleDataIO.BACKUP_DIR)
-    require(backupDirPath != null,
-      s"Backup path must be specified with ${MockAsyncBackupShuffleDataIO.BACKUP_DIR}")
-    val backupDir = new File(backupDirPath)
-    Files.createDirectories(backupDir.toPath)
-    val backupExecutor = ThreadUtils.newDaemonSingleThreadExecutor("test-shuffle-backups")
-    backupExecutionContext = ExecutionContext.fromExecutorService(backupExecutor)
-    backupManager = new MockAsyncShuffleBlockBackupManager(backupDir, backupExecutionContext)
-  }
+  private val backupDir = new File(backupDirPath)
+  private val backupExecutor = ThreadUtils.newDaemonSingleThreadExecutor("test-shuffle-backups")
+  private val backupManager = new MockAsyncShuffleBlockBackupManager(
+    backupDir, backupExecutionContext)
+  private val backupExecutionContext = ExecutionContext.fromExecutorService(backupExecutor)
 
   override def createMapOutputWriter(shuffleId: Int, mapTaskId: Long, numPartitions: Int)
       : ShuffleMapOutputWriter = {

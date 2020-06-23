@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle.api;
 
+import java.util.Map;
+
 import org.apache.spark.annotation.Private;
 
 /**
@@ -44,12 +46,18 @@ public interface ShuffleDataIO {
   /**
    * Called once on executor processes to bootstrap the shuffle data storage modules that
    * are only invoked on the executors.
+   *
+   * @param appId The Spark application id
+   * @param execId The unique identifier of the executor being initialized
+   * @param extraConfigs Extra configs that were returned by
+   *                     {@link ShuffleDriverComponents#getAddedExecutorSparkConf()}
    */
-  ShuffleExecutorComponents executor();
+  ShuffleExecutorComponents initializeShuffleExecutorComponents(
+      String appId, String execId, Map<String, String> extraConfigs);
 
   /**
    * Called once on driver process to bootstrap the shuffle metadata modules that
    * are maintained by the driver.
    */
-  ShuffleDriverComponents driver();
+  ShuffleDriverComponents initializeShuffleDriverComponents();
 }

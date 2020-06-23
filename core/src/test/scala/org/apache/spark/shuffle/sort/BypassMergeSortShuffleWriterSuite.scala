@@ -119,8 +119,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockIdToFileMap(invocation.getArguments.head.asInstanceOf[BlockId])
     }
 
-    shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(
-      conf, blockManager, blockResolver)
+    shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(conf, blockResolver)
   }
 
   override def afterEach(): Unit = {

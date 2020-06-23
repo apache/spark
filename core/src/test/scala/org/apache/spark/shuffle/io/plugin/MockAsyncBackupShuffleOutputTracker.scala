@@ -21,21 +21,23 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.api.metadata.{MapOutputMetadata, ShuffleOutputTracker}
 import org.apache.spark.storage.ShuffleBlockId
 
 class MockAsyncBackupShuffleOutputTracker(
     val backupManager: MockAsyncShuffleBlockBackupManager,
-    localDelegateTracker: Option[ShuffleOutputTracker]) extends ShuffleOutputTracker {
+    localDelegateTracker: ShuffleOutputTracker)
+    extends ShuffleOutputTracker with Logging {
 
   private val backupIdsByBlockId = new ConcurrentHashMap[ShuffleBlockId, String].asScala
 
   override def registerShuffle(shuffleId: Int): Unit = {
-    localDelegateTracker.foreach(_.registerShuffle(shuffleId))
+    localDelegateTracker.registerShuffle(shuffleId)
   }
 
   override def unregisterShuffle(shuffleId: Int, blocking: Boolean): Unit = {
-    localDelegateTracker.foreach(_.unregisterShuffle(shuffleId, blocking))
+    localDelegateTracker.unregisterShuffle(shuffleId, blocking)
     backupManager.deleteAllShufflesWithShuffleId(shuffleId)
   }
 
@@ -45,10 +47,8 @@ class MockAsyncBackupShuffleOutputTracker(
       mapTaskAttemptId: Long,
       mapOutputMetadata: MapOutputMetadata): Unit = {
     val mockMapOutputMetadata = cast(mapOutputMetadata)
-    localDelegateTracker.foreach { tracker =>
-      mockMapOutputMetadata.delegateMetadata.foreach { metadata =>
-        tracker.registerMapOutput(shuffleId, mapId, mapTaskAttemptId, metadata)
-      }
+    mockMapOutputMetadata.delegateMetadata.foreach { metadata =>
+      localDelegateTracker.registerMapOutput(shuffleId, mapId, mapTaskAttemptId, metadata)
     }
     mockMapOutputMetadata
       .backupIdsByPartition
@@ -58,7 +58,7 @@ class MockAsyncBackupShuffleOutputTracker(
   }
 
   override def removeMapOutput(shuffleId: Int, mapId: Int, mapTaskAttemptId: Long): Unit = {
-    localDelegateTracker.foreach(_.removeMapOutput(shuffleId, mapId, mapTaskAttemptId))
+    localDelegateTracker.removeMapOutput(shuffleId, mapId, mapTaskAttemptId)
     backupManager.deleteShufflesWithBackupIds(
       shuffleId,
       backupIdsByBlockId

@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import scala.compat.java8.OptionConverters._
-
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.shuffle.io.plugin.{MockAsyncBackupShuffleDataIO, MockAsyncBackupShuffleOutputTracker}
@@ -26,10 +24,10 @@ import org.apache.spark.shuffle.io.plugin.{MockAsyncBackupShuffleDataIO, MockAsy
 class ShuffleStoragePluginSuite extends SortShuffleSuite {
 
   override def beforeAll(): Unit = {
-    super.beforeAll()
     conf.set(
       org.apache.spark.internal.config.SHUFFLE_IO_PLUGIN_CLASS,
       classOf[MockAsyncBackupShuffleDataIO].getName())
+    super.beforeAll()
   }
 
   test("Running shuffle should register metadata with the custom output tracker.") {
@@ -37,11 +35,11 @@ class ShuffleStoragePluginSuite extends SortShuffleSuite {
     val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)), 4)
     val groups = pairs.groupByKey(4)
     assert(groups.collect.size === 2)
-    assert(sc.shuffleDriverComponents.shuffleOutputTracker().asScala.isDefined)
-    val outputTracker = sc
-      .shuffleDriverComponents
-      .shuffleOutputTracker()
+    val outputTracker = SparkEnv
       .get
+      .shuffleDataIO
+      .getOrCreateDriverComponents()
+      .shuffleOutputTracker()
       .asInstanceOf[MockAsyncBackupShuffleOutputTracker]
     val backupManager = outputTracker.backupManager
     val deps = groups.dependencies

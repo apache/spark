@@ -29,21 +29,18 @@ import org.apache.spark.shuffle.api.metadata.ShuffleOutputTracker
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 class MockAsyncBackupShuffleDriverComponents(
-    localDelegate: ShuffleDriverComponents) extends ShuffleDriverComponents {
+    localDelegate: ShuffleDriverComponents,
+    backupDir: File) extends ShuffleDriverComponents {
 
-  private var backupManager: MockAsyncShuffleBlockBackupManager = _
-  private var backupDir: File = _
-  private var tracker: ShuffleOutputTracker = _
+  private val backupManager = new MockAsyncShuffleBlockBackupManager(
+    backupDir,
+    ExecutionContext.fromExecutorService(ThreadUtils.newDaemonSingleThreadExecutor(
+      "driver-test-shuffle-backups")))
+  private val tracker = new MockAsyncBackupShuffleOutputTracker(
+    backupManager, localDelegate.shuffleOutputTracker())
 
-  override def initializeApplication(): util.Map[String, String] = {
-    val delegateConfs = localDelegate.initializeApplication().asScala
-    backupDir = Utils.createTempDir(namePrefix = "test-shuffle-backups")
-    backupManager = new MockAsyncShuffleBlockBackupManager(
-      backupDir,
-      ExecutionContext.fromExecutorService(ThreadUtils.newDaemonSingleThreadExecutor(
-        "driver-test-shuffle-backups")))
-    tracker = new MockAsyncBackupShuffleOutputTracker(
-      backupManager, localDelegate.shuffleOutputTracker().asScala)
+  override def getAddedExecutorSparkConf(): util.Map[String, String] = {
+    val delegateConfs = localDelegate.getAddedExecutorSparkConf().asScala
     (delegateConfs ++
       Map[String, String](MockAsyncBackupShuffleDataIO.BACKUP_DIR -> backupDir.getAbsolutePath))
       .asJava
@@ -56,7 +53,5 @@ class MockAsyncBackupShuffleDriverComponents(
     }
   }
 
-  override def shuffleOutputTracker(): java.util.Optional[ShuffleOutputTracker] = {
-    Some(tracker).asJava
-  }
+  override def shuffleOutputTracker(): ShuffleOutputTracker = tracker
 }
