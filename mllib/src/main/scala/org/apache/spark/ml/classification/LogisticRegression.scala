@@ -1451,7 +1451,7 @@ sealed trait BinaryLogisticRegressionTrainingSummary extends BinaryLogisticRegre
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
- * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 private class LogisticRegressionTrainingSummaryImpl(
@@ -1476,7 +1476,7 @@ private class LogisticRegressionTrainingSummaryImpl(
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
- * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
  */
 private class LogisticRegressionSummaryImpl(
     @transient override val predictions: DataFrame,
@@ -1497,7 +1497,7 @@ private class LogisticRegressionSummaryImpl(
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
- * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 private class BinaryLogisticRegressionTrainingSummaryImpl(
@@ -1522,7 +1522,7 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
  *                      each class as a double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
- * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
  */
 private class BinaryLogisticRegressionSummaryImpl(
     predictions: DataFrame,
