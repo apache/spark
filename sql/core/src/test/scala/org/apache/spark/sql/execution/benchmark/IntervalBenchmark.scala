@@ -123,32 +123,37 @@ object IntervalBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark("make_interval()", cardinality, output = output)
     val hmExprs = Seq("id % 24", "id % 60")
     val hmsExprs = hmExprs ++ Seq("cast((id % 500000000) / 1000000.0 as decimal(18, 6))")
-    val ymwExprs = Seq("(2000 + (id % 30))", "((id % 12) + 1)", "((id % 54) + 1)")
-    val dayExpr = Seq("((id % 1000) + 1)")
-    val args = ymwExprs ++ dayExpr ++ hmsExprs
+    val ymExprs = Seq("(2000 + (id % 30))", "((id % 12) + 1)")
+    val wdExpr = Seq("((id % 54) + 1)", "((id % 1000) + 1)")
+    val args = ymExprs ++ wdExpr ++ hmsExprs
 
     addCaseExpr(
       benchmark,
       cardinality,
       "prepare make_interval()",
       args: _*)
-    val foldableExpr = "make_interval(0,1,2,3,4,5,50.123456)"
+    val foldableExpr = "make_interval(0, 1, 2, 3, 4, 5, 50.123456)"
     addCaseExpr(benchmark, cardinality, foldableExpr, foldableExpr)
     addCaseExpr(
       benchmark,
       cardinality,
-      "make_interval(*,*,*,3,4,5,50.123456)",
-      s"make_interval(${ymwExprs.mkString(",")}, 3, 4, 5, 50.123456)")
+      "make_interval(*, *, 2, 3, 4, 5, 50.123456)",
+      s"make_interval(${ymExprs.mkString(",")}, 2, 3, 4, 5, 50.123456)")
     addCaseExpr(
       benchmark,
       cardinality,
-      "make_interval(0,1,2,*,4,5,50.123456)",
-      s"make_interval(0, 1, 2, ${dayExpr.mkString(",")}, 4, 5, 50.123456)")
+      "make_interval(0, 1, *, *, 4, 5, 50.123456)",
+      s"make_interval(0, 1, ${wdExpr.mkString(",")}, 4, 5, 50.123456)")
     addCaseExpr(
       benchmark,
       cardinality,
       "make_interval(0, 1, 2, 3, *, *, *)",
       s"make_interval(0, 1, 2, 3, ${hmsExprs.mkString(",")})")
+    addCaseExpr(
+      benchmark,
+      cardinality,
+      "make_interval(*, *, *, *, *, *, *)",
+      s"make_interval(${args.mkString(",")})")
 
     benchmark.run()
   }
