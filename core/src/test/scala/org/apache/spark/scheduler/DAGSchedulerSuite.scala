@@ -548,7 +548,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mapStatus2(2).location.host === "hostB")
   }
 
-  test("[SPARK-32003] All shuffle files for executor should be cleaned up on fetch failure") {
+  test("SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure") {
     // reset the test context with the right shuffle service config
     afterEach()
     val conf = new SparkConf()
