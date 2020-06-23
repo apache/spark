@@ -103,16 +103,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
       typeSoFar
     } else {
       typeSoFar match {
-        case NullType =>
-          tryParseInteger(field) match {
-            case _: StringType =>
-              tryParseTimestamp(field) match {
-                case _: StringType =>
-                  tryParseBoolean(field)
-                case timestamp => timestamp
-              }
-            case numeric => numeric
-          }
+        case NullType => tryParseInteger(field)
         case IntegerType => tryParseInteger(field)
         case LongType => tryParseLong(field)
         case _: DecimalType =>
@@ -170,7 +161,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
     } else {
-      stringType()
+      tryParseTimestamp(field)
     }
   }
 
@@ -179,7 +170,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if ((allCatch opt timestampParser.parse(field)).isDefined) {
       TimestampType
     } else {
-      stringType()
+      tryParseBoolean(field)
     }
   }
 
