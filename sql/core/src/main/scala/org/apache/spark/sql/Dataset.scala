@@ -2993,7 +2993,7 @@ class Dataset[T] private[sql](
 
   private def repartitionByExpression(
       numPartitions: Option[Int],
-      partitionExprs: Column*): Dataset[T] = {
+      partitionExprs: Seq[Column]): Dataset[T] = {
     // The underlying `LogicalPlan` operator special-cases all-`SortOrder` arguments.
     // However, we don't want to complicate the semantics of this API method.
     // Instead, let's give users a friendly error message, pointing them to the new method.
@@ -3018,7 +3018,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
-    repartitionByExpression(Some(numPartitions), partitionExprs: _*)
+    repartitionByExpression(Some(numPartitions), partitionExprs)
   }
 
   /**
@@ -3033,12 +3033,12 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(partitionExprs: Column*): Dataset[T] = {
-    repartitionByExpression(None, partitionExprs: _*)
+    repartitionByExpression(None, partitionExprs)
   }
 
   private def repartitionByRange(
       numPartitions: Option[Int],
-      partitionExprs: Column*): Dataset[T] = {
+      partitionExprs: Seq[Column]): Dataset[T] = {
     require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
     val sortOrder: Seq[SortOrder] = partitionExprs.map(_.expr match {
       case expr: SortOrder => expr
@@ -3068,7 +3068,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
-    repartitionByRange(Some(numPartitions), partitionExprs: _*)
+    repartitionByRange(Some(numPartitions), partitionExprs)
   }
 
   /**
@@ -3090,7 +3090,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartitionByRange(partitionExprs: Column*): Dataset[T] = {
-    repartitionByRange(None, partitionExprs: _*)
+    repartitionByRange(None, partitionExprs)
   }
 
   /**
