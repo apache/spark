@@ -342,8 +342,8 @@ private[hive] class SparkExecuteStatementOperation(
     synchronized {
       if (!getStatus.getState.isTerminal) {
         logInfo(s"Cancel query with $statementId")
-        cleanup()
         setState(OperationState.CANCELED)
+        cleanup()
         HiveThriftServer2.eventManager.onStatementCanceled(statementId)
       }
     }

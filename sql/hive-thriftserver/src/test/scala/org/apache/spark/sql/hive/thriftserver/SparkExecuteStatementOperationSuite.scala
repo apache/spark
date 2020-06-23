@@ -17,10 +17,29 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.spark.SparkFunSuite
+import java.util
+import java.util.UUID
+import java.util.concurrent.{Future, Semaphore, TimeUnit}
+
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hive.service.cli.{OperationState, SessionHandle}
+import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl, SessionManager}
+import org.apache.hive.service.rpc.thrift.TProtocolVersion
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{doReturn, spy, when}
+import org.mockito.invocation.InvocationOnMock
+import org.scalatestplus.mockito.MockitoSugar._
+
+import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2EventManager
 import org.apache.spark.sql.types.{IntegerType, NullType, StringType, StructField, StructType}
 
-class SparkExecuteStatementOperationSuite extends SparkFunSuite {
+class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedThriftServer {
+
+  override def mode: ServerMode.Value = ServerMode.binary
+
   test("SPARK-17112 `select null` via JDBC triggers IllegalArgumentException in ThriftServer") {
     val field1 = StructField("NULL", NullType)
     val field2 = StructField("(IF(true, NULL, NULL))", NullType)
@@ -41,5 +60,58 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite {
     assert(columns.get(0).getComment() == "comment 1")
     assert(columns.get(1).getType().getName == "INT")
     assert(columns.get(1).getComment() == "")
+  }
+
+  test("SPARK-32057 SparkExecuteStatementOperation should not transiently ERROR while cancelling") {
+    val hiveSession = new HiveSessionImpl(TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V1,
+      "username", "password", new HiveConf(), "ip address")
+    hiveSession.open(new util.HashMap[String, String]())
+    val spySqlContext = spy(sqlContext)
+
+    // When cancel() is called on the operation, cleanup causes an exception to be thrown inside of
+    // execute(). This should not cause the state to become ERROR. The exception here will be
+    // triggered in our custom cleanup().
+    val signal = new Semaphore(0)
+    val dataFrame = mock[DataFrame]
+    when(dataFrame.collect()).thenAnswer((_: InvocationOnMock) => {
+      signal.acquire()
+      throw new RuntimeException("Operation was cancelled")
+    })
+    when(dataFrame.queryExecution).thenReturn(mock[QueryExecution])
+    val statement = "stmt"
+    doReturn(dataFrame, Nil: _*).when(spySqlContext).sql(statement)
+
+    val executeStatementOperation = new MySparkExecuteStatementOperation(spySqlContext, hiveSession,
+      statement, signal)
+
+    val run = new Thread() {
+      override def run(): Unit = executeStatementOperation.runInternal()
+    }
+    assert(executeStatementOperation.getStatus.getState === OperationState.INITIALIZED)
+    run.start()
+    eventually {
+      assert(executeStatementOperation.getStatus.getState === OperationState.RUNNING)
+    }
+    executeStatementOperation.cancel()
+    run.join()
+    assert(executeStatementOperation.getStatus.getState === OperationState.CANCELED)
+  }
+
+  private class MySparkExecuteStatementOperation(
+      sqlContext: SQLContext,
+      hiveSession: HiveSession,
+      statement: String,
+      signal: Semaphore)
+    extends SparkExecuteStatementOperation(sqlContext, hiveSession, statement,
+      new util.HashMap[String, String](), false) {
+
+    override def cleanup(): Unit = {
+      super.cleanup()
+      signal.release()
+      // Allow time for the exception to propagate.
+      Thread.sleep(1000)
+      // State should not be ERROR
+      assert(getStatus.getState === OperationState.CANCELED)
+    }
   }
 }
