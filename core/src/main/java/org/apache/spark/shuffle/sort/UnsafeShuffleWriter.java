@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.sort;
 
 import java.nio.channels.Channels;
+import java.util.Arrays;
 import java.util.Optional;
 import javax.annotation.Nullable;
 import java.io.*;
@@ -280,11 +281,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       if (maybeSingleFileWriter.isPresent()) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
-        Optional<MapOutputMetadata> maybeMetadata =
-            maybeSingleFileWriter.get().transferMapSpillFile(
-                spills[0].file, spills[0].partitionLengths);
-        mapOutputCommitMessage = new MapOutputCommitMessage(
-            spills[0].partitionLengths, maybeMetadata);
+        mapOutputCommitMessage = maybeSingleFileWriter.get().transferMapSpillFile(
+            spills[0].file, spills[0].partitionLengths);
+        assert Arrays.equals(
+            spills[0].partitionLengths, mapOutputCommitMessage.getPartitionLengths());
       } else {
         mapOutputCommitMessage = mergeSpillsUsingStandardWriter(spills);
       }

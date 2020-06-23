@@ -19,10 +19,9 @@ package org.apache.spark.shuffle.api;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Optional;
 
 import org.apache.spark.annotation.Private;
-import org.apache.spark.shuffle.api.metadata.MapOutputMetadata;
+import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
 
 /**
  * Optional extension for partition writing that is optimized for transferring a single
@@ -34,6 +33,6 @@ public interface SingleSpillShuffleMapOutputWriter {
   /**
    * Transfer a file that contains the bytes of all the partitions written by this map task.
    */
-  Optional<MapOutputMetadata> transferMapSpillFile(File mapOutputFile, long[] partitionLengths)
+  MapOutputCommitMessage transferMapSpillFile(File mapOutputFile, long[] partitionLengths)
       throws IOException;
 }
