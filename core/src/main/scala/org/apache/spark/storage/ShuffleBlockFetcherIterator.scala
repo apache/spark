@@ -488,15 +488,12 @@ final class ShuffleBlockFetcherIterator(
 
       dirFetchRequests.foreach { case (host, port, bmIds) =>
         hostLocalDirManager.getHostLocalDirs(host, port, bmIds.map(_.executorId)) {
-          case Success(dirs) =>
+          case Success(dirsByExecId) =>
             bmIds.foreach { bmId =>
+              val dirs = dirsByExecId.get(bmId.executorId)
               immutableHostLocalBlocksWithoutDirs(bmId)
                 .takeWhile { case (blockId, _, mapIndex) =>
-                  fetchHostLocalBlock(
-                    blockId,
-                    mapIndex,
-                    dirs.get(bmId.executorId),
-                    bmId)
+                  fetchHostLocalBlock(blockId, mapIndex, dirs, bmId)
                 }
             }
             logDebug(s"Got host-local blocks (without cached executors' dir) in " +

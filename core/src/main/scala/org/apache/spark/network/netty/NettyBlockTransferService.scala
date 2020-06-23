@@ -20,7 +20,7 @@ package org.apache.spark.network.netty
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.util
-import java.util.{Arrays, HashMap => JHashMap, Map => JMap}
+import java.util.{HashMap => JHashMap, Map => JMap}
 import java.util.concurrent.CompletableFuture
 
 import scala.collection.JavaConverters._
