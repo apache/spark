@@ -460,23 +460,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // children being empty means that the condition is not set
     val matchedActionSize = matchedActions.length
     if (matchedActionSize >= 2 && !matchedActions.init.forall(_.condition.nonEmpty)) {
-      throw new ParseException(
-        s"When there are $matchedActionSize MATCHED clauses in a MERGE statement, " +
-            s"${if (matchedActionSize == 2) {
-              "the first MATCHED clause must have a condition"
-            } else {
-              s"the first ${matchedActionSize - 1} MATCHED clauses must have conditions"
-            }}", ctx)
+      throw new ParseException("When there are more than one MATCHED clauses in a MERGE " +
+          "statement, only the last MATCHED clause can omit the condition.", ctx)
     }
     val notMatchedActionSize = notMatchedActions.length
     if (notMatchedActionSize >= 2 && !notMatchedActions.init.forall(_.condition.nonEmpty)) {
-      throw new ParseException(
-        s"When there are $notMatchedActionSize NOT MATCHED clauses in a MERGE statement, " +
-            s"${if (notMatchedActionSize == 2) {
-              "the first NOT MATCHED clause must have a condition"
-            } else {
-              s"the first ${notMatchedActionSize - 1} NOT MATCHED clauses must have conditions"
-            }}", ctx)
+      throw new ParseException("When there are more than one NOT MATCHED clauses in a MERGE " +
+          "statement, only the last NOT MATCHED clause can omit the condition.", ctx)
     }
 
     MergeIntoTable(

@@ -1165,24 +1165,7 @@ class DDLParserSuite extends AnalysisTest {
               Assignment(UnresolvedAttribute("target.col2"), Literal(2)))))))
   }
 
-  test("merge into table: the first matched clause must have a condition if there's a second") {
-    val exc = intercept[ParseException] {
-      parsePlan(
-        """
-          |MERGE INTO testcat1.ns1.ns2.tbl AS target
-          |USING testcat2.ns1.ns2.tbl AS source
-          |ON target.col1 = source.col1
-          |WHEN MATCHED THEN DELETE
-          |WHEN MATCHED THEN UPDATE SET target.col2 = source.col2
-          |WHEN NOT MATCHED AND (target.col2='insert')
-          |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
-        """.stripMargin)
-    }
-
-    assert(exc.getMessage.contains("the first MATCHED clause must have a condition"))
-  }
-
-  test("merge into table: the first 2 matched clause must have conditions if there's a third") {
+  test("merge into table: only the last matched clause can omit the condition") {
     val exc = intercept[ParseException] {
       parsePlan(
         """
@@ -1197,7 +1180,7 @@ class DDLParserSuite extends AnalysisTest {
         """.stripMargin)
     }
 
-    assert(exc.getMessage.contains("the first 2 MATCHED clauses must have conditions"))
+    assert(exc.getMessage.contains("only the last MATCHED clause can omit the condition"))
   }
 
   test("merge into table: there must be a when (not) matched condition") {
