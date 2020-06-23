@@ -103,7 +103,7 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
     val metrics = context.taskMetrics().createTempShuffleReadMetrics()
     SparkEnv.get.shuffleManager.getReader(
-      dep.shuffleHandle, MapOutputTracker.allMapStatus,
+      dep.shuffleHandle, MapOutputTracker.allMapStatuses,
       split.index, split.index + 1, context, metrics)
       .read()
       .asInstanceOf[Iterator[(K, C)]]

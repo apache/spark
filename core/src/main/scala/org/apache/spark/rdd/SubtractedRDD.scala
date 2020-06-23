@@ -105,7 +105,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
           val iter = SparkEnv.get.shuffleManager
             .getReader(
               shuffleDependency.shuffleHandle,
-              MapOutputTracker.allMapStatus,
+              MapOutputTracker.allMapStatuses,
               partition.index,
               partition.index + 1,
               context,
