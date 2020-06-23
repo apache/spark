@@ -1029,12 +1029,15 @@ class AdaptiveQueryExecSuite
         SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
         SQLConf.SHUFFLE_PARTITIONS.key -> "6",
         SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "7") {
-        val df = spark.range(10).repartition($"id")
-        val partitionsNum = df.rdd.collectPartitions().length
-        if (enableAQE) {
-          assert(partitionsNum < 6)
+        val df1 = spark.range(10).repartition($"id")
+        val df2 = spark.range(10).repartition(10, $"id")
+        val df3 = spark.range(10).repartition(10)
 
-          val plan = df.queryExecution.executedPlan
+        val partitionsNum1 = df1.rdd.collectPartitions().length
+        if (enableAQE) {
+          assert(partitionsNum1 < 6)
+
+          val plan = df1.queryExecution.executedPlan
           assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
           val shuffle = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan.collect {
             case s: ShuffleExchangeExec => s
@@ -1042,8 +1045,14 @@ class AdaptiveQueryExecSuite
           assert(shuffle.size == 1)
           assert(shuffle(0).outputPartitioning.numPartitions == 7)
         } else {
-          assert(partitionsNum === 6)
+          assert(partitionsNum1 === 6)
         }
+
+        val partitionsNum2 = df2.rdd.collectPartitions().length
+        assert(partitionsNum2 == 10)
+
+        val partitionsNum3 = df3.rdd.collectPartitions().length
+        assert(partitionsNum3 == 10)
       }
     }
   }
