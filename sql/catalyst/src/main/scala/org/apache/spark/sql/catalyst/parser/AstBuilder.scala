@@ -411,8 +411,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     val mergeCondition = expression(ctx.mergeCondition)
 
-    val whenClauses = ctx.matchedOrNotMatchedClause()
-    val matchedClauses = whenClauses.asScala.map(_.matchedClause()).filter(_ != null)
+    val matchedClauses = ctx.matchedClause().asScala.filter(_ != null)
     val matchedActions = matchedClauses.map {
       clause => {
         if (clause.matchedAction().DELETE() != null) {
@@ -432,7 +431,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         }
       }
     }
-    val notMatchedClauses = whenClauses.asScala.map(_.notMatchedClause()).filter(_ != null)
+    val notMatchedClauses = ctx.notMatchedClause().asScala.filter(_ != null)
     val notMatchedActions = notMatchedClauses.map {
       clause => {
         if (clause.notMatchedAction().INSERT() != null) {
