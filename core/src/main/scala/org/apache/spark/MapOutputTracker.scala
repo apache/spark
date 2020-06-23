@@ -729,7 +729,7 @@ private[spark] class MapOutputTrackerMaster(
     : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
     shuffleStatuses.get(shuffleId) match {
-      case Some (shuffleStatus) =>
+      case Some(shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
           val actualEndMapIndex = if (endMapIndex == Int.MaxValue) statuses.length else endMapIndex
           logDebug(s"Convert map statuses for shuffle $shuffleId, " +
