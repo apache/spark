@@ -161,7 +161,15 @@ function setDataTableDefaults() {
 
 function formatDate(date) {
   if (date <= 0) return "-";
-  else return date.split(".")[0].replace("T", " ");
+  else return {
+     var d = new Date(date.replace("GMT","Z"))
+     return d.getFullYear() + '-' +
+            (d.getMonth() + 1) + '-' +
+            d.getDate() + " " +
+            d.getHours() + ":" +
+            d.getMinutes() + ":" +
+            d.getSeconds();
+  }
 }
 
 function createRESTEndPointForExecutorsPage(appId) {
