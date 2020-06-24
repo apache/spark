@@ -758,7 +758,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     if (expectAccept) {
       val numExecutors = backend.getExecutorIds().size
       val launchedTasks = verifyTaskLaunched(driver, s"o$id")
-      assert(s"s$id" == launchedTasks.head.getAgentId.getValue)
+      assert(s"s$id" == launchedTasks.head.getSlaveId.getValue)
       registerMockExecutor(launchedTasks.head.getTaskId.getValue, s"s$id", 1)
       assert(backend.getExecutorIds().size == numExecutors + 1)
     } else {
@@ -769,7 +769,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   private def createTaskStatus(taskId: String, agentId: String, state: TaskState): TaskStatus = {
     TaskStatus.newBuilder()
       .setTaskId(TaskID.newBuilder().setValue(taskId).build())
-      .setAgentId(AgentID.newBuilder().setValue(agentId).build())
+      .setSlaveId(SlaveID.newBuilder().setValue(agentId).build())
       .setState(state)
       .build
   }

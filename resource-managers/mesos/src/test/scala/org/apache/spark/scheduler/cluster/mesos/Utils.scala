@@ -77,7 +77,7 @@ object Utils {
     builder.setId(createOfferId(offerId))
       .setFrameworkId(FrameworkID.newBuilder()
       .setValue("f1"))
-      .setAgentId(AgentID.newBuilder().setValue(agentId))
+      .setSlaveId(SlaveID.newBuilder().setValue(agentId))
       .setHostname(s"host${agentId}")
       .addAllAttributes(attributes.asJava)
       .build()
@@ -101,8 +101,8 @@ object Utils {
     OfferID.newBuilder().setValue(offerId).build()
   }
 
-  def createAgentId(agentId: String): AgentID = {
-    AgentID.newBuilder().setValue(agentId).build()
+  def createAgentId(agentId: String): SlaveID = {
+    SlaveID.newBuilder().setValue(agentId).build()
   }
 
   def createExecutorId(executorId: String): ExecutorID = {
@@ -227,4 +227,3 @@ object Utils {
       .build()
   }
 }
-

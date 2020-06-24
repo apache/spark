@@ -116,7 +116,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   // executor limit
   private var launchingExecutors = false
 
-  // AgentID -> Agent
+  // SlaveID -> Agent
   // This map accumulates entries for the duration of the job.  Agents are never deleted, because
   // we need to maintain e.g. failure state and connection state.
   private val agents = new mutable.HashMap[String, Agent]
@@ -441,7 +441,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           val ports = getRangeResource(task.getResourcesList, "ports").mkString(",")
 
           logDebug(s"Launching Mesos task: ${taskId.getValue} with mem: $mem cpu: $cpus" +
-            s" ports: $ports" + s" on agent with agent id: ${task.getAgentId.getValue} ")
+            s" ports: $ports" + s" on agent with agent id: ${task.getSlaveId.getValue} ")
         }
 
         driver.launchTasks(
@@ -502,7 +502,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       launchTasks = false
 
       for (offer <- offers) {
-        val agentId = offer.getAgentId.getValue
+        val agentId = offer.getSlaveId.getValue
         val offerId = offer.getId.getValue
         val resources = remainingResources(offerId)
 
@@ -524,7 +524,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
           val taskBuilder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
-            .setAgentId(offer.getAgentId)
+            .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
             .setName(s"${sc.appName} $taskId")
             .setLabels(MesosProtoUtils.mesosLabels(taskLabels))
@@ -622,7 +622,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus): Unit = {
     val taskId = status.getTaskId.getValue
-    val agentId = status.getAgentId.getValue
+    val agentId = status.getSlaveId.getValue
     val state = mesosToTaskState(status.getState)
 
     logInfo(s"Mesos task $taskId is now ${status.getState}")
@@ -650,7 +650,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           .registerDriverWithShuffleService(
             agent.hostname,
             externalShufflePort,
-            sc.conf.get(config.STORAGE_BLOCKMANAGER_AGENT_TIMEOUT),
+            sc.conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT),
             sc.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL))
         agent.shuffleRegistered = true
       }
@@ -729,7 +729,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def frameworkMessage(
-      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: AgentID, b: Array[Byte]): Unit = {}
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]): Unit = {}
 
   /**
    * Called when a agent is lost or a Mesos task finished. Updates local view on
@@ -751,12 +751,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  override def agentLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit = {
+  override def slaveLost(d: org.apache.mesos.SchedulerDriver, agentId: SlaveID): Unit = {
     logInfo(s"Mesos agent lost: ${agentId.getValue}")
   }
 
   override def executorLost(
-      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: AgentID, status: Int): Unit = {
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int): Unit = {
     logInfo("Mesos executor lost: %s".format(e.getValue))
   }
 

@@ -57,7 +57,7 @@ private[spark] class MesosExecutorBackend
       driver: ExecutorDriver,
       executorInfo: ExecutorInfo,
       frameworkInfo: FrameworkInfo,
-      agentInfo: AgentInfo): Unit = {
+      agentInfo: SlaveInfo): Unit = {
 
     // Get num cores for this task from ExecutorInfo, created in MesosSchedulerBackend.
     val cpusPerTask = executorInfo.getResourcesList.asScala
@@ -112,7 +112,7 @@ private[spark] class MesosExecutorBackend
     }
   }
 
-  override def reregistered(d: ExecutorDriver, p2: AgentInfo): Unit = {}
+  override def reregistered(d: ExecutorDriver, p2: SlaveInfo): Unit = {}
 
   override def disconnected(d: ExecutorDriver): Unit = {}
 
