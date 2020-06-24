@@ -18,24 +18,26 @@
 package org.apache.spark.shuffle
 
 import java.io.{File, IOException}
+import java.net.ConnectException
 import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
-
 import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockPushException,
-  BlockStoreClient}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockPushException, BlockStoreClient}
+import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.ShuffleWriter._
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.{ThreadUtils, Utils}
+
+import scala.collection.mutable
 
 /**
  * Obtained inside a map task to write out records to the shuffle system, and optionally
@@ -50,6 +52,8 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
   private[this] val deferredPushRequests = new HashMap[BlockManagerId, Queue[PushRequest]]()
   private[this] val pushRequests = new Queue[PushRequest]
+  private[this] val errorHandler = createErrorHandler()
+  private[this] val unreachableBlockMgrs = new HashSet[BlockManagerId]()
 
   /** Write a sequence of records to this task's output */
   @throws[IOException]
@@ -59,6 +63,24 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
   def stop(success: Boolean): Option[MapStatus]
 
   def getPartitionLengths(): Array[Long]
+
+  /**
+   * VisbleForTesting
+   */
+  private[shuffle] def createErrorHandler(): BlockPushErrorHandler = {
+    new BlockPushErrorHandler() {
+      override def shouldRetryError(t: Throwable): Boolean = {
+        // If the block is too late, there is no need to retry it
+        if ((t.getMessage != null &&
+          t.getMessage.contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX)) ||
+          (t.getCause != null && t.getCause.getMessage != null &&
+            t.getCause.getMessage.contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))) {
+          return false
+        }
+        true
+      }
+    }
+  }
 
   /**
    * Initiate the block push process. This will be invoked after the shuffle writer
@@ -100,8 +122,18 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
     pushRequests ++= Utils.randomize(requests)
 
     val shuffleClient = SparkEnv.get.blockManager.blockStoreClient
+    submitTask(() => {
+      pushUpToMax(shuffleClient)
+    })
+  }
+
+  /**
+   * Triggers the push. It's a separate method for testing.
+   * Visible for testing
+   */
+  protected def submitTask(task: Runnable): Unit = {
     if (BLOCK_PUSHER_POOL != null) {
-      BLOCK_PUSHER_POOL.execute(() => pushUpToMax(shuffleClient))
+      BLOCK_PUSHER_POOL.execute(task)
     }
   }
 
@@ -191,16 +223,12 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
       // Once the blockPushListener is notified of the block push success or failure, we
       // just delegate it to block-push-threads.
       def handleResult(result: PushResult): Unit = {
-        if (BLOCK_PUSHER_POOL != null) {
-          BLOCK_PUSHER_POOL.execute(new Runnable {
-            override def run(): Unit = {
-              if (updateStateAndCheckIfPushMore(
-                sizeMap(result.blockId), address, remainingBlocks, result)) {
-                pushUpToMax(SparkEnv.get.blockManager.blockStoreClient)
-              }
-            }
-          })
-        }
+        submitTask(() => {
+          if (updateStateAndCheckIfPushMore(
+            sizeMap(result.blockId), address, remainingBlocks, result)) {
+            pushUpToMax(SparkEnv.get.blockManager.blockStoreClient)
+          }
+        })
       }
 
       override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
@@ -210,15 +238,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
 
       override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
         // check the message or it's cause to see it needs to be logged.
-        if ((exception.getMessage != null &&
-          (exception.getMessage.contains(
-            BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) ||
-            exception.getMessage.contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))) ||
-            (exception.getCause != null && exception.getCause.getMessage != null &&
-            (exception.getCause.getMessage.contains(
-              BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX) ||
-              exception.getCause.getMessage.contains(
-                BlockPushException.TOO_LATE_MESSAGE_SUFFIX)))) {
+        if (!errorHandler.shouldLogError(exception)) {
           logTrace(s"Pushing block $blockId to $address failed.", exception)
         } else {
           logWarning(s"Pushing block $blockId to $address failed.", exception)
@@ -242,8 +262,10 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
    *                  the shuffle data file for a PushRequest
    * @param blockSizes Array of block sizes
    * @return Array of in memory buffer for each individual block
+   *
+   * VisibleForTesting
    */
-  private def sliceReqBufferIntoBlockBuffers(
+  protected def sliceReqBufferIntoBlockBuffers(
       reqBuffer: ManagedBuffer,
       blockSizes: Seq[Long]): Array[ManagedBuffer] = {
     if (blockSizes.size == 1) {
@@ -287,14 +309,27 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
     if (remainingBlocks.isEmpty) {
       reqsInFlight = reqsInFlight - 1
     }
-    if (pushResult.failure != null &&
-      ((pushResult.failure.getMessage != null &&
-        pushResult.failure.getMessage.contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX)) ||
-      (pushResult.failure.getCause != null && pushResult.failure.getCause.getMessage != null &&
-        pushResult.failure.getCause.getMessage.contains(
-          BlockPushException.TOO_LATE_MESSAGE_SUFFIX)))) {
+    if (pushResult.failure != null && pushResult.failure.getCause != null &&
+      pushResult.failure.getCause.isInstanceOf[ConnectException]) {
+      // Remove all the blocks for this address just once because removing from pushRequests
+      // is expensive. If there is a ConnectException for the first block, all the subsequent
+      // blocks to that address will fail, so should avoid removing multiple times.
+      if (!unreachableBlockMgrs.contains(address)) {
+        var removed = 0
+        unreachableBlockMgrs.add(address)
+        removed += pushRequests.dequeueAll(req => req.address == address).length
+        val droppedReq = deferredPushRequests.remove(address)
+        if (droppedReq.isDefined) {
+          removed += droppedReq.get.length
+        }
+        logWarning(s"Received a ConnectException from $address. " +
+          s"Dropping push of $removed blocks and " +
+          s"not pushing any more blocks to this address.")
+      }
+    }
+    if (pushResult.failure != null && !errorHandler.shouldRetryError(pushResult.failure)) {
       logDebug(s"Received after merge is finalized from $address. Not pushing any more blocks.")
-      false
+      return false
     } else {
       remainingBlocks.isEmpty && (pushRequests.nonEmpty || deferredPushRequests.nonEmpty)
     }
