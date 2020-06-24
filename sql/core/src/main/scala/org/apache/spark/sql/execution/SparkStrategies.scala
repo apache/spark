@@ -463,7 +463,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 case other =>
                   val name = e match {
                     case ne: NamedExpression => ne.name
-                    case other => other.toString
+                    case _ => e.toString
                   }
                   Alias(other, name)()
               }
