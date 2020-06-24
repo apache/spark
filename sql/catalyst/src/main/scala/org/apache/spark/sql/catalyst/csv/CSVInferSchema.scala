@@ -106,9 +106,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case NullType => tryParseInteger(field)
         case IntegerType => tryParseInteger(field)
         case LongType => tryParseLong(field)
-        case _: DecimalType =>
-          // DecimalTypes have different precisions and scales, so we try to find the common type.
-          compatibleType(typeSoFar, tryParseDecimal(field)).getOrElse(StringType)
+        case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
