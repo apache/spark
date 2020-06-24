@@ -62,10 +62,10 @@ public interface TableCatalog extends CatalogPlugin {
   String PROP_OWNER = "owner";
 
   /**
-   * A reserved property to specify the type of the table.
-   * @since 3.1.0 To determinate a temporary/volatile table.
+   * A reserved property to specify the specific type of the table.
+   * @since 3.1.0 Added to determinate a temporary table.
    */
-  String PROP_TYPE = "type";
+  String PROP_TYPE = "specific_type";
 
   /**
    * List the tables in a namespace from the catalog.

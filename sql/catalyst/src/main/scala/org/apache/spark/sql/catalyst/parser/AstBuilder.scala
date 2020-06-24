@@ -2798,12 +2798,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed("specify LOCATION in temporary table", ctx)
     }
 
-    val withTempProps =
-      if (temp) {
-        Map(TableCatalog.PROP_TYPE -> CatalogUtils.TEMPORARY_TABLE)
+    val withTempProps = if (temp) {
+        Map(TableCatalog.PROP_TYPE -> CatalogUtils.TEMPORARY_TABLE) ++ properties
       } else {
-        Map(TableCatalog.PROP_TYPE -> CatalogUtils.METASTORE_TABLE)
-      } ++ properties
+        properties
+      }
 
     Option(ctx.query).map(plan) match {
       case Some(_) if schema.isDefined =>

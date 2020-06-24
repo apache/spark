@@ -685,7 +685,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   test("create table - temporary") {
     val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
     val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("CREATE TEMPORARY TABLE is not supported yet"))
+    assert(e.message.contains("CREATE TEMPORARY (Hive) TABLE is not supported yet"))
   }
 
   test("create table - external") {

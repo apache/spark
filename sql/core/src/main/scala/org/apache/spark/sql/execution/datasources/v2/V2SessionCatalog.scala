@@ -90,8 +90,8 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
     val tableType =
-      if (properties.getOrDefault(TableCatalog.PROP_TYPE,
-          CatalogUtils.METASTORE_TABLE).equals(CatalogUtils.TEMPORARY_TABLE)) {
+      if (Option(properties.get(TableCatalog.PROP_TYPE, ""))
+          .contains(CatalogUtils.TEMPORARY_TABLE)) {
         CatalogTableType.TEMPORARY
       } else if (location.isDefined) {
         CatalogTableType.EXTERNAL

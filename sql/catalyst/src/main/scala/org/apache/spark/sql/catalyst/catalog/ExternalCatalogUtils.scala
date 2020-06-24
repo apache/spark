@@ -234,7 +234,6 @@ object CatalogUtils {
   }
 
   val TEMPORARY_TABLE = "temporary"
-  val METASTORE_TABLE = "metastore"
 
   def isTemporaryTable(table: CatalogTable): Boolean = {
     table.tableType == CatalogTableType.TEMPORARY ||

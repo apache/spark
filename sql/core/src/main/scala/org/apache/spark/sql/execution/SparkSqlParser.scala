@@ -288,7 +288,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitCreateHiveTable(ctx: CreateHiveTableContext): LogicalPlan = withOrigin(ctx) {
     val (ident, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
-    // TODO: implement temporary tables
     if (temp) {
       throw new ParseException(
         "CREATE TEMPORARY (Hive) TABLE is not supported yet. " +
