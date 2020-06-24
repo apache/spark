@@ -677,7 +677,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whitelist of all [[UnaryNode]]s for which allow foldable propagation.
+   * List of all [[UnaryNode]]s which allow foldable propagation.
    */
   private def canPropagateFoldables(u: UnaryNode): Boolean = u match {
     case _: Project => true

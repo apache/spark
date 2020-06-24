@@ -48,7 +48,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty)
   }
 
-  override protected val blacklistedOnceBatches: Set[String] =
+  override protected val excludedOnceBatches: Set[String] =
     Set(
       "PartitionPruning",
       "Extract Python UDFs",
@@ -373,38 +373,38 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   /**
    * Remove the top-level alias from an expression when it is redundant.
    */
-  private def removeRedundantAlias(e: Expression, blacklist: AttributeSet): Expression = e match {
+  private def removeRedundantAlias(e: Expression, excludeList: AttributeSet): Expression = e match {
     // Alias with metadata can not be stripped, or the metadata will be lost.
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
       if a.metadata == Metadata.empty &&
         name == attr.name &&
-        !blacklist.contains(attr) &&
-        !blacklist.contains(a) =>
+        !excludeList.contains(attr) &&
+        !excludeList.contains(a) =>
       attr
     case a => a
   }
 
   /**
-   * Remove redundant alias expression from a LogicalPlan and its subtree. A blacklist is used to
-   * prevent the removal of seemingly redundant aliases used to deduplicate the input for a (self)
-   * join or to prevent the removal of top-level subquery attributes.
+   * Remove redundant alias expression from a LogicalPlan and its subtree. A set of excludes is used
+   * to prevent the removal of seemingly redundant aliases used to deduplicate the input for a
+   * (self) join or to prevent the removal of top-level subquery attributes.
    */
-  private def removeRedundantAliases(plan: LogicalPlan, blacklist: AttributeSet): LogicalPlan = {
+  private def removeRedundantAliases(plan: LogicalPlan, excluded: AttributeSet): LogicalPlan = {
     plan match {
       // We want to keep the same output attributes for subqueries. This means we cannot remove
       // the aliases that produce these attributes
       case Subquery(child, correlated) =>
-        Subquery(removeRedundantAliases(child, blacklist ++ child.outputSet), correlated)
+        Subquery(removeRedundantAliases(child, excluded ++ child.outputSet), correlated)
 
       // A join has to be treated differently, because the left and the right side of the join are
-      // not allowed to use the same attributes. We use a blacklist to prevent us from creating a
-      // situation in which this happens; the rule will only remove an alias if its child
+      // not allowed to use the same attributes. We use an exclude list to prevent us from creating
+      // a situation in which this happens; the rule will only remove an alias if its child
       // attribute is not on the black list.
       case Join(left, right, joinType, condition, hint) =>
-        val newLeft = removeRedundantAliases(left, blacklist ++ right.outputSet)
-        val newRight = removeRedundantAliases(right, blacklist ++ newLeft.outputSet)
+        val newLeft = removeRedundantAliases(left, excluded ++ right.outputSet)
+        val newRight = removeRedundantAliases(right, excluded ++ newLeft.outputSet)
         val mapping = AttributeMap(
           createAttributeMapping(left, newLeft) ++
           createAttributeMapping(right, newRight))
@@ -417,7 +417,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         // Remove redundant aliases in the subtree(s).
         val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
         val newNode = plan.mapChildren { child =>
-          val newChild = removeRedundantAliases(child, blacklist)
+          val newChild = removeRedundantAliases(child, excluded)
           currentNextAttrPairs ++= createAttributeMapping(child, newChild)
           newChild
         }
@@ -430,9 +430,9 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         // Create a an expression cleaning function for nodes that can actually produce redundant
         // aliases, use identity otherwise.
         val clean: Expression => Expression = plan match {
-          case _: Project => removeRedundantAlias(_, blacklist)
-          case _: Aggregate => removeRedundantAlias(_, blacklist)
-          case _: Window => removeRedundantAlias(_, blacklist)
+          case _: Project => removeRedundantAlias(_, excluded)
+          case _: Aggregate => removeRedundantAlias(_, excluded)
+          case _: Window => removeRedundantAlias(_, excluded)
           case _ => identity[Expression]
         }
 

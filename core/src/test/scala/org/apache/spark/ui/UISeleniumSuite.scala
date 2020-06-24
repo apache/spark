@@ -48,24 +48,24 @@ import org.apache.spark.util.CallSite
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
-  private val cssWhiteList = List("bootstrap.min.css", "vis-timeline-graph2d.min.css")
+  private val cssExcludeList = List("bootstrap.min.css", "vis-timeline-graph2d.min.css")
 
-  private def isInWhileList(uri: String): Boolean = cssWhiteList.exists(uri.endsWith)
+  private def isInExcludeList(uri: String): Boolean = cssExcludeList.exists(uri.endsWith)
 
   override def warning(e: CSSParseException): Unit = {
-    if (!isInWhileList(e.getURI)) {
+    if (!isInExcludeList(e.getURI)) {
       super.warning(e)
     }
   }
 
   override def fatalError(e: CSSParseException): Unit = {
-    if (!isInWhileList(e.getURI)) {
+    if (!isInExcludeList(e.getURI)) {
       super.fatalError(e)
     }
   }
 
   override def error(e: CSSParseException): Unit = {
-    if (!isInWhileList(e.getURI)) {
+    if (!isInExcludeList(e.getURI)) {
       super.error(e)
     }
   }

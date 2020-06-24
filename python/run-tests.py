@@ -269,7 +269,7 @@ def main():
             [python_exec, "--version"], stderr=subprocess.STDOUT, universal_newlines=True).strip())
         if should_test_modules:
             for module in modules_to_test:
-                if python_implementation not in module.blacklisted_python_implementations:
+                if python_implementation not in module.excluded_python_implementations:
                     for test_goal in module.python_test_goals:
                         heavy_tests = ['pyspark.streaming.tests', 'pyspark.mllib.tests',
                                        'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests']

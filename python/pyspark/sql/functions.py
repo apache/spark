@@ -3411,9 +3411,9 @@ def udf(f=None, returnType=StringType()):
                            evalType=PythonEvalType.SQL_BATCHED_UDF)
 
 
-blacklist = ['map', 'since']
+ignored_fns = ['map', 'since']
 __all__ = [k for k, v in globals().items()
-           if not k.startswith('_') and k[0].islower() and callable(v) and k not in blacklist]
+           if not k.startswith('_') and k[0].islower() and callable(v) and k not in ignored_fns]
 __all__ += ["PandasUDFType"]
 __all__.sort()
 
