@@ -460,7 +460,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // because `distinctExpressions` is not extracted during logical phase.
               NormalizeFloatingNumbers.normalize(e) match {
                 case ne: NamedExpression => ne
-                case other => Alias(other, other.toString)()
+                case other =>
+                  val name = e match {
+                    case ne: NamedExpression => ne.name
+                    case other => other.toString
+                  }
+                  Alias(other, name)()
               }
             }
 
