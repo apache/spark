@@ -139,8 +139,10 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     val udt1 = new ExampleBaseTypeUDT
     val udt2 = new ExampleSubTypeUDT
     val udt3 = new ExampleSubTypeUDT
-    assert(udt1 !== udt2)
+    assert(!(udt1 === udt2))
+    assert(!(udt2 === udt1))
     assert(udt2 === udt3)
+    assert(udt3 === udt2)
   }
 
   test("register user type: MyDenseVector for MyLabeledPoint") {
