@@ -1022,84 +1022,83 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-31220 repartition obeys initialPartitionNum when adaptiveExecutionEnabled") {
+  test("SPARK-31220 and SPARK-32056 coalesce partitions for repartition by expressions " +
+      "when AQE is enabled") {
     Seq(true, false).foreach { enableAQE =>
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
         SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "6",
-        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "7") {
+        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+
         val df1 = spark.range(10).repartition($"id")
-        val df2 = spark.range(10).repartition(10, $"id")
-        val df3 = spark.range(10).repartition(10)
-        val df4 = spark.range(10).repartitionByRange(10, $"id".asc)
+        val df2 = spark.range(10).repartition($"id" + 1)
 
         val partitionsNum1 = df1.rdd.collectPartitions().length
-        if (enableAQE) {
-          assert(partitionsNum1 < 6)
+        val partitionsNum2 = df2.rdd.collectPartitions().length
 
+        if (enableAQE) {
+          assert(partitionsNum1 < 10)
+          assert(partitionsNum2 < 10)
+
+          // repartition obeys initialPartitionNum when adaptiveExecutionEnabled
           val plan = df1.queryExecution.executedPlan
           assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
           val shuffle = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan.collect {
             case s: ShuffleExchangeExec => s
           }
           assert(shuffle.size == 1)
-          assert(shuffle(0).outputPartitioning.numPartitions == 7)
+          assert(shuffle(0).outputPartitioning.numPartitions == 10)
         } else {
-          assert(partitionsNum1 === 6)
+          assert(partitionsNum1 === 10)
+          assert(partitionsNum2 === 10)
         }
 
-        assert(df2.rdd.collectPartitions().length == 10)
+
+        // Don't coalesce partitions if the number of partitions is specified.
+        val df3 = spark.range(10).repartition(10, $"id")
+        val df4 = spark.range(10).repartition(10)
         assert(df3.rdd.collectPartitions().length == 10)
         assert(df4.rdd.collectPartitions().length == 10)
       }
     }
   }
 
-  test("SPARK-32056 coalesce partitions for repartition by expressions when AQE is enabled") {
+  test("SPARK-31220 and SPARK-32056 coalesce partitions for repartition by range " +
+      "when AQE is enabled") {
     Seq(true, false).foreach { enableAQE =>
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
         SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
-        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "50",
+        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10",
         SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
 
-        val partitionsNum1 = (1 to 10).toDF.repartition($"value")
-          .rdd.collectPartitions().length
-        val partitionsNum2 = (1 to 10).toDF.repartition($"value" + 1)
-          .rdd.collectPartitions().length
+        val df1 = spark.range(10).toDF.repartitionByRange($"id".asc)
+        val df2 = spark.range(10).toDF.repartitionByRange(($"id" + 1).asc)
+
+        val partitionsNum1 = df1.rdd.collectPartitions().length
+        val partitionsNum2 = df2.rdd.collectPartitions().length
 
         if (enableAQE) {
           assert(partitionsNum1 < 10)
           assert(partitionsNum2 < 10)
+
+          // repartition obeys initialPartitionNum when adaptiveExecutionEnabled
+          val plan = df1.queryExecution.executedPlan
+          assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
+          val shuffle = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan.collect {
+            case s: ShuffleExchangeExec => s
+          }
+          assert(shuffle.size == 1)
+          assert(shuffle(0).outputPartitioning.numPartitions == 10)
         } else {
           assert(partitionsNum1 === 10)
           assert(partitionsNum2 === 10)
         }
-      }
-    }
-  }
 
-  test("SPARK-32056 coalesce partitions for repartition by range when AQE is enabled") {
-    Seq(true, false).foreach { enableAQE =>
-      withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
-        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
-        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "50",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
-
-        val partitionsNum1 = (1 to 10).toDF.repartitionByRange($"value".asc)
-          .rdd.collectPartitions().length
-        val partitionsNum2 = (1 to 10).toDF.repartitionByRange(($"value" + 1).asc)
-          .rdd.collectPartitions().length
-
-        if (enableAQE) {
-          assert(partitionsNum1 < 10)
-          assert(partitionsNum2 < 10)
-        } else {
-          assert(partitionsNum1 === 10)
-          assert(partitionsNum2 === 10)
-        }
+        // Don't coalesce partitions if the number of partitions is specified.
+        val df3 = spark.range(10).repartitionByRange(10, $"id".asc)
+        assert(df3.rdd.collectPartitions().length == 10)
       }
     }
   }
