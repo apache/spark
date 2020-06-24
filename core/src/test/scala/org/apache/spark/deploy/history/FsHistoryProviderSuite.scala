@@ -1137,17 +1137,17 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
     }
-    // Doing 2 times in order to check the ignoreList filter too
+    // Doing 2 times in order to check the inaccessibleList filter too
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
     }
     val accessDeniedPath = new Path(accessDenied.getPath)
-    assert(mockedProvider.isIgnored(accessDeniedPath))
+    assert(mockedProvider.isAccessible(accessDeniedPath))
     clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
     isReadable = true
     mockedProvider.cleanLogs()
     updateAndCheck(mockedProvider) { list =>
-      assert(!mockedProvider.isIgnored(accessDeniedPath))
+      assert(mockedProvider.isAccessible(accessDeniedPath))
       assert(list.exists(_.name == "accessDenied"))
       assert(list.exists(_.name == "accessGranted"))
       list.size should be(2)

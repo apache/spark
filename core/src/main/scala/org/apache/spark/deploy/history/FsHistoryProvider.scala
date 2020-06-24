@@ -181,23 +181,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     processing.remove(path.getName)
   }
 
-  private val ignoreList = new ConcurrentHashMap[String, Long]
+  private val inaccessibleList = new ConcurrentHashMap[String, Long]
 
   // Visible for testing
-  private[history] def isIgnored(path: Path): Boolean = {
-    ignoreList.containsKey(path.getName)
+  private[history] def isAccessible(path: Path): Boolean = {
+    inaccessibleList.containsKey(path.getName)
   }
 
-  private def ignore(path: Path): Unit = {
-    ignoreList.put(path.getName, clock.getTimeMillis())
+  private def markInaccessible(path: Path): Unit = {
+    inaccessibleList.put(path.getName, clock.getTimeMillis())
   }
 
   /**
-   * Removes expired entries in the ignoreList, according to the provided `expireTimeInSeconds`.
+   * Removes expired entries in the inaccessibleList, according to the provided
+   * `expireTimeInSeconds`.
    */
-  private def clearIgnoreList(expireTimeInSeconds: Long): Unit = {
+  private def clearInaccessibleList(expireTimeInSeconds: Long): Unit = {
     val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
-    ignoreList.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
+    inaccessibleList.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
   }
 
   private val activeUIs = new mutable.HashMap[(String, Option[String]), LoadedAppUI]()
@@ -460,7 +461,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
 
       val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
-        .filter { entry => !isIgnored(entry.getPath) }
+        .filter { entry => isAccessible(entry.getPath) }
         .filter { entry => !isProcessing(entry.getPath) }
         .flatMap { entry => EventLogFileReader(fs, entry) }
         .filter { reader =>
@@ -677,8 +678,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case e: AccessControlException =>
         // We don't have read permissions on the log file
         logWarning(s"Unable to read log $rootPath", e)
-        ignore(rootPath)
-        // SPARK-28157 We should remove this ignored entry from the KVStore
+        markInaccessible(rootPath)
+        // SPARK-28157 We should remove this inaccessible entry from the KVStore
         // to handle permission-only changes with the same file sizes later.
         listing.delete(classOf[LogInfo], rootPath.toString)
       case e: Exception =>
@@ -946,8 +947,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    // Clean the ignoreList from the expired entries.
-    clearIgnoreList(CLEAN_INTERVAL_S)
+    // Clean the inaccessibleList from the expired entries.
+    clearInaccessibleList(CLEAN_INTERVAL_S)
   }
 
   private def deleteAttemptLogs(
@@ -1235,7 +1236,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def deleteLog(fs: FileSystem, log: Path): Boolean = {
     var deleted = false
-    if (isIgnored(log)) {
+    if (!isAccessible(log)) {
       logDebug(s"Skipping deleting $log as we don't have permissions on it.")
     } else {
       try {

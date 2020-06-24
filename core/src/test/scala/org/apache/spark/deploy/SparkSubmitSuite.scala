@@ -1211,16 +1211,16 @@ class SparkSubmitSuite
   }
 
   test("force download from forced schemes") {
-    testRemoteResources(enableHttpFs = true, forceDownloadSchemas = Seq("http"))
+    testRemoteResources(enableHttpFs = true, forceDownloadSchemes = Seq("http"))
   }
 
   test("force download for all the schemes") {
-    testRemoteResources(enableHttpFs = true, forceDownloadSchemas = Seq("*"))
+    testRemoteResources(enableHttpFs = true, forceDownloadSchemes = Seq("*"))
   }
 
   private def testRemoteResources(
       enableHttpFs: Boolean,
-      forceDownloadSchemas: Seq[String] = Nil): Unit = {
+      forceDownloadSchemes: Seq[String] = Nil): Unit = {
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     if (enableHttpFs) {
@@ -1237,8 +1237,8 @@ class SparkSubmitSuite
     val tmpHttpJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
     val tmpHttpJarPath = s"http://${new File(tmpHttpJar.toURI).getAbsolutePath}"
 
-    val forceDownloadArgs = if (forceDownloadSchemas.nonEmpty) {
-      Seq("--conf", s"spark.yarn.dist.forceDownloadSchemes=${forceDownloadSchemas.mkString(",")}")
+    val forceDownloadArgs = if (forceDownloadSchemes.nonEmpty) {
+      Seq("--conf", s"spark.yarn.dist.forceDownloadSchemes=${forceDownloadSchemes.mkString(",")}")
     } else {
       Nil
     }
@@ -1257,14 +1257,14 @@ class SparkSubmitSuite
     val jars = conf.get("spark.yarn.dist.jars").split(",").toSet
 
     def isSchemeForcedDownload(scheme: String) = {
-      forceDownloadSchemas.contains("*") || forceDownloadSchemas.contains(scheme)
+      forceDownloadSchemes.contains("*") || forceDownloadSchemes.contains(scheme)
     }
 
     if (!isSchemeForcedDownload("s3")) {
       assert(jars.contains(tmpS3JarPath))
     }
 
-    if (enableHttpFs && forceDownloadSchemas.isEmpty) {
+    if (enableHttpFs && forceDownloadSchemes.isEmpty) {
       // If Http FS is supported by yarn service, the URI of remote http resource should
       // still be remote.
       assert(jars.contains(tmpHttpJarPath))
