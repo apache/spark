@@ -2343,7 +2343,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     }
   }
 
-  test("Test mixed types") {
+  test("SPARK-32025: infer the schema from mixed-type values") {
     val data = spark
       .read
       .format("csv")

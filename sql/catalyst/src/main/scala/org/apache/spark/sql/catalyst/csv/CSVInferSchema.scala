@@ -82,8 +82,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   def inferRowType(rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
-      val typeElemInfer = inferField(rowSoFar(i), next(i))
-      rowSoFar(i) = compatibleType(rowSoFar(i), typeElemInfer).getOrElse(StringType)
+      rowSoFar(i) = inferField(rowSoFar(i), next(i))
       i+=1
     }
     rowSoFar
@@ -103,7 +102,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
     } else {
-      typeSoFar match {
+      val typeElemInfer = typeSoFar match {
         case NullType => tryParseInteger(field)
         case IntegerType => tryParseInteger(field)
         case LongType => tryParseLong(field)
@@ -117,6 +116,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case other: DataType =>
           throw new UnsupportedOperationException(s"Unexpected data type $other")
       }
+      compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }
   }
 
