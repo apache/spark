@@ -37,6 +37,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
@@ -640,6 +641,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         (targetAppId, appPathsInfo) ->
             appPathsInfo.updateActiveLocalDirs(
                 targetAppId, relativeMergeDirPathPattern, localDirs));
+  }
+
+  @VisibleForTesting
+  public Path[] getLocalDirs() {
+    return localDirs;
   }
 
   /**
