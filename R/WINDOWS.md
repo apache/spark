@@ -2,7 +2,7 @@
 
 To build SparkR on Windows, the following steps are required
 
-1. Install R (>= 3.1) and [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Make sure to
+1. Install R (>= 3.5) and [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Make sure to
 include Rtools and R in `PATH`.
 
 2. Install
