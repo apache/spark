@@ -142,48 +142,53 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("Aggregate metrics: track avg probe") {
-    // The executed plan looks like:
-    // HashAggregate(keys=[a#61], functions=[count(1)], output=[a#61, count#71L])
-    // +- Exchange hashpartitioning(a#61, 5)
-    //    +- HashAggregate(keys=[a#61], functions=[partial_count(1)], output=[a#61, count#76L])
-    //       +- Exchange RoundRobinPartitioning(1)
-    //          +- LocalTableScan [a#61]
-    //
-    // Assume the execution plan with node id is:
-    // Wholestage disabled:
-    // HashAggregate(nodeId = 0)
-    //   Exchange(nodeId = 1)
-    //     HashAggregate(nodeId = 2)
-    //       Exchange (nodeId = 3)
-    //         LocalTableScan(nodeId = 4)
-    //
-    // Wholestage enabled:
-    // WholeStageCodegen(nodeId = 0)
-    //   HashAggregate(nodeId = 1)
-    //     Exchange(nodeId = 2)
-    //       WholeStageCodegen(nodeId = 3)
-    //         HashAggregate(nodeId = 4)
-    //           Exchange(nodeId = 5)
-    //             LocalTableScan(nodeId = 6)
-    Seq(true, false).foreach { enableWholeStage =>
-      val df = generateRandomBytesDF().repartition(1).groupBy('a).count()
-      val nodeIds = if (enableWholeStage) {
-        Set(4L, 1L)
-      } else {
-        Set(2L, 0L)
-      }
-      val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
-      nodeIds.foreach { nodeId =>
-        val probes = metrics(nodeId)._2("avg hash probe bucket list iters").toString
-        if (!probes.contains("\n")) {
-          // It's a single metrics value
-          assert(probes.toDouble > 1.0)
+    val skipPartialAgg = spark.sessionState.conf.getConf(SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED)
+    if (skipPartialAgg) {
+      logInfo("Skipping, since partial Aggregation is disabled")
+    } else {
+      // The executed plan looks like:
+      // HashAggregate(keys=[a#61], functions=[count(1)], output=[a#61, count#71L])
+      // +- Exchange hashpartitioning(a#61, 5)
+      //    +- HashAggregate(keys=[a#61], functions=[partial_count(1)], output=[a#61, count#76L])
+      //       +- Exchange RoundRobinPartitioning(1)
+      //          +- LocalTableScan [a#61]
+      //
+      // Assume the execution plan with node id is:
+      // Wholestage disabled:
+      // HashAggregate(nodeId = 0)
+      //   Exchange(nodeId = 1)
+      //     HashAggregate(nodeId = 2)
+      //       Exchange (nodeId = 3)
+      //         LocalTableScan(nodeId = 4)
+      //
+      // Wholestage enabled:
+      // WholeStageCodegen(nodeId = 0)
+      //   HashAggregate(nodeId = 1)
+      //     Exchange(nodeId = 2)
+      //       WholeStageCodegen(nodeId = 3)
+      //         HashAggregate(nodeId = 4)
+      //           Exchange(nodeId = 5)
+      //             LocalTableScan(nodeId = 6)
+      Seq(true, false).foreach { enableWholeStage =>
+        val df = generateRandomBytesDF().repartition(1).groupBy('a).count()
+        val nodeIds = if (enableWholeStage) {
+          Set(4L, 1L)
         } else {
-          val mainValue = probes.split("\n").apply(1).stripPrefix("(").stripSuffix(")")
-          // Extract min, med, max from the string and strip off everthing else.
-          val index = mainValue.indexOf(" (", 0)
-          mainValue.slice(0, index).split(", ").foreach {
-            probe => assert(probe.toDouble > 1.0)
+          Set(2L, 0L)
+        }
+        val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
+        nodeIds.foreach { nodeId =>
+          val probes = metrics(nodeId)._2("avg hash probe bucket list iters").toString
+          if (!probes.contains("\n")) {
+            // It's a single metrics value
+            assert(probes.toDouble > 1.0)
+          } else {
+            val mainValue = probes.split("\n").apply(1).stripPrefix("(").stripSuffix(")")
+            // Extract min, med, max from the string and strip off everthing else.
+            val index = mainValue.indexOf(" (", 0)
+            mainValue.slice(0, index).split(", ").foreach {
+              probe => assert(probe.toDouble > 1.0)
+            }
           }
         }
       }
