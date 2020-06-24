@@ -236,7 +236,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   private def findActiveMergedShuffleDirs(conf: SparkConf): Option[Array[File]] = {
-    Option(Utils.getConfiguredLocalDirs(conf).map(
+    Option(Utils.getConfiguredLocalDirs(conf).sorted.map(
       rootDir => new File(rootDir, "merge_manager")).filter(mergeDir => mergeDir.exists()))
   }
 

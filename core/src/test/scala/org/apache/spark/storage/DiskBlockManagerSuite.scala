@@ -93,6 +93,9 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
     assert(diskBlockManager.activeMergedShuffleDirs.isDefined)
     assert(diskBlockManager.activeMergedShuffleDirs.get.length == diskBlockManager.localDirs.length)
+    val expected = Array(rootDir0.getAbsolutePath, rootDir1.getAbsolutePath).sorted
+    val actual = diskBlockManager.activeMergedShuffleDirs.get.map(file => file.getParent)
+    assert(expected sameElements actual)
   }
 
   test("should not create merge directories if one already exists under a local dir") {
