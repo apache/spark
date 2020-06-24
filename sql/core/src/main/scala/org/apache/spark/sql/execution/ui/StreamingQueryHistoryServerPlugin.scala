@@ -33,8 +33,7 @@ class StreamingQueryHistoryServerPlugin extends AppHistoryServerPlugin {
   }
 
   override def setupUI(ui: SparkUI): Unit = {
-    val trackingStore = new ElementTrackingStore(ui.store.store, ui.conf)
-    val streamingQueryStatusStore = new StreamingQueryStatusStore(trackingStore)
+    val streamingQueryStatusStore = new StreamingQueryStatusStore(ui.store.store)
     new StreamingQueryTab(streamingQueryStatusStore, ui)
   }
 

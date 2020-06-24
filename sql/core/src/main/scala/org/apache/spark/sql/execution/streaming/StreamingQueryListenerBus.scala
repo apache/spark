@@ -22,6 +22,7 @@ import java.util.UUID
 import scala.collection.mutable
 
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerEvent}
+import org.apache.spark.scheduler.ReplayListenerBus
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.ListenerBus
 
@@ -31,9 +32,14 @@ import org.apache.spark.util.ListenerBus
  * Spark listener bus, so that it can receive [[StreamingQueryListener.Event]]s and dispatch them
  * to StreamingQueryListeners.
  *
- * Note that each bus and its registered listeners are associated with a single SparkSession
+ * Note 1: Each bus and its registered listeners are associated with a single SparkSession
  * and StreamingQueryManager. So this bus will dispatch events to registered listeners for only
  * those queries that were started in the associated SparkSession.
+ *
+ * Note 2: To rebuild Structured Streaming UI in SHS, this bus will be registered into
+ * [[ReplayListenerBus]]. We use the `live` argument (true in default) to determine how to process
+ * [[StreamingQueryListener.Event]]. If `live` is false, it means this bus is used to replay all
+ * streaming query event from eventLog.
  */
 class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus], live: Boolean = true)
   extends SparkListener with ListenerBus[StreamingQueryListener, StreamingQueryListener.Event] {
@@ -99,7 +105,7 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus], live:
         // When loaded by Spark History Server, we should process all event coming from replay
         // listener bus.
         if (!live || !LiveListenerBus.withinListenerThread.value ||
-          !e.isInstanceOf[QueryStartedEvent])  {
+            !e.isInstanceOf[QueryStartedEvent])  {
           postToAll(e)
         }
       case _ =>

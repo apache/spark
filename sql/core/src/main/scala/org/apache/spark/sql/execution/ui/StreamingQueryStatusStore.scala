@@ -18,16 +18,15 @@
 package org.apache.spark.sql.execution.ui
 
 import org.apache.spark.sql.streaming.ui.{StreamingQueryProgressWrapper, StreamingQuerySummary, StreamingQueryUIData}
-import org.apache.spark.status.{ElementTrackingStore, KVUtils}
+import org.apache.spark.status.KVUtils
+import org.apache.spark.util.kvstore.KVStore
 
 /**
  * Provides a view of a KVStore with methods that make it easy to query Streaming Query state.
  * There's no state kept in this class, so it's ok to have multiple instances of it in an
  * application.
  */
-class StreamingQueryStatusStore(store: ElementTrackingStore) {
-
-  def queriesCount(): Long = store.count(classOf[StreamingQuerySummary])
+class StreamingQueryStatusStore(store: KVStore) {
 
   def allQueryUIData: Seq[StreamingQueryUIData] = synchronized {
     val view = store.view(classOf[StreamingQuerySummary]).index("startTimestamp").first(0L)
