@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Evolving;
  *
  * As of Spark 2.4, statistics are reported to the optimizer before any operator is pushed to the
  * data source. Implementations may return more accurate statistics based on pushed operators
- * may improve query performance by providing better information to the optimizer.
+ * which may improve query performance by providing better information to the optimizer.
  *
  * @since 3.0.0
  */
