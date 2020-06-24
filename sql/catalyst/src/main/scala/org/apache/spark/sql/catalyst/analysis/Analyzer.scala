@@ -1893,8 +1893,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case UnresolvedFunc(multipartIdent) =>
         val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent, "function lookup")
-        val info = v1SessionCatalog.lookupFunctionInfo(funcIdent)
-        ResolvedFunc(currentCatalog, CatalogFunction(funcIdent, info.getClassName, Nil))
+        ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
 
       case q: LogicalPlan =>
         q transformExpressions {

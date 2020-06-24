@@ -85,7 +85,12 @@ case class ResolvedView(identifier: Identifier) extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
 
-case class ResolvedFunc(catalog: CatalogPlugin, catalogFunction: CatalogFunction)
+/**
+ * A plan containing resolved function.
+ */
+// TODO: create a generic representation for v1, v2 function, after we add function
+//       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
+case class ResolvedFunc(identifier: Identifier)
   extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }

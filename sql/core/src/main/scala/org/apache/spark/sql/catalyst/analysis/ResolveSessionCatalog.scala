@@ -612,9 +612,10 @@ class ResolveSessionCatalog(
           replace)
       }
 
-    case RefreshFunction(ResolvedFunc(_, func)) =>
+    case RefreshFunction(ResolvedFunc(identifier)) =>
       // Fallback to v1 command
-      RefreshFunctionCommand(func.identifier.database, func.identifier.funcName)
+      val funcIdentifier = identifier.asFunctionIdentifier
+      RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = tableName match {
