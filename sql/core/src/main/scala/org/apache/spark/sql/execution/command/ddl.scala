@@ -839,21 +839,14 @@ case class AlterTableSetLocationCommand(
 object DDLUtils {
   val HIVE_PROVIDER = "hive"
 
-  val RESERVED_PROPERTIES: Set[String] =
-    // spark reserved properties
-    Set(
-    TableCatalog.PROP_COMMENT,
-    TableCatalog.PROP_LOCATION,
-    TableCatalog.PROP_OWNER,
-    TableCatalog.PROP_PROVIDER) ++
-    // hive reserved properties
-    Set(
+  val METASTORE_GENERATED_PROPERTIES: Set[String] = Set(
     "CreateTime",
     "transient_lastDdlTime",
     "grantTime",
     "lastUpdateTime",
     "last_modified_by",
     "last_modified_time",
+    "Owner",
     "totalNumberFiles",
     "maxFileSize",
     "minFileSize")
