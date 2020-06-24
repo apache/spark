@@ -3052,25 +3052,25 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       val func = FunctionIdentifier("func1", Some("default"))
       sql("CREATE FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
-      assert(spark.sessionState.catalog.isRegisteredFunction(func) == false)
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
       sql("REFRESH FUNCTION func1")
-      assert(spark.sessionState.catalog.isRegisteredFunction(func) == true)
+      assert(spark.sessionState.catalog.isRegisteredFunction(func))
 
       spark.sessionState.catalog.externalCatalog.dropFunction("default", "func1")
-      assert(spark.sessionState.catalog.isRegisteredFunction(func) == true)
+      assert(spark.sessionState.catalog.isRegisteredFunction(func))
       intercept[NoSuchFunctionException] {
         sql("REFRESH FUNCTION func1")
       }
-      assert(spark.sessionState.catalog.isRegisteredFunction(func) == false)
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
 
       val function = CatalogFunction(func, "test.non.exists.udf", Seq.empty)
       spark.sessionState.catalog.createFunction(function, false)
-      assert(spark.sessionState.catalog.isRegisteredFunction(func) == false)
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
       val err = intercept[AnalysisException] {
         sql("REFRESH FUNCTION func1")
       }.getMessage
       assert(err.contains("Can not load class"))
-      assert(spark.sessionState.catalog.isRegisteredFunction(func) == false)
+      assert(!spark.sessionState.catalog.isRegisteredFunction(func))
     }
   }
 }
