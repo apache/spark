@@ -2727,7 +2727,7 @@ class HiveDDLSuite
 
   test("SPARK-31828: Filters out Hive metastore properties in CreateTableLikeCommand") {
     val catalog = spark.sessionState.catalog
-    DDLUtils.METASTORE_GENERATED_PROPERTIES.foreach { meta =>
+    DDLUtils.RESERVED_PROPERTIES.foreach { meta =>
       withTable("t1", "t2") {
         val uuid = UUID.randomUUID().toString
         sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES('$meta'='$uuid')")
