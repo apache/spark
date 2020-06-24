@@ -67,7 +67,6 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
   private val malformedRowFile = "test-data/malformedRow.csv"
-  private val mixedTypes = "test-data/mixed-types1.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
