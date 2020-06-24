@@ -161,8 +161,8 @@ function setDataTableDefaults() {
 
 function formatDate(date) {
   if (date <= 0) return "-";
-  else return {
-     var d = new Date(date.replace("GMT","Z"))
+  else {
+     var d = new Date(date.replace("GMT", "Z"))
      return d.getFullYear() + '-' +
             (d.getMonth() + 1) + '-' +
             d.getDate() + " " +
