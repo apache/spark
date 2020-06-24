@@ -74,13 +74,25 @@ private[spark] class PythonRDD(
  * runner.
  */
 private[spark] case class PythonFunction(
-    command: Array[Byte],
+    command: Seq[Byte],
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: PythonAccumulatorV2)
+    accumulator: PythonAccumulatorV2) {
+
+  def this(
+      command: Array[Byte],
+      envVars: JMap[String, String],
+      pythonIncludes: JList[String],
+      pythonExec: String,
+      pythonVer: String,
+      broadcastVars: JList[Broadcast[PythonBroadcast]],
+      accumulator: PythonAccumulatorV2) = {
+    this(command.toSeq, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
+  }
+}
 
 /**
  * A wrapper for chained Python functions (from bottom to top).

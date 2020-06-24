@@ -811,6 +811,69 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
     }
   }
+
+  test("SPARK-31859 Thriftserver works with spark.sql.datetime.java8API.enabled=true") {
+    withJdbcStatement() { st =>
+      st.execute("set spark.sql.datetime.java8API.enabled=true")
+      val rs = st.executeQuery("select date '2020-05-28', timestamp '2020-05-28 00:00:00'")
+      rs.next()
+      assert(rs.getDate(1).toString() == "2020-05-28")
+      assert(rs.getTimestamp(2).toString() == "2020-05-28 00:00:00.0")
+    }
+  }
+
+  test("SPARK-31861 Thriftserver respects spark.sql.session.timeZone") {
+    withJdbcStatement() { st =>
+      st.execute("set spark.sql.session.timeZone=+03:15") // different than Thriftserver's JVM tz
+      val rs = st.executeQuery("select timestamp '2020-05-28 10:00:00'")
+      rs.next()
+      // The timestamp as string is the same as the literal
+      assert(rs.getString(1) == "2020-05-28 10:00:00.0")
+      // Parsing it to java.sql.Timestamp in the client will always result in a timestamp
+      // in client default JVM timezone. The string value of the Timestamp will match the literal,
+      // but if the JDBC application cares about the internal timezone and UTC offset of the
+      // Timestamp object, it should set spark.sql.session.timeZone to match its client JVM tz.
+      assert(rs.getTimestamp(1).toString() == "2020-05-28 10:00:00.0")
+    }
+  }
+
+  test("SPARK-31863 Session conf should persist between Thriftserver worker threads") {
+    val iter = 20
+    withJdbcStatement() { statement =>
+      // date 'now' is resolved during parsing, and relies on SQLConf.get to
+      // obtain the current set timezone. We exploit this to run this test.
+      // If the timezones are set correctly to 25 hours apart across threads,
+      // the dates should reflect this.
+
+      // iterate a few times for the odd chance the same thread is selected
+      for (_ <- 0 until iter) {
+        statement.execute("SET spark.sql.session.timeZone=GMT-12")
+        val firstResult = statement.executeQuery("SELECT date 'now'")
+        firstResult.next()
+        val beyondDateLineWest = firstResult.getDate(1)
+
+        statement.execute("SET spark.sql.session.timeZone=GMT+13")
+        val secondResult = statement.executeQuery("SELECT date 'now'")
+        secondResult.next()
+        val dateLineEast = secondResult.getDate(1)
+        assert(
+          dateLineEast after beyondDateLineWest,
+          "SQLConf changes should persist across execution threads")
+      }
+    }
+  }
+
+  test("SPARK-30808: use Java 8 time API and Proleptic Gregorian calendar by default") {
+    withJdbcStatement() { st =>
+      // Proleptic Gregorian calendar has no gap in the range 1582-10-04..1582-10-15
+      val date = "1582-10-10"
+      val rs = st.executeQuery(s"select date '$date'")
+      rs.next()
+      val expected = java.sql.Date.valueOf(date)
+      assert(rs.getDate(1) === expected)
+      assert(rs.getString(1) === expected.toString)
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
@@ -820,7 +883,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
     s"--conf ${HIVE_THRIFT_SERVER_SINGLESESSION.key}=true" :: Nil
 
   test("share the temporary functions across JDBC connections") {
-    withMultipleConnectionJdbcStatement()(
+    withMultipleConnectionJdbcStatement("test_udtf")(
       { statement =>
         val jarPath = "../hive/src/test/resources/TestUDTF.jar"
         val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"

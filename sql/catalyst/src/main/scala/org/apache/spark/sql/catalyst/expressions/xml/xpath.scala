@@ -30,7 +30,8 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * This is not the world's most efficient implementation due to type conversion, but works.
  */
-abstract class XPathExtract extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+abstract class XPathExtract
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback with NullIntolerant {
   override def left: Expression = xml
   override def right: Expression = path
 

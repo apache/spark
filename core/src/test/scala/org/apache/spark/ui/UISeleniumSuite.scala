@@ -24,6 +24,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.io.Source
 import scala.xml.Node
 
+import com.gargoylesoftware.css.parser.CSSParseException
 import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
 import org.json4s._
 import org.json4s.jackson.JsonMethods
@@ -33,7 +34,6 @@ import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
-import org.w3c.css.sac.CSSParseException
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
@@ -769,33 +769,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         val descriptions = findAll(className("description-input")).toArray
         descriptions(0).text should be (description)
         descriptions(1).text should include ("collect")
-      }
-    }
-  }
-
-  test("SPARK-31534: text for tooltip should be escaped") {
-    withSpark(newSparkContext()) { sc =>
-      sc.setLocalProperty(CallSite.LONG_FORM, "collect at <console>:25")
-      sc.setLocalProperty(CallSite.SHORT_FORM, "collect at <console>:25")
-      sc.parallelize(1 to 10).collect
-
-      val driver = webDriver.asInstanceOf[HtmlUnitDriver]
-      driver.setJavascriptEnabled(true)
-
-      eventually(timeout(10.seconds), interval(50.milliseconds)) {
-        goToUi(sc, "/jobs")
-        val jobDesc =
-          driver.findElement(By.cssSelector("div[class='application-timeline-content']"))
-        jobDesc.getAttribute("data-title") should include  ("collect at &lt;console&gt;:25")
-
-        goToUi(sc, "/jobs/job/?id=0")
-        val stageDesc = driver.findElement(By.cssSelector("div[class='job-timeline-content']"))
-        stageDesc.getAttribute("data-title") should include ("collect at &lt;console&gt;:25")
-
-        // Open DAG Viz.
-        driver.findElement(By.id("job-dag-viz")).click()
-        val nodeDesc = driver.findElement(By.cssSelector("g[class='node_0 node']"))
-        nodeDesc.getAttribute("name") should include ("collect at &lt;console&gt;:25")
       }
     }
   }

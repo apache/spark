@@ -141,7 +141,7 @@ object Size {
   """,
   group = "map_funcs")
 case class MapKeys(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
 
@@ -332,7 +332,7 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
   """,
   group = "map_funcs")
 case class MapValues(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
 
@@ -361,7 +361,8 @@ case class MapValues(child: Expression)
   """,
   group = "map_funcs",
   since = "3.0.0")
-case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class MapEntries(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
 
@@ -649,7 +650,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
   """,
   group = "map_funcs",
   since = "2.4.0")
-case class MapFromEntries(child: Expression) extends UnaryExpression {
+case class MapFromEntries(child: Expression) extends UnaryExpression with NullIntolerant {
 
   @transient
   private lazy val dataTypeDetails: Option[(MapType, Boolean, Boolean)] = child.dataType match {
@@ -873,7 +874,7 @@ object ArraySortLike {
   group = "array_funcs")
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
-  extends BinaryExpression with ArraySortLike {
+  extends BinaryExpression with ArraySortLike with NullIntolerant {
 
   def this(e: Expression) = this(e, Literal(true))
 
@@ -1017,7 +1018,8 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
     Reverse logic for arrays is available since 2.4.0.
   """
 )
-case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Reverse(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   // Input types are utilized by type coercion in ImplicitTypeCasts.
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, ArrayType))
@@ -1086,7 +1088,7 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
   """,
   group = "array_funcs")
 case class ArrayContains(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = BooleanType
 
@@ -1185,7 +1187,7 @@ case class ArrayContains(left: Expression, right: Expression)
   since = "2.4.0")
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
-  extends BinaryArrayExpressionWithImplicitCast {
+  extends BinaryArrayExpressionWithImplicitCast with NullIntolerant {
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
@@ -1410,7 +1412,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
   since = "2.4.0")
 // scalastyle:on line.size.limit
 case class Slice(x: Expression, start: Expression, length: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = x.dataType
 
@@ -1688,7 +1690,8 @@ case class ArrayJoin(
   """,
   group = "array_funcs",
   since = "2.4.0")
-case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class ArrayMin(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def nullable: Boolean = true
 
@@ -1755,7 +1758,8 @@ case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCast
   """,
   group = "array_funcs",
   since = "2.4.0")
-case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class ArrayMax(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def nullable: Boolean = true
 
@@ -1831,7 +1835,7 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
   group = "array_funcs",
   since = "2.4.0")
 case class ArrayPosition(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
@@ -1909,7 +1913,7 @@ case class ArrayPosition(left: Expression, right: Expression)
   """,
   since = "2.4.0")
 case class ElementAt(left: Expression, right: Expression)
-  extends GetMapValueUtil with GetArrayItemUtil {
+  extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
@@ -2245,7 +2249,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   """,
   group = "array_funcs",
   since = "2.4.0")
-case class Flatten(child: Expression) extends UnaryExpression {
+case class Flatten(child: Expression) extends UnaryExpression with NullIntolerant {
 
   private def childDataType: ArrayType = child.dataType.asInstanceOf[ArrayType]
 
@@ -2624,7 +2628,7 @@ object Sequence {
         val maxEstimatedArrayLength =
           getSequenceLength(startMicros, stopMicros, intervalStepInMicros)
 
-        val stepSign = if (stopMicros > startMicros) +1 else -1
+        val stepSign = if (stopMicros >= startMicros) +1 else -1
         val exclusiveItem = stopMicros + stepSign
         val arr = new Array[T](maxEstimatedArrayLength)
         var t = startMicros
@@ -2686,7 +2690,7 @@ object Sequence {
          |
          |  $sequenceLengthCode
          |
-         |  final int $stepSign = $stopMicros > $startMicros ? +1 : -1;
+         |  final int $stepSign = $stopMicros >= $startMicros ? +1 : -1;
          |  final long $exclusiveItem = $stopMicros + $stepSign;
          |
          |  $arr = new $elemType[$arrLength];
@@ -2884,7 +2888,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
   group = "array_funcs",
   since = "2.4.0")
 case class ArrayRemove(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = left.dataType
 
@@ -3081,7 +3085,7 @@ trait ArraySetLike {
   group = "array_funcs",
   since = "2.4.0")
 case class ArrayDistinct(child: Expression)
-  extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
+  extends UnaryExpression with ArraySetLike with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
@@ -3219,7 +3223,8 @@ case class ArrayDistinct(child: Expression)
 /**
  * Will become common base class for [[ArrayUnion]], [[ArrayIntersect]], and [[ArrayExcept]].
  */
-trait ArrayBinaryLike extends BinaryArrayExpressionWithImplicitCast with ArraySetLike {
+trait ArrayBinaryLike
+  extends BinaryArrayExpressionWithImplicitCast with ArraySetLike with NullIntolerant {
   override protected def dt: DataType = dataType
   override protected def et: DataType = elementType
 

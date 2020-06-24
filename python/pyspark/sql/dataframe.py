@@ -276,6 +276,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Prints the (logical and physical) plans to the console for debugging purpose.
 
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+            When this is a string without specifying the ``mode``, it works as the mode is
+            specified.
         :param mode: specifies the expected output format of plans.
 
             * ``simple``: Print only a physical plan.
@@ -306,12 +308,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Output [2]: [age#0, name#1]
         ...
 
+        >>> df.explain("cost")
+        == Optimized Logical Plan ==
+        ...Statistics...
+        ...
+
         .. versionchanged:: 3.0.0
            Added optional argument `mode` to specify the expected output format of plans.
         """
 
         if extended is not None and mode is not None:
-            raise Exception("extended and mode can not be specified simultaneously")
+            raise Exception("extended and mode should not be set together.")
 
         # For the no argument case: df.explain()
         is_no_argument = extended is None and mode is None
@@ -319,18 +326,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         # For the cases below:
         #   explain(True)
         #   explain(extended=False)
-        is_extended_case = extended is not None and isinstance(extended, bool)
+        is_extended_case = isinstance(extended, bool) and mode is None
 
-        # For the mode specified: df.explain(mode="formatted")
-        is_mode_case = mode is not None and isinstance(mode, basestring)
+        # For the case when extended is mode:
+        #   df.explain("formatted")
+        is_extended_as_mode = isinstance(extended, basestring) and mode is None
 
-        if not is_no_argument and not (is_extended_case or is_mode_case):
-            if extended is not None:
-                err_msg = "extended (optional) should be provided as bool" \
-                    ", got {0}".format(type(extended))
-            else:  # For mode case
-                err_msg = "mode (optional) should be provided as str, got {0}".format(type(mode))
-            raise TypeError(err_msg)
+        # For the mode specified:
+        #   df.explain(mode="formatted")
+        is_mode_case = extended is None and isinstance(mode, basestring)
+
+        if not (is_no_argument or is_extended_case or is_extended_as_mode or is_mode_case):
+            argtypes = [
+                str(type(arg)) for arg in [extended, mode] if arg is not None]
+            raise TypeError(
+                "extended (optional) and mode (optional) should be a string "
+                "and bool; however, got [%s]." % ", ".join(argtypes))
 
         # Sets an explain mode depending on a given argument
         if is_no_argument:
@@ -339,6 +350,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             explain_mode = "extended" if extended else "simple"
         elif is_mode_case:
             explain_mode = mode
+        elif is_extended_as_mode:
+            explain_mode = extended
 
         print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
 
@@ -521,7 +534,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. note:: Evolving
 
-        >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
+        >>> from pyspark.sql.functions import timestamp_seconds
+        >>> sdf.select(
+        ...    'name',
+        ...    timestamp_seconds(sdf.time).alias('time')).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
         """
         if not eventTime or type(eventTime) is not str:
@@ -2218,6 +2234,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         1855039936
         """
         return self._jdf.semanticHash()
+
+    @since(3.1)
+    def inputFiles(self):
+        """
+        Returns a best-effort snapshot of the files that compose this :class:`DataFrame`.
+        This method simply asks each constituent BaseRelation for its respective files and
+        takes the union of all results. Depending on the source relations, this may not find
+        all input files. Duplicates are removed.
+
+        >>> df = spark.read.load("examples/src/main/resources/people.json", format="json")
+        >>> len(df.inputFiles())
+        1
+        """
+        return list(self._jdf.inputFiles())
 
     where = copy_func(
         filter,

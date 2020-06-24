@@ -123,7 +123,11 @@ object StringUtils extends Logging {
           val stringToAppend = if (available >= sLen) s else s.substring(0, available)
           strings.append(stringToAppend)
         }
-        length += sLen
+
+        // Keeps the total length of appended strings. Note that we need to cap the length at
+        // `ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH`; otherwise, we will overflow
+        // length causing StringIndexOutOfBoundsException in the substring call above.
+        length = Math.min(length.toLong + sLen, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH).toInt
       }
     }
 

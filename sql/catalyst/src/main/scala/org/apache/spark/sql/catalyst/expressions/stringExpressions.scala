@@ -118,47 +118,72 @@ case class ConcatWs(children: Seq[Expression])
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
     } else {
+      val isNullArgs = ctx.freshName("isNullArgs")
+      val valueArgs = ctx.freshName("valueArgs")
+
       val array = ctx.freshName("array")
       val varargNum = ctx.freshName("varargNum")
       val idxVararg = ctx.freshName("idxInVararg")
 
       val evals = children.map(_.genCode(ctx))
-      val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
-        child.dataType match {
+      val (argBuild, varargCount, varargBuild) = children.tail.zip(evals.tail)
+        .zipWithIndex.map { case ((child, eval), idx) =>
+        val reprForIsNull = s"$isNullArgs[$idx]"
+        val reprForValue = s"$valueArgs[$idx]"
+
+        val arg =
+          s"""
+           ${eval.code}
+           $reprForIsNull = ${eval.isNull};
+           $reprForValue = ${eval.value};
+           """
+
+        val (varCount, varBuild) = child.dataType match {
           case StringType =>
+            val reprForValueCast = s"((UTF8String) $reprForValue)"
             ("", // we count all the StringType arguments num at once below.
-             if (eval.isNull == TrueLiteral) {
-               ""
-             } else {
-               s"$array[$idxVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
-             })
+              if (eval.isNull == TrueLiteral) {
+                ""
+              } else {
+                s"$array[$idxVararg ++] = $reprForIsNull ? (UTF8String) null : $reprForValueCast;"
+              })
           case _: ArrayType =>
+            val reprForValueCast = s"((ArrayData) $reprForValue)"
             val size = ctx.freshName("n")
             if (eval.isNull == TrueLiteral) {
               ("", "")
             } else {
+              // scalastyle:off line.size.limit
               (s"""
-                if (!${eval.isNull}) {
-                  $varargNum += ${eval.value}.numElements();
+                if (!$reprForIsNull) {
+                  $varargNum += $reprForValueCast.numElements();
                 }
                 """,
-               s"""
-                if (!${eval.isNull}) {
-                  final int $size = ${eval.value}.numElements();
+                s"""
+                if (!$reprForIsNull) {
+                  final int $size = $reprForValueCast.numElements();
                   for (int j = 0; j < $size; j ++) {
-                    $array[$idxVararg ++] = ${CodeGenerator.getValue(eval.value, StringType, "j")};
+                    $array[$idxVararg ++] = ${CodeGenerator.getValue(reprForValueCast, StringType, "j")};
                   }
                 }
                 """)
+              // scalastyle:on line.size.limit
             }
         }
-      }.unzip
 
-      val codes = ctx.splitExpressionsWithCurrentInputs(evals.map(_.code.toString))
+        (arg, varCount, varBuild)
+      }.unzip3
+
+      val argBuilds = ctx.splitExpressionsWithCurrentInputs(
+        expressions = argBuild,
+        funcName = "initializeArgsArrays",
+        extraArguments = ("boolean []", isNullArgs) :: ("Object []", valueArgs) :: Nil
+      )
 
       val varargCounts = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargCount,
         funcName = "varargCountsConcatWs",
+        extraArguments = ("boolean []", isNullArgs) :: ("Object []", valueArgs) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
@@ -171,7 +196,8 @@ case class ConcatWs(children: Seq[Expression])
       val varargBuilds = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargBuild,
         funcName = "varargBuildsConcatWs",
-        extraArguments = ("UTF8String []", array) :: ("int", idxVararg) :: Nil,
+        extraArguments = ("UTF8String []", array) :: ("int", idxVararg) ::
+          ("boolean []", isNullArgs) :: ("Object []", valueArgs) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
@@ -182,12 +208,15 @@ case class ConcatWs(children: Seq[Expression])
 
       ev.copy(
         code"""
-        $codes
+        boolean[] $isNullArgs = new boolean[${children.length - 1}];
+        Object[] $valueArgs = new Object[${children.length - 1}];
+        $argBuilds
         int $varargNum = ${children.count(_.dataType == StringType) - 1};
         int $idxVararg = 0;
         $varargCounts
         UTF8String[] $array = new UTF8String[$varargNum];
         $varargBuilds
+        ${evals.head.code}
         UTF8String ${ev.value} = UTF8String.concatWs(${evals.head.value}, $array);
         boolean ${ev.isNull} = ${ev.value} == null;
       """)
@@ -334,7 +363,7 @@ trait String2StringExpression extends ImplicitCastInputTypes {
   """,
   since = "1.0.1")
 case class Upper(child: Expression)
-  extends UnaryExpression with String2StringExpression {
+  extends UnaryExpression with String2StringExpression with NullIntolerant {
 
   // scalastyle:off caselocale
   override def convert(v: UTF8String): UTF8String = v.toUpperCase
@@ -356,7 +385,8 @@ case class Upper(child: Expression)
        sparksql
   """,
   since = "1.0.1")
-case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
+case class Lower(child: Expression)
+  extends UnaryExpression with String2StringExpression with NullIntolerant {
 
   // scalastyle:off caselocale
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
@@ -365,6 +395,9 @@ case class Lower(child: Expression) extends UnaryExpression with String2StringEx
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
   }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("lower")
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
@@ -432,7 +465,7 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   since = "2.3.0")
 // scalastyle:on line.size.limit
 case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(srcExpr: Expression, searchExpr: Expression) = {
     this(srcExpr, searchExpr, Literal(""))
@@ -598,7 +631,7 @@ object StringTranslate {
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   @transient private var lastMatching: UTF8String = _
   @transient private var lastReplace: UTF8String = _
@@ -663,7 +696,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
-    with ImplicitCastInputTypes {
+    with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
@@ -1035,7 +1068,7 @@ case class StringTrimRight(
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class StringInstr(str: Expression, substr: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = str
   override def right: Expression = substr
@@ -1077,7 +1110,7 @@ case class StringInstr(str: Expression, substr: Expression)
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
- extends TernaryExpression with ImplicitCastInputTypes {
+ extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
@@ -1182,7 +1215,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
      """)
   }
 
-  override def prettyName: String = "locate"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("locate")
 }
 
 /**
@@ -1205,7 +1239,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
   """,
   since = "1.5.0")
 case class StringLPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(str: Expression, len: Expression) = {
     this(str, len, Literal(" "))
@@ -1246,7 +1280,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
   """,
   since = "1.5.0")
 case class StringRPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(str: Expression, len: Expression) = {
     this(str, len, Literal(" "))
@@ -1536,7 +1570,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
        Spark Sql
   """,
   since = "1.5.0")
-case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class InitCap(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
   override def dataType: DataType = StringType
@@ -1563,7 +1598,7 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
   """,
   since = "1.5.0")
 case class StringRepeat(str: Expression, times: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = str
   override def right: Expression = times
@@ -1593,7 +1628,7 @@ case class StringRepeat(str: Expression, times: Expression)
   """,
   since = "1.5.0")
 case class StringSpace(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
@@ -1738,7 +1773,8 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Length(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
 
@@ -1766,7 +1802,8 @@ case class Length(child: Expression) extends UnaryExpression with ImplicitCastIn
        72
   """,
   since = "2.3.0")
-case class BitLength(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class BitLength(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
 
@@ -1797,7 +1834,8 @@ case class BitLength(child: Expression) extends UnaryExpression with ImplicitCas
        9
   """,
   since = "2.3.0")
-case class OctetLength(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class OctetLength(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
 
@@ -1828,7 +1866,7 @@ case class OctetLength(child: Expression) extends UnaryExpression with ImplicitC
   """,
   since = "1.5.0")
 case class Levenshtein(left: Expression, right: Expression) extends BinaryExpression
-    with ImplicitCastInputTypes {
+    with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
@@ -1853,7 +1891,8 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
        M460
   """,
   since = "1.5.0")
-case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class SoundEx(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
 
@@ -1879,7 +1918,8 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
        50
   """,
   since = "1.5.0")
-case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Ascii(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[DataType] = Seq(StringType)
@@ -1921,7 +1961,8 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
   """,
   since = "2.3.0")
 // scalastyle:on line.size.limit
-case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Chr(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(LongType)
@@ -1964,7 +2005,8 @@ case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInput
        U3BhcmsgU1FM
   """,
   since = "1.5.0")
-case class Base64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Base64(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
@@ -1992,7 +2034,8 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
        Spark SQL
   """,
   since = "1.5.0")
-case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class UnBase64(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[DataType] = Seq(StringType)
@@ -2024,7 +2067,7 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class Decode(bin: Expression, charset: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = bin
   override def right: Expression = charset
@@ -2064,7 +2107,7 @@ case class Decode(bin: Expression, charset: Expression)
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class Encode(value: Expression, charset: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = value
   override def right: Expression = charset
@@ -2108,7 +2151,7 @@ case class Encode(value: Expression, charset: Expression)
   """,
   since = "1.5.0")
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def left: Expression = x
   override def right: Expression = d

@@ -20,11 +20,12 @@ package org.apache.spark.sql.expressions
 import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
 
@@ -152,6 +153,40 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
               assert(actual === expected)
             case _ =>
           }
+        }
+      }
+    }
+  }
+
+  test("Check whether SQL expressions should extend NullIntolerant") {
+    // Only check expressions extended from these expressions because these expressions are
+    // NullIntolerant by default.
+    val exprTypesToCheck = Seq(classOf[UnaryExpression], classOf[BinaryExpression],
+      classOf[TernaryExpression], classOf[QuaternaryExpression], classOf[SeptenaryExpression])
+
+    // Do not check these expressions, because these expressions extend NullIntolerant
+    // and override the eval method to avoid evaluating input1 if input2 is 0.
+    val ignoreSet = Set(classOf[IntegralDivide], classOf[Divide], classOf[Remainder], classOf[Pmod])
+
+    val candidateExprsToCheck = spark.sessionState.functionRegistry.listFunction()
+      .map(spark.sessionState.catalog.lookupFunctionInfo).map(_.getClassName)
+      .filterNot(c => ignoreSet.exists(_.getName.equals(c)))
+      .map(name => Utils.classForName(name))
+      .filterNot(classOf[NonSQLExpression].isAssignableFrom)
+
+    exprTypesToCheck.foreach { superClass =>
+      candidateExprsToCheck.filter(superClass.isAssignableFrom).foreach { clazz =>
+        val isEvalOverrode = clazz.getMethod("eval", classOf[InternalRow]) !=
+          superClass.getMethod("eval", classOf[InternalRow])
+        val isNullIntolerantMixedIn = classOf[NullIntolerant].isAssignableFrom(clazz)
+        if (isEvalOverrode && isNullIntolerantMixedIn) {
+          fail(s"${clazz.getName} should not extend ${classOf[NullIntolerant].getSimpleName}, " +
+            s"or add ${clazz.getName} in the ignoreSet of this test.")
+        } else if (!isEvalOverrode && !isNullIntolerantMixedIn) {
+          fail(s"${clazz.getName} should extend ${classOf[NullIntolerant].getSimpleName}.")
+        } else {
+          assert((!isEvalOverrode && isNullIntolerantMixedIn) ||
+            (isEvalOverrode && !isNullIntolerantMixedIn))
         }
       }
     }

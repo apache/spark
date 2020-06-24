@@ -41,7 +41,6 @@ from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
-from pyspark.util import _warn_pin_thread
 
 if sys.version > '3':
     xrange = range
@@ -866,16 +865,22 @@ class SparkContext(object):
         if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
             rdds = [x._reserialize() for x in rdds]
         gw = SparkContext._gateway
-        cls = SparkContext._jvm.org.apache.spark.api.java.JavaRDD
-        is_jrdd = is_instance_of(gw, rdds[0]._jrdd, cls)
+        jvm = SparkContext._jvm
+        jrdd_cls = jvm.org.apache.spark.api.java.JavaRDD
+        jpair_rdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
+        jdouble_rdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
+        if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):
+            cls = jrdd_cls
+        elif is_instance_of(gw, rdds[0]._jrdd, jpair_rdd_cls):
+            cls = jpair_rdd_cls
+        elif is_instance_of(gw, rdds[0]._jrdd, jdouble_rdd_cls):
+            cls = jdouble_rdd_cls
+        else:
+            cls_name = rdds[0]._jrdd.getClass().getCanonicalName()
+            raise TypeError("Unsupported Java RDD class %s" % cls_name)
         jrdds = gw.new_array(cls, len(rdds))
         for i in range(0, len(rdds)):
-            if is_jrdd:
-                jrdds[i] = rdds[i]._jrdd
-            else:
-                # zip could return JavaPairRDD hence we ensure `_jrdd`
-                # to be `JavaRDD` by wrapping it in a `map`
-                jrdds[i] = rdds[i].map(lambda x: x)._jrdd
+            jrdds[i] = rdds[i]._jrdd
         return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
@@ -1020,17 +1025,9 @@ class SparkContext(object):
         .. note:: Currently, setting a group ID (set to local properties) with multiple threads
             does not properly work. Internally threads on PVM and JVM are not synced, and JVM
             thread can be reused for multiple threads on PVM, which fails to isolate local
-            properties for each thread on PVM.
-
-            To work around this, you can set `PYSPARK_PIN_THREAD` to
-            `'true'` (see SPARK-22340). However, note that it cannot inherit the local properties
-            from the parent thread although it isolates each thread on PVM and JVM with its own
-            local properties.
-
-            To work around this, you should manually copy and set the local
-            properties from the parent thread to the child thread when you create another thread.
+            properties for each thread on PVM. To work around this, You can use
+            :meth:`RDD.collectWithJobGroup` for now.
         """
-        _warn_pin_thread("setJobGroup")
         self._jsc.setJobGroup(groupId, description, interruptOnCancel)
 
     def setLocalProperty(self, key, value):
@@ -1041,17 +1038,9 @@ class SparkContext(object):
         .. note:: Currently, setting a local property with multiple threads does not properly work.
             Internally threads on PVM and JVM are not synced, and JVM thread
             can be reused for multiple threads on PVM, which fails to isolate local properties
-            for each thread on PVM.
-
-            To work around this, you can set `PYSPARK_PIN_THREAD` to
-            `'true'` (see SPARK-22340). However, note that it cannot inherit the local properties
-            from the parent thread although it isolates each thread on PVM and JVM with its own
-            local properties.
-
-            To work around this, you should manually copy and set the local
-            properties from the parent thread to the child thread when you create another thread.
+            for each thread on PVM. To work around this, You can use
+            :meth:`RDD.collectWithJobGroup`.
         """
-        _warn_pin_thread("setLocalProperty")
         self._jsc.setLocalProperty(key, value)
 
     def getLocalProperty(self, key):
@@ -1068,17 +1057,9 @@ class SparkContext(object):
         .. note:: Currently, setting a job description (set to local properties) with multiple
             threads does not properly work. Internally threads on PVM and JVM are not synced,
             and JVM thread can be reused for multiple threads on PVM, which fails to isolate
-            local properties for each thread on PVM.
-
-            To work around this, you can set `PYSPARK_PIN_THREAD` to
-            `'true'` (see SPARK-22340). However, note that it cannot inherit the local properties
-            from the parent thread although it isolates each thread on PVM and JVM with its own
-            local properties.
-
-            To work around this, you should manually copy and set the local
-            properties from the parent thread to the child thread when you create another thread.
+            local properties for each thread on PVM. To work around this, You can use
+            :meth:`RDD.collectWithJobGroup` for now.
         """
-        _warn_pin_thread("setJobDescription")
         self._jsc.setJobDescription(value)
 
     def sparkUser(self):

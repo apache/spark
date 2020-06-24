@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.TreeSet
+import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -95,7 +97,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 }
 
-trait PredicateHelper {
+trait PredicateHelper extends Logging {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -197,6 +199,98 @@ trait PredicateHelper {
     case _: PythonUDF => true
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
+  }
+
+  /**
+   * Convert an expression into conjunctive normal form.
+   * Definition and algorithm: https://en.wikipedia.org/wiki/Conjunctive_normal_form
+   * CNF can explode exponentially in the size of the input expression when converting [[Or]]
+   * clauses. Use a configuration [[SQLConf.MAX_CNF_NODE_COUNT]] to prevent such cases.
+   *
+   * @param condition to be converted into CNF.
+   * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
+   *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
+   */
+  protected def conjunctiveNormalForm(condition: Expression): Seq[Expression] = {
+    val postOrderNodes = postOrderTraversal(condition)
+    val resultStack = new mutable.Stack[Seq[Expression]]
+    val maxCnfNodeCount = SQLConf.get.maxCnfNodeCount
+    // Bottom up approach to get CNF of sub-expressions
+    while (postOrderNodes.nonEmpty) {
+      val cnf = postOrderNodes.pop() match {
+        case _: And =>
+          val right = resultStack.pop()
+          val left = resultStack.pop()
+          left ++ right
+        case _: Or =>
+          // For each side, there is no need to expand predicates of the same references.
+          // So here we can aggregate predicates of the same qualifier as one single predicate,
+          // for reducing the size of pushed down predicates and corresponding codegen.
+          val right = groupExpressionsByQualifier(resultStack.pop())
+          val left = groupExpressionsByQualifier(resultStack.pop())
+          // Stop the loop whenever the result exceeds the `maxCnfNodeCount`
+          if (left.size * right.size > maxCnfNodeCount) {
+            logInfo(s"As the result size exceeds the threshold $maxCnfNodeCount. " +
+              "The CNF conversion is skipped and returning Seq.empty now. To avoid this, you can " +
+              s"raise the limit ${SQLConf.MAX_CNF_NODE_COUNT.key}.")
+            return Seq.empty
+          } else {
+            for { x <- left; y <- right } yield Or(x, y)
+          }
+        case other => other :: Nil
+      }
+      resultStack.push(cnf)
+    }
+    if (resultStack.length != 1) {
+      logWarning("The length of CNF conversion result stack is supposed to be 1. There might " +
+        "be something wrong with CNF conversion.")
+      return Seq.empty
+    }
+    resultStack.top
+  }
+
+  private def groupExpressionsByQualifier(expressions: Seq[Expression]): Seq[Expression] = {
+    expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq
+  }
+
+  /**
+   * Iterative post order traversal over a binary tree built by And/Or clauses with two stacks.
+   * For example, a condition `(a And b) Or c`, the postorder traversal is
+   * (`a`,`b`, `And`, `c`, `Or`).
+   * Following is the complete algorithm. After step 2, we get the postorder traversal in
+   * the second stack.
+   * 1. Push root to first stack.
+   * 2. Loop while first stack is not empty
+   *    2.1 Pop a node from first stack and push it to second stack
+   *    2.2 Push the children of the popped node to first stack
+   *
+   * @param condition to be traversed as binary tree
+   * @return sub-expressions in post order traversal as a stack.
+   *         The first element of result stack is the leftmost node.
+   */
+  private def postOrderTraversal(condition: Expression): mutable.Stack[Expression] = {
+    val stack = new mutable.Stack[Expression]
+    val result = new mutable.Stack[Expression]
+    stack.push(condition)
+    while (stack.nonEmpty) {
+      val node = stack.pop()
+      node match {
+        case Not(a And b) => stack.push(Or(Not(a), Not(b)))
+        case Not(a Or b) => stack.push(And(Not(a), Not(b)))
+        case Not(Not(a)) => stack.push(a)
+        case a And b =>
+          result.push(node)
+          stack.push(a)
+          stack.push(b)
+        case a Or b =>
+          result.push(node)
+          stack.push(a)
+          stack.push(b)
+        case _ =>
+          result.push(node)
+      }
+    }
+    result
   }
 }
 
