@@ -92,9 +92,10 @@ object ShufflePartitionsUtil extends Logging {
     var coalescedSize = 0L
     var i = 0
 
-    def createPartitionSpec(): Unit = {
-      // Skip empty inputs, as it is a waste to launch an empty task.
-      if (coalescedSize > 0) {
+    def createPartitionSpec(last: Boolean = false): Unit = {
+      // Skip empty inputs, as it is a waste to launch an empty task
+      // unless all inputs are empty
+      if (coalescedSize > 0 || (last && partitionSpecs.isEmpty)) {
         partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, i)
       }
     }
@@ -120,7 +121,7 @@ object ShufflePartitionsUtil extends Logging {
       }
       i += 1
     }
-    createPartitionSpec()
+    createPartitionSpec(last = true)
     partitionSpecs
   }
 
