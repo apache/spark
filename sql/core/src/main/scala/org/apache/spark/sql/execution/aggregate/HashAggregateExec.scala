@@ -413,9 +413,9 @@ case class HashAggregateExec(
   private var fastHashMapTerm: String = _
   private var isFastHashMapEnabled: Boolean = false
 
-  private val isPartial = AggUtils.areAggExpressionsPartial(modes)
   private var avoidSpillInPartialAggregateTerm: String = _
-  private val skipPartialAggregate = sqlContext.conf.skipPartialAggregate
+  private val skipPartialAggregate = sqlContext.conf.skipPartialAggregate &&
+    AggUtils.areAggExpressionsPartial(modes) && find(_.isInstanceOf[ExpandExec]).isEmpty
   private var childrenConsumed: String = _
   private var outputFunc: String = _
 
@@ -638,6 +638,8 @@ case class HashAggregateExec(
          |${consume(ctx, resultVars)}
        """.stripMargin
     }
+
+
     ctx.addNewFunction(funcName,
       s"""
          |private void $funcName(UnsafeRow $keyTerm, UnsafeRow $bufferTerm)
@@ -848,8 +850,8 @@ case class HashAggregateExec(
     s"""
        |if (!$initAgg) {
        |  $initAgg = true;
-       |  $avoidSpillInPartialAggregateTerm = ${Utils.isTesting}
-       |    && $isPartial && $skipPartialAggregate;
+       |  $avoidSpillInPartialAggregateTerm =
+       |   ${Utils.isTesting} && $skipPartialAggregate;
        |  $createFastHashMap
        |  $hashMapTerm = $thisPlan.createHashMap();
        |  long $beforeAgg = System.nanoTime();
@@ -900,9 +902,6 @@ case class HashAggregateExec(
     }
 
     val oomeClassName = classOf[SparkOutOfMemoryError].getName
-
-
-
     val findOrInsertRegularHashMap: String =
       s"""
          |if (!$avoidSpillInPartialAggregateTerm) {
@@ -919,7 +918,7 @@ case class HashAggregateExec(
          |  if ($unsafeRowBuffer == null && !$avoidSpillInPartialAggregateTerm) {
          |    // If sort/spill to disk is disabled, nothing is done.
          |    // Aggregation buffer is created later
-         |    if ($skipPartialAggregate && $isPartial) {
+         |    if ($skipPartialAggregate) {
          |      $avoidSpillInPartialAggregateTerm = true;
          |    } else {
          |      if ($sorterTerm == null) {
