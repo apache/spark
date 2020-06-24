@@ -19,8 +19,11 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.{QueryTest, SparkSession}
+import org.apache.spark.sql.LocalSparkSession.withSparkSession
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -125,5 +128,40 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
 
   for (pruningEnabled <- Seq(true, false)) {
     testCaching(pruningEnabled)
+  }
+
+  test("cache TTL") {
+    val sparkConfWithTTl = new SparkConf().set(SQLConf.METADATA_CACHE_TTL.key, "1")
+    val newSession = SparkSession.builder.config(sparkConfWithTTl).getOrCreate().cloneSession()
+
+    withSparkSession(newSession) { implicit spark =>
+      withTable("test_ttl") {
+        withTempDir { dir =>
+          spark.sql(s"""
+            |create external table test_ttl (id long)
+            |partitioned by (f1 int, f2 int)
+            |stored as parquet
+            |location "${dir.toURI}"""".stripMargin)
+
+          val tableIdentifier = TableIdentifier("test_ttl", Some("default"))
+
+          // First, make sure the test table is not cached.
+          assert(getCachedDataSourceTable(tableIdentifier) === null)
+          // This query will make the table cached.
+          spark.sql("select * from test_ttl")
+          assert(getCachedDataSourceTable(tableIdentifier) !== null)
+          // Wait until the cache expiration.
+          Thread.sleep(1500L) // 1.5 seconds > 1 second.
+          // And the cache is gone.
+          assert(getCachedDataSourceTable(tableIdentifier) === null)
+        }
+      }
+    }
+  }
+
+  private def getCachedDataSourceTable(table: TableIdentifier)
+                                      (implicit spark: SparkSession): LogicalPlan = {
+    spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
+      .getCachedDataSourceTable(table)
   }
 }

@@ -30,6 +30,7 @@ import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
@@ -487,6 +488,26 @@ class FileIndexSuite extends SharedSparkSession {
     })
     val fileIndex = new TestInMemoryFileIndex(spark, path)
     assert(fileIndex.leafFileStatuses.toSeq == statuses)
+  }
+
+  test("expire FileStatusCache if TTL is configured") {
+    val sparkConfWithTTl = sparkConf.set(SQLConf.METADATA_CACHE_TTL.key, "1")
+
+    withSparkSession(SparkSession.builder.config(sparkConfWithTTl).getOrCreate()) { spark =>
+      val path = new Path("/tmp", "abc")
+      val files = (1 to 3).map(_ => new FileStatus())
+
+      FileStatusCache.resetForTesting()
+      val fileStatusCache = FileStatusCache.getOrCreate(spark)
+      fileStatusCache.putLeafFiles(path, files.toArray)
+
+      // Exactly 3 files are cached.
+      assert(fileStatusCache.getLeafFiles(path).get.length === 3)
+      // Wait until the cache expiration.
+      Thread.sleep(1500) // 1.5 seconds > 1 second
+      // And the cache is gone.
+      assert(fileStatusCache.getLeafFiles(path) === None)
+    }
   }
 }
 

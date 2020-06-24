@@ -46,7 +46,7 @@ object FileStatusCache {
       if (sharedCache == null) {
         sharedCache = new SharedInMemoryCache(
           session.sqlContext.conf.filesourcePartitionFileCacheSize,
-          session.sqlContext.conf.filesourcePartitionFileCacheTTL
+          session.sqlContext.conf.metadataCacheTTL
         )
       }
       sharedCache.createForNewClient()

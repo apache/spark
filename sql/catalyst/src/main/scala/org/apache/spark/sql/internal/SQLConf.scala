@@ -835,15 +835,6 @@ object SQLConf {
       .longConf
       .createWithDefault(250 * 1024 * 1024)
 
-  val HIVE_FILESOURCE_PARTITION_FILE_CACHE_TTL =
-    buildConf("spark.sql.hive.filesourcePartitionFileCacheTTL")
-      .doc("Time-to-live (TTL) value for the partition file metadata cache. This configuration " +
-           "only has an effect when this value having a positive value and setting `hive` to " +
-           s"${StaticSQLConf.CATALOG_IMPLEMENTATION}.")
-      .version("3.1.0")
-      .timeConf(TimeUnit.SECONDS)
-      .createWithDefault(-1)
-
   object HiveCaseSensitiveInferenceMode extends Enumeration {
     val INFER_AND_SAVE, INFER_ONLY, NEVER_INFER = Value
   }
@@ -2665,6 +2656,17 @@ object SQLConf {
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
 
+  val METADATA_CACHE_TTL =
+    buildConf("spark.sql.metadataCacheTTL")
+      .doc("Time-to-live (TTL) value for the metadata caches: partition file metadata cache and " +
+        "session catalog cache. This configuration only has an effect when this value having " +
+        "a positive value. It also requires setting `hive` to " +
+        s"${StaticSQLConf.CATALOG_IMPLEMENTATION} to be applied to the partition file " +
+        "metadata cache.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(-1)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2908,8 +2910,6 @@ class SQLConf extends Serializable with Logging {
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
-
-  def filesourcePartitionFileCacheTTL: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_TTL)
 
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
     HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
@@ -3261,6 +3261,8 @@ class SQLConf extends Serializable with Logging {
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
+
+  def metadataCacheTTL: Long = getConf(METADATA_CACHE_TTL)
 
   /** ********************** SQLConf functionality methods ************ */
 
