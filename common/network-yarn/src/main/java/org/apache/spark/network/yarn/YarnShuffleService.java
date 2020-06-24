@@ -134,7 +134,8 @@ public class YarnShuffleService extends AuxiliaryService {
   // Handles registering executors and opening shuffle blocks
   @VisibleForTesting
   ExternalBlockHandler blockHandler;
-  private RemoteBlockPushResolver shuffleMergeManager;
+  @VisibleForTesting
+  RemoteBlockPushResolver shuffleMergeManager;
 
   // Where to store & reload executor info for recovering state after an NM restart
   @VisibleForTesting
@@ -181,7 +182,7 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
-      String[] localDirs = Arrays.stream(conf.getTrimmedStrings(YARN_LOCAL_DIRS))
+      String[] localDirs = Arrays.stream(conf.getTrimmedStrings(YARN_LOCAL_DIRS)).sorted()
           .map(dir -> new Path(dir).toUri().getPath()).toArray(String[]::new);
       shuffleMergeManager = new RemoteBlockPushResolver(transportConf, localDirs);
       blockHandler = new ExternalBlockHandler(transportConf, registeredExecutorFile, shuffleMergeManager);
