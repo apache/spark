@@ -1022,8 +1022,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-31220 and SPARK-32056 coalesce partitions for repartition by expressions " +
-      "when AQE is enabled") {
+  test("SPARK-31220, SPARK-32056: repartition by expression with AQE") {
     Seq(true, false).foreach { enableAQE =>
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
@@ -1064,8 +1063,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-31220 and SPARK-32056 coalesce partitions for repartition by range " +
-      "when AQE is enabled") {
+  test("SPARK-31220, SPARK-32056: repartition by range with AQE") {
     Seq(true, false).foreach { enableAQE =>
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
