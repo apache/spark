@@ -260,7 +260,7 @@ trait PredicateHelper extends Logging {
   def conjunctiveNormalFormAndGroupExpsByReference(condition: Expression): Seq[Expression] = {
     conjunctiveNormalForm(condition,
       (expressions: Seq[Expression]) =>
-        expressions.groupBy(_.references).map(_._2.reduceLeft(And)).toSeq)
+        expressions.groupBy(e => AttributeSet(e.references)).map(_._2.reduceLeft(And)).toSeq)
   }
 
   /**

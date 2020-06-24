@@ -89,15 +89,10 @@ private[sql] object PruneFileSourcePartitions
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
       val predicates = conjunctiveNormalFormAndGroupExpsByReference(filters.reduceLeft(And))
-      val (partitionKeyFilters, _) = if (predicates.nonEmpty) {
-        getPartitionKeyFiltersAndDataFilters(
-          fsRelation.sparkSession, logicalRelation, partitionSchema, predicates,
-          logicalRelation.output)
-      } else {
-        getPartitionKeyFiltersAndDataFilters(
-          fsRelation.sparkSession, logicalRelation, partitionSchema, filters,
-          logicalRelation.output)
-      }
+      val finalPredicates = if (predicates.nonEmpty) predicates else filters
+      val (partitionKeyFilters, _) = getPartitionKeyFiltersAndDataFilters(
+        fsRelation.sparkSession, logicalRelation, partitionSchema, finalPredicates,
+        logicalRelation.output)
 
       if (partitionKeyFilters.nonEmpty) {
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)

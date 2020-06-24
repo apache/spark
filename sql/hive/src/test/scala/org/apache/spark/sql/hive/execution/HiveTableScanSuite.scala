@@ -206,41 +206,37 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
              |select col from temp""".stripMargin)
       }
 
-      val scan1 = getHiveTableScanExec(
-        "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)")
-      val scan2 = getHiveTableScanExec(
-        "SELECT * FROM t WHERE (p = '1' and i = 2) or (i = 1 or p = '2')")
-      val scan3 = getHiveTableScanExec(
-        "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '3' and i = 3 )")
-      val scan4 = getHiveTableScanExec(
-        "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '2' or p = '3')")
-      val scan5 = getHiveTableScanExec(
-        "SELECT * FROM t")
-      val scan6 = getHiveTableScanExec(
-        "SELECT * FROM t where p = '1' and i = 2")
-
-      val scan7 = getHiveTableScanExec(
+      assertPrunedPartitions(
+        "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)",
+        Array("t(p=1)", "t(p=2)"))
+      assertPrunedPartitions(
+        "SELECT * FROM t WHERE (p = '1' and i = 2) or (i = 1 or p = '2')",
+        Array("t(p=1)", "t(p=2)", "t(p=3)", "t(p=4)"))
+      assertPrunedPartitions(
+        "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '3' and i = 3 )",
+        Array("t(p=1)", "t(p=3)"))
+      assertPrunedPartitions(
+        "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '2' or p = '3')",
+        Array("t(p=1)", "t(p=2)", "t(p=3)"))
+      assertPrunedPartitions(
+        "SELECT * FROM t",
+        Array("t(p=1)", "t(p=2)", "t(p=3)", "t(p=4)"))
+      assertPrunedPartitions(
+        "SELECT * FROM t where p = '1' and i = 2",
+        Array("t(p=1)"))
+      assertPrunedPartitions(
         """
           |SELECT i, COUNT(1) FROM (
           |SELECT * FROM t where  p = '1' OR (p = '2' AND i = 1)
           |) TMP GROUP BY i
-        """.stripMargin)
-
-      assert(scan1.prunedPartitions.map(_.toString) ==
-        Stream("t(p=1)", "t(p=2)"))
-      assert(scan2.prunedPartitions.map(_.toString) ==
-        Stream("t(p=1)", "t(p=2)", "t(p=3)", "t(p=4)"))
-      assert(scan3.prunedPartitions.map(_.toString) ==
-        Stream("t(p=1)", "t(p=3)"))
-      assert(scan4.prunedPartitions.map(_.toString) ==
-        Stream("t(p=1)", "t(p=2)", "t(p=3)"))
-      assert(scan5.prunedPartitions.map(_.toString) ==
-        Stream("t(p=1)", "t(p=2)", "t(p=3)", "t(p=4)"))
-      assert(scan6.prunedPartitions.map(_.toString) ==
-        Stream("t(p=1)"))
-      assert(scan7.prunedPartitions.map(_.toString) ==
-        Stream("t(p=1)", "t(p=2)"))
+        """.stripMargin,
+        Array("t(p=1)", "t(p=2)"))
     }
+  }
+
+  private def assertPrunedPartitions(query: String, expected: Array[String]): Unit = {
+    val prunedPartitions = getHiveTableScanExec(query).prunedPartitions.map(_.toString).toArray
+    assert(prunedPartitions.sameElements(expected))
   }
 
   private def getHiveTableScanExec(query: String): HiveTableScanExec = {

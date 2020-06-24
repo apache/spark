@@ -104,11 +104,8 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
     case op @ PhysicalOperation(projections, filters, relation: HiveTableRelation)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
       val predicates = conjunctiveNormalFormAndGroupExpsByReference(filters.reduceLeft(And))
-      val partitionKeyFilters = if (predicates.nonEmpty) {
-        getPartitionKeyFilters(predicates, relation)
-      } else {
-        getPartitionKeyFilters(filters, relation)
-      }
+      val finalPredicates = if (predicates.nonEmpty) predicates else filters
+      val partitionKeyFilters = getPartitionKeyFilters(finalPredicates, relation)
       if (partitionKeyFilters.nonEmpty) {
         val newPartitions = prunePartitions(relation, partitionKeyFilters)
         val newTableMeta = updateTableMeta(relation.tableMeta, newPartitions)

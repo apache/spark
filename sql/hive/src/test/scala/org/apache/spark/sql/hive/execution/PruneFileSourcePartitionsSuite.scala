@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -107,5 +108,55 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
         qe.sparkPlan.collect { case j: BroadcastHashJoinExec => j } should have size 1
       }
     }
+  }
+
+  test("SPARK-28169: Convert scan predicate condition to CNF") {
+    withTable("t", "temp") {
+      sql(
+        s"""
+           |CREATE TABLE t(i int, p string)
+           |USING PARQUET
+           |PARTITIONED BY (p)
+           |""".stripMargin)
+      spark.range(0, 1000, 1).selectExpr("id as col")
+        .createOrReplaceTempView("temp")
+
+      for (part <- Seq(1, 2, 3, 4)) {
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE t PARTITION (p='$part')
+             |select col from temp""".stripMargin)
+      }
+
+      assertPrunedPartitions(
+        "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2)
+      assertPrunedPartitions(
+        "SELECT * FROM t WHERE (p = '1' and i = 2) or (i = 1 or p = '2')", 4)
+      assertPrunedPartitions(
+        "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '3' and i = 3 )", 2)
+      assertPrunedPartitions(
+        "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '2' or p = '3')", 3)
+      assertPrunedPartitions(
+        "SELECT * FROM t", 4)
+      assertPrunedPartitions(
+        "SELECT * FROM t where p = '1' and i = 2", 1)
+      assertPrunedPartitions(
+        """
+          |SELECT i, COUNT(1) FROM (
+          |SELECT * FROM t where  p = '1' OR (p = '2' AND i = 1)
+          |) TMP GROUP BY i
+        """.stripMargin, 2)
+    }
+  }
+
+  private def assertPrunedPartitions(query: String, expected: Long): Unit = {
+    val prunedPartitions = getFileScanExec(query).relation.location.inputFiles.length
+    assert(prunedPartitions == expected)
+  }
+
+  private def getFileScanExec(query: String): FileSourceScanExec = {
+    sql(query).queryExecution.sparkPlan.collectFirst {
+      case p: FileSourceScanExec => p
+    }.get
   }
 }
