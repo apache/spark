@@ -23,8 +23,9 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, TimeoutException}
 import scala.util.Random
+import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
@@ -32,8 +33,9 @@ import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEndpointAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
@@ -94,6 +96,13 @@ class BlockManagerMasterEndpoint(
   //   && conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)`
   private val externalShuffleServiceRddFetchEnabled: Boolean = externalBlockStoreClient.isDefined
   private val externalShuffleServicePort: Int = StorageUtils.externalShuffleServicePort(conf)
+
+  private lazy val driverEndpoint = {
+    rpcEnv.setupEndpointRefByURI(RpcEndpointAddress(
+      conf.get(config.DRIVER_HOST_ADDRESS),
+      conf.get(config.DRIVER_PORT),
+      CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString)
+  }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint) =>
@@ -168,6 +177,37 @@ class BlockManagerMasterEndpoint(
       stop()
   }
 
+  private def handleFailure[T](
+      blockType: String,
+      blockId: String,
+      bmId: BlockManagerId,
+      defaultValue: T): PartialFunction[Throwable, T] = {
+    case e: IOException =>
+      logWarning(s"Error trying to remove $blockType $blockId" +
+        s" from block manager $bmId", e)
+      defaultValue
+
+    case t: TimeoutException =>
+      val executorId = bmId.executorId
+      val isAlive = try {
+        driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.IsExecutorAlive(executorId))
+      } catch {
+        // ignore the non-fatal error from driverEndpoint since the caller doesn't really
+        // care about the return result of removing blocks. And so we could avoid breaking
+        // down the whole application.
+        case NonFatal(e) =>
+          logError(s"Fail to know the executor $executorId is alive or not.", e)
+          false
+      }
+      if (!isAlive) {
+        logWarning(s"Error trying to remove $blockType $blockId. " +
+          s"The executor $executorId may have been lost.", t)
+        defaultValue
+      } else {
+        throw t
+      }
+  }
+
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
     // First remove the metadata for the given RDD, and then asynchronously remove the blocks
     // from the slaves.
@@ -207,10 +247,8 @@ class BlockManagerMasterEndpoint(
     }
     val removeRddFromExecutorsFutures = blockManagerInfo.values.map { bmInfo =>
       bmInfo.slaveEndpoint.ask[Int](removeMsg).recover {
-        case e: IOException =>
-          logWarning(s"Error trying to remove RDD ${removeMsg.rddId} " +
-            s"from block manager ${bmInfo.blockManagerId}", e)
-          0 // zero blocks were removed
+        // use 0 as default value means no blocks were removed
+        handleFailure("RDD", rddId.toString, bmInfo.blockManagerId, 0)
       }
     }.toSeq
 
@@ -235,7 +273,9 @@ class BlockManagerMasterEndpoint(
     val removeMsg = RemoveShuffle(shuffleId)
     Future.sequence(
       blockManagerInfo.values.map { bm =>
-        bm.slaveEndpoint.ask[Boolean](removeMsg)
+        bm.slaveEndpoint.ask[Boolean](removeMsg).recover {
+          handleFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
+        }
       }.toSeq
     )
   }
@@ -252,10 +292,8 @@ class BlockManagerMasterEndpoint(
     }
     val futures = requiredBlockManagers.map { bm =>
       bm.slaveEndpoint.ask[Int](removeMsg).recover {
-        case e: IOException =>
-          logWarning(s"Error trying to remove broadcast $broadcastId from block manager " +
-            s"${bm.blockManagerId}", e)
-          0 // zero blocks were removed
+        // use 0 as default value means no blocks were removed
+        handleFailure("broadcast", broadcastId.toString, bm.blockManagerId, 0)
       }
     }.toSeq
 
@@ -350,11 +388,13 @@ class BlockManagerMasterEndpoint(
     if (locations != null) {
       locations.foreach { blockManagerId: BlockManagerId =>
         val blockManager = blockManagerInfo.get(blockManagerId)
-        if (blockManager.isDefined) {
+        blockManager.foreach { bm =>
           // Remove the block from the slave's BlockManager.
           // Doesn't actually wait for a confirmation and the message might get lost.
           // If message loss becomes frequent, we should add retry logic here.
-          blockManager.get.slaveEndpoint.ask[Boolean](RemoveBlock(blockId))
+          bm.slaveEndpoint.ask[Boolean](RemoveBlock(blockId)).recover {
+            handleFailure("block", blockId.toString, bm.blockManagerId, false)
+          }
         }
       }
     }

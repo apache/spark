@@ -132,4 +132,6 @@ private[spark] object CoarseGrainedClusterMessages {
   // Used internally by executors to shut themselves down.
   case object Shutdown extends CoarseGrainedClusterMessage
 
+  // The message to check whether the executor is alive or not.
+  case class IsExecutorAlive(executorId: String) extends CoarseGrainedClusterMessage
 }

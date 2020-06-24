@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.Future
+import scala.concurrent.{Future, TimeoutException}
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -49,8 +49,9 @@ import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransport
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExecutorDiskUtils, ExternalBlockStoreClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
-import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerBlockUpdated}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -93,6 +94,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(MEMORY_STORAGE_FRACTION, 0.999)
       .set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
+      .set(Network.RPC_ASK_TIMEOUT, "5s")
   }
 
   private def makeBlockManager(
@@ -137,7 +139,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     conf = new SparkConf(false)
     init(conf)
 
-    rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
+    rpcEnv = RpcEnv.create("test", conf.get(config.DRIVER_HOST_ADDRESS),
+      conf.get(config.DRIVER_PORT), conf, securityMgr)
     conf.set(DRIVER_PORT, rpcEnv.address.port)
 
     // Mock SparkContext to reduce the memory usage of tests. It's fine since the only reason we
@@ -175,6 +178,95 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   private def stopBlockManager(blockManager: BlockManager): Unit = {
     allStores -= blockManager
     blockManager.stop()
+  }
+
+  private def setupBlockManagerMasterWithBlocks(withLost: Boolean): Unit = {
+    // set up a simple DriverEndpoint which simply adds executorIds and
+    // check whether a certain executorId has been added before.
+    val driverEndpoint = rpcEnv.setupEndpoint(CoarseGrainedSchedulerBackend.ENDPOINT_NAME,
+      new RpcEndpoint {
+        private val executorSet = mutable.HashSet[String]()
+        override val rpcEnv: RpcEnv = this.rpcEnv
+        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+          case CoarseGrainedClusterMessages.RegisterExecutor(executorId, _, _, _, _, _, _, _) =>
+            executorSet += executorId
+            context.reply(true)
+          case CoarseGrainedClusterMessages.IsExecutorAlive(executorId) =>
+            context.reply(executorSet.contains(executorId))
+        }
+      }
+    )
+
+    def createAndRegisterBlockManager(timeout: Boolean): BlockManagerId = {
+      val id = if (timeout) "timeout" else "normal"
+      val bmRef = rpcEnv.setupEndpoint(s"bm-$id", new RpcEndpoint {
+        override val rpcEnv: RpcEnv = this.rpcEnv
+        private def reply[T](context: RpcCallContext, response: T): Unit = {
+          if (timeout) {
+            Thread.sleep(conf.getTimeAsMs(Network.RPC_ASK_TIMEOUT.key) + 1000)
+          }
+          context.reply(response)
+        }
+
+        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+          case RemoveRdd(_) => reply(context, 1)
+          case RemoveBroadcast(_, _) => reply(context, 1)
+          case RemoveShuffle(_) => reply(context, true)
+        }
+      })
+      val bmId = BlockManagerId(s"exec-$id", "localhost", 1234, None)
+      master.registerBlockManager(bmId, Array.empty, 2000, 0, bmRef)
+    }
+
+    // set up normal bm1
+    val bm1Id = createAndRegisterBlockManager(false)
+    // set up bm2, which intentionally takes more time than RPC_ASK_TIMEOUT to
+    // remove rdd/broadcast/shuffle in order to raise timeout error
+    val bm2Id = createAndRegisterBlockManager(true)
+
+    driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.RegisterExecutor(
+      bm1Id.executorId, null, bm1Id.host, 1, Map.empty, Map.empty,
+      Map.empty, 0))
+
+    if (!withLost) {
+      driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.RegisterExecutor(
+        bm2Id.executorId, null, bm1Id.host, 1, Map.empty, Map.empty, Map.empty, 0))
+    }
+
+    eventually(timeout(5.seconds)) {
+      // make sure both bm1 and bm2 are registered at driver side BlockManagerMaster
+      verify(master, times(2))
+        .registerBlockManager(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
+      assert(driverEndpoint.askSync[Boolean](
+        CoarseGrainedClusterMessages.IsExecutorAlive(bm1Id.executorId)))
+      assert(driverEndpoint.askSync[Boolean](
+        CoarseGrainedClusterMessages.IsExecutorAlive(bm2Id.executorId)) === !withLost)
+    }
+
+    // update RDD block info for bm1 and bm2 (Broadcast and shuffle don't report block
+    // locations to BlockManagerMaster)
+    master.updateBlockInfo(bm1Id, RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100, 0)
+    master.updateBlockInfo(bm2Id, RDDBlockId(0, 1), StorageLevel.MEMORY_ONLY, 100, 0)
+  }
+
+  test("SPARK-32091: count failures from active executors when remove rdd/broadcast/shuffle") {
+    setupBlockManagerMasterWithBlocks(false)
+    // fail because bm2 will timeout and it's not lost anymore
+    assert(intercept[Exception](master.removeRdd(0, true))
+      .getCause.isInstanceOf[TimeoutException])
+    assert(intercept[Exception](master.removeBroadcast(0, true, true))
+      .getCause.isInstanceOf[TimeoutException])
+    assert(intercept[Exception](master.removeShuffle(0, true))
+      .getCause.isInstanceOf[TimeoutException])
+  }
+
+  test("SPARK-32091: ignore failures from lost executors when remove rdd/broadcast/shuffle") {
+    setupBlockManagerMasterWithBlocks(true)
+    // succeed because bm1 will remove rdd/broadcast successfully and bm2 will
+    // timeout but ignored as it's lost
+    master.removeRdd(0, true)
+    master.removeBroadcast(0, true, true)
+    master.removeShuffle(0, true)
   }
 
   test("StorageLevel object caching") {

@@ -285,6 +285,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           Option(delegationTokens.get()),
           rp)
         context.reply(reply)
+
+      case IsExecutorAlive(executorId) => context.reply(isExecutorActive(executorId))
+
       case e =>
         logError(s"Received unexpected ask ${e}")
     }
