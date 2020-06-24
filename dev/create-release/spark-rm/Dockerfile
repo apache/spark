@@ -21,7 +21,7 @@
 # * Java 8
 # * Ivy
 # * Python/PyPandoc (2.7.12/3.5.2)
-# * R-base/R-base-dev (3.3.2+)
+# * R-base/R-base-dev (4.0.2)
 # * Ruby 2.3 build utilities
 
 FROM ubuntu:16.04
@@ -39,9 +39,9 @@ ARG PIP_PKGS="pyopenssl pypandoc numpy pygments sphinx"
 # This is all in a single "RUN" command so that if anything changes, "apt update" is run to fetch
 # the most current package versions (instead of potentially using old versions cached by docker).
 RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates apt-transport-https && \
-  echo 'deb https://cloud.r-project.org/bin/linux/ubuntu xenial/' >> /etc/apt/sources.list && \
+  echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran40/' >> /etc/apt/sources.list && \
   gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
-  gpg -a --export E298A3A825C0D65DFD57CBB651716619E084DAB9 | apt-key add - && \
+  gpg -a --export E084DAB9 | apt-key add - && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
   apt-get clean && \
