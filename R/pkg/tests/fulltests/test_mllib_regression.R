@@ -108,7 +108,7 @@ test_that("spark.glm summary", {
   rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = iris))
 
   # test summary coefficients return matrix type
-  expect_true(class(stats$coefficients) == "matrix")
+  expect_true(any(class(stats$coefficients) == "matrix"))
   expect_true(class(stats$coefficients[, 1]) == "numeric")
 
   coefs <- stats$coefficients
