@@ -19,51 +19,49 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.{File, FileNotFoundException}
 import java.net.URI
-import java.time.format.DateTimeParseException
+
+import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem, RemoteIterator}
 import org.apache.hadoop.fs.viewfs.ViewFileSystem
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
+
 import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.KnownSizeEstimation
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, when}
-
-import scala.collection.mutable
 
 class FileIndexSuite extends SharedSparkSession {
-  
+
   private class TestInMemoryFileIndex(
-      spark: SparkSession,
-      path: Path,
-      fileStatusCache: FileStatusCache = NoopCache)
+    spark: SparkSession,
+    path: Path,
+    fileStatusCache: FileStatusCache = NoopCache)
       extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
     def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
-    
     def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
-    
     def leafFileStatuses: Iterable[FileStatus] = leafFiles.values
   }
-  
+
   test("InMemoryFileIndex: leaf files are qualified paths") {
     withTempDir { dir =>
       val file = new File(dir, "text.txt")
       stringToFile(file, "text")
-      
+
       val path = new Path(file.getCanonicalPath)
       val catalog = new TestInMemoryFileIndex(spark, path)
       assert(catalog.leafFilePaths.forall(p => p.toString.startsWith("file:/")))
       assert(catalog.leafDirPaths.forall(p => p.toString.startsWith("file:/")))
     }
   }
-  
+
   test("SPARK-26188: don't infer data types of partition columns if user specifies schema") {
     withTempDir { dir =>
       val partitionDirectory = new File(dir, "a=4d")
@@ -75,7 +73,7 @@ class FileIndexSuite extends SharedSparkSession {
       val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
       val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
       assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
-        partitionValues(0).getString(0) == "4d")
+          partitionValues(0).getString(0) == "4d")
     }
   }
 
@@ -144,7 +142,7 @@ class FileIndexSuite extends SharedSparkSession {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
         val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
         assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
-          partitionValues(0).isNullAt(0))
+            partitionValues(0).isNullAt(0))
       }
     }
   }
@@ -196,7 +194,7 @@ class FileIndexSuite extends SharedSparkSession {
       parDiscoveryThreshold <- Seq(0, 100)
     ) {
       withClue(s"raceCondition=$raceCondition, ignoreMissingFiles=$ignoreMissingFiles, " +
-        s"parDiscoveryThreshold=$parDiscoveryThreshold"
+          s"parDiscoveryThreshold=$parDiscoveryThreshold"
       ) {
         withSQLConf(
           SQLConf.IGNORE_MISSING_FILES.key -> ignoreMissingFiles.toString,
@@ -206,7 +204,6 @@ class FileIndexSuite extends SharedSparkSession {
         ) {
           def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
             spark, Seq(rootDirPath), Map.empty, None)
-
           if (ignoreMissingFiles) {
             // We're ignoring missing files, so catalog construction should succeed
             val catalog = makeCatalog()
@@ -312,8 +309,8 @@ class FileIndexSuite extends SharedSparkSession {
 
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
     class MockCatalog(
-                       override val rootPaths: Seq[Path])
-      extends PartitioningAwareFileIndex(spark, Map.empty, None) {
+      override val rootPaths: Seq[Path])
+        extends PartitioningAwareFileIndex(spark, Map.empty, None) {
 
       override def refresh(): Unit = {}
 
@@ -345,7 +342,7 @@ class FileIndexSuite extends SharedSparkSession {
   }
 
   test("InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD" +
-    "is a nonpositive number") {
+      "is a nonpositive number") {
     withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
       new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
     }
@@ -356,10 +353,10 @@ class FileIndexSuite extends SharedSparkSession {
       }
     }.getMessage
     assert(e.contains("The maximum number of paths allowed for listing files at " +
-      "driver side must not be negative"))
+        "driver side must not be negative"))
   }
 
-  test("SPARK-29537: throw exception when user defined a wrong base path") {
+  test ("SPARK-29537: throw exception when user defined a wrong base path") {
     withTempDir { dir =>
       val partitionDirectory = new File(dir, "a=foo")
       partitionDirectory.mkdir()
@@ -420,15 +417,15 @@ class FileIndexSuite extends SharedSparkSession {
     withTempPath { path =>
       val colToUnescape = "Column/#%'?"
       spark
-        .range(1)
-        .select(col("id").as(colToUnescape), col("id"))
-        .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
+          .range(1)
+          .select(col("id").as(colToUnescape), col("id"))
+          .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
       assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
     }
   }
 
   test("SPARK-25062 - InMemoryFileIndex stores BlockLocation objects no matter what subclass " +
-    "the FS returns") {
+      "the FS returns") {
     withSQLConf("fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
       withTempDir { dir =>
         val file = new File(dir, "text.txt")
@@ -456,17 +453,17 @@ class FileIndexSuite extends SharedSparkSession {
       withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
         "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
         val withBlockLocations = fileIndex.
-          listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+            listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
 
         withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true") {
           val withoutBlockLocations = fileIndex.
-            listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+              listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
 
           assert(withBlockLocations.size == withoutBlockLocations.size)
           assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
-            b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
+              b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
           assert(withoutBlockLocations.forall(b => b.isInstanceOf[FileStatus] &&
-            !b.isInstanceOf[LocatedFileStatus]))
+              !b.isInstanceOf[LocatedFileStatus]))
           assert(withoutBlockLocations.forall(withBlockLocations.contains))
         }
       }
@@ -485,88 +482,14 @@ class FileIndexSuite extends SharedSparkSession {
       )
     when(dfs.listLocatedStatus(path)).thenReturn(new RemoteIterator[LocatedFileStatus] {
       val iter = statuses.toIterator
-
       override def hasNext: Boolean = iter.hasNext
-
       override def next(): LocatedFileStatus = iter.next
     })
     val fileIndex = new TestInMemoryFileIndex(spark, path)
     assert(fileIndex.leafFileStatuses.toSeq == statuses)
   }
-
-  test("SPARK-39162 - when filesModifiedAfterDate specified and before file date without filter") {
-    withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val df = spark.read.option("filesModifiedAfterDate", "2020-05-01T01:00:00").format("csv").load(path + "/file1.csv")
-      assert(df.count() == 1)
-    }
-  }
-  test("SPARK-39162 - when filesModifiedAfterDate specified and after file date without filter") {
-    withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir,     "file1.csv")
-      stringToFile(file, "text")
-      val msg = intercept[AnalysisException] {
-        spark.read.option("filesModifiedAfterDate", "2024-05-01T01:00:00").format("csv").load(path + "/file1.csv")
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV. It must be specified manually."))
-      //val inMemoryFileIndex = new TestInMemoryFileIndex(spark, new Path(file.getCanonicalPath))
-    }
-    assert(true)
-  }
-
-  test("SPARK-39162 - when filesModifiedAfterDate specified and before file date with filter") {
-    withTempDir { dir =>
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      spark.read.format("csv").load("file1.csv")
-      //val inMemoryFileIndex = new TestInMemoryFileIndex(spark, new Path(file.getCanonicalPath))
-    }
-    assert(true)
-  }
-
-  test("SPARK-39162 - when filesModifiedAfterDate specified and after file date with filter") {
-    withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir,     "file1.csv")
-      stringToFile(file, "text")
-      val msg = intercept[AnalysisException] {
-        spark.read.option("filesModifiedAfterDate", "2024-05-01T01:00:00").format("csv").load(path + "/file1.csv")
-      }.getMessage
-      assert(msg.contains("could not be parsed at index "))
-    }
-  }
-  test("SPARK-39162 - when filesModifiedAfterDate is specified with invalid date") {
-    withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir,     "file1.csv")
-      stringToFile(file, "text")
-      val msg = intercept[DateTimeParseException] {
-        spark.read.option("filesModifiedAfterDate", "2024-05+1 01:00:00").format("csv").load(path + "/file1.csv")
-      }.getMessage
-      assert(msg.contains("could not be parsed at index "))
-    }
-  }
-  test("SPARK-39162 - when filesModifiedAfterDate not specified") {
-    withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val df = spark.read.format("csv").load(path + "/file1.csv")
-      assert(df.count() == 1)
-    }
-    test("SPARK-39162 - when filesModifiedAfterDate not specified") {
-      withTempDir { dir =>
-        val path = new Path(dir.getCanonicalPath)
-        val file = new File(dir, "file1.csv")
-        stringToFile(file, "text")
-        val df = spark.read.format("csv").load(path + "/file1.csv")
-        assert(df.count() == 1)
-      }
-  }
 }
+
 object DeletionRaceFileSystem {
   val rootDirPath: Path = new Path("mockFs:///rootDir/")
   val subDirPath: Path = new Path(rootDirPath, "subDir")
@@ -616,9 +539,9 @@ class FileDeletionRaceFileSystem extends RawLocalFileSystem {
   }
 
   override def getFileBlockLocations(
-      file: FileStatus,
-      start: Long,
-      len: Long): Array[BlockLocation] = {
+    file: FileStatus,
+    start: Long,
+    len: Long): Array[BlockLocation] = {
     if (file.getPath == leafFilePath) {
       throw new FileNotFoundException(leafFilePath.toString)
     } else {
@@ -638,16 +561,16 @@ class FakeParentPathFileSystem extends RawLocalFileSystem {
 class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
 
   class SpecialBlockLocation(
-      names: Array[String],
-      hosts: Array[String],
-      offset: Long,
-      length: Long)
-    extends BlockLocation(names, hosts, offset, length)
+    names: Array[String],
+    hosts: Array[String],
+    offset: Long,
+    length: Long)
+      extends BlockLocation(names, hosts, offset, length)
 
   override def getFileBlockLocations(
-      file: FileStatus,
-      start: Long,
-      len: Long): Array[BlockLocation] = {
+    file: FileStatus,
+    start: Long,
+    len: Long): Array[BlockLocation] = {
     Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
   }
 }
