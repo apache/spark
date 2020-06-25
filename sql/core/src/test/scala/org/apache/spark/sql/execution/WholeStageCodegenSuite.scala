@@ -77,7 +77,6 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       }
       checkAnswer(aggDF, Row(6))
       assert(aggNodes.nonEmpty)
-      Thread.sleep(1000000)
       assert(aggNodes.forall(_.metrics("partialAggSkipped").value == 0))
     }
   }

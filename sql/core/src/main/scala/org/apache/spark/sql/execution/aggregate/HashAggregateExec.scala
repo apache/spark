@@ -416,7 +416,6 @@ case class HashAggregateExec(
   private var avoidSpillInPartialAggregateTerm: String = _
   private val skipPartialAggregate = sqlContext.conf.skipPartialAggregate &&
     AggUtils.areAggExpressionsPartial(modes) && find(_.isInstanceOf[ExpandExec]).isEmpty
-  private var childrenConsumed: String = _
   private var outputFunc: String = _
 
   // whether a vectorized hashmap is used instead
@@ -694,7 +693,7 @@ case class HashAggregateExec(
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
     avoidSpillInPartialAggregateTerm = ctx.
       addMutableState(CodeGenerator.JAVA_BOOLEAN, "avoidPartialAggregate")
-    childrenConsumed = ctx.
+    val childrenConsumed = ctx.
       addMutableState(CodeGenerator.JAVA_BOOLEAN, "childrenConsumed")
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
