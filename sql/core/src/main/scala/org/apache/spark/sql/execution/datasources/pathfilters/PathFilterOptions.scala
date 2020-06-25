@@ -21,10 +21,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{GlobFilter, PathFilter}
 import org.apache.spark.sql.SparkSession
 
-/**
-SPARK-31962 - Provide option to load files after a specified
-date when reading from a folder path.
-  */
 class PathFilterOptions(sparkSession: SparkSession,
     hadoopConf: Configuration,
     parameters: Map[String, String]) {

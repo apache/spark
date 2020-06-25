@@ -69,6 +69,24 @@ def generic_file_source_options_example(spark):
     # +-------------+
     # $example off:load_with_path_glob_filter$
 
+    # $example on:load_with_modified_date_filter$
+    # Assume file in provided path were last modified today.
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", modifiedDateFilter="2020-06-01T08:30:00")
+    df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # +-------------+
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", modifiedDateFilter="2050-06-01T08:30:00")
+    df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # +-------------+
+    # $example off:load_with_modified_date_filter$
 
 def basic_datasource_example(spark):
     # $example on:generic_load_save_functions$
