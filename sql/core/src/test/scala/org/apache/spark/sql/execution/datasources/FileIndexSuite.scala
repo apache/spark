@@ -31,7 +31,6 @@ import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
@@ -492,9 +491,7 @@ class FileIndexSuite extends SharedSparkSession {
   }
 
   test("expire FileStatusCache if TTL is configured") {
-    val sparkConfWithTTl = sparkConf.set(SQLConf.METADATA_CACHE_TTL.key, "1")
-
-    withSparkSession(SparkSession.builder.config(sparkConfWithTTl).getOrCreate()) { spark =>
+    withSQLConf(SQLConf.METADATA_CACHE_TTL.key -> "1") {
       val path = new Path("/tmp", "abc")
       val files = (1 to 3).map(_ => new FileStatus())
 
