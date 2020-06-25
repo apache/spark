@@ -17,35 +17,41 @@
 
 package org.apache.spark.sql.execution.datasources.pathfilters
 
+import java.time.{LocalDateTime, ZoneOffset}
+import java.time.format.DateTimeFormatter
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
-
 import org.apache.spark.sql.SparkSession
 
 /**
 SPARK-31962 - Provide option to load files after a specified
 date when reading from a folder path.  When specifying the
-filesModifiedAfterDate option in yyyy-mm-ddThh:mm:ss format,
+modifiedDateFilter option in yyyy-mm-ddThh:mm:ss format,
 all files having modification dates before this date will not be returned
 when loading from a folder path.
 Ex:
 spark.read
 .option("header", "true")
 .option("delimiter", "\t")
-.option("fileModifiedDate", "2020-05-01T12:00:00")
+.option("modifiedDateFilter", "2020-05-01T12:00:00")
 .format("csv")
 .load("/mnt/Deltas")
   * @param sparkSession SparkSession
-  * @param epochSeconds epoch in milliseconds
+ *  @param hadoopConf Hadoop Configuration object
+  * @param timestamp string representing timestamp
   */
-class PathFilterIgnoreOldFiles(sparkSession: SparkSession,
-                               hadoopConf: Configuration,
-                               epochSeconds: Long)
+class ModifiedDateFilter(sparkSession: SparkSession,
+    hadoopConf: Configuration,
+    timestamp: String)
     extends PathFilter
     with Serializable {
+    private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+    private val parsedDate = LocalDateTime.parse(timestamp, formatter)
+    private val afterDateSeconds = parsedDate.toEpochSecond(ZoneOffset.UTC) * 1000
 
   override def accept(path: Path): Boolean = {
     val fileName = path.getFileSystem(hadoopConf).getFileStatus(path)
-    (fileName.getModificationTime - epochSeconds) > 0
+    (fileName.getModificationTime - afterDateSeconds) > 0
   }
 }

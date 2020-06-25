@@ -17,21 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.pathfilters
 
-import org.apache.hadoop.fs.{Path, PathFilter}
-
-import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{GlobFilter, PathFilter}
+import org.apache.spark.sql.SparkSession
 
 /**
- * For the purpose of calculating total directory sizes, use this filter to
- * ignore some irrelevant files.
- *
- * @param stagingDir hive staging dir
- */
-class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serializable {
-    override def accept(path: Path): Boolean = {
-        val fileName = path.getName
-        !fileName.startsWith(stagingDir) && DataSourceUtils.isDataFile(fileName)
-    }
+SPARK-31962 - Provide option to load files after a specified
+date when reading from a folder path.
+  */
+class PathFilterOptions(sparkSession: SparkSession,
+    hadoopConf: Configuration,
+    parameters: Map[String, String]) {
+  def filters(): Iterable[PathFilter] = {
+    val pathGlobFilter = parameters.get("pathGlobFilter").map(new GlobFilter(_))
+    val modifiedDateFilter = parameters.get("modifiedDateFilter").map(new ModifiedDateFilter(sparkSession, hadoopConf, _))
+    pathGlobFilter ++ modifiedDateFilter
+  }
 }
-
-
