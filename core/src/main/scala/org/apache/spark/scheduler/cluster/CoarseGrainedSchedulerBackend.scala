@@ -515,13 +515,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
     // Send decommission message to the executor (it could have originated on the executor
     // but not necessarily.
-    executorDataMap.get(executorId) match {
-      case Some(executorInfo) =>
-        executorInfo.executorEndpoint.send(DecommissionSelf)
-      case None =>
-        // Ignoring the executor since it is not registered.
-        logWarning(s"Attempted to decommission unknown executor $executorId.")
-        return false
+    CoarseGrainedSchedulerBackend.this.synchronized {
+      executorDataMap.get(executorId) match {
+        case Some(executorInfo) =>
+          executorInfo.executorEndpoint.send(DecommissionSelf)
+        case None =>
+          // Ignoring the executor since it is not registered.
+          logWarning(s"Attempted to decommission unknown executor $executorId.")
+          return false
+      }
     }
     logInfo(s"Finished decommissioning executor $executorId.")
 
