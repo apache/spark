@@ -40,7 +40,7 @@ class WorkerDecommissionExtendedSuite extends SparkFunSuite with LocalSparkConte
     .set(WORKER_DECOMMISSION_ENABLED, true)
 
   test("Worker decommission and executor idle timeout") {
-    sc = new SparkContext(conf.set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT, "10s"))
+    sc = new SparkContext(conf.set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "10s"))
     withSpark(sc) { sc =>
       TestUtils.waitUntilExecutorsUp(sc, 20, 60000)
       val rdd1 = sc.parallelize(1 to 10, 2)
