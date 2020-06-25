@@ -21,6 +21,7 @@ import java.io.{File, FileNotFoundException}
 import java.net.URI
 
 import scala.collection.mutable
+import scala.concurrent.duration._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem, RemoteIterator}
@@ -504,9 +505,10 @@ class FileIndexSuite extends SharedSparkSession {
       // Exactly 3 files are cached.
       assert(fileStatusCache.getLeafFiles(path).get.length === 3)
       // Wait until the cache expiration.
-      Thread.sleep(1500) // 1.5 seconds > 1 second
-      // And the cache is gone.
-      assert(fileStatusCache.getLeafFiles(path) === None)
+      eventually(timeout(2.seconds)) {
+        // And the cache is gone.
+        assert(fileStatusCache.getLeafFiles(path).isEmpty === true)
+      }
     }
   }
 }

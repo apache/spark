@@ -2656,8 +2656,7 @@ object SQLConf {
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
 
-  val METADATA_CACHE_TTL =
-    buildConf("spark.sql.metadataCacheTTL")
+  val METADATA_CACHE_TTL = buildConf("spark.sql.metadataCacheTTL")
       .doc("Time-to-live (TTL) value for the metadata caches: partition file metadata cache and " +
         "session catalog cache. This configuration only has an effect when this value having " +
         "a positive value. It also requires setting `hive` to " +

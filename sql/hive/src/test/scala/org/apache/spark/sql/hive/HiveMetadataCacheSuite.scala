@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import scala.concurrent.duration._
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -130,7 +132,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
     testCaching(pruningEnabled)
   }
 
-  test("cache TTL") {
+  test("expire cached metadata if TTL is configured") {
     val sparkConfWithTTl = new SparkConf().set(SQLConf.METADATA_CACHE_TTL.key, "1")
     val newSession = SparkSession.builder.config(sparkConfWithTTl).getOrCreate().cloneSession()
 
@@ -138,10 +140,10 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
       withTable("test_ttl") {
         withTempDir { dir =>
           spark.sql(s"""
-            |create external table test_ttl (id long)
-            |partitioned by (f1 int, f2 int)
-            |stored as parquet
-            |location "${dir.toURI}"""".stripMargin)
+            |CREATE EXTERNAL TABLE test_ttl (id long)
+            |PARTITIONED BY (f1 int, f2 int)
+            |STORED AS PARQUET
+            |LOCATION "${dir.toURI}"""".stripMargin)
 
           val tableIdentifier = TableIdentifier("test_ttl", Some("default"))
 
@@ -151,16 +153,17 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
           spark.sql("select * from test_ttl")
           assert(getCachedDataSourceTable(tableIdentifier) !== null)
           // Wait until the cache expiration.
-          Thread.sleep(1500L) // 1.5 seconds > 1 second.
-          // And the cache is gone.
-          assert(getCachedDataSourceTable(tableIdentifier) === null)
+          eventually(timeout(2.seconds)) {
+            // And the cache is gone.
+            assert(getCachedDataSourceTable(tableIdentifier) === null)
+          }
         }
       }
     }
   }
 
   private def getCachedDataSourceTable(table: TableIdentifier)
-                                      (implicit spark: SparkSession): LogicalPlan = {
+      (implicit spark: SparkSession): LogicalPlan = {
     spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
       .getCachedDataSourceTable(table)
   }
