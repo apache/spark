@@ -108,7 +108,6 @@ case class ScalaUDF(
    *   - UDF which doesn't provide inputEncoders, e.g., untyped Scala UDF and Java UDF
    *   - type which isn't supported by `ExpressionEncoder`, e.g., Any
    *   - primitive types, in order to use `identity` for better performance
-   *   - UserDefinedType which isn't fully supported by `ExpressionEncoder`
    * For other cases like case class, Option[T], we use `ExpressionEncoder` instead since
    * `CatalystTypeConverters` doesn't support these data types.
    *
@@ -121,8 +120,7 @@ case class ScalaUDF(
     val useEncoder =
       !(inputEncoders.isEmpty || // for untyped Scala UDF and Java UDF
       inputEncoders(i).isEmpty || // for types aren't supported by encoder, e.g. Any
-      inputPrimitives(i) || // for primitive types
-      dataType.existsRecursively(_.isInstanceOf[UserDefinedType[_]]))
+      inputPrimitives(i)) // for primitive types
 
     if (useEncoder) {
       val enc = inputEncoders(i).get

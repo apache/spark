@@ -454,6 +454,8 @@ case class MapFilter(
        [1,3]
       > SELECT _FUNC_(array(0, 2, 3), (x, i) -> x > i);
        [2,3]
+      > SELECT _FUNC_(array(0, null, 2, 3, null), x -> x IS NOT NULL);
+       [0,2,3]
   """,
   since = "2.4.0",
   note = """
@@ -518,6 +520,10 @@ case class ArrayFilter(
        false
       > SELECT _FUNC_(array(1, null, 3), x -> x % 2 == 0);
        NULL
+      > SELECT _FUNC_(array(0, null, 2, 3, null), x -> x IS NULL);
+       true
+      > SELECT _FUNC_(array(1, 2, 3), x -> x IS NULL);
+       false
   """,
   since = "2.4.0")
 case class ArrayExists(

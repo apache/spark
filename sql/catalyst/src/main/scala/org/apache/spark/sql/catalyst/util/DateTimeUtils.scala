@@ -203,20 +203,10 @@ object DateTimeUtils {
     Math.multiplyExact(millis, MICROS_PER_MILLIS)
   }
 
+  private final val gmtUtf8 = UTF8String.fromString("GMT")
   // The method is called by JSON/CSV parser to clean up the legacy timestamp string by removing
-  // the "GMT" string.
-  def cleanLegacyTimestampStr(s: String): String = {
-    val indexOfGMT = s.indexOf("GMT")
-    if (indexOfGMT != -1) {
-      // ISO8601 with a weird time zone specifier (2000-01-01T00:00GMT+01:00)
-      val s0 = s.substring(0, indexOfGMT)
-      val s1 = s.substring(indexOfGMT + 3)
-      // Mapped to 2000-01-01T00:00+01:00
-      s0 + s1
-    } else {
-      s
-    }
-  }
+  // the "GMT" string. For example, it returns 2000-01-01T00:00+01:00 for 2000-01-01T00:00GMT+01:00.
+  def cleanLegacyTimestampStr(s: UTF8String): UTF8String = s.replace(gmtUtf8, UTF8String.EMPTY_UTF8)
 
   /**
    * Trims and parses a given UTF8 timestamp string to the corresponding a corresponding [[Long]]
@@ -544,6 +534,26 @@ object DateTimeUtils {
    * Returns the 'day of month' value for the given number of days since 1970-01-01.
    */
   def getDayOfMonth(days: Int): Int = daysToLocalDate(days).getDayOfMonth
+
+  /**
+   * Returns the day of the week for the given number of days since 1970-01-01
+   * (1 = Sunday, 2 = Monday, ..., 7 = Saturday).
+   */
+  def getDayOfWeek(days: Int): Int = LocalDate.ofEpochDay(days).getDayOfWeek.plus(1).getValue
+
+  /**
+   * Returns the day of the week for the given number of days since 1970-01-01
+   * (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
+   */
+  def getWeekDay(days: Int): Int = LocalDate.ofEpochDay(days).getDayOfWeek.ordinal()
+
+  /**
+   * Returns the week of the year of the given date expressed as the number of days from 1970-01-01.
+   * A week is considered to start on a Monday and week 1 is the first week with > 3 days.
+   */
+  def getWeekOfYear(days: Int): Int = {
+    LocalDate.ofEpochDay(days).get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
+  }
 
   /**
    * Adds an year-month interval to a date represented as days since 1970-01-01.
