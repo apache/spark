@@ -56,13 +56,17 @@ function formatTimeMillis(timeMillis) {
     return "-";
   } else {
     var dt = new Date(timeMillis);
+    return formatDateString(dt);
+  }
+}
+
+function formatDateString(dt) {
     return dt.getFullYear() + "-" +
       padZeroes(dt.getMonth() + 1) + "-" +
       padZeroes(dt.getDate()) + " " +
       padZeroes(dt.getHours()) + ":" +
       padZeroes(dt.getMinutes()) + ":" +
       padZeroes(dt.getSeconds());
-  }
 }
 
 function getTimeZone() {
@@ -162,13 +166,8 @@ function setDataTableDefaults() {
 function formatDate(date) {
   if (date <= 0) return "-";
   else {
-     var d = new Date(date.replace("GMT", "Z"))
-     return d.getFullYear() + '-' +
-            (d.getMonth() + 1) + '-' +
-            d.getDate() + " " +
-            d.getHours() + ":" +
-            d.getMinutes() + ":" +
-            d.getSeconds();
+     var dt = new Date(date.replace("GMT", "Z"))
+     return formatDateString(dt);
   }
 }
 
