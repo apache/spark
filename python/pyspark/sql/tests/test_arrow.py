@@ -415,6 +415,12 @@ class ArrowTests(ReusedSQLTestCase):
         for case in cases:
             run_test(*case)
 
+    def test_createDataFrame_with_float_index(self):
+        # SPARK-32098: float index should not produce duplicated or truncated Spark DataFrame
+        self.assertEqual(
+            self.spark.createDataFrame(
+                pd.DataFrame({'a': [1, 2, 3]}, index=[2., 3., 4.])).distinct().count(), 3)
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
