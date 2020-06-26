@@ -627,7 +627,8 @@ class FileBasedDataSourceSuite extends QueryTest
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
       val msg = intercept[DateTimeParseException] {
-        spark.read.option("modifiedDateFilter", "2024-05+1 01:00:00").format("csv").load(path.toString)
+        spark.read.option("modifiedDateFilter", "2024-05+1 01:00:00")
+            .format("csv").load(path.toString)
       }.getMessage
       assert(msg.contains("could not be parsed at index "))
     }
