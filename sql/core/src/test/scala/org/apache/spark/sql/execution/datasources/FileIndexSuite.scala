@@ -41,9 +41,9 @@ import org.apache.spark.util.KnownSizeEstimation
 class FileIndexSuite extends SharedSparkSession {
 
   private class TestInMemoryFileIndex(
-      spark: SparkSession,
-      path: Path,
-      fileStatusCache: FileStatusCache = NoopCache)
+    spark: SparkSession,
+    path: Path,
+    fileStatusCache: FileStatusCache = NoopCache)
       extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
     def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
     def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
@@ -73,7 +73,7 @@ class FileIndexSuite extends SharedSparkSession {
       val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
       val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
       assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
-        partitionValues(0).getString(0) == "4d")
+          partitionValues(0).getString(0) == "4d")
     }
   }
 
@@ -142,7 +142,7 @@ class FileIndexSuite extends SharedSparkSession {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
         val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
         assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
-          partitionValues(0).isNullAt(0))
+            partitionValues(0).isNullAt(0))
       }
     }
   }
@@ -194,7 +194,7 @@ class FileIndexSuite extends SharedSparkSession {
       parDiscoveryThreshold <- Seq(0, 100)
     ) {
       withClue(s"raceCondition=$raceCondition, ignoreMissingFiles=$ignoreMissingFiles, " +
-        s"parDiscoveryThreshold=$parDiscoveryThreshold"
+          s"parDiscoveryThreshold=$parDiscoveryThreshold"
       ) {
         withSQLConf(
           SQLConf.IGNORE_MISSING_FILES.key -> ignoreMissingFiles.toString,
@@ -310,7 +310,7 @@ class FileIndexSuite extends SharedSparkSession {
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
     class MockCatalog(
       override val rootPaths: Seq[Path])
-      extends PartitioningAwareFileIndex(spark, Map.empty, None) {
+        extends PartitioningAwareFileIndex(spark, Map.empty, None) {
 
       override def refresh(): Unit = {}
 
@@ -328,8 +328,8 @@ class FileIndexSuite extends SharedSparkSession {
     }
 
     withSQLConf(
-        "fs.mockFs.impl" -> classOf[FakeParentPathFileSystem].getName,
-        "fs.mockFs.impl.disable.cache" -> "true") {
+      "fs.mockFs.impl" -> classOf[FakeParentPathFileSystem].getName,
+      "fs.mockFs.impl.disable.cache" -> "true") {
       val pathWithSlash = new Path("mockFs://some-bucket/")
       assert(pathWithSlash.getParent === null)
       val pathWithoutSlash = new Path("mockFs://some-bucket")
@@ -342,7 +342,7 @@ class FileIndexSuite extends SharedSparkSession {
   }
 
   test("InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD" +
-    "is a nonpositive number") {
+      "is a nonpositive number") {
     withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
       new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
     }
@@ -353,7 +353,7 @@ class FileIndexSuite extends SharedSparkSession {
       }
     }.getMessage
     assert(e.contains("The maximum number of paths allowed for listing files at " +
-      "driver side must not be negative"))
+        "driver side must not be negative"))
   }
 
   test ("SPARK-29537: throw exception when user defined a wrong base path") {
@@ -417,15 +417,15 @@ class FileIndexSuite extends SharedSparkSession {
     withTempPath { path =>
       val colToUnescape = "Column/#%'?"
       spark
-        .range(1)
-        .select(col("id").as(colToUnescape), col("id"))
-        .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
+          .range(1)
+          .select(col("id").as(colToUnescape), col("id"))
+          .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
       assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
     }
   }
 
   test("SPARK-25062 - InMemoryFileIndex stores BlockLocation objects no matter what subclass " +
-    "the FS returns") {
+      "the FS returns") {
     withSQLConf("fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
       withTempDir { dir =>
         val file = new File(dir, "text.txt")
@@ -451,19 +451,19 @@ class FileIndexSuite extends SharedSparkSession {
       val path = new Path(dir.getCanonicalPath)
       val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
       withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
-         "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+        "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
         val withBlockLocations = fileIndex.
-          listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+            listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
 
         withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true") {
           val withoutBlockLocations = fileIndex.
-            listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+              listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
 
           assert(withBlockLocations.size == withoutBlockLocations.size)
           assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
-            b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
+              b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
           assert(withoutBlockLocations.forall(b => b.isInstanceOf[FileStatus] &&
-            !b.isInstanceOf[LocatedFileStatus]))
+              !b.isInstanceOf[LocatedFileStatus]))
           assert(withoutBlockLocations.forall(withBlockLocations.contains))
         }
       }
@@ -539,9 +539,9 @@ class FileDeletionRaceFileSystem extends RawLocalFileSystem {
   }
 
   override def getFileBlockLocations(
-      file: FileStatus,
-      start: Long,
-      len: Long): Array[BlockLocation] = {
+    file: FileStatus,
+    start: Long,
+    len: Long): Array[BlockLocation] = {
     if (file.getPath == leafFilePath) {
       throw new FileNotFoundException(leafFilePath.toString)
     } else {
@@ -561,16 +561,16 @@ class FakeParentPathFileSystem extends RawLocalFileSystem {
 class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
 
   class SpecialBlockLocation(
-      names: Array[String],
-      hosts: Array[String],
-      offset: Long,
-      length: Long)
-    extends BlockLocation(names, hosts, offset, length)
+    names: Array[String],
+    hosts: Array[String],
+    offset: Long,
+    length: Long)
+      extends BlockLocation(names, hosts, offset, length)
 
   override def getFileBlockLocations(
-      file: FileStatus,
-      start: Long,
-      len: Long): Array[BlockLocation] = {
+    file: FileStatus,
+    start: Long,
+    len: Long): Array[BlockLocation] = {
     Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
   }
 }

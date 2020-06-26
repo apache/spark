@@ -27,6 +27,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.execution.datasources.pathfilters.PathFilterOptions
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
@@ -56,10 +57,11 @@ abstract class PartitioningAwareFileIndex(
 
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
-  protected lazy val pathGlobFilter = parameters.get("pathGlobFilter").map(new GlobFilter(_))
+  protected lazy val pathFilters = new PathFilterOptions(
+    sparkSession, hadoopConf, parameters).filters()
 
-  protected def matchGlobPattern(file: FileStatus): Boolean = {
-    pathGlobFilter.forall(_.accept(file.getPath))
+  protected def matchPathPattern(file: FileStatus): Boolean = {
+    pathFilters.forall(_.accept(file.getPath))
   }
 
   protected lazy val recursiveFileLookup = {
@@ -83,7 +85,7 @@ abstract class PartitioningAwareFileIndex(
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
-              existingDir.filter(f => matchGlobPattern(f) && isNonEmptyFile(f))
+              existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f))
 
             case None =>
               // Directory does not exist, or has no children files
@@ -132,7 +134,7 @@ abstract class PartitioningAwareFileIndex(
     } else {
       leafFiles.values.toSeq
     }
-    files.filter(matchGlobPattern)
+    files.filter(matchPathPattern)
   }
 
   protected def inferPartitioning(): PartitionSpec = {

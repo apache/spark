@@ -19,18 +19,18 @@ package org.apache.spark.sql
 
 import java.io.{File, FileNotFoundException}
 import java.nio.file.{Files, StandardOpenOption}
+import java.time.format.DateTimeParseException
 import java.util.Locale
 
 import scala.collection.mutable
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan}
@@ -40,7 +40,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-
 
 class FileBasedDataSourceSuite extends QueryTest
   with SharedSparkSession
@@ -556,6 +555,85 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(row.getString(0).contains(path))
         }
       }
+    }
+  }
+
+  test("SPARK-39162 - when modifiedDateFilter specified and before file date without filter") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+      val df = spark.read
+          .option("modifiedDateFilter", "2020-05-01T01:00:00")
+          .format("csv")
+          .load(path.toString)
+      assert(df.count() == 1)
+    }
+  }
+
+  test("SPARK-39162 - when modifiedDateFilter specified and after file date without filter") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir,     "file1.csv")
+      stringToFile(file, "text")
+      val msg = intercept[AnalysisException] {
+        spark.read
+            .option("modifiedDateFilter", "2024-05-01T01:00:00")
+            .format("csv")
+            .load(path.toString)
+      }.getMessage
+      assert(msg.contains("Unable to infer schema for CSV. It must be specified manually."))
+    }
+    assert(true)
+  }
+
+  test("SPARK-39162 - when modifiedDateFilter specified and before file date with path glob filter") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+      spark.read
+          .option("modifiedDateFilter", "2020-05-01T01:00:00")
+          .option("pathGlobFilter", "*.csv")
+          .format("csv")
+          .load(path.toString)
+    }
+    assert(true)
+  }
+
+  test("SPARK-39162 - when modifiedDateFilter specified and after file date with path glob filter") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir,     "file1.csv")
+      stringToFile(file, "text")
+      val msg = intercept[AnalysisException] {
+        spark.read
+            .option("modifiedDateFilter", "2050-05-01T01:00:00")
+            .option("pathGlobFilter", "*.csv")
+            .format("csv")
+            .load(path.toString)
+      }.getMessage
+      assert(msg.contains("Unable to infer schema for CSV"))
+    }
+  }
+  test("SPARK-39162 - when modifiedDateFilter is specified with invalid date") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir,     "file1.csv")
+      stringToFile(file, "text")
+      val msg = intercept[DateTimeParseException] {
+        spark.read.option("modifiedDateFilter", "2024-05+1 01:00:00").format("csv").load(path.toString)
+      }.getMessage
+      assert(msg.contains("could not be parsed at index "))
+    }
+  }
+  test("SPARK-39162 - when modifiedDateFilter not specified") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath)
+      val file = new File(dir, "file1.csv")
+      stringToFile(file, "text")
+      val df = spark.read.format("csv").load(path.toString)
+      assert(df.count() == 1)
     }
   }
 
