@@ -520,6 +520,7 @@ class DataStreamReader(OptionUtils):
         True
         >>> json_sdf.schema == sdf_schema
         True
+
         """
         self._set_opts(
             schema=schema, primitivesAsString=primitivesAsString, prefersDecimal=prefersDecimal,
@@ -563,6 +564,7 @@ class DataStreamReader(OptionUtils):
         >>> orc_sdf.schema == sdf_schema
         True
         """
+
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
                        recursiveFileLookup=recursiveFileLookup,
                        modifiedDateFilter=modifiedDateFilter)
@@ -599,6 +601,7 @@ class DataStreamReader(OptionUtils):
         >>> parquet_sdf.schema == sdf_schema
         True
         """
+
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
                        recursiveFileLookup=recursiveFileLookup,
                        modifiedDateFilter=modifiedDateFilter)
@@ -642,6 +645,7 @@ class DataStreamReader(OptionUtils):
         >>> "value" in str(text_sdf.schema)
         True
         """
+
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
@@ -776,6 +780,7 @@ class DataStreamReader(OptionUtils):
         >>> csv_sdf.schema == sdf_schema
         True
         """
+
         self._set_opts(
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
