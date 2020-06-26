@@ -23,7 +23,9 @@ import java.time.format.DateTimeParseException
 import java.util.Locale
 
 import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
@@ -574,7 +576,7 @@ class FileBasedDataSourceSuite extends QueryTest
   test("SPARK-39162 - when modifiedDateFilter specified and after file date without filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir,     "file1.csv")
+      val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
       val msg = intercept[AnalysisException] {
         spark.read
@@ -587,7 +589,8 @@ class FileBasedDataSourceSuite extends QueryTest
     assert(true)
   }
 
-  test("SPARK-39162 - when modifiedDateFilter specified and before file date with path glob filter") {
+  test("SPARK-39162 - when modifiedDateFilter specified and" +
+      " before file date with path glob filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -601,10 +604,11 @@ class FileBasedDataSourceSuite extends QueryTest
     assert(true)
   }
 
-  test("SPARK-39162 - when modifiedDateFilter specified and after file date with path glob filter") {
+  test("SPARK-39162 - when modifiedDateFilter specified and " +
+      "after file date with path glob filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir,     "file1.csv")
+      val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
       val msg = intercept[AnalysisException] {
         spark.read
@@ -616,10 +620,11 @@ class FileBasedDataSourceSuite extends QueryTest
       assert(msg.contains("Unable to infer schema for CSV"))
     }
   }
-  test("SPARK-39162 - when modifiedDateFilter is specified with invalid date") {
+  test("SPARK-39162 - when modifiedDateFilter is specified" +
+      " with invalid date") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir,     "file1.csv")
+      val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
       val msg = intercept[DateTimeParseException] {
         spark.read.option("modifiedDateFilter", "2024-05+1 01:00:00").format("csv").load(path.toString)
