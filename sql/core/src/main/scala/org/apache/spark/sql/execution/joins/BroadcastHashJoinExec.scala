@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable
+
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -61,23 +63,89 @@ case class BroadcastHashJoinExec(
   }
 
   override def outputPartitioning: Partitioning = {
-    def buildKeys: Seq[Expression] = buildSide match {
-      case BuildLeft => leftKeys
-      case BuildRight => rightKeys
+    val (buildKeys, streamedKeys) = buildSide match {
+      case BuildLeft => (leftKeys, rightKeys)
+      case BuildRight => (rightKeys, leftKeys)
     }
 
     joinType match {
       case _: InnerLike =>
         streamedPlan.outputPartitioning match {
           case h: HashPartitioning =>
-            PartitioningCollection(Seq(h, HashPartitioning(buildKeys, h.numPartitions)))
-          case c: PartitioningCollection
-            if c.partitionings.forall(_.isInstanceOf[HashPartitioning]) =>
-            PartitioningCollection(c.partitionings :+ HashPartitioning(buildKeys, c.numPartitions))
+            getBuildSidePartitioning(h, streamedKeys, buildKeys) match {
+              case Some(p) => PartitioningCollection(Seq(h, p))
+              case None => h
+            }
+          case c: PartitioningCollection =>
+            c.partitionings.foreach {
+              case h: HashPartitioning =>
+                getBuildSidePartitioning(h, streamedKeys, buildKeys) match {
+                  case Some(p) => return PartitioningCollection(c.partitionings :+ p)
+                  case None => ()
+                }
+              case _ => ()
+            }
+            c
           case other => other
         }
       case _ => streamedPlan.outputPartitioning
     }
+  }
+
+  /**
+   * Returns a partitioning for the build side if the following conditions are met:
+   *   - The streamed side's output partitioning expressions consist of all the keys
+   *     from the streamed side, we can add a partitioning for the build side.
+   *   - There is a one-to-one mapping from streamed keys to build keys.
+   *
+   * The build side partitioning will have expressions in the same order as the expressions
+   * in the streamed side partitioning. For example, for the following setup:
+   *   - streamed partitioning expressions: Seq(s1, s2)
+   *   - streamed keys: Seq(c1, c2)
+   *   - build keys: Seq(b1, b2)
+   * the expressions in the build side partitioning will be Seq(b1, b2), not Seq(b2, b1).
+   */
+  private def getBuildSidePartitioning(
+      streamedPartitioning: HashPartitioning,
+      streamedKeys: Seq[Expression],
+      buildKeys: Seq[Expression]): Option[HashPartitioning] = {
+    if (!satisfiesPartitioning(streamedKeys, streamedPartitioning)) {
+      return None
+    }
+
+    val streamedKeyToBuildKeyMap = mutable.Map.empty[Expression, Expression]
+    streamedKeys.zip(buildKeys).foreach {
+      case (streamedKey, buildKey) =>
+        val inserted = streamedKeyToBuildKeyMap.getOrElseUpdate(
+          streamedKey.canonicalized,
+          buildKey)
+
+        if (!inserted.semanticEquals(buildKey)) {
+          // One-to-many mapping from streamed keys to build keys found.
+          return None
+        }
+    }
+
+    // Ensure the one-to-one mapping from streamed keys to build keys.
+    if (streamedKeyToBuildKeyMap.size != streamedKeyToBuildKeyMap.values.toSet.size) {
+      return None
+    }
+
+    // The final expressions are built by mapping stream partitioning expressions ->
+    // streamed keys -> build keys.
+    val buildPartitioningExpressions = streamedPartitioning.expressions.map { e =>
+      streamedKeyToBuildKeyMap(e.canonicalized)
+    }
+
+    Some(HashPartitioning(buildPartitioningExpressions, streamedPartitioning.numPartitions))
+  }
+
+  // Returns true if `keys` consist of all the expressions in `partitioning`.
+  private def satisfiesPartitioning(
+      keys: Seq[Expression],
+      partitioning: HashPartitioning): Boolean = {
+    partitioning.expressions.length == keys.length &&
+      partitioning.expressions.forall(e => keys.exists(_.semanticEquals(e)))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

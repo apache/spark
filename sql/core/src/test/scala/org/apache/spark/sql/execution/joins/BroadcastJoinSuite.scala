@@ -469,14 +469,14 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         val df1 = (0 until 100).map(i => (i % 5, i % 13)).toDF("i1", "j1")
         val df2 = (0 until 20).map(i => (i % 7, i % 11)).toDF("i2", "j2")
         val df3 = (0 until 100).map(i => (i % 5, i % 13)).toDF("i3", "j3")
-        df1.write.format("parquet").bucketBy(8, "i1").saveAsTable("t1")
-        df3.write.format("parquet").bucketBy(8, "i3").saveAsTable("t3")
+        df1.write.format("parquet").bucketBy(8, "i1", "j1").saveAsTable("t1")
+        df3.write.format("parquet").bucketBy(8, "i3", "j3").saveAsTable("t3")
         val t1 = spark.table("t1")
         val t3 = spark.table("t3")
 
         // join1 is a broadcast join where df2 is broadcasted. Note that output partitioning on the
         // streamed side (t1) is HashPartitioning (bucketed files).
-        val join1 = t1.join(df2, t1("i1") === df2("i2"))
+        val join1 = t1.join(df2, t1("i1") === df2("i2") && t1("j1") === df2("j2"))
         val plan1 = join1.queryExecution.executedPlan
         assert(collect(plan1) { case e: ShuffleExchangeExec => e }.isEmpty)
         val broadcastJoins = collect(plan1) { case b: BroadcastHashJoinExec => b }
@@ -489,17 +489,17 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
           case _ => fail()
         }
 
-        // Join on the column from the broadcasted side (i2) and make sure output partitioning
+        // Join on the column from the broadcasted side (i2, j2) and make sure output partitioning
         // is maintained by checking no shuffle exchange is introduced.
-        val join2 = join1.join(t3, join1("i2") === t3("i3"))
+        val join2 = join1.join(t3, join1("i2") === t3("i3") && join1("j2") === t3("j3"))
         val plan2 = join2.queryExecution.executedPlan
         assert(collect(plan2) { case s: SortMergeJoinExec => s }.size == 1)
         assert(collect(plan2) { case b: BroadcastHashJoinExec => b }.size == 1)
         assert(collect(plan2) { case e: ShuffleExchangeExec => e }.isEmpty)
 
-        // Validate the data with boradcast join off.
+        // Validate the data with broadcast join off.
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-          val df = join1.join(t3, join1("i2") === t3("i3"))
+          val df = join1.join(t3, join1("i2") === t3("i3") && join1("j2") === t3("j3"))
           QueryTest.sameRows(join2.collect().toSeq, df.collect().toSeq)
         }
       }
