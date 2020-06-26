@@ -826,8 +826,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     complete(taskSets(1), Seq(
       (Success, 42),
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"), null)))
-    // this will get called
-    // blockManagerMaster.removeExecutor("hostA-exec")
     verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
     // ask the scheduler to try it again
     scheduler.resubmitFailedStages()

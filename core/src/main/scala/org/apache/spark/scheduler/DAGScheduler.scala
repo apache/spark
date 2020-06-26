@@ -170,28 +170,33 @@ private[spark] class DAGScheduler(
    */
   private val cacheLocs = new HashMap[Int, IndexedSeq[Seq[TaskLocation]]]
 
-  // Tracks the latest epoch of a fully processed error related to the given executor. (We use
-  // the MapOutputTracker's epoch number, which is sent with every task.)
-  //
-  // When an executor fails, it can affect the results of many tasks, and we have to deal with
-  // all of them consistently. We don't simply ignore all future results from that executor,
-  // as the failures may have been transient; but we also don't want to "overreact" to follow-
-  // on errors we receive. Furthermore, we might receive notification of a task success, after
-  // we find out the executor has actually failed; we'll assume those successes are, in fact,
-  // simply delayed notifications and the results have been lost, if they come from the same
-  // epoch. In particular, we use this to control when we tell the BlockManagerMaster that the
-  // BlockManager has been lost.
+  /**
+   * Tracks the latest epoch of a fully processed error related to the given executor. (We use
+   * the MapOutputTracker's epoch number, which is sent with every task.)
+   *
+   * When an executor fails, it can affect the results of many tasks, and we have to deal with
+   * all of them consistently. We don't simply ignore all future results from that executor,
+   * as the failures may have been transient; but we also don't want to "overreact" to follow-
+   * on errors we receive. Furthermore, we might receive notification of a task success, after
+   * we find out the executor has actually failed; we'll assume those successes are, in fact,
+   * simply delayed notifications and the results have been lost, if the tasks started in the
+   * same or an earlier epoch. In particular, we use this to control when we tell the
+   * BlockManagerMaster that the BlockManager has been lost.
+   */
   private val executorFailureEpoch = new HashMap[String, Long]
-  // Tracks the latest epoch of a fully processed error where shuffle files have been lost from
-  // the given executor.
-  //
-  // This is closely related to executorFailureEpoch.
-  // They only differ for the executor when there is a Standalone worker or an external shuffle
-  // service serving shuffle files. In that case, when an executor is lost, we do not update
-  // the shuffleFileLostEpoch; we wait for a fetch failure. This way, if only the executor
-  // fails, we do not unregister the shuffle data as it can still be served; but if there is
-  // a failure in the shuffle service (resulting in fetch failure), we unregister the shuffle
-  // data only once, even if we get many fetch failures.
+
+  /**
+   * Tracks the latest epoch of a fully processed error where shuffle files have been lost from
+   * the given executor.
+   *
+   * This is closely related to executorFailureEpoch.
+   * They only differ for the executor when there is a Standalone worker or an external shuffle
+   * service serving shuffle files. In that case, when an executor is lost, we do not update
+   * the shuffleFileLostEpoch; we wait for a fetch failure. This way, if only the executor
+   * fails, we do not unregister the shuffle data as it can still be served; but if there is
+   * a failure in the shuffle service (resulting in fetch failure), we unregister the shuffle
+   * data only once, even if we get many fetch failures.
+   */
   private val shuffleFileLostEpoch = new HashMap[String, Long]
 
   private [scheduler] val outputCommitCoordinator = env.outputCommitCoordinator
@@ -1950,14 +1955,16 @@ private[spark] class DAGScheduler(
    * Handles removing an executor from the BlockManagerMaster as well as unregistering shuffle
    * outputs for the executor or optionally its host.
    *
-   * The fileLost parameter being true indicates that we assume we've lost all shuffle blocks
-   * associated with the executor; this happens if the executor serves its own blocks (i.e.,
-   * we're not using external shuffle), the Standalone worker (which serves the shuffle data)
-   * is lost, or a FetchFailed occurred (in which case we presume all shuffle data related to
-   * this executor to be lost).
-   *
-   * Optionally the epoch during which the failure was caught can be passed to avoid allowing
-   * stray fetch failures from possibly retriggering the detection of a node as lost.
+   * @param execId executor to be removed
+   * @param fileLost If true, indicates that we assume we've lost all shuffle blocks associated
+   *   with the executor; this happens if the executor serves its own blocks (i.e., we're not
+   *   using external shuffle), the Standalone worker (which serves the shuffle data) is lost,
+   *   or a FetchFailed occurred (in which case we presume all shuffle data related to this
+   *   executor to be lost).
+   * @param hostToUnregisterOutputs (optional) executor host if we're unregistering all the
+   *   outputs on the host
+   * @param maybeEpoch (optional) the epoch during which the failure was caught (this prevents
+   *   reprocessing for follow-on fetch failures)
    */
   private def removeExecutorAndUnregisterOutputs(
       execId: String,
