@@ -276,7 +276,7 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedDateFilter: an optional timestamp to only include files with
+        :param modifiedDateFilter: an optional timestamp to only include files with
                modification dates occurring after the specified time.  The provided timestamp
                must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
                Example: `2020-06-01T13:00:00`
@@ -351,7 +351,7 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedDateFilter: an optional timestamp to only include files with
+        :param modifiedDateFilter: an optional timestamp to only include files with
                modification dates occurring after the specified time.  The provided timestamp
                must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
                Example: `2020-06-01T13:00:00`
@@ -391,7 +391,7 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedDateFilter: an optional timestamp to only include files with
+        :param modifiedDateFilter: an optional timestamp to only include files with
                modification dates occurring after the specified time.  The provided timestamp
                must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
                Example: `2020-06-01T13:00:00`
@@ -531,7 +531,7 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedDateFilter: an optional timestamp to only include files with
+        :param modifiedDateFilter: an optional timestamp to only include files with
                modification dates occurring after the specified time.  The provided timestamp
                must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
                Example: `2020-06-01T13:00:00`
@@ -597,7 +597,7 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedDateFilter: an optional timestamp to only include files with
+        :param modifiedDateFilter: an optional timestamp to only include files with
                modification dates occurring after the specified time.  The provided timestamp
                must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
                Example: `2020-06-01T13:00:00`
