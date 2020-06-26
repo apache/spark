@@ -711,16 +711,20 @@ case class DateFormatTzClass(timestamp: Expression, format: Expression, tz: Expr
 
   @transient private lazy val formatter: Option[TimestampFormatter] = {
     if (format.foldable && tz.foldable) {
-      Option(format.eval()).map(format => TimestampFormatter(format.toString, zoneId))
+      Option(format.eval()).map(format => getFormatter(format.toString))
     } else None
   }
 
+  private def getFormatter(fmt: String): TimestampFormatter = {
+    TimestampFormatter(
+      format = fmt,
+      zoneId = zoneId,
+      legacyFormat = SIMPLE_DATE_FORMAT,
+      isParsing = false)
+  }
+
   override protected def nullSafeEval(timestamp: Any, format: Any, timeZone: Any): Any = {
-    val tf = if (formatter.isEmpty) {
-      TimestampFormatter(format.toString, zoneId)
-    } else {
-      formatter.get
-    }
+    val tf = formatter.getOrElse(getFormatter(format.toString))
     UTF8String.fromString(tf.format(timestamp.asInstanceOf[Long]))
   }
 
@@ -732,10 +736,15 @@ case class DateFormatTzClass(timestamp: Expression, format: Expression, tz: Expr
       })
     }.getOrElse {
       val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+      val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
       val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
       defineCodeGen(ctx, ev, (timestamp, format, _) => {
-        s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid)
-          .format($timestamp))"""
+        s"""|UTF8String.fromString($tf$$.MODULE$$.apply(
+            |  $format.toString(),
+            |  $zid,
+            |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+            |  false)
+            |.format($timestamp))""".stripMargin
       })
     }
   }
