@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.pathfilters
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{GlobFilter, PathFilter}
+
 import org.apache.spark.sql.SparkSession
 
 class PathFilterOptions(sparkSession: SparkSession,
@@ -26,7 +27,8 @@ class PathFilterOptions(sparkSession: SparkSession,
     parameters: Map[String, String]) {
   def filters(): Iterable[PathFilter] = {
     val pathGlobFilter = parameters.get("pathGlobFilter").map(new GlobFilter(_))
-    val modifiedDateFilter = parameters.get("modifiedDateFilter").map(new ModifiedDateFilter(sparkSession, hadoopConf, _))
+    val modifiedDateFilter = parameters.get("modifiedDateFilter")
+        .map(new ModifiedDateFilter(sparkSession, hadoopConf, _))
     pathGlobFilter ++ modifiedDateFilter
   }
 }
