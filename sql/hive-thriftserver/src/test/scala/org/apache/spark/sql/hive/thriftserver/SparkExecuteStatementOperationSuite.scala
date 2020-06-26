@@ -21,14 +21,12 @@ import java.util
 import java.util.concurrent.Semaphore
 
 import scala.concurrent.duration._
-import scala.reflect.ClassTag
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.{OperationState, SessionHandle}
 import org.apache.hive.service.cli.session.HiveSession
-import org.mockito.Mockito
-import org.mockito.Mockito.{doReturn, spy, when}
+import org.mockito.Mockito.{doReturn, mock, spy, when}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.SparkFunSuite
@@ -38,10 +36,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, NullType, StringType, StructField, StructType}
 
 class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSparkSession {
-
-  protected final def smartMock[T](implicit ct: ClassTag[T]): T = {
-    Mockito.mock(ct.runtimeClass, Mockito.RETURNS_MOCKS).asInstanceOf[T]
-  }
 
   test("SPARK-17112 `select null` via JDBC triggers IllegalArgumentException in ThriftServer") {
     val field1 = StructField("NULL", NullType)
@@ -69,18 +63,18 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
     (OperationState.CANCELED, (_: SparkExecuteStatementOperation).cancel()),
     (OperationState.CLOSED, (_: SparkExecuteStatementOperation).close())
   ).foreach { case (finalState, transition) =>
-    test(s"SPARK-32057 SparkExecuteStatementOperation should not transiently become ERROR " +
+    test("SPARK-32057 SparkExecuteStatementOperation should not transiently become ERROR " +
       s"before being set to $finalState") {
-      val hiveSession = smartMock[HiveSession]
+      val hiveSession = mock(classOf[HiveSession])
       when(hiveSession.getHiveConf).thenReturn(new HiveConf)
       when(hiveSession.getSessionHandle)
         .thenReturn(new SessionHandle(ThriftserverShimUtils.testedProtocolVersions.head))
       when(hiveSession.getUserName).thenReturn("test")
-      val sessionState = smartMock[SessionState]
-      when(sessionState.getConf).thenReturn(smartMock[HiveConf])
+      val sessionState = mock(classOf[SessionState])
+      when(sessionState.getConf).thenReturn(mock(classOf[HiveConf]))
       when(hiveSession.getSessionState).thenReturn(sessionState)
 
-      HiveThriftServer2.eventManager = smartMock[HiveThriftServer2EventManager]
+      HiveThriftServer2.eventManager = mock(classOf[HiveThriftServer2EventManager])
 
       val spySqlContext = spy(sqlContext)
 
@@ -88,7 +82,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
       // of execute(). This should not cause the state to become ERROR. The exception here will be
       // triggered in our custom cleanup().
       val signal = new Semaphore(0)
-      val dataFrame = smartMock[DataFrame]
+      val dataFrame = mock(classOf[DataFrame])
       when(dataFrame.collect()).thenAnswer((_: InvocationOnMock) => {
         signal.acquire()
         throw new RuntimeException("Operation was cancelled by test cleanup.")
