@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.execution.script.{HiveScriptIOSchema, HiveScriptTransformationExec}
+import org.apache.spark.sql.hive.execution.{HiveScriptIOSchema, HiveScriptTransformationExec}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StringType

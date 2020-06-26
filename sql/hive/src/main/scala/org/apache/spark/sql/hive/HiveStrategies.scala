@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.hive.execution.script.{HiveScriptIOSchema, HiveScriptTransformationExec}
+import org.apache.spark.sql.hive.execution.{HiveScriptIOSchema, HiveScriptTransformationExec}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 
