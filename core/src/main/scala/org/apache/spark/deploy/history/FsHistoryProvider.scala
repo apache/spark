@@ -185,7 +185,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Visible for testing
   private[history] def isAccessible(path: Path): Boolean = {
-    inaccessibleList.containsKey(path.getName)
+    !inaccessibleList.containsKey(path.getName)
   }
 
   private def markInaccessible(path: Path): Unit = {

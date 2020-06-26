@@ -1142,7 +1142,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       list.size should be(1)
     }
     val accessDeniedPath = new Path(accessDenied.getPath)
-    assert(mockedProvider.isAccessible(accessDeniedPath))
+    assert(!mockedProvider.isAccessible(accessDeniedPath))
     clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
     isReadable = true
     mockedProvider.cleanLogs()
