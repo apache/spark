@@ -513,6 +513,37 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("SPARK-39162 - modifiedDateFilter") {
+    val testTableName = "ModifiedFilterDate"
+    withTempDirs { case (output, checkpoint) =>
+      val path = new Path(output.getCanonicalPath)
+
+      val file1 = new File(output, "file1.txt")
+      stringToFile(file1, "text1")
+      val file2 = new File(output, "file2.txt")
+      stringToFile(file2, "text2")
+      file2.setLastModified(0)
+      val file3 = new File(output, "file3.txt")
+      stringToFile(file3, "text3")
+      file3.setLastModified(10)
+
+      val df = spark.readStream
+          .option("modifiedDateFilter", "2020-06-01T05:30:00")
+          .format("text")
+          .load(path.toString)
+
+      val query = df.writeStream.format("memory")
+          .queryName(testTableName).start()
+      try {
+        query.processAllAvailable()
+        checkDatasetUnorderly(spark.table(testTableName).as[String],
+          "text1")
+      } finally {
+      query.stop()
+    }
+    }
+  }
+
   test("Option pathGlobFilter") {
     val testTableName = "FileStreamSourceTest"
     withTable(testTableName) {
