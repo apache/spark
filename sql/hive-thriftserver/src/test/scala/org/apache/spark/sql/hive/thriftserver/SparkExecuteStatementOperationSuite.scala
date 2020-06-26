@@ -23,10 +23,9 @@ import java.util.concurrent.Semaphore
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.{OperationState, SessionHandle}
 import org.apache.hive.service.cli.session.HiveSession
-import org.mockito.Mockito.{doReturn, mock, spy, when}
+import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.SparkFunSuite
@@ -65,14 +64,11 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
   ).foreach { case (finalState, transition) =>
     test("SPARK-32057 SparkExecuteStatementOperation should not transiently become ERROR " +
       s"before being set to $finalState") {
-      val hiveSession = mock(classOf[HiveSession])
+      val hiveSession = mock(classOf[HiveSession], RETURNS_DEEP_STUBS)
       when(hiveSession.getHiveConf).thenReturn(new HiveConf)
       when(hiveSession.getSessionHandle)
         .thenReturn(new SessionHandle(ThriftserverShimUtils.testedProtocolVersions.head))
       when(hiveSession.getUserName).thenReturn("test")
-      val sessionState = mock(classOf[SessionState])
-      when(sessionState.getConf).thenReturn(mock(classOf[HiveConf]))
-      when(hiveSession.getSessionState).thenReturn(sessionState)
 
       HiveThriftServer2.eventManager = mock(classOf[HiveThriftServer2EventManager])
 
@@ -82,7 +78,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
       // of execute(). This should not cause the state to become ERROR. The exception here will be
       // triggered in our custom cleanup().
       val signal = new Semaphore(0)
-      val dataFrame = mock(classOf[DataFrame])
+      val dataFrame = mock(classOf[DataFrame], RETURNS_DEEP_STUBS)
       when(dataFrame.collect()).thenAnswer((_: InvocationOnMock) => {
         signal.acquire()
         throw new RuntimeException("Operation was cancelled by test cleanup.")
