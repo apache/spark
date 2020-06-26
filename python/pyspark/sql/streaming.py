@@ -530,14 +530,16 @@ class DataStreamReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
             dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            modifiedDateFilter=modifiedDateFilter)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
             raise TypeError("path can be only a single string")
 
     @since(2.3)
-    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None, modifiedDateFilter=None):
+    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None,
+            modifiedDateFilter=None):
         """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
 
         .. note:: Evolving.
@@ -562,14 +564,16 @@ class DataStreamReader(OptionUtils):
         True
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+                       recursiveFileLookup=recursiveFileLookup,
+                       modifiedDateFilter=modifiedDateFilter)
         if isinstance(path, basestring):
             return self._df(self._jreader.orc(path))
         else:
             raise TypeError("path can be only a single string")
 
     @since(2.0)
-    def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None, modifiedDateFilter=None):
+    def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None,
+                modifiedDateFilter=None):
         """
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
@@ -596,7 +600,8 @@ class DataStreamReader(OptionUtils):
         True
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup,modifiedDateFilter=modifiedDateFilter)
+                       recursiveFileLookup=recursiveFileLookup,
+                       modifiedDateFilter=modifiedDateFilter)
         if isinstance(path, basestring):
             return self._df(self._jreader.parquet(path))
         else:
@@ -605,7 +610,8 @@ class DataStreamReader(OptionUtils):
     @ignore_unicode_prefix
     @since(2.0)
     def text(self, path, wholetext=False, lineSep=None, pathGlobFilter=None,
-             recursiveFileLookup=None, modifiedDateFilter=None):
+             recursiveFileLookup=None,
+             modifiedDateFilter=None):
         """
         Loads a text file stream and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -781,7 +787,8 @@ class DataStreamReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
             emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            modifiedDateFilter=modifiedDateFilter)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:

@@ -305,7 +305,8 @@ class DataFrameReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
             samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+            locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            modifiedDateFilter=modifiedDateFilter)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -366,7 +367,8 @@ class DataFrameReader(OptionUtils):
         modifiedDateFilter = options.get('modifiedDateFilter', None)
         recursiveFileLookup = options.get('recursiveFileLookup', None)
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+                       recursiveFileLookup=recursiveFileLookup,
+                       modifiedDateFilter=modifiedDateFilter)
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
     @ignore_unicode_prefix
@@ -553,7 +555,8 @@ class DataFrameReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
             enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            modifiedDateFilter=modifiedDateFilter)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -581,7 +584,8 @@ class DataFrameReader(OptionUtils):
             raise TypeError("path can be only string, list or RDD")
 
     @since(1.5)
-    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None, modifiedDateFilter=None):
+    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None,
+            modifiedDateFilter=None):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
         :param mergeSchema: sets whether we should merge schemas collected from all
@@ -602,7 +606,8 @@ class DataFrameReader(OptionUtils):
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+                       recursiveFileLookup=recursiveFileLookup,
+                       modifiedDateFilter=modifiedDateFilter)
         if isinstance(path, basestring):
             path = [path]
         return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
