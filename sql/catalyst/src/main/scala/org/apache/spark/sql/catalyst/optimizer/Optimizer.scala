@@ -51,7 +51,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
   override protected val blacklistedOnceBatches: Set[String] =
     Set(
       "PartitionPruning",
-      "Extract Python UDFs")
+      "Extract Python UDFs",
+      "Push CNF predicate through join")
 
   protected def fixedPoint =
     FixedPoint(
@@ -118,7 +119,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Batch("Infer Filters", Once,
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        rulesWithoutInferFiltersFromConstraints: _*) :: Nil
+        rulesWithoutInferFiltersFromConstraints: _*) ::
+      // Set strategy to Once to avoid pushing filter every time because we do not change the
+      // join condition.
+      Batch("Push CNF predicate through join", Once,
+        PushCNFPredicateThroughJoin) :: Nil
     }
 
     val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
@@ -644,8 +649,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
-    case p @ NestedColumnAliasing(nestedFieldToAlias, attrToAliases) =>
-      NestedColumnAliasing.replaceToAliases(p, nestedFieldToAlias, attrToAliases)
+    case NestedColumnAliasing(p) => p
 
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
@@ -1285,11 +1289,17 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
   }
 
+  private def canPushThrough(joinType: JoinType): Boolean = joinType match {
+    case _: InnerLike | LeftSemi | RightOuter | LeftOuter | LeftAnti | ExistenceJoin(_) => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // push the where condition down into join filter
-    case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint)) =>
+    case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint))
+        if canPushThrough(joinType) =>
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
         split(splitConjunctivePredicates(filterCondition), left, right)
       joinType match {
@@ -1329,13 +1339,13 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           (rightFilterConditions ++ commonFilterCondition).
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
-        case FullOuter => f // DO Nothing for Full Outer Join
-        case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
-        case UsingJoin(_, _) => sys.error("Untransformed Using join node")
+
+        case other =>
+          throw new IllegalStateException(s"Unexpected join type: $other")
       }
 
     // push down the join filter into sub query scanning if applicable
-    case j @ Join(left, right, joinType, joinCondition, hint) =>
+    case j @ Join(left, right, joinType, joinCondition, hint) if canPushThrough(joinType) =>
       val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
 
@@ -1365,9 +1375,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoinCond = (leftJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
           Join(newLeft, newRight, joinType, newJoinCond, hint)
-        case FullOuter => j
-        case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
-        case UsingJoin(_, _) => sys.error("Untransformed Using join node")
+
+        case other =>
+          throw new IllegalStateException(s"Unexpected join type: $other")
       }
   }
 }

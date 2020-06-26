@@ -529,7 +529,10 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
         # Namespaces other than "SparkR" will not be searched.
         if (!isNamespace(func.env) ||
             (getNamespaceName(func.env) == "SparkR" &&
-               !(nodeChar %in% getNamespaceExports("SparkR")))) {
+               !(nodeChar %in% getNamespaceExports("SparkR")) &&
+                  # Note that generic S4 methods should not be set to the environment of
+                  # cleaned closure. It does not work with R 4.0.0+. See also SPARK-31918.
+                  nodeChar != "" && !methods::isGeneric(nodeChar, func.env))) {
           # Only include SparkR internals.
 
           # Set parameter 'inherits' to FALSE since we do not need to search in
