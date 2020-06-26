@@ -791,9 +791,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         )
       }
 
-      // FULL OUTER JOIN still does not use [[ExternalAppendOnlyUnsafeRowArray]]
-      // so should not cause any spill
-      assertNotSpilled(sparkContext, "full outer join") {
+      // use [[FileBasedAppendOnlyUnsafeRowArray]]
+      assertSpilled(sparkContext, "full outer join") {
         checkAnswer(
           sql(
             """
