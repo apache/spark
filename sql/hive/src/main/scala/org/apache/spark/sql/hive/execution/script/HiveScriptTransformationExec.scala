@@ -225,13 +225,13 @@ private class HiveScriptTransformationWriterThread(
     taskContext: TaskContext,
     conf: Configuration)
   extends ScriptTransformationWriterThreadBase(
-      iter,
-      inputSchema,
-      outputStream,
-      proc,
-      stderrBuffer,
-      taskContext,
-      conf) with HiveInspectors {
+    iter,
+    inputSchema,
+    outputStream,
+    proc,
+    stderrBuffer,
+    taskContext,
+    conf) with HiveInspectors {
 
   setDaemon(true)
 

@@ -35,7 +35,6 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.execution.python._
-import org.apache.spark.sql.execution.script.{ScriptTransformationExec, ScriptTransformIOSchema}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -647,20 +646,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         BatchEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case _ =>
         Nil
-    }
-  }
-
-  object Scripts extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.ScriptTransformation(input, script, output, child, ioschema) =>
-        ScriptTransformationExec(
-          input,
-          script,
-          output,
-          planLater(child),
-          ScriptTransformIOSchema(ioschema)
-        ) :: Nil
-      case _ => Nil
     }
   }
 

@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, SerializableConfiguration, Utils}
 
-private[sql] trait ScriptTransformBase extends UnaryExecNode {
+trait ScriptTransformBase extends UnaryExecNode {
   override def doExecute(): RDD[InternalRow] = {
     val broadcastedHadoopConf =
       new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
@@ -84,7 +84,7 @@ private[sql] trait ScriptTransformBase extends UnaryExecNode {
   }
 }
 
-private[sql] abstract class ScriptTransformationWriterThreadBase(
+abstract class ScriptTransformationWriterThreadBase(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
     outputStream: OutputStream,
@@ -134,4 +134,29 @@ private[sql] abstract class ScriptTransformationWriterThreadBase(
       }
     }
   }
+}
+
+/**
+ * The wrapper class of Hive input and output schema properties
+ */
+class ScriptTransformIOSchema (
+    inputRowFormat: Seq[(String, String)],
+    outputRowFormat: Seq[(String, String)],
+    inputSerdeClass: Option[String],
+    outputSerdeClass: Option[String],
+    inputSerdeProps: Seq[(String, String)],
+    outputSerdeProps: Seq[(String, String)],
+    recordReaderClass: Option[String],
+    recordWriterClass: Option[String],
+    schemaLess: Boolean) extends Serializable {
+
+  protected val defaultFormat = Map(
+    ("TOK_TABLEROWFORMATFIELD", "\t"),
+    ("TOK_TABLEROWFORMATLINES", "\n")
+  )
+
+  val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
+  val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
+
+  def isSchemaLess: Boolean = schemaLess
 }
