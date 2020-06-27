@@ -31,7 +31,7 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
     val scratchDir = "/tmp/hive_scratch"
     val sessionScratchDir = "/tmp/hive/user_a/session_b"
 
-    val resultFromSessionDir = insertIntoHiveTable.getMRTmpPath(
+    val resultFromSessionDir = insertIntoHiveTable.getNonBlobTmpPath(
       hadoopConf, sessionScratchDir, scratchDir).toString
 
     // The result should start with 'file:$sessionScratchDir/' & end with '/-mr-10000'.
@@ -49,7 +49,7 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
     val scratchDir = "/tmp/hive_scratch"
     val emptySessionScratchDir = ""
 
-    val resultFromScratchDir = insertIntoHiveTable.getMRTmpPath(
+    val resultFromScratchDir = insertIntoHiveTable.getNonBlobTmpPath(
       hadoopConf, emptySessionScratchDir, scratchDir).toString
 
     // The result should start with 'file:$scratchDir/' & end with '/-mr-10000'.

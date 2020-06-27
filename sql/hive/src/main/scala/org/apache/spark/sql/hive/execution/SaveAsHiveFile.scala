@@ -101,7 +101,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
 
   // Mostly copied from Context.java#getMRTmpPath of Hive 2.3.
   // Visible for testing.
-  private[execution] def getMRTmpPath(
+  private[execution] def getNonBlobTmpPath(
       hadoopConf: Configuration,
       sessionScratchDir: String,
       scratchDir: String): Path = {
@@ -131,7 +131,6 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       hadoopConf: Configuration,
       path: Path): Path = {
     import org.apache.spark.sql.hive.client.hive._
-
     // Before Hive 1.1, when inserting into a table, Hive will create the staging directory under
     // a common scratch directory. After the writing is finished, Hive will simply empty the table
     // directory and move the staging directory to it.
@@ -144,6 +143,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     val hiveVersionsUsingOldExternalTempPath: Set[HiveVersion] = Set(v12, v13, v14, v1_0)
     val hiveVersionsUsingNewExternalTempPath: Set[HiveVersion] =
       Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
+    val hiveVersionsSupportingNonBlobstoreTempPath: Set[HiveVersion] =
+      Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
 
     // Ensure all the supported versions are considered here.
     assert(hiveVersionsUsingNewExternalTempPath ++ hiveVersionsUsingOldExternalTempPath ==
@@ -161,13 +162,14 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     } else if (hiveVersionsUsingNewExternalTempPath.contains(hiveVersion)) {
       // HIVE-14270: Write temporary data to HDFS when doing inserts on tables located on S3
       // Copied from Context.java#getTempDirForPath of Hive 2.3.
-      if (supportSchemeToUseNonBlobStore(path)) {
+      if (hiveVersionsSupportingNonBlobstoreTempPath.contains(hiveVersion) &&
+        supportSchemeToUseNonBlobStore(path)) {
         // Hive sets session_path as HDFS_SESSION_PATH_KEY(_hive.hdfs.session.path) in hive config
         val HDFS_SESSION_PATH_KEY = "_hive.hdfs.session.path"
         val sessionScratchDir = externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
           .client.getConf(HDFS_SESSION_PATH_KEY, "")
         logDebug(s"session scratch dir '$sessionScratchDir' is used")
-        getMRTmpPath(hadoopConf, sessionScratchDir, scratchDir)
+        getNonBlobTmpPath(hadoopConf, sessionScratchDir, scratchDir)
       } else {
         newVersionExternalTempPath(path, hadoopConf, stagingDir)
       }
