@@ -275,11 +275,11 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
 
     // this worked already before the fix SPARK-19311:
     // return type of doUDF equals parameter type of doOtherUDF
-    sql("SELECT doOtherUDF(doUDF(41))")
+    checkAnswer(sql("SELECT doOtherUDF(doUDF(41))"), Row(41) :: Nil)
 
     // this one passes only with the fix SPARK-19311:
     // return type of doSubUDF is a subtype of the parameter type of doOtherUDF
-    sql("SELECT doOtherUDF(doSubTypeUDF(42))")
+    checkAnswer(sql("SELECT doOtherUDF(doSubTypeUDF(42))"), Row(42) :: Nil)
   }
 
   test("except on UDT") {
