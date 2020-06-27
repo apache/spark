@@ -513,7 +513,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("SPARK-39162 - modifiedDateFilter") {
+  test("SPARK-31962 - modifiedDateFilter") {
     val testTableName = "ModifiedFilterDate"
     withTempDirs { case (output, checkpoint) =>
       val path = new Path(output.getCanonicalPath)

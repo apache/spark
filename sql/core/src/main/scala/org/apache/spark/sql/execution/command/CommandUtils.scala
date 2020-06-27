@@ -81,14 +81,14 @@ object CommandUtils extends Logging {
       calculateMultipleLocationSizes(spark, catalogTable.identifier, paths).sum
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
-        s" the total size for table ${catalogTable.identifier}.")
+      s" the total size for table ${catalogTable.identifier}.")
     totalSize
   }
 
   def calculateSingleLocationSize(
-    sessionState: SessionState,
-    identifier: TableIdentifier,
-    locationUri: Option[URI]): Long = {
+      sessionState: SessionState,
+      identifier: TableIdentifier,
+      locationUri: Option[URI]): Long = {
     // This method is mainly based on
     // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
     // in Hive 0.13 (except that we do not use fs.getContentSummary).
@@ -103,13 +103,13 @@ object CommandUtils extends Logging {
       val fileStatus = fs.getFileStatus(path)
       val size = if (fileStatus.isDirectory) {
         fs.listStatus(path)
-            .map { status =>
-              if (isDataPath(status.getPath, stagingDir)) {
-                getPathSize(fs, status.getPath)
-              } else {
-                0L
-              }
-            }.sum
+          .map { status =>
+            if (isDataPath(status.getPath, stagingDir)) {
+              getPathSize(fs, status.getPath)
+            } else {
+              0L
+            }
+          }.sum
       } else {
         fileStatus.getLen
       }
@@ -127,7 +127,7 @@ object CommandUtils extends Logging {
         case NonFatal(e) =>
           logWarning(
             s"Failed to get the size of table ${identifier.table} in the " +
-                s"database ${identifier.database} because of ${e.toString}", e)
+              s"database ${identifier.database} because of ${e.toString}", e)
           0L
       }
     }.getOrElse(0L)
@@ -138,9 +138,9 @@ object CommandUtils extends Logging {
   }
 
   def calculateMultipleLocationSizes(
-    sparkSession: SparkSession,
-    tid: TableIdentifier,
-    paths: Seq[Option[URI]]): Seq[Long] = {
+      sparkSession: SparkSession,
+      tid: TableIdentifier,
+      paths: Seq[Option[URI]]): Seq[Long] = {
     if (sparkSession.sessionState.conf.parallelFileListingInStatsComputation) {
       calculateMultipleLocationSizesInParallel(sparkSession, paths.map(_.map(new Path(_))))
     } else {
@@ -157,10 +157,10 @@ object CommandUtils extends Logging {
    *         if `paths(i)` is None
    */
   def calculateMultipleLocationSizesInParallel(
-    sparkSession: SparkSession,
-    paths: Seq[Option[Path]]): Seq[Long] = {
+      sparkSession: SparkSession,
+      paths: Seq[Option[Path]]): Seq[Long] = {
     val stagingDir = sparkSession.sessionState.conf
-        .getConfString("hive.exec.stagingdir", ".hive-staging")
+      .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
     val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
       sparkSession.sessionState.newHadoopConf(), filter, sparkSession, areRootPaths = true).map {
@@ -171,9 +171,9 @@ object CommandUtils extends Logging {
   }
 
   def compareAndGetNewStats(
-    oldStats: Option[CatalogStatistics],
-    newTotalSize: BigInt,
-    newRowCount: Option[BigInt]): Option[CatalogStatistics] = {
+      oldStats: Option[CatalogStatistics],
+      newTotalSize: BigInt,
+      newRowCount: Option[BigInt]): Option[CatalogStatistics] = {
     val oldTotalSize = oldStats.map(_.sizeInBytes).getOrElse(BigInt(-1))
     val oldRowCount = oldStats.flatMap(_.rowCount).getOrElse(BigInt(-1))
     var newStats: Option[CatalogStatistics] = None
@@ -201,9 +201,9 @@ object CommandUtils extends Logging {
    * @return (row count, map from column name to CatalogColumnStats)
    */
   private[sql] def computeColumnStats(
-    sparkSession: SparkSession,
-    relation: LogicalPlan,
-    columns: Seq[Attribute]): (Long, Map[Attribute, ColumnStat]) = {
+      sparkSession: SparkSession,
+      relation: LogicalPlan,
+      columns: Seq[Attribute]): (Long, Map[Attribute, ColumnStat]) = {
     val conf = sparkSession.sessionState.conf
 
     // Collect statistics per column.
@@ -221,11 +221,11 @@ object CommandUtils extends Logging {
     // will be structs containing all column stats.
     // The layout of each struct follows the layout of the ColumnStats.
     val expressions = Count(Literal(1)).toAggregateExpression() +:
-        columns.map(statExprs(_, conf, attributePercentiles))
+      columns.map(statExprs(_, conf, attributePercentiles))
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
     val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation))
-        .executedPlan.executeTake(1).head
+      .executedPlan.executeTake(1).head
 
     val rowCount = statsRow.getLong(0)
     val columnStats = columns.zipWithIndex.map { case (attr, i) =>
@@ -238,9 +238,9 @@ object CommandUtils extends Logging {
 
   /** Computes percentiles for each attribute. */
   private def computePercentiles(
-    attributesToAnalyze: Seq[Attribute],
-    sparkSession: SparkSession,
-    relation: LogicalPlan): AttributeMap[ArrayData] = {
+      attributesToAnalyze: Seq[Attribute],
+      sparkSession: SparkSession,
+      relation: LogicalPlan): AttributeMap[ArrayData] = {
     val conf = sparkSession.sessionState.conf
     val attrsToGenHistogram = if (conf.histogramEnabled) {
       attributesToAnalyze.filter(a => supportsHistogram(a.dataType))
@@ -250,7 +250,7 @@ object CommandUtils extends Logging {
     val attributePercentiles = mutable.HashMap[Attribute, ArrayData]()
     if (attrsToGenHistogram.nonEmpty) {
       val percentiles = (0 to conf.histogramNumBins)
-          .map(i => i.toDouble / conf.histogramNumBins).toArray
+        .map(i => i.toDouble / conf.histogramNumBins).toArray
 
       val namedExprs = attrsToGenHistogram.map { attr =>
         val aggFunc =
@@ -262,7 +262,7 @@ object CommandUtils extends Logging {
       }
 
       val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation))
-          .executedPlan.executeTake(1).head
+        .executedPlan.executeTake(1).head
       attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
         val percentiles = percentilesRow.getArray(i)
         // When there is no non-null value, `percentiles` is null. In such case, there is no
@@ -344,7 +344,7 @@ object CommandUtils extends Logging {
           nullArray)
       case _ =>
         throw new AnalysisException("Analyzing column statistics is not supported for column " +
-            s"${col.name} of data type: ${col.dataType}.")
+          s"${col.name} of data type: ${col.dataType}.")
     }
   }
 

@@ -560,7 +560,7 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-39162 - when modifiedDateFilter specified and before file date without filter") {
+  test("SPARK-31962 - when modifiedDateFilter specified and before file date without filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -573,7 +573,7 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-39162 - when modifiedDateFilter specified and after file date without filter") {
+  test("SPARK-31962 - when modifiedDateFilter specified and after file date without filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -589,7 +589,7 @@ class FileBasedDataSourceSuite extends QueryTest
     assert(true)
   }
 
-  test("SPARK-39162 - when modifiedDateFilter specified and" +
+  test("SPARK-31962 - when modifiedDateFilter specified and" +
       " before file date with path glob filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
@@ -604,7 +604,7 @@ class FileBasedDataSourceSuite extends QueryTest
     assert(true)
   }
 
-  test("SPARK-39162 - when modifiedDateFilter specified and " +
+  test("SPARK-31962 - when modifiedDateFilter specified and " +
       "after file date with path glob filter") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
@@ -620,7 +620,7 @@ class FileBasedDataSourceSuite extends QueryTest
       assert(msg.contains("Unable to infer schema for CSV"))
     }
   }
-  test("SPARK-39162 - when modifiedDateFilter is specified" +
+  test("SPARK-31962 - when modifiedDateFilter is specified" +
       " with invalid date") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
@@ -633,7 +633,7 @@ class FileBasedDataSourceSuite extends QueryTest
       assert(msg.contains("could not be parsed at index "))
     }
   }
-  test("SPARK-39162 - when modifiedDateFilter not specified") {
+  test("SPARK-31962 - when modifiedDateFilter not specified") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")

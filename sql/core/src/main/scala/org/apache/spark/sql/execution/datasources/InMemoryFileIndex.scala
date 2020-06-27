@@ -47,22 +47,22 @@ import org.apache.spark.util.SerializableConfiguration
  *                            types for the discovered partitions
  */
 class InMemoryFileIndex(
-  sparkSession: SparkSession,
-  rootPathsSpecified: Seq[Path],
-  parameters: Map[String, String],
-  userSpecifiedSchema: Option[StructType],
-  fileStatusCache: FileStatusCache = NoopCache,
-  userSpecifiedPartitionSpec: Option[PartitionSpec] = None,
-  override val metadataOpsTimeNs: Option[Long] = None)
-    extends PartitioningAwareFileIndex(
-      sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
+    sparkSession: SparkSession,
+    rootPathsSpecified: Seq[Path],
+    parameters: Map[String, String],
+    userSpecifiedSchema: Option[StructType],
+    fileStatusCache: FileStatusCache = NoopCache,
+    userSpecifiedPartitionSpec: Option[PartitionSpec] = None,
+    override val metadataOpsTimeNs: Option[Long] = None)
+  extends PartitioningAwareFileIndex(
+    sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
 
   // Filter out streaming metadata dirs or files such as "/.../_spark_metadata" (the metadata dir)
   // or "/.../_spark_metadata/0" (a file in the metadata dir). `rootPathsSpecified` might contain
   // such streaming metadata dir or files, e.g. when after globbing "basePath/*" where "basePath"
   // is the output of a streaming query.
   override val rootPaths =
-  rootPathsSpecified.filterNot(FileStreamSink.ancestorIsMetadataDirectory(_, hadoopConf))
+    rootPathsSpecified.filterNot(FileStreamSink.ancestorIsMetadataDirectory(_, hadoopConf))
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
@@ -98,7 +98,7 @@ class InMemoryFileIndex(
   private def refresh0(): Unit = {
     val files = listLeafFiles(rootPaths)
     cachedLeafFiles =
-        new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
+      new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
     cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
     cachedPartitionSpec = null
   }
@@ -140,7 +140,7 @@ class InMemoryFileIndex(
       output ++= leafFiles
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to list leaf files" +
-        s" for ${paths.length} paths.")
+      s" for ${paths.length} paths.")
     output
   }
 }
@@ -149,21 +149,21 @@ object InMemoryFileIndex extends Logging {
 
   /** A serializable variant of HDFS's BlockLocation. */
   private case class SerializableBlockLocation(
-    names: Array[String],
-    hosts: Array[String],
-    offset: Long,
-    length: Long)
+      names: Array[String],
+      hosts: Array[String],
+      offset: Long,
+      length: Long)
 
   /** A serializable variant of HDFS's FileStatus. */
   private case class SerializableFileStatus(
-    path: String,
-    length: Long,
-    isDir: Boolean,
-    blockReplication: Short,
-    blockSize: Long,
-    modificationTime: Long,
-    accessTime: Long,
-    blockLocations: Array[SerializableBlockLocation])
+      path: String,
+      length: Long,
+      isDir: Boolean,
+      blockReplication: Short,
+      blockSize: Long,
+      modificationTime: Long,
+      accessTime: Long,
+      blockLocations: Array[SerializableBlockLocation])
 
   /**
    * Lists a collection of paths recursively. Picks the listing strategy adaptively depending
@@ -174,11 +174,11 @@ object InMemoryFileIndex extends Logging {
    * @return for each input path, the set of discovered files for the path
    */
   private[sql] def bulkListLeafFiles(
-    paths: Seq[Path],
-    hadoopConf: Configuration,
-    filter: PathFilter,
-    sparkSession: SparkSession,
-    areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
+      paths: Seq[Path],
+      hadoopConf: Configuration,
+      filter: PathFilter,
+      sparkSession: SparkSession,
+      areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
 
     val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
     val ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality
@@ -199,7 +199,7 @@ object InMemoryFileIndex extends Logging {
     }
 
     logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
-        s" The first several paths are: ${paths.take(10).mkString(", ")}.")
+      s" The first several paths are: ${paths.take(10).mkString(", ")}.")
     HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val sparkContext = sparkSession.sparkContext
@@ -224,21 +224,21 @@ object InMemoryFileIndex extends Logging {
       }
       sparkContext.setJobDescription(description)
       sparkContext
-          .parallelize(serializedPaths, numParallelism)
-          .mapPartitions { pathStrings =>
-            val hadoopConf = serializableConfiguration.value
-            pathStrings.map(new Path(_)).toSeq.map { path =>
-              val leafFiles = listLeafFiles(
-                path,
-                hadoopConf,
-                filter,
-                None,
-                ignoreMissingFiles = ignoreMissingFiles,
-                ignoreLocality = ignoreLocality,
-                isRootPath = areRootPaths)
-              (path, leafFiles)
-            }.iterator
-          }.map { case (path, statuses) =>
+        .parallelize(serializedPaths, numParallelism)
+        .mapPartitions { pathStrings =>
+          val hadoopConf = serializableConfiguration.value
+          pathStrings.map(new Path(_)).toSeq.map { path =>
+            val leafFiles = listLeafFiles(
+              path,
+              hadoopConf,
+              filter,
+              None,
+              ignoreMissingFiles = ignoreMissingFiles,
+              ignoreLocality = ignoreLocality,
+              isRootPath = areRootPaths)
+            (path, leafFiles)
+          }.iterator
+        }.map { case (path, statuses) =>
         val serializableStatuses = statuses.map { status =>
           // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
           val blockLocations = status match {
@@ -296,13 +296,13 @@ object InMemoryFileIndex extends Logging {
    * @return all children of path that match the specified filter.
    */
   private def listLeafFiles(
-    path: Path,
-    hadoopConf: Configuration,
-    filter: PathFilter,
-    sessionOpt: Option[SparkSession],
-    ignoreMissingFiles: Boolean,
-    ignoreLocality: Boolean,
-    isRootPath: Boolean): Seq[FileStatus] = {
+      path: Path,
+      hadoopConf: Configuration,
+      filter: PathFilter,
+      sessionOpt: Option[SparkSession],
+      ignoreMissingFiles: Boolean,
+      ignoreLocality: Boolean,
+      isRootPath: Boolean): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
 
@@ -437,7 +437,7 @@ object InMemoryFileIndex extends Logging {
     // 2. everything that ends with `._COPYING_`, because this is a intermediate state of file. we
     // should skip this file in case of double reading.
     val exclude = (pathName.startsWith("_") && !pathName.contains("=")) ||
-        pathName.startsWith(".") || pathName.endsWith("._COPYING_")
+      pathName.startsWith(".") || pathName.endsWith("._COPYING_")
     val include = pathName.startsWith("_common_metadata") || pathName.startsWith("_metadata")
     exclude && !include
   }
