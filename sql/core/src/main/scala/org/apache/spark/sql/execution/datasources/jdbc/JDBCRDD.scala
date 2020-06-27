@@ -25,6 +25,7 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils.runQuery
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -156,9 +157,16 @@ object JDBCRDD extends Logging {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+
+    val conn = JdbcUtils.createConnectionFactory(options)
+    options.preActions match {
+      case Some(i) =>
+        runQuery(conn(), i, options)
+      case None =>
+    }
     new JDBCRDD(
       sc,
-      JdbcUtils.createConnectionFactory(options),
+      conn,
       pruneSchema(schema, requiredColumns),
       quotedColumns,
       filters,

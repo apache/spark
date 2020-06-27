@@ -157,6 +157,20 @@ the following case-insensitive options:
   </tr>
 
   <tr>
+     <td><code>preActions</code></td>
+     <td>
+       You can specify custom queries which you want to run before reading data from JDBC or writing data to JDBC. It is called per DataFrame, not per session.
+     </td>
+  </tr>
+
+  <tr>
+     <td><code>postActions</code></td>
+     <td>
+        This is a JDBC writer related option. You can specify custom queries which you want to run after writing data to JDBC. It is called per DataFrame, not per session.
+     </td>
+  </tr>
+
+  <tr>
     <td><code>truncate</code></td>
     <td>
      This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g., indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. It defaults to <code>false</code>. This option applies only to writing.

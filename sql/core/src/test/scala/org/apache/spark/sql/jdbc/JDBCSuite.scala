@@ -81,6 +81,7 @@ class JDBCSuite extends QueryTest
     properties.setProperty("rowId", "false")
 
     conn = DriverManager.getConnection(url, properties)
+    conn.prepareStatement("drop schema if exists test").executeUpdate()
     conn.prepareStatement("create schema test").executeUpdate()
     conn.prepareStatement(
       "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
@@ -1715,4 +1716,25 @@ class JDBCSuite extends QueryTest
     jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts)
     checkAnswer(jdbcDF, Row("mary", 2) :: Nil)
   }
+
+  test("SPARK-32013: option preActions, run SQL before reading data.") {
+    val df1 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLE")
+      .load()
+    df1.show()
+    val df1Count = df1.count()  // df1Count is 3 at the beginning
+
+    val preSQL = "delete from test.people where name = 'fred'"
+    var df2 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLE")
+      .option("preActions", preSQL)
+      .load()
+    df2 = df2.repartition(20)
+    df2.show()
+    val df2Count = df2.count()  // df2Count should be 2 after running preActions
+    assert(df2Count == df1Count - 1)  // df2.count() should be 2
+  }
+
 }

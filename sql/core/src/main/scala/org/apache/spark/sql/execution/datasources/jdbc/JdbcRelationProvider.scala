@@ -47,6 +47,12 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
     val conn = JdbcUtils.createConnectionFactory(options)()
     try {
+      options.preActions match {
+        case Some(i) =>
+          runQuery(conn, i, options)
+        case None =>
+      }
+
       val tableExists = JdbcUtils.tableExists(conn, options)
       if (tableExists) {
         mode match {
@@ -80,6 +86,12 @@ class JdbcRelationProvider extends CreatableRelationProvider
       } else {
         createTable(conn, df, options)
         saveTable(df, Some(df.schema), isCaseSensitive, options)
+      }
+
+      options.postActions match {
+        case Some(i) =>
+          runQuery(conn, i, options)
+        case None =>
       }
     } finally {
       conn.close()

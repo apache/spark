@@ -54,9 +54,11 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   before {
     Utils.classForName("org.h2.Driver")
     conn = DriverManager.getConnection(url)
+    conn.prepareStatement("drop schema if exists test").executeUpdate()
     conn.prepareStatement("create schema test").executeUpdate()
 
     conn1 = DriverManager.getConnection(url1, properties)
+    conn1.prepareStatement("drop schema if exists test").executeUpdate()
     conn1.prepareStatement("create schema test").executeUpdate()
     conn1.prepareStatement("drop table if exists test.people").executeUpdate()
     conn1.prepareStatement(
@@ -572,6 +574,41 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     runAndVerifyRecordsWritten(0) {
       df.write.mode(SaveMode.Ignore).jdbc(url, "TEST.BASICCREATETEST", new Properties())
     }
+  }
+
+  test("SPARK-32013: option preActions/postActions, run SQL before writing data.") {
+
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    df.write.format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.CUSTOMQUERY")
+      .options(properties.asScala)
+      .save()
+    val df1 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
+    df1.show()
+    assert(2 === df1.count())
+
+    val preSQL = "insert into TEST.CUSTOMQUERY values ('kathy', 4)"
+    df.repartition(20).write.mode(SaveMode.Append).format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.CUSTOMQUERY")
+      .option("preActions", preSQL)
+      .options(properties.asScala)
+      .save()
+    val df2 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
+    df2.show()
+    assert(5 === df2.count()) // 2(df) + 2(df append) + 1(preActions)
+
+    val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1)"
+    df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.CUSTOMQUERY")
+      .option("postActions", postSQL)
+      .options(properties.asScala)
+      .save()
+    val df3 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
+    df3.show()
+    assert(3 === df3.count()) // 2(df) + 1(postActions)
   }
 
   private def runAndVerifyRecordsWritten(expected: Long)(job: => Unit): Unit = {

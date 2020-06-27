@@ -122,6 +122,19 @@ object JdbcUtils extends Logging {
     }
   }
 
+  /**
+   * Runs a custom query against a table from the JDBC database.
+   */
+  def runQuery(conn: Connection, queryString: String, options: JDBCOptions): Unit = {
+    val statement = conn.prepareStatement(queryString)
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      statement.execute()
+    } finally {
+      statement.close()
+    }
+  }
+
   def isCascadingTruncateTable(url: String): Option[Boolean] = {
     JdbcDialects.get(url).isCascadingTruncateTable()
   }

@@ -116,6 +116,9 @@ class JDBCOptions(
   // number of seconds. Zero means there is no limit.
   val queryTimeout = parameters.getOrElse(JDBC_QUERY_TIMEOUT, "0").toInt
 
+  // the query used before reading/writing data
+  var preActions = parameters.get(JDBC_PRE_ACTIONS_STRING)
+
   // ------------------------------------------------------------
   // Optional parameters only for reading
   // ------------------------------------------------------------
@@ -206,6 +209,9 @@ class JDBCOptions(
   }
   // The principal name of user's keytab file
   val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
+
+  // the query used after writing data
+  var postActions = parameters.get(JDBC_POST_ACTIONS_STRING)
 }
 
 class JdbcOptionsInWrite(
@@ -242,6 +248,8 @@ object JDBCOptions {
   val JDBC_URL = newOption("url")
   val JDBC_TABLE_NAME = newOption("dbtable")
   val JDBC_QUERY_STRING = newOption("query")
+  val JDBC_PRE_ACTIONS_STRING = newOption("preActions")
+  val JDBC_POST_ACTIONS_STRING = newOption("postActions")
   val JDBC_DRIVER_CLASS = newOption("driver")
   val JDBC_PARTITION_COLUMN = newOption("partitionColumn")
   val JDBC_LOWER_BOUND = newOption("lowerBound")
