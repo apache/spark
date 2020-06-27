@@ -207,7 +207,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CollapseProject,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
-    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
+    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
+    Batch("DemoteCoalesceShufflePartitionsJoin", Once, DemoteCoalesceShufflePartitionsJoin)
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -1796,5 +1797,48 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
+  }
+}
+
+/**
+ * This optimization rule detects a join condition that has a inequality predicate and
+ * adds a no-coalesce-shuffle-partitions-join hint to avoid it being coalesce shuffle partitions.
+ */
+object DemoteCoalesceShufflePartitionsJoin extends Rule[LogicalPlan] with PredicateHelper {
+
+  private def shouldDemote(exp: Expression): Boolean = {
+    splitConjunctivePredicates(exp).exists {
+      case _: GreaterThan => true
+      case _: GreaterThanOrEqual => true
+      case _: LessThan => true
+      case _: LessThanOrEqual => true
+      case _ => false
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.adaptiveExecutionEnabled && SQLConf.get.coalesceShufflePartitionsEnabled) {
+      plan.transformDown {
+        case j @ Join(_, _, _, Some(condition), hint) =>
+          var newHint = hint
+          if (!hint.leftHint.exists(_.strategy.isDefined) && shouldDemote(condition)) {
+            newHint = newHint.copy(leftHint =
+              Some(hint.leftHint.getOrElse(HintInfo())
+                .copy(strategy = Some(NO_COALESCE_SHUFFLE_PARTITIONS_JOIN))))
+          }
+          if (!hint.rightHint.exists(_.strategy.isDefined) && shouldDemote(condition)) {
+            newHint = newHint.copy(rightHint =
+              Some(hint.rightHint.getOrElse(HintInfo())
+                .copy(strategy = Some(NO_COALESCE_SHUFFLE_PARTITIONS_JOIN))))
+          }
+          if (newHint.ne(hint)) {
+            j.copy(hint = newHint)
+          } else {
+            j
+          }
+      }
+    } else {
+      plan
+    }
   }
 }

@@ -191,7 +191,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         def createSortMergeJoin() = {
           if (RowOrdering.isOrderable(leftKeys)) {
             Some(Seq(joins.SortMergeJoinExec(
-              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right))))
+              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right),
+              isCoalesceShufflePartitions = !hintToNotCoalesceShufflePartitions(hint))))
           } else {
             None
           }

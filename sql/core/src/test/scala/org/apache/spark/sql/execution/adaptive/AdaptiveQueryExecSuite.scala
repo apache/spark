@@ -1037,4 +1037,33 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("Avoid coalescing shuffle partitions if join condition has inequality predicate") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(10).selectExpr("id % 4 as a", "id % 5 as b")
+      val df2 = spark.range(10).selectExpr("id % 3 as c", "id % 4 as d")
+
+      val testDf1 = df1.where('a > 1).join(df2, $"a" === $"c" && $"b" < $"d").groupBy('a).count()
+      checkAnswer(testDf1, Seq(Row(2, 1)))
+      val plan1 = testDf1.queryExecution.executedPlan
+      assert(find(plan1)(_.isInstanceOf[SortMergeJoinExec]).isDefined)
+      val coalescedReaders1 = collect(plan1) {
+        case r: CustomShuffleReaderExec => r
+      }
+      assert(coalescedReaders1.isEmpty, s"$plan1")
+
+      val testDf2 = df1.where('a > 1).join(df2, $"a" === $"c").groupBy('a).count()
+      checkAnswer(testDf2, Seq(Row(2, 6)))
+      val plan2 = testDf2.queryExecution.executedPlan
+      assert(find(plan2)(_.isInstanceOf[SortMergeJoinExec]).isDefined)
+      val coalescedReaders2 = collect(plan2) {
+        case r: CustomShuffleReaderExec => r
+      }
+      assert(coalescedReaders2.length == 2)
+      coalescedReaders2.foreach(r => assert(r.partitionSpecs.nonEmpty))
+    }
+  }
 }

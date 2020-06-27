@@ -326,6 +326,10 @@ trait JoinSelectionHelper {
       hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))
   }
 
+  def hintToNotCoalesceShufflePartitions(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.strategy.contains(NO_COALESCE_SHUFFLE_PARTITIONS_JOIN))
+  }
+
   private def getBuildSide(
       canBuildLeft: Boolean,
       canBuildRight: Boolean,

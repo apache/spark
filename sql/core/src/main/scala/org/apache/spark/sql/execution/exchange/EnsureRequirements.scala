@@ -37,6 +37,11 @@ import org.apache.spark.sql.internal.SQLConf
 case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
+    val canChangeNumPartitions = operator match {
+      case SortMergeJoinExec(_, _, _, _, _, _, _, coalesceShufflePartitions) =>
+        coalesceShufflePartitions
+      case _ => true
+    }
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
     val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
     var children: Seq[SparkPlan] = operator.children
@@ -52,7 +57,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(conf.numShufflePartitions)
-        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child)
+        ShuffleExchangeExec(
+          distribution.createPartitioning(numPartitions), child, canChangeNumPartitions)
     }
 
     // Get the indexes of children which have specified distribution requirements and need to have
@@ -199,11 +205,12 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         ShuffledHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
           left, right)
 
-      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right, isPartial) =>
+      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right, isPartial,
+          isCoalesceShufflePartitions) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
         SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition,
-          left, right, isPartial)
+          left, right, isPartial, isCoalesceShufflePartitions)
 
       case other => other
     }

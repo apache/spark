@@ -168,6 +168,15 @@ case object NO_BROADCAST_HASH extends JoinStrategyHint {
 }
 
 /**
+ * An internal hint to discourage coalesce shuffle partitions for sort merge join,
+ * used by adaptive query execution.
+ */
+case object NO_COALESCE_SHUFFLE_PARTITIONS_JOIN extends JoinStrategyHint {
+  override def displayName: String = "no_coalesce_shuffle_partitions_join"
+  override def hintAliases: Set[String] = Set.empty
+}
+
+/**
  * The callback for implementing customized strategies of handling hint errors.
  */
 trait HintErrorHandler {

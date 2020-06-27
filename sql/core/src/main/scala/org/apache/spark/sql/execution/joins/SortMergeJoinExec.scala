@@ -41,7 +41,8 @@ case class SortMergeJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isSkewJoin: Boolean = false) extends BaseJoinExec with CodegenSupport {
+    isSkewJoin: Boolean = false,
+    isCoalesceShufflePartitions: Boolean = true) extends BaseJoinExec with CodegenSupport {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
