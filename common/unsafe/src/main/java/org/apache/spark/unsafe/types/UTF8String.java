@@ -345,7 +345,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int start = (pos > 0) ? pos -1 : ((pos < 0) ? len + pos : 0);
 
     int end;
-    if((long) start + length > Integer.MAX_VALUE) {
+    if ((long) start + length > Integer.MAX_VALUE) {
       end = Integer.MAX_VALUE;
     } else if ((long) start + length < Integer.MIN_VALUE) {
       end = Integer.MIN_VALUE;
