@@ -2342,6 +2342,18 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     }
   }
 
+  test("SPARK-32025: infer the schema from mixed-type values") {
+    withTempPath { path =>
+      Seq("col_mixed_types", "2012", "1997", "True").toDS.write.text(path.getCanonicalPath)
+      val df = spark.read.format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .load(path.getCanonicalPath)
+
+      assert(df.schema.last == StructField("col_mixed_types", StringType, true))
+    }
+  }
+
   test("case sensitivity of filters references") {
     Seq(true, false).foreach { filterPushdown =>
       withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
