@@ -179,11 +179,18 @@ private[spark] object TestUtils {
       destDir: File,
       toStringValue: String = "",
       baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq.empty): File = {
+      classpathUrls: Seq[URL] = Seq.empty,
+      preClassDefinitionBlock: String = "",
+      implementsClasses: Seq[String] = Seq.empty,
+      extraCodeBody: String = ""): File = {
     val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
+    val implementsText = implementsClasses.map(", " + _).mkString
     val sourceFile = new JavaSourceFromString(className,
-      "public class " + className + extendsText + " implements java.io.Serializable {" +
-      "  @Override public String toString() { return \"" + toStringValue + "\"; }}")
+      preClassDefinitionBlock +
+      "public class " + className + extendsText + " implements java.io.Serializable" +
+      implementsText + " {" +
+      "  @Override public String toString() { return \"" + toStringValue + "\"; }" +
+      extraCodeBody + " }")
     createCompiledClass(className, destDir, sourceFile, classpathUrls)
   }
 

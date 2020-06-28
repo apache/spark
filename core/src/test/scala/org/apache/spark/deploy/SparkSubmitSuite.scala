@@ -1218,6 +1218,91 @@ class SparkSubmitSuite
     testRemoteResources(enableHttpFs = true, blacklistSchemes = Seq("*"))
   }
 
+
+  test("SPARK-32119: Jars and files should be loaded when Executors launch for plugins") {
+    val tempDir = Utils.createTempDir()
+    val tempFileName = "test.txt"
+    val tempFile = new File(tempDir, tempFileName)
+
+    // scalastyle:off println
+    Utils.tryWithResource {
+      new PrintWriter(tempFile)
+    } { writer =>
+      writer.println("SparkPluginTest")
+    }
+    // scalastyle:on println
+
+    val importStatements =
+      """
+        |import java.io.*;
+        |import java.util.Map;
+        |import org.apache.spark.api.plugin.*;
+      """.stripMargin
+    val sparkPluginCodeBody =
+      """
+        |@Override
+        |public ExecutorPlugin executorPlugin() {
+        |  return new TestExecutorPlugin();
+        |}
+        |
+        |@Override
+        |public DriverPlugin driverPlugin() { return null; }
+      """.stripMargin
+    val executorPluginCodeBody =
+      s"""
+        |@Override
+        |public void init(PluginContext ctx, Map<String, String> extraConf) {
+        |  String str = null;
+        |  try (BufferedReader reader =
+        |    new BufferedReader(new InputStreamReader(new FileInputStream($tempFileName)))) {
+        |    str = reader.readLine();
+        |  } catch (IOException e) {
+        |    throw new RuntimeException(e);
+        |  } finally {
+        |    assert str == "SparkPluginTest";
+        |  }
+        |}
+      """.stripMargin
+
+    val compiledExecutorPlugin = TestUtils.createCompiledClass(
+      "TestExecutorPlugin",
+      tempDir,
+      "",
+      null,
+      Seq.empty,
+      importStatements,
+      Seq("ExecutorPlugin"),
+      executorPluginCodeBody)
+
+    val thisClassPath =
+      sys.props("java.class.path").split(File.pathSeparator).map(p => new File(p).toURI.toURL)
+    val compiledSparkPlugin = TestUtils.createCompiledClass(
+      "TestSparkPlugin",
+      tempDir,
+      "",
+      null,
+      Seq(tempDir.toURI.toURL) ++ thisClassPath,
+      importStatements,
+      Seq("SparkPlugin"),
+      sparkPluginCodeBody)
+
+    val jarUrl = TestUtils.createJar(
+      Seq(compiledSparkPlugin, compiledExecutorPlugin),
+      new java.io.File(tempDir, "testplugin.jar"))
+
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local-cluster[1,1,1024]",
+      "--conf", "spark.plugins=TestSparkPlugin",
+      "--conf", "spark.ui.enabled=false",
+      "--jars", jarUrl.toString,
+      "--files", tempFile.toString,
+      unusedJar.toString)
+    runSparkSubmit(args, timeout = 10.seconds)
+  }
+
   private def testRemoteResources(
       enableHttpFs: Boolean,
       blacklistSchemes: Seq[String] = Nil): Unit = {

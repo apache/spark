@@ -379,6 +379,7 @@ class SparkContext(config: SparkConf) extends Logging {
   try {
     _conf = config.clone()
     _conf.validateSettings()
+    _conf.set("spark.app.startTime", startTime.toString)
 
     if (!_conf.contains("spark.master")) {
       throw new SparkException("A master URL must be set in your configuration")
@@ -487,11 +488,11 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Add each JAR given through the constructor
     if (jars != null) {
-      jars.foreach(addJar)
+      jars.foreach(jar => addJar(jar, true))
     }
 
     if (files != null) {
-      files.foreach(addFile)
+      files.foreach(file => addFile(file, false, true))
     }
 
     _executorMemory = _conf.getOption(EXECUTOR_MEMORY.key)
@@ -1495,7 +1496,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String): Unit = {
-    addFile(path, false)
+    addFile(path, false, false)
   }
 
   /**
@@ -1517,6 +1518,10 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
+    addFile(path, recursive, false)
+  }
+
+  private def addFile(path: String, recursive: Boolean, addedOnSubmit: Boolean): Unit = {
     val uri = new Path(path).toUri
     val schemeCorrectedURI = uri.getScheme match {
       case null => new File(path).getCanonicalFile.toURI
@@ -1554,7 +1559,7 @@ class SparkContext(config: SparkConf) extends Logging {
           path
         }
     }
-    val timestamp = System.currentTimeMillis
+    val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
     if (addedFiles.putIfAbsent(key, timestamp).isEmpty) {
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
@@ -1564,7 +1569,7 @@ class SparkContext(config: SparkConf) extends Logging {
       postEnvironmentUpdate()
     } else {
       logWarning(s"The path $path has been added already. Overwriting of added paths " +
-       "is not supported in the current version.")
+        "is not supported in the current version.")
     }
   }
 
@@ -1835,6 +1840,10 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addJar(path: String): Unit = {
+    addJar(path, false)
+  }
+
+  private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
     def addLocalJarFile(file: File): String = {
       try {
         if (!file.exists()) {
@@ -1899,7 +1908,7 @@ class SparkContext(config: SparkConf) extends Logging {
         }
       }
       if (key != null) {
-        val timestamp = System.currentTimeMillis
+        val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
         if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
           logInfo(s"Added JAR $path at $key with timestamp $timestamp")
           postEnvironmentUpdate()

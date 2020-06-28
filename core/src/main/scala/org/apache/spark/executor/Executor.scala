@@ -154,6 +154,16 @@ private[spark] class Executor(
   // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
+  private val appStartTime = conf.getLong("spark.app.startTime", 0)
+
+  // Jars and files specified by spark.jars and spark.files.
+  private val initialUserJars =
+    Map(Utils.getUserJars(conf).map(jar => (jar, appStartTime)): _*)
+  private val initialUserFiles =
+    Map(Utils.getUserFiles(conf).map(file => (file, appStartTime)): _*)
+
+  updateDependencies(initialUserFiles, initialUserJars)
+
   // Plugins need to load using a class loader that includes the executor's user classpath
   private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
     PluginContainer(env, resources.asJava)

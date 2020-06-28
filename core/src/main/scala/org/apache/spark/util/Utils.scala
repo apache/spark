@@ -2573,6 +2573,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Return the files pointed by the "spark.files" property. Spark internally will distribute
+   * these files through file server. In the YARN mode, it will return an empty list, since YARN
+   * has its own mechanism to distribute files.
+   */
+  def getUserFiles(conf: SparkConf): Seq[String] = {
+    conf.get(FILES).filter(_.nonEmpty)
+  }
+
+  /**
    * Return the local jar files which will be added to REPL's classpath. These jar files are
    * specified by --jars (spark.jars) or --packages, remote jars will be downloaded to local by
    * SparkSubmit at first.
