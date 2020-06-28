@@ -24,7 +24,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, TEMPORARY, VIEW}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -90,6 +90,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
   def tableTypeString(tableType: CatalogTableType): String = tableType match {
     case EXTERNAL | MANAGED => "TABLE"
     case VIEW => "VIEW"
+    case TEMPORARY => "LOCAL TEMPORARY"
     case t =>
       throw new IllegalArgumentException(s"Unknown table type is found: $t")
   }

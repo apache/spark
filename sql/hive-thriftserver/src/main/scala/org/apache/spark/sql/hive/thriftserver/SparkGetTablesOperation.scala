@@ -43,7 +43,7 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param catalogName catalog name. null if not applicable
  * @param schemaName database name, null or a concrete database name
  * @param tableName table name pattern
- * @param tableTypes list of allowed table types, e.g. "TABLE", "VIEW"
+ * @param tableTypes list of allowed table types, e.g. "TABLE", "VIEW", "LOCAL TEMPORARY"
  */
 private[hive] class SparkGetTablesOperation(
     val sqlContext: SQLContext,
