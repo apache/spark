@@ -202,4 +202,29 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       assert(alteredTable.provider === Some("foo"))
     })
   }
+
+  test("SPARK-31751: serde property `path` overwrites hive table property location") {
+    val catalog = newBasicCatalog()
+    val hiveTable = CatalogTable(
+      identifier = TableIdentifier("parq_alter", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat,
+      schema = new StructType().add("col1", "int"),
+      provider = Some("orc"))
+    catalog.createTable(hiveTable, ignoreIfExists = false)
+    externalCatalog.client.runSqlHive(
+      "alter table db1.parq_alter rename to db1.parq_alter2")
+    val noFollowTable = externalCatalog.getTable("db1", "parq_alter2")
+    assert(!noFollowTable.storage.locationUri.toString.contains("parq_alter2"))
+
+    val confField = classOf[HiveExternalCatalog].getDeclaredField("conf")
+    confField.setAccessible(true)
+    val sparkConf = confField.get(externalCatalog).asInstanceOf[SparkConf]
+    sparkConf.set("spark.sql.follow.hive.table.location", "true")
+    val followTable = externalCatalog.getTable("db1", "parq_alter2")
+    assert(followTable.storage.locationUri.toString.contains("parq_alter2"))
+
+    sparkConf.set("spark.sql.follow.hive.table.location", "false")
+    confField.setAccessible(false)
+  }
 }
