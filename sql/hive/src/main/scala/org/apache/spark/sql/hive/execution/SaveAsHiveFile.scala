@@ -115,7 +115,15 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     val sessionPath = if (!sessionScratchDir.isEmpty) sessionScratchDir else scratchDir
     val mrScratchDir = oldVersionExternalTempPath(new Path(sessionPath), hadoopConf, sessionPath)
     logDebug(s"MR scratch dir '$mrScratchDir/-mr-10000' is used")
-    new Path(mrScratchDir, "-mr-10000")
+    val path = new Path(mrScratchDir, "-mr-10000")
+    val scheme = Option(path.toUri.getScheme).getOrElse("")
+    if (schema == "file") {
+      logWarning(s"Temporary data will be written into a local disk " +
+        s"(scheme: '$scheme', path: '$mrScratchDir'). " +
+        s"You need to configure 'hive.exec.scratchdir' to use accessible location " +
+        s"(e.g. HDFS path) from any executors in the cluster.")
+    }
+    path
   }
 
   private def supportSchemeToUseNonBlobStore(path: Path): Boolean = {

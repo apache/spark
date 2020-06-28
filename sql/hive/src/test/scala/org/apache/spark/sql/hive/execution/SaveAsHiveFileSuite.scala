@@ -62,7 +62,23 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
     assert(!resultFromScratchDir.equals("-mr-10000"))
   }
 
-  test("default config & hdfs path") {
+  test("sessionScratchDir = empty & scratchDir = '/tmp/hive_scratch' & default fs = hdfs") {
+    val insertIntoHiveTable = InsertIntoHiveTable(null, Map.empty, null, true, false, null)
+    val hadoopConf = new Configuration()
+    hadoopConf.set("fs.default.name", "hdfs://localhost:8020/")
+    val scratchDir = "/tmp/hive_scratch"
+    val emptySessionScratchDir = ""
+
+    val exception = intercept[RuntimeException] {
+      insertIntoHiveTable.getNonBlobTmpPath(
+        hadoopConf, emptySessionScratchDir, scratchDir).toString
+    }
+
+    // Temp dir is being created in HDFS location.
+    assert(exception.getMessage().contains("Cannot create staging directory: hdfs://"))
+  }
+
+  test("default config & local path") {
     val insertIntoHiveTable = InsertIntoHiveTable(null, Map.empty, null, true, false, null)
 
     val hadoopConf = new Configuration()
@@ -77,7 +93,7 @@ class SaveAsHiveFileSuite extends QueryTest with TestHiveSingleton {
     assert(localStagingTmpPath.endsWith("/-ext-10000"))
   }
 
-  test("'spark.sql.hive.supportedSchemesToUseNonBlobstore=false' & s3 path") {
+  test("'spark.sql.hive.supportedSchemesToUseNonBlobstore=s3a, s3, s3n' & s3 path") {
     val insertIntoHiveTable = InsertIntoHiveTable(null, Map.empty, null, true, false, null)
 
     val hadoopConf = new Configuration()
