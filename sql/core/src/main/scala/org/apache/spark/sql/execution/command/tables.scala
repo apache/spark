@@ -116,8 +116,14 @@ case class CreateTableLikeCommand(
       CatalogTableType.EXTERNAL
     }
 
+    // We only copy source tbl properties if the format is the same with each other
+    val needCopyProperties =
+      (provider.isEmpty || provider == sourceTableDesc.provider) &&
+      (fileFormat.inputFormat.isEmpty ||
+        fileFormat.inputFormat == sourceTableDesc.storage.inputFormat)
+
     val newProperties = sourceTableDesc.tableType match {
-      case MANAGED | EXTERNAL =>
+      case MANAGED | EXTERNAL if needCopyProperties =>
         // Hive only retain the useful properties through serde class annotation.
         // For better compatible with Hive, we remove the metastore properties.
         sourceTableDesc.properties -- DDLUtils.METASTORE_GENERATED_PROPERTIES ++ properties
