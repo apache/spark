@@ -200,7 +200,9 @@ exclude_patterns: List[str] = [
     "_api/airflow/providers/apache/index.rst",
     "_api/airflow/providers/yandex/index.rst",
     "_api/airflow/providers/cncf/index.rst",
-    # Utils for internal use
+    # Packages without operators
+    "_api/airflow/providers/sendgrid",
+    # Utils
     '_api/airflow/providers/google/cloud/utils',
     # Internal client for Hashicorp Vault
     '_api/airflow/providers/hashicorp/_internal_client',
