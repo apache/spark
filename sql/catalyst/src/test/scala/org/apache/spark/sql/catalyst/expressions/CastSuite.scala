@@ -652,7 +652,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast(1, DateType).checkInputDataTypes().isFailure)
     assert(cast(1L, DateType).checkInputDataTypes().isFailure)
     assert(cast(1.0.toFloat, DateType).checkInputDataTypes().isFailure)
-    assert(cast(1.0, DateType).checkInputDataTypes().isFailure)
   }
 
   test("SPARK-20302 cast with same structure") {
