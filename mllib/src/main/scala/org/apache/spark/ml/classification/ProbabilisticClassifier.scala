@@ -19,8 +19,8 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
-import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
