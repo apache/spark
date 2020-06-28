@@ -153,20 +153,18 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("disallows CREATE TEMPORARY TABLE ... USING ... AS query") {
-    withTable("t") {
-      val error = intercept[ParseException] {
+  test("disallows CREATE TEMPORARY VIEW ... USING ... AS query") {
+    withTempView("t") {
+      intercept[ParseException] {
         sql(
           s"""
-             |CREATE TEMPORARY TABLE t USING PARQUET
+             |CREATE TEMPORARY VIEW t USING PARQUET
              |OPTIONS (PATH '${path.toURI}')
              |PARTITIONED BY (a)
              |AS SELECT 1 AS a, 2 AS b
            """.stripMargin
         )
-      }.getMessage
-      assert(error.contains("Operation not allowed") &&
-        error.contains("CREATE TEMPORARY TABLE ... USING ... AS query"))
+      }
     }
   }
 
