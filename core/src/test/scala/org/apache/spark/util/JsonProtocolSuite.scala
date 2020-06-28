@@ -327,7 +327,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
-  test("FetchFailed Map Index backwards compatibility") {
+  test("SPARK-32124: FetchFailed Map Index backwards compatibility") {
     // FetchFailed in Spark 2.4.0 does not have "Map Index" property.
     val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L, 18, 19,
       "ignored")
