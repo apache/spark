@@ -21,6 +21,8 @@ import java.io.IOException
 import java.lang.reflect.InvocationTargetException
 import java.util
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.{ReadWriteLock, ReentrantReadWriteLock}
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -78,6 +80,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     classOf[TException].getCanonicalName,
     classOf[InvocationTargetException].getCanonicalName)
 
+  // Locks used to synchronized read or write operations per database
+  private val clientLocks = new ConcurrentHashMap[String, ReadWriteLock]()
+
   /**
    * Whether this is an exception thrown by the hive client that should be wrapped.
    *
@@ -95,11 +100,20 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Run some code involving `client` in a [[synchronized]] block and wrap certain
+   * Run some code involving `client` in a [[ReadWriteLock]] and wrap certain
    * exceptions thrown in the process in [[AnalysisException]].
    */
-  private def withClient[T](body: => T): T = synchronized {
+  private def withClient[T](db: String, writeLock: Boolean = false) (body: => T): T = {
+    val clientLock = clientLocks.computeIfAbsent(db,
+      new java.util.function.Function[String, ReadWriteLock]() {
+        override def apply(db: String) = new ReentrantReadWriteLock()
+      })
     try {
+      if (writeLock) {
+        clientLock.writeLock().lock()
+      } else {
+        clientLock.readLock().lock()
+      }
       body
     } catch {
       case NonFatal(exception) if isClientException(exception) =>
@@ -111,6 +125,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         }
         throw new AnalysisException(
           e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
+    } finally {
+      if (writeLock) {
+        clientLock.writeLock().unlock()
+      } else {
+        clientLock.readLock().unlock()
+      }
     }
   }
 
@@ -190,14 +210,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def createDatabase(
       dbDefinition: CatalogDatabase,
-      ignoreIfExists: Boolean): Unit = withClient {
+      ignoreIfExists: Boolean): Unit = withClient(dbDefinition.name, true) {
     client.createDatabase(dbDefinition, ignoreIfExists)
   }
 
   override def dropDatabase(
       db: String,
       ignoreIfNotExists: Boolean,
-      cascade: Boolean): Unit = withClient {
+      cascade: Boolean): Unit = withClient(db, true) {
     client.dropDatabase(db, ignoreIfNotExists, cascade)
   }
 
@@ -207,7 +227,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    *
    * Note: As of now, this only supports altering database properties!
    */
-  override def alterDatabase(dbDefinition: CatalogDatabase): Unit = withClient {
+  override def alterDatabase(
+      dbDefinition: CatalogDatabase): Unit = withClient(dbDefinition.name, true) {
     val existingDb = getDatabase(dbDefinition.name)
     if (existingDb.properties == dbDefinition.properties) {
       logWarning(s"Request to alter database ${dbDefinition.name} is a no-op because " +
@@ -217,23 +238,23 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.alterDatabase(dbDefinition)
   }
 
-  override def getDatabase(db: String): CatalogDatabase = withClient {
+  override def getDatabase(db: String): CatalogDatabase = withClient(db) {
     client.getDatabase(db)
   }
 
-  override def databaseExists(db: String): Boolean = withClient {
+  override def databaseExists(db: String): Boolean = withClient(db) {
     client.databaseExists(db)
   }
 
-  override def listDatabases(): Seq[String] = withClient {
+  override def listDatabases(): Seq[String] = withClient(db = "") {
     client.listDatabases("*")
   }
 
-  override def listDatabases(pattern: String): Seq[String] = withClient {
+  override def listDatabases(pattern: String): Seq[String] = withClient(db = "") {
     client.listDatabases(pattern)
   }
 
-  override def setCurrentDatabase(db: String): Unit = withClient {
+  override def setCurrentDatabase(db: String): Unit = withClient(db) {
     client.setCurrentDatabase(db)
   }
 
@@ -243,7 +264,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def createTable(
       tableDefinition: CatalogTable,
-      ignoreIfExists: Boolean): Unit = withClient {
+      ignoreIfExists: Boolean): Unit = withClient(tableDefinition.identifier.database.get, true) {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     val table = tableDefinition.identifier.table
@@ -515,7 +536,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       table: String,
       ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = withClient {
+      purge: Boolean): Unit = withClient(db, true) {
     requireDbExists(db)
     client.dropTable(db, table, ignoreIfNotExists, purge)
   }
@@ -523,7 +544,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def renameTable(
       db: String,
       oldName: String,
-      newName: String): Unit = withClient {
+      newName: String): Unit = withClient(db, true) {
     val rawTable = getRawTable(db, oldName)
 
     // Note that Hive serde tables don't use path option in storage properties to store the value
@@ -571,7 +592,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * Note: As of now, this doesn't support altering table schema, partition column names and bucket
    * specification. We will ignore them even if users do specify different values for these fields.
    */
-  override def alterTable(tableDefinition: CatalogTable): Unit = withClient {
+  override def alterTable(tableDefinition: CatalogTable): Unit =
+      withClient(tableDefinition.identifier.database.get, true) {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
@@ -670,7 +692,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def alterTableDataSchema(
       db: String,
       table: String,
-      newDataSchema: StructType): Unit = withClient {
+      newDataSchema: StructType): Unit = withClient(db, true) {
     requireTableExists(db, table)
     val oldTable = getTable(db, table)
     verifyDataSchema(oldTable.identifier, oldTable.tableType, newDataSchema)
@@ -702,7 +724,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def alterTableStats(
       db: String,
       table: String,
-      stats: Option[CatalogStatistics]): Unit = withClient {
+      stats: Option[CatalogStatistics]): Unit = withClient(db, true) {
     requireTableExists(db, table)
     val rawTable = getRawTable(db, table)
 
@@ -719,11 +741,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.alterTable(updatedTable)
   }
 
-  override def getTable(db: String, table: String): CatalogTable = withClient {
+  override def getTable(db: String, table: String): CatalogTable = withClient(db) {
     restoreTableMetadata(getRawTable(db, table))
   }
 
-  override def getTablesByName(db: String, tables: Seq[String]): Seq[CatalogTable] = withClient {
+  override def getTablesByName(
+      db: String, tables: Seq[String]): Seq[CatalogTable] = withClient(db) {
     getRawTablesByNames(db, tables).map(restoreTableMetadata)
   }
 
@@ -851,21 +874,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       properties = table.properties.filterKeys(!HIVE_GENERATED_TABLE_PROPERTIES(_)).toMap)
   }
 
-  override def tableExists(db: String, table: String): Boolean = withClient {
+  override def tableExists(db: String, table: String): Boolean = withClient(db) {
     client.tableExists(db, table)
   }
 
-  override def listTables(db: String): Seq[String] = withClient {
+  override def listTables(db: String): Seq[String] = withClient(db) {
     requireDbExists(db)
     client.listTables(db)
   }
 
-  override def listTables(db: String, pattern: String): Seq[String] = withClient {
+  override def listTables(db: String, pattern: String): Seq[String] = withClient(db) {
     requireDbExists(db)
     client.listTables(db, pattern)
   }
 
-  override def listViews(db: String, pattern: String): Seq[String] = withClient {
+  override def listViews(db: String, pattern: String): Seq[String] = withClient(db) {
     requireDbExists(db)
     client.listTablesByType(db, pattern, CatalogTableType.VIEW)
   }
@@ -875,7 +898,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       loadPath: String,
       isOverwrite: Boolean,
-      isSrcLocal: Boolean): Unit = withClient {
+      isSrcLocal: Boolean): Unit = withClient(db) {
     requireTableExists(db, table)
     client.loadTable(
       loadPath,
@@ -891,7 +914,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       inheritTableSpecs: Boolean,
-      isSrcLocal: Boolean): Unit = withClient {
+      isSrcLocal: Boolean): Unit = withClient(db) {
     requireTableExists(db, table)
 
     val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
@@ -921,7 +944,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int): Unit = withClient {
+      numDP: Int): Unit = withClient(db) {
     requireTableExists(db, table)
 
     val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
@@ -986,7 +1009,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       table: String,
       parts: Seq[CatalogTablePartition],
-      ignoreIfExists: Boolean): Unit = withClient {
+      ignoreIfExists: Boolean): Unit = withClient(db, true) {
     requireTableExists(db, table)
 
     val tableMeta = getTable(db, table)
@@ -1012,7 +1035,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
       purge: Boolean,
-      retainData: Boolean): Unit = withClient {
+      retainData: Boolean): Unit = withClient(db, true) {
     requireTableExists(db, table)
     client.dropPartitions(
       db, table, parts.map(lowerCasePartitionSpec), ignoreIfNotExists, purge, retainData)
@@ -1022,7 +1045,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       table: String,
       specs: Seq[TablePartitionSpec],
-      newSpecs: Seq[TablePartitionSpec]): Unit = withClient {
+      newSpecs: Seq[TablePartitionSpec]): Unit = withClient(db, true) {
     client.renamePartitions(
       db, table, specs.map(lowerCasePartitionSpec), newSpecs.map(lowerCasePartitionSpec))
 
@@ -1149,7 +1172,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def alterPartitions(
       db: String,
       table: String,
-      newParts: Seq[CatalogTablePartition]): Unit = withClient {
+      newParts: Seq[CatalogTablePartition]): Unit = withClient(db, true) {
     val lowerCasedParts = newParts.map(p => p.copy(spec = lowerCasePartitionSpec(p.spec)))
 
     val rawTable = getRawTable(db, table)
@@ -1170,7 +1193,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def getPartition(
       db: String,
       table: String,
-      spec: TablePartitionSpec): CatalogTablePartition = withClient {
+      spec: TablePartitionSpec): CatalogTablePartition = withClient(db) {
     val part = client.getPartition(db, table, lowerCasePartitionSpec(spec))
     restorePartitionMetadata(part, getTable(db, table))
   }
@@ -1208,7 +1231,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def getPartitionOption(
       db: String,
       table: String,
-      spec: TablePartitionSpec): Option[CatalogTablePartition] = withClient {
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = withClient(db) {
     client.getPartitionOption(db, table, lowerCasePartitionSpec(spec)).map { part =>
       restorePartitionMetadata(part, getTable(db, table))
     }
@@ -1220,7 +1243,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def listPartitionNames(
       db: String,
       table: String,
-      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = withClient {
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = withClient(db) {
     val catalogTable = getTable(db, table)
     val partColNameMap = buildLowerCasePartColNameMap(catalogTable).mapValues(escapePathName)
     val clientPartitionNames =
@@ -1241,7 +1264,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def listPartitions(
       db: String,
       table: String,
-      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient(db) {
     val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
     val res = client.getPartitions(db, table, partialSpec.map(lowerCasePartitionSpec)).map { part =>
       part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
@@ -1262,7 +1285,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       table: String,
       predicates: Seq[Expression],
-      defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
+      defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient(db) {
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
 
@@ -1281,7 +1304,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def createFunction(
       db: String,
-      funcDefinition: CatalogFunction): Unit = withClient {
+      funcDefinition: CatalogFunction): Unit = withClient(db, true) {
     requireDbExists(db)
     // Hive's metastore is case insensitive. However, Hive's createFunction does
     // not normalize the function name (unlike the getFunction part). So,
@@ -1292,13 +1315,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.createFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
-  override def dropFunction(db: String, name: String): Unit = withClient {
+  override def dropFunction(db: String, name: String): Unit = withClient(db, true) {
     requireFunctionExists(db, name)
     client.dropFunction(db, name)
   }
 
   override def alterFunction(
-      db: String, funcDefinition: CatalogFunction): Unit = withClient {
+      db: String, funcDefinition: CatalogFunction): Unit = withClient(db, true) {
     requireDbExists(db)
     val functionName = funcDefinition.identifier.funcName.toLowerCase(Locale.ROOT)
     requireFunctionExists(db, functionName)
@@ -1309,23 +1332,23 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def renameFunction(
       db: String,
       oldName: String,
-      newName: String): Unit = withClient {
+      newName: String): Unit = withClient(db, true) {
     requireFunctionExists(db, oldName)
     requireFunctionNotExists(db, newName)
     client.renameFunction(db, oldName, newName)
   }
 
-  override def getFunction(db: String, funcName: String): CatalogFunction = withClient {
+  override def getFunction(db: String, funcName: String): CatalogFunction = withClient(db) {
     requireFunctionExists(db, funcName)
     client.getFunction(db, funcName)
   }
 
-  override def functionExists(db: String, funcName: String): Boolean = withClient {
+  override def functionExists(db: String, funcName: String): Boolean = withClient(db) {
     requireDbExists(db)
     client.functionExists(db, funcName)
   }
 
-  override def listFunctions(db: String, pattern: String): Seq[String] = withClient {
+  override def listFunctions(db: String, pattern: String): Seq[String] = withClient(db) {
     requireDbExists(db)
     client.listFunctions(db, pattern)
   }
