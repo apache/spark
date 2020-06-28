@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveNullType, HiveStringType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, HiveVoidType, MetadataBuilder, StructField, StructType}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -131,10 +131,9 @@ class ResolveSessionCatalog(
                     s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
               }
           }
-          // Add Hive type string to metadata.
-          val cleanedDataType = HiveNullType.replaceNullType(
-            HiveStringType.replaceCharType(dataType)
-          )
+          // Add Hive type 'string' and 'void' to metadata.
+          val cleanedDataType =
+            HiveVoidType.replaceVoidType(HiveStringType.replaceCharType(dataType))
           if (dataType != cleanedDataType) {
             builder.putString(HIVE_TYPE_STRING, dataType.catalogString)
           }
@@ -721,9 +720,8 @@ class ResolveSessionCatalog(
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
 
-    val cleanedDataType = HiveNullType.replaceNullType(
-      HiveStringType.replaceCharType(col.dataType)
-    )
+    val cleanedDataType =
+      HiveVoidType.replaceVoidType(HiveStringType.replaceCharType(col.dataType))
     if (col.dataType != cleanedDataType) {
       builder.putString(HIVE_TYPE_STRING, col.dataType.catalogString)
     }

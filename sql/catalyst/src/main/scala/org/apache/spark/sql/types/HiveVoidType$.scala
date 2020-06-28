@@ -18,38 +18,28 @@
 package org.apache.spark.sql.types
 
 /**
- * A hive null type for compatibility. These datatypes should only used for parsing,
+ * A hive void type for compatibility. These datatypes should only used for parsing,
  * and should NOT be used anywhere else. Any instance of these data types should be
  * replaced by a [[NullType]] before analysis.
  */
-class HiveNullType private() extends DataType {
+class HiveVoidType private() extends DataType {
 
   override def defaultSize: Int = 1
 
-  override private[spark] def asNullable: HiveNullType = this
+  override private[spark] def asNullable: HiveVoidType = this
 
   override def simpleString: String = "void"
 }
 
-case object HiveNullType extends HiveNullType {
-  def replaceNullType(dt: DataType): DataType = dt match {
+case object HiveVoidType extends HiveVoidType {
+  def replaceVoidType(dt: DataType): DataType = dt match {
     case ArrayType(et, nullable) =>
-      ArrayType(replaceNullType(et), nullable)
+      ArrayType(replaceVoidType(et), nullable)
     case MapType(kt, vt, nullable) =>
-      MapType(replaceNullType(kt), replaceNullType(vt), nullable)
+      MapType(replaceVoidType(kt), replaceVoidType(vt), nullable)
     case StructType(fields) =>
-      StructType(fields.map { field =>
-        field.copy(dataType = replaceNullType(field.dataType))
-      })
-    case _: HiveNullType => NullType
+      StructType(fields.map(f => f.copy(dataType = replaceVoidType(f.dataType))))
+    case _: HiveVoidType => NullType
     case _ => dt
-  }
-
-
-  def containsNullType(dt: DataType): Boolean = dt match {
-    case ArrayType(et, _) => containsNullType(et)
-    case MapType(kt, vt, _) => containsNullType(kt) || containsNullType(vt)
-    case StructType(fields) => fields.exists(f => containsNullType(f.dataType))
-    case _ => dt.isInstanceOf[HiveNullType]
   }
 }
