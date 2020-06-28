@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveNullType, HiveStringType, MetadataBuilder, StructField, StructType}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -132,7 +132,9 @@ class ResolveSessionCatalog(
               }
           }
           // Add Hive type string to metadata.
-          val cleanedDataType = HiveStringType.replaceCharType(dataType)
+          val cleanedDataType = HiveNullType.replaceNullType(
+            HiveStringType.replaceCharType(dataType)
+          )
           if (dataType != cleanedDataType) {
             builder.putString(HIVE_TYPE_STRING, dataType.catalogString)
           }
@@ -719,7 +721,9 @@ class ResolveSessionCatalog(
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
 
-    val cleanedDataType = HiveStringType.replaceCharType(col.dataType)
+    val cleanedDataType = HiveNullType.replaceNullType(
+      HiveStringType.replaceCharType(col.dataType)
+    )
     if (col.dataType != cleanedDataType) {
       builder.putString(HIVE_TYPE_STRING, col.dataType.catalogString)
     }

@@ -62,6 +62,7 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType("cHaR(27)", StringType)
   checkDataType("BINARY", BinaryType)
   checkDataType("interval", CalendarIntervalType)
+  checkDataType("void", NullType)
 
   checkDataType("array<doublE>", ArrayType(DoubleType, true))
   checkDataType("Array<map<int, tinYint>>", ArrayType(MapType(IntegerType, ByteType, true), true))

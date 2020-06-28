@@ -2184,7 +2184,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Spark DataType.
    */
   private def visitSparkDataType(ctx: DataTypeContext): DataType = {
-    HiveStringType.replaceCharType(typedVisit(ctx))
+    HiveNullType.replaceNullType(
+      HiveStringType.replaceCharType(typedVisit(ctx))
+    )
   }
 
   /**
@@ -2212,6 +2214,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case ("decimal" | "dec" | "numeric", precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
       case ("interval", Nil) => CalendarIntervalType
+      case ("void", Nil) => HiveNullType
       case (dt, params) =>
         val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else dt
         throw new ParseException(s"DataType $dtStr is not supported.", ctx)
@@ -2260,7 +2263,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     // Add Hive type string to metadata.
     val rawDataType = typedVisit[DataType](ctx.dataType)
-    val cleanedDataType = HiveStringType.replaceCharType(rawDataType)
+    val cleanedDataType = HiveNullType.replaceNullType(
+      HiveStringType.replaceCharType(rawDataType)
+    )
     if (rawDataType != cleanedDataType) {
       builder.putString(HIVE_TYPE_STRING, rawDataType.catalogString)
     }
