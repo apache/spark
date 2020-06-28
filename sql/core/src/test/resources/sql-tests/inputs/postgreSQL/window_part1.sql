@@ -301,7 +301,7 @@ FROM tenk1 WHERE unique1 < 10;
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
--- [SPARK-30708] first_value/last_value window function throws ParseException
+-- [SPARK-28310] ANSI SQL grammar support: first_value/last_value(expression, [RESPECT NULLS | IGNORE NULLS])
 -- SELECT first_value(unique1) over w,
 -- nth_value(unique1, 2) over w AS nth_2,
 -- last_value(unique1) over w, unique1, four
