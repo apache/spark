@@ -27,7 +27,7 @@ import org.apache.spark.network.util.JavaUtils;
 
 public class ExecutorDiskUtils {
 
-  private static final Pattern MULTIPLE_SEPARATORS = Pattern.compile(File.separator + "{2,}");
+  private static final Pattern MULTIPLE_SEPARATORS = Pattern.compile("[/\\\\]+");
 
   /**
    * Hashes a filename into the corresponding local directory, in a manner consistent with
@@ -50,14 +50,15 @@ public class ExecutorDiskUtils {
    * the internal code in java.io.File would normalize it later, creating a new "foo/bar"
    * String copy. Unfortunately, we cannot just reuse the normalization code that java.io.File
    * uses, since it is in the package-private class java.io.FileSystem.
+   * On Windows, separator / should be \.
    */
   @VisibleForTesting
   static String createNormalizedInternedPathname(String dir1, String dir2, String fname) {
     String pathname = dir1 + File.separator + dir2 + File.separator + fname;
     Matcher m = MULTIPLE_SEPARATORS.matcher(pathname);
-    pathname = m.replaceAll("/");
+    pathname = m.replaceAll(Matcher.quoteReplacement(File.separator));
     // A single trailing slash needs to be taken care of separately
-    if (pathname.length() > 1 && pathname.endsWith("/")) {
+    if (pathname.length() > 1 && pathname.endsWith(File.separator)) {
       pathname = pathname.substring(0, pathname.length() - 1);
     }
     return pathname.intern();

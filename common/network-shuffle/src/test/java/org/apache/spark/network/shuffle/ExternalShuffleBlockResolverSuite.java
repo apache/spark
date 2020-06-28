@@ -146,12 +146,12 @@ public class ExternalShuffleBlockResolverSuite {
 
   @Test
   public void testNormalizeAndInternPathname() {
-    assertPathsMatch("/foo", "bar", "baz", "/foo/bar/baz");
-    assertPathsMatch("//foo/", "bar/", "//baz", "/foo/bar/baz");
-    assertPathsMatch("foo", "bar", "baz///", "foo/bar/baz");
-    assertPathsMatch("/foo/", "/bar//", "/baz", "/foo/bar/baz");
-    assertPathsMatch("/", "", "", "/");
-    assertPathsMatch("/", "/", "/", "/");
+    assertPathsMatch("/foo", "bar", "baz", File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
+    assertPathsMatch("//foo/", "bar/", "//baz", File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
+    assertPathsMatch("foo", "bar", "baz///", "foo" + File.separator + "bar" + File.separator + "baz");
+    assertPathsMatch("/foo/", "/bar//", "/baz", File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
+    assertPathsMatch("/", "", "", File.separator);
+    assertPathsMatch("/", "/", "/", File.separator);
   }
 
   private void assertPathsMatch(String p1, String p2, String p3, String expectedPathname) {
@@ -160,6 +160,6 @@ public class ExternalShuffleBlockResolverSuite {
     assertEquals(expectedPathname, normPathname);
     File file = new File(normPathname);
     String returnedPath = file.getPath();
-    assertTrue(normPathname == returnedPath);
+    assertEquals(normPathname, returnedPath);
   }
 }
