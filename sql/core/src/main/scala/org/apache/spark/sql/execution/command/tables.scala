@@ -127,6 +127,8 @@ case class CreateTableLikeCommand(
         // Hive only retain the useful properties through serde class annotation.
         // For better compatible with Hive, we remove the metastore properties.
         sourceTableDesc.properties -- DDLUtils.METASTORE_GENERATED_PROPERTIES ++ properties
+      case MANAGED | EXTERNAL =>
+        properties
       case VIEW =>
         // For view, we just use new properties
         properties
