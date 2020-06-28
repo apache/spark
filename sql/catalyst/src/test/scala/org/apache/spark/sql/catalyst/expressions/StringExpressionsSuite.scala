@@ -229,6 +229,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "xample",
       row)
 
+    // Substring with from negative position with negative length
+    checkEvaluation(Substring(s, Literal.create(-1207959552, IntegerType),
+      Literal.create(-1207959552, IntegerType)), "", row)
+
     val s_notNull = 'a.string.notNull.at(0)
 
     assert(Substring(s, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable

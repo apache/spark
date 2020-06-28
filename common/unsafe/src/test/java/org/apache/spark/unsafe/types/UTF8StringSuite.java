@@ -389,6 +389,10 @@ public class UTF8StringSuite {
     assertEquals(e.substringSQL(0, Integer.MAX_VALUE), fromString("example"));
     assertEquals(e.substringSQL(1, Integer.MAX_VALUE), fromString("example"));
     assertEquals(e.substringSQL(2, Integer.MAX_VALUE), fromString("xample"));
+    assertEquals(EMPTY_UTF8, e.substringSQL(-100, -100));
+    assertEquals(EMPTY_UTF8, e.substringSQL(-1207959552, -1207959552));
+    assertEquals(fromString("pl"), e.substringSQL(-3, 2));
+    assertEquals(EMPTY_UTF8, e.substringSQL(Integer.MIN_VALUE, 6));
   }
 
   @Test
