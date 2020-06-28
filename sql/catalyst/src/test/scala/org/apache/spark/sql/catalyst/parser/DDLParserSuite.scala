@@ -1141,11 +1141,11 @@ class DDLParserSuite extends AnalysisTest {
         |USING testcat2.ns1.ns2.tbl AS source
         |ON target.col1 = source.col1
         |WHEN MATCHED AND (target.col2='delete') THEN DELETE
-        |WHEN MATCHED AND (target.col2='update to 1') THEN UPDATE SET target.col2 = 1
-        |WHEN MATCHED AND (target.col2='update to 2') THEN UPDATE SET target.col2 = 2
-        |WHEN NOT MATCHED AND (target.col2='insert 1')
+        |WHEN MATCHED AND (target.col2='update1') THEN UPDATE SET target.col2 = 1
+        |WHEN MATCHED AND (target.col2='update2') THEN UPDATE SET target.col2 = 2
+        |WHEN NOT MATCHED AND (target.col2='insert1')
         |THEN INSERT (target.col1, target.col2) values (source.col1, 1)
-        |WHEN NOT MATCHED AND (target.col2='insert 2')
+        |WHEN NOT MATCHED AND (target.col2='insert2')
         |THEN INSERT (target.col1, target.col2) values (source.col1, 2)
       """.stripMargin,
       MergeIntoTable(
@@ -1153,14 +1153,14 @@ class DDLParserSuite extends AnalysisTest {
         SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
         EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
-          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update to 1"))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update1"))),
             Seq(Assignment(UnresolvedAttribute("target.col2"), Literal(1)))),
-          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update to 2"))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update2"))),
             Seq(Assignment(UnresolvedAttribute("target.col2"), Literal(2))))),
-        Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert 1"))),
+        Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert1"))),
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
             Assignment(UnresolvedAttribute("target.col2"), Literal(1)))),
-          InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert 2"))),
+          InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert2"))),
             Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
               Assignment(UnresolvedAttribute("target.col2"), Literal(2)))))))
   }
@@ -1172,7 +1172,7 @@ class DDLParserSuite extends AnalysisTest {
           |MERGE INTO testcat1.ns1.ns2.tbl AS target
           |USING testcat2.ns1.ns2.tbl AS source
           |ON target.col1 = source.col1
-          |WHEN MATCHED AND (source.col2 == '1') THEN UPDATE SET target.col2 = 1
+          |WHEN MATCHED AND (target.col2 == 'update1') THEN UPDATE SET target.col2 = 1
           |WHEN MATCHED THEN UPDATE SET target.col2 = 2
           |WHEN MATCHED THEN DELETE
           |WHEN NOT MATCHED AND (target.col2='insert')
@@ -1181,6 +1181,27 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     assert(exc.getMessage.contains("only the last MATCHED clause can omit the condition"))
+  }
+
+  test("merge into table: only the last not matched clause can omit the condition") {
+    val exc = intercept[ParseException] {
+      parsePlan(
+        """
+          |MERGE INTO testcat1.ns1.ns2.tbl AS target
+          |USING testcat2.ns1.ns2.tbl AS source
+          |ON target.col1 = source.col1
+          |WHEN MATCHED AND (target.col2 == 'update') THEN UPDATE SET target.col2 = source.col2
+          |WHEN MATCHED THEN DELETE
+          |WHEN NOT MATCHED AND (target.col2='insert1')
+          |THEN INSERT (target.col1, target.col2) values (source.col1, 1)
+          |WHEN NOT MATCHED
+          |THEN INSERT (target.col1, target.col2) values (source.col1, 2)
+          |WHEN NOT MATCHED
+          |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("only the last NOT MATCHED clause can omit the condition"))
   }
 
   test("merge into table: there must be a when (not) matched condition") {
