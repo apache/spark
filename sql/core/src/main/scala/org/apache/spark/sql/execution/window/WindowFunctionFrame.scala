@@ -172,8 +172,8 @@ class OffsetWindowFunctionFrame(
 
 /**
  * The fixed offset window frame calculates frames containing
- * NTH_VALUE/FIRST_VALUE/LAST_VALUE statements.
- * The fixed offset windwo frame return the same value for all rows in the window partition.
+ * NTH_VALUE statements.
+ * The fixed offset window frame return the same value for all rows in the window partition.
  */
 class FixedOffsetWindowFunctionFrame(
     target: InternalRow,
@@ -185,19 +185,19 @@ class FixedOffsetWindowFunctionFrame(
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
-  var rowOption: Option[UnsafeRow] = None
+  var maybeRow: Option[UnsafeRow] = None
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     super.prepare(rows)
     if (inputIndex >= 0 && inputIndex < input.length) {
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-      rowOption = Some(r)
+      maybeRow = Some(r)
     }
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    if (rowOption.isDefined) {
-      projection(rowOption.get)
+    if (maybeRow.isDefined) {
+      projection(maybeRow.get)
     } else {
       // Use default values since the offset row does not exist.
       fillDefaultValue(current)
