@@ -287,7 +287,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     testWithSparkConf(testName, testTags: _*)()(testFun)(pos)
   }
 
-  protected def testWithSparkConf(testName: String, testTags: Tag*)
+  private def testWithSparkConf(testName: String, testTags: Tag*)
       (pairs: (String, String)*)(testFun: => Any)(implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {
       withSparkConf(pairs: _*)(testFun)
@@ -295,7 +295,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   /** Sets all configurations specified in `pairs`, calls `init`, and then calls `testFun` */
-  protected def withSparkConf(pairs: (String, String)*)(testFun: => Any): Unit = {
+  private def withSparkConf(pairs: (String, String)*)(testFun: => Any): Unit = {
     val conf = new SparkConf()
     pairs.foreach(kv => conf.set(kv._1, kv._2))
     init(conf)
