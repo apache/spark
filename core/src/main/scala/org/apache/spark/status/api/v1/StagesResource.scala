@@ -96,8 +96,9 @@ private[v1] class StagesResource extends BaseAppResource {
       @PathParam("stageAttemptId") stageAttemptId: Int,
       @DefaultValue("0") @QueryParam("offset") offset: Int,
       @DefaultValue("20") @QueryParam("length") length: Int,
-      @DefaultValue("ID") @QueryParam("sortBy") sortBy: TaskSorting): Seq[TaskData] = {
-    withUI(_.store.taskList(stageId, stageAttemptId, offset, length, sortBy))
+      @DefaultValue("ID") @QueryParam("sortBy") sortBy: TaskSorting,
+      @QueryParam("status") statuses: JList[TaskStatus]): Seq[TaskData] = {
+    withUI(_.store.taskList(stageId, stageAttemptId, offset, length, sortBy, statuses))
   }
 
   // This api needs to stay formatted exactly as it is below, since, it is being used by the

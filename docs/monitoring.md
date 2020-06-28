@@ -480,7 +480,8 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
        A list of all tasks for the given stage attempt.
       <br><code>?offset=[offset]&amp;length=[len]</code> list tasks in the given range.
       <br><code>?sortBy=[runtime|-runtime]</code> sort the tasks.
-      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime</code>
+      <br><code>?status=[running|success|killed|failed|unknown]</code> list only tasks in the state.
+      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime&amp;status=running</code>
     </td>
   </tr>
   <tr>
