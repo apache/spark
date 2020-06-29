@@ -75,9 +75,9 @@ class OrcFilterSuite extends OrcTest with NestedColumnPredicateTest with SharedS
   }
 
   protected def checkFilterPredicate
-  (predicate: Predicate, filterOperator: PredicateLeaf.Operator)
-  (implicit df: DataFrame): Unit = {
-    def checkComparisonOperator(filter: SearchArgument): Unit = {
+      (predicate: Predicate, filterOperator: PredicateLeaf.Operator)
+      (implicit df: DataFrame): Unit = {
+    def checkComparisonOperator(filter: SearchArgument) = {
       val operator = filter.getLeaves.asScala
       assert(operator.map(_.getOperator).contains(filterOperator))
     }
@@ -87,7 +87,7 @@ class OrcFilterSuite extends OrcTest with NestedColumnPredicateTest with SharedS
   protected def checkFilterPredicate
       (predicate: Predicate, stringExpr: String)
       (implicit df: DataFrame): Unit = {
-    def checkLogicalOperator(filter: SearchArgument): Unit = {
+    def checkLogicalOperator(filter: SearchArgument) = {
       assert(filter.toString == stringExpr)
     }
     checkFilterPredicate(df, predicate, checkLogicalOperator)
