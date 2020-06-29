@@ -755,24 +755,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
   }
 
-  testRetry("provider reports error after FS leaves safe mode") {
-    testDir.delete()
-    val clock = new ManualClock()
-    val provider = new SafeModeTestProvider(createTestConf(), clock)
-    val errorHandler = mock(classOf[Thread.UncaughtExceptionHandler])
-    provider.startSafeModeCheckThread(Some(errorHandler))
-    try {
-      provider.inSafeMode = false
-      clock.setTime(10000)
-
-      eventually(timeout(3.second), interval(10.milliseconds)) {
-        verify(errorHandler).uncaughtException(any(), any())
-      }
-    } finally {
-      provider.stop()
-    }
-  }
-
   test("ignore hidden files") {
 
     // FsHistoryProvider should ignore hidden files.  (It even writes out a hidden file itself

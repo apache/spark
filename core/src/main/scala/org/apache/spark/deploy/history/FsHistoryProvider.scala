@@ -471,7 +471,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val newLastScanTime = clock.getTimeMillis()
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
 
-      val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
+      val updated = Option(fs.globStatus(new Path(logDir + "/*"))).map(_.toSeq).getOrElse(Nil)
         .filter { entry => isAccessible(entry.getPath) }
         .filter { entry => !isProcessing(entry.getPath) }
         .flatMap { entry => EventLogFileReader(fs, entry) }
@@ -612,7 +612,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       assert(attempt.isEmpty || attempt.size == 1)
       val isStale = attempt.headOption.exists { a =>
-        if (a.logPath != new Path(logPath).getName()) {
+        if (a.logPath != logPath) {
           // If the log file name does not match, then probably the old log file was from an
           // in progress application. Just return that the app should be left alone.
           false
@@ -662,7 +662,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .map { id => app.attempts.filter(_.info.attemptId == Some(id)) }
         .getOrElse(app.attempts)
         .foreach { attempt =>
-          val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
+          val reader = EventLogFileReader(fs, new Path(attempt.logPath),
             attempt.lastIndex)
           reader.zipEventLogFiles(zipStream)
         }
@@ -982,7 +982,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var countDeleted = 0
     toDelete.foreach { attempt =>
       logInfo(s"Deleting expired event log for ${attempt.logPath}")
-      val logPath = new Path(logDir, attempt.logPath)
+      val logPath = new Path(attempt.logPath)
       listing.delete(classOf[LogInfo], logPath.toString())
       cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
       if (deleteLog(fs, logPath)) {
@@ -1030,7 +1030,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           false
         }
       if (deleteFile) {
-        logInfo(s"Deleting expired driver log for: ${f.getPath().getName()}")
+        logInfo(s"Deleting expired driver log for: ${f.getPath().toString()}")
         listing.delete(classOf[LogInfo], f.getPath().toString())
         deleteLog(driverLogFs, f.getPath())
       }
@@ -1279,7 +1279,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var retried = false
     var newStorePath: File = null
     while (newStorePath == null) {
-      val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
+      val reader = EventLogFileReader(fs, new Path(attempt.logPath),
         attempt.lastIndex)
       val isCompressed = reader.compressionCodec.isDefined
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
@@ -1312,7 +1312,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     while (store == null) {
       try {
         val s = new InMemoryStore()
-        val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
+        val reader = EventLogFileReader(fs, new Path(attempt.logPath),
           attempt.lastIndex)
         rebuildAppStore(s, reader, attempt.info.lastUpdated.getTime())
         store = s
@@ -1454,7 +1454,7 @@ private[history] class AppListingListener(
     haltEnabled: Boolean) extends SparkListener {
 
   private val app = new MutableApplicationInfo()
-  private val attempt = new MutableAttemptInfo(reader.rootPath.getName(),
+  private val attempt = new MutableAttemptInfo(reader.rootPath.toString(),
     reader.fileSizeForLastIndex, reader.lastIndex)
 
   private var gotEnvUpdate = false
