@@ -27,7 +27,13 @@ import org.apache.spark.network.util.JavaUtils;
 
 public class ExecutorDiskUtils {
 
-  private static final Pattern MULTIPLE_SEPARATORS = Pattern.compile("[/\\\\]+");
+  private static final Pattern MULTIPLE_SEPARATORS;
+  static {
+    if (isWindows())
+      MULTIPLE_SEPARATORS= Pattern.compile("[/\\\\]+");
+    else
+      MULTIPLE_SEPARATORS = Pattern.compile("/{2,}");
+  }
 
   /**
    * Hashes a filename into the corresponding local directory, in a manner consistent with
@@ -41,6 +47,13 @@ public class ExecutorDiskUtils {
         localDir, String.format("%02x", subDirId), filename));
   }
 
+  /** Returns whether the OS is Windows. */
+  @VisibleForTesting
+  static boolean isWindows() {
+    String os = System.getProperty("os.name");
+    return os.startsWith("Windows");
+  }
+
   /**
    * This method is needed to avoid the situation when multiple File instances for the
    * same pathname "foo/bar" are created, each with a separate copy of the "foo/bar" String.
@@ -50,7 +63,10 @@ public class ExecutorDiskUtils {
    * the internal code in java.io.File would normalize it later, creating a new "foo/bar"
    * String copy. Unfortunately, we cannot just reuse the normalization code that java.io.File
    * uses, since it is in the package-private class java.io.FileSystem.
-   * On Windows, separator / should be \.
+   *
+   * On Windows, separator "/" should be "\".
+   *
+   * "\\" is legal character in path name on Unix like OS, but illegal on Windows.
    */
   @VisibleForTesting
   static String createNormalizedInternedPathname(String dir1, String dir2, String fname) {

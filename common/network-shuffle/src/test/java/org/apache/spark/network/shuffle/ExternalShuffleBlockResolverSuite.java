@@ -158,6 +158,13 @@ public class ExternalShuffleBlockResolverSuite {
             File.separator);
     assertPathsMatch("/", "/", "/",
             File.separator);
+    if (ExecutorDiskUtils.isWindows()) {
+      assertPathsMatch("/foo\\/", "bar", "baz",
+              File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
+    } else {
+      assertPathsMatch("/foo\\/", "bar", "baz",
+              File.separator + "foo\\" + File.separator + "bar" + File.separator + "baz");
+    }
   }
 
   private void assertPathsMatch(String p1, String p2, String p3, String expectedPathname) {
