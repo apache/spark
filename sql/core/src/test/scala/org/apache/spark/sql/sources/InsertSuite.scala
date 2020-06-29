@@ -334,7 +334,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           checkAnswer(spark.table("insertTable"), Row(1, 1))
           val testSql =
             """
-              |INSERT OVERWRITE TABLE insertTable PARTITION(part1=2)
+              |INSERT OVERWRITE TABLE insertTable PARTITION(part=2)
               |SELECT i + 1 FROM insertTable
               |WHERE part=1
               """.stripMargin
@@ -348,7 +348,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               "INSERT OVERWRITE to a table while querying it should not be allowed.")
           } else {
             sql(testSql)
-            checkAnswer(spark.table("insertTable"), Row(1, 1, 1) :: Row(2, 2) :: Nil)
+            checkAnswer(spark.table("insertTable"), Row(1, 1) :: Row(2, 2) :: Nil)
           }
         }
       }
