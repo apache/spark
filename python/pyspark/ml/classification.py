@@ -39,6 +39,7 @@ from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
 
 __all__ = ['LinearSVC', 'LinearSVCModel',
+           'LinearSVCSummary', 'LinearSVCTrainingSummary',
            'LogisticRegression', 'LogisticRegressionModel',
            'LogisticRegressionSummary', 'LogisticRegressionTrainingSummary',
            'BinaryLogisticRegressionSummary', 'BinaryLogisticRegressionTrainingSummary',
@@ -683,7 +684,8 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
         return self._set(blockSize=value)
 
 
-class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable):
+class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable,
+                     HasTrainingSummary):
     """
     Model fitted by LinearSVC.
 
@@ -712,6 +714,50 @@ class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable,
         Model intercept of Linear SVM Classifier.
         """
         return self._call_java("intercept")
+
+    @since("3.1.0")
+    def summary(self):
+        """
+        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
+        """
+        if self.hasSummary:
+            return LinearSVCTrainingSummary(super(LinearSVCModel, self).summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
+
+    @since("3.1.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+
+        :param dataset:
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+        java_lsvc_summary = self._call_java("evaluate", dataset)
+        return LinearSVCSummary(java_lsvc_summary)
+
+
+class LinearSVCSummary(_BinaryClassificationSummary):
+    """
+    Abstraction for LinearSVC Results for a given model.
+    .. versionadded:: 3.1.0
+    """
+    pass
+
+
+@inherit_doc
+class LinearSVCTrainingSummary(LinearSVCSummary, _TrainingSummary):
+    """
+    Abstraction for LinearSVC Training results.
+
+    .. versionadded:: 3.1.0
+    """
+    pass
 
 
 class _LogisticRegressionParams(_ProbabilisticClassifierParams, HasRegParam,
