@@ -62,7 +62,7 @@ private[spark] trait ShuffleManager {
   /**
    * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive) to
    * read from a range of map outputs(startMapIndex to endMapIndex-1, inclusive).
-   * If endMapIndex=Int.MaxValue, the real endMapIndex will be changed to the length of total map
+   * If endMapIndex=Int.MaxValue, the actual endMapIndex will be changed to the length of total map
    * outputs of the shuffle in `getMapSizesByExecutorId`.
    *
    * Called on executors by reduce tasks.
