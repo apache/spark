@@ -59,7 +59,7 @@ public class ExecutorDiskUtils {
    * String copy. Unfortunately, we cannot just reuse the normalization code that java.io.File
    * uses, since it is in the package-private class java.io.FileSystem.
    *
-   * On Windows, separator "/" should be "\".
+   * On Windows, separator "\" is used instead of "/".
    *
    * "\\" is legal character in path name on Unix like OS, but illegal on Windows.
    */
