@@ -286,7 +286,7 @@ private class HiveScriptTransformationWriterThread(
 
 object HiveScriptIOSchema {
   def apply(input: ScriptInputOutputSchema): HiveScriptIOSchema = {
-    new HiveScriptIOSchema(
+    HiveScriptIOSchema(
       input.inputRowFormat,
       input.outputRowFormat,
       input.inputSerdeClass,

@@ -52,18 +52,6 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
     schemaLess = false
   )
 
-//  private val serdeIOSchema = new HiveScriptIOSchema(
-//    inputRowFormat = Seq.empty,
-//    outputRowFormat = Seq.empty,
-//    inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
-//    outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
-//    inputSerdeProps = Seq.empty,
-//    outputSerdeProps = Seq.empty,
-//    recordReaderClass = None,
-//    recordWriterClass = None,
-//    schemaLess = false
-//  )
-
   private val serdeIOSchema = noSerdeIOSchema.copy(
     inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
     outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
