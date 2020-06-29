@@ -27,7 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import org.apache.mesos.Protos.{SlaveID => AgentID, TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TaskState}
@@ -116,7 +116,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   // executor limit
   private var launchingExecutors = false
 
-  // SlaveID -> Agent
+  // AgentID -> Agent
   // This map accumulates entries for the duration of the job.  Agents are never deleted, because
   // we need to maintain e.g. failure state and connection state.
   private val agents = new mutable.HashMap[String, Agent]
@@ -729,7 +729,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def frameworkMessage(
-      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]): Unit = {}
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: AgentID, b: Array[Byte]): Unit = {}
 
   /**
    * Called when a agent is lost or a Mesos task finished. Updates local view on
@@ -751,12 +751,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  override def slaveLost(d: org.apache.mesos.SchedulerDriver, agentId: SlaveID): Unit = {
+  override def slaveLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit = {
     logInfo(s"Mesos agent lost: ${agentId.getValue}")
   }
 
   override def executorLost(
-      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int): Unit = {
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: AgentID, status: Int): Unit = {
     logInfo("Mesos executor lost: %s".format(e.getValue))
   }
 

@@ -23,7 +23,8 @@ import java.util.{ArrayList => JArrayList, Collections, List => JList}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, HashSet}
 
-import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, _}
+import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, SlaveID => AgentID,
+  TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.protobuf.ByteString
 
@@ -360,7 +361,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       partitionResources(remainingResources, "cpus", scheduler.CPUS_PER_TASK)
     val taskInfo = MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
-      .setSlaveId(SlaveID.newBuilder().setValue(agentId).build())
+      .setSlaveId(AgentID.newBuilder().setValue(agentId).build())
       .setExecutor(executorInfo)
       .setName(task.name)
       .addAllResources(cpuResources.asJava)
@@ -406,7 +407,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   }
 
   override def frameworkMessage(
-      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]): Unit = {}
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: AgentID, b: Array[Byte]): Unit = {}
 
   /**
    * Remove executor associated with agentId in a thread safe manner.
@@ -419,7 +420,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   }
 
   private def recordAgentLost(
-      d: org.apache.mesos.SchedulerDriver, agentId: SlaveID, reason: ExecutorLossReason): Unit = {
+      d: org.apache.mesos.SchedulerDriver, agentId: AgentID, reason: ExecutorLossReason): Unit = {
     inClassLoader() {
       logInfo("Mesos agent lost: " + agentId.getValue)
       removeExecutor(agentId.getValue, reason.toString)
@@ -427,14 +428,14 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     }
   }
 
-  override def slaveLost(d: org.apache.mesos.SchedulerDriver, agentId: SlaveID): Unit = {
+  override def slaveLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit = {
     recordAgentLost(d, agentId, ExecutorProcessLost())
   }
 
   override def executorLost(
       d: org.apache.mesos.SchedulerDriver,
       executorId: ExecutorID,
-      agentId: SlaveID,
+      agentId: AgentID,
       status: Int): Unit = {
     logInfo("Executor lost: %s, marking agent %s as lost".format(executorId.getValue,
                                                                  agentId.getValue))

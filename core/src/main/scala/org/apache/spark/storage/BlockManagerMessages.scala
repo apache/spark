@@ -26,32 +26,32 @@ private[spark] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from the master to storage endpoints.
   //////////////////////////////////////////////////////////////////////////////////
-  sealed trait ToBlockManagerStorage
+  sealed trait ToBlockManagerMasterStorageEndpoint
 
   // Remove a block from the storage endpoints that have it. This can only be used to remove
   // blocks that the master knows about.
-  case class RemoveBlock(blockId: BlockId) extends ToBlockManagerStorage
+  case class RemoveBlock(blockId: BlockId) extends ToBlockManagerMasterStorageEndpoint
 
   // Replicate blocks that were lost due to executor failure
   case class ReplicateBlock(blockId: BlockId, replicas: Seq[BlockManagerId], maxReplicas: Int)
-    extends ToBlockManagerStorage
+    extends ToBlockManagerMasterStorageEndpoint
 
-  case object DecommissionBlockManager extends ToBlockManagerStorage
+  case object DecommissionBlockManager extends ToBlockManagerMasterStorageEndpoint
 
   // Remove all blocks belonging to a specific RDD.
-  case class RemoveRdd(rddId: Int) extends ToBlockManagerStorage
+  case class RemoveRdd(rddId: Int) extends ToBlockManagerMasterStorageEndpoint
 
   // Remove all blocks belonging to a specific shuffle.
-  case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerStorage
+  case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerMasterStorageEndpoint
 
   // Remove all blocks belonging to a specific broadcast.
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
-    extends ToBlockManagerStorage
+    extends ToBlockManagerMasterStorageEndpoint
 
   /**
    * Driver to Executor message to trigger a thread dump.
    */
-  case object TriggerThreadDump extends ToBlockManagerStorage
+  case object TriggerThreadDump extends ToBlockManagerMasterStorageEndpoint
 
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from storage endpoints to the master.

@@ -655,7 +655,7 @@ private[spark] class BlockManagerInfo(
     var originalLevel: StorageLevel = StorageLevel.NONE
 
     if (blockExists) {
-      // The block exists on the replica already.
+      // The block exists on the storage endpoint already.
       val blockStatus: BlockStatus = _blocks.get(blockId)
       originalLevel = blockStatus.storageLevel
       originalMemSize = blockStatus.memSize

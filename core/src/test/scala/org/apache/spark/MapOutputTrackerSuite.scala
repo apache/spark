@@ -136,7 +136,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
 
-    val mapWorkerRpcEnv = createRpcEnv("spark-replica", hostname, 0, new SecurityManager(conf))
+    val mapWorkerRpcEnv = createRpcEnv("spark-worker", hostname, 0, new SecurityManager(conf))
     val mapWorkerTracker = new MapOutputTrackerWorker(conf)
     mapWorkerTracker.trackerEndpoint =
       mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)

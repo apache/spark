@@ -466,7 +466,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertDataStructuresEmpty()
   }
 
-  test("All shuffle files on the replica should be cleaned up when it is lost") {
+  test("All shuffle files on the storage endpoint should be cleaned up when it is lost") {
     // reset the test context with the right shuffle service config
     afterEach()
     val conf = new SparkConf()

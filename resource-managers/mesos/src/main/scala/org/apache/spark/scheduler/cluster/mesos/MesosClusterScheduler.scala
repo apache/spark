@@ -25,7 +25,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.mesos.{Scheduler, SchedulerDriver}
-import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
+import org.apache.mesos.Protos.{SlaveID => AgentID, TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
 
@@ -50,7 +50,7 @@ import org.apache.spark.util.Utils
 private[spark] class MesosClusterSubmissionState(
     val driverDescription: MesosDriverDescription,
     val taskId: TaskID,
-    val agentId: SlaveID,
+    val agentId: AgentID,
     var mesosTaskStatus: Option[TaskStatus],
     var startDate: Date,
     var finishDate: Option[Date],
@@ -142,7 +142,7 @@ private[spark] class MesosClusterScheduler(
   // Holds a map of driver id to expected agent id that is passed to Mesos for reconciliation.
   // All drivers that are loaded after failover are added here, as we need get the latest
   // state of the tasks from Mesos. Keyed by task Id.
-  private val pendingRecover = new mutable.HashMap[String, SlaveID]()
+  private val pendingRecover = new mutable.HashMap[String, AgentID]()
   // Stores all the submitted drivers that hasn't been launched, keyed by submission id
   private val queuedDrivers = new ArrayBuffer[MesosDriverDescription]()
   // All supervised drivers that are waiting to retry after termination, keyed by submission id
@@ -657,7 +657,7 @@ private[spark] class MesosClusterScheduler(
             finishedDrivers += new MesosClusterSubmissionState(
               submission,
               TaskID.newBuilder().setValue(submission.submissionId).build(),
-              SlaveID.newBuilder().setValue("").build(),
+              AgentID.newBuilder().setValue("").build(),
               None,
               null,
               None,
@@ -731,7 +731,7 @@ private[spark] class MesosClusterScheduler(
   override def reregistered(driver: SchedulerDriver, masterInfo: MasterInfo): Unit = {
     logInfo(s"Framework re-registered with master ${masterInfo.getId}")
   }
-  override def slaveLost(driver: SchedulerDriver, agentId: SlaveID): Unit = {}
+  override def slaveLost(driver: SchedulerDriver, agentId: AgentID): Unit = {}
   override def error(driver: SchedulerDriver, error: String): Unit = {
     logError("Error received: " + error)
     markErr()
@@ -815,13 +815,13 @@ private[spark] class MesosClusterScheduler(
   override def frameworkMessage(
       driver: SchedulerDriver,
       executorId: ExecutorID,
-      agentId: SlaveID,
+      agentId: AgentID,
       message: Array[Byte]): Unit = {}
 
   override def executorLost(
       driver: SchedulerDriver,
       executorId: ExecutorID,
-      agentId: SlaveID,
+      agentId: AgentID,
       status: Int): Unit = {}
 
   private def removeFromQueuedDrivers(subId: String): Boolean = {
