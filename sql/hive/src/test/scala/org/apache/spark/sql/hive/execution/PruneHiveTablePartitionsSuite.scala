@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 
-class PruneHiveTablePartitionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
+
+  convert = "false"
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -55,59 +54,9 @@ class PruneHiveTablePartitionsSuite extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  test("SPARK-28169: Convert scan predicate condition to CNF") {
-    withTable("t", "temp") {
-      sql(
-        s"""
-           |CREATE TABLE t(i int)
-           |PARTITIONED BY (p int)
-           |STORED AS textfile""".stripMargin)
-      spark.range(0, 1000, 1).selectExpr("id as col")
-        .createOrReplaceTempView("temp")
-
-      for (part <- Seq(1, 2, 3, 4)) {
-        sql(
-          s"""
-             |INSERT OVERWRITE TABLE t PARTITION (p='$part')
-             |select col from temp""".stripMargin)
-      }
-
-      assertPrunedPartitions(
-        "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)",
-        Array("t(p=1)", "t(p=2)"))
-      assertPrunedPartitions(
-        "SELECT * FROM t WHERE (p = '1' and i = 2) or (i = 1 or p = '2')",
-        Array("t(p=1)", "t(p=2)", "t(p=3)", "t(p=4)"))
-      assertPrunedPartitions(
-        "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '3' and i = 3 )",
-        Array("t(p=1)", "t(p=3)"))
-      assertPrunedPartitions(
-        "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '2' or p = '3')",
-        Array("t(p=1)", "t(p=2)", "t(p=3)"))
-      assertPrunedPartitions(
-        "SELECT * FROM t",
-        Array("t(p=1)", "t(p=2)", "t(p=3)", "t(p=4)"))
-      assertPrunedPartitions(
-        "SELECT * FROM t where p = '1' and i = 2",
-        Array("t(p=1)"))
-      assertPrunedPartitions(
-        """
-          |SELECT i, COUNT(1) FROM (
-          |SELECT * FROM t where  p = '1' OR (p = '2' AND i = 1)
-          |) TMP GROUP BY i
-        """.stripMargin,
-        Array("t(p=1)", "t(p=2)"))
-    }
-  }
-
-  private def assertPrunedPartitions(query: String, expected: Array[String]): Unit = {
-    val prunedPartitions = getHiveTableScanExec(query).prunedPartitions.map(_.toString).toArray
-    assert(prunedPartitions.sameElements(expected))
-  }
-
-  private def getHiveTableScanExec(query: String): HiveTableScanExec = {
+  override def getScanExecPartitionSize(query: String): Long = {
     sql(query).queryExecution.sparkPlan.collectFirst {
       case p: HiveTableScanExec => p
-    }.get
+    }.get.prunedPartitions.size
   }
 }
