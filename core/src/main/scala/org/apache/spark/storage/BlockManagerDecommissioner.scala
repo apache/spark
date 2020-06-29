@@ -60,12 +60,12 @@ private[storage] class BlockManagerDecommissioner(
   private class ShuffleMigrationRunnable(peer: BlockManagerId) extends Runnable {
     @volatile var running = true
     override def run(): Unit = {
-      var migrating: Option[ShuffleBlockInfo] = None
+      var migrating: Option[(ShuffleBlockInfo, Int)] = None
       logInfo(s"Starting migration thread for ${peer}")
       // Once a block fails to transfer to an executor stop trying to transfer more blocks
       try {
         while (running && !Thread.interrupted()) {
-          val migrating = Option(shufflesToMigrate.poll())
+          migrating = Option(shufflesToMigrate.poll())
           migrating match {
             case None =>
               logDebug("Nothing to migrate")
@@ -73,24 +73,28 @@ private[storage] class BlockManagerDecommissioner(
               // will finish being committed.
               val SLEEP_TIME_SECS = 1
               Thread.sleep(SLEEP_TIME_SECS * 1000L)
-            case Some(shuffleBlockInfo) =>
-              logInfo(s"Trying to migrate shuffle ${shuffleBlockInfo} to ${peer}")
-              val blocks =
-                bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
-              logInfo(s"Got migration sub-blocks ${blocks}")
-              blocks.foreach { case (blockId, buffer) =>
-                logInfo(s"Migrating sub-block ${blockId}")
-                bm.blockTransferService.uploadBlockSync(
-                  peer.host,
-                  peer.port,
-                  peer.executorId,
-                  blockId,
-                  buffer,
-                  StorageLevel.DISK_ONLY,
-                  null)// class tag, we don't need for shuffle
-                logDebug(s"Migrated sub block ${blockId}")
+            case Some((shuffleBlockInfo, retryCount)) =>
+              if (retryCount < maxReplicationFailuresForDecommission) {
+                logInfo(s"Trying to migrate shuffle ${shuffleBlockInfo} to ${peer}")
+                val blocks =
+                  bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
+                logDebug(s"Got migration sub-blocks ${blocks}")
+                blocks.foreach { case (blockId, buffer) =>
+                  logDebug(s"Migrating sub-block ${blockId}")
+                  bm.blockTransferService.uploadBlockSync(
+                    peer.host,
+                    peer.port,
+                    peer.executorId,
+                    blockId,
+                    buffer,
+                    StorageLevel.DISK_ONLY,
+                    null)// class tag, we don't need for shuffle
+                  logDebug(s"Migrated sub block ${blockId}")
+                }
+                logInfo(s"Migrated ${shuffleBlockInfo} to ${peer}")
+              } else {
+                logError(s"Skipping block ${shuffleBlockInfo} because it has failed ${retryCount}")
               }
-              logInfo(s"Migrated ${shuffleBlockInfo} to ${peer}")
           }
         }
         // This catch is intentionally outside of the while running block.
@@ -98,11 +102,11 @@ private[storage] class BlockManagerDecommissioner(
       } catch {
         case e: Exception =>
           migrating match {
-            case Some(shuffleMap) =>
-              logError(s"Error ${e} during migration, adding ${shuffleMap} back to migration queue")
-              shufflesToMigrate.add(shuffleMap)
+            case Some((shuffleMap, retryCount)) =>
+              logError(s"Error during migration, adding ${shuffleMap} back to migration queue", e)
+              shufflesToMigrate.add((shuffleMap, retryCount + 1))
             case None =>
-              logError(s"Error ${e} while waiting for block to migrate")
+              logError(s"Error while waiting for block to migrate", e)
           }
       }
     }
@@ -113,7 +117,7 @@ private[storage] class BlockManagerDecommissioner(
 
   // Shuffles which are queued for migration
   private[storage] val shufflesToMigrate =
-    new java.util.concurrent.ConcurrentLinkedQueue[ShuffleBlockInfo]()
+    new java.util.concurrent.ConcurrentLinkedQueue[(ShuffleBlockInfo, Int)]()
 
   @volatile private var stopped = false
 
@@ -178,7 +182,7 @@ private[storage] class BlockManagerDecommissioner(
     logInfo("Offloading shuffle blocks")
     val localShuffles = bm.migratableResolver.getStoredShuffles()
     val newShufflesToMigrate = localShuffles.&~(migratingShuffles).toSeq
-    shufflesToMigrate.addAll(newShufflesToMigrate.asJava)
+    shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
 
     // Update the threads doing migrations
