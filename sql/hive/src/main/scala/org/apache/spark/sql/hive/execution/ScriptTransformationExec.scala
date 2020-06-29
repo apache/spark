@@ -63,8 +63,9 @@ case class HiveScriptTransformationExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  override def processIterator(inputIterator: Iterator[InternalRow], hadoopConf: Configuration)
-  : Iterator[InternalRow] = {
+  override def processIterator(
+      inputIterator: Iterator[InternalRow],
+      hadoopConf: Configuration): Iterator[InternalRow] = {
     val cmd = List("/bin/bash", "-c", script)
     val builder = new ProcessBuilder(cmd.asJava)
 
