@@ -45,7 +45,7 @@ object FileStreamSink extends Logging {
         val hdfsPath = new Path(singlePath)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         if (fs.isDirectory(hdfsPath)) {
-          val metadataPath = getMetadataLogPath(hdfsPath, hadoopConf, sqlConf)
+          val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)
           fs.exists(metadataPath)
         } else {
           false
@@ -54,9 +54,8 @@ object FileStreamSink extends Logging {
     }
   }
 
-  def getMetadataLogPath(path: Path, hadoopConf: Configuration, sqlConf: SQLConf): Path = {
+  def getMetadataLogPath(fs: FileSystem, path: Path, sqlConf: SQLConf): Path = {
     val metadataDir = new Path(path, FileStreamSink.metadataDir)
-    val fs = metadataDir.getFileSystem(hadoopConf)
     FileStreamSink.checkEscapedMetadataPath(fs, metadataDir, sqlConf)
     metadataDir
   }
@@ -135,7 +134,8 @@ class FileStreamSink(
 
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
   private val basePath = new Path(path)
-  private val logPath = getMetadataLogPath(basePath, hadoopConf, sparkSession.sessionState.conf)
+  private val logPath = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
+    sparkSession.sessionState.conf)
   private val fileLog =
     new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toString)
 

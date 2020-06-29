@@ -557,8 +557,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
 
           val outputDirPath = new Path(outputDir.getCanonicalPath)
           val hadoopConf = spark.sessionState.newHadoopConf()
-          val logPath = FileStreamSink.getMetadataLogPath(outputDirPath, hadoopConf, conf)
-          val fs = logPath.getFileSystem(hadoopConf)
+          val fs = outputDirPath.getFileSystem(hadoopConf)
+          val logPath = FileStreamSink.getMetadataLogPath(fs, outputDirPath, conf)
 
           val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, logPath.toString)
 
