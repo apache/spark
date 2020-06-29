@@ -29,10 +29,11 @@ public class ExecutorDiskUtils {
 
   private static final Pattern MULTIPLE_SEPARATORS;
   static {
-    if (isWindows())
-      MULTIPLE_SEPARATORS= Pattern.compile("[/\\\\]+");
-    else
+    if (isWindows()) {
+      MULTIPLE_SEPARATORS = Pattern.compile("[/\\\\]+");
+    } else {
       MULTIPLE_SEPARATORS = Pattern.compile("/{2,}");
+    }
   }
 
   /**
