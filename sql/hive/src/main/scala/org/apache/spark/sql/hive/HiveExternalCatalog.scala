@@ -102,12 +102,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   /**
    * Run some code involving `client` in a [[ReadWriteLock]] and wrap certain
    * exceptions thrown in the process in [[AnalysisException]].
+   *
+   * @param db to specify the place of the operation act on.
+   * @param writeLock to specify it is a write lock.
    */
-  private def withClient[T](db: String, writeLock: Boolean = false) (body: => T): T = {
-    val clientLock = clientLocks.computeIfAbsent(db,
-      new java.util.function.Function[String, ReadWriteLock]() {
-        override def apply(db: String) = new ReentrantReadWriteLock()
-      })
+  private def withClient[T](db: String = "", writeLock: Boolean = false) (body: => T): T = {
+    val clientLock = clientLocks.computeIfAbsent(db, (_: String) => new ReentrantReadWriteLock())
     try {
       if (writeLock) {
         clientLock.writeLock().lock()
@@ -246,11 +246,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.databaseExists(db)
   }
 
-  override def listDatabases(): Seq[String] = withClient(db = "") {
+  override def listDatabases(): Seq[String] = withClient() {
     client.listDatabases("*")
   }
 
-  override def listDatabases(pattern: String): Seq[String] = withClient(db = "") {
+  override def listDatabases(pattern: String): Seq[String] = withClient() {
     client.listDatabases(pattern)
   }
 
