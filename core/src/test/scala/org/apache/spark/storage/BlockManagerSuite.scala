@@ -1829,7 +1829,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       when(env.conf).thenReturn(conf)
       SparkEnv.set(env)
 
-      decomManager.offloadShuffleBlocks()
+      decomManager.refreshOffloadingShuffleBlocks()
 
       eventually(timeout(1.second), interval(10.milliseconds)) {
         assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm2.blockManagerId)

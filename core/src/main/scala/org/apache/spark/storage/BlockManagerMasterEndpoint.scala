@@ -491,16 +491,16 @@ class BlockManagerMasterEndpoint(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
-    logInfo(s"Updating block info on master ${blockId} for ${blockManagerId}")
+    logDebug(s"Updating block info on master ${blockId} for ${blockManagerId}")
 
-    if (blockId.isInternalShuffle) {
+    if (blockId.isShuffle) {
       blockId match {
         case ShuffleIndexBlockId(shuffleId, mapId, _) =>
           // Don't update the map output on just the index block
           logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, ignoring.")
           return true
         case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
-          logInfo(s"Received shuffle data block update for ${shuffleId} ${mapId}, updating.")
+          logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, updating.")
           mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
           return true
         case _ =>

@@ -36,8 +36,8 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
   private val bmPort = 12345
 
   private val sparkConf = new SparkConf(false)
-    .set(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED, true)
-    .set(config.STORAGE_RDD_DECOMMISSION_ENABLED, true)
+    .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
+    .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED, true)
 
   private def registerShuffleBlocks(
       mockMigratableShuffleResolver: MigratableResolver,

@@ -30,8 +30,8 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.container.image", pyImage)
       .set(config.STORAGE_DECOMMISSION_ENABLED.key, "true")
-      .set(config.STORAGE_SHUFFLE_DECOMMISSION_ENABLED.key, "true")
-      .set(config.STORAGE_RDD_DECOMMISSION_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key, "true")
       // Ensure we have somewhere to migrate our data too
       .set("spark.executor.instances", "3")
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.

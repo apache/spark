@@ -244,6 +244,7 @@ private[spark] class BlockManager(
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
 
+  // This is volatile since if it's defined we should not accept remote blocks.
   @volatile private var decommissioner: Option[BlockManagerDecommissioner] = None
 
   // A DownloadFileManager used to track all the files of remote blocks which are above the
@@ -255,6 +256,9 @@ private[spark] class BlockManager(
 
   var hostLocalDirManager: Option[HostLocalDirManager] = None
 
+  @inline final private def isDecommissioning() = {
+    decommissioner.isDefined
+  }
   // This is a lazy val so someone can migrating RDDs even if they don't have a MigratableResolver
   // for shuffles. Used in BlockManagerDecommissioner & block puts.
   private[storage] lazy val migratableResolver: MigratableResolver = {
@@ -659,11 +663,11 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[_]): StreamCallbackWithID = {
 
-    if (decommissioner.isDefined) {
+    if (isDecommissioning()) {
        throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
     }
 
-    if (blockId.isShuffle || blockId.isInternalShuffle) {
+    if (blockId.isShuffle) {
       logInfo(s"Putting shuffle block ${blockId}")
       try {
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
@@ -1310,7 +1314,7 @@ private[spark] class BlockManager(
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
-    if (decommissioner.isDefined) {
+    if (isDecommissioning()) {
       throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
     }
 
