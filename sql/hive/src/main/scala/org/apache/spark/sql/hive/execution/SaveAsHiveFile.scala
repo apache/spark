@@ -117,11 +117,11 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     logDebug(s"MR scratch dir '$mrScratchDir/-mr-10000' is used")
     val path = new Path(mrScratchDir, "-mr-10000")
     val scheme = Option(path.toUri.getScheme).getOrElse("")
-    if (schema == "file") {
-      logWarning(s"Temporary data will be written into a local disk " +
-        s"(scheme: '$scheme', path: '$mrScratchDir'). " +
-        s"You need to configure 'hive.exec.scratchdir' to use accessible location " +
-        s"(e.g. HDFS path) from any executors in the cluster.")
+    if (scheme.equals("file")) {
+      logWarning(s"Temporary data will be written into a local file system " +
+        s"(scheme: '$scheme', path: '$mrScratchDir'). If your Spark is not in local mode, " +
+        s"you might need to configure 'hive.exec.scratchdir' " +
+        s"to use accessible file system (e.g. HDFS path) from any executors in the cluster.")
     }
     path
   }
@@ -168,7 +168,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     if (hiveVersionsUsingOldExternalTempPath.contains(hiveVersion)) {
       oldVersionExternalTempPath(path, hadoopConf, scratchDir)
     } else if (hiveVersionsUsingNewExternalTempPath.contains(hiveVersion)) {
-      // HIVE-14270: Write temporary data to HDFS when doing inserts on tables located on S3
+      // SPARK-21514: Write temporary data to HDFS when doing inserts on tables located on S3
       // Copied from Context.java#getTempDirForPath of Hive 2.3.
       if (hiveVersionsSupportingNonBlobstoreTempPath.contains(hiveVersion) &&
         supportSchemeToUseNonBlobStore(path)) {
