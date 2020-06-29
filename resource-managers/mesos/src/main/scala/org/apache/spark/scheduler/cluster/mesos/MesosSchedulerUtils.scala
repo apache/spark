@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import com.google.common.base.Splitter
 import com.google.common.io.Files
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
-import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
+import org.apache.mesos.Protos.{SlaveID => AgentID, TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.FrameworkInfo.Capability
 import org.apache.mesos.Protos.Resource.ReservationInfo
 import org.apache.mesos.protobuf.{ByteString, GeneratedMessageV3}
@@ -574,15 +574,6 @@ trait MesosSchedulerUtils extends Logging {
          MesosTaskState.TASK_UNREACHABLE => TaskState.LOST
   }
 
-  def taskStateToMesos(state: TaskState.TaskState): MesosTaskState = state match {
-    case TaskState.LAUNCHING => MesosTaskState.TASK_STARTING
-    case TaskState.RUNNING => MesosTaskState.TASK_RUNNING
-    case TaskState.FINISHED => MesosTaskState.TASK_FINISHED
-    case TaskState.FAILED => MesosTaskState.TASK_FAILED
-    case TaskState.KILLED => MesosTaskState.TASK_KILLED
-    case TaskState.LOST => MesosTaskState.TASK_LOST
-  }
-
   protected def declineOffer(
     driver: org.apache.mesos.SchedulerDriver,
     offer: Offer,
@@ -612,4 +603,3 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 }
-

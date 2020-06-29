@@ -121,7 +121,7 @@ private[spark] class MesosDriverState(
 private[spark] class MesosClusterScheduler(
     engineFactory: MesosClusterPersistenceEngineFactory,
     conf: SparkConf)
-  extends Scheduler with MesosSchedulerUtils {
+  extends Scheduler with MesosSchedulerUtils with MesosScheduler {
   var frameworkUrl: String = _
   private val metricsSystem =
     MetricsSystem.createMetricsSystem(MetricsSystemInstances.MESOS_CLUSTER, conf,
@@ -731,7 +731,7 @@ private[spark] class MesosClusterScheduler(
   override def reregistered(driver: SchedulerDriver, masterInfo: MasterInfo): Unit = {
     logInfo(s"Framework re-registered with master ${masterInfo.getId}")
   }
-  override def slaveLost(driver: SchedulerDriver, agentId: AgentID): Unit = {}
+  override def agentLost(driver: SchedulerDriver, agentId: AgentID): Unit = {}
   override def error(driver: SchedulerDriver, error: String): Unit = {
     logError("Error received: " + error)
     markErr()

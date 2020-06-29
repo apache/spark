@@ -47,7 +47,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     sc: SparkContext,
     master: String)
   extends SchedulerBackend
-  with org.apache.mesos.Scheduler
+  with MesosScheduler
   with MesosSchedulerUtils {
 
   // Stores the agent ids that has launched a Mesos executor.
@@ -428,7 +428,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     }
   }
 
-  override def slaveLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit = {
+  override def agentLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit = {
     recordAgentLost(d, agentId, ExecutorProcessLost())
   }
 

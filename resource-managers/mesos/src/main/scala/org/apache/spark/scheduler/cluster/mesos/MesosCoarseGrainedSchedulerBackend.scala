@@ -60,7 +60,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     master: String,
     securityManager: SecurityManager)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
-    with org.apache.mesos.Scheduler with MesosSchedulerUtils {
+  with MesosScheduler
+  with MesosSchedulerUtils {
 
   // Blacklist a agent after this many failures
   private val MAX_AGENT_FAILURES = 2
@@ -751,7 +752,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  override def slaveLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit = {
+  override def agentLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit = {
     logInfo(s"Mesos agent lost: ${agentId.getValue}")
   }
 
