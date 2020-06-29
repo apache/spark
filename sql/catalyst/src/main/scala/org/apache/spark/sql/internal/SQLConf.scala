@@ -2656,16 +2656,6 @@ object SQLConf {
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
 
-  val METADATA_CACHE_TTL = buildConf("spark.sql.metadataCacheTTL")
-      .doc("Time-to-live (TTL) value for the metadata caches: partition file metadata cache and " +
-        "session catalog cache. This configuration only has an effect when this value having " +
-        "a positive value. It also requires setting `hive` to " +
-        s"${StaticSQLConf.CATALOG_IMPLEMENTATION} to be applied to the partition file " +
-        "metadata cache.")
-      .version("3.1.0")
-      .timeConf(TimeUnit.SECONDS)
-      .createWithDefault(-1)
-
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3261,7 +3251,7 @@ class SQLConf extends Serializable with Logging {
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
 
-  def metadataCacheTTL: Long = getConf(METADATA_CACHE_TTL)
+  def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL)
 
   /** ********************** SQLConf functionality methods ************ */
 
