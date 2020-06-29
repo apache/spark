@@ -147,23 +147,21 @@ public class ExternalShuffleBlockResolverSuite {
   @Test
   public void testNormalizeAndInternPathname() {
     assertPathsMatch("/foo", "bar", "baz",
-            File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
+      File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
     assertPathsMatch("//foo/", "bar/", "//baz",
-            File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
+      File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
     assertPathsMatch("foo", "bar", "baz///",
-            "foo" + File.separator + "bar" + File.separator + "baz");
+      "foo" + File.separator + "bar" + File.separator + "baz");
     assertPathsMatch("/foo/", "/bar//", "/baz",
-            File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
-    assertPathsMatch("/", "", "",
-            File.separator);
-    assertPathsMatch("/", "/", "/",
-            File.separator);
+      File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
+    assertPathsMatch("/", "", "", File.separator);
+    assertPathsMatch("/", "/", "/", File.separator);
     if (ExecutorDiskUtils.isWindows()) {
       assertPathsMatch("/foo\\/", "bar", "baz",
-              File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
+        File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
     } else {
       assertPathsMatch("/foo\\/", "bar", "baz",
-              File.separator + "foo\\" + File.separator + "bar" + File.separator + "baz");
+        File.separator + "foo\\" + File.separator + "bar" + File.separator + "baz");
     }
   }
 
