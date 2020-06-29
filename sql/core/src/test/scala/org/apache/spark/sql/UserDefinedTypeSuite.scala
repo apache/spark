@@ -135,7 +135,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     MyLabeledPoint(0.0, new TestUDT.MyDenseVector(Array(0.3, 3.0)))).toDF()
 
 
-  test("equal") {
+  test("SPARK-32090: equal") {
     val udt1 = new ExampleBaseTypeUDT
     val udt2 = new ExampleSubTypeUDT
     val udt3 = new ExampleSubTypeUDT
@@ -145,7 +145,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     assert(udt3 === udt2)
   }
 
-  test("acceptsType") {
+  test("SPARK-32090: acceptsType") {
     val udt1 = new ExampleBaseTypeUDT
     val udt2 = new ExampleSubTypeUDT
     assert(udt1.acceptsType(udt2))
