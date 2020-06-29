@@ -26,7 +26,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[sql] class OracleConnectionProvider(driver: Driver, options: JDBCOptions)
-    extends SecureConnectionProvider(driver, options) {
+  extends SecureConnectionProvider(driver, options) {
   override val appEntry: String = "kprb5module"
 
   override def getConnection(): Connection = {
@@ -42,10 +42,9 @@ private[sql] class OracleConnectionProvider(driver: Driver, options: JDBCOptions
 
   override def getAdditionalProperties(): Properties = {
     val result = new Properties()
-    // This prop needed to turn on kerberos authentication in the JDBC driver. Please see:
-    // scalastyle:off line.size.limit
-    // https://docs.oracle.com/en/database/oracle/oracle-database/19/jajdb/oracle/jdbc/OracleConnection.html#CONNECTION_PROPERTY_THIN_NET_AUTHENTICATION_SERVICES
-    // scalastyle:on line.size.limit
+    // This prop is needed to turn on kerberos authentication in the JDBC driver.
+    // The possible values can be found in AnoServices public interface
+    // The value is coming from AUTHENTICATION_KERBEROS5 final String in driver version 19.6.0.0
     result.put("oracle.net.authentication_services", "(KERBEROS5)");
     result
   }
