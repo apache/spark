@@ -20,9 +20,13 @@ package org.apache.spark.metrics.sink
 import java.util.Properties
 
 import scala.collection.JavaConverters._
+
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+
 import org.scalatest.PrivateMethodTester
+
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+
 
 class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
 
