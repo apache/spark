@@ -22,6 +22,7 @@ import java.net.URI
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -212,19 +213,16 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       schema = new StructType().add("col1", "int"),
       provider = Some("parquet"))
     catalog.createTable(hiveTable, ignoreIfExists = false)
+    val beforeAlterTable = externalCatalog.getTable("db1", "parq_alter")
+    assert(beforeAlterTable.storage.locationUri.toString.contains("parq_alter"))
+
     externalCatalog.client.runSqlHive(
       "alter table db1.parq_alter rename to db1.parq_alter2")
-    val noFollowTable = externalCatalog.getTable("db1", "parq_alter2")
-    assert(!noFollowTable.storage.locationUri.toString.contains("parq_alter2"))
 
-    val confField = classOf[HiveExternalCatalog].getDeclaredField("conf")
-    confField.setAccessible(true)
-    val sparkConf = confField.get(externalCatalog).asInstanceOf[SparkConf]
-    sparkConf.set("spark.sql.hive.follow.table.location", "true")
-    val followTable = externalCatalog.getTable("db1", "parq_alter2")
-    assert(followTable.storage.locationUri.toString.contains("parq_alter2"))
-
-    sparkConf.set("spark.sql.hive.follow.table.location", "false")
-    confField.setAccessible(false)
+    val e = intercept[AnalysisException](
+      externalCatalog.getTable("db1", "parq_alter2")
+    )
+    assert(e.getMessage.contains("not equal to table prop path")
+      && e.getMessage.contains("parq_alter2"))
   }
 }
