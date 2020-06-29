@@ -183,6 +183,24 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     MyLabeledPoint(1.0, new UDT.MyDenseVector(Array(0.1, 1.0))),
     MyLabeledPoint(0.0, new UDT.MyDenseVector(Array(0.3, 3.0)))).toDF()
 
+
+  test("SPARK-32090: equal") {
+    val udt1 = new ExampleBaseTypeUDT
+    val udt2 = new ExampleSubTypeUDT
+    val udt3 = new ExampleSubTypeUDT
+    assert(udt1 !== udt2)
+    assert(udt2 !== udt1)
+    assert(udt2 === udt3)
+    assert(udt3 === udt2)
+  }
+
+  test("SPARK-32090: acceptsType") {
+    val udt1 = new ExampleBaseTypeUDT
+    val udt2 = new ExampleSubTypeUDT
+    assert(udt1.acceptsType(udt2))
+    assert(!udt2.acceptsType(udt1))
+  }
+
   test("register user type: MyDenseVector for MyLabeledPoint") {
     val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
