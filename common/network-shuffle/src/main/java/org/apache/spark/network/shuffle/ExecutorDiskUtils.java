@@ -23,13 +23,14 @@ import java.util.regex.Pattern;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.commons.lang3.SystemUtils;
 import org.apache.spark.network.util.JavaUtils;
 
 public class ExecutorDiskUtils {
 
   private static final Pattern MULTIPLE_SEPARATORS;
   static {
-    if (isWindows()) {
+    if (SystemUtils.IS_OS_WINDOWS) {
       MULTIPLE_SEPARATORS = Pattern.compile("[/\\\\]+");
     } else {
       MULTIPLE_SEPARATORS = Pattern.compile("/{2,}");
@@ -46,13 +47,6 @@ public class ExecutorDiskUtils {
     int subDirId = (hash / localDirs.length) % subDirsPerLocalDir;
     return new File(createNormalizedInternedPathname(
         localDir, String.format("%02x", subDirId), filename));
-  }
-
-  /** Returns whether the OS is Windows. */
-  @VisibleForTesting
-  static boolean isWindows() {
-    String os = System.getProperty("os.name");
-    return os.startsWith("Windows");
   }
 
   /**

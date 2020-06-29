@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.CharStreams;
+import org.apache.commons.lang3.SystemUtils;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
@@ -156,7 +157,7 @@ public class ExternalShuffleBlockResolverSuite {
       File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
     assertPathsMatch("/", "", "", File.separator);
     assertPathsMatch("/", "/", "/", File.separator);
-    if (ExecutorDiskUtils.isWindows()) {
+    if (SystemUtils.IS_OS_WINDOWS) {
       assertPathsMatch("/foo\\/", "bar", "baz",
         File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
     } else {
