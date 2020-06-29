@@ -2311,15 +2311,15 @@ class HiveDDLSuite
 
   test("SPARK-20680: Spark-sql do not support for void column datatype of view") {
     withTable("t") {
-      withView("tabNullType") {
+      withView("tblVoidType") {
         val client =
           spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
         client.runSqlHive("CREATE TABLE t (t1 int)")
         client.runSqlHive("INSERT INTO t VALUES (3)")
-        client.runSqlHive("CREATE VIEW tabNullType AS SELECT NULL AS col FROM t")
-        checkAnswer(spark.table("tabNullType"), Row(null))
+        client.runSqlHive("CREATE VIEW tblVoidType AS SELECT NULL AS col FROM t")
+        checkAnswer(spark.table("tblVoidType"), Row(null))
         // No exception shows
-        val desc = spark.sql("DESC tabNullType").collect().toSeq
+        val desc = spark.sql("DESC tblVoidType").collect().toSeq
         assert(desc.contains(Row("col", "null", null)))
       }
     }
