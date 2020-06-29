@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.script.{ScriptTransformationWriterThreadBase, ScriptTransformBase, ScriptTransformIOSchema}
+import org.apache.spark.sql.execution.script.{ScriptTransformationWriterThreadBase, ScriptTransformBase, ScriptTransformIOSchemaBase}
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types.DataType
@@ -302,7 +302,7 @@ object HiveScriptIOSchema {
 /**
  * The wrapper class of Hive input and output schema properties
  */
-private[hive] class HiveScriptIOSchema (
+case class HiveScriptIOSchema (
     inputRowFormat: Seq[(String, String)],
     outputRowFormat: Seq[(String, String)],
     inputSerdeClass: Option[String],
@@ -312,7 +312,7 @@ private[hive] class HiveScriptIOSchema (
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
     schemaLess: Boolean)
-  extends ScriptTransformIOSchema(
+  extends ScriptTransformIOSchemaBase(
     inputRowFormat,
     outputRowFormat,
     inputSerdeClass,
@@ -394,7 +394,6 @@ private[hive] class HiveScriptIOSchema (
       instance.initialize(outputStream, conf)
       instance
     }
-
   }
 
   def outputSerdeProperties: Seq[(String, String)] = outputSerdeProps

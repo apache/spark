@@ -52,8 +52,7 @@ trait ScriptTransformBase extends UnaryExecNode {
 
   def processIterator(
       inputIterator: Iterator[InternalRow],
-      hadoopConf: Configuration) : Iterator[InternalRow]
-
+      hadoopConf: Configuration): Iterator[InternalRow]
 
   protected def checkFailureAndPropagate(
       writerThread: ScriptTransformationWriterThreadBase,
@@ -137,9 +136,9 @@ abstract class ScriptTransformationWriterThreadBase(
 }
 
 /**
- * The wrapper class of Hive input and output schema properties
+ * The wrapper class of input and output schema properties
  */
-class ScriptTransformIOSchema (
+abstract class ScriptTransformIOSchemaBase(
     inputRowFormat: Seq[(String, String)],
     outputRowFormat: Seq[(String, String)],
     inputSerdeClass: Option[String],

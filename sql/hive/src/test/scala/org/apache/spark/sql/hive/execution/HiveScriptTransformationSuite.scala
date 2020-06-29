@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.execution.{HiveScriptIOSchema, HiveScriptTransformationExec}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StringType
@@ -41,7 +40,7 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
   with BeforeAndAfterEach {
   import spark.implicits._
 
-  private val noSerdeIOSchema = new HiveScriptIOSchema(
+  private val noSerdeIOSchema = HiveScriptIOSchema(
     inputRowFormat = Seq.empty,
     outputRowFormat = Seq.empty,
     inputSerdeClass = None,
@@ -53,16 +52,21 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
     schemaLess = false
   )
 
-  private val serdeIOSchema = new HiveScriptIOSchema(
-    inputRowFormat = Seq.empty,
-    outputRowFormat = Seq.empty,
+//  private val serdeIOSchema = new HiveScriptIOSchema(
+//    inputRowFormat = Seq.empty,
+//    outputRowFormat = Seq.empty,
+//    inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
+//    outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
+//    inputSerdeProps = Seq.empty,
+//    outputSerdeProps = Seq.empty,
+//    recordReaderClass = None,
+//    recordWriterClass = None,
+//    schemaLess = false
+//  )
+
+  private val serdeIOSchema = noSerdeIOSchema.copy(
     inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
-    outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
-    inputSerdeProps = Seq.empty,
-    outputSerdeProps = Seq.empty,
-    recordReaderClass = None,
-    recordWriterClass = None,
-    schemaLess = false
+    outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
   )
 
   private var defaultUncaughtExceptionHandler: Thread.UncaughtExceptionHandler = _
