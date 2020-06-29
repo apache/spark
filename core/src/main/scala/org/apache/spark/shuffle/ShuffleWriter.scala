@@ -23,8 +23,9 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+
 import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv}
-import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
@@ -36,8 +37,6 @@ import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.ShuffleWriter._
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.{ThreadUtils, Utils}
-
-import scala.collection.mutable
 
 /**
  * Obtained inside a map task to write out records to the shuffle system, and optionally

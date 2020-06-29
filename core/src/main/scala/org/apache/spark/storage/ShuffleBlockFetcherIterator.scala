@@ -813,7 +813,10 @@ final class ShuffleBlockFetcherIterator(
 
       result match {
         case r @ SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
-          if (address != blockManager.blockManagerId) {
+          // If the executor id is empty then it is a merged block so we compare the hosts to check
+          // if it's remote. Otherwise, compare the blockManager Id.
+          if ((address.executorId.isEmpty && address.host != blockManager.blockManagerId.host) ||
+            (address.executorId.nonEmpty && address != blockManager.blockManagerId)) {
             if (hostLocalBlocks.contains(blockId -> mapIndex)) {
               shuffleMetrics.incLocalBlocksFetched(1)
               shuffleMetrics.incLocalBytesRead(buf.size)
