@@ -47,7 +47,9 @@ object HiveStringType {
     case MapType(kt, vt, nullable) =>
       MapType(replaceCharType(kt), replaceCharType(vt), nullable)
     case StructType(fields) =>
-      StructType(fields.map(f => f.copy(dataType = replaceCharType(f.dataType))))
+      StructType(fields.map { field =>
+        field.copy(dataType = replaceCharType(field.dataType))
+      })
     case _: HiveStringType => StringType
     case _ => dt
   }
