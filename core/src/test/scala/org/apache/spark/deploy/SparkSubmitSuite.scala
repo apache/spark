@@ -568,7 +568,8 @@ class SparkSubmitSuite
       }
     }
 
-    val clArgs2 = Seq("--class", "org.SomeClass", "thejar.jar")
+    val dummyJarFile = TestUtils.createJarWithClasses(Seq.empty)
+    val clArgs2 = Seq("--class", "org.SomeClass", dummyJarFile.toString)
     val appArgs2 = new SparkSubmitArguments(clArgs2)
     val (_, _, conf2, _) = submit.prepareSubmitEnvironment(appArgs2)
     assert(!conf2.contains(UI_SHOW_CONSOLE_PROGRESS))
@@ -1254,7 +1255,7 @@ class SparkSubmitSuite
         |public void init(PluginContext ctx, Map<String, String> extraConf) {
         |  String str = null;
         |  try (BufferedReader reader =
-        |    new BufferedReader(new InputStreamReader(new FileInputStream($tempFileName)))) {
+        |    new BufferedReader(new InputStreamReader(new FileInputStream("$tempFileName")))) {
         |    str = reader.readLine();
         |  } catch (IOException e) {
         |    throw new RuntimeException(e);
