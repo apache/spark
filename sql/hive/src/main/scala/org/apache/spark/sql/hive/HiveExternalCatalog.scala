@@ -545,7 +545,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   private def getLocationFromStorageProps(table: CatalogTable): Option[String] = {
-    if (conf.get(HiveUtils.FOLLOW_HIVE_TABLE_LOCATION_ENABLED)) {
+    if (conf.get(HiveUtils.FOLLOW_TABLE_LOCATION)) {
       table.storage.locationUri.map(_.toString)
     } else {
       CaseInsensitiveMap(table.storage.properties).get("path")

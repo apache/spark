@@ -165,7 +165,7 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
-  val FOLLOW_HIVE_TABLE_LOCATION_ENABLED =
+  val FOLLOW_TABLE_LOCATION =
     buildStaticConf("spark.sql.hive.follow.table.location")
       .doc("If prefer hive table location to compatible with legacy `path` in catalog")
       .version("3.1.0")
