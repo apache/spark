@@ -468,7 +468,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       throw new ParseException("There must be at least one WHEN clause in a MERGE statement", ctx)
     }
     // children being empty means that the condition is not set
-    if (matchedActions.length == 2 && matchedActions.head.children.isEmpty) {
+    if (matchedActions.length == 2 && matchedActions.head.condition.isEmpty) {
       throw new ParseException("When there are 2 MATCHED clauses in a MERGE statement, " +
         "the first MATCHED clause must have a condition", ctx)
     }
