@@ -65,7 +65,8 @@ class PandasConversionMixin(object):
         import numpy as np
         import pandas as pd
 
-        timezone = self.sql_ctx._conf.sessionLocalTimeZone()
+        from pyspark.sql.pandas.types import _get_local_timezone
+        timezone = _get_local_timezone()
 
         if self.sql_ctx._conf.arrowPySparkEnabled():
             use_arrow = True

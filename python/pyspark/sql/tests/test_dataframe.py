@@ -838,6 +838,18 @@ class DataFrameTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(tpath)
 
+    def test_timezone(self):
+        # SPARK-32123: Setting `spark.sql.session.timeZone` only partially respected
+
+        tz_default = self.spark.conf.get("spark.sql.session.timeZone")
+        try:
+            self.spark.conf.set("spark.sql.session.timeZone", "UTC")
+            df = self.spark.createDataFrame([("2018-06-01 01:00:00",)], ["ts"])
+            df = df.withColumn("ts", df["ts"].astype("timestamp"))
+            self.assertEqual(df.toPandas().iloc[0, 0], df.collect()[0][0])
+        finally:
+            self.spark.conf.set("spark.sql.session.timeZone", tz_default)
+
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
