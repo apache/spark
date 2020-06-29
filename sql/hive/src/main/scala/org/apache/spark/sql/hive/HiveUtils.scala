@@ -165,6 +165,13 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val FOLLOW_HIVE_TABLE_LOCATION_ENABLED =
+    buildStaticConf("spark.sql.hive.follow.table.location")
+      .doc("If prefer hive table location to compatible with legacy `path` in catalog")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
    * this does not necessarily need to be the same version of Hive that is used internally by

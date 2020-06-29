@@ -226,11 +226,4 @@ object StaticSQLConf {
       .version("3.0.0")
       .intConf
       .createWithDefault(100)
-
-  val FOLLOW_HIVE_TABLE_LOCATION_ENABLED =
-    buildStaticConf("spark.sql.follow.hive.table.location")
-      .doc("If prefer hive table location to compatible with legacy `path` in catalog")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
 }

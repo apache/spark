@@ -210,7 +210,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       tableType = CatalogTableType.MANAGED,
       storage = storageFormat,
       schema = new StructType().add("col1", "int"),
-      provider = Some("orc"))
+      provider = Some("parquet"))
     catalog.createTable(hiveTable, ignoreIfExists = false)
     externalCatalog.client.runSqlHive(
       "alter table db1.parq_alter rename to db1.parq_alter2")
@@ -220,11 +220,11 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     val confField = classOf[HiveExternalCatalog].getDeclaredField("conf")
     confField.setAccessible(true)
     val sparkConf = confField.get(externalCatalog).asInstanceOf[SparkConf]
-    sparkConf.set("spark.sql.follow.hive.table.location", "true")
+    sparkConf.set("spark.sql.hive.follow.table.location", "true")
     val followTable = externalCatalog.getTable("db1", "parq_alter2")
     assert(followTable.storage.locationUri.toString.contains("parq_alter2"))
 
-    sparkConf.set("spark.sql.follow.hive.table.location", "false")
+    sparkConf.set("spark.sql.hive.follow.table.location", "false")
     confField.setAccessible(false)
   }
 }
