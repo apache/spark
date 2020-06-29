@@ -148,7 +148,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       ThreadUtils.awaitResult(asyncCount, 15.seconds)
     }
 
-    // Decommission one of the executor
+    // Decommission one of the executors.
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
     assert(execs.size == numExecs, s"Expected ${numExecs} executors but found ${execs.size}")
@@ -157,13 +157,12 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     logDebug(s"Decommissioning executor ${execToDecommission}")
     sched.decommissionExecutor(execToDecommission)
 
-    // Wait for job to finish
+    // Wait for job to finish.
     val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 15.seconds)
     assert(asyncCountResult === numParts)
-    // All tasks finished, so accum should have been increased numParts times
+    // All tasks finished, so accum should have been increased numParts times.
     assert(accum.value === numParts)
 
-    // All tasks should be successful, nothing should have failed
     sc.listenerBus.waitUntilEmpty()
     if (shuffle) {
       //  mappers & reducers which succeeded
