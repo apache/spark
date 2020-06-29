@@ -1855,7 +1855,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Seq(Date.valueOf("2018-01-01")))
   }
 
-  test("SPARK-31982: Sequence step must be a day interval " +
+  test("SPARK-32133: Sequence step must be a day interval " +
     "if start and end values are dates") {
     val e = intercept[Exception](
       checkEvaluation(Sequence(
