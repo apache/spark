@@ -692,8 +692,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
+        val canChangeNumParts = r.optNumPartitions.isEmpty
         exchange.ShuffleExchangeExec(
-          r.partitioning, planLater(r.child), canChangeNumPartitions = false) :: Nil
+          r.partitioning, planLater(r.child), canChangeNumParts) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
