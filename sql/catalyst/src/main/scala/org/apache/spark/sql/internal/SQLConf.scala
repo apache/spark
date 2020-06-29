@@ -2035,6 +2035,16 @@ object SQLConf {
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
 
+  val PARTITION_OVERWRITE_VERIFY_PATH =
+    buildConf("spark.sql.sources.partitionOverwriteVerifyPath")
+      .doc("When INSERT OVERWRITE a partitioned data source table, spark will verify input " +
+        "and output paths by default. Set to false to skip the verify in some cases. " +
+        "(eg. INSERT OVERWRITE t partition(dt=a) SELECT * FROM t WHERE dt=b)"
+      )
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
   }

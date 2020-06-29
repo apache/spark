@@ -320,6 +320,41 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-320128: skip verify the input and output paths") {
+    Seq(true, false).foreach { verityPath =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_VERIFY_PATH.key -> verityPath.toString) {
+        withTable("insertTable") {
+          sql(
+            """
+              |CREATE TABLE insertTable(i int, part int) USING PARQUET
+              |PARTITIONED BY (part)
+            """.stripMargin)
+
+          sql("INSERT INTO TABLE insertTable PARTITION (part=1) SELECT 1")
+          checkAnswer(spark.table("insertTable"), Row(1, 1))
+          val testSql =
+            """
+              |INSERT OVERWRITE TABLE insertTable PARTITION(part1=2)
+              |SELECT i + 1 FROM insertTable
+              |WHERE part=1
+              """.stripMargin
+
+          if (verityPath) {
+            sql(testSql)
+            checkAnswer(spark.table("insertTable"), Row(1, 1, 1) :: Row(2, 2) :: Nil)
+          } else {
+            val message = intercept[AnalysisException] {
+              sql(testSql)
+            }.getMessage
+            assert(
+              message.contains("Cannot overwrite a path that is also being read from."),
+              "INSERT OVERWRITE to a table while querying it should not be allowed.")
+          }
+        }
+      }
+    }
+  }
+
   test("Caching")  {
     // write something to the jsonTable
     sql(
