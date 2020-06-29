@@ -154,6 +154,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       "applications/local-1430917381534/stages/0/0/taskList?sortBy=-runtime",
     "stage task list w/ sortBy short names: runtime" ->
       "applications/local-1430917381534/stages/0/0/taskList?sortBy=runtime",
+    "stage task list w/ status" ->
+      "applications/app-20161115172038-0000/stages/0/0/taskList?status=failed",
+    "stage task list w/ status & offset & length" ->
+      "applications/local-1430917381534/stages/0/0/taskList?status=success&offset=1&length=2",
+    "stage task list w/ status & sortBy short names: runtime" ->
+      "applications/local-1430917381534/stages/0/0/taskList?status=success&sortBy=runtime",
 
     "stage list with accumulable json" -> "applications/local-1426533911241/1/stages",
     "stage with accumulable json" -> "applications/local-1426533911241/1/stages/0/0",
