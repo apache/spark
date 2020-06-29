@@ -86,7 +86,11 @@
       <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}>{{version}}</td>
       <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}><span title="{{id}}"><a href="{{uiroot}}/history/{{id}}{{#hasAttemptId}}/{{attemptId}}{{/hasAttemptId}}/jobs/">{{id}}</a></span></td>
       <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}>{{name}}</td>
+<<<<<<< HEAD
+=======
       <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}>{{driverHost}}</td>
+      {{#attempts}}
+>>>>>>> 8d169636fc ([SPARK-32135] Display Spark driver host on history page)
       {{#hasMultipleAttempts}}
       <td><a href="{{uiroot}}/history/{{id}}{{#hasAttemptId}}/{{attemptId}}{{/hasAttemptId}}/jobs/">{{attemptId}}</a></td>
       {{/hasMultipleAttempts}}

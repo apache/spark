@@ -1,4 +1,5 @@
 [ {
+<<<<<<< HEAD
   "id" : "app-20200706201101-0003",
   "name" : "Spark shell",
   "attempts" : [ {
@@ -29,6 +30,8 @@
     "lastUpdatedEpoch" : 0
   } ]
 }, {
+=======
+>>>>>>> 8d169636fc ([SPARK-32135] Display Spark driver host on history page)
   "id" : "application_1555004656427_0144",
   "name" : "Spark shell",
   "attempts" : [ {
@@ -39,11 +42,18 @@
     "sparkUser" : "tgraves",
     "completed" : true,
     "appSparkVersion" : "3.0.0-SNAPSHOT",
+<<<<<<< HEAD
+    "endTimeEpoch" : 1562101355974,
+    "startTimeEpoch" : 1562101337180,
+    "lastUpdatedEpoch" : 0
+  } ]
+=======
     "startTimeEpoch" : 1562101337180,
     "endTimeEpoch" : 1562101355974,
     "lastUpdatedEpoch" : 0
   } ],
   "driverHost" : "tomg-test"
+>>>>>>> 8d169636fc ([SPARK-32135] Display Spark driver host on history page)
 }, {
   "id" : "application_1553914137147_0018",
   "name" : "LargeBlocks",
@@ -211,38 +221,6 @@
     "appSparkVersion" : "",
     "startTimeEpoch" : 1425081758277,
     "endTimeEpoch" : 1425081766912,
-    "lastUpdatedEpoch" : 0
-  } ],
-  "driverHost" : "localhost"
-}, {
-  "id" : "local-1422981780767",
-  "name" : "Spark shell",
-  "attempts" : [ {
-    "startTime" : "2015-02-03T16:42:59.720GMT",
-    "endTime" : "2015-02-03T16:43:08.731GMT",
-    "lastUpdated" : "",
-    "duration" : 9011,
-    "sparkUser" : "irashid",
-    "completed" : true,
-    "appSparkVersion" : "",
-    "startTimeEpoch" : 1422981779720,
-    "endTimeEpoch" : 1422981788731,
-    "lastUpdatedEpoch" : 0
-  } ],
-  "driverHost" : "localhost"
-}, {
-  "id" : "local-1422981759269",
-  "name" : "Spark shell",
-  "attempts" : [ {
-    "startTime" : "2015-02-03T16:42:38.277GMT",
-    "endTime" : "2015-02-03T16:42:46.912GMT",
-    "lastUpdated" : "",
-    "duration" : 8635,
-    "sparkUser" : "irashid",
-    "completed" : true,
-    "appSparkVersion" : "",
-    "startTimeEpoch" : 1422981758277,
-    "endTimeEpoch" : 1422981766912,
     "lastUpdatedEpoch" : 0
   } ],
   "driverHost" : "localhost"

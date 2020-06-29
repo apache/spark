@@ -8,12 +8,20 @@
     "duration" : 363996,
     "sparkUser" : "terryk",
     "completed" : true,
+<<<<<<< HEAD
     "appSparkVersion" : "3.1.0-SNAPSHOT",
     "lastUpdatedEpoch" : 0,
     "endTimeEpoch" : 1594091824231,
     "startTimeEpoch" : 1594091460235
+  } ]
+=======
+    "appSparkVersion" : "3.0.0-SNAPSHOT",
+    "startTimeEpoch" : 1562101337180,
+    "endTimeEpoch" : 1562101355974,
+    "lastUpdatedEpoch" : 0
   } ],
   "driverHost" : "tomg-test"
+>>>>>>> 8d169636fc ([SPARK-32135] Display Spark driver host on history page)
 }, {
   "id" : "application_1578436911597_0052",
   "name" : "Spark shell",
@@ -40,10 +48,18 @@
     "duration" : 18794,
     "sparkUser" : "tgraves",
     "completed" : true,
+<<<<<<< HEAD
     "appSparkVersion" : "3.0.0-SNAPSHOT",
     "startTimeEpoch" : 1562101337180,
     "lastUpdatedEpoch" : 0,
     "endTimeEpoch" : 1562101355974
+  } ]
+=======
+    "appSparkVersion" : "2.3.0-SNAPSHOT",
+    "startTimeEpoch" : 1516300235119,
+    "endTimeEpoch" : 1516300707938,
+    "lastUpdatedEpoch" : 0
   } ],
   "driverHost" : "apiros-2.gce.test.com"
+>>>>>>> 8d169636fc ([SPARK-32135] Display Spark driver host on history page)
 } ]

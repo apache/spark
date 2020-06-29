@@ -10,9 +10,9 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "1.4.0-SNAPSHOT",
-    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380893,
-    "endTimeEpoch" : 1430917380950
+    "endTimeEpoch" : 1430917380950,
+    "lastUpdatedEpoch" : 0
   }, {
     "attemptId" : "1",
     "startTime" : "2015-05-06T13:03:00.880GMT",
@@ -22,10 +22,11 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "1.4.0-SNAPSHOT",
-    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380880,
-    "endTimeEpoch" : 1430917380890
-  } ]
+    "endTimeEpoch" : 1430917380890,
+    "lastUpdatedEpoch" : 0
+  } ],
+  "driverHost" : "localhost"
 }, {
   "id" : "local-1426533911241",
   "name" : "Spark shell",
@@ -38,9 +39,9 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "",
-    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1426633910242,
-    "endTimeEpoch" : 1426633945177
+    "endTimeEpoch" : 1426633945177,
+    "lastUpdatedEpoch" : 0
   }, {
     "attemptId" : "1",
     "startTime" : "2015-03-16T19:25:10.242GMT",
@@ -50,10 +51,11 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "",
-    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1426533910242,
-    "endTimeEpoch" : 1426533945177
-  } ]
+    "endTimeEpoch" : 1426533945177,
+    "lastUpdatedEpoch" : 0
+  } ],
+  "driverHost" : "localhost"
 }, {
   "id" : "local-1425081759269",
   "name" : "Spark shell",
@@ -65,10 +67,11 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "",
-    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1425081758277,
-    "endTimeEpoch" : 1425081766912
-  } ]
+    "endTimeEpoch" : 1425081766912,
+    "lastUpdatedEpoch" : 0
+  } ],
+  "driverHost" : "localhost"
 }, {
   "id" : "local-1422981780767",
   "name" : "Spark shell",
@@ -80,10 +83,11 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "",
-    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1422981779720,
-    "endTimeEpoch" : 1422981788731
-  } ]
+    "endTimeEpoch" : 1422981788731,
+    "lastUpdatedEpoch" : 0
+  } ],
+  "driverHost" : "localhost"
 }, {
   "id" : "local-1422981759269",
   "name" : "Spark shell",
@@ -95,8 +99,9 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "",
-    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1422981758277,
-    "endTimeEpoch" : 1422981766912
-  } ]
+    "endTimeEpoch" : 1422981766912,
+    "lastUpdatedEpoch" : 0
+  } ],
+  "driverHost" : "localhost"
 } ]

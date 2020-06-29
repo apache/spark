@@ -141,8 +141,12 @@ $(document).ready(function() {
             (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
           attempt["durationMillisec"] = attempt["duration"];
           attempt["duration"] = formatDuration(attempt["duration"]);
+<<<<<<< HEAD
           var hasAttemptId = attempt.hasOwnProperty("attemptId");
-          var app_clone = {"id" : id, "name" : name, "version": version, "driverHost": driverHost, "hasAttemptId" : hasAttemptId, "attempts" : [attempt]};
+          var app_clone = {"id" : id, "name" : name, "version": version, "hasAttemptId" : hasAttemptId, "attempts" : [attempt]};
+=======
+          var app_clone = {"id" : id, "name" : name, "version": version, "driverHost": driverHost, "num" : num, "attempts" : [attempt]};
+>>>>>>> 8d169636fc ([SPARK-32135] Display Spark driver host on history page)
           array.push(app_clone);
         }
       }

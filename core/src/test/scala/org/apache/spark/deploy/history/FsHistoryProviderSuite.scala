@@ -140,7 +140,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
         val duration = if (end > 0) end - start else 0
         new ApplicationInfo(id, name, None, None, None, None,
           List(ApplicationAttemptInfo(None, new Date(start),
-            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION)))
+            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION)), null)
       }
 
       // For completed files, lastUpdated would be lastModified time.
