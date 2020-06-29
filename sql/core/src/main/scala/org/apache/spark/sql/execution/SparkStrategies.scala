@@ -436,6 +436,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val normalizedGroupingExpressions = groupingExpressions.map { e =>
           NormalizeFloatingNumbers.normalize(e) match {
             case n: NamedExpression => n
+            // Keep the name of the original expression.
             case other => Alias(other, e.name)(exprId = e.exprId)
           }
         }
@@ -460,7 +461,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // because `distinctExpressions` is not extracted during logical phase.
               NormalizeFloatingNumbers.normalize(e) match {
                 case ne: NamedExpression => ne
-                case other => Alias(other, other.toString)()
+                case other =>
+                  // Keep the name of the original expression.
+                  val name = e match {
+                    case ne: NamedExpression => ne.name
+                    case _ => e.toString
+                  }
+                  Alias(other, name)()
               }
             }
 
