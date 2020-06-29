@@ -250,10 +250,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       }
   }
 
-  override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.getConf(SQLConf.SKEW_JOIN_ENABLED)) {
-      return plan
-    }
+  private def tryOptimize(plan: SparkPlan): SparkPlan = {
 
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
       case stage: ShuffleQueryStageExec => Seq(stage)
@@ -284,6 +281,36 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       }
     } else {
       plan
+    }
+  }
+
+  override def apply(plan: SparkPlan): SparkPlan = {
+    if (!conf.getConf(SQLConf.SKEW_JOIN_ENABLED)) {
+      return plan
+    }
+
+    // Try to handle skew join with union case, like
+    // Union
+    //   SMJ
+    //     Sort
+    //       Shuffle
+    //     Sort
+    //       Shuffle
+    //   SMJ
+    //     Sort
+    //       Shuffle
+    //     Sort
+    //       Shuffle
+    var containsUnion = false
+    val optimizedUnion = plan transformUp {
+      case u @ UnionExec(children) =>
+        containsUnion = true
+        u.withNewChildren(children.map(tryOptimize))
+    }
+    if (containsUnion) {
+      optimizedUnion
+    } else {
+      tryOptimize(plan)
     }
   }
 }
