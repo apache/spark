@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.optimization
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.Breaks._
 
 import breeze.linalg.{norm, DenseVector => BDV}
 
@@ -128,8 +129,8 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
    * @param initialWeights initial weights
    * @return solution vector
    */
-  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
-    val (weights, _) = GradientDescent.runMiniBatchSGD(
+  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): (Vector, Array[Double]) = {
+    GradientDescent.runMiniBatchSGD(
       data,
       gradient,
       updater,
@@ -139,7 +140,6 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
       miniBatchFraction,
       initialWeights,
       convergenceTol)
-    weights
   }
 
 }
@@ -195,7 +195,7 @@ object GradientDescent extends Logging {
         s"numIterations=$numIterations and miniBatchFraction=$miniBatchFraction")
     }
 
-    val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
+    val stochasticLossHistory = new ArrayBuffer[Double](numIterations + 1)
     // Record previous weight and current one to calculate solution vector difference
 
     var previousWeights: Option[Vector] = None
@@ -226,45 +226,48 @@ object GradientDescent extends Logging {
 
     var converged = false // indicates whether converged based on convergenceTol
     var i = 1
-    while (!converged && i <= numIterations) {
-      val bcWeights = data.context.broadcast(weights)
-      // Sample a subset (fraction miniBatchFraction) of the total data
-      // compute and sum up the subgradients on this subset (this is one map-reduce)
-      val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
-        .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))(
-          seqOp = (c, v) => {
-            // c: (grad, loss, count), v: (label, features)
-            val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1))
-            (c._1, c._2 + l, c._3 + 1)
-          },
-          combOp = (c1, c2) => {
-            // c: (grad, loss, count)
-            (c1._1 += c2._1, c1._2 + c2._2, c1._3 + c2._3)
-          })
-      bcWeights.destroy()
+    breakable {
+      while (i <= numIterations + 1) {
+        val bcWeights = data.context.broadcast(weights)
+        // Sample a subset (fraction miniBatchFraction) of the total data
+        // compute and sum up the subgradients on this subset (this is one map-reduce)
+        val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
+          .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))(
+            seqOp = (c, v) => {
+              // c: (grad, loss, count), v: (label, features)
+              val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1))
+              (c._1, c._2 + l, c._3 + 1)
+            },
+            combOp = (c1, c2) => {
+              // c: (grad, loss, count)
+              (c1._1 += c2._1, c1._2 + c2._2, c1._3 + c2._3)
+            })
+        bcWeights.destroy()
 
-      if (miniBatchSize > 0) {
-        /**
-         * lossSum is computed using the weights from the previous iteration
-         * and regVal is the regularization value computed in the previous iteration as well.
-         */
-        stochasticLossHistory += lossSum / miniBatchSize + regVal
-        val update = updater.compute(
-          weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
-          stepSize, i, regParam)
-        weights = update._1
-        regVal = update._2
+        if (miniBatchSize > 0) {
+          /**
+            * lossSum is computed using the weights from the previous iteration
+            * and regVal is the regularization value computed in the previous iteration as well.
+            */
+          stochasticLossHistory += lossSum / miniBatchSize + regVal
+          if (converged || i == (numIterations + 1)) break
+          val update = updater.compute(
+            weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
+            stepSize, i, regParam)
+          weights = update._1
+          regVal = update._2
 
-        previousWeights = currentWeights
-        currentWeights = Some(weights)
-        if (previousWeights != None && currentWeights != None) {
-          converged = isConverged(previousWeights.get,
-            currentWeights.get, convergenceTol)
+          previousWeights = currentWeights
+          currentWeights = Some(weights)
+          if (previousWeights != None && currentWeights != None) {
+            converged = isConverged(previousWeights.get,
+              currentWeights.get, convergenceTol)
+          }
+        } else {
+          logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")
         }
-      } else {
-        logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")
+        i += 1
       }
-      i += 1
     }
 
     logInfo("GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses %s".format(

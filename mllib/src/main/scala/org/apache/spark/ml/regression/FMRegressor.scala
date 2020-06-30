@@ -47,7 +47,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[ml] trait FactorizationMachinesParams extends PredictorParams
   with HasMaxIter with HasStepSize with HasTol with HasSolver with HasSeed
-  with HasFitIntercept with HasRegParam {
+  with HasFitIntercept with HasRegParam with HasWeightCol {
 
   /**
    * Param for dimensionality of the factors (&gt;= 0)
@@ -134,7 +134,7 @@ private[ml] trait FactorizationMachines extends FactorizationMachinesParams {
       data: RDD[(Double, OldVector)],
       numFeatures: Int,
       loss: String
-    ): Vector = {
+    ): (Vector, Array[Double]) = {
 
     // initialize coefficients
     val initialCoefficients = initCoefficients(numFeatures)
@@ -151,8 +151,8 @@ private[ml] trait FactorizationMachines extends FactorizationMachinesParams {
       .setRegParam($(regParam))
       .setMiniBatchFraction($(miniBatchFraction))
       .setConvergenceTol($(tol))
-    val coefficients = optimizer.optimize(data, initialCoefficients)
-    coefficients.asML
+    val (coefficients, lossHistory) = optimizer.optimize(data, initialCoefficients)
+    (coefficients.asML, lossHistory)
   }
 }
 
@@ -421,7 +421,7 @@ class FMRegressor @Since("3.0.0") (
 
     if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val coefficients = trainImpl(data, numFeatures, SquaredError)
+    val (coefficients, _) = trainImpl(data, numFeatures, SquaredError)
 
     val (intercept, linear, factors) = splitCoefficients(
       coefficients, numFeatures, $(factorSize), $(fitIntercept), $(fitLinear))
