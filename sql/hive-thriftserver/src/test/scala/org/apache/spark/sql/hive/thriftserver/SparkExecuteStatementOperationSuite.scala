@@ -23,8 +23,8 @@ import java.util.concurrent.Semaphore
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hive.service.cli.{OperationState, SessionHandle}
-import org.apache.hive.service.cli.session.HiveSession
+import org.apache.hive.service.cli.OperationState
+import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
 import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
 import org.mockito.invocation.InvocationOnMock
 
@@ -64,11 +64,9 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
   ).foreach { case (finalState, transition) =>
     test("SPARK-32057 SparkExecuteStatementOperation should not transiently become ERROR " +
       s"before being set to $finalState") {
-      val hiveSession = mock(classOf[HiveSession], RETURNS_DEEP_STUBS)
-      when(hiveSession.getHiveConf).thenReturn(new HiveConf)
-      when(hiveSession.getSessionHandle)
-        .thenReturn(new SessionHandle(ThriftserverShimUtils.testedProtocolVersions.head))
-      when(hiveSession.getUserName).thenReturn("test")
+      val hiveSession = new HiveSessionImpl(ThriftserverShimUtils.testedProtocolVersions.head,
+      "username", "password", new HiveConf, "ip address")
+      hiveSession.open(new util.HashMap)
 
       HiveThriftServer2.eventManager = mock(classOf[HiveThriftServer2EventManager])
 
