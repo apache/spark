@@ -69,7 +69,7 @@ public class ExecutorDiskUtils {
     Matcher m = MULTIPLE_SEPARATORS.matcher(pathname);
     pathname = m.replaceAll(Matcher.quoteReplacement(File.separator));
     // A single trailing slash needs to be taken care of separately
-    if (pathname.length() > 1 && pathname.endsWith(File.separator)) {
+    if (pathname.length() > 1 && pathname.charAt(pathname.length() - 1) == File.separatorChar) {
       pathname = pathname.substring(0, pathname.length() - 1);
     }
     return pathname.intern();

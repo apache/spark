@@ -147,22 +147,20 @@ public class ExternalShuffleBlockResolverSuite {
 
   @Test
   public void testNormalizeAndInternPathname() {
-    assertPathsMatch("/foo", "bar", "baz",
-      File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
-    assertPathsMatch("//foo/", "bar/", "//baz",
-      File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
-    assertPathsMatch("foo", "bar", "baz///",
-      "foo" + File.separator + "bar" + File.separator + "baz");
-    assertPathsMatch("/foo/", "/bar//", "/baz",
-      File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
-    assertPathsMatch("/", "", "", File.separator);
-    assertPathsMatch("/", "/", "/", File.separator);
+    String sep = File.separator;
+    String expectedPathname1 = sep + "foo" + sep + "bar" + sep + "baz";
+    String expectedPathname2 = "foo" + sep + "bar" + sep + "baz";
+    String expectedPathname3 = sep + "foo\\" + sep + "bar" + sep + "baz";
+    assertPathsMatch("/foo", "bar", "baz", expectedPathname1);
+    assertPathsMatch("//foo/", "bar/", "//baz", expectedPathname1);
+    assertPathsMatch("foo", "bar", "baz///", expectedPathname2);
+    assertPathsMatch("/foo/", "/bar//", "/baz", expectedPathname1);
+    assertPathsMatch("/", "", "", sep);
+    assertPathsMatch("/", "/", "/", sep);
     if (SystemUtils.IS_OS_WINDOWS) {
-      assertPathsMatch("/foo\\/", "bar", "baz",
-        File.separator + "foo" + File.separator + "bar" + File.separator + "baz");
+      assertPathsMatch("/foo\\/", "bar", "baz", expectedPathname1);
     } else {
-      assertPathsMatch("/foo\\/", "bar", "baz",
-        File.separator + "foo\\" + File.separator + "bar" + File.separator + "baz");
+      assertPathsMatch("/foo\\/", "bar", "baz", expectedPathname3);
     }
   }
 
