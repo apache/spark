@@ -1301,7 +1301,7 @@ class SparkSubmitSuite
       "--jars", jarUrl.toString,
       "--files", tempFile.toString,
       unusedJar.toString)
-    runSparkSubmit(args, timeout = 10.seconds)
+    runSparkSubmit(args, timeout = 30.seconds)
   }
 
   private def testRemoteResources(
