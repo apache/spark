@@ -597,3 +597,20 @@ class HasBlockSize(Params):
         Gets the value of blockSize or its default value.
         """
         return self.getOrDefault(self.blockSize)
+
+
+class HasMaxBlockMemoryInMB(Params):
+    """
+    Mixin for param maxBlockMemoryInMB: Maximum memory in MB allocated to stack instances to a block.
+    """
+
+    maxBlockMemoryInMB = Param(Params._dummy(), "maxBlockMemoryInMB", "Maximum memory in MB allocated to stack instances to a block.", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasMaxBlockMemoryInMB, self).__init__()
+
+    def getMaxBlockMemoryInMB(self):
+        """
+        Gets the value of maxBlockMemoryInMB or its default value.
+        """
+        return self.getOrDefault(self.maxBlockMemoryInMB)

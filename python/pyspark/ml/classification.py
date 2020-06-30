@@ -499,7 +499,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
 class _LinearSVCParams(_ClassifierParams, HasRegParam, HasMaxIter, HasFitIntercept, HasTol,
                        HasStandardization, HasWeightCol, HasAggregationDepth, HasThreshold,
-                       HasBlockSize):
+                       HasMaxBlockMemoryInMB):
     """
     Params for :py:class:`LinearSVC` and :py:class:`LinearSVCModel`.
 
@@ -548,8 +548,8 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     LinearSVCModel...
     >>> model.getThreshold()
     0.5
-    >>> model.getBlockSize()
-    1
+    >>> model.getMaxBlockMemoryInMB()
+    0
     >>> model.coefficients
     DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
@@ -588,19 +588,19 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                 aggregationDepth=2, blockSize=1):
+                 aggregationDepth=2, maxBlockMemoryInMB=0):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                 aggregationDepth=2, blockSize=1):
+                 aggregationDepth=2, maxBlockMemoryInMB=0):
         """
         super(LinearSVC, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LinearSVC", self.uid)
         self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
                          standardization=True, threshold=0.0, aggregationDepth=2,
-                         blockSize=1)
+                         maxBlockMemoryInMB=0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -609,12 +609,12 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                  aggregationDepth=2, blockSize=1):
+                  aggregationDepth=2, maxBlockMemoryInMB=0):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                  aggregationDepth=2, blockSize=1):
+                  aggregationDepth=2, maxBlockMemoryInMB=0):
         Sets params for Linear SVM Classifier.
         """
         kwargs = self._input_kwargs
@@ -680,11 +680,11 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
         return self._set(aggregationDepth=value)
 
     @since("3.1.0")
-    def setBlockSize(self, value):
+    def setMaxBlockMemoryInMB(self, value):
         """
-        Sets the value of :py:attr:`blockSize`.
+        Sets the value of :py:attr:`maxBlockMemoryInMB`.
         """
-        return self._set(blockSize=value)
+        return self._set(maxBlockMemoryInMB=value)
 
 
 class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable,

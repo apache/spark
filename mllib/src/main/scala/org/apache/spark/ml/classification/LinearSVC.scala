@@ -42,7 +42,7 @@ import org.apache.spark.storage.StorageLevel
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasAggregationDepth with HasThreshold with HasBlockSize {
+  with HasAggregationDepth with HasThreshold with HasMaxBlockMemoryInMB {
 
   /**
    * Param for threshold in binary classification prediction.
@@ -156,24 +156,9 @@ class LinearSVC @Since("2.2.0") (
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
-  /**
-   * Set block size for stacking input data in matrices.
-   * If blockSize == 1, then stacking will be skipped, and each vector is treated individually;
-   * If blockSize &gt; 1, then vectors will be stacked to blocks, and high-level BLAS routines
-   * will be used if possible (for example, GEMV instead of DOT, GEMM instead of GEMV).
-   * Recommended size is between 10 and 1000. An appropriate choice of the block size depends
-   * on the sparsity and dim of input datasets, the underlying BLAS implementation (for example,
-   * f2jBLAS, OpenBLAS, intel MKL) and its configuration (for example, number of threads).
-   * Note that existing BLAS implementations are mainly optimized for dense matrices, if the
-   * input dataset is sparse, stacking may bring no performance gain, the worse is possible
-   * performance regression.
-   * Default is 1.
-   *
-   * @group expertSetParam
-   */
   @Since("3.1.0")
-  def setBlockSize(value: Int): this.type = set(blockSize, value)
-  setDefault(blockSize -> 1)
+  def setMaxBlockMemoryInMB(value: Int): this.type = set(maxBlockMemoryInMB, value)
+  setDefault(maxBlockMemoryInMB -> 0)
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
@@ -182,17 +167,19 @@ class LinearSVC @Since("2.2.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
-      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth, blockSize)
+      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth,
+      maxBlockMemoryInMB)
+    val enableBlockify = $(maxBlockMemoryInMB) > 0
 
     val instances = extractInstances(dataset)
       .setName("training instances")
 
-    if (dataset.storageLevel == StorageLevel.NONE && $(blockSize) == 1) {
+    if (dataset.storageLevel == StorageLevel.NONE && enableBlockify) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
     var requestedMetrics = Seq("mean", "std", "count")
-    if ($(blockSize) != 1) requestedMetrics +:= "numNonZeros"
+    if (enableBlockify) requestedMetrics +:= "numNonZeros"
     val (summarizer, labelSummarizer) = Summarizer
       .getClassificationSummarizers(instances, $(aggregationDepth), requestedMetrics)
 
@@ -204,14 +191,10 @@ class LinearSVC @Since("2.2.0") (
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
     instr.logSumOfWeights(summarizer.weightSum)
-    if ($(blockSize) > 1) {
+    if (enableBlockify) {
       val scale = 1.0 / summarizer.count / numFeatures
       val sparsity = 1 - summarizer.numNonzeros.toArray.map(_ * scale).sum
       instr.logNamedValue("sparsity", sparsity.toString)
-      if (sparsity > 0.5) {
-        instr.logWarning(s"sparsity of input dataset is $sparsity, " +
-          s"which may hurt performance in high-level BLAS.")
-      }
     }
 
     val numClasses = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
@@ -250,10 +233,10 @@ class LinearSVC @Since("2.2.0") (
        Note that the intercept in scaled space and original space is the same;
        as a result, no scaling is needed.
      */
-    val (rawCoefficients, objectiveHistory) = if ($(blockSize) == 1) {
-      trainOnRows(instances, featuresStd, regularization, optimizer)
-    } else {
+    val (rawCoefficients, objectiveHistory) = if (enableBlockify) {
       trainOnBlocks(instances, featuresStd, regularization, optimizer)
+    } else {
+      trainOnRows(instances, featuresStd, regularization, optimizer)
     }
     if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
 
@@ -331,9 +314,10 @@ class LinearSVC @Since("2.2.0") (
       val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)
       iter.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
     }
-    val blocks = InstanceBlock.blokify(standardized, $(blockSize))
+    val maxMemoryUsage = $(maxBlockMemoryInMB) * 1024L * 1024L
+    val blocks = InstanceBlock.blokifyWithMaxMemoryUsage(standardized, maxMemoryUsage)
       .persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"training blocks (blockSize=${$(blockSize)})")
+      .setName(s"training blocks (maxBlockMemoryInMB=${$(maxBlockMemoryInMB)})")
 
     val getAggregatorFunc = new BlockHingeAggregator($(fitIntercept))(_)
     val costFun = new RDDLossFunction(blocks, getAggregatorFunc,

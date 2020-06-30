@@ -107,8 +107,10 @@ private[shared] object SharedParamsCodeGen {
         "validation."),
       ParamDesc[Int]("blockSize", "block size for stacking input data in matrices. Data is " +
         "stacked within partitions. If block size is more than remaining data in a partition " +
-        "then it is adjusted to the size of this data.",
-        isValid = "ParamValidators.gt(0)", isExpertParam = true)
+        "then it is adjusted to the size of this data",
+        isValid = "ParamValidators.gt(0)", isExpertParam = true),
+      ParamDesc[Int]("maxBlockMemoryInMB", "Maximum memory in MB allocated to stack instances " +
+        "to a block", isValid = "ParamValidators.gtEq(0)", isExpertParam = true)
     )
 
     val code = genSharedParams(params)

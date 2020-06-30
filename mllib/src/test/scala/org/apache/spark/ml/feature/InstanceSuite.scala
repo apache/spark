@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import scala.util.Random
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.linalg.Vectors
@@ -74,4 +76,33 @@ class InstanceSuite extends SparkFunSuite{
     }
   }
 
+  test("InstanceBlock: memory usage limit") {
+    val rng = new Random(123L)
+    val instances = Seq.fill(1000) {
+      Instance(rng.nextDouble, rng.nextDouble, Vectors.dense(Array.fill(1000)(rng.nextDouble)))
+    }
+
+    Seq(1, 2, 3).foreach { maxBlockMemoryInMB =>
+      val maxMemoryUsage = maxBlockMemoryInMB * 1024L * 1024L
+      val blocks = InstanceBlock.blokifyWithMaxMemoryUsage(
+        instances.iterator, maxMemoryUsage).toSeq
+      val flatten = blocks.flatMap { block => block.instanceIterator }
+      assert(instances.size == flatten.size)
+      assert(instances.iterator.zip(flatten.iterator).forall(t => t._1 === t._2))
+    }
+
+    Seq(2, 4, 64).foreach { i =>
+      val instanceIter = Iterator.single(Instance(rng.nextDouble, rng.nextDouble,
+        Vectors.dense(Array.fill(1024 * i)(rng.nextDouble))))
+      assert(InstanceBlock.blokifyWithMaxMemoryUsage(instanceIter, 1024L * 1024L).size == 1)
+    }
+
+    Seq(128, 256).foreach { i =>
+      val instanceIter = Iterator.single(Instance(rng.nextDouble, rng.nextDouble,
+        Vectors.dense(Array.fill(1024 * i)(rng.nextDouble))))
+      intercept[IllegalArgumentException] {
+        InstanceBlock.blokifyWithMaxMemoryUsage(instanceIter, 1024L * 1024L).size
+      }
+    }
+  }
 }

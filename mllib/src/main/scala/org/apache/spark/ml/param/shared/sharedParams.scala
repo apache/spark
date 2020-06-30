@@ -554,12 +554,28 @@ trait HasValidationIndicatorCol extends Params {
 trait HasBlockSize extends Params {
 
   /**
-   * Param for block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data..
+   * Param for block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.
    * @group expertParam
    */
-  final val blockSize: IntParam = new IntParam(this, "blockSize", "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.", ParamValidators.gt(0))
+  final val blockSize: IntParam = new IntParam(this, "blockSize", "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data", ParamValidators.gt(0))
 
   /** @group expertGetParam */
   final def getBlockSize: Int = $(blockSize)
+}
+
+/**
+ * Trait for shared param maxBlockMemoryInMB. This trait may be changed or
+ * removed between minor versions.
+ */
+trait HasMaxBlockMemoryInMB extends Params {
+
+  /**
+   * Param for Maximum memory in MB allocated to stack instances to a block.
+   * @group expertParam
+   */
+  final val maxBlockMemoryInMB: IntParam = new IntParam(this, "maxBlockMemoryInMB", "Maximum memory in MB allocated to stack instances to a block", ParamValidators.gtEq(0))
+
+  /** @group expertGetParam */
+  final def getMaxBlockMemoryInMB: Int = $(maxBlockMemoryInMB)
 }
 // scalastyle:on

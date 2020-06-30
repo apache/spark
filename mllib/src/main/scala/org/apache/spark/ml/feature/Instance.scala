@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable
+
 import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
 
@@ -100,6 +102,18 @@ private[spark] case class InstanceBlock(
 
 private[spark] object InstanceBlock {
 
+  private def getBlockSize(
+      numCols: Int,
+      numRows: Int,
+      nnz: Int): Long = {
+    val doubleBytes = java.lang.Double.BYTES
+    val arrayHeader = 12L
+    val denseSize = Matrices.getDenseSize(numCols, numRows)
+    val sparseSize = Matrices.getSparseSize(nnz, numRows + 1)
+    val matrixSize = math.min(denseSize, sparseSize)
+    matrixSize + doubleBytes * numRows * 2 + arrayHeader * 2
+  }
+
   def fromInstances(instances: Seq[Instance]): InstanceBlock = {
     val labels = instances.map(_.label).toArray
     val weights = if (instances.exists(_.weight != 1)) {
@@ -113,6 +127,48 @@ private[spark] object InstanceBlock {
 
   def blokify(instances: RDD[Instance], blockSize: Int): RDD[InstanceBlock] = {
     instances.mapPartitions(_.grouped(blockSize).map(InstanceBlock.fromInstances))
+  }
+
+  def blokifyWithMaxMemoryUsage(
+      iterator: Iterator[Instance],
+      maxMemoryUsage: Long): Iterator[InstanceBlock] = {
+    require(maxMemoryUsage > 0)
+    val buff = mutable.ArrayBuilder.make[Instance]
+    var numCols = -1
+    var count = 0
+    var nnz = 0
+
+    iterator.flatMap { instance =>
+      if (numCols < 0) numCols = instance.features.size
+      require(numCols == instance.features.size)
+      val n = instance.features.numNonzeros
+      var block = Option.empty[InstanceBlock]
+      if (getBlockSize(numCols, count + 1, nnz + n) > maxMemoryUsage) {
+        val instances = buff.result()
+        if (instances.nonEmpty) block = Some(InstanceBlock.fromInstances(instances))
+        buff.clear()
+        count = 0
+        nnz = 0
+        require(getBlockSize(numCols, 1, n) <= maxMemoryUsage,
+          s"instance $instance exceeds memory limit $maxMemoryUsage")
+      }
+      buff += instance
+      count += 1
+      nnz += n
+      block.iterator
+    } ++ {
+      val instances = buff.result()
+      if (instances.nonEmpty) {
+        Iterator.single(InstanceBlock.fromInstances(instances))
+      } else Iterator.empty
+    }
+  }
+
+  def blokifyWithMaxMemoryUsage(
+      instances: RDD[Instance],
+      maxMemoryUsage: Long): RDD[InstanceBlock] = {
+    require(maxMemoryUsage > 0)
+    instances.mapPartitions(iter => blokifyWithMaxMemoryUsage(iter, maxMemoryUsage))
   }
 }
 
