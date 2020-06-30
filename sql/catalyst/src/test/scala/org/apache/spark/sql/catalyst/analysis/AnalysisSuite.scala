@@ -858,26 +858,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       AttributeReference("c", IntegerType)(),
       AttributeReference("d", TimestampType)())
 
-    val a1 = firstTable.output(0)
-    val b1 = firstTable.output(1)
-    val c1 = firstTable.output(2)
-    val d1 = firstTable.output(3)
-
-    val a2 = secondTable.output(0)
-    val b2 = secondTable.output(1)
-    val c2 = secondTable.output(2)
-    val d2 = secondTable.output(3)
-
-    val a3 = thirdTable.output(0)
-    val b3 = thirdTable.output(1)
-    val c3 = thirdTable.output(2)
-    val d3 = thirdTable.output(3)
-
-    val a4 = fourthTable.output(0)
-    val b4 = fourthTable.output(1)
-    val c4 = fourthTable.output(2)
-    val d4 = fourthTable.output(3)
-
     val r1 = Union(firstTable, secondTable)
     val r2 = Union(firstTable, thirdTable)
     val r3 = Union(firstTable, fourthTable)
