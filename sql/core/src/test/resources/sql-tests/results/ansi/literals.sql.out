@@ -5,7 +5,7 @@
 -- !query
 select null, Null, nUll
 -- !query schema
-struct<NULL:void,NULL:void,NULL:void>
+struct<NULL:null,NULL:null,NULL:null>
 -- !query output
 NULL	NULL	NULL
 
