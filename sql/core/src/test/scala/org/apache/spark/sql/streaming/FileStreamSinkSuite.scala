@@ -555,10 +555,12 @@ abstract class FileStreamSinkSuite extends StreamTest {
             }
           }
 
-          val fs = new Path(outputDir.getCanonicalPath).getFileSystem(
-            spark.sessionState.newHadoopConf())
-          val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark,
-            outputDir.getCanonicalPath)
+          val outputDirPath = new Path(outputDir.getCanonicalPath)
+          val hadoopConf = spark.sessionState.newHadoopConf()
+          val fs = outputDirPath.getFileSystem(hadoopConf)
+          val logPath = FileStreamSink.getMetadataLogPath(fs, outputDirPath, conf)
+
+          val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, logPath.toString)
 
           val allFiles = sinkLog.allFiles()
           // only files from non-empty partition should be logged
