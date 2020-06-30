@@ -1735,7 +1735,7 @@ class JDBCSuite extends QueryTest
     val df2Count = df2.count()  // df2Count should be 2 after running preActions
     assert(df2Count == df1Count - 1)  // df2.count() should be 2
 
-    val preSQLview = "create temp view test.peopleview as select * from test.people where name = 'mary'"
+    val preSQLview = "create view test.peopleview as select * from test.people where name = 'mary'"
     val df3 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", "TEST.PEOPLEVIEW")
