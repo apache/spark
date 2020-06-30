@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 
 class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
 
@@ -68,10 +68,6 @@ class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
       "listenerProcessingTime_org_apache_spark_HeartbeatReceiver_")
   }
 
-  private def createPrometheusServlet(): PrometheusServlet = {
-    val props = new Properties
-    val registry = new MetricRegistry
-    val securityMgr = new SecurityManager(new SparkConf(false))
-    new PrometheusServlet(props, registry, securityMgr)
-  }
+  private def createPrometheusServlet(): PrometheusServlet =
+    new PrometheusServlet(new Properties, new MetricRegistry, securityMgr = null)
 }
