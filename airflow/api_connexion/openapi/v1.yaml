@@ -606,6 +606,8 @@ paths:
           $ref: '#/components/responses/PermissionDenied'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/AlreadyExists'
 
     delete:
       summary: Delete a pool
@@ -621,6 +623,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/PermissionDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances:
     parameters:
