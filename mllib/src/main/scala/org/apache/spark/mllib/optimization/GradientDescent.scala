@@ -246,9 +246,9 @@ object GradientDescent extends Logging {
 
         if (miniBatchSize > 0) {
           /**
-            * lossSum is computed using the weights from the previous iteration
-            * and regVal is the regularization value computed in the previous iteration as well.
-            */
+           * lossSum is computed using the weights from the previous iteration
+           * and regVal is the regularization value computed in the previous iteration as well.
+           */
           stochasticLossHistory += lossSum / miniBatchSize + regVal
           if (converged || i == (numIterations + 1)) break
           val update = updater.compute(
