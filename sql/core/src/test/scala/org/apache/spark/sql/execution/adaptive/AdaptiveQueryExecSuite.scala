@@ -130,7 +130,7 @@ class AdaptiveQueryExecSuite
     assert(numShuffles === (numLocalReaders.length + numShufflesWithoutLocalReader))
   }
 
-  private def checkInitialPartitionNum(df: Dataset[_]): Unit = {
+  private def checkInitialPartitionNum(df: Dataset[_], numPartition: Int): Unit = {
     // repartition obeys initialPartitionNum when adaptiveExecutionEnabled
     val plan = df.queryExecution.executedPlan
     assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
@@ -138,7 +138,7 @@ class AdaptiveQueryExecSuite
       case s: ShuffleExchangeExec => s
     }
     assert(shuffle.size == 1)
-    assert(shuffle(0).outputPartitioning.numPartitions == 10)
+    assert(shuffle(0).outputPartitioning.numPartitions == numPartition)
   }
 
   test("Change merge join to broadcast join") {
@@ -1051,8 +1051,8 @@ class AdaptiveQueryExecSuite
           assert(partitionsNum1 < 10)
           assert(partitionsNum2 < 10)
 
-          checkInitialPartitionNum(df1)
-          checkInitialPartitionNum(df2)
+          checkInitialPartitionNum(df1, 10)
+          checkInitialPartitionNum(df2, 10)
         } else {
           assert(partitionsNum1 === 10)
           assert(partitionsNum2 === 10)
@@ -1086,8 +1086,8 @@ class AdaptiveQueryExecSuite
           assert(partitionsNum1 < 10)
           assert(partitionsNum2 < 10)
 
-          checkInitialPartitionNum(df1)
-          checkInitialPartitionNum(df2)
+          checkInitialPartitionNum(df1, 10)
+          checkInitialPartitionNum(df2, 10)
         } else {
           assert(partitionsNum1 === 10)
           assert(partitionsNum2 === 10)
@@ -1127,10 +1127,10 @@ class AdaptiveQueryExecSuite
             assert(partitionsNum3 < 10)
             assert(partitionsNum4 < 10)
 
-            checkInitialPartitionNum(df1)
-            checkInitialPartitionNum(df2)
-            checkInitialPartitionNum(df3)
-            checkInitialPartitionNum(df4)
+            checkInitialPartitionNum(df1, 10)
+            checkInitialPartitionNum(df2, 10)
+            checkInitialPartitionNum(df3, 10)
+            checkInitialPartitionNum(df4, 10)
           } else {
             assert(partitionsNum1 === 10)
             assert(partitionsNum2 === 10)
