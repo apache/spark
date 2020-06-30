@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
@@ -109,9 +109,9 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase {
     }
   }
 
-  override def getScanExecPartitionSize(query: String): Long = {
-    sql(query).queryExecution.sparkPlan.collectFirst {
+  override def getScanExecPartitionSize(plan: SparkPlan): Long = {
+    plan.collectFirst {
       case p: FileSourceScanExec => p
-    }.get.relation.location.inputFiles.length
+    }.get.selectedPartitions.length
   }
 }

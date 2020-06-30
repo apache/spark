@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.execution.SparkPlan
 
 class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
 
@@ -54,8 +55,8 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
     }
   }
 
-  override def getScanExecPartitionSize(query: String): Long = {
-    sql(query).queryExecution.sparkPlan.collectFirst {
+  override def getScanExecPartitionSize(plan: SparkPlan): Long = {
+    plan.collectFirst {
       case p: HiveTableScanExec => p
     }.get.prunedPartitions.size
   }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -68,8 +68,9 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
   }
 
   protected def assertPrunedPartitions(query: String, expected: Long): Unit = {
-    assert(getScanExecPartitionSize(query) == expected)
+    val plan = sql(query).queryExecution.sparkPlan
+    assert(getScanExecPartitionSize(plan) == expected)
   }
 
-  protected def getScanExecPartitionSize(query: String): Long
+  protected def getScanExecPartitionSize(plan: SparkPlan): Long
 }
