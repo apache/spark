@@ -42,4 +42,11 @@ case object HiveVoidType extends HiveVoidType {
     case _: HiveVoidType => NullType
     case _ => dt
   }
+
+  def containsVoidType(dt: DataType): Boolean = dt match {
+    case ArrayType(et, _) => containsVoidType(et)
+    case MapType(kt, vt, _) => containsVoidType(kt) || containsVoidType(vt)
+    case StructType(fields) => fields.exists(f => containsVoidType(f.dataType))
+    case _ => dt.isInstanceOf[HiveVoidType]
+  }
 }

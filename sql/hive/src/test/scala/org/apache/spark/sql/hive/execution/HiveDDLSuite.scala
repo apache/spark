@@ -2323,6 +2323,69 @@ class HiveDDLSuite
         assert(desc.contains(Row("col", "null", null)))
       }
     }
+
+    // Forbid creating Hive table with void type in Spark
+    withTable("t1", "t2", "t3") {
+      val e1 = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE t1 (v void) USING parquet")
+      }.getMessage
+      assert(e1.contains("Cannot create tables with Hive VOID type"))
+      val e2 = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE t2 (v void) USING hive")
+      }.getMessage
+      assert(e2.contains("Cannot create tables with Hive VOID type"))
+      val e3 = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE t3 (v void)")
+      }.getMessage
+      assert(e3.contains("Cannot create tables with Hive VOID type"))
+    }
+
+    // Make sure spark.catalog.createTable with void type will fail
+    val schema1 = new StructType().add("c", HiveVoidType)
+    assertHiveTableVoidType(schema1)
+    assertDSTableVoidType(schema1)
+
+    val schema2 = new StructType()
+      .add("c", StructType(Seq(StructField.apply("c1", HiveVoidType))))
+    assertHiveTableVoidType(schema2)
+    assertDSTableVoidType(schema2)
+
+    val schema3 = new StructType().add("c", ArrayType(HiveVoidType))
+    assertHiveTableVoidType(schema3)
+    assertDSTableVoidType(schema3)
+
+    val schema4 = new StructType()
+      .add("c", MapType(StringType, HiveVoidType))
+    assertHiveTableVoidType(schema4)
+    assertDSTableVoidType(schema4)
+
+    val schema5 = new StructType()
+      .add("c", MapType(HiveVoidType, StringType))
+    assertHiveTableVoidType(schema5)
+    assertDSTableVoidType(schema5)
+  }
+
+  private def assertHiveTableVoidType(schema: StructType): Unit = {
+    withTable("t") {
+      intercept[AnalysisException] {
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "hive",
+          schema = schema,
+          options = Map("fileFormat" -> "parquet"))
+      }
+    }
+  }
+  private def assertDSTableVoidType(schema: StructType): Unit = {
+    withTable("t") {
+      intercept[AnalysisException] {
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "parquet",
+          schema = schema,
+          options = Map.empty[String, String])
+      }
+    }
   }
 
   test("SPARK-21216: join with a streaming DataFrame") {

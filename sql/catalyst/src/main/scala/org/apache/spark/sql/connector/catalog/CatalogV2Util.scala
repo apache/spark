@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.AlterTable
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{ArrayType, DataType, HIVE_TYPE_STRING, HiveStringType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, HIVE_TYPE_STRING, HiveStringType, HiveVoidType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -339,10 +339,25 @@ private[sql] object CatalogV2Util {
     }
   }
 
+  def failVoidType(dt: DataType): Unit = {
+    if (HiveVoidType.containsVoidType(dt)) {
+      throw new AnalysisException(
+        "Cannot create tables with Hive VOID type.")
+    }
+  }
+
   def assertNoCharTypeInSchema(schema: StructType): Unit = {
     schema.foreach { f =>
       if (f.metadata.contains(HIVE_TYPE_STRING)) {
         failCharType(CatalystSqlParser.parseRawDataType(f.metadata.getString(HIVE_TYPE_STRING)))
+      }
+    }
+  }
+
+  def assertNoVoidTypeInSchema(schema: StructType): Unit = {
+    schema.foreach { f =>
+      if (f.metadata.contains(HIVE_TYPE_STRING)) {
+        failVoidType(CatalystSqlParser.parseRawDataType(f.metadata.getString(HIVE_TYPE_STRING)))
       }
     }
   }
