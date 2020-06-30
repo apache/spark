@@ -211,24 +211,26 @@ class AdaptiveQueryExecSuite
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         val testDf = df1.where('a > 10).join(df2.where('b > 10), "id").groupBy('a).count()
         checkAnswer(testDf, Seq())
+        assert(testDf.rdd.collectPartitions().length == 0)
         val plan = testDf.queryExecution.executedPlan
         assert(find(plan)(_.isInstanceOf[SortMergeJoinExec]).isDefined)
         val coalescedReaders = collect(plan) {
           case r: CustomShuffleReaderExec => r
         }
-        assert(coalescedReaders.length == 2)
+        assert(coalescedReaders.length == 3, s"$plan")
         coalescedReaders.foreach(r => assert(r.partitionSpecs.isEmpty))
       }
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
         val testDf = df1.where('a > 10).join(df2.where('b > 10), "id").groupBy('a).count()
         checkAnswer(testDf, Seq())
+        assert(testDf.rdd.collectPartitions().length == 0)
         val plan = testDf.queryExecution.executedPlan
         assert(find(plan)(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
         val coalescedReaders = collect(plan) {
           case r: CustomShuffleReaderExec => r
         }
-        assert(coalescedReaders.length == 2, s"$plan")
+        assert(coalescedReaders.length == 3, s"$plan")
         coalescedReaders.foreach(r => assert(r.partitionSpecs.isEmpty))
       }
     }
