@@ -1717,7 +1717,11 @@ class JDBCSuite extends QueryTest
     checkAnswer(jdbcDF, Row("mary", 2) :: Nil)
   }
 
+<<<<<<< HEAD
   test("option preActions, run single DML before reading data.") {
+=======
+  test("option preActions, run single SQL before reading data.") {
+>>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
     val df1 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", "TEST.PEOPLE")
@@ -1734,6 +1738,63 @@ class JDBCSuite extends QueryTest
     df2.show()
     val df2Count = df2.count()  // df2Count should be 2 after running preActions
     assert(df2Count == df1Count - 1)  // df2.count() should be 2
+
+    val preSQLview = "create temp view test.peopleview as select * from test.people where name = 'mary'"
+    val df3 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLEVIEW")
+      .option("preActions", preSQLview)
+      .load()
+    df3.show()
+    val df3Count = df3.count()
+    assert(df3Count == 1)
+  }
+
+  test("option preActions, run multiple SQLs before reading data.") {
+    val df1 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLE")
+      .load()
+    df1.show()
+    val df1Count = df1.count()  // df1Count is 2 at the beginning
+
+    val preSQL = "select * from test.people; insert into test.people values ('fred', 1)"
+    val df2 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLE")
+      .option("preActions", preSQL)
+      .load()
+    df2.show()
+    val df2Count = df2.count()  // df2Count should be 3 after running preActions
+    assert(df2Count == df1Count + 1)  // df2.count() should be 3
+  }
+
+  test("option preActions, run multiple SQLs before reading data with exceptions.") {
+    val df1 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLE")
+      .load()
+    df1.show()
+    val df1Count = df1.count()  // df1Count is 2 at the beginning
+
+    val preSQL = "insert into test.people values ('fred', 1); select * from test.nonexists; "
+
+    val e = intercept[SQLException] {
+      val df2 = spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", "TEST.PEOPLE")
+        .option("preActions", preSQL)
+        .load()
+    }.getMessage
+    assert(e.contains("Table \"NONEXISTS\" not found"))
+
+    val df3 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLE")
+      .load()
+    df3.show()
+    val df3Count = df3.count()
+    assert(df1Count == df3Count)  // insert should be rollbacked.
   }
 
   test("option preActions, run multiple DML/DDLs before reading data.") {

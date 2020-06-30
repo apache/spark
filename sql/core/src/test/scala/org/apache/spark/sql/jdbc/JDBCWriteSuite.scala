@@ -576,7 +576,11 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
+<<<<<<< HEAD
   test("option preActions/postActions, run single DML before writing data.") {
+=======
+  test("option preActions/postActions, run single SQL before writing data.") {
+>>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
 
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     df.write.format("jdbc")
@@ -611,6 +615,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     assert(3 === df3.count()) // 2(df) + 1(postActions)
   }
 
+<<<<<<< HEAD
   test("option preActions/postActions, run multiple DDLs before writing data.") {
 
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
@@ -648,6 +653,9 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   test("option preActions/postActions, run multiple DMLs before writing data.") {
+=======
+  test("option preActions/postActions, run multiple SQLs before writing data.") {
+>>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
 
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     df.write.format("jdbc")
@@ -671,7 +679,12 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     df2.show()
     assert(6 === df2.count()) // 2(df) + 2(df append) + 2(preActions)
 
+<<<<<<< HEAD
     val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1);"
+=======
+    val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1); " +
+      "select * from TEST.CUSTOMQUERY;"
+>>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
     df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
       .option("Url", url1)
       .option("dbtable", "TEST.CUSTOMQUERY")
@@ -683,7 +696,11 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     assert(3 === df3.count()) // 2(df) + 1(postActions)
   }
 
+<<<<<<< HEAD
   test("option preActions/postActions, run multiple DMLs before writing data with exceptions.") {
+=======
+  test("option preActions/postActions, run multiple SQLs before writing data with exceptions.") {
+>>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
 
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     df.write.format("jdbc")
@@ -712,7 +729,11 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     assert(2 === df2.count()) // preActions should be rollbacked, and data write should be canceled.
 
     val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1); " +
+<<<<<<< HEAD
       "select * from TEST.CUSTOMQUERY;"
+=======
+      "select * from TEST.NONEXISTS;"
+>>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
     val e2 = intercept[SQLException] {
       df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
         .option("Url", url1)
@@ -721,7 +742,11 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         .options(properties.asScala)
         .save()
     }.getMessage
+<<<<<<< HEAD
     assert(e2.contains("Method is not allowed for a query"))
+=======
+    assert(e2.contains("Table \"NONEXISTS\" not found"))
+>>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
     val df3 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
     df3.show()
     assert(2 === df3.count()) // postActions should be rollbacked.
