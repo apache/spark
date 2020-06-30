@@ -22,14 +22,8 @@ import sys
 import functools
 import warnings
 
-if sys.version < "3":
-    from itertools import imap as map
-
-if sys.version >= '3':
-    basestring = str
-
 from pyspark import since, SparkContext
-from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
+from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal, \
     _create_column_from_name
 from pyspark.sql.dataframe import DataFrame
@@ -88,14 +82,14 @@ def _create_binary_mathfunction(name, doc=""):
         # if they are not columns or strings.
         if isinstance(col1, Column):
             arg1 = col1._jc
-        elif isinstance(col1, basestring):
+        elif isinstance(col1, str):
             arg1 = _create_column_from_name(col1)
         else:
             arg1 = float(col1)
 
         if isinstance(col2, Column):
             arg2 = col2._jc
-        elif isinstance(col2, basestring):
+        elif isinstance(col2, str):
             arg2 = _create_column_from_name(col2)
         else:
             arg2 = float(col2)
@@ -648,7 +642,6 @@ def percentile_approx(col, percentage, accuracy=10000):
     return Column(sc._jvm.functions.percentile_approx(_to_java_column(col), percentage, accuracy))
 
 
-@ignore_unicode_prefix
 @since(1.4)
 def rand(seed=None):
     """Generates a random column with independent and identically distributed (i.i.d.) samples
@@ -657,8 +650,8 @@ def rand(seed=None):
     .. note:: The function is non-deterministic in general case.
 
     >>> df.withColumn('rand', rand(seed=42) * 3).collect()
-    [Row(age=2, name=u'Alice', rand=2.4052597283576684),
-     Row(age=5, name=u'Bob', rand=2.3913904055683974)]
+    [Row(age=2, name='Alice', rand=2.4052597283576684),
+     Row(age=5, name='Bob', rand=2.3913904055683974)]
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -668,7 +661,6 @@ def rand(seed=None):
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(1.4)
 def randn(seed=None):
     """Generates a column with independent and identically distributed (i.i.d.) samples from
@@ -677,8 +669,8 @@ def randn(seed=None):
     .. note:: The function is non-deterministic in general case.
 
     >>> df.withColumn('randn', randn(seed=42)).collect()
-    [Row(age=2, name=u'Alice', randn=1.1027054481455365),
-    Row(age=5, name=u'Bob', randn=0.7400395449950132)]
+    [Row(age=2, name='Alice', randn=1.1027054481455365),
+    Row(age=5, name='Bob', randn=0.7400395449950132)]
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -774,7 +766,6 @@ def expr(str):
     return Column(sc._jvm.functions.expr(str))
 
 
-@ignore_unicode_prefix
 @since(1.4)
 def struct(*cols):
     """Creates a new struct column.
@@ -782,9 +773,9 @@ def struct(*cols):
     :param cols: list of column names (string) or list of :class:`Column` expressions
 
     >>> df.select(struct('age', 'name').alias("struct")).collect()
-    [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
+    [Row(struct=Row(age=2, name='Alice')), Row(struct=Row(age=5, name='Bob'))]
     >>> df.select(struct([df.age, df.name]).alias("struct")).collect()
-    [Row(struct=Row(age=2, name=u'Alice')), Row(struct=Row(age=5, name=u'Bob'))]
+    [Row(struct=Row(age=2, name='Alice')), Row(struct=Row(age=5, name='Bob'))]
     """
     sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
@@ -879,14 +870,13 @@ def log2(col):
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def conv(col, fromBase, toBase):
     """
     Convert a number in a string column from one base to another.
 
     >>> df = spark.createDataFrame([("010101",)], ['n'])
     >>> df.select(conv(df.n, 2, 16).alias('hex')).collect()
-    [Row(hex=u'15')]
+    [Row(hex='15')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.conv(_to_java_column(col), fromBase, toBase))
@@ -976,7 +966,6 @@ def current_timestamp():
     return Column(sc._jvm.functions.current_timestamp())
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def date_format(date, format):
     """
@@ -992,7 +981,7 @@ def date_format(date, format):
 
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
     >>> df.select(date_format('dt', 'MM/dd/yyy').alias('date')).collect()
-    [Row(date=u'04/08/2015')]
+    [Row(date='04/08/2015')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.date_format(_to_java_column(date), format))
@@ -1310,7 +1299,6 @@ def last_day(date):
     return Column(sc._jvm.functions.last_day(_to_java_column(date)))
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     """
@@ -1321,7 +1309,7 @@ def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> time_df = spark.createDataFrame([(1428476400,)], ['unix_time'])
     >>> time_df.select(from_unixtime('unix_time').alias('ts')).collect()
-    [Row(ts=u'2015-04-08 00:00:00')]
+    [Row(ts='2015-04-08 00:00:00')]
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     sc = SparkContext._active_spark_context
@@ -1447,7 +1435,6 @@ def timestamp_seconds(col):
 
 
 @since(2.0)
-@ignore_unicode_prefix
 def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
     """Bucketize rows into one or more time windows given a timestamp specifying column. Window
     starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
@@ -1471,7 +1458,7 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
     >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
     >>> w.select(w.window.start.cast("string").alias("start"),
     ...          w.window.end.cast("string").alias("end"), "sum").collect()
-    [Row(start=u'2016-03-11 09:00:05', end=u'2016-03-11 09:00:10', sum=1)]
+    [Row(start='2016-03-11 09:00:05', end='2016-03-11 09:00:10', sum=1)]
     """
     def check_string_field(field, fieldName):
         if not field or type(field) is not str:
@@ -1498,7 +1485,6 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
 # ---------------------------- misc functions ----------------------------------
 
 @since(1.5)
-@ignore_unicode_prefix
 def crc32(col):
     """
     Calculates the cyclic redundancy check value  (CRC32) of a binary column and
@@ -1511,33 +1497,30 @@ def crc32(col):
     return Column(sc._jvm.functions.crc32(_to_java_column(col)))
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def md5(col):
     """Calculates the MD5 digest and returns the value as a 32 character hex string.
 
     >>> spark.createDataFrame([('ABC',)], ['a']).select(md5('a').alias('hash')).collect()
-    [Row(hash=u'902fbdd2b1df0c4f70b4a5d23525e932')]
+    [Row(hash='902fbdd2b1df0c4f70b4a5d23525e932')]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.md5(_to_java_column(col))
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def sha1(col):
     """Returns the hex string result of SHA-1.
 
     >>> spark.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
-    [Row(hash=u'3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
+    [Row(hash='3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.sha1(_to_java_column(col))
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def sha2(col, numBits):
     """Returns the hex string result of SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384,
@@ -1546,9 +1529,9 @@ def sha2(col, numBits):
 
     >>> digests = df.select(sha2(df.name, 256).alias('s')).collect()
     >>> digests[0]
-    Row(s=u'3bc51062973c458d5a6f2d8d64a023246354ad7e064b1e4e009ec8a0699a3043')
+    Row(s='3bc51062973c458d5a6f2d8d64a023246354ad7e064b1e4e009ec8a0699a3043')
     >>> digests[1]
-    Row(s=u'cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961')
+    Row(s='cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961')
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
@@ -1600,7 +1583,6 @@ del _name, _doc
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def concat_ws(sep, *cols):
     """
     Concatenates multiple input string columns together into a single string column,
@@ -1608,7 +1590,7 @@ def concat_ws(sep, *cols):
 
     >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
     >>> df.select(concat_ws('-', df.s, df.d).alias('s')).collect()
-    [Row(s=u'abcd-123')]
+    [Row(s='abcd-123')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.concat_ws(sep, _to_seq(sc, cols, _to_java_column)))
@@ -1634,7 +1616,6 @@ def encode(col, charset):
     return Column(sc._jvm.functions.encode(_to_java_column(col), charset))
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def format_number(col, d):
     """
@@ -1645,13 +1626,12 @@ def format_number(col, d):
     :param d: the N decimal places
 
     >>> spark.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
-    [Row(v=u'5.0000')]
+    [Row(v='5.0000')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.format_number(_to_java_column(col), d))
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def format_string(format, *cols):
     """
@@ -1663,7 +1643,7 @@ def format_string(format, *cols):
 
     >>> df = spark.createDataFrame([(5, "hello")], ['a', 'b'])
     >>> df.select(format_string('%d %s', df.a, df.b).alias('v')).collect()
-    [Row(v=u'5 hello')]
+    [Row(v='5 hello')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.format_string(format, _to_seq(sc, cols, _to_java_column)))
@@ -1721,7 +1701,6 @@ def overlay(src, replace, pos, len=-1):
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def substring(str, pos, len):
     """
     Substring starts at `pos` and is of length `len` when str is String type or
@@ -1732,14 +1711,13 @@ def substring(str, pos, len):
 
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
-    [Row(s=u'ab')]
+    [Row(s='ab')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.substring(_to_java_column(str), pos, len))
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def substring_index(str, delim, count):
     """
     Returns the substring from string str before count occurrences of the delimiter delim.
@@ -1749,15 +1727,14 @@ def substring_index(str, delim, count):
 
     >>> df = spark.createDataFrame([('a.b.c.d',)], ['s'])
     >>> df.select(substring_index(df.s, '.', 2).alias('s')).collect()
-    [Row(s=u'a.b')]
+    [Row(s='a.b')]
     >>> df.select(substring_index(df.s, '.', -3).alias('s')).collect()
-    [Row(s=u'b.c.d')]
+    [Row(s='b.c.d')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.substring_index(_to_java_column(str), delim, count))
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def levenshtein(left, right):
     """Computes the Levenshtein distance of the two given strings.
@@ -1792,49 +1769,45 @@ def locate(substr, str, pos=1):
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def lpad(col, len, pad):
     """
     Left-pad the string column to width `len` with `pad`.
 
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(lpad(df.s, 6, '#').alias('s')).collect()
-    [Row(s=u'##abcd')]
+    [Row(s='##abcd')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.lpad(_to_java_column(col), len, pad))
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def rpad(col, len, pad):
     """
     Right-pad the string column to width `len` with `pad`.
 
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(rpad(df.s, 6, '#').alias('s')).collect()
-    [Row(s=u'abcd##')]
+    [Row(s='abcd##')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.rpad(_to_java_column(col), len, pad))
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def repeat(col, n):
     """
     Repeats a string column n times, and returns it as a new string column.
 
     >>> df = spark.createDataFrame([('ab',)], ['s',])
     >>> df.select(repeat(df.s, 3).alias('s')).collect()
-    [Row(s=u'ababab')]
+    [Row(s='ababab')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.repeat(_to_java_column(col), n))
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def split(str, pattern, limit=-1):
     """
     Splits str around matches of the given pattern.
@@ -1855,15 +1828,14 @@ def split(str, pattern, limit=-1):
 
     >>> df = spark.createDataFrame([('oneAtwoBthreeC',)], ['s',])
     >>> df.select(split(df.s, '[ABC]', 2).alias('s')).collect()
-    [Row(s=[u'one', u'twoBthreeC'])]
+    [Row(s=['one', 'twoBthreeC'])]
     >>> df.select(split(df.s, '[ABC]', -1).alias('s')).collect()
-    [Row(s=[u'one', u'two', u'three', u''])]
+    [Row(s=['one', 'two', 'three', ''])]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.split(_to_java_column(str), pattern, limit))
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def regexp_extract(str, pattern, idx):
     r"""Extract a specific group matched by a Java regex, from the specified string column.
@@ -1871,73 +1843,68 @@ def regexp_extract(str, pattern, idx):
 
     >>> df = spark.createDataFrame([('100-200',)], ['str'])
     >>> df.select(regexp_extract('str', r'(\d+)-(\d+)', 1).alias('d')).collect()
-    [Row(d=u'100')]
+    [Row(d='100')]
     >>> df = spark.createDataFrame([('foo',)], ['str'])
     >>> df.select(regexp_extract('str', r'(\d+)', 1).alias('d')).collect()
-    [Row(d=u'')]
+    [Row(d='')]
     >>> df = spark.createDataFrame([('aaaac',)], ['str'])
     >>> df.select(regexp_extract('str', '(a+)(b)?(c)', 2).alias('d')).collect()
-    [Row(d=u'')]
+    [Row(d='')]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.regexp_extract(_to_java_column(str), pattern, idx)
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def regexp_replace(str, pattern, replacement):
     r"""Replace all substrings of the specified string value that match regexp with rep.
 
     >>> df = spark.createDataFrame([('100-200',)], ['str'])
     >>> df.select(regexp_replace('str', r'(\d+)', '--').alias('d')).collect()
-    [Row(d=u'-----')]
+    [Row(d='-----')]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.regexp_replace(_to_java_column(str), pattern, replacement)
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def initcap(col):
     """Translate the first letter of each word to upper case in the sentence.
 
     >>> spark.createDataFrame([('ab cd',)], ['a']).select(initcap("a").alias('v')).collect()
-    [Row(v=u'Ab Cd')]
+    [Row(v='Ab Cd')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.initcap(_to_java_column(col)))
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def soundex(col):
     """
     Returns the SoundEx encoding for a string
 
     >>> df = spark.createDataFrame([("Peters",),("Uhrbach",)], ['name'])
     >>> df.select(soundex(df.name).alias("soundex")).collect()
-    [Row(soundex=u'P362'), Row(soundex=u'U612')]
+    [Row(soundex='P362'), Row(soundex='U612')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.soundex(_to_java_column(col)))
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def bin(col):
     """Returns the string representation of the binary value of the given column.
 
     >>> df.select(bin(df.age).alias('c')).collect()
-    [Row(c=u'10'), Row(c=u'101')]
+    [Row(c='10'), Row(c='101')]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.bin(_to_java_column(col))
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def hex(col):
     """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
@@ -1945,14 +1912,13 @@ def hex(col):
     :class:`pyspark.sql.types.LongType`.
 
     >>> spark.createDataFrame([('ABC', 3)], ['a', 'b']).select(hex('a'), hex('b')).collect()
-    [Row(hex(a)=u'414243', hex(b)=u'3')]
+    [Row(hex(a)='414243', hex(b)='3')]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.hex(_to_java_column(col))
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def unhex(col):
     """Inverse of hex. Interprets each pair of characters as a hexadecimal number
@@ -1965,7 +1931,6 @@ def unhex(col):
     return Column(sc._jvm.functions.unhex(_to_java_column(col)))
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def length(col):
     """Computes the character length of string data or number of bytes of binary data.
@@ -1979,7 +1944,6 @@ def length(col):
     return Column(sc._jvm.functions.length(_to_java_column(col)))
 
 
-@ignore_unicode_prefix
 @since(1.5)
 def translate(srcCol, matching, replace):
     """A function translate any character in the `srcCol` by a character in `matching`.
@@ -1989,7 +1953,7 @@ def translate(srcCol, matching, replace):
 
     >>> spark.createDataFrame([('translate',)], ['a']).select(translate('a', "rnlt", "123") \\
     ...     .alias('r')).collect()
-    [Row(r=u'1a2s3ae')]
+    [Row(r='1a2s3ae')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.translate(_to_java_column(srcCol), matching, replace))
@@ -1997,7 +1961,6 @@ def translate(srcCol, matching, replace):
 
 # ---------------------- Collection functions ------------------------------
 
-@ignore_unicode_prefix
 @since(2.0)
 def create_map(*cols):
     """Creates a new map column.
@@ -2006,9 +1969,9 @@ def create_map(*cols):
         grouped as key-value pairs, e.g. (key1, value1, key2, value2, ...).
 
     >>> df.select(create_map('name', 'age').alias("map")).collect()
-    [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
+    [Row(map={'Alice': 2}), Row(map={'Bob': 5})]
     >>> df.select(create_map([df.name, df.age]).alias("map")).collect()
-    [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
+    [Row(map={'Alice': 2}), Row(map={'Bob': 5})]
     """
     sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
@@ -2108,7 +2071,6 @@ def slice(x, start, length):
     return Column(sc._jvm.functions.slice(_to_java_column(x), start, length))
 
 
-@ignore_unicode_prefix
 @since(2.4)
 def array_join(col, delimiter, null_replacement=None):
     """
@@ -2117,9 +2079,9 @@ def array_join(col, delimiter, null_replacement=None):
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],), (["a", None],)], ['data'])
     >>> df.select(array_join(df.data, ",").alias("joined")).collect()
-    [Row(joined=u'a,b,c'), Row(joined=u'a')]
+    [Row(joined='a,b,c'), Row(joined='a')]
     >>> df.select(array_join(df.data, ",", "NULL").alias("joined")).collect()
-    [Row(joined=u'a,b,c'), Row(joined=u'a,NULL')]
+    [Row(joined='a,b,c'), Row(joined='a,NULL')]
     """
     sc = SparkContext._active_spark_context
     if null_replacement is None:
@@ -2130,7 +2092,6 @@ def array_join(col, delimiter, null_replacement=None):
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def concat(*cols):
     """
     Concatenates multiple input columns together into a single column.
@@ -2138,7 +2099,7 @@ def concat(*cols):
 
     >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
     >>> df.select(concat(df.s, df.d).alias('s')).collect()
-    [Row(s=u'abcd123')]
+    [Row(s='abcd123')]
 
     >>> df = spark.createDataFrame([([1, 2], [3, 4], [5]), ([1, 2], None, [3])], ['a', 'b', 'c'])
     >>> df.select(concat(df.a, df.b, df.c).alias("arr")).collect()
@@ -2165,7 +2126,6 @@ def array_position(col, value):
     return Column(sc._jvm.functions.array_position(_to_java_column(col), value))
 
 
-@ignore_unicode_prefix
 @since(2.4)
 def element_at(col, extraction):
     """
@@ -2179,7 +2139,7 @@ def element_at(col, extraction):
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
     >>> df.select(element_at(df.data, 1)).collect()
-    [Row(element_at(data, 1)=u'a'), Row(element_at(data, 1)=None)]
+    [Row(element_at(data, 1)='a'), Row(element_at(data, 1)=None)]
 
     >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},), ({},)], ['data'])
     >>> df.select(element_at(df.data, lit("a"))).collect()
@@ -2221,7 +2181,6 @@ def array_distinct(col):
     return Column(sc._jvm.functions.array_distinct(_to_java_column(col)))
 
 
-@ignore_unicode_prefix
 @since(2.4)
 def array_intersect(col1, col2):
     """
@@ -2234,13 +2193,12 @@ def array_intersect(col1, col2):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
     >>> df.select(array_intersect(df.c1, df.c2)).collect()
-    [Row(array_intersect(c1, c2)=[u'a', u'c'])]
+    [Row(array_intersect(c1, c2)=['a', 'c'])]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
 
 
-@ignore_unicode_prefix
 @since(2.4)
 def array_union(col1, col2):
     """
@@ -2253,13 +2211,12 @@ def array_union(col1, col2):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
     >>> df.select(array_union(df.c1, df.c2)).collect()
-    [Row(array_union(c1, c2)=[u'b', u'a', u'c', u'd', u'f'])]
+    [Row(array_union(c1, c2)=['b', 'a', 'c', 'd', 'f'])]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
 
 
-@ignore_unicode_prefix
 @since(2.4)
 def array_except(col1, col2):
     """
@@ -2272,7 +2229,7 @@ def array_except(col1, col2):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
     >>> df.select(array_except(df.c1, df.c2)).collect()
-    [Row(array_except(c1, c2)=[u'b'])]
+    [Row(array_except(c1, c2)=['b'])]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
@@ -2397,7 +2354,6 @@ def posexplode_outer(col):
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(1.6)
 def get_json_object(col, path):
     """
@@ -2411,14 +2367,13 @@ def get_json_object(col, path):
     >>> df = spark.createDataFrame(data, ("key", "jstring"))
     >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \\
     ...                   get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
-    [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None)]
+    [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.get_json_object(_to_java_column(col), path)
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(1.6)
 def json_tuple(col, *fields):
     """Creates a new row for a json column according to the given field names.
@@ -2429,14 +2384,13 @@ def json_tuple(col, *fields):
     >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
     >>> df = spark.createDataFrame(data, ("key", "jstring"))
     >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
-    [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None)]
+    [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.json_tuple(_to_java_column(col), _to_seq(sc, fields))
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(2.1)
 def from_json(col, schema, options={}):
     """
@@ -2460,7 +2414,7 @@ def from_json(col, schema, options={}):
     >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
     [Row(json=Row(a=1))]
     >>> df.select(from_json(df.value, "MAP<STRING,INT>").alias("json")).collect()
-    [Row(json={u'a': 1})]
+    [Row(json={'a': 1})]
     >>> data = [(1, '''[{"a": 1}]''')]
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
     >>> df = spark.createDataFrame(data, ("key", "value"))
@@ -2485,7 +2439,6 @@ def from_json(col, schema, options={}):
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(2.1)
 def to_json(col, options={}):
     """
@@ -2499,26 +2452,26 @@ def to_json(col, options={}):
 
     >>> from pyspark.sql import Row
     >>> from pyspark.sql.types import *
-    >>> data = [(1, Row(name='Alice', age=2))]
+    >>> data = [(1, Row(age=2, name='Alice'))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json=u'{"age":2,"name":"Alice"}')]
-    >>> data = [(1, [Row(name='Alice', age=2), Row(name='Bob', age=3)])]
+    [Row(json='{"age":2,"name":"Alice"}')]
+    >>> data = [(1, [Row(age=2, name='Alice'), Row(age=3, name='Bob')])]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json=u'[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]')]
+    [Row(json='[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]')]
     >>> data = [(1, {"name": "Alice"})]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json=u'{"name":"Alice"}')]
+    [Row(json='{"name":"Alice"}')]
     >>> data = [(1, [{"name": "Alice"}, {"name": "Bob"}])]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json=u'[{"name":"Alice"},{"name":"Bob"}]')]
+    [Row(json='[{"name":"Alice"},{"name":"Bob"}]')]
     >>> data = [(1, ["Alice", "Bob"])]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json=u'["Alice","Bob"]')]
+    [Row(json='["Alice","Bob"]')]
     """
 
     sc = SparkContext._active_spark_context
@@ -2526,7 +2479,6 @@ def to_json(col, options={}):
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(2.4)
 def schema_of_json(json, options={}):
     """
@@ -2540,12 +2492,12 @@ def schema_of_json(json, options={}):
 
     >>> df = spark.range(1)
     >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
-    [Row(json=u'struct<a:bigint>')]
+    [Row(json='struct<a:bigint>')]
     >>> schema = schema_of_json('{a: 1}', {'allowUnquotedFieldNames':'true'})
     >>> df.select(schema.alias("json")).collect()
-    [Row(json=u'struct<a:bigint>')]
+    [Row(json='struct<a:bigint>')]
     """
-    if isinstance(json, basestring):
+    if isinstance(json, str):
         col = _create_column_from_literal(json)
     elif isinstance(json, Column):
         col = _to_java_column(json)
@@ -2557,7 +2509,6 @@ def schema_of_json(json, options={}):
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(3.0)
 def schema_of_csv(csv, options={}):
     """
@@ -2568,11 +2519,11 @@ def schema_of_csv(csv, options={}):
 
     >>> df = spark.range(1)
     >>> df.select(schema_of_csv(lit('1|a'), {'sep':'|'}).alias("csv")).collect()
-    [Row(csv=u'struct<_c0:int,_c1:string>')]
+    [Row(csv='struct<_c0:int,_c1:string>')]
     >>> df.select(schema_of_csv('1|a', {'sep':'|'}).alias("csv")).collect()
-    [Row(csv=u'struct<_c0:int,_c1:string>')]
+    [Row(csv='struct<_c0:int,_c1:string>')]
     """
-    if isinstance(csv, basestring):
+    if isinstance(csv, str):
         col = _create_column_from_literal(csv)
     elif isinstance(csv, Column):
         col = _to_java_column(csv)
@@ -2584,7 +2535,6 @@ def schema_of_csv(csv, options={}):
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(3.0)
 def to_csv(col, options={}):
     """
@@ -2595,10 +2545,10 @@ def to_csv(col, options={}):
     :param options: options to control converting. accepts the same options as the CSV datasource.
 
     >>> from pyspark.sql import Row
-    >>> data = [(1, Row(name='Alice', age=2))]
+    >>> data = [(1, Row(age=2, name='Alice'))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_csv(df.value).alias("csv")).collect()
-    [Row(csv=u'2,Alice')]
+    [Row(csv='2,Alice')]
     """
 
     sc = SparkContext._active_spark_context
@@ -2705,7 +2655,6 @@ def shuffle(col):
 
 
 @since(1.5)
-@ignore_unicode_prefix
 def reverse(col):
     """
     Collection function: returns a reversed string or an array with reverse order of elements.
@@ -2714,7 +2663,7 @@ def reverse(col):
 
     >>> df = spark.createDataFrame([('Spark SQL',)], ['data'])
     >>> df.select(reverse(df.data).alias('s')).collect()
-    [Row(s=u'LQS krapS')]
+    [Row(s='LQS krapS')]
     >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
     >>> df.select(reverse(df.data).alias('r')).collect()
     [Row(r=[3, 1, 2]), Row(r=[1]), Row(r=[])]
@@ -2820,7 +2769,6 @@ def map_from_entries(col):
     return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
 
 
-@ignore_unicode_prefix
 @since(2.4)
 def array_repeat(col, count):
     """
@@ -2828,7 +2776,7 @@ def array_repeat(col, count):
 
     >>> df = spark.createDataFrame([('ab',)], ['data'])
     >>> df.select(array_repeat(df.data, 3).alias('r')).collect()
-    [Row(r=[u'ab', u'ab', u'ab'])]
+    [Row(r=['ab', 'ab', 'ab'])]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_repeat(
@@ -2898,7 +2846,6 @@ def sequence(start, stop, step=None):
             _to_java_column(start), _to_java_column(stop), _to_java_column(step)))
 
 
-@ignore_unicode_prefix
 @since(3.0)
 def from_csv(col, schema, options={}):
     """
@@ -2920,11 +2867,11 @@ def from_csv(col, schema, options={}):
     >>> df = spark.createDataFrame(data, ("value",))
     >>> options = {'ignoreLeadingWhiteSpace': True}
     >>> df.select(from_csv(df.value, "s string", options).alias("csv")).collect()
-    [Row(csv=Row(s=u'abc'))]
+    [Row(csv=Row(s='abc'))]
     """
 
     sc = SparkContext._active_spark_context
-    if isinstance(schema, basestring):
+    if isinstance(schema, str):
         schema = _create_column_from_literal(schema)
     elif isinstance(schema, Column):
         schema = _to_java_column(schema)
@@ -2984,20 +2931,6 @@ def _get_lambda_parameters(f):
     return parameters
 
 
-def _get_lambda_parameters_legacy(f):
-    # TODO (SPARK-29909) Remove once 2.7 support is dropped
-    import inspect
-
-    spec = inspect.getargspec(f)
-    if not 1 <= len(spec.args) <= 3 or spec.varargs or spec.keywords:
-        raise ValueError(
-            "f should take between 1 and 3 arguments, but provided function takes {}".format(
-                spec
-            )
-        )
-    return spec.args
-
-
 def _create_lambda(f):
     """
     Create `o.a.s.sql.expressions.LambdaFunction` corresponding
@@ -3008,10 +2941,7 @@ def _create_lambda(f):
             - (Column, Column) -> Column: ...
             - (Column, Column, Column) -> Column: ...
     """
-    if sys.version_info >= (3, 3):
-        parameters = _get_lambda_parameters(f)
-    else:
-        parameters = _get_lambda_parameters_legacy(f)
+    parameters = _get_lambda_parameters(f)
 
     sc = SparkContext._active_spark_context
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
@@ -3481,7 +3411,7 @@ def udf(f=None, returnType=StringType()):
                            evalType=PythonEvalType.SQL_BATCHED_UDF)
 
 
-blacklist = ['map', 'since', 'ignore_unicode_prefix']
+blacklist = ['map', 'since']
 __all__ = [k for k, v in globals().items()
            if not k.startswith('_') and k[0].islower() and callable(v) and k not in blacklist]
 __all__ += ["PandasUDFType"]
@@ -3500,7 +3430,7 @@ def _test():
     sc = spark.sparkContext
     globs['sc'] = sc
     globs['spark'] = spark
-    globs['df'] = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
+    globs['df'] = spark.createDataFrame([Row(age=2, name='Alice'), Row(age=5, name='Bob')])
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)

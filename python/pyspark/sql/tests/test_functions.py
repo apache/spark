@@ -167,10 +167,6 @@ class FunctionsTests(ReusedSQLTestCase):
             TypeError,
             "must be the same type",
             lambda: df.select(col('name').substr(0, lit(1))))
-        if sys.version_info.major == 2:
-            self.assertRaises(
-                TypeError,
-                lambda: df.select(col('name').substr(long(0), long(1))))
 
         for name in _string_functions.keys():
             self.assertEqual(
