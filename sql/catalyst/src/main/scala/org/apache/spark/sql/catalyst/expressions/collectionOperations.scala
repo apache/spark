@@ -2612,8 +2612,10 @@ object Sequence {
       val stepDays = step.days
       val stepMicros = step.microseconds
 
-      require(scale != MICROS_PER_DAY || stepMonths != 0 || stepDays != 0,
-        "sequence step must be a day interval if start and end values are dates")
+      if(scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
+        throw new IllegalArgumentException(
+          "sequence step must be a day interval if start and end values are dates")
+      }
 
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
         backedSequenceImpl.eval(start, stop, fromLong(stepDays))
@@ -2677,15 +2679,23 @@ object Sequence {
            |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
           """.stripMargin
 
+      val check = if (scale == MICROS_PER_DAY) {
+        s"""
+           if ($stepMonths == 0 && $stepDays == 0) {
+            throw new IllegalArgumentException(
+               "sequence step must be a day interval if start and end values are dates");
+           }
+         """
+      } else {
+        ""
+      }
+
       s"""
          |final int $stepMonths = $step.months;
          |final int $stepDays = $step.days;
          |final long $stepMicros = $step.microseconds;
          |
-         |if (${scale}L == ${MICROS_PER_DAY}L && $stepMonths == 0 && $stepDays == 0) {
-         |  throw new IllegalArgumentException(
-         |    "sequence step must be a day interval if start and end values are dates");
-         |}
+         |$check
          |
          |if ($stepMonths == 0 && $stepMicros == 0 && ${scale}L == ${MICROS_PER_DAY}L) {
          |  ${backedSequenceImpl.genCode(ctx, start, stop, stepDays, arr, elemType)};
