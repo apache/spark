@@ -97,12 +97,8 @@ class BlockManagerMasterEndpoint(
   private val externalShuffleServiceRddFetchEnabled: Boolean = externalBlockStoreClient.isDefined
   private val externalShuffleServicePort: Int = StorageUtils.externalShuffleServicePort(conf)
 
-  private lazy val driverEndpoint = {
-    rpcEnv.setupEndpointRefByURI(RpcEndpointAddress(
-      conf.get(config.DRIVER_HOST_ADDRESS),
-      conf.get(config.DRIVER_PORT),
-      CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString)
-  }
+  private lazy val driverEndpoint =
+    RpcUtils.makeDriverRef(CoarseGrainedSchedulerBackend.ENDPOINT_NAME, conf, rpcEnv)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint) =>
