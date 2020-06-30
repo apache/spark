@@ -124,7 +124,8 @@ class MyRDD(
 
 class DAGSchedulerSuiteDummyException extends Exception
 
-class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLimits {
+class DAGSchedulerSuite extends SparkFunSuite
+    with LocalSparkContext with TimeLimits with SparkConfHelper {
 
   import DAGSchedulerSuite._
 
@@ -290,16 +291,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   private def testWithSparkConf(testName: String, testTags: Tag*)
       (pairs: (String, String)*)(testFun: => Any)(implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {
-      withSparkConf(pairs: _*)(testFun)
+      withSparkConf(pairs: _*) { conf: SparkConf =>
+        init(conf)
+        testFun
+      }
     }
-  }
-
-  /** Sets all configurations specified in `pairs`, calls `init`, and then calls `testFun` */
-  private def withSparkConf(pairs: (String, String)*)(testFun: => Any): Unit = {
-    val conf = new SparkConf()
-    pairs.foreach(kv => conf.set(kv._1, kv._2))
-    init(conf)
-    testFun
   }
 
   private def init(testConf: SparkConf): Unit = {
