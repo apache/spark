@@ -22,7 +22,7 @@ import java.sql.Driver
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[jdbc] class MariaDBConnectionProvider(driver: Driver, options: JDBCOptions)
-    extends SecureConnectionProvider(driver, options) {
+  extends SecureConnectionProvider(driver, options) {
   override val appEntry: String = {
     "Krb5ConnectorContext"
   }
