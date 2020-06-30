@@ -24,17 +24,17 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
-  var convert: String = _
+  protected def format: String
 
   test("SPARK-28169: Convert scan predicate condition to CNF") {
-    withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convert,
-      HiveUtils.CONVERT_METASTORE_ORC.key -> convert) {
-      withTable("t", "temp") {
+    withTempView("temp") {
+      withTable("t") {
         sql(
           s"""
-             |CREATE TABLE t(i int)
-             |PARTITIONED BY (p int)
-             |STORED AS PARQUET""".stripMargin)
+             |CREATE TABLE t(i INT, p STRING)
+             |USING $format
+             |PARTITIONED BY (p)""".stripMargin)
+
         spark.range(0, 1000, 1).selectExpr("id as col")
           .createOrReplaceTempView("temp")
 
@@ -42,26 +42,26 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
           sql(
             s"""
                |INSERT OVERWRITE TABLE t PARTITION (p='$part')
-               |select col from temp""".stripMargin)
+               |SELECT col FROM temp""".stripMargin)
         }
 
         assertPrunedPartitions(
           "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2)
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' and i = 2) or (i = 1 or p = '2')", 4)
+          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4)
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '3' and i = 3 )", 2)
+          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2)
         assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' and i = 2) or (p = '2' or p = '3')", 3)
+          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3)
         assertPrunedPartitions(
           "SELECT * FROM t", 4)
         assertPrunedPartitions(
-          "SELECT * FROM t where p = '1' and i = 2", 1)
+          "SELECT * FROM t WHERE p = '1' AND i = 2", 1)
         assertPrunedPartitions(
           """
             |SELECT i, COUNT(1) FROM (
-            |SELECT * FROM t where  p = '1' OR (p = '2' AND i = 1)
-            |) TMP GROUP BY i
+            |SELECT * FROM t WHERE  p = '1' OR (p = '2' AND i = 1)
+            |) tmp GROUP BY i
           """.stripMargin, 2)
       }
     }

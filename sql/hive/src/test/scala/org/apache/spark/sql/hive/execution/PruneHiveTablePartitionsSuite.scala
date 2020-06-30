@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
 
-  convert = "false"
+  override def format(): String = "hive"
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =

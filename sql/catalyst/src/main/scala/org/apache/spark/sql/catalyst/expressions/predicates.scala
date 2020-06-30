@@ -251,12 +251,32 @@ trait PredicateHelper extends Logging {
     resultStack.top
   }
 
+  /**
+   * Convert an expression to conjunctive normal form when pushing predicates through Join,
+   * when expand predicates, we can group by the qualifier avoiding generate unnecessary
+   * expression to control the length of final result since there are multiple tables.
+   * @param condition condition need to be convert
+   * @return expression seq in conjunctive normal form of input expression, if length exceeds
+   *         the threshold [[SQLConf.MAX_CNF_NODE_COUNT]] or length != 1, return empty Seq
+   */
   def conjunctiveNormalFormAndGroupExpsByQualifier(condition: Expression): Seq[Expression] = {
     conjunctiveNormalForm(condition,
       (expressions: Seq[Expression]) =>
         expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq)
   }
 
+  /**
+   * Convert an expression to conjunctive normal form when pushing predicates for partition pruning,
+   * when expand predicates, we can group by the reference avoiding generate unnecessary expression
+   * to control the length of final result since here we just have one table. In partition pruning
+   * strategies, we split filters by [[splitConjunctivePredicates]] and partition filters by judging
+   * if it's references is subset of partCols, if we combine expressions group by reference when
+   * expand predicate of [[Or]], it won't impact final predicate pruning result since
+   * [[splitConjunctivePredicates]] won't split [[Or]] expression.
+   * @param condition condition need to be convert
+   * @return expression seq in conjunctive normal form of input expression, if length exceeds
+   *         the threshold [[SQLConf.MAX_CNF_NODE_COUNT]] or length != 1, return empty Seq
+   */
   def conjunctiveNormalFormAndGroupExpsByReference(condition: Expression): Seq[Expression] = {
     conjunctiveNormalForm(condition,
       (expressions: Seq[Expression]) =>
