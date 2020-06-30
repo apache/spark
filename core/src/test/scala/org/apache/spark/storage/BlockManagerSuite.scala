@@ -183,7 +183,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   private def setupBlockManagerMasterWithBlocks(withLost: Boolean): Unit = {
     // set up a simple DriverEndpoint which simply adds executorIds and
-    // check whether a certain executorId has been added before.
+    // checks whether a certain executorId has been added before.
     val driverEndpoint = rpcEnv.setupEndpoint(CoarseGrainedSchedulerBackend.ENDPOINT_NAME,
       new RpcEndpoint {
         private val executorSet = mutable.HashSet[String]()
