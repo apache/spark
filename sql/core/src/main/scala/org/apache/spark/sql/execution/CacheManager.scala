@@ -254,11 +254,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Tries to re-cache all the cache entries that contain `path` in one or more
+   * Tries to re-cache all the cache entries that contain `resourcePath` in one or more
    * `HadoopFsRelation` node(s) as part of its logical plan.
    */
-  def recacheByPath(spark: SparkSession, path: Path, fs: FileSystem): Unit = {
-    val qualifiedPath = fs.makeQualified(path)
+  def recacheByPath(spark: SparkSession, resourcePath: Path, fs: FileSystem): Unit = {
+    val qualifiedPath = fs.makeQualified(resourcePath)
     recacheByCondition(spark, _.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined)
   }
 
