@@ -231,7 +231,9 @@ private[spark] class NettyBlockTransferService(
         }
       })
     } catch {
-      case e: IOException | InterruptedException =>
+      case e: IOException =>
+        hostLocalDirsCompletable.completeExceptionally(e)
+      case e: InterruptedException =>
         hostLocalDirsCompletable.completeExceptionally(e)
     }
   }
