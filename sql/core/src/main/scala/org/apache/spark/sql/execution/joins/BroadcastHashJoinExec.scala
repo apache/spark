@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.joins
 
-import scala.collection.mutable
-
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
