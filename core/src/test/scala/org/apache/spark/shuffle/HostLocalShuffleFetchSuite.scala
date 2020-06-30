@@ -43,8 +43,8 @@ class HostLocalShuffleFetchSuite extends SparkFunSuite with Matchers with LocalS
       .map { i => (i, 1) }
       .reduceByKey(_ + _)
 
-    rdd.count()
-    rdd.count()
+    assert(rdd.count() === 1000)
+    assert(rdd.count() === 1000)
 
     val cachedExecutors = rdd.mapPartitions { _ =>
       SparkEnv.get.blockManager.hostLocalDirManager.map { localDirManager =>
@@ -55,8 +55,6 @@ class HostLocalShuffleFetchSuite extends SparkFunSuite with Matchers with LocalS
     // both executors are caching the dirs of the other one
     cachedExecutors should equal(sc.getExecutorIds().toSet)
 
-    // Now Spark will not receive FetchFailed as host local blocks are read from the cached local
-    // disk directly
     rdd.collect().map(_._2).sum should equal(1000)
   }
 }
