@@ -832,7 +832,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
-  test("SPARK-32131 Fix wrong column index when we have more than two columns" +
+  test("SPARK-32131: Fix wrong column index when we have more than two columns" +
     " during union and set operations" ) {
     val firstTable = LocalRelation(
       AttributeReference("a", StringType)(),
