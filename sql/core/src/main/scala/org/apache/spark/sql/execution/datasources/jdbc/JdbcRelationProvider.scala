@@ -46,10 +46,15 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
 
     val conn = JdbcUtils.createConnectionFactory(options)()
+
+    var parametersWithoutPreActions: Map[String, String] = parameters
     try {
       options.preActions match {
         case Some(i) =>
           runQuery(conn, i, options)
+
+          // Remove preActions to avoid duplicate execution when writing data
+          parametersWithoutPreActions = parameters.-(JDBCOptions.JDBC_PRE_ACTIONS_STRING)
         case None =>
       }
 
@@ -97,6 +102,6 @@ class JdbcRelationProvider extends CreatableRelationProvider
       conn.close()
     }
 
-    createRelation(sqlContext, parameters)
+    createRelation(sqlContext, parametersWithoutPreActions)
   }
 }

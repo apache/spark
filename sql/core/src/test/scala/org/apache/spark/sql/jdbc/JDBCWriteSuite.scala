@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.DriverManager
+import java.sql.{DriverManager, SQLException}
 import java.util.Properties
 
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
@@ -576,7 +576,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
-  test("SPARK-32013: option preActions/postActions, run SQL before writing data.") {
+  test("option preActions/postActions, run single SQL before writing data.") {
 
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     df.write.format("jdbc")
@@ -609,6 +609,88 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     val df3 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
     df3.show()
     assert(3 === df3.count()) // 2(df) + 1(postActions)
+  }
+
+  test("option preActions/postActions, run multiple SQLs before writing data.") {
+
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    df.write.format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.CUSTOMQUERY")
+      .options(properties.asScala)
+      .save()
+    val df1 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
+    df1.show()
+    assert(2 === df1.count())
+
+    val preSQL = "insert into TEST.CUSTOMQUERY values ('kathy', 4); " +
+      "insert into TEST.CUSTOMQUERY values ('joe', 5)"
+    df.repartition(20).write.mode(SaveMode.Append).format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.CUSTOMQUERY")
+      .option("preActions", preSQL)
+      .options(properties.asScala)
+      .save()
+    val df2 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
+    df2.show()
+    assert(6 === df2.count()) // 2(df) + 2(df append) + 2(preActions)
+
+    val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1); " +
+      "select * from TEST.CUSTOMQUERY;"
+    df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.CUSTOMQUERY")
+      .option("postActions", postSQL)
+      .options(properties.asScala)
+      .save()
+    val df3 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
+    df3.show()
+    assert(3 === df3.count()) // 2(df) + 1(postActions)
+  }
+
+  test("option preActions/postActions, run multiple SQLs before writing data with exceptions.") {
+
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    df.write.format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.CUSTOMQUERY")
+      .options(properties.asScala)
+      .save()
+    val df1 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
+    df1.show()
+    assert(2 === df1.count())
+
+    val preSQL = "insert into TEST.CUSTOMQUERY values ('kathy', 4); " +
+      "insert into TEST.NONEXISTS values ('joe', 5)"
+    val e1 = intercept[SQLException] {
+      df.repartition(20).write.mode(SaveMode.Append).format("jdbc")
+        .option("Url", url1)
+        .option("dbtable", "TEST.CUSTOMQUERY")
+        .option("preActions", preSQL)
+        .options(properties.asScala)
+        .save()
+    }.getMessage
+    assert(e1.contains("Table \"NONEXISTS\" not found"))
+
+    val df2 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
+    df2.show()
+    assert(2 === df2.count()) // preActions should be rollbacked, and data write should be canceled.
+
+    val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1); " +
+      "select * from TEST.NONEXISTS;"
+    val e2 = intercept[SQLException] {
+      df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
+        .option("Url", url1)
+        .option("dbtable", "TEST.CUSTOMQUERY")
+        .option("postActions", postSQL)
+        .options(properties.asScala)
+        .save()
+    }.getMessage
+    assert(e2.contains("Table \"NONEXISTS\" not found"))
+    val df3 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
+    df3.show()
+    assert(2 === df3.count()) // postActions should be rollbacked.
+
   }
 
   private def runAndVerifyRecordsWritten(expected: Long)(job: => Unit): Unit = {

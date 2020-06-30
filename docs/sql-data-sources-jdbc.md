@@ -159,14 +159,14 @@ the following case-insensitive options:
   <tr>
      <td><code>preActions</code></td>
      <td>
-       You can specify custom queries which you want to run before reading data from JDBC or writing data to JDBC. It is called per DataFrame, not per session.
+       Custom queries which you want to run before reading data from JDBC or writing data to JDBC. It is called per DataFrame, not per session. You can specify multiple queries separated by semicolon. When exceptions occur, all the queries will be rollbacked. 
      </td>
   </tr>
 
   <tr>
      <td><code>postActions</code></td>
      <td>
-        This is a JDBC writer related option. You can specify custom queries which you want to run after writing data to JDBC. It is called per DataFrame, not per session.
+        This is a JDBC writer related option. Custom queries which you want to run after writing data to JDBC. It is called per DataFrame, not per session. You can specify multiple queries separated by semicolon. When exceptions occur, all the queries will be rollbacked. 
      </td>
   </tr>
 

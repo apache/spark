@@ -125,13 +125,31 @@ object JdbcUtils extends Logging {
   /**
    * Runs a custom query against a table from the JDBC database.
    */
-  def runQuery(conn: Connection, queryString: String, options: JDBCOptions): Unit = {
-    val statement = conn.prepareStatement(queryString)
+  def runQuery(conn: Connection, actions: String, options: JDBCOptions): Unit = {
+    val autoCommit = conn.getAutoCommit
+    conn.setAutoCommit(false)
+    val queries = actions.split(";")
     try {
-      statement.setQueryTimeout(options.queryTimeout)
-      statement.execute()
+      queries.foreach { query =>
+        val queryString = query.trim()
+        val statement = conn.prepareStatement(queryString)
+        try {
+          statement.setQueryTimeout(options.queryTimeout)
+          val hasResultSet = statement.execute()
+          if (hasResultSet) {
+            statement.getResultSet().close()
+          }
+        } finally {
+          statement.close()
+        }
+      }
+      conn.commit()
+    } catch {
+      case e: SQLException =>
+        conn.rollback()
+        throw e
     } finally {
-      statement.close()
+      conn.setAutoCommit(autoCommit)
     }
   }
 
