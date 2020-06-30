@@ -226,7 +226,6 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
       model2: FMClassificationModel
     ): Unit = {
       assert(model.intercept === model2.intercept)
-      println(model.factors.toArray.mkString(" "))
       assert(model.linear.toArray === model2.linear.toArray)
       assert(model.factors.toArray === model2.factors.toArray)
       assert(model.numFeatures === model2.numFeatures)
