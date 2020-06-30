@@ -235,7 +235,7 @@ object StaticSQLConf {
       s"${StaticSQLConf.CATALOG_IMPLEMENTATION} to `hive`, setting " +
       s"${SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE} > 0 and setting " +
       s"${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS} to `true` " +
-      s"to be applied to the partition file metadata cache.")
+      "to be applied to the partition file metadata cache.")
     .version("3.1.0")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefault(-1)
