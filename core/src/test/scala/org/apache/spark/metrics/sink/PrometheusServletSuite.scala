@@ -22,7 +22,6 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
-
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
