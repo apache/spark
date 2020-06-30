@@ -58,8 +58,9 @@ private[spark] object RpcUtils {
 
   /**
    * Infinite timeout is used internally, so there's no actual timeout property controls it.
-   * And timeout property should never be accessed since infinite means we never timeout.
-   * */
+   * Therefore, we use "infinite" without any specific reason as its timeout property. And
+   * its timeout property should never be accessed since infinite means we never timeout.
+   */
   val infiniteTimeout = new RpcTimeout(Long.MaxValue.nanos, "infinite")
 
   private val MAX_MESSAGE_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
