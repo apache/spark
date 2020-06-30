@@ -106,6 +106,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveNoopOperators,
+        CombineWithFields,
         SimplifyExtractValueOps,
         CombineConcats) ++
         extendedOperatorOptimizationRules
@@ -202,9 +203,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CollapseProject,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
-    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
-    Batch("CombineWithFields", fixedPoint, CombineWithFields) :+
-    Batch("WithFieldsToCreateNamedStruct", Once, WithFieldsToCreateNamedStruct)
+    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
+
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -238,8 +238,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
-      CombineWithFields.ruleName ::
-      WithFieldsToCreateNamedStruct.ruleName :: Nil
+      CombineWithFields.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -1800,14 +1799,5 @@ object CombineWithFields extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
       WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
-  }
-}
-
-/**
- * [[WithFields]] expression to [[CreateNamedStruct]].
- */
-object WithFieldsToCreateNamedStruct extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case e: WithFields => e.toCreateNamedStruct
   }
 }
