@@ -270,6 +270,7 @@ class BlockManagerMasterEndpoint(
     Future.sequence(
       blockManagerInfo.values.map { bm =>
         bm.slaveEndpoint.ask[Boolean](removeMsg).recover {
+          // use false as default value means no shuffle data were removed
           handleFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
         }
       }.toSeq
@@ -389,6 +390,7 @@ class BlockManagerMasterEndpoint(
           // Doesn't actually wait for a confirmation and the message might get lost.
           // If message loss becomes frequent, we should add retry logic here.
           bm.slaveEndpoint.ask[Boolean](RemoveBlock(blockId)).recover {
+            // use false as default value means no blocks were removed
             handleFailure("block", blockId.toString, bm.blockManagerId, false)
           }
         }
