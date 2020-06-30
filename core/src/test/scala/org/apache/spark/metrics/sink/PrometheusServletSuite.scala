@@ -24,12 +24,12 @@ import scala.collection.JavaConverters._
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 
 import org.scalatest.PrivateMethodTester
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 
 class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
 
-  test("PrometheusServletSuite registered metrics test") {
+  test("register metrics") {
     val sink = createPrometheusServlet()
 
     val gauge = new Gauge[Double] {
@@ -60,7 +60,7 @@ class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
     counterValues.foreach(counter => assert(counter.getCount == 10))
   }
 
-  test("PrometheusServletSuite private normalizeKey function test") {
+  test("normalize key") {
     val key = "local-1592132938718.driver.LiveListenerBus." +
       "listenerProcessingTime.org.apache.spark.HeartbeatReceiver"
     val sink = createPrometheusServlet()
@@ -71,11 +71,8 @@ class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
 
   private def createPrometheusServlet(): PrometheusServlet = {
     val props = new Properties
-    props.put("host", "127.0.0.1")
-    props.put("port", "12340")
     val registry = new MetricRegistry
     val securityMgr = new SecurityManager(new SparkConf(false))
     new PrometheusServlet(props, registry, securityMgr)
   }
-
 }
