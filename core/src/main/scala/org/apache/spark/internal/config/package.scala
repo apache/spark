@@ -1828,6 +1828,22 @@ package object config {
       .doubleConf
       .createWithDefault(0.75)
 
+  private[spark] val SPECULATION_TASK_MIN_DURATION =
+    ConfigBuilder("spark.speculation.task.min.duration")
+      .doc("The minimum duration of a task can be speculatived.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("0s")
+
+  private[spark] val SPECULATION_TASK_PROGRESS_MULTIPLIER =
+    ConfigBuilder("spark.speculation.task.progress.multiplier")
+      .doubleConf
+      .createWithDefault(1.0)
+
+  private[spark] val SPECULATION_TASK_DURATION_FACTOR =
+    ConfigBuilder("spark.speculation.task.duration.factor")
+      .doubleConf
+      .createWithDefault(2.0)
+
   private[spark] val SPECULATION_TASK_DURATION_THRESHOLD =
     ConfigBuilder("spark.speculation.task.duration.threshold")
       .doc("Task duration after which scheduler would try to speculative run the task. If " +

@@ -32,6 +32,7 @@ import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.SKIP_VALIDATE_CORES_TESTING
@@ -2036,6 +2037,264 @@ class TaskSetManagerSuite
       assert(backend.executorsPendingToRemove.isEmpty)
       assert(manager.invokePrivate(numFailures())(index0) === 0)
       assert(manager.invokePrivate(numFailures())(index1) === 1)
+    }
+  }
+
+  test("SPARK-32170: test 'spark.speculation.task.min.duration' for speculating " +
+    "inefficient tasks") {
+    sc = new SparkContext("local", "test")
+    // set the speculation multiplier to be 0, so speculative tasks are launched immediately
+    sc.conf.set("spark.speculation.multiplier", "0.0")
+    sc.conf.set("spark.speculation", "true")
+    sc.conf.set("spark.speculation.task.progress.multiplier", "0.5")
+    sc.conf.set("spark.speculation.task.duration.factor", Int.MaxValue.toString)
+    val submissionTime = 0L
+    val runtime = 20 * 1000
+    val recordsNum = 10000L
+    Seq("0s", "10s", "50s").foreach { minDuration =>
+      sc.conf.set("spark.speculation.task.min.duration", minDuration)
+      sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+      val taskSet = FakeTask.createTaskSet(4)
+      val clock = new ManualClock()
+      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+      val stage =
+        new StageInfo(0, 0, "stage", 4, Nil, Nil, null, null, resourceProfileId = 0)
+      val listener = sc.statusTracker.getAppStatusStore.listener.get
+      stage.submissionTime = Some(submissionTime)
+      listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
+      val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+        task.metrics.internalAccums
+      }
+      // offer resources for 4 tasks to start
+      for ((k, v) <- List(
+        "exec1" -> "host1",
+        "exec1" -> "host1",
+        "exec2" -> "host2",
+        "exec2" -> "host2")) {
+        val taskOption = manager.resourceOffer(k, v, NO_PREF)._1
+        assert(taskOption.isDefined)
+        val task = taskOption.get
+        assert(task.executorId === k)
+        val taskInfo = new TaskInfo(task.taskId, task.index, 0, submissionTime, k, v,
+          NO_PREF, false)
+
+        // FakeDAGScheduler has overrided onTaskStart to record the number of startedTasks instead
+        // of calling 'listener.onTaskEnd', so we should call listener.onTaskStart to update the
+        // AppStatusStore.
+        listener.onTaskStart(SparkListenerTaskStart(stage.stageId,
+          stage.attemptNumber, taskInfo))
+      }
+      assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
+      // give task metrics some time to update
+      Thread.sleep(200)
+      clock.advance(runtime)
+      // complete the 3 tasks and leave 1 task in running
+      for (id <- Set(0, 1, 2)) {
+        manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
+        assert(sched.endedTasks(id) === Success)
+        val taskInfo = manager.taskInfos(id)
+        val taskMetrics = new TaskMetrics
+        taskMetrics.inputMetrics.incRecordsRead(recordsNum)
+        taskMetrics.shuffleReadMetrics.incRecordsRead(recordsNum)
+        taskMetrics.setExecutorRunTime(runtime)
+
+        // FakeDAGScheduler has overrided onTaskEnd to record the number of endedTasks instead of
+        // calling 'listener.onTaskEnd', so we should call listener.onTaskEnd to update the
+        // AppStatusStore.
+        listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, null,
+          Success, taskInfo, null, taskMetrics))
+      }
+      val taskMetrics = TaskMetrics.empty
+      taskMetrics.inputMetrics.incRecordsRead((0.4 * recordsNum).toLong)
+      taskMetrics.shuffleReadMetrics.incRecordsRead((0.4 * recordsNum).toLong)
+      // accum is Array((taskId, stageId, stageAttemptId, accumUpdates))
+      val accum = Array((3.toLong, 0, 0, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
+      // update the task 4 metrics
+      listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("exec2", accum))
+
+      // 1) when 'spark.speculation.task.min.duration' is equal 0s, the task 4 will be speculated
+      // by previous strategy.
+      // 2) when 'spark.speculation.task.min.duration' is equal 10s, the task 4 runtime(20s) is
+      // above (10s) and evaluated an inefficient task to speculate.
+      // 3) when 'spark.speculation.task.min.duration' is equal 50s, the task 4 runtime(20s) is less
+      // than (50s) and no needs to speculate.
+      if (Seq("0s", "10s").contains(minDuration)) {
+        assert(manager.checkSpeculatableTasks(0))
+        assert(sched.speculativeTasks.toSet === Set(3))
+      } else {
+        assert(!manager.checkSpeculatableTasks(0))
+        assert(sched.speculativeTasks.toSet === Set.empty)
+      }
+    }
+  }
+
+  test("SPARK-32170: test 'spark.speculation.task.progress.multiplier' for speculating " +
+    "inefficient tasks") {
+    sc = new SparkContext("local", "test")
+    // set the speculation multiplier to be 0, so speculative tasks are launched immediately
+    sc.conf.set("spark.speculation.multiplier", "0.0")
+    sc.conf.set("spark.speculation", "true")
+    sc.conf.set("spark.speculation.task.min.duration", "10s")
+    sc.conf.set("spark.speculation.task.duration.factor", Int.MaxValue.toString)
+    val submissionTime = 0L
+    val runtime = 20 * 1000
+    val recordsNum = 10000L
+    Seq(0.5, 0.8).foreach { progressMultiplier => {
+      sc.conf.set("spark.speculation.task.progress.multiplier", progressMultiplier.toString)
+      sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+      val taskSet = FakeTask.createTaskSet(4)
+      val clock = new ManualClock()
+      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+      val stage =
+        new StageInfo(0, 0, "stage", 4, Nil, Nil, null, null, resourceProfileId = 0)
+      val listener = sc.statusTracker.getAppStatusStore.listener.get
+      stage.submissionTime = Some(submissionTime)
+      listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
+      val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+        task.metrics.internalAccums
+      }
+      // offer resources for 4 tasks to start
+      for ((k, v) <- List(
+        "exec1" -> "host1",
+        "exec1" -> "host1",
+        "exec2" -> "host2",
+        "exec2" -> "host2")) {
+        val taskOption = manager.resourceOffer(k, v, NO_PREF)._1
+        assert(taskOption.isDefined)
+        val task = taskOption.get
+        assert(task.executorId === k)
+        val taskInfo = new TaskInfo(task.taskId, task.index, 0, submissionTime, k, v,
+          NO_PREF, false)
+
+        // FakeDAGScheduler has overrided onTaskStart to record the number of startedTasks instead
+        // of calling 'listener.onTaskEnd', so we should call listener.onTaskStart to update the
+        // AppStatusStore.
+        listener.onTaskStart(SparkListenerTaskStart(stage.stageId,
+          stage.attemptNumber, taskInfo))
+      }
+      assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
+      // give task metrics some time to update
+      Thread.sleep(200)
+      clock.advance(runtime)
+      // complete the 3 tasks and leave 1 task in running
+      for (id <- Set(0, 1, 2)) {
+        manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
+        assert(sched.endedTasks(id) === Success)
+
+        val taskInfo = manager.taskInfos(id)
+        val taskMetrics = new TaskMetrics
+        taskMetrics.inputMetrics.incRecordsRead(recordsNum)
+        taskMetrics.shuffleReadMetrics.incRecordsRead(recordsNum)
+        taskMetrics.setExecutorRunTime(runtime)
+
+        // FakeDAGScheduler has overrided onTaskEnd to record the number of endedTasks instead of
+        // calling 'listener.onTaskEnd', so we should call listener.onTaskEnd to update the
+        // AppStatusStore.
+        listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, null,
+          Success, taskInfo, null, taskMetrics))
+      }
+      val taskMetrics = TaskMetrics.empty
+      taskMetrics.inputMetrics.incRecordsRead((0.6 * recordsNum).toLong)
+      taskMetrics.shuffleReadMetrics.incRecordsRead((0.6 * recordsNum).toLong)
+      // accum is Array((taskId, stageId, stageAttemptId, accumUpdates))
+      val accum = Array((3.toLong, 0, 0, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
+      // update the task-4 metrics
+      listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("exec2", accum))
+      // 0.5 < 0.6 < 0.8
+      if (progressMultiplier == 0.8) {
+        assert(manager.checkSpeculatableTasks(0))
+        assert(sched.speculativeTasks.toSet === Set(3))
+      } else {
+        assert(!manager.checkSpeculatableTasks(0))
+        assert(sched.speculativeTasks.toSet === Set.empty)
+      }
+    }
+    }
+  }
+
+  test("SPARK-32170: test 'spark.speculation.task.duration.factor' for speculating" +
+    " tasks") {
+    sc = new SparkContext("local", "test")
+    // set the speculation multiplier to be 0, so speculative tasks are launched immediately
+    sc.conf.set("spark.speculation.multiplier", "0.0")
+    sc.conf.set("spark.speculation.factor", "2")
+    sc.conf.set("spark.speculation", "true")
+    sc.conf.set("spark.speculation.task.min.duration", "15s")
+    sc.conf.set("spark.speculation.task.progress.multiplier", "0.5")
+    val submissionTime = 0L
+    val runtime = 20 * 1000
+    val recordsNum = 10000L
+    Seq(1, 2).foreach { factor => {
+      sc.conf.set("spark.speculation.task.duration.factor", factor.toString)
+      sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+      val taskSet = FakeTask.createTaskSet(4)
+      val clock = new ManualClock()
+      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+      val stage =
+        new StageInfo(0, 0, "stage", 4, Nil, Nil, null, null, resourceProfileId = 0)
+      val listener = sc.statusTracker.getAppStatusStore.listener.get
+      stage.submissionTime = Some(submissionTime)
+      listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
+      val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+        task.metrics.internalAccums
+      }
+      // offer resources for 4 tasks to start
+      for ((k, v) <- List(
+        "exec1" -> "host1",
+        "exec1" -> "host1",
+        "exec2" -> "host2",
+        "exec2" -> "host2")) {
+        val taskOption = manager.resourceOffer(k, v, NO_PREF)._1
+        assert(taskOption.isDefined)
+        val task = taskOption.get
+        assert(task.executorId === k)
+        val taskInfo = new TaskInfo(task.taskId, task.index, 0, submissionTime, k, v,
+          NO_PREF, false)
+
+        // FakeDAGScheduler has overrided onTaskStart to record the number of startedTasks instead
+        // of calling 'listener.onTaskEnd', so we should call listener.onTaskStart to update the
+        // AppStatusStore.
+        listener.onTaskStart(SparkListenerTaskStart(stage.stageId,
+          stage.attemptNumber, taskInfo))
+      }
+      assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
+      // give task metrics some time to update
+      Thread.sleep(200)
+      clock.advance(runtime)
+      // complete the 3 tasks and leave 1 task in running
+      for (id <- Set(0, 1, 2)) {
+        manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
+        assert(sched.endedTasks(id) === Success)
+
+        val taskInfo = manager.taskInfos(id)
+        val taskMetrics = new TaskMetrics
+        taskMetrics.inputMetrics.incRecordsRead(recordsNum)
+        taskMetrics.shuffleReadMetrics.incRecordsRead(recordsNum)
+        taskMetrics.setExecutorRunTime(runtime)
+
+        // FakeDAGScheduler has overrided onTaskEnd to record the number of endedTasks instead of
+        // calling 'listener.onTaskEnd', so we should call listener.onTaskEnd to update the
+        // AppStatusStore.
+        listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, null,
+          Success, taskInfo, null, taskMetrics))
+      }
+      val taskMetrics = TaskMetrics.empty
+      taskMetrics.inputMetrics.incRecordsRead((0.6 * recordsNum).toLong)
+      taskMetrics.shuffleReadMetrics.incRecordsRead((0.6 * recordsNum).toLong)
+      // accum is Array((taskId, stageId, stageAttemptId, accumUpdates))
+      val accum = Array((3.toLong, 0, 0, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
+      // update the task-4 metrics
+      listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("exec2", accum))
+      // runtimeMs(20s) > 15s(1 * 15s)
+      if (factor == 1) {
+        assert(manager.checkSpeculatableTasks(0))
+        assert(sched.speculativeTasks.toSet === Set(3))
+      } else {
+        // runtimeMs(20s) < 30s(2 * 15s)
+        assert(!manager.checkSpeculatableTasks(0))
+        assert(sched.speculativeTasks.toSet === Set.empty)
+      }
+    }
     }
   }
 }
