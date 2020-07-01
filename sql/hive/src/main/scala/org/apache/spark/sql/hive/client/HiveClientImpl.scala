@@ -478,13 +478,19 @@ private[hive] class HiveClientImpl(
       ignoredProperties += key -> value
     }
 
-    val excludedTableProperties = HiveStatisticsProperties ++ Set(
+    var excludedTableProperties = HiveStatisticsProperties ++ Set(
       // The property value of "comment" is moved to the dedicated field "comment"
-      "comment",
-      // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
-      // in the function toHiveTable.
-      "EXTERNAL"
+      "comment"
     )
+    // We should retain the external property if is useful
+    val externalExcluded = properties.get("EXTERNAL").map(_.toLowerCase(Locale.ROOT)) match {
+      case Some("true") if h.getTableType == HiveTableType.MANAGED_TABLE => false
+      case Some("false") if h.getTableType == HiveTableType.EXTERNAL_TABLE => false
+      case _ => true
+    }
+    if (externalExcluded) {
+      excludedTableProperties = excludedTableProperties + "EXTERNAL"
+    }
 
     val filteredProperties = properties.filterNot {
       case (key, _) => excludedTableProperties.contains(key)
