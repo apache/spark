@@ -160,10 +160,14 @@ the following case-insensitive options:
      <td><code>preActions</code></td>
      <td>
 <<<<<<< HEAD
+<<<<<<< HEAD
        Custom queries which you want to run in the Spark Driver before reading data from JDBC or writing data to JDBC. Only DDL or DML (insert/update/delete) are allowed. You can specify multiple queries separated by semicolon. When exceptions occur in preActions, the queries in preActions will be rollbacked. 
 =======
        Custom queries which you want to run before reading data from JDBC or writing data to JDBC. It is called per DataFrame, not per session. You can specify multiple queries separated by semicolon. When exceptions occur, all the queries will be rollbacked. 
 >>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
+=======
+       Custom queries which you want to run before reading data from JDBC or writing data to JDBC. It is called per DataFrame, not per session. You can specify multiple queries separated by semicolon. When exceptions occur in preActions, the queries in preActions will be rollbacked. 
+>>>>>>> f2e68a2c27... [SPARK-21514][SQL] Updated doc to explain how it behaves for exceptions in postActions.
      </td>
   </tr>
 
@@ -171,10 +175,14 @@ the following case-insensitive options:
      <td><code>postActions</code></td>
      <td>
 <<<<<<< HEAD
+<<<<<<< HEAD
         This is a JDBC writer related option. Custom queries which you want to run the Spark Driver after writing data to JDBC. Only DDL or DML (insert/update/delete) are allowed. You can specify multiple queries separated by semicolon. When exceptions occur in postActions, the queries in postActions will be rollbacked but the queries in preActions and queries used in saving the DataFrame will be committed. 
 =======
         This is a JDBC writer related option. Custom queries which you want to run after writing data to JDBC. It is called per DataFrame, not per session. You can specify multiple queries separated by semicolon. When exceptions occur, all the queries will be rollbacked. 
 >>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
+=======
+        This is a JDBC writer related option. Custom queries which you want to run after writing data to JDBC. It is called per DataFrame, not per session. You can specify multiple queries separated by semicolon. When exceptions occur in postActions, the queries in postActions will be rollbacked but the queries in preActions and queries used in saving the DataFrame will be committed. 
+>>>>>>> f2e68a2c27... [SPARK-21514][SQL] Updated doc to explain how it behaves for exceptions in postActions.
      </td>
   </tr>
 
