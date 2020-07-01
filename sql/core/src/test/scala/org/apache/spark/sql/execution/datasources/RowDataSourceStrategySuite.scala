@@ -46,6 +46,7 @@ class RowDataSourceStrategySuite extends SharedSparkSession with BeforeAndAfter 
     properties.setProperty("rowId", "false")
 
     conn = DriverManager.getConnection(url, properties)
+    conn.prepareStatement("drop schema if exists test").executeUpdate()
     conn.prepareStatement("create schema test").executeUpdate()
     conn.prepareStatement("create table test.inttypes (a INT, b INT, c INT)").executeUpdate()
     conn.prepareStatement("insert into test.inttypes values (1, 2, 3)").executeUpdate()

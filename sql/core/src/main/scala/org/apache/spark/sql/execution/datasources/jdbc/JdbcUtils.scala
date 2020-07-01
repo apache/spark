@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, Ge
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.QueryStatementUtils
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
@@ -128,10 +129,11 @@ object JdbcUtils extends Logging {
   def runQuery(conn: Connection, actions: String, options: JDBCOptions): Unit = {
     val autoCommit = conn.getAutoCommit
     conn.setAutoCommit(false)
-    val queries = actions.split(";")
+    val commands = QueryStatementUtils.splitSemiColon(actions).asScala
     try {
-      queries.foreach { query =>
-        val queryString = query.trim()
+      commands.foreach { command =>
+        val queryString = command.trim()
+        logWarning(queryString)
         val statement = conn.prepareStatement(queryString)
         try {
           statement.setQueryTimeout(options.queryTimeout)
