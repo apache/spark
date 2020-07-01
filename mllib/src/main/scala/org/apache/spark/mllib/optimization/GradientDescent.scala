@@ -129,7 +129,20 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
    * @param initialWeights initial weights
    * @return solution vector
    */
-  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): (Vector, Array[Double]) = {
+  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
+    val (weights, _) = optimizeWithLossReturned(data, initialWeights)
+    weights
+  }
+
+  /**
+   * Runs gradient descent on the given training data.
+   * @param data training data
+   * @param initialWeights initial weights
+   * @return solution vector and loss value in an array
+   */
+  def optimizeWithLossReturned(
+      data: RDD[(Double, Vector)],
+      initialWeights: Vector): (Vector, Array[Double]) = {
     GradientDescent.runMiniBatchSGD(
       data,
       gradient,

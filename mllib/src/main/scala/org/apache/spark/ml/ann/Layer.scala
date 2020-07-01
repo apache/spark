@@ -851,7 +851,7 @@ private[ml] class FeedForwardTrainer(
     }
     val handlePersistence = trainData.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) trainData.persist(StorageLevel.MEMORY_AND_DISK)
-    val (newWeights, _) = optimizer.optimize(trainData, w)
+    val newWeights = optimizer.optimize(trainData, w)
     if (handlePersistence) trainData.unpersist()
     topology.model(newWeights)
   }

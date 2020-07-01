@@ -210,7 +210,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
       .setNumIterations(numIterations)
       .setRegParam(regParam)
 
-    val (weightLBFGS, _) = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
+    val weightLBFGS = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
 
     val numGDIterations = 50
     val stepSize = 1.0

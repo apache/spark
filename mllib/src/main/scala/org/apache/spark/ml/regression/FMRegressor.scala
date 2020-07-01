@@ -151,7 +151,7 @@ private[ml] trait FactorizationMachines extends FactorizationMachinesParams {
       .setRegParam($(regParam))
       .setMiniBatchFraction($(miniBatchFraction))
       .setConvergenceTol($(tol))
-    val (coefficients, lossHistory) = optimizer.optimize(data, initialCoefficients)
+    val (coefficients, lossHistory) = optimizer.optimizeWithLossReturned(data, initialCoefficients)
     (coefficients.asML, lossHistory)
   }
 }

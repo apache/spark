@@ -28,5 +28,5 @@ trait Optimizer extends Serializable {
   /**
    * Solve the provided convex optimization problem.
    */
-  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): (Vector, Array[Double])
+  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector
 }
