@@ -2730,4 +2730,20 @@ class HiveDDLSuite
       assert(sql("SELECT * FROM t2 WHERE c = 'A'").collect().isEmpty)
     }
   }
+
+  test("SPARK-32144: Retain EXTERNAL property in hive table properties") {
+    val catalog = spark.sessionState.catalog
+    withTable("t1") {
+      sql("create table t1(c int)")
+      val table = catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table.properties.get("EXTERNAL").isEmpty)
+      val alter1 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "true"))
+      // spark cann't modify EXTERNAL property so we have to use hive client
+      hiveClient.alterTable(alter1)
+      assert(table.properties.get("EXTERNAL").isEmpty)
+      val alter2 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "false"))
+      hiveClient.alterTable(alter2)
+      assert(table.properties("EXTERNAL") == "false")
+    }
+  }
 }
