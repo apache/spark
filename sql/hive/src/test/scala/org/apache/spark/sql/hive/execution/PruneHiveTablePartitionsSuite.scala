@@ -32,7 +32,7 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
         EliminateSubqueryAliases, new PruneHiveTablePartitions(spark)) :: Nil
   }
 
-  test("SPARK-15616 statistics pruned after going through PruneHiveTablePartitions") {
+  test("SPARK-15616: statistics pruned after going through PruneHiveTablePartitions") {
     withTable("test", "temp") {
       sql(
         s"""
