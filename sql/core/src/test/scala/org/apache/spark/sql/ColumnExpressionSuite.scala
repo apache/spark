@@ -976,17 +976,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should throw an exception if either fieldName or col argument are null") {
-    an[java.lang.NullPointerException] should be thrownBy {
+    intercept[IllegalArgumentException] {
       structLevel1.withColumn("a", $"a".withField(null, lit(2)))
-    }
+    }.getMessage should include("fieldName cannot be null")
 
-    an[java.lang.NullPointerException] should be thrownBy {
+    intercept[IllegalArgumentException] {
       structLevel1.withColumn("a", $"a".withField("b", null))
-    }
+    }.getMessage should include("col cannot be null")
 
-    an[java.lang.NullPointerException] should be thrownBy {
+    intercept[IllegalArgumentException] {
       structLevel1.withColumn("a", $"a".withField(null, null))
-    }
+    }.getMessage should include("fieldName cannot be null")
   }
 
   test("withField should throw an exception if any intermediate structs don't exist") {

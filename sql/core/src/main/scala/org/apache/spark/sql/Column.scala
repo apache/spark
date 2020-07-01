@@ -900,6 +900,9 @@ class Column(val expr: Expression) extends Logging {
    * @since 3.1.0
    */
   def withField(fieldName: String, col: Column): Column = withExpr {
+    require(fieldName != null, "fieldName cannot be null")
+    require(col != null, "col cannot be null")
+
     val nameParts = if (fieldName.isEmpty) {
       fieldName :: Nil
     } else {
