@@ -94,10 +94,6 @@ private[hive] trait SparkOperation extends Operation with Logging {
       throw new IllegalArgumentException(s"Unknown table type is found: $t")
   }
 
-  def state(newState: OperationState): OperationState = {
-    super.setState(newState)
-  }
-
   protected def onError(): PartialFunction[Throwable, Unit] = {
     case e: Throwable =>
       logError(s"Error executing get catalogs operation with $statementId", e)
