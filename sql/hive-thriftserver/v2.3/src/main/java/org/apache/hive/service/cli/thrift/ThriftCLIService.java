@@ -566,7 +566,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       if (opException != null) {
         resp.setSqlState(opException.getSQLState());
         resp.setErrorCode(opException.getErrorCode());
-        resp.setErrorMessage(opException.getMessage());
+        resp.setErrorMessage(org.apache.hadoop.util.StringUtils.
+            stringifyException(opException));
       }
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {
