@@ -2735,6 +2735,16 @@ class HiveDDLSuite
       val t5 = catalog.getTableMetadata(TableIdentifier("t5"))
       assert(t5.properties.isEmpty)
     }
+
+    withView("v1") {
+      withTable("t1") {
+        sql("create view v1 as select 1")
+        sql("alter view v1 set tblproperties('k1'='v1')")
+        sql("create table t1 like v1")
+        val t1 = catalog.getTableMetadata(TableIdentifier("t1"))
+        assert(t1.properties.get("k1").isEmpty)
+      }
+    }
   }
 
   test("SPARK-31828: Filters out Hive metastore properties in CreateTableLikeCommand") {
