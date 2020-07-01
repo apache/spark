@@ -124,7 +124,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
         normalize(GetStructField(expr, i))
       }
       val struct = CreateStruct(fields)
-      If(IsNull(expr), Literal(null, struct.dataType), struct)
+      KnownFloatingPointNormalized(If(IsNull(expr), Literal(null, struct.dataType), struct))
 
     case _ if expr.dataType.isInstanceOf[ArrayType] =>
       val ArrayType(et, containsNull) = expr.dataType
