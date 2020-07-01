@@ -1149,25 +1149,25 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("withField should replace field in null struct") {
     checkAnswerAndSchema(
-      nullStructLevel1.withColumn("a", 'a.withField("b", lit(2))),
+      nullStructLevel1.withColumn("a", 'a.withField("b", lit("foo"))),
       Row(null) :: Nil,
       StructType(Seq(
         StructField("a", StructType(Seq(
           StructField("a", IntegerType, nullable = false),
-          StructField("b", IntegerType, nullable = false),
+          StructField("b", StringType, nullable = false),
           StructField("c", IntegerType, nullable = false))),
           nullable = true))))
   }
 
   test("withField should replace field in nested null struct") {
     checkAnswerAndSchema(
-      nullStructLevel2.withColumn("a", $"a".withField("a.b", lit(2))),
+      nullStructLevel2.withColumn("a", $"a".withField("a.b", lit("foo"))),
       Row(Row(null)) :: Nil,
       StructType(
         Seq(StructField("a", StructType(Seq(
           StructField("a", StructType(Seq(
             StructField("a", IntegerType, nullable = false),
-            StructField("b", IntegerType, nullable = false),
+            StructField("b", StringType, nullable = false),
             StructField("c", IntegerType, nullable = false))),
             nullable = true))),
           nullable = false))))
