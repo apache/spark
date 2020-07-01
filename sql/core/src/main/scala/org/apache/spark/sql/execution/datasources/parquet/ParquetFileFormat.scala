@@ -238,7 +238,7 @@ class ParquetFileFormat
             .orElse(filesByType.data.headOption)
             .toSeq
       }
-    ParquetFileFormat.mergeSchemasInParallel(filesToTouch, sparkSession)
+    ParquetFileFormat.mergeSchemasInParallel(parameters, filesToTouch, sparkSession)
   }
 
   case class FileTypes(
@@ -569,11 +569,13 @@ object ParquetFileFormat extends Logging {
    *     S3 nodes).
    */
   def mergeSchemasInParallel(
+      parameters: Map[String, String],
       filesToTouch: Seq[FileStatus],
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
-    val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
+    val serializedConf = new SerializableConfiguration(
+      sparkSession.sessionState.newHadoopConfWithOptions(parameters))
 
     // !! HACK ALERT !!
     //
