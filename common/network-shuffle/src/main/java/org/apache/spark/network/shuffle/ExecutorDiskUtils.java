@@ -61,7 +61,7 @@ public class ExecutorDiskUtils {
    *
    * On Windows, separator "\" is used instead of "/".
    *
-   * "\\" is legal character in path name on Unix like OS, but illegal on Windows.
+   * "\\" is a legal character in path name on Unix-like OS, but illegal on Windows.
    */
   @VisibleForTesting
   static String createNormalizedInternedPathname(String dir1, String dir2, String fname) {
