@@ -2753,11 +2753,11 @@ class HiveDDLSuite
 
         assert(table.properties.get("EXTERNAL").isEmpty)
         if (isExternalTable) {
-          assert(table1.properties("EXTERNAL") == "false")
-          assert(table2.properties("EXTERNAL").isEmpty)
+          assert(table1.properties.get("EXTERNAL").isEmpty)
+          assert(table2.properties("EXTERNAL") == "false")
         } else {
           assert(table1.properties("EXTERNAL") == "true")
-          assert(table2.properties("EXTERNAL").isEmpty)
+          assert(table2.properties.get("EXTERNAL").isEmpty)
         }
       }
     }
