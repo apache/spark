@@ -100,6 +100,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
       assert(executeStatementOperation.getStatus.getState === finalState)
     }
   }
+
   private class MySparkExecuteStatementOperation(
       sqlContext: SQLContext,
       hiveSession: HiveSession,
