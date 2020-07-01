@@ -546,7 +546,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 case class WithFields(
     structExpr: Expression,
     names: Seq[String],
-    valExprs: Seq[Expression]) extends Expression {
+    valExprs: Seq[Expression]) extends Unevaluable {
 
   assert(names.length == valExprs.length)
 
@@ -578,14 +578,7 @@ case class WithFields(
 
   override def prettyName: String = "with_fields"
 
-  override def eval(input: InternalRow): Any = evalExpr.eval(input)
-
-  override def genCode(ctx: CodegenContext): ExprCode = evalExpr.genCode(ctx)
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new IllegalStateException("WithFields.doGenCode should not be called.")
-
-  private lazy val evalExpr: If = {
+  lazy val evalExpr: Expression = {
     val existingExprs = structExpr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
       case (name, i) => (name, GetStructField(structExpr, i, Some(name)))
     }
@@ -593,7 +586,11 @@ case class WithFields(
       case (name, valExpr) => Seq(Literal(name), valExpr)
     }
     val expr = CreateNamedStruct(newExprs)
-    If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+    if (structExpr.nullable) {
+      If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+    } else {
+      expr
+    }
   }
 
   private def addOrReplace[T](

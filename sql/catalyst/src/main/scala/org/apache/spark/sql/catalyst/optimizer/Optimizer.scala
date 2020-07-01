@@ -203,8 +203,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CollapseProject,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
-    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
-
+    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
+    Batch("WithFieldsToEvaluableExpression", Once, WithFieldsToEvaluableExpression)
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -1799,5 +1799,14 @@ object CombineWithFields extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
       WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
+  }
+}
+
+/**
+ * Converts [[WithFields]] expression into an evaluable expression.
+ */
+object WithFieldsToEvaluableExpression extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case w: WithFields => w.evalExpr
   }
 }
