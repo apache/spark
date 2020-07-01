@@ -50,6 +50,7 @@ class ResolveSessionCatalog(
          nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
+          cols.foreach(c => failNullType(c.dataType))
           if (!DDLUtils.isHiveTable(v1Table.v1Table)) {
             cols.foreach(c => failCharType(c.dataType))
           }
@@ -62,6 +63,7 @@ class ResolveSessionCatalog(
           }
           AlterTableAddColumnsCommand(tbl.asTableIdentifier, cols.map(convertToStructField))
       }.getOrElse {
+        cols.foreach(c => failNullType(c.dataType))
         cols.foreach(c => failCharType(c.dataType))
         val changes = cols.map { col =>
           TableChange.addColumn(
@@ -80,6 +82,7 @@ class ResolveSessionCatalog(
         case Some(_: V1Table) =>
           throw new AnalysisException("REPLACE COLUMNS is only supported with v2 tables.")
         case Some(table) =>
+          cols.foreach(c => failNullType(c.dataType))
           cols.foreach(c => failCharType(c.dataType))
           // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
           val deleteChanges = table.schema.fieldNames.map { name =>
@@ -102,6 +105,7 @@ class ResolveSessionCatalog(
          nameParts @ SessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
+          a.dataType.foreach(failNullType)
           if (!DDLUtils.isHiveTable(v1Table.v1Table)) {
             a.dataType.foreach(failCharType)
           }
@@ -143,6 +147,7 @@ class ResolveSessionCatalog(
             builder.build())
           AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName, newColumn)
       }.getOrElse {
+        a.dataType.foreach(failNullType)
         a.dataType.foreach(failCharType)
         val colName = a.column.toArray
         val typeChange = a.dataType.map { newDataType =>
@@ -270,6 +275,7 @@ class ResolveSessionCatalog(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
+        assertNoNullTypeInSchema(c.tableSchema)
         if (!DDLUtils.isHiveTable(Some(provider))) {
           assertNoCharTypeInSchema(c.tableSchema)
         }
@@ -279,6 +285,7 @@ class ResolveSessionCatalog(
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
         CreateTable(tableDesc, mode, None)
       } else {
+        assertNoNullTypeInSchema(c.tableSchema)
         assertNoCharTypeInSchema(c.tableSchema)
         CreateV2Table(
           catalog.asTableCatalog,
@@ -323,6 +330,7 @@ class ResolveSessionCatalog(
       if (!isV2Provider(provider)) {
         throw new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
       } else {
+        assertNoNullTypeInSchema(c.tableSchema)
         assertNoCharTypeInSchema(c.tableSchema)
         ReplaceTable(
           catalog.asTableCatalog,

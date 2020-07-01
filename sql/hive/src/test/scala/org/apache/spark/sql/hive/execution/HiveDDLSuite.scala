@@ -2309,7 +2309,7 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-20680: Spark-sql do not support for void column datatype of view") {
+  test("SPARK-20680: Spark-sql do not support for void column datatype") {
     withTable("t") {
       withView("tabVoidType") {
         val client =
@@ -2322,6 +2322,92 @@ class HiveDDLSuite
         val desc = spark.sql("DESC tabVoidType").collect().toSeq
         assert(desc.contains(Row("col", "null", null)))
       }
+    }
+
+    // Forbid CTAS with null type
+    withTable("t1", "t2", "t3") {
+      val e1 = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE t1 USING PARQUET AS SELECT null as null_col")
+      }.getMessage
+      assert(e1.contains("Cannot create tables with VOID type"))
+
+      val e2 = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE t2 AS SELECT null as null_col")
+      }.getMessage
+      assert(e2.contains("Cannot create tables with VOID type"))
+
+      val e3 = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE t3 STORED AS PARQUET AS SELECT null as null_col")
+      }.getMessage
+      assert(e3.contains("Cannot create tables with VOID type"))
+    }
+
+    // Forbid creating table with void/null type in Spark
+    Seq("void", "null").foreach { colType =>
+      withTable("t1", "t2", "t3") {
+        val e1 = intercept[AnalysisException] {
+          spark.sql(s"CREATE TABLE t1 (v $colType) USING parquet")
+        }.getMessage
+        assert(e1.contains("Cannot create tables with VOID type"))
+        val e2 = intercept[AnalysisException] {
+          spark.sql(s"CREATE TABLE t2 (v $colType) USING hive")
+        }.getMessage
+        assert(e2.contains("Cannot create tables with VOID type"))
+        val e3 = intercept[AnalysisException] {
+          spark.sql(s"CREATE TABLE t3 (v $colType)")
+        }.getMessage
+        assert(e3.contains("Cannot create tables with VOID type"))
+      }
+    }
+
+    // Make sure spark.catalog.createTable with null type will fail
+    val schema1 = new StructType().add("c", NullType)
+    assertHiveTableNullType(schema1)
+    assertDSTableNullType(schema1)
+
+    val schema2 = new StructType()
+      .add("c", StructType(Seq(StructField.apply("c1", NullType))))
+    assertHiveTableNullType(schema2)
+    assertDSTableNullType(schema2)
+
+    val schema3 = new StructType().add("c", ArrayType(NullType))
+    assertHiveTableNullType(schema3)
+    assertDSTableNullType(schema3)
+
+    val schema4 = new StructType()
+      .add("c", MapType(StringType, NullType))
+    assertHiveTableNullType(schema4)
+    assertDSTableNullType(schema4)
+
+    val schema5 = new StructType()
+      .add("c", MapType(NullType, StringType))
+    assertHiveTableNullType(schema5)
+    assertDSTableNullType(schema5)
+  }
+
+  private def assertHiveTableNullType(schema: StructType): Unit = {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "hive",
+          schema = schema,
+          options = Map("fileFormat" -> "parquet"))
+      }.getMessage
+      assert(e.contains("Cannot create tables with VOID type"))
+    }
+  }
+
+  private def assertDSTableNullType(schema: StructType): Unit = {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "json",
+          schema = schema,
+          options = Map.empty[String, String])
+      }.getMessage
+      assert(e.contains("Cannot create tables with VOID type"))
     }
   }
 
