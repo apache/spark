@@ -2740,10 +2740,12 @@ class HiveDDLSuite
       val alter1 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "true"))
       // spark cann't modify EXTERNAL property so we have to use hive client
       hiveClient.alterTable(alter1)
-      assert(table.properties.get("EXTERNAL").isEmpty)
+      val table1 = catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table1.properties("EXTERNAL") == "true")
       val alter2 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "false"))
       hiveClient.alterTable(alter2)
-      assert(table.properties("EXTERNAL") == "false")
+      val table2 = catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table2.properties("EXTERNAL").isEmpty)
     }
   }
 }

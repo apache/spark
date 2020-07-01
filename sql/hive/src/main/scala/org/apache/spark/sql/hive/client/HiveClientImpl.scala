@@ -1053,7 +1053,7 @@ private[hive] object HiveClientImpl extends Logging {
     // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
-    if (table.tableType == CatalogTableType.EXTERNAL) {
+    if (table.properties.get("EXTERNAL").isEmpty && table.tableType == CatalogTableType.EXTERNAL) {
       hiveTable.setProperty("EXTERNAL", "TRUE")
     }
     // Note: In Hive the schema and partition columns must be disjoint sets
