@@ -2733,7 +2733,12 @@ class HiveDDLSuite
       assert(t4.properties("k2") == "v2")
       sql("CREATE TABLE t5 LIKE t1 USING parquet")
       val t5 = catalog.getTableMetadata(TableIdentifier("t5"))
-      assert(t5.properties.isEmpty)
+      assert(t5.properties.get("k1").isEmpty)
+      assert(t5.properties.get("k2").isEmpty)
+      sql("CREATE TABLE t5 LIKE t1 USING hive")
+      val t6 = catalog.getTableMetadata(TableIdentifier("t5"))
+      assert(t4.properties("k1") == "v1")
+      assert(t4.properties("k2") == "v2")
     }
 
     withView("v1") {
