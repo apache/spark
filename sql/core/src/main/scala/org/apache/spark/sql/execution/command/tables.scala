@@ -56,7 +56,8 @@ import org.apache.spark.sql.util.SchemaUtils
  *
  * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
  * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec, tblproperties
- * by default.
+ * by default. Note that, tblproperties is copied into a new table if the table formats including
+ * data source providers and storage input formats are the same.
  *
  * Use "CREATE TABLE t1 LIKE t2 USING file_format" to specify new provider for t1.
  * For Hive compatibility, use "CREATE TABLE t1 LIKE t2 STORED AS hiveFormat"
