@@ -204,7 +204,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
-    Batch("WithFieldsToEvaluableExpression", Once, WithFieldsToEvaluableExpression)
+    Batch("ReplaceWithFieldsExpression", Once, ReplaceWithFieldsExpression)
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -238,7 +238,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
-      CombineWithFields.ruleName :: Nil
+      ReplaceWithFieldsExpression.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -1803,9 +1803,9 @@ object CombineWithFields extends Rule[LogicalPlan] {
 }
 
 /**
- * Converts [[WithFields]] expression into an evaluable expression.
+ * Replaces [[WithFields]] expression with an evaluable expression.
  */
-object WithFieldsToEvaluableExpression extends Rule[LogicalPlan] {
+object ReplaceWithFieldsExpression extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case w: WithFields => w.evalExpr
   }
