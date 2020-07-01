@@ -286,7 +286,7 @@ private class FakeSchedulerBackend(
     clusterManagerEndpoint: RpcEndpointRef,
     resourceProfileManager: ResourceProfileManager)
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
-  
+
   def this() = this(null, null, null, null)
 
   protected override def doRequestTotalExecutors(
