@@ -260,7 +260,7 @@ trait PredicateHelper extends Logging {
    * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
    *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
    */
-  def conjunctiveNormalFormAndGroupExpsByQualifier(condition: Expression): Seq[Expression] = {
+  def CNFWithGroupExpressionsByQualifier(condition: Expression): Seq[Expression] = {
     conjunctiveNormalForm(condition, (expressions: Seq[Expression]) =>
         expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq)
   }
@@ -278,7 +278,7 @@ trait PredicateHelper extends Logging {
    * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
    *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
    */
-  def conjunctiveNormalFormAndGroupExpsByReference(condition: Expression): Seq[Expression] = {
+  def CNFWithGroupExpressionsByReference(condition: Expression): Seq[Expression] = {
     conjunctiveNormalForm(condition, (expressions: Seq[Expression]) =>
         expressions.groupBy(e => AttributeSet(e.references)).map(_._2.reduceLeft(And)).toSeq)
   }

@@ -88,7 +88,7 @@ private[sql] object PruneFileSourcePartitions
             _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
-      val predicates = conjunctiveNormalFormAndGroupExpsByReference(filters.reduceLeft(And))
+      val predicates = CNFWithGroupExpressionsByReference(filters.reduceLeft(And))
       val finalPredicates = if (predicates.nonEmpty) predicates else filters
       val (partitionKeyFilters, _) = getPartitionKeyFiltersAndDataFilters(
         fsRelation.sparkSession, logicalRelation, partitionSchema, finalPredicates,

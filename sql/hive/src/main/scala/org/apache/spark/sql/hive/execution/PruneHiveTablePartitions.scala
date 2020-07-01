@@ -103,7 +103,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case op @ PhysicalOperation(projections, filters, relation: HiveTableRelation)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
-      val predicates = conjunctiveNormalFormAndGroupExpsByReference(filters.reduceLeft(And))
+      val predicates = CNFWithGroupExpressionsByReference(filters.reduceLeft(And))
       val finalPredicates = if (predicates.nonEmpty) predicates else filters
       val partitionKeyFilters = getPartitionKeyFilters(finalPredicates, relation)
       if (partitionKeyFilters.nonEmpty) {
