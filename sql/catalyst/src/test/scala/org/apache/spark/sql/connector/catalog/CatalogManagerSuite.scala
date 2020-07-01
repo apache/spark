@@ -18,13 +18,13 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.net.URI
-import java.util
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -113,8 +113,10 @@ class CatalogManagerSuite extends SparkFunSuite {
     assert(v1SessionCatalog.getCurrentDatabase == "default")
 
     // Check namespace existence if currentCatalog implements SupportsNamespaces.
-    conf.setConfString("spark.sql.catalog.dummyNamespace", classOf[DummyNameSpaceCatalog].getName)
-    catalogManager.setCurrentCatalog("dummyNamespace")
+    conf.setConfString("spark.sql.catalog.testCatalog", classOf[InMemoryTableCatalog].getName)
+    catalogManager.setCurrentCatalog("testCatalog")
+    catalogManager.currentCatalog.asInstanceOf[InMemoryTableCatalog]
+      .createNamespace(Array("test3"), Map.empty[String, String].asJava)
     assert(v1SessionCatalog.getCurrentDatabase == "default")
     catalogManager.setCurrentNamespace(Array("test3"))
     assert(v1SessionCatalog.getCurrentDatabase == "default")
@@ -132,23 +134,4 @@ class DummyCatalog extends CatalogPlugin {
   private var _name: String = null
   override def name(): String = _name
   override def defaultNamespace(): Array[String] = Array("a", "b")
-}
-
-class DummyNameSpaceCatalog extends DummyCatalog with SupportsNamespaces {
-  override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
-    case Array("a") | Array("a", "b") | Array("test3") => true
-    case _ => false
-  }
-  // empty namespace functions
-  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = Unit
-  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] =
-    Map.empty[String, String].asJava
-  override def createNamespace(
-      namespace: Array[String],
-      metadata: util.Map[String, String]): Unit = Unit
-  override def dropNamespace(namespace: Array[String]): Boolean = false
-  override def listNamespaces(): Array[Array[String]] =
-    Array[Array[String]]()
-  override def listNamespaces(namespace: Array[String]): Array[Array[String]] =
-    Array[Array[String]]()
 }
