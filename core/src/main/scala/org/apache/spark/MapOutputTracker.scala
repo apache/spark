@@ -972,6 +972,6 @@ private[spark] object MapOutputTracker extends Logging {
       }
     }
 
-    splitsByAddress.view.mapValues(_.toSeq).iterator
+    splitsByAddress.mapValues(_.toSeq).iterator
   }
 }
