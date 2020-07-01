@@ -421,7 +421,7 @@ abstract class IntegralToTimestampBase extends UnaryExpression
   since = "3.1.0")
 // scalastyle:on line.size.limit
 case class SecondsToTimestamp(child: Expression) extends UnaryExpression
-  with ExpectsInputTypes with NullIntolerant{
+  with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
