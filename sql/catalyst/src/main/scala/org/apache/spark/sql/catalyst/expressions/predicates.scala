@@ -213,7 +213,7 @@ trait PredicateHelper extends Logging {
    */
   protected def conjunctiveNormalForm(
       condition: Expression,
-      groupExpsFunc: Seq[Expression] => Seq[Expression] = _.toSeq): Seq[Expression] = {
+      groupExpsFunc: Seq[Expression] => Seq[Expression]): Seq[Expression] = {
     val postOrderNodes = postOrderTraversal(condition)
     val resultStack = new mutable.Stack[Seq[Expression]]
     val maxCnfNodeCount = SQLConf.get.maxCnfNodeCount
