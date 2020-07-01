@@ -19,17 +19,16 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
 import java.sql.{DriverManager, Statement}
+import java.util
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.Try
 
-import java.util
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.jdbc.HttpBasicAuthInterceptor
-import org.apache.hive.jdbc.Utils.JdbcConnectionParams
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.thrift.{ThriftCLIService, ThriftCLIServiceClient}
 import org.apache.http.impl.client.HttpClientBuilder
