@@ -61,6 +61,12 @@ if ! [ -z ${HADOOP_CONF_DIR+x} ]; then
   SPARK_CLASSPATH="$HADOOP_CONF_DIR:$SPARK_CLASSPATH";
 fi
 
+if ! [ -z ${SPARK_CONF_DIR+x} ]; then
+  SPARK_CLASSPATH="$SPARK_CONF_DIR:$SPARK_CLASSPATH";
+elif ! [ -z ${SPARK_HOME+x} ]; then
+  SPARK_CLASSPATH="$SPARK_HOME/conf:$SPARK_CLASSPATH";
+fi
+
 case "$1" in
   driver)
     shift 1
