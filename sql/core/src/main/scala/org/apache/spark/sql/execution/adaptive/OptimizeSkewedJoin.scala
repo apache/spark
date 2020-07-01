@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
-
-import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
+import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv, SparkException}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
@@ -236,6 +235,10 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         } {
           leftSidePartitions += leftSidePartition
           rightSidePartitions += rightSidePartition
+          if (leftSidePartitions.length > conf.getConf(SQLConf.SKEW_JOIN_MAX_PARTITION_SPLITS)) {
+            throw new SparkException(s"Too many partition splits produced in handling data skew." +
+              s" The threshold is ${conf.getConf(SQLConf.SKEW_JOIN_MAX_PARTITION_SPLITS)}")
+          }
         }
       }
 
