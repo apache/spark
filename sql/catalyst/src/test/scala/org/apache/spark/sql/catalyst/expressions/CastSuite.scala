@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, Collect
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -271,13 +270,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     for (tz <- ALL_TIMEZONES) {
       val timeZoneId = Option(tz.getId)
-      var c = Calendar.getInstance(TimeZoneGMT)
+      var c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
         millisToMicros(c.getTimeInMillis))
-      c = Calendar.getInstance(TimeZoneGMT)
+      c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
@@ -294,7 +293,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
       cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
-      DateTimeUtils.fromJavaTimestamp(ts))
+      fromJavaTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(
@@ -386,11 +385,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> "true") {
       checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-        DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+        fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
       checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-        DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+        fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
       checkEvaluation(cast(cast(tss, LongType), TimestampType),
-        DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+        fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
       checkEvaluation(
         cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
         millis.toFloat / MILLIS_PER_SECOND)

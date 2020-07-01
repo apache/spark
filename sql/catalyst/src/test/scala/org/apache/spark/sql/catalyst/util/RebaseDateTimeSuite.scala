@@ -78,7 +78,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
   private def fromJavaDateLegacy(date: Date): Int = {
-    millisToDaysLegacy(date.getTime, defaultTimeZone())
+    millisToDaysLegacy(date.getTime, TimeZone.getTimeZone(ZoneId.systemDefault()))
   }
 
   test("rebase gregorian to/from julian days") {
