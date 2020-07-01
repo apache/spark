@@ -109,7 +109,7 @@ object OrcUtils extends Logging {
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
     if (orcOptions.mergeSchema) {
       SchemaMergeUtils.mergeSchemasInParallel(
-        sparkSession, files, OrcUtils.readOrcSchemasInParallel)
+        sparkSession, options, files, OrcUtils.readOrcSchemasInParallel)
     } else {
       OrcUtils.readSchema(sparkSession, files)
     }
