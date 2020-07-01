@@ -755,11 +755,10 @@ class SparkSession private(
    * previous session on completion.
    */
   private[sql] def withActive[T](block: => T): T = {
-    sparkContext.assertNotStopped()
     // Use the active session thread local directly to make sure we get the session that is actually
     // set and not the default session. This to prevent that we promote the default session to the
     // active session once we are done.
-    val old = SparkSession.activeThreadSession.get()
+    val old = SparkSession.getActiveSession.get
     SparkSession.setActiveSession(this)
     try block finally {
       SparkSession.setActiveSession(old)
@@ -1021,7 +1020,9 @@ object SparkSession extends Logging {
       // Return None when running on executors.
       None
     } else {
-      Option(activeThreadSession.get)
+      val session = Option(activeThreadSession.get)
+      session.foreach(_.sparkContext.assertNotStopped())
+      session
     }
   }
 

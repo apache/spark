@@ -257,4 +257,25 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       context.stop()
     }
   }
+
+  test("SPARK-32029: check active session if spark context is stop") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-SPARK-32029")
+    val context = new SparkContext(conf)
+    val session = SparkSession
+      .builder()
+      .sparkContext(context)
+      .getOrCreate()
+
+    context.stop()
+    val msg = intercept[IllegalStateException] {
+      session.withActive()
+    }.getMessage
+    assert(msg.contains("Cannot call methods on a stopped SparkContext."))
+    val msg2 = intercept[IllegalStateException] {
+      SparkSession.getActiveSession
+    }.getMessage
+    assert(msg2.contains("Cannot call methods on a stopped SparkContext."))
+  }
 }
