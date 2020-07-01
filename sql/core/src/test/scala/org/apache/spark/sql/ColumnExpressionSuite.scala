@@ -1316,7 +1316,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         nullable = false))))
 
   test("withField should replace field in struct even if casing is different") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> false.toString) {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       checkAnswerAndSchema(
         mixedCaseStructLevel1.withColumn("a", 'a.withField("A", lit(2))),
         Row(Row(2, 1)) :: Nil,
@@ -1338,7 +1338,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should add field to struct because casing is different") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswerAndSchema(
         mixedCaseStructLevel1.withColumn("a", 'a.withField("A", lit(2))),
         Row(Row(1, 1, 2)) :: Nil,
@@ -1376,7 +1376,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         nullable = false))))
 
   test("withField should replace nested field in struct even if casing is different") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> false.toString) {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       checkAnswerAndSchema(
         mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2))),
         Row(Row(Row(2, 1), Row(1, 1))) :: Nil,
@@ -1410,7 +1410,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("withField should throw an exception because casing is different") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       intercept[AnalysisException] {
         mixedCaseStructLevel2.withColumn("a", 'a.withField("A.a", lit(2)))
       }.getMessage should include("No such struct field A in a, B")
