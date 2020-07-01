@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
 
 /**
  * Simplify redundant [[CreateNamedStruct]], [[CreateArray]] and [[CreateMap]] expressions.
@@ -46,6 +45,10 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
         val resolver = SQLConf.get.resolver
         val matches = names.zip(valExprs).filter { case (name, _) => resolver(name, getFieldName) }
         if (matches.nonEmpty) {
+          // return last matching element as that is the final value for the field being extracted.
+          // For example, if a user submits a query like this:
+          // `$"struct_col".withField("b", lit(100)).withField("b", lit(200)).getField("b")`
+          // we want to return `lit(200)` (and not `lit(100)`).
           matches.last._2
         } else {
           GetStructField(struct, ordinal, Some(getFieldName))
