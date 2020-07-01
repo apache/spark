@@ -274,7 +274,8 @@ trait CheckAnalysis extends PredicateHelper {
             def ordinalNumber(i: Int): String = i match {
               case 0 => "first"
               case 1 => "second"
-              case i => s"${i}th"
+              case 2 => "third"
+              case i => s"${i + 1}th"
             }
             val ref = dataTypes(operator.children.head)
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
