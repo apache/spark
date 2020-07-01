@@ -547,8 +547,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   private def getLocationFromStorageProps(table: CatalogTable): Option[String] = {
     val storageLoc = table.storage.locationUri.map(CatalogUtils.URIToString(_))
     val storageProp = CaseInsensitiveMap(table.storage.properties).get("path")
-    if (storageLoc.equals(storageProp)) {
-      storageProp
+    // storageProp == None is hive table
+    if (storageLoc.equals(storageProp) || storageProp == None) {
+      storageLoc
     } else {
       throw new AnalysisException(s"path in location ${storageLoc} " +
         s"not equal to table prop path ${storageProp}, please use alter table in spark")
