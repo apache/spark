@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
@@ -2312,11 +2313,9 @@ class HiveDDLSuite
   test("SPARK-20680: Spark-sql do not support for void column datatype") {
     withTable("t") {
       withView("tabVoidType") {
-        val client =
-          spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
-        client.runSqlHive("CREATE TABLE t (t1 int)")
-        client.runSqlHive("INSERT INTO t VALUES (3)")
-        client.runSqlHive("CREATE VIEW tabVoidType AS SELECT NULL AS col FROM t")
+        hiveClient.runSqlHive("CREATE TABLE t (t1 int)")
+        hiveClient.runSqlHive("INSERT INTO t VALUES (3)")
+        hiveClient.runSqlHive("CREATE VIEW tabVoidType AS SELECT NULL AS col FROM t")
         checkAnswer(spark.table("tabVoidType"), Row(null))
         // No exception shows
         val desc = spark.sql("DESC tabVoidType").collect().toSeq
@@ -2342,8 +2341,17 @@ class HiveDDLSuite
       assert(e3.contains("Cannot create tables with VOID type"))
     }
 
+    // Forbid Replace table AS SELECT with null type
+    withTable("t") {
+      val v2Source = classOf[FakeV2Provider].getName
+      val e = intercept[AnalysisException] {
+        spark.sql(s"REPLACE TABLE t USING $v2Source AS SELECT null as null_col")
+      }.getMessage
+      assert(e.contains("Cannot create tables with VOID type"))
+    }
+
     // Forbid creating table with VOID type in Spark
-    withTable("t1", "t2", "t3") {
+    withTable("t1", "t2", "t3", "t4") {
       val e1 = intercept[AnalysisException] {
         spark.sql(s"CREATE TABLE t1 (v VOID) USING PARQUET")
       }.getMessage
@@ -2357,9 +2365,18 @@ class HiveDDLSuite
       }.getMessage
       assert(e3.contains("Cannot create tables with VOID type"))
       val e4 = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE t2 (v VOID) STORED AS PARQUET")
+        spark.sql(s"CREATE TABLE t4 (v VOID) STORED AS PARQUET")
       }.getMessage
       assert(e4.contains("Cannot create tables with VOID type"))
+    }
+
+    // Forbid Replace table with VOID type
+    withTable("t") {
+      val v2Source = classOf[FakeV2Provider].getName
+      val e = intercept[AnalysisException] {
+        spark.sql(s"REPLACE TABLE t (v VOID) USING $v2Source")
+      }.getMessage
+      assert(e.contains("Cannot create tables with VOID type"))
     }
 
     // Make sure spark.catalog.createTable with null type will fail

@@ -161,6 +161,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ CreateTableAsSelectStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
+      assertNoNullTypeInSchema(c.asSelect.schema)
       CreateTableAsSelect(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -189,6 +190,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableAsSelectStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
+      assertNoNullTypeInSchema(c.asSelect.schema)
       ReplaceTableAsSelect(
         catalog.asTableCatalog,
         tbl.asIdentifier,
