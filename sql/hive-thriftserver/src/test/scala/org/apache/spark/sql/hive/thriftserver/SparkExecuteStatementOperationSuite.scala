@@ -113,7 +113,9 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
     override def cleanup(): Unit = {
       super.cleanup()
       signal.release()
-      // Allow time for the exception to propagate.
+      // At this point, operation should already be in finalState (set by either close() or
+      // cancel()). We want to check if it stays in finalState after the exception thrown by
+      // releasing the semaphore propagates. We hence need to sleep for a short while.
       Thread.sleep(1000)
       // State should not be ERROR
       assert(getStatus.getState === finalState)
