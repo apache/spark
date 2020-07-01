@@ -256,7 +256,8 @@ class Analyzer(
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
-      HandleNullInputsForUDF),
+      HandleNullInputsForUDF,
+      ResolveEncodersInUDF),
     Batch("UpdateNullability", Once,
       UpdateAttributeNullability),
     Batch("Subquery", Once,
@@ -1015,7 +1016,7 @@ class Analyzer(
     private def lookupRelation(identifier: Seq[String]): Option[LogicalPlan] = {
       expandRelationName(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
-          def loaded = CatalogV2Util.loadTable(catalog, ident).map {
+          lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
               v1SessionCatalog.getRelation(v1Table.v1Table)
             case table =>
@@ -1024,7 +1025,12 @@ class Analyzer(
                 DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
           }
           val key = catalog.name +: ident.namespace :+ ident.name
-          Option(AnalysisContext.get.relationCache.getOrElseUpdate(key, loaded.orNull))
+          AnalysisContext.get.relationCache.get(key).map(_.transform {
+            case multi: MultiInstanceRelation => multi.newInstance()
+          }).orElse {
+            loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
+            loaded
+          }
         case _ => None
       }
     }
@@ -2843,6 +2849,40 @@ class Analyzer(
           } else {
             udf
           }
+      }
+    }
+  }
+
+  /**
+   * Resolve the encoders for the UDF by explicitly given the attributes. We give the
+   * attributes explicitly in order to handle the case where the data type of the input
+   * value is not the same with the internal schema of the encoder, which could cause
+   * data loss. For example, the encoder should not cast the input value to Decimal(38, 18)
+   * if the actual data type is Decimal(30, 0).
+   *
+   * The resolved encoders then will be used to deserialize the internal row to Scala value.
+   */
+  object ResolveEncodersInUDF extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case p if !p.resolved => p // Skip unresolved nodes.
+
+      case p => p transformExpressionsUp {
+
+        case udf: ScalaUDF if udf.inputEncoders.nonEmpty =>
+          val boundEncoders = udf.inputEncoders.zipWithIndex.map { case (encOpt, i) =>
+            val dataType = udf.children(i).dataType
+            encOpt.map { enc =>
+              val attrs = if (enc.isSerializedAsStructForTopLevel) {
+                dataType.asInstanceOf[StructType].toAttributes
+              } else {
+                // the field name doesn't matter here, so we use
+                // a simple literal to avoid any overhead
+                new StructType().add("input", dataType).toAttributes
+              }
+              enc.resolveAndBind(attrs)
+            }
+          }
+          udf.copy(inputEncoders = boundEncoders)
       }
     }
   }

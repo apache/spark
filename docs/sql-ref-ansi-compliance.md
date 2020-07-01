@@ -95,7 +95,7 @@ CREATE TABLE t (v INT);
 -- `spark.sql.storeAssignmentPolicy=ANSI`
 INSERT INTO t VALUES ('1');
 org.apache.spark.sql.AnalysisException: Cannot write incompatible data to table '`default`.`t`':
-- Cannot safely cast 'v': StringType to IntegerType;
+- Cannot safely cast 'v': string to int;
 
 -- `spark.sql.storeAssignmentPolicy=LEGACY` (This is a legacy behaviour until Spark 2.x)
 INSERT INTO t VALUES ('1');
@@ -135,7 +135,7 @@ Below is a list of all the keywords in Spark SQL.
 |ALTER|non-reserved|non-reserved|reserved|
 |ANALYZE|non-reserved|non-reserved|non-reserved|
 |AND|reserved|non-reserved|reserved|
-|ANTI|reserved|strict-non-reserved|non-reserved|
+|ANTI|non-reserved|strict-non-reserved|non-reserved|
 |ANY|reserved|non-reserved|reserved|
 |ARCHIVE|non-reserved|non-reserved|non-reserved|
 |ARRAY|non-reserved|non-reserved|reserved|
@@ -264,7 +264,7 @@ Below is a list of all the keywords in Spark SQL.
 |MAP|non-reserved|non-reserved|non-reserved|
 |MATCHED|non-reserved|non-reserved|non-reserved|
 |MERGE|non-reserved|non-reserved|non-reserved|
-|MINUS|reserved|strict-non-reserved|non-reserved|
+|MINUS|not-reserved|strict-non-reserved|non-reserved|
 |MINUTE|reserved|non-reserved|reserved|
 |MONTH|reserved|non-reserved|reserved|
 |MSCK|non-reserved|non-reserved|non-reserved|
@@ -325,7 +325,7 @@ Below is a list of all the keywords in Spark SQL.
 |SCHEMA|non-reserved|non-reserved|non-reserved|
 |SECOND|reserved|non-reserved|reserved|
 |SELECT|reserved|non-reserved|reserved|
-|SEMI|reserved|strict-non-reserved|non-reserved|
+|SEMI|non-reserved|strict-non-reserved|non-reserved|
 |SEPARATED|non-reserved|non-reserved|non-reserved|
 |SERDE|non-reserved|non-reserved|non-reserved|
 |SERDEPROPERTIES|non-reserved|non-reserved|non-reserved|

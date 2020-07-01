@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[jdbc] class BasicConnectionProvider(driver: Driver, options: JDBCOptions)
-    extends ConnectionProvider {
+  extends ConnectionProvider {
   def getConnection(): Connection = {
     val properties = getAdditionalProperties()
     options.asConnectionProperties.entrySet().asScala.foreach { e =>
