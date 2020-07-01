@@ -42,6 +42,7 @@ class CatalogManager(
     defaultSessionCatalog: CatalogPlugin,
     val v1SessionCatalog: SessionCatalog) extends Logging {
   import CatalogManager.SESSION_CATALOG_NAME
+  import CatalogV2Util._
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
@@ -107,13 +108,14 @@ class CatalogManager(
 
   def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
     currentCatalog match {
-      case _ if currentCatalog.name() == SESSION_CATALOG_NAME && namespace.length == 1 =>
+      case _ if isSessionCatalog(currentCatalog) && namespace.length == 1 =>
         v1SessionCatalog.setCurrentDatabase(namespace.head)
-      case catalog: SupportsNamespaces if catalog.namespaceExists(namespace) =>
-        logInfo(s"set current namespace to ${namespace.mkString(".")}")
-        _currentNamespace = Some(namespace)
-      case _ =>
+      case _ if isSessionCatalog(currentCatalog) =>
         throw new NoSuchNamespaceException(namespace)
+      case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
+        throw new NoSuchNamespaceException(namespace)
+      case _ =>
+        _currentNamespace = Some(namespace)
     }
   }
 

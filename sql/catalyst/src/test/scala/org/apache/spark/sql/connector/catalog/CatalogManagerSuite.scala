@@ -112,21 +112,31 @@ class CatalogManagerSuite extends SparkFunSuite {
     catalogManager.setCurrentNamespace(Array("test2"))
     assert(v1SessionCatalog.getCurrentDatabase == "default")
 
+    // Check namespace existence if currentCatalog implements SupportsNamespaces.
+    conf.setConfString("spark.sql.catalog.dummyNamespace", classOf[DummyNameSpaceCatalog].getName)
+    catalogManager.setCurrentCatalog("dummyNamespace")
+    assert(v1SessionCatalog.getCurrentDatabase == "default")
+    catalogManager.setCurrentNamespace(Array("test3"))
+    assert(v1SessionCatalog.getCurrentDatabase == "default")
+
     intercept[NoSuchNamespaceException] {
       catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
     }
   }
 }
 
-class DummyCatalog extends CatalogPlugin with SupportsNamespaces {
+class DummyCatalog extends CatalogPlugin {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = name
   }
   private var _name: String = null
   override def name(): String = _name
   override def defaultNamespace(): Array[String] = Array("a", "b")
+}
+
+class DummyNameSpaceCatalog extends DummyCatalog with SupportsNamespaces {
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
-    case Array("a") | Array("a", "b") | Array("test2") => true
+    case Array("a") | Array("a", "b") | Array("test3") => true
     case _ => false
   }
   // empty namespace functions
