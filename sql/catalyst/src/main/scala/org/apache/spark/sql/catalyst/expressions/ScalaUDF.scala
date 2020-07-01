@@ -46,6 +46,7 @@ case class ScalaUDF(
     dataType: DataType,
     children: Seq[Expression],
     inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
+    returnEncoder: Option[ExpressionEncoder[_]] = None,
     udfName: Option[String] = None,
     nullable: Boolean = true,
     udfDeterministic: Boolean = true)
@@ -99,6 +100,15 @@ case class ScalaUDF(
       } else {
         AnyDataType
       }
+    }
+  }
+
+  private def catalystConverter(dataType: DataType): Any => Any = {
+    if (returnEncoder.isDefined) {
+      val toRow = returnEncoder.get.createSerializer()
+      value => toRow.asInstanceOf[Any => Any](value).asInstanceOf[InternalRow].get(0, dataType)
+    } else {
+      createToCatalystConverter(dataType)
     }
   }
 
@@ -1071,7 +1081,7 @@ case class ScalaUDF(
     val (converters, useEncoders): (Array[Any => Any], Array[Boolean]) =
       (children.zipWithIndex.map { case (c, i) =>
         scalaConverter(i, c.dataType)
-      }.toArray :+ (createToCatalystConverter(dataType), false)).unzip
+      }.toArray :+ (catalystConverter(dataType), false)).unzip
     val convertersTerm = ctx.addReferenceObj("converters", converters, s"$converterClassName[]")
     val errorMsgTerm = ctx.addReferenceObj("errMsg", udfErrorMessage)
     val resultTerm = ctx.freshName("result")

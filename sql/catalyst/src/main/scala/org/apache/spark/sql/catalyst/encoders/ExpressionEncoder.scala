@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Initial
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -285,7 +285,7 @@ case class ExpressionEncoder[T](
       // transform attributes accessors.
       objDeserializer.transform {
         case UnresolvedExtractValue(GetColumnByOrdinal(0, _),
-            Literal(part: UTF8String, StringType)) =>
+        Literal(part: UTF8String, StringType)) =>
           UnresolvedAttribute.quoted(part.toString)
         case GetStructField(GetColumnByOrdinal(0, dt), ordinal, _) =>
           GetColumnByOrdinal(ordinal, dt)
@@ -304,6 +304,14 @@ case class ExpressionEncoder[T](
   val schema: StructType = StructType(serializer.map { s =>
     StructField(s.name, s.dataType, s.nullable)
   })
+
+  def dataTypeAndNullable(): (DataType, Boolean) = {
+    if (isSerializedAsStruct) {
+      (schema, true)
+    } else {
+      (schema.head.dataType, schema.head.nullable)
+    }
+  }
 
   /**
    * Returns true if the type `T` is serialized as a struct by `objSerializer`.
