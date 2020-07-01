@@ -21,8 +21,10 @@ import unittest
 if sys.version > '3':
     basestring = str
 
-from pyspark.ml.classification import BinaryLogisticRegressionSummary, LogisticRegression, \
-    LogisticRegressionSummary
+from pyspark.ml.classification import BinaryLogisticRegressionSummary, LinearSVC, \
+    LinearSVCSummary, BinaryRandomForestClassificationSummary, LogisticRegression, \
+    LogisticRegressionSummary, RandomForestClassificationSummary, \
+    RandomForestClassifier
 from pyspark.ml.clustering import BisectingKMeans, GaussianMixture, KMeans
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.regression import GeneralizedLinearRegression, LinearRegression
@@ -42,7 +44,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(model.hasSummary)
         s = model.summary
         # test that api is callable and returns expected types
-        self.assertGreater(s.totalIterations, 0)
+        self.assertEqual(s.totalIterations, 0)
         self.assertTrue(isinstance(s.predictions, DataFrame))
         self.assertEqual(s.predictionCol, "prediction")
         self.assertEqual(s.labelCol, "label")
@@ -191,6 +193,123 @@ class TrainingSummaryTest(SparkSessionTestCase):
         sameSummary = model.evaluate(df)
         self.assertTrue(isinstance(sameSummary, LogisticRegressionSummary))
         self.assertFalse(isinstance(sameSummary, BinaryLogisticRegressionSummary))
+        self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
+
+    def test_linear_svc_summary(self):
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0, 1.0, 1.0)),
+                                         (0.0, 2.0, Vectors.dense(1.0, 2.0, 3.0))],
+                                        ["label", "weight", "features"])
+        svc = LinearSVC(maxIter=5, weightCol="weight")
+        model = svc.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary()
+        # test that api is callable and returns expected types
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.scoreCol, "rawPrediction")
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.predictionCol, "prediction")
+        objHist = s.objectiveHistory
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.labels, list))
+        self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.precisionByLabel, list))
+        self.assertTrue(isinstance(s.recallByLabel, list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(), list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
+        self.assertTrue(isinstance(s.roc, DataFrame))
+        self.assertAlmostEqual(s.areaUnderROC, 1.0, 2)
+        self.assertTrue(isinstance(s.pr, DataFrame))
+        self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
+        print(s.weightedTruePositiveRate)
+        self.assertAlmostEqual(s.weightedTruePositiveRate, 0.5, 2)
+        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.5, 2)
+        self.assertAlmostEqual(s.weightedRecall, 0.5, 2)
+        self.assertAlmostEqual(s.weightedPrecision, 0.25, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(), 0.3333333333333333, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(1.0), 0.3333333333333333, 2)
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertTrue(isinstance(sameSummary, LinearSVCSummary))
+        self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
+
+    def test_binary_randomforest_classification_summary(self):
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        rf = RandomForestClassifier(weightCol="weight")
+        model = rf.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertEqual(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.labels, list))
+        self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.precisionByLabel, list))
+        self.assertTrue(isinstance(s.recallByLabel, list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(), list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
+        self.assertTrue(isinstance(s.roc, DataFrame))
+        self.assertAlmostEqual(s.areaUnderROC, 1.0, 2)
+        self.assertTrue(isinstance(s.pr, DataFrame))
+        self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
+        self.assertAlmostEqual(s.accuracy, 1.0, 2)
+        self.assertAlmostEqual(s.weightedTruePositiveRate, 1.0, 2)
+        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.0, 2)
+        self.assertAlmostEqual(s.weightedRecall, 1.0, 2)
+        self.assertAlmostEqual(s.weightedPrecision, 1.0, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(), 1.0, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(1.0), 1.0, 2)
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertTrue(isinstance(sameSummary, BinaryRandomForestClassificationSummary))
+        self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
+
+    def test_multiclass_randomforest_classification_summary(self):
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], [])),
+                                         (2.0, 2.0, Vectors.dense(2.0)),
+                                         (2.0, 2.0, Vectors.dense(1.9))],
+                                        ["label", "weight", "features"])
+        rf = RandomForestClassifier(weightCol="weight")
+        model = rf.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertEqual(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.labels, list))
+        self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.precisionByLabel, list))
+        self.assertTrue(isinstance(s.recallByLabel, list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(), list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
+        self.assertAlmostEqual(s.accuracy, 1.0, 2)
+        self.assertAlmostEqual(s.weightedTruePositiveRate, 1.0, 2)
+        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.0, 2)
+        self.assertAlmostEqual(s.weightedRecall, 1.0, 2)
+        self.assertAlmostEqual(s.weightedPrecision, 1.0, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(), 1.0, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(1.0), 1.0, 2)
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertTrue(isinstance(sameSummary, RandomForestClassificationSummary))
+        self.assertFalse(isinstance(sameSummary, BinaryRandomForestClassificationSummary))
         self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
 
     def test_gaussian_mixture_summary(self):

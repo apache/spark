@@ -134,7 +134,7 @@ object PartitioningUtils {
     val timestampFormatter = TimestampFormatter(
       timestampPartitionPattern,
       zoneId,
-      needVarLengthSecondFraction = true)
+      isParsing = true)
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
       parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes,
@@ -544,6 +544,9 @@ object PartitioningUtils {
       schema: StructType,
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
+
+    SchemaUtils.checkColumnNameDuplication(
+      partitionColumns, partitionColumns.mkString(", "), caseSensitive)
 
     partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
       field => field.dataType match {

@@ -359,7 +359,7 @@ Spark Standalone has 2 parts, the first is configuring the resources for the Wor
 
 The user must configure the Workers to have a set of resources available so that it can assign them out to Executors. The <code>spark.worker.resource.{resourceName}.amount</code> is used to control the amount of each resource the worker has allocated. The user must also specify either <code>spark.worker.resourcesFile</code> or <code>spark.worker.resource.{resourceName}.discoveryScript</code> to specify how the Worker discovers the resources its assigned. See the descriptions above for each of those to see which method works best for your setup.
 
-The second part is running an application on Spark Standalone. The only special case from the standard Spark resource configs is when you are running the Driver in client mode. For a Driver in client mode, the user can specify the resources it uses via <code>spark.driver.resourcesfile</code> or <code>spark.driver.resource.{resourceName}.discoveryScript</code>. If the Driver is running on the same host as other Drivers, please make sure the resources file or discovery script only returns resources that do not conflict with other Drivers running on the same node.
+The second part is running an application on Spark Standalone. The only special case from the standard Spark resource configs is when you are running the Driver in client mode. For a Driver in client mode, the user can specify the resources it uses via <code>spark.driver.resourcesFile</code> or <code>spark.driver.resource.{resourceName}.discoveryScript</code>. If the Driver is running on the same host as other Drivers, please make sure the resources file or discovery script only returns resources that do not conflict with other Drivers running on the same node.
 
 Note, the user does not need to specify a discovery script when submitting an application as the Worker will start each Executor with the resources it allocates to it.
 
@@ -373,6 +373,25 @@ To run an interactive Spark shell against the cluster, run the following command
     ./bin/spark-shell --master spark://IP:PORT
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
+
+# Client Properties
+
+Spark applications supports the following configuration properties specific to standalone mode: 
+
+<table class="table">
+  <tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr>
+  <tr>
+  <td><code>spark.standalone.submit.waitAppCompletion</code></td>
+  <td><code>false</code></td>
+  <td>
+  In standalone cluster mode, controls whether the client waits to exit until the application completes.
+  If set to <code>true</code>, the client process will stay alive polling the driver's status.
+  Otherwise, the client process will exit after submission.
+  </td>
+  <td>3.1.0</td>
+  </tr>
+</table>
+
 
 # Launching Spark Applications
 

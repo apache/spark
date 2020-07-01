@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
@@ -629,21 +629,29 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "700") {
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
       withTempView("skewData1", "skewData2") {
         spark
           .range(0, 1000, 1, 10)
-          .selectExpr("id % 2 as key1", "id as value1")
+          .selectExpr("id % 3 as key1", "id as value1")
           .createOrReplaceTempView("skewData1")
         spark
           .range(0, 1000, 1, 10)
           .selectExpr("id % 1 as key2", "id as value2")
           .createOrReplaceTempView("skewData2")
-        val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
-          "SELECT key1 FROM skewData1 join skewData2 ON key1 = key2 group by key1")
+
+        def checkSkewJoin(query: String, optimizeSkewJoin: Boolean): Unit = {
+          val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(query)
+          val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
+          assert(innerSmj.size == 1 && innerSmj.head.isSkewJoin == optimizeSkewJoin)
+        }
+
+        checkSkewJoin(
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2", true)
         // Additional shuffle introduced, so disable the "OptimizeSkewedJoin" optimization
-        val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        assert(innerSmj.size == 1 && !innerSmj.head.isSkewJoin)
+        checkSkewJoin(
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1", false)
       }
     }
   }
@@ -1010,6 +1018,85 @@ class AdaptiveQueryExecSuite
         } finally {
           spark.sparkContext.removeSparkListener(listener)
         }
+      }
+    }
+  }
+
+  test("SPARK-31220, SPARK-32056: repartition by expression with AQE") {
+    Seq(true, false).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+
+        val df1 = spark.range(10).repartition($"id")
+        val df2 = spark.range(10).repartition($"id" + 1)
+
+        val partitionsNum1 = df1.rdd.collectPartitions().length
+        val partitionsNum2 = df2.rdd.collectPartitions().length
+
+        if (enableAQE) {
+          assert(partitionsNum1 < 10)
+          assert(partitionsNum2 < 10)
+
+          // repartition obeys initialPartitionNum when adaptiveExecutionEnabled
+          val plan = df1.queryExecution.executedPlan
+          assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
+          val shuffle = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan.collect {
+            case s: ShuffleExchangeExec => s
+          }
+          assert(shuffle.size == 1)
+          assert(shuffle(0).outputPartitioning.numPartitions == 10)
+        } else {
+          assert(partitionsNum1 === 10)
+          assert(partitionsNum2 === 10)
+        }
+
+
+        // Don't coalesce partitions if the number of partitions is specified.
+        val df3 = spark.range(10).repartition(10, $"id")
+        val df4 = spark.range(10).repartition(10)
+        assert(df3.rdd.collectPartitions().length == 10)
+        assert(df4.rdd.collectPartitions().length == 10)
+      }
+    }
+  }
+
+  test("SPARK-31220, SPARK-32056: repartition by range with AQE") {
+    Seq(true, false).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+
+        val df1 = spark.range(10).toDF.repartitionByRange($"id".asc)
+        val df2 = spark.range(10).toDF.repartitionByRange(($"id" + 1).asc)
+
+        val partitionsNum1 = df1.rdd.collectPartitions().length
+        val partitionsNum2 = df2.rdd.collectPartitions().length
+
+        if (enableAQE) {
+          assert(partitionsNum1 < 10)
+          assert(partitionsNum2 < 10)
+
+          // repartition obeys initialPartitionNum when adaptiveExecutionEnabled
+          val plan = df1.queryExecution.executedPlan
+          assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
+          val shuffle = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan.collect {
+            case s: ShuffleExchangeExec => s
+          }
+          assert(shuffle.size == 1)
+          assert(shuffle(0).outputPartitioning.numPartitions == 10)
+        } else {
+          assert(partitionsNum1 === 10)
+          assert(partitionsNum2 === 10)
+        }
+
+        // Don't coalesce partitions if the number of partitions is specified.
+        val df3 = spark.range(10).repartitionByRange(10, $"id".asc)
+        assert(df3.rdd.collectPartitions().length == 10)
       }
     }
   }
