@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -228,6 +229,27 @@ abstract class ProbabilisticClassificationModel[
       }
       argMax
     }
+  }
+
+  /**
+   *If the probability and prediction columns are set, this method returns the current model,
+   * otherwise it generates new columns for them and sets them as columns on a new copy of
+   * the current model
+   */
+  override private[classification] def findSummaryModel():
+  (ProbabilisticClassificationModel[FeaturesType, M], String, String) = {
+    val model = if ($(probabilityCol).isEmpty && $(predictionCol).isEmpty) {
+      copy(ParamMap.empty)
+        .setProbabilityCol("probability_" + java.util.UUID.randomUUID.toString)
+        .setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+    } else if ($(probabilityCol).isEmpty) {
+      copy(ParamMap.empty).setProbabilityCol("probability_" + java.util.UUID.randomUUID.toString)
+    } else if ($(predictionCol).isEmpty) {
+      copy(ParamMap.empty).setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+    } else {
+      this
+    }
+    (model, model.getProbabilityCol, model.getPredictionCol)
   }
 }
 
