@@ -18,9 +18,11 @@
 package org.apache.spark.sql
 
 import java.math.BigDecimal
+import java.time.format.DateTimeFormatter
 
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
@@ -504,13 +506,15 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Using java.time.Instant in UDF") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
-      val expected = java.time.Instant.parse("2019-02-27T00:00:00Z").toString
-      val plusSec = udf((i: java.time.Instant) => i.plusSeconds(1))
-      val df = spark.sql("SELECT TIMESTAMP '2019-02-26 23:59:59Z' as t")
-        .select(plusSec('t).cast(StringType))
-      assert(df.collect().toSeq === Seq(Row(expected)))
-    }
+    val dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    val expected = java.time.Instant.parse("2019-02-27T00:00:00Z")
+      .atZone(DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+      .toLocalDateTime
+      .format(dtf)
+    val plusSec = udf((i: java.time.Instant) => i.plusSeconds(1))
+    val df = spark.sql("SELECT TIMESTAMP '2019-02-26 23:59:59Z' as t")
+      .select(plusSec('t).cast(StringType))
+    assert(df.collect().toSeq === Seq(Row(expected)))
   }
 
   test("Using java.time.LocalDate in UDF") {
