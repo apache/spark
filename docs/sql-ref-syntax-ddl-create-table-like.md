@@ -57,7 +57,7 @@ CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier
 * **TBLPROPERTIES**
 
     Table properties that have to be set are specified, such as `created.by.user`, `owner`, etc.
-    Note that a basic set of table properties defined in a source table is copied into a new table if the format is the same with each other.
+    Note that a basic set of table properties defined in a source table is copied into a new table if the table format including data source provider and storage input format are the same.
     If a specified property key has already existed in a source table, the old property is overwritten with the new one.
 
 * **LOCATION**
