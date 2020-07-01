@@ -125,9 +125,7 @@ case class CreateTableLikeCommand(
 
     val newProperties = sourceTableDesc.tableType match {
       case MANAGED | EXTERNAL if needCopyProperties =>
-        // Hive only retain the useful properties through serde class annotation.
-        // For better compatible with Hive, we remove the metastore properties.
-        sourceTableDesc.properties -- DDLUtils.METASTORE_GENERATED_PROPERTIES ++ properties
+        sourceTableDesc.properties ++ properties
       case MANAGED | EXTERNAL =>
         properties
       case VIEW =>

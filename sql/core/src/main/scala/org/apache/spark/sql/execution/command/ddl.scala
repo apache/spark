@@ -839,18 +839,6 @@ case class AlterTableSetLocationCommand(
 object DDLUtils {
   val HIVE_PROVIDER = "hive"
 
-  val METASTORE_GENERATED_PROPERTIES: Set[String] = Set(
-    "CreateTime",
-    "transient_lastDdlTime",
-    "grantTime",
-    "lastUpdateTime",
-    "last_modified_by",
-    "last_modified_time",
-    "Owner",
-    "totalNumberFiles",
-    "maxFileSize",
-    "minFileSize")
-
   def isHiveTable(table: CatalogTable): Boolean = {
     isHiveTable(table.provider)
   }

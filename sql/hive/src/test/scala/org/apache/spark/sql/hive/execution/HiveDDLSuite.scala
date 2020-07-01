@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -2738,7 +2739,7 @@ class HiveDDLSuite
 
   test("SPARK-31828: Filters out Hive metastore properties in CreateTableLikeCommand") {
     val catalog = spark.sessionState.catalog
-    DDLUtils.METASTORE_GENERATED_PROPERTIES.foreach { meta =>
+    HiveClientImpl.HIVE_METASTORE_GENERATED_PROPERTIES.foreach { meta =>
       withTable("t1", "t2") {
         val uuid = UUID.randomUUID().toString
         sql(s"CREATE TABLE t1(c1 int) TBLPROPERTIES('$meta'='$uuid')")

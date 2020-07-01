@@ -1066,7 +1066,10 @@ private[hive] object HiveClientImpl extends Logging {
     hiveTable.setSerializationLib(
       table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
-    table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
+    // Hive only retain the useful properties through serde class annotation.
+    // For better compatible with Hive, we remove the metastore properties.
+    val hiveProperties = table.properties -- HIVE_METASTORE_GENERATED_PROPERTIES
+    hiveProperties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
     // Hive will expand the view text, so it needs 2 fields: viewOriginalText and viewExpandedText.
     // Since we don't expand the view text, but only add table properties, we map the `viewText` to
@@ -1223,6 +1226,20 @@ private[hive] object HiveClientImpl extends Logging {
     StatsSetupConst.ROW_COUNT,
     StatsSetupConst.RAW_DATA_SIZE,
     StatsSetupConst.TOTAL_SIZE
+  )
+
+  // Visible for testing.
+  private[hive] val HIVE_METASTORE_GENERATED_PROPERTIES: Set[String] = Set(
+    "CreateTime",
+    "transient_lastDdlTime",
+    "grantTime",
+    "lastUpdateTime",
+    "last_modified_by",
+    "last_modified_time",
+    "Owner",
+    "totalNumberFiles",
+    "maxFileSize",
+    "minFileSize"
   )
 
   def newHiveConf(
