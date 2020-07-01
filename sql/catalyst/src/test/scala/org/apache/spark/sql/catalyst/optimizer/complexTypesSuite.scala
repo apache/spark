@@ -510,31 +510,4 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
         Literal(3) as "struct3B")
     checkRule(query, expected)
   }
-
-  test("case sensitive config should be respected when simplifying GetStructField on WithFields") {
-    val query1 = testStructRelation.select(
-      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 1, Some("B")) as "outerAtt")
-    val query2 = testStructRelation.select(
-      GetStructField(WithFields('struct1, Seq("B"), Seq(Literal(1))), 1, Some("b")) as "outerAtt")
-    val query3 = testStructRelation.select(
-      GetStructField(WithFields('struct1, Seq("B"), Seq(Literal(1))), 1, Some("B")) as "outerAtt")
-    val query4 = testStructRelation.select(
-      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 1, Some("b")) as "outerAtt")
-
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> true.toString) {
-      checkRule(query1,
-        testStructRelation.select(GetStructField('struct1, 1, Some("B")) as "outerAtt"))
-      checkRule(query2,
-        testStructRelation.select(GetStructField('struct1, 1, Some("b")) as "outerAtt"))
-      checkRule(query3, testStructRelation.select(Literal(1) as "outerAtt"))
-      checkRule(query4, testStructRelation.select(Literal(1) as "outerAtt"))
-    }
-
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> false.toString) {
-      checkRule(query1, testStructRelation.select(Literal(1) as "outerAtt"))
-      checkRule(query2, testStructRelation.select(Literal(1) as "outerAtt"))
-      checkRule(query3, testStructRelation.select(Literal(1) as "outerAtt"))
-      checkRule(query4, testStructRelation.select(Literal(1) as "outerAtt"))
-    }
-  }
 }
