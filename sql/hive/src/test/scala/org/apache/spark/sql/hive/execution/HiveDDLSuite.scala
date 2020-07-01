@@ -24,8 +24,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.QueryPlanningTracker.RuleSummary
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.HiveExternalCatalog
+import org.apache.spark.sql.hive.{DetermineTableStats, HiveExternalCatalog}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -169,6 +169,32 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 
   test("drop table") {
     testDropTable(isDatasourceTable = false)
+  }
+
+  test("DetermineTableStats should not cause any plan changes" +
+    " if it can be converted to Datasource table") {
+    withSQLConf((SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, "true")) {
+      val tblName = "test"
+      val createQuery =
+        s"""
+           |CREATE TABLE $tblName(col0 INT)
+           |STORED AS PARQUET
+           |""".stripMargin
+      sql(s"DROP TABLE IF EXISTS $tblName")
+      sql(createQuery)
+
+      val query =
+        s"""
+           |SELECT COUNT(*)
+           |FROM $tblName
+           |""".stripMargin
+      val df = sql(query)
+      val ruleSummary =
+        df.queryExecution.tracker.rules.get(classOf[DetermineTableStats].getName)
+      assert(ruleSummary.isDefined)
+      assert(ruleSummary.get.numEffectiveInvocations == 0)
+      sql(s"DROP TABLE $tblName")
+    }
   }
 
   test("alter datasource table add columns - orc") {
