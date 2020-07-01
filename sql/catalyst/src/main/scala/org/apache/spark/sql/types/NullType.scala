@@ -38,12 +38,4 @@ class NullType private() extends DataType {
  * @since 1.3.0
  */
 @Stable
-case object NullType extends NullType {
-
-  def containsNullType(dt: DataType): Boolean = dt match {
-    case ArrayType(et, _) => containsNullType(et)
-    case MapType(kt, vt, _) => containsNullType(kt) || containsNullType(vt)
-    case StructType(fields) => fields.exists(f => containsNullType(f.dataType))
-    case _ => dt.isInstanceOf[NullType]
-  }
-}
+case object NullType extends NullType

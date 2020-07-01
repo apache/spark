@@ -107,7 +107,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
       } else {
         withStorage
       }
-      assertNoNullTypeInSchema(withSchema.schema)
+
       c.copy(tableDesc = withSchema)
   }
 }

@@ -348,7 +348,13 @@ private[sql] object CatalogV2Util {
   }
 
   def failNullType(dt: DataType): Unit = {
-    if (NullType.containsNullType(dt)) {
+    def containsNullType(dt: DataType): Boolean = dt match {
+      case ArrayType(et, _) => containsNullType(et)
+      case MapType(kt, vt, _) => containsNullType(kt) || containsNullType(vt)
+      case StructType(fields) => fields.exists(f => containsNullType(f.dataType))
+      case _ => dt.isInstanceOf[NullType]
+    }
+    if (containsNullType(dt)) {
       throw new AnalysisException(
         "Cannot create tables with VOID type.")
     }
@@ -356,7 +362,7 @@ private[sql] object CatalogV2Util {
 
   def assertNoNullTypeInSchema(schema: StructType): Unit = {
     schema.foreach { f =>
-      failNullType(CatalystSqlParser.parseDataType(schema.catalogString))
+      failNullType(f.dataType)
     }
   }
 }
