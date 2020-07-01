@@ -422,7 +422,7 @@ private[spark] object RestSubmissionClient {
   private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
     env.filterKeys { k =>
       (k.startsWith("SPARK_") && !BLACKLISTED_SPARK_ENV_VARS.contains(k)) || k.startsWith("MESOS_")
-    }
+    }.toMap
   }
 
   private[spark] def supportsRestClient(master: String): Boolean = {

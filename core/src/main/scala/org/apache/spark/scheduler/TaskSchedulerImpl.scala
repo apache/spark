@@ -137,7 +137,7 @@ private[spark] class TaskSchedulerImpl(
   private val executorIdToRunningTaskIds = new HashMap[String, HashSet[Long]]
 
   def runningTasksByExecutors: Map[String, Int] = synchronized {
-    executorIdToRunningTaskIds.toMap.mapValues(_.size)
+    executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
   }
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
@@ -719,7 +719,7 @@ private[spark] class TaskSchedulerImpl(
     if (tasks.nonEmpty) {
       hasLaunchedTask = true
     }
-    return tasks
+    return tasks.map(_.toSeq)
   }
 
   private def createUnschedulableTaskSetAbortTimer(

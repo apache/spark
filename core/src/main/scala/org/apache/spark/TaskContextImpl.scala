@@ -111,7 +111,7 @@ private[spark] class TaskContextImpl(
     if (failed) return
     failed = true
     failure = error
-    invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
+    invokeListeners(onFailureCallbacks.toSeq, "TaskFailureListener", Option(error)) {
       _.onTaskFailure(this, error)
     }
   }
@@ -120,7 +120,7 @@ private[spark] class TaskContextImpl(
   private[spark] override def markTaskCompleted(error: Option[Throwable]): Unit = synchronized {
     if (completed) return
     completed = true
-    invokeListeners(onCompleteCallbacks, "TaskCompletionListener", error) {
+    invokeListeners(onCompleteCallbacks.toSeq, "TaskCompletionListener", error) {
       _.onTaskCompletion(this)
     }
   }
@@ -142,7 +142,7 @@ private[spark] class TaskContextImpl(
       }
     }
     if (errorMsgs.nonEmpty) {
-      throw new TaskCompletionListenerException(errorMsgs, error)
+      throw new TaskCompletionListenerException(errorMsgs.toSeq, error)
     }
   }
 

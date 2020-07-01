@@ -657,7 +657,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("top with predefined ordering") {
     val nums = Array.range(1, 100000)
-    val ints = sc.makeRDD(scala.util.Random.shuffle(nums), 2)
+    val ints = sc.makeRDD(scala.util.Random.shuffle(nums).toSeq, 2)
     val topK = ints.top(5)
     assert(topK.size === 5)
     assert(topK === nums.reverse.take(5))
@@ -1098,7 +1098,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     override def getPartitions: Array[Partition] = Array(new Partition {
       override def index: Int = 0
     })
-    override def getDependencies: Seq[Dependency[_]] = mutableDependencies
+    override def getDependencies: Seq[Dependency[_]] = mutableDependencies.toSeq
     def addDependency(dep: Dependency[_]): Unit = {
       mutableDependencies += dep
     }

@@ -103,7 +103,7 @@ private class MyTaskResultGetter(env: SparkEnv, scheduler: TaskSchedulerImpl)
   // DirectTaskResults that we receive from the executors
   private val _taskResults = new ArrayBuffer[DirectTaskResult[_]]
 
-  def taskResults: Seq[DirectTaskResult[_]] = _taskResults
+  def taskResults: Seq[DirectTaskResult[_]] = _taskResults.toSeq
 
   override def enqueueSuccessfulTask(tsm: TaskSetManager, tid: Long, data: ByteBuffer): Unit = {
     // work on a copy since the super class still needs to use the buffer

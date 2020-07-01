@@ -1716,7 +1716,7 @@ private[spark] object Utils extends Logging {
     if (inWord || inDoubleQuote || inSingleQuote) {
       endWord()
     }
-    buf
+    buf.toSeq
   }
 
  /* Calculates 'x' modulo 'mod', takes to consideration sign of x,

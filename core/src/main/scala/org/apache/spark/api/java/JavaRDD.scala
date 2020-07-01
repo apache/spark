@@ -256,7 +256,7 @@ object JavaRDD {
       } catch {
         case eof: EOFException => // No-op
       }
-      JavaRDD.fromRDD(sc.parallelize(objs, parallelism))
+      JavaRDD.fromRDD(sc.parallelize(objs.toSeq, parallelism))
     } finally {
       din.close()
     }

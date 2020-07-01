@@ -157,7 +157,7 @@ private class SaveInfoListener extends SparkListener {
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
   def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.values.flatten.toSeq
   def getCompletedTaskInfos(stageId: StageId, stageAttemptId: StageAttemptId): Seq[TaskInfo] =
-    completedTaskInfos.getOrElse((stageId, stageAttemptId), Seq.empty[TaskInfo])
+    completedTaskInfos.getOrElse((stageId, stageAttemptId), Seq.empty[TaskInfo]).toSeq
 
   /**
    * If `jobCompletionCallback` is set, block until the next call has finished.

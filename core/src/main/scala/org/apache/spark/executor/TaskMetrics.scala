@@ -123,7 +123,7 @@ class TaskMetrics private[spark] () extends Serializable {
   def updatedBlockStatuses: Seq[(BlockId, BlockStatus)] = {
     // This is called on driver. All accumulator updates have a fixed value. So it's safe to use
     // `asScala` which accesses the internal values using `java.util.Iterator`.
-    _updatedBlockStatuses.value.asScala
+    _updatedBlockStatuses.value.asScala.toSeq
   }
 
   // Setters and increment-ers
@@ -199,7 +199,7 @@ class TaskMetrics private[spark] () extends Serializable {
    */
   private[spark] def mergeShuffleReadMetrics(): Unit = synchronized {
     if (tempShuffleReadMetrics.nonEmpty) {
-      shuffleReadMetrics.setMergeValues(tempShuffleReadMetrics)
+      shuffleReadMetrics.setMergeValues(tempShuffleReadMetrics.toSeq)
     }
   }
 

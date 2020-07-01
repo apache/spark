@@ -291,14 +291,14 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val shuffleIds = 0 until sc.newShuffleId
     val broadcastIds = broadcastBuffer.map(_.id)
 
-    val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
+    val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds.toSeq)
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that GC triggers the cleanup of all variables after the dereferencing them
-    val postGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
+    val postGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds.toSeq)
     broadcastBuffer.clear()
     rddBuffer.clear()
     runGC()
@@ -331,14 +331,14 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val shuffleIds = 0 until sc.newShuffleId
     val broadcastIds = broadcastBuffer.map(_.id)
 
-    val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
+    val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds.toSeq)
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that GC triggers the cleanup of all variables after the dereferencing them
-    val postGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
+    val postGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds.toSeq)
     broadcastBuffer.clear()
     rddBuffer.clear()
     runGC()
