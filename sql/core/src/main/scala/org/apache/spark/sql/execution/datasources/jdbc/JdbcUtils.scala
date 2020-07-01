@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, Ge
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.QueryStatementUtils
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
@@ -128,7 +129,6 @@ object JdbcUtils extends Logging {
   def runQuery(conn: Connection, actions: String, options: JDBCOptions): Unit = {
     val autoCommit = conn.getAutoCommit
     conn.setAutoCommit(false)
-<<<<<<< HEAD
 
     val commands = StringUtils.splitSemiColon(actions).asScala
     val statement = conn.createStatement()
@@ -141,33 +141,13 @@ object JdbcUtils extends Logging {
     }
     try {
       statement.executeBatch()
-=======
-    val queries = actions.split(";")
-    try {
-      queries.foreach { query =>
-        val queryString = query.trim()
-        val statement = conn.prepareStatement(queryString)
-        try {
-          statement.setQueryTimeout(options.queryTimeout)
-          val hasResultSet = statement.execute()
-          if (hasResultSet) {
-            statement.getResultSet().close()
-          }
-        } finally {
-          statement.close()
-        }
-      }
->>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
       conn.commit()
     } catch {
       case e: SQLException =>
         conn.rollback()
         throw e
     } finally {
-<<<<<<< HEAD
       statement.close()
-=======
->>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
       conn.setAutoCommit(autoCommit)
     }
   }
