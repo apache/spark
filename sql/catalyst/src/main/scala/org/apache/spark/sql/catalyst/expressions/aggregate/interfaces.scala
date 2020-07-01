@@ -140,7 +140,7 @@ case class AggregateExpression(
   override lazy val references: AttributeSet = {
     val aggAttributes = mode match {
       case Partial | Complete => aggregateFunction.references
-      case PartialMerge | Final => AttributeSet(aggregateFunction.aggBufferAttributes)
+      case PartialMerge | Final => AttributeSet(aggregateFunction.inputAggBufferAttributes)
     }
     aggAttributes ++ filterAttributes
   }

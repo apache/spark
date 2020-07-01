@@ -186,9 +186,6 @@
   <profiles>
     <profile>
       <id>hadoop-2.7</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>com.amazonaws</groupId>
@@ -200,6 +197,9 @@
     </profile>
     <profile>
       <id>hadoop-3.2</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <dependencies>
         <dependency>
           <groupId>com.amazonaws</groupId>

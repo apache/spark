@@ -241,24 +241,20 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session.conf.get(WAREHOUSE_PATH) === "SPARK-31532-db-2")
   }
 
-  test("SPARK-32029 make active session null when application end") {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test-SPARK-32029")
-    val context = new SparkContext(conf)
-    val session = SparkSession
-      .builder()
-      .sparkContext(context)
-      .getOrCreate()
-
-    context.stop()
-    // wait for application end event
-    Thread.sleep(1000)
-    assert(SparkSession.getDefaultSession.isEmpty)
-    assert(SparkSession.getActiveSession.isEmpty)
-    val msg = intercept[IllegalStateException] {
-      session.withActive()
-    }.getMessage
-    assert(msg.contains("Cannot call methods on a stopped SparkContext."))
+  test("SPARK-32062: reset listenerRegistered in SparkSession") {
+    (1 to 2).foreach { i =>
+      val conf = new SparkConf()
+        .setMaster("local")
+        .setAppName(s"test-SPARK-32062-$i")
+      val context = new SparkContext(conf)
+      val beforeListenerSize = context.listenerBus.listeners.size()
+      SparkSession
+        .builder()
+        .sparkContext(context)
+        .getOrCreate()
+      val afterListenerSize = context.listenerBus.listeners.size()
+      assert(beforeListenerSize + 1 == afterListenerSize)
+      context.stop()
+    }
   }
 }
