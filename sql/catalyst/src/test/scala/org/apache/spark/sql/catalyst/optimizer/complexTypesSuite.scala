@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
