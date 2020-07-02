@@ -290,7 +290,8 @@ private[spark] class ExecutorAllocationManager(
       s" tasksperexecutor: $tasksPerExecutor")
     val maxNeeded = math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
       tasksPerExecutor).toInt
-    val totalNeed = if (tasksPerExecutor > 1 && maxNeeded == 1 && pendingSpeculative > 0) {
+    val maxNeededWithSpeculationLocalityOffset =
+      if (tasksPerExecutor > 1 && maxNeeded == 1 && pendingSpeculative > 0) {
       // If we have pending speculative tasks and only need a single executor, allocate one more
       // to satisfy the locality requirements of speculation
       maxNeeded + 1
@@ -298,14 +299,16 @@ private[spark] class ExecutorAllocationManager(
       maxNeeded
     }
 
-    // Request additional executors to schedule the unschedulable tasks as well
+    // Since the maxNeededWithSpeculationLocalityOffset already includes the num executors needed
+    // to run unschedulable tasks, we would only try to add when the
+    // maxNeededWithSpeculationLocalityOffset is lesser than the active executors
     if (numUnschedulables > 0) {
       val maxNeededForUnschedulables = math.ceil(numUnschedulables * executorAllocationRatio /
         tasksPerExecutor).toInt
-      math.max(totalNeed, executorMonitor.executorCountWithResourceProfile(rpId)) +
-        maxNeededForUnschedulables
+      math.max(maxNeededWithSpeculationLocalityOffset,
+        executorMonitor.executorCountWithResourceProfile(rpId) + maxNeededForUnschedulables)
     } else {
-      totalNeed
+      maxNeededWithSpeculationLocalityOffset
     }
   }
 

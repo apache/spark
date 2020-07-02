@@ -21,15 +21,15 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{mock, never, times, verify, when}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito._
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, ResourceProfileManager, TaskResourceRequests}
+import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -501,37 +501,105 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
   }
 
-  test("SPARK-31418: add executors when unschedulable tasks added") {
-    val manager = createManager(createConf(0, 10, 0))
-
+  test("SPARK-31418: one stage being unschedulable") {
+    val clock = new ManualClock()
+    val conf = createConf(0, 5, 0).set(config.EXECUTOR_CORES, 2)
+    val manager = createManager(conf, clock = clock)
     val updatesNeeded =
       new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
 
-    post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
-    // Verify that we're capped at number of tasks including the unschedulable ones in the stage
-    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(1), Some(0)))
-    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
-    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
-    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
-    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-    post(SparkListenerUnschedulableBlacklistTaskSubmitted(None, None))
-    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
-    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
-    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
-    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
-    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
-    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
-    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
-    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
 
-    // Verify that running a task doesn't affect the target
-    post(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
-    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
-    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
-    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+
+    onExecutorAddedDefaultProfile(manager, "0")
+    val t1 = createTaskInfo(0, 0, executorId = s"0")
+    val t2 = createTaskInfo(1, 1, executorId = s"0")
+    post(SparkListenerTaskStart(0, 0, t1))
+    post(SparkListenerTaskStart(0, 0, t2))
+
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+
+    // Stage 0 becomes unschedulable due to blacklisting
+    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(0), Some(0)))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    // Assert that we are getting additional executor to schedule unschedulable tasks
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
+
+    // Add a new executor
+    onExecutorAddedDefaultProfile(manager, "1")
+    // Now once the task becomes schedulable, clear the unschedulableTaskSets
+    // by posting unschedulable event with (None, None)
+    post(SparkListenerUnschedulableBlacklistTaskSubmitted(None, None))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+  }
+
+  test("SPARK-31418: multiple stages being unschedulable") {
+    val clock = new ManualClock()
+    val conf = createConf(0, 10, 0).set(config.EXECUTOR_CORES, 2)
+    val manager = createManager(conf, clock = clock)
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
+    post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
+    post(SparkListenerStageSubmitted(createStageInfo(2, 2)))
+
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+
+    // Add necessary executors
+    (0 to 2).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
+
+    // Start all the tasks
+    (0 to 2).foreach {
+      i =>
+        val t1Info = createTaskInfo(0, (i * 2) + 1, executorId = s"${i / 2}")
+        val t2Info = createTaskInfo(1, (i * 2) + 2, executorId = s"${i / 2}")
+        post(SparkListenerTaskStart(i, 0, t1Info))
+        post(SparkListenerTaskStart(i, 0, t2Info))
+    }
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 3)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 3)
+
+    // Complete the stage 0 tasks.
+    val t1Info = createTaskInfo(0, 0, executorId = s"0")
+    val t2Info = createTaskInfo(1, 1, executorId = s"0")
+    post(SparkListenerTaskEnd(0, 0, null, Success, t1Info, new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, Success, t2Info, new ExecutorMetrics, null))
+    post(SparkListenerStageCompleted(createStageInfo(0, 2)))
+
+    // Stage 1 and 2 becomes unschedulable now due to blacklisting
+    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(1), Some(0)))
+    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(2), Some(0)))
+
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    // Assert that we are getting additional executor to schedule unschedulable tasks
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 4)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 4)
+
+    // Add a new executor
+    onExecutorAddedDefaultProfile(manager, "3")
+
+    // Now once the task becomes schedulable, clear the unschedulableTaskSets
+    // by posting unschedulable event with (None, None)
+    post(SparkListenerUnschedulableBlacklistTaskSubmitted(None, None))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
   }
 
   test("SPARK-31418: remove executors after unschedulable tasks end") {
