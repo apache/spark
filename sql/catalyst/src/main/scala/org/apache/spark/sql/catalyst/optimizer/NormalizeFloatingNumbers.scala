@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CreateArray, CreateMap, CreateNamedStruct, CreateStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, KnownFloatingPointNormalized, LambdaFunction, NamedLambdaVariable, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CreateArray, CreateMap, CreateNamedStruct, CreateStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery, Window}
@@ -123,7 +123,8 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       val fields = expr.dataType.asInstanceOf[StructType].fields.indices.map { i =>
         normalize(GetStructField(expr, i))
       }
-      CreateStruct(fields)
+      val struct = CreateStruct(fields)
+      KnownFloatingPointNormalized(If(IsNull(expr), Literal(null, struct.dataType), struct))
 
     case _ if expr.dataType.isInstanceOf[ArrayType] =>
       val ArrayType(et, containsNull) = expr.dataType
