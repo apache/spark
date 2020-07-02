@@ -144,8 +144,7 @@ object ResolveHints {
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case h: UnresolvedHint if !conf.optimizerIgnoreHints &&
-          STRATEGY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      case h: UnresolvedHint if STRATEGY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
         if (h.parameters.isEmpty) {
           // If there is no table alias specified, apply the hint on the entire subtree.
           ResolvedHint(h.child, createHintInfo(h.name))
@@ -249,8 +248,7 @@ object ResolveHints {
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case hint @ UnresolvedHint(hintName, _, _) if !conf.optimizerIgnoreHints =>
-        hintName.toUpperCase(Locale.ROOT) match {
+      case hint @ UnresolvedHint(hintName, _, _) => hintName.toUpperCase(Locale.ROOT) match {
           case "REPARTITION" =>
             createRepartition(shuffle = true, hint)
           case "COALESCE" =>
@@ -278,6 +276,17 @@ object ResolveHints {
       case h: UnresolvedHint =>
         hintErrorHandler.hintNotRecognized(h.name, h.parameters)
         h.child
+    }
+  }
+
+  /**
+   * Removes all the hints when `spark.sql.optimizer.ignoreHints` is set.
+   * This is executed at the very beginning of the Analyzer to disable
+   * the hint functionality.
+   */
+  class DisableHints(conf: SQLConf) extends RemoveAllHints(conf: SQLConf) {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (conf.optimizerIgnoreHints) super.apply(plan) else plan
     }
   }
 }

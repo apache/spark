@@ -200,6 +200,8 @@ class Analyzer(
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
+    Batch("Disable Hints", Once,
+      new ResolveHints.DisableHints(conf)),
     Batch("Hints", fixedPoint,
       new ResolveHints.ResolveJoinStrategyHints(conf),
       new ResolveHints.ResolveCoalesceHints(conf)),
