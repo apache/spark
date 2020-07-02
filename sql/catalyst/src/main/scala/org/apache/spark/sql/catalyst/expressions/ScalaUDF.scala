@@ -36,7 +36,8 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, User
  * @param inputEncoders ExpressionEncoder for each input parameters. For a input parameter which
  *                      serialized as struct will use encoder instead of CatalystTypeConverters to
  *                      convert internal value to Scala value.
- * @param returnEncoder ExpressionEncoder for the return type of function.
+ * @param returnEncoder ExpressionEncoder for the return type of function. It's only defined when
+ *                      this is a typed Scala UDF.
  * @param udfName  The user-specified name of this UDF.
  * @param nullable  True if the UDF can return null value.
  * @param udfDeterministic  True if the UDF is deterministic. Deterministic UDF returns same result
