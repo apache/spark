@@ -482,8 +482,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
     "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite",
-    // For all hive.execution suites
-    "org.apache.spark.sql.hive.execution"
+    "org.apache.spark.sql.hive.execution.HashAggregationQueryWithControlledFallbackSuite",
+    "org.apache.spark.sql.hive.execution.HiveCompatibilitySuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
