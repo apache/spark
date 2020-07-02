@@ -17,19 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
-import java.sql.{Connection, Driver}
+class OracleConnectionProviderSuite extends ConnectionProviderSuiteBase {
+  test("setAuthenticationConfigIfNeeded must set authentication if not set") {
+    val driver = registerDriver(OracleConnectionProvider.driverClass)
+    val provider = new OracleConnectionProvider(driver,
+      options("jdbc:oracle:thin:@//localhost/xe"))
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-
-private[jdbc] class BasicConnectionProvider(driver: Driver, options: JDBCOptions)
-  extends ConnectionProvider {
-  def getConnection(): Connection = {
-    val properties = getAdditionalProperties()
-    options.asConnectionProperties.entrySet().asScala.foreach { e =>
-      properties.put(e.getKey(), e.getValue())
-    }
-    driver.connect(options.url, properties)
+    testSecureConnectionProvider(provider)
   }
 }

@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.ParseException
 import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
 import java.time.format.DateTimeParseException
-import java.time.temporal.IsoFields
 import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
@@ -386,7 +385,7 @@ case class DayOfYear(child: Expression) extends GetDateField {
   override val funcName = "getDayInYear"
 }
 
-abstract class NumberToTimestampBase extends UnaryExpression
+abstract class IntegralToTimestampBase extends UnaryExpression
   with ExpectsInputTypes with NullIntolerant {
 
   protected def upScaleFactor: Long
@@ -408,19 +407,66 @@ abstract class NumberToTimestampBase extends UnaryExpression
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
+  usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds (can be fractional) since UTC epoch.",
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000);
        2008-12-25 07:30:00
+      > SELECT _FUNC_(1230219000.123);
+       2008-12-25 07:30:00.123
   """,
   group = "datetime_funcs",
   since = "3.1.0")
-case class SecondsToTimestamp(child: Expression)
-  extends NumberToTimestampBase {
+// scalastyle:on line.size.limit
+case class SecondsToTimestamp(child: Expression) extends UnaryExpression
+  with ExpectsInputTypes with NullIntolerant {
 
-  override def upScaleFactor: Long = MICROS_PER_SECOND
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+
+  override def dataType: DataType = TimestampType
+
+  override def nullable: Boolean = child.dataType match {
+    case _: FloatType | _: DoubleType => true
+    case _ => child.nullable
+  }
+
+  @transient
+  private lazy val evalFunc: Any => Any = child.dataType match {
+    case _: IntegralType => input =>
+      Math.multiplyExact(input.asInstanceOf[Number].longValue(), MICROS_PER_SECOND)
+    case _: DecimalType => input =>
+      val operand = new java.math.BigDecimal(MICROS_PER_SECOND)
+      input.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
+    case _: FloatType => input =>
+      val f = input.asInstanceOf[Float]
+      if (f.isNaN || f.isInfinite) null else (f * MICROS_PER_SECOND).toLong
+    case _: DoubleType => input =>
+      val d = input.asInstanceOf[Double]
+      if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
+  }
+
+  override def nullSafeEval(input: Any): Any = evalFunc(input)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
+    case _: IntegralType =>
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${MICROS_PER_SECOND}L)")
+    case _: DecimalType =>
+      val operand = s"new java.math.BigDecimal($MICROS_PER_SECOND)"
+      defineCodeGen(ctx, ev, c => s"$c.toJavaBigDecimal().multiply($operand).longValueExact()")
+    case other =>
+      nullSafeCodeGen(ctx, ev, c => {
+        val typeStr = CodeGenerator.boxedType(other)
+        s"""
+           |if ($typeStr.isNaN($c) || $typeStr.isInfinite($c)) {
+           |  ${ev.isNull} = true;
+           |} else {
+           |  ${ev.value} = (long)($c * $MICROS_PER_SECOND);
+           |}
+           |""".stripMargin
+      })
+  }
 
   override def prettyName: String = "timestamp_seconds"
 }
@@ -437,7 +483,7 @@ case class SecondsToTimestamp(child: Expression)
   since = "3.1.0")
 // scalastyle:on line.size.limit
 case class MillisToTimestamp(child: Expression)
-  extends NumberToTimestampBase {
+  extends IntegralToTimestampBase {
 
   override def upScaleFactor: Long = MICROS_PER_MILLIS
 
@@ -456,7 +502,7 @@ case class MillisToTimestamp(child: Expression)
   since = "3.1.0")
 // scalastyle:on line.size.limit
 case class MicrosToTimestamp(child: Expression)
-  extends NumberToTimestampBase {
+  extends IntegralToTimestampBase {
 
   override def upScaleFactor: Long = 1L
 

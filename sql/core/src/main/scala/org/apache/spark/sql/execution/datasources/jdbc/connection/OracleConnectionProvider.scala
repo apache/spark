@@ -25,16 +25,16 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-private[sql] class DB2ConnectionProvider(driver: Driver, options: JDBCOptions)
+private[sql] class OracleConnectionProvider(driver: Driver, options: JDBCOptions)
   extends SecureConnectionProvider(driver, options) {
-  override val appEntry: String = "JaasClient"
+  override val appEntry: String = "kprb5module"
 
   override def getConnection(): Connection = {
     setAuthenticationConfigIfNeeded()
     UserGroupInformation.loginUserFromKeytabAndReturnUGI(options.principal, options.keytab).doAs(
       new PrivilegedExceptionAction[Connection]() {
         override def run(): Connection = {
-          DB2ConnectionProvider.super.getConnection()
+          OracleConnectionProvider.super.getConnection()
         }
       }
     )
@@ -42,9 +42,10 @@ private[sql] class DB2ConnectionProvider(driver: Driver, options: JDBCOptions)
 
   override def getAdditionalProperties(): Properties = {
     val result = new Properties()
-    // 11 is the integer value for kerberos
-    result.put("securityMechanism", new String("11"))
-    result.put("KerberosServerPrincipal", options.principal)
+    // This prop is needed to turn on kerberos authentication in the JDBC driver.
+    // The possible values can be found in AnoServices public interface
+    // The value is coming from AUTHENTICATION_KERBEROS5 final String in driver version 19.6.0.0
+    result.put("oracle.net.authentication_services", "(KERBEROS5)");
     result
   }
 
@@ -56,6 +57,6 @@ private[sql] class DB2ConnectionProvider(driver: Driver, options: JDBCOptions)
   }
 }
 
-private[sql] object DB2ConnectionProvider {
-  val driverClass = "com.ibm.db2.jcc.DB2Driver"
+private[sql] object OracleConnectionProvider {
+  val driverClass = "oracle.jdbc.OracleDriver"
 }
