@@ -84,7 +84,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
     case _: TimestampType =>
-      (sum / count).cast(resultType)
+      (sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
     case _ =>
       sum.cast(resultType) / count.cast(resultType)
   }

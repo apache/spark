@@ -404,7 +404,7 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
-       1
+       1L
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
