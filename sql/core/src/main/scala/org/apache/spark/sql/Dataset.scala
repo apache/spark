@@ -3420,6 +3420,39 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns the content of the Dataset as a Dataset of JSON strings.
+   * @since 3.0.1
+   */
+  def toJSON(options: Map[String, String]): Dataset[String] = {
+    val rowSchema = this.schema
+    val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
+    mapPartitions { iter =>
+      val writer = new CharArrayWriter()
+      // create the Generator without separator inserted between 2 records
+      val gen = new JacksonGenerator(rowSchema, writer,
+        new JSONOptions(options, sessionLocalTimeZone))
+
+      new Iterator[String] {
+        private val toRow = exprEnc.createSerializer()
+        override def hasNext: Boolean = iter.hasNext
+        override def next(): String = {
+          gen.write(toRow(iter.next()))
+          gen.flush()
+
+          val json = writer.toString
+          if (hasNext) {
+            writer.reset()
+          } else {
+            gen.close()
+          }
+
+          json
+        }
+      }
+    } (Encoders.STRING)
+  }
+
+  /**
    * Returns a best-effort snapshot of the files that compose this Dataset. This method simply
    * asks each constituent BaseRelation for its respective files and takes the union of all results.
    * Depending on the source relations, this may not find all input files. Duplicates are removed.
@@ -3440,6 +3473,7 @@ class Dataset[T] private[sql](
     }.flatten
     files.toSet.toArray
   }
+
 
   /**
    * Returns `true` when the logical query plans inside both [[Dataset]]s are equal and
