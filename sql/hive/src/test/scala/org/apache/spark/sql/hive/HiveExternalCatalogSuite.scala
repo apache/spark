@@ -184,14 +184,14 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
   test("SPARK-31061: alterTable should be able to change table provider/hive") {
     val catalog = newBasicCatalog()
     Seq("parquet", "hive").foreach(i => {
-      val parquetTable = CatalogTable(
+      val tableDDL = CatalogTable(
         identifier = TableIdentifier("parq_tbl", Some("db1")),
         tableType = CatalogTableType.MANAGED,
         storage = storageFormat,
         schema = new StructType().add("col1", "int"),
         provider = Some(i))
       catalog.dropTable("db1", "parq_tbl", true, true)
-      catalog.createTable(parquetTable, ignoreIfExists = false)
+      catalog.createTable(tableDDL, ignoreIfExists = false)
 
       val rawTable = externalCatalog.getTable("db1", "parq_tbl")
       assert(rawTable.provider === Some(i))
