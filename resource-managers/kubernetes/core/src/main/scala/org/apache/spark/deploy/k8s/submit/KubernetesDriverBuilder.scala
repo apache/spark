@@ -58,8 +58,7 @@ private[spark] class KubernetesDriverBuilder(
     val baseFeatures = Seq(
       provideBasicStep(kubernetesConf),
       provideCredentialsStep(kubernetesConf),
-      provideServiceStep(kubernetesConf),
-      provideLocalDirsStep(kubernetesConf))
+      provideServiceStep(kubernetesConf))
 
     val secretFeature = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
       Seq(provideSecretsStep(kubernetesConf))
@@ -70,6 +69,7 @@ private[spark] class KubernetesDriverBuilder(
     val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
       Seq(provideVolumesStep(kubernetesConf))
     } else Nil
+    val localDirsFeature = Seq(provideLocalDirsStep(kubernetesConf))
 
     val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
         case JavaMainAppResource(_) =>
@@ -81,7 +81,7 @@ private[spark] class KubernetesDriverBuilder(
       .getOrElse(provideJavaStep(kubernetesConf))
 
     val allFeatures = (baseFeatures :+ bindingsStep) ++
-      secretFeature ++ envSecretFeature ++ volumesFeature
+      secretFeature ++ envSecretFeature ++ volumesFeature ++ localDirsFeature
 
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
