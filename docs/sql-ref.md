@@ -1,6 +1,7 @@
 ---
 layout: global
 title: SQL Reference
+redirect_from: /sql-reference
 displayTitle: SQL Reference
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more

@@ -31,13 +31,13 @@ class CSVDataSourceV2 extends FileDataSourceV2 {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
-    val tableName = getTableName(paths)
+    val tableName = getTableName(options, paths)
     CSVTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
   }
 
   override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
     val paths = getPaths(options)
-    val tableName = getTableName(paths)
+    val tableName = getTableName(options, paths)
     CSVTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
   }
 }

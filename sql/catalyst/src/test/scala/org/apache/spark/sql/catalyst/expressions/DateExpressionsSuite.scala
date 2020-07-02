@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -803,7 +804,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
+        sdf3.setTimeZone(TimeZoneUTC)
 
         withDefaultTimeZone(UTC) {
           for (zid <- outstandingZoneIds) {
@@ -872,7 +873,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
+        sdf3.setTimeZone(TimeZoneUTC)
 
         withDefaultTimeZone(UTC) {
           for (zid <- outstandingZoneIds) {
@@ -1141,28 +1142,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-31710:Adds TIMESTAMP_SECONDS, " +
-    "TIMESTAMP_MILLIS and TIMESTAMP_MICROS functions") {
-    checkEvaluation(SecondsToTimestamp(Literal(1230219000)), 1230219000L * MICROS_PER_SECOND)
-    checkEvaluation(SecondsToTimestamp(Literal(-1230219000)), -1230219000L * MICROS_PER_SECOND)
-    checkEvaluation(SecondsToTimestamp(Literal(null, IntegerType)), null)
-    checkEvaluation(MillisToTimestamp(Literal(1230219000123L)), 1230219000123L * MICROS_PER_MILLIS)
-    checkEvaluation(MillisToTimestamp(
-      Literal(-1230219000123L)), -1230219000123L * MICROS_PER_MILLIS)
-    checkEvaluation(MillisToTimestamp(Literal(null, IntegerType)), null)
-    checkEvaluation(MicrosToTimestamp(Literal(1230219000123123L)), 1230219000123123L)
-    checkEvaluation(MicrosToTimestamp(Literal(-1230219000123123L)), -1230219000123123L)
-    checkEvaluation(MicrosToTimestamp(Literal(null, IntegerType)), null)
-    checkExceptionInExpression[ArithmeticException](
-      SecondsToTimestamp(Literal(1230219000123123L)), "long overflow")
-    checkExceptionInExpression[ArithmeticException](
-      SecondsToTimestamp(Literal(-1230219000123123L)), "long overflow")
-    checkExceptionInExpression[ArithmeticException](
-      MillisToTimestamp(Literal(92233720368547758L)), "long overflow")
-    checkExceptionInExpression[ArithmeticException](
-      MillisToTimestamp(Literal(-92233720368547758L)), "long overflow")
-  }
-
   test("Consistent error handling for datetime formatting and parsing functions") {
 
     def checkException[T <: Exception : ClassTag](c: String): Unit = {
@@ -1192,5 +1171,119 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       new ParseToTimestamp(Literal("11:11 PM"), Literal("mm:ss a")).child,
       Timestamp.valueOf("1970-01-01 12:11:11.0"))
+  }
+
+  def testIntegralInput(testFunc: Number => Unit): Unit = {
+    def checkResult(input: Long): Unit = {
+      if (input.toByte == input) {
+        testFunc(input.toByte)
+      } else if (input.toShort == input) {
+        testFunc(input.toShort)
+      } else if (input.toInt == input) {
+        testFunc(input.toInt)
+      } else {
+        testFunc(input)
+      }
+    }
+    checkResult(0)
+    checkResult(Byte.MaxValue)
+    checkResult(Byte.MinValue)
+    checkResult(Short.MaxValue)
+    checkResult(Short.MinValue)
+    checkResult(Int.MaxValue)
+    checkResult(Int.MinValue)
+    checkResult(Int.MaxValue.toLong + 100)
+    checkResult(Int.MinValue.toLong - 100)
+  }
+
+  test("TIMESTAMP_SECONDS") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        SecondsToTimestamp(Literal(value)),
+        Instant.ofEpochSecond(value.longValue()))
+    }
+
+    // test null input
+    checkEvaluation(
+      SecondsToTimestamp(Literal(null, IntegerType)),
+      null)
+
+    // test integral input
+    testIntegralInput(testIntegralFunc)
+    // test overflow
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(Long.MaxValue, LongType)), EmptyRow, "long overflow")
+
+    def testFractionalInput(input: String): Unit = {
+      Seq(input.toFloat, input.toDouble, Decimal(input)).foreach { value =>
+        checkEvaluation(
+          SecondsToTimestamp(Literal(value)),
+          (input.toDouble * MICROS_PER_SECOND).toLong)
+      }
+    }
+
+    testFractionalInput("1.0")
+    testFractionalInput("-1.0")
+    testFractionalInput("1.234567")
+    testFractionalInput("-1.234567")
+
+    // test overflow for decimal input
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(Decimal("9" * 38))), "Overflow"
+    )
+    // test truncation error for decimal input
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(Decimal("0.1234567"))), "Rounding necessary"
+    )
+
+    // test NaN
+    checkEvaluation(
+      SecondsToTimestamp(Literal(Double.NaN)),
+      null)
+    checkEvaluation(
+      SecondsToTimestamp(Literal(Float.NaN)),
+      null)
+    // double input can truncate
+    checkEvaluation(
+      SecondsToTimestamp(Literal(123.456789123)),
+      Instant.ofEpochSecond(123, 456789000))
+  }
+
+  test("TIMESTAMP_MILLIS") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        MillisToTimestamp(Literal(value)),
+        Instant.ofEpochMilli(value.longValue()))
+    }
+
+    // test null input
+    checkEvaluation(
+      MillisToTimestamp(Literal(null, IntegerType)),
+      null)
+
+    // test integral input
+    testIntegralInput(testIntegralFunc)
+    // test overflow
+    checkExceptionInExpression[ArithmeticException](
+      MillisToTimestamp(Literal(Long.MaxValue, LongType)), EmptyRow, "long overflow")
+  }
+
+  test("TIMESTAMP_MICROS") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        MicrosToTimestamp(Literal(value)),
+        value.longValue())
+    }
+
+    // test null input
+    checkEvaluation(
+      MicrosToTimestamp(Literal(null, IntegerType)),
+      null)
+
+    // test integral input
+    testIntegralInput(testIntegralFunc)
+    // test max/min input
+    testIntegralFunc(Long.MaxValue)
+    testIntegralFunc(Long.MinValue)
   }
 }
