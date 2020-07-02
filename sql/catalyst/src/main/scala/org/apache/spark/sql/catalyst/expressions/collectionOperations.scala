@@ -2612,7 +2612,7 @@ object Sequence {
       val stepDays = step.days
       val stepMicros = step.microseconds
 
-      if(scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
+      if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
         throw new IllegalArgumentException(
           "sequence step must be a day interval if start and end values are dates")
       }
@@ -2682,13 +2682,13 @@ object Sequence {
       val check = if (scale == MICROS_PER_DAY) {
         s"""
            if ($stepMonths == 0 && $stepDays == 0) {
-            throw new IllegalArgumentException(
-               "sequence step must be a day interval if start and end values are dates");
+              throw new IllegalArgumentException(
+                "sequence step must be a day interval if start and end values are dates");
            }
          """
-      } else {
-        ""
-      }
+        } else {
+          ""
+        }
 
       s"""
          |final int $stepMonths = $step.months;
