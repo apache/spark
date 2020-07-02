@@ -173,6 +173,19 @@ class BlockManagerMasterEndpoint(
       stop()
   }
 
+  /**
+   * A function that used to handle the failures when removing blocks. In general, the failure
+   * should be considered as non-fatal since it won't cause any correctness issue. Therefore,
+   * this function would prefer to log the exception and return the default value. We only throw
+   * the exception when there's a TimeoutException from an active executor, which implies the
+   * unhealthy status of the executor while the driver still not be aware of it.
+   * @param blockType should be one of "RDD", "shuffle", "broadcast", "block", used for log
+   * @param blockId the string value of a certain block id, used for log
+   * @param bmId the BlockManagerId of the BlockManager, where we're trying to remove the block
+   * @param defaultValue the return value of a failure removal. e.g., 0 means no blocks are removed
+   * @tparam T the generic type for defaultValue, Int or Boolean.
+   * @return the defaultValue or throw exception if the executor is active but reply late.
+   */
   private def handleBlockRemovalFailure[T](
       blockType: String,
       blockId: String,
