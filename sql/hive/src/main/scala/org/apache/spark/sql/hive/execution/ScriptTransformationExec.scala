@@ -181,7 +181,7 @@ case class HiveScriptTransformationExec(
         if (outputSerde == null) {
           val prevLine = curLine
           curLine = reader.readLine()
-          if (!ioschema.isSchemaLess) {
+          if (!ioschema.schemaLess) {
             new GenericInternalRow(
               prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
                 .map(CatalystTypeConverters.convertToCatalyst))

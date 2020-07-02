@@ -156,6 +156,4 @@ abstract class ScriptTransformIOSchemaBase(
 
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
-
-  def isSchemaLess: Boolean = schemaLess
 }
