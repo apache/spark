@@ -656,8 +656,8 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   }
 
   test("top with predefined ordering") {
-    val nums = Array.range(1, 100000)
-    val ints = sc.makeRDD(scala.util.Random.shuffle(nums).toSeq, 2)
+    val nums = Seq.range(1, 100000)
+    val ints = sc.makeRDD(scala.util.Random.shuffle(nums), 2)
     val topK = ints.top(5)
     assert(topK.size === 5)
     assert(topK === nums.reverse.take(5))
