@@ -2733,31 +2733,35 @@ class HiveDDLSuite
 
   test("SPARK-32144: Retain EXTERNAL property in hive table properties") {
     val catalog = spark.sessionState.catalog
-    withTable("t0", "t1") {
-      Seq(true, false).zipWithIndex.foreach { case (isExternalTable, i) =>
-        val tbl = s"t$i"
-        val external = if (isExternalTable) {
-          "external"
-        } else {
-          ""
-        }
-        sql(s"create $external table $tbl(c int)")
-        val table = catalog.getTableMetadata(TableIdentifier(tbl))
-        val alter1 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "true"))
-        // spark cann't modify EXTERNAL property so we have to use hive client
-        hiveClient.alterTable(alter1)
-        val table1 = catalog.getTableMetadata(TableIdentifier(tbl))
-        val alter2 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "false"))
-        hiveClient.alterTable(alter2)
-        val table2 = catalog.getTableMetadata(TableIdentifier(tbl))
+    withTempDir { tempDir =>
+      withTable("t0", "t1") {
+        // external table need a location
+        spark.range(1).write.mode(SaveMode.Overwrite).parquet(tempDir.toURI.toString)
+        Seq(true, false).zipWithIndex.foreach { case (isExternalTable, i) =>
+          val tbl = s"t$i"
+          val external = if (isExternalTable) {
+            "external"
+          } else {
+            ""
+          }
+          sql(s"create $external table $tbl(c int) location '${tempDir.toURI}'")
+          val table = catalog.getTableMetadata(TableIdentifier(tbl))
+          val alter1 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "true"))
+          // spark cann't modify EXTERNAL property so we have to use hive client
+          hiveClient.alterTable(alter1)
+          val table1 = catalog.getTableMetadata(TableIdentifier(tbl))
+          val alter2 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "false"))
+          hiveClient.alterTable(alter2)
+          val table2 = catalog.getTableMetadata(TableIdentifier(tbl))
 
-        assert(table.properties.get("EXTERNAL").isEmpty)
-        if (isExternalTable) {
-          assert(table1.properties.get("EXTERNAL").isEmpty)
-          assert(table2.properties("EXTERNAL") == "false")
-        } else {
-          assert(table1.properties("EXTERNAL") == "true")
-          assert(table2.properties.get("EXTERNAL").isEmpty)
+          assert(table.properties.get("EXTERNAL").isEmpty)
+          if (isExternalTable) {
+            assert(table1.properties.get("EXTERNAL").isEmpty)
+            assert(table2.properties("EXTERNAL") == "false")
+          } else {
+            assert(table1.properties("EXTERNAL") == "true")
+            assert(table2.properties.get("EXTERNAL").isEmpty)
+          }
         }
       }
     }
