@@ -1419,7 +1419,8 @@ package object config {
         s"shuffle `${SHUFFLE_SERVICE_ENABLED.key}` is enabled or 2) ${DYN_ALLOCATION_ENABLED.key}" +
         s" is disabled), shuffle blocks requested from those block managers which are running on " +
         s"the same host are read from the disk directly instead of being fetched as remote blocks" +
-        s" over the network.")
+        s" over the network. Note that for k8s workloads, this only works when nodes are using " +
+        s"non-isolated container storage.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
