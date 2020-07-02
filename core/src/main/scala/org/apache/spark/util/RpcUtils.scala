@@ -57,9 +57,10 @@ private[spark] object RpcUtils {
   }
 
   /**
-   * Infinite timeout is used internally, so there's no actual timeout property controls it.
-   * Therefore, we use "infinite" without any specific reason as its timeout property. And
-   * its timeout property should never be accessed since infinite means we never timeout.
+   * Infinite timeout is used internally, so there's no timeout configuration property that
+   * controls it. Therefore, we use "infinite" without any specific reason as its timeout
+   * configuration property. And its timeout property should never be accessed since infinite
+   * means we never timeout.
    */
   val infiniteTimeout = new RpcTimeout(Long.MaxValue.nanos, "infinite")
 
