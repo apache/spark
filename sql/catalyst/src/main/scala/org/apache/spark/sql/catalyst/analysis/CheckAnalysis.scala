@@ -159,7 +159,7 @@ trait CheckAnalysis extends PredicateHelper {
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
           case Alias(w: WindowFunction, _) =>
-            failAnalysis(s"Window function $w call requires an OVER clause.")
+            failAnalysis(s"Window function $w requires an OVER clause.")
 
           case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
