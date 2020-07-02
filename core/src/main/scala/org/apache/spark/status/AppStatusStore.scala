@@ -387,7 +387,7 @@ private[spark] class AppStatusStore(
       offset: Int,
       length: Int,
       sortBy: v1.TaskSorting,
-      status: v1.TaskStatus): Seq[v1.TaskData] = {
+      statuses: JList[v1.TaskStatus]): Seq[v1.TaskData] = {
     val (indexName, ascending) = sortBy match {
       case v1.TaskSorting.ID =>
         (None, true)
@@ -396,7 +396,7 @@ private[spark] class AppStatusStore(
       case v1.TaskSorting.DECREASING_RUNTIME =>
         (Some(TaskIndexNames.EXEC_RUN_TIME), false)
     }
-    taskList(stageId, stageAttemptId, offset, length, indexName, ascending, status)
+    taskList(stageId, stageAttemptId, offset, length, indexName, ascending, statuses)
   }
 
   def taskList(
@@ -406,7 +406,7 @@ private[spark] class AppStatusStore(
       length: Int,
       sortBy: Option[String],
       ascending: Boolean,
-      status: v1.TaskStatus = null): Seq[v1.TaskData] = {
+      statuses: JList[v1.TaskStatus] = List().asJava): Seq[v1.TaskData] = {
     val stageKey = Array(stageId, stageAttemptId)
     val base = store.view(classOf[TaskDataWrapper])
     val indexed = sortBy match {
@@ -419,10 +419,9 @@ private[spark] class AppStatusStore(
     }
 
     val ordered = if (ascending) indexed else indexed.reverse()
-    val taskDataWrapperIter = if (status != null) {
-      ordered.asScala
-        .filter(s => status.toString.equalsIgnoreCase(s.status))
-        .slice(offset, offset + length)
+    val taskDataWrapperIter = if (statuses != null && !statuses.isEmpty) {
+      val statusesStr = statuses.asScala.map(_.toString).toSet
+      ordered.asScala.filter(s => statusesStr.contains(s.status)).slice(offset, offset + length)
     } else {
       ordered.skip(offset).max(length).asScala
     }
