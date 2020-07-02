@@ -16,13 +16,12 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.nio.file.Paths
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, VolumeBuilder, VolumeMountBuilder}
 
-import io.fabric8.kubernetes.api.model._
-
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 
 private[spark] class LocalDirsFeatureStep(
@@ -30,46 +29,36 @@ private[spark] class LocalDirsFeatureStep(
     defaultLocalDir: String = s"/var/data/spark-${UUID.randomUUID}")
   extends KubernetesFeatureConfigStep {
 
+  // Cannot use Utils.getConfiguredLocalDirs because that will default to the Java system
+  // property - we want to instead default to mounting an emptydir volume that doesn't already
+  // exist in the image.
+  // We could make utils.getConfiguredLocalDirs opinionated about Kubernetes, as it is already
+  // a bit opinionated about YARN and Mesos.
+  private val resolvedLocalDirs = Option(conf.sparkConf.getenv("SPARK_LOCAL_DIRS"))
+    .orElse(conf.getOption("spark.local.dir"))
+    .getOrElse(defaultLocalDir)
+    .split(",")
   private val useLocalDirTmpFs = conf.get(KUBERNETES_LOCAL_DIRS_TMPFS)
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    var localDirs = pod.container.getVolumeMounts.asScala
-      .filter(_.getName.startsWith("spark-local-dir-"))
-      .map(_.getMountPath)
-    var localDirVolumes : Seq[Volume] = Seq()
-    var localDirVolumeMounts : Seq[VolumeMount] = Seq()
-
-    if (localDirs.isEmpty) {
-      // Cannot use Utils.getConfiguredLocalDirs because that will default to the Java system
-      // property - we want to instead default to mounting an emptydir volume that doesn't already
-      // exist in the image.
-      // We could make utils.getConfiguredLocalDirs opinionated about Kubernetes, as it is already
-      // a bit opinionated about YARN and Mesos.
-      val resolvedLocalDirs = Option(conf.sparkConf.getenv("SPARK_LOCAL_DIRS"))
-        .orElse(conf.getOption("spark.local.dir"))
-        .getOrElse(defaultLocalDir)
-        .split(",")
-      localDirs = resolvedLocalDirs.toBuffer
-      localDirVolumes = resolvedLocalDirs
-        .zipWithIndex
-        .map { case (_, index) =>
-          new VolumeBuilder()
-            .withName(s"spark-local-dir-${index + 1}")
-            .withNewEmptyDir()
-            .withMedium(if (useLocalDirTmpFs) "Memory" else null)
-            .endEmptyDir()
-            .build()
-        }
-
-      localDirVolumeMounts = localDirVolumes
-        .zip(resolvedLocalDirs)
-        .map { case (localDirVolume, localDirPath) =>
-          new VolumeMountBuilder()
-            .withName(localDirVolume.getName)
-            .withMountPath(localDirPath)
-            .build()
-        }
-    }
+    val localDirVolumes = resolvedLocalDirs
+      .zipWithIndex
+      .map { case (localDir, index) =>
+        new VolumeBuilder()
+          .withName(s"spark-local-dir-${index + 1}")
+          .withNewEmptyDir()
+          .withMedium(if (useLocalDirTmpFs) "Memory" else null)
+          .endEmptyDir()
+          .build()
+      }
+    val localDirVolumeMounts = localDirVolumes
+      .zip(resolvedLocalDirs)
+      .map { case (localDirVolume, localDirPath) =>
+        new VolumeMountBuilder()
+          .withName(localDirVolume.getName)
+          .withMountPath(localDirPath)
+          .build()
+      }
 
     val podWithLocalDirVolumes = new PodBuilder(pod.pod)
       .editSpec()
@@ -79,7 +68,7 @@ private[spark] class LocalDirsFeatureStep(
     val containerWithLocalDirVolumeMounts = new ContainerBuilder(pod.container)
       .addNewEnv()
         .withName("SPARK_LOCAL_DIRS")
-        .withValue(localDirs.mkString(","))
+        .withValue(resolvedLocalDirs.mkString(","))
         .endEnv()
       .addToVolumeMounts(localDirVolumeMounts: _*)
       .build()
