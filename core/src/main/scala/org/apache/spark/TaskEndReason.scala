@@ -90,7 +90,8 @@ case class FetchFailed(
   extends TaskFailedReason {
   override def toErrorString: String = {
     val bmAddressString = if (bmAddress == null) "null" else bmAddress.toString
-    s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapIndex=$mapIndex, " +
+    val mapIndexString = if (mapIndex == Int.MinValue) "Unknown" else mapIndex.toString
+    s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapIndex=$mapIndexString, " +
       s"mapId=$mapId, reduceId=$reduceId, message=\n$message\n)"
   }
 

@@ -1080,10 +1080,10 @@ private[spark] object JsonProtocol {
         val mapId = (json \ "Map ID").extract[Long]
         val mapIndex = json \ "Map Index" match {
           case JNothing =>
-            // Note, we use the invalid value -2 here to fill the map index for backward
+            // Note, we use the invalid value Int.MinValue here to fill the map index for backward
             // compatibility. Otherwise, the fetch failed event will be dropped when the history
             // server loads the event log written by the Spark version before 3.0.
-            -2
+            Int.MinValue
           case x => x.extract[Int]
         }
         val reduceId = (json \ "Reduce ID").extract[Int]
