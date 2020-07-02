@@ -2733,18 +2733,17 @@ class HiveDDLSuite
 
   test("SPARK-32144: Retain EXTERNAL property in hive table properties") {
     val catalog = spark.sessionState.catalog
+    // external table need a location
     withTempDir { tempDir =>
-      // external table need a location
-      spark.range(1).write.mode(SaveMode.Overwrite).parquet(tempDir.toURI.toString)
       withTable("t0", "t1") {
         Seq(true, false).zipWithIndex.foreach { case (isExternalTable, i) =>
           val tbl = s"t$i"
-          val external = if (isExternalTable) {
-            "external"
+          if (isExternalTable) {
+            sql(s"create external table $tbl(c int) location '${tempDir.toURI}'")
           } else {
-            ""
+            sql(s"create table $tbl(c int)")
           }
-          sql(s"create $external table $tbl(c int) location '${tempDir.toURI}'")
+
           val table = catalog.getTableMetadata(TableIdentifier(tbl))
           val alter1 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "true"))
           // spark cann't modify EXTERNAL property so we have to use hive client
