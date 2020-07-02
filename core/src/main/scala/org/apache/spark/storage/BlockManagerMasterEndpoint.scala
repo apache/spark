@@ -173,7 +173,7 @@ class BlockManagerMasterEndpoint(
       stop()
   }
 
-  private def handleFailure[T](
+  private def handleBlockRemovalFailure[T](
       blockType: String,
       blockId: String,
       bmId: BlockManagerId,
@@ -244,7 +244,7 @@ class BlockManagerMasterEndpoint(
     val removeRddFromExecutorsFutures = blockManagerInfo.values.map { bmInfo =>
       bmInfo.slaveEndpoint.ask[Int](removeMsg).recover {
         // use 0 as default value means no blocks were removed
-        handleFailure("RDD", rddId.toString, bmInfo.blockManagerId, 0)
+        handleBlockRemovalFailure("RDD", rddId.toString, bmInfo.blockManagerId, 0)
       }
     }.toSeq
 
@@ -271,7 +271,7 @@ class BlockManagerMasterEndpoint(
       blockManagerInfo.values.map { bm =>
         bm.slaveEndpoint.ask[Boolean](removeMsg).recover {
           // use false as default value means no shuffle data were removed
-          handleFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
+          handleBlockRemovalFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
         }
       }.toSeq
     )
@@ -290,7 +290,7 @@ class BlockManagerMasterEndpoint(
     val futures = requiredBlockManagers.map { bm =>
       bm.slaveEndpoint.ask[Int](removeMsg).recover {
         // use 0 as default value means no blocks were removed
-        handleFailure("broadcast", broadcastId.toString, bm.blockManagerId, 0)
+        handleBlockRemovalFailure("broadcast", broadcastId.toString, bm.blockManagerId, 0)
       }
     }.toSeq
 
@@ -391,7 +391,7 @@ class BlockManagerMasterEndpoint(
           // If message loss becomes frequent, we should add retry logic here.
           bm.slaveEndpoint.ask[Boolean](RemoveBlock(blockId)).recover {
             // use false as default value means no blocks were removed
-            handleFailure("block", blockId.toString, bm.blockManagerId, false)
+            handleBlockRemovalFailure("block", blockId.toString, bm.blockManagerId, false)
           }
         }
       }
