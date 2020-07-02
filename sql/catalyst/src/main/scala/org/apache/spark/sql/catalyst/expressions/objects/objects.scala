@@ -679,7 +679,10 @@ object MapObjects {
       elementNullable: Boolean = true,
       customCollectionCls: Option[Class[_]] = None): MapObjects = {
     val loopVar = LambdaVariable("MapObject", elementType, elementNullable)
-    MapObjects(loopVar, function(loopVar), inputData, customCollectionCls)
+    // println(s"\n\n $function, $inputData, $elementType, $elementNullable, $customCollectionCls \n")
+    val fOfLV = if (function == null) loopVar else function(loopVar)
+    // MapObjects(loopVar, function(loopVar), inputData, customCollectionCls)
+    MapObjects(loopVar, fOfLV, inputData, customCollectionCls)
   }
 }
 
