@@ -52,7 +52,8 @@ private[spark] class KubernetesExecutorBuilder(
     } else Nil
     val localDirsFeature = Seq(provideLocalDirsStep(kubernetesConf))
 
-    val allFeatures = baseFeatures ++ secretFeature ++ secretEnvFeature ++ volumesFeature ++ localDirsFeature
+    val allFeatures = baseFeatures ++ secretFeature ++ secretEnvFeature ++ volumesFeature ++
+      localDirsFeature
 
     var executorPod = SparkPod.initialPod()
     for (feature <- allFeatures) {
