@@ -561,16 +561,7 @@ case class WithFields(
 
   override def children: Seq[Expression] = structExpr +: valExprs
 
-  private lazy val addOrReplaceExprs = names.zip(valExprs)
-
-  override def dataType: StructType = {
-    val existingStructFields: Seq[(String, StructField)] = structExpr.dataType
-      .asInstanceOf[StructType].map(f => (f.name, f))
-    val addOrReplaceStructFields: Seq[(String, StructField)] = addOrReplaceExprs.map {
-      case (name, expr) => (name, StructField(name, expr.dataType, expr.nullable))
-    }
-    StructType(addOrReplace(existingStructFields, addOrReplaceStructFields).map(_._2))
-  }
+  override def dataType: StructType = evalExpr.dataType.asInstanceOf[StructType]
 
   override def foldable: Boolean = structExpr.foldable && valExprs.forall(_.foldable)
 
@@ -579,9 +570,12 @@ case class WithFields(
   override def prettyName: String = "with_fields"
 
   lazy val evalExpr: Expression = {
-    val existingExprs = structExpr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
-      case (name, i) => (name, GetStructField(structExpr, i, Some(name)))
+    val existingExprs = structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex.map {
+      case (StructField(name, _, nullable, _), i) =>
+        val existingFieldExpr = GetStructField(structExpr, i)
+        (name, if (nullable) existingFieldExpr else KnownNotNull(existingFieldExpr))
     }
+    val addOrReplaceExprs = names.zip(valExprs)
     val newExprs = addOrReplace(existingExprs, addOrReplaceExprs).flatMap {
       case (name, valExpr) => Seq(Literal(name), valExpr)
     }
