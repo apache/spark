@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.math.BigDecimal
+import java.time.{Instant, LocalDate}
 import java.time.format.DateTimeFormatter
 
 import org.apache.spark.sql.api.java._
@@ -35,6 +36,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.QueryExecutionListener
 
 private case class FunctionResult(f1: String, f2: String)
+private case class DateTimeResult(date: LocalDate, instant: Instant)
 
 class UDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -523,6 +525,17 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val df = spark.sql("SELECT DATE '2019-02-26' as d")
       .select(plusDay('d).cast(StringType))
     assert(df.collect().toSeq === Seq(Row(expected)))
+  }
+
+  test("Using combined types of Instant/LocalDate in UDF") {
+    val ts = "2019-02-26T23:59:59Z"
+    val date = "2019-02-26"
+    val expectedDate = sql(s"SELECT CAST(DATE '$date' AS STRING)").collect().head.getString(0)
+    val expectedIns = sql(s"SELECT CAST(TIMESTAMP '$ts' AS STRING)").collect().head.getString(0)
+    spark.udf.register("toDateTime", udf((d: LocalDate, i: Instant) => DateTimeResult(d, i)))
+    val df = sql(s"SELECT toDateTime(DATE '$date', TIMESTAMP '$ts') as t")
+      .select('t.cast(StringType))
+    assert(df.collect().toSeq === Seq(Row(s"[$expectedDate, $expectedIns]")))
   }
 
   test("SPARK-28321 0-args Java UDF should not be called only once") {
