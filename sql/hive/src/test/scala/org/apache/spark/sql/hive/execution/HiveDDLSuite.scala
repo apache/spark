@@ -2345,7 +2345,7 @@ class HiveDDLSuite
     withTable("t") {
       val v2Source = classOf[FakeV2Provider].getName
       val e = intercept[AnalysisException] {
-        spark.sql(s"REPLACE TABLE t USING $v2Source AS SELECT null as null_col")
+        spark.sql(s"CREATE OR REPLACE TABLE t USING $v2Source AS SELECT null as null_col")
       }.getMessage
       assert(e.contains("Cannot create tables with VOID type"))
     }
@@ -2374,7 +2374,7 @@ class HiveDDLSuite
     withTable("t") {
       val v2Source = classOf[FakeV2Provider].getName
       val e = intercept[AnalysisException] {
-        spark.sql(s"REPLACE TABLE t (v VOID) USING $v2Source")
+        spark.sql(s"CREATE OR REPLACE TABLE t (v VOID) USING $v2Source")
       }.getMessage
       assert(e.contains("Cannot create tables with VOID type"))
     }
