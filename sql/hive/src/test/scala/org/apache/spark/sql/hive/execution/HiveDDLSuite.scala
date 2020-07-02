@@ -2734,9 +2734,9 @@ class HiveDDLSuite
   test("SPARK-32144: Retain EXTERNAL property in hive table properties") {
     val catalog = spark.sessionState.catalog
     withTempDir { tempDir =>
+      // external table need a location
+      spark.range(1).write.mode(SaveMode.Overwrite).parquet(tempDir.toURI.toString)
       withTable("t0", "t1") {
-        // external table need a location
-        spark.range(1).write.mode(SaveMode.Overwrite).parquet(tempDir.toURI.toString)
         Seq(true, false).zipWithIndex.foreach { case (isExternalTable, i) =>
           val tbl = s"t$i"
           val external = if (isExternalTable) {
@@ -2750,17 +2750,25 @@ class HiveDDLSuite
           // spark cann't modify EXTERNAL property so we have to use hive client
           hiveClient.alterTable(alter1)
           val table1 = catalog.getTableMetadata(TableIdentifier(tbl))
-          val alter2 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "false"))
+          val alter2 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "TRUE"))
+          // spark cann't modify EXTERNAL property so we have to use hive client
           hiveClient.alterTable(alter2)
           val table2 = catalog.getTableMetadata(TableIdentifier(tbl))
 
-          assert(table.properties.get("EXTERNAL").isEmpty)
           if (isExternalTable) {
-            assert(table1.properties.get("EXTERNAL").isEmpty)
-            assert(table2.properties("EXTERNAL") == "false")
-          } else {
+            assert(table.tableType == CatalogTableType.EXTERNAL)
+            assert(table.properties.get("EXTERNAL").isEmpty)
+            assert(table1.tableType == CatalogTableType.MANAGED)
             assert(table1.properties("EXTERNAL") == "true")
-            assert(table2.properties.get("EXTERNAL").isEmpty)
+            assert(table2.tableType == CatalogTableType.EXTERNAL)
+            assert(table2.properties("EXTERNAL").isEmpty)
+          } else {
+            assert(table.tableType == CatalogTableType.MANAGED)
+            assert(table.properties.get("EXTERNAL").isEmpty)
+            assert(table1.tableType == CatalogTableType.MANAGED)
+            assert(table1.properties("EXTERNAL") == "true")
+            assert(table2.tableType == CatalogTableType.EXTERNAL)
+            assert(table2.properties("EXTERNAL").isEmpty)
           }
         }
       }

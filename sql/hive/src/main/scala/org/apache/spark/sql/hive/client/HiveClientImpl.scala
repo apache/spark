@@ -482,12 +482,23 @@ private[hive] class HiveClientImpl(
       // The property value of "comment" is moved to the dedicated field "comment"
       "comment"
     )
-    // We should retain the external property if is useful
-    val externalExcluded = properties.get("EXTERNAL").map(_.toLowerCase(Locale.ROOT)) match {
-      case Some("true") if h.getTableType == HiveTableType.MANAGED_TABLE => false
-      case Some("false") if h.getTableType == HiveTableType.EXTERNAL_TABLE => false
+    // We should match case 2
+    // List the case:
+    // 1. MANAGED && TRUE => EXTERNAL
+    // 2. MANAGED && true => MANAGED (EXTERNAL behavior)
+    // 3. MANAGED && FALSE => MANAGED
+    // 4. MANAGED && false => MANAGED
+    // 5. EXTERNAL && TRUE => EXTERNAL
+    // 6. EXTERNAL && true => MANAGED
+    // 7. EXTERNAL && FALSE => MANAGED
+    // 8. EXTERNAL && false => MANAGED
+    val externalExcluded = properties.get("EXTERNAL") match {
+      case Some("TRUE") => true
+      case Some(t)
+        if t.equalsIgnoreCase("true") && h.getTableType == HiveTableType.MANAGED_TABLE => false
       case _ => true
     }
+
     if (externalExcluded) {
       excludedTableProperties = excludedTableProperties + "EXTERNAL"
     }
@@ -1053,7 +1064,7 @@ private[hive] object HiveClientImpl extends Logging {
     // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
-    if (table.properties.get("EXTERNAL").isEmpty && table.tableType == CatalogTableType.EXTERNAL) {
+    if (table.tableType == CatalogTableType.EXTERNAL) {
       hiveTable.setProperty("EXTERNAL", "TRUE")
     }
     // Note: In Hive the schema and partition columns must be disjoint sets
