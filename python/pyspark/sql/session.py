@@ -265,7 +265,10 @@ class SparkSession(SparkConversionMixin):
     @since(3.0)
     def getActiveSession(cls):
         """
-        Returns the active SparkSession for the current thread, returned by the builder.
+        Returns the active SparkSession for the current thread, returned by the builder
+
+        :return: :class:`SparkSession` if an active session exists for the current thread
+
         >>> s = SparkSession.getActiveSession()
         >>> l = [('Alice', 1)]
         >>> rdd = s.sparkContext.parallelize(l)
