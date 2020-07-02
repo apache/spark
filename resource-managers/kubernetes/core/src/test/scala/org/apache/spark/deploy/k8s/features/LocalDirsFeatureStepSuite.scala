@@ -21,7 +21,7 @@ import org.mockito.Mockito
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s._
 
 class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   private val defaultLocalDir = "/var/data/default-local-dir"
@@ -109,6 +109,60 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       new EnvVarBuilder()
         .withName("SPARK_LOCAL_DIRS")
         .withValue("/var/data/my-local-dir-1,/var/data/my-local-dir-2")
+        .build())
+  }
+
+  test("Use tmpfs to back default local dir") {
+    Mockito.doReturn(null).when(sparkConf).get("spark.local.dir")
+    Mockito.doReturn(null).when(sparkConf).getenv("SPARK_LOCAL_DIRS")
+    Mockito.doReturn(true).when(sparkConf).get(KUBERNETES_LOCAL_DIRS_TMPFS)
+    val stepUnderTest = new LocalDirsFeatureStep(kubernetesConf, defaultLocalDir)
+    val configuredPod = stepUnderTest.configurePod(SparkPod.initialPod())
+    assert(configuredPod.pod.getSpec.getVolumes.size === 1)
+    assert(configuredPod.pod.getSpec.getVolumes.get(0) ===
+      new VolumeBuilder()
+        .withName(s"spark-local-dir-1")
+        .withNewEmptyDir()
+        .withMedium("Memory")
+        .endEmptyDir()
+        .build())
+    assert(configuredPod.container.getVolumeMounts.size === 1)
+    assert(configuredPod.container.getVolumeMounts.get(0) ===
+      new VolumeMountBuilder()
+        .withName(s"spark-local-dir-1")
+        .withMountPath(defaultLocalDir)
+        .build())
+    assert(configuredPod.container.getEnv.size === 1)
+    assert(configuredPod.container.getEnv.get(0) ===
+      new EnvVarBuilder()
+        .withName("SPARK_LOCAL_DIRS")
+        .withValue(defaultLocalDir)
+        .build())
+  }
+
+  test("local dir on mounted volume") {
+    val volumeConf = KubernetesVolumeSpec(
+      "spark-local-dir-test",
+      "/tmp",
+      "",
+      false,
+      KubernetesHostPathVolumeConf("/hostPath/tmp")
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val mountVolumeStep = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = mountVolumeStep.configurePod(SparkPod.initialPod())
+    val localDirStep = new LocalDirsFeatureStep(kubernetesConf, defaultLocalDir)
+    val newConfiguredPod = localDirStep.configurePod(configuredPod)
+
+    assert(newConfiguredPod.pod.getSpec.getVolumes.size() === 1)
+    assert(newConfiguredPod.pod.getSpec.getVolumes.get(0).getHostPath.getPath === "/hostPath/tmp")
+    assert(newConfiguredPod.container.getVolumeMounts.size() === 1)
+    assert(newConfiguredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
+    assert(newConfiguredPod.container.getVolumeMounts.get(0).getName === "spark-local-dir-test")
+    assert(newConfiguredPod.container.getEnv.get(0) ===
+      new EnvVarBuilder()
+        .withName("SPARK_LOCAL_DIRS")
+        .withValue("/tmp")
         .build())
   }
 }

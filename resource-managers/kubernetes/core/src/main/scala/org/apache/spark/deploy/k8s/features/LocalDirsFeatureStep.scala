@@ -76,7 +76,7 @@ private[spark] class LocalDirsFeatureStep(
     val containerWithLocalDirVolumeMounts = new ContainerBuilder(pod.container)
       .addNewEnv()
         .withName("SPARK_LOCAL_DIRS")
-        .withValue(resolvedLocalDirs.mkString(","))
+        .withValue(localDirs.mkString(","))
         .endEnv()
       .addToVolumeMounts(localDirVolumeMounts: _*)
       .build()
