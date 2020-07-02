@@ -72,7 +72,7 @@ SELECT Count(DISTINCT( t1a )),
 FROM   t1
 WHERE  t1d IN (SELECT t2d
                FROM   t2
-               ORDER  BY t2c
+               ORDER  BY t2c, t2d
                LIMIT 2)
 GROUP  BY t1b
 ORDER  BY t1b DESC NULLS FIRST
@@ -93,7 +93,7 @@ SELECT Count(DISTINCT( t1a )),
 FROM   t1
 WHERE  t1d NOT IN (SELECT t2d
                    FROM   t2
-                   ORDER  BY t2b DESC nulls first
+                   ORDER  BY t2b DESC nulls first, t2d
                    LIMIT 1)
 GROUP  BY t1b
 ORDER BY t1b NULLS last
