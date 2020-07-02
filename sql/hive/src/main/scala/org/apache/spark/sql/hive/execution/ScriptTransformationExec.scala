@@ -312,16 +312,7 @@ case class HiveScriptIOSchema (
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
     schemaLess: Boolean)
-  extends ScriptTransformIOSchemaBase(
-    inputRowFormat,
-    outputRowFormat,
-    inputSerdeClass,
-    outputSerdeClass,
-    inputSerdeProps,
-    outputSerdeProps,
-    recordReaderClass,
-    recordWriterClass,
-    schemaLess) with HiveInspectors {
+  extends ScriptTransformIOSchemaBase with HiveInspectors {
 
   def initInputSerDe(input: Seq[Expression]): Option[(AbstractSerDe, StructObjectInspector)] = {
     inputSerdeClass.map { serdeClass =>

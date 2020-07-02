@@ -138,16 +138,24 @@ abstract class ScriptTransformationWriterThreadBase(
 /**
  * The wrapper class of input and output schema properties
  */
-abstract class ScriptTransformIOSchemaBase(
-    inputRowFormat: Seq[(String, String)],
-    outputRowFormat: Seq[(String, String)],
-    inputSerdeClass: Option[String],
-    outputSerdeClass: Option[String],
-    inputSerdeProps: Seq[(String, String)],
-    outputSerdeProps: Seq[(String, String)],
-    recordReaderClass: Option[String],
-    recordWriterClass: Option[String],
-    schemaLess: Boolean) extends Serializable {
+abstract class ScriptTransformIOSchemaBase extends Serializable {
+  def inputRowFormat: Seq[(String, String)]
+
+  def outputRowFormat: Seq[(String, String)]
+
+  def inputSerdeClass: Option[String]
+
+  def outputSerdeClass: Option[String]
+
+  def inputSerdeProps: Seq[(String, String)]
+
+  def outputSerdeProps: Seq[(String, String)]
+
+  def recordReaderClass: Option[String]
+
+  def recordWriterClass: Option[String]
+
+  def schemaLess: Boolean
 
   protected val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\t"),
