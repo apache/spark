@@ -37,7 +37,9 @@ class StreamingQuery(object):
     """
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
+
     .. note:: Evolving
+
     .. versionadded:: 2.0
     """
 
@@ -86,9 +88,11 @@ class StreamingQuery(object):
         exception. If the query has terminated with an exception, then the exception will be thrown.
         If `timeout` is set, it returns whether the query has terminated or not within the
         `timeout` seconds.
+
         If the query has terminated, then all subsequent calls to this method will either return
         immediately (if the query was terminated by :func:`stop()`), or throw the exception
         immediately (if the query has terminated with exception).
+
         throws :class:`StreamingQueryException`, if `this` query has terminated with an exception
         """
         if timeout is not None:
@@ -121,6 +125,7 @@ class StreamingQuery(object):
         """
         Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
         None if there were no progress updates
+
         :return: a map
         """
         lastProgress = self._jsq.lastProgress()
@@ -133,6 +138,7 @@ class StreamingQuery(object):
     def processAllAvailable(self):
         """Blocks until all available data in the source has been processed and committed to the
         sink. This method is intended for testing.
+
         .. note:: In the case of continually arriving data, this method may block forever.
             Additionally, this method is only guaranteed to block until data that has been
             synchronously appended data to a stream source prior to invocation.
@@ -149,7 +155,9 @@ class StreamingQuery(object):
     @since(2.1)
     def explain(self, extended=False):
         """Prints the (logical and physical) plans to the console for debugging purpose.
+
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+
         >>> sq = sdf.writeStream.format('memory').queryName('query_explain').start()
         >>> sq.processAllAvailable() # Wait a bit to generate the runtime plans.
         >>> sq.explain()
@@ -186,7 +194,9 @@ class StreamingQuery(object):
 
 class StreamingQueryManager(object):
     """A class to manage all the :class:`StreamingQuery` StreamingQueries active.
+
     .. note:: Evolving
+
     .. versionadded:: 2.0
     """
 
@@ -198,6 +208,7 @@ class StreamingQueryManager(object):
     @since(2.0)
     def active(self):
         """Returns a list of active queries associated with this SQLContext
+
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sqm = spark.streams
         >>> # get the list of active streaming queries
@@ -212,6 +223,7 @@ class StreamingQueryManager(object):
     def get(self, id):
         """Returns an active query from this SQLContext or throws exception if an active query
         with this name doesn't exist.
+
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.name
         u'this_query'
@@ -232,15 +244,18 @@ class StreamingQueryManager(object):
         terminated with an exception, then the exception will be thrown.
         If `timeout` is set, it returns whether the query has terminated or not within the
         `timeout` seconds.
+
         If a query has terminated, then subsequent calls to :func:`awaitAnyTermination()` will
         either return immediately (if the query was terminated by :func:`query.stop()`),
         or throw the exception immediately (if the query was terminated with exception). Use
         :func:`resetTerminated()` to clear past terminations and wait for new terminations.
+
         In the case where multiple queries have terminated since :func:`resetTermination()`
         was called, if any query has terminated with exception, then :func:`awaitAnyTermination()`
         will throw any of the exception. For correctly documenting exceptions across multiple
         queries, users need to stop all of them after any of them terminates with exception, and
         then check the `query.exception()` for each query.
+
         throws :class:`StreamingQueryException`, if `this` query has terminated with an exception
         """
         if timeout is not None:
@@ -254,6 +269,7 @@ class StreamingQueryManager(object):
     def resetTerminated(self):
         """Forget about past terminated queries so that :func:`awaitAnyTermination()` can be used
         again to wait for new terminations.
+
         >>> spark.streams.resetTerminated()
         """
         self._jsqm.resetTerminated()
@@ -264,7 +280,9 @@ class DataStreamReader(OptionUtils):
     Interface used to load a streaming :class:`DataFrame <pyspark.sql.DataFrame>` from external
     storage systems (e.g. file systems, key-value stores, etc).
     Use :attr:`SparkSession.readStream <pyspark.sql.SparkSession.readStream>` to access this.
+
     .. note:: Evolving.
+
     .. versionadded:: 2.0
     """
 
@@ -279,8 +297,11 @@ class DataStreamReader(OptionUtils):
     @since(2.0)
     def format(self, source):
         """Specifies the input data source format.
+
         .. note:: Evolving.
+
         :param source: string, name of the data source, e.g. 'json', 'parquet'.
+
         >>> s = spark.readStream.format("text")
         """
         self._jreader = self._jreader.format(source)
@@ -289,12 +310,16 @@ class DataStreamReader(OptionUtils):
     @since(2.0)
     def schema(self, schema):
         """Specifies the input schema.
+
         Some data sources (e.g. JSON) can infer the input schema automatically from data.
         By specifying the schema here, the underlying data source can skip the schema
         inference step, and thus speed up data loading.
+
         .. note:: Evolving.
+
         :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
                        (For example ``col0 INT, col1 DOUBLE``).
+
         >>> s = spark.readStream.schema(sdf_schema)
         >>> s = spark.readStream.schema("col0 INT, col1 DOUBLE")
         """
@@ -312,18 +337,23 @@ class DataStreamReader(OptionUtils):
     @since(2.0)
     def option(self, key, value):
         """Adds an input option for the underlying data source.
+
         You can set the following option(s) for reading files:
             * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
                 timestamps in the JSON/CSV datasources or partition values. The following
                 formats of `timeZone` are supported:
+
                 * Region-based zone ID: It should have the form 'area/city', such as \
                   'America/Los_Angeles'.
                 * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
                  '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
                 Other short names like 'CST' are not recommended to use because they can be
                 ambiguous. If it isn't set, the current value of the SQL config
                 ``spark.sql.session.timeZone`` is used by default.
+
         .. note:: Evolving.
+
         >>> s = spark.readStream.option("x", 1)
         """
         self._jreader = self._jreader.option(key, to_str(value))
@@ -332,18 +362,23 @@ class DataStreamReader(OptionUtils):
     @since(2.0)
     def options(self, **options):
         """Adds input options for the underlying data source.
+
         You can set the following option(s) for reading files:
             * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
                 timestamps in the JSON/CSV datasources or partition values. The following
                 formats of `timeZone` are supported:
+
                 * Region-based zone ID: It should have the form 'area/city', such as \
                   'America/Los_Angeles'.
                 * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
                  '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
                 Other short names like 'CST' are not recommended to use because they can be
                 ambiguous. If it isn't set, the current value of the SQL config
                 ``spark.sql.session.timeZone`` is used by default.
+
         .. note:: Evolving.
+
         >>> s = spark.readStream.options(x="1", y=2)
         """
         for k in options:
@@ -354,12 +389,15 @@ class DataStreamReader(OptionUtils):
     def load(self, path=None, format=None, schema=None, **options):
         """Loads a data stream from a data source and returns it as a
         :class:`DataFrame <pyspark.sql.DataFrame>`.
+
         .. note:: Evolving.
+
         :param path: optional string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
         :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param options: all other string options
+
         >>> json_sdf = spark.readStream.format("json") \\
         ...     .schema(sdf_schema) \\
         ...     .load(tempfile.mkdtemp())
@@ -391,11 +429,15 @@ class DataStreamReader(OptionUtils):
              recursiveFileLookup=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
+
         `JSON Lines <http://jsonlines.org/>`_ (newline-delimited JSON) is supported by default.
         For JSON (one record per file), set the ``multiLine`` parameter to ``true``.
+
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
+
         .. note:: Evolving.
+
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
@@ -418,15 +460,17 @@ class DataStreamReader(OptionUtils):
                                                    set, it uses the default value, ``false``.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+
+                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
                   When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
                   field in an output schema.
-                *  ``DROPMALFORMED`` : ignores the whole corrupted records.
-                *  ``FAILFAST`` : throws an exception when it meets corrupted records.
+                *  ``DROPMALFORMED``: ignores the whole corrupted records.
+                *  ``FAILFAST``: throws an exception when it meets corrupted records.
+
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
@@ -462,9 +506,11 @@ class DataStreamReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
+
         .. _partition discovery:
           https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
         .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
         True
@@ -489,7 +535,9 @@ class DataStreamReader(OptionUtils):
     @since(2.3)
     def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
         """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
+
         .. note:: Evolving.
+
         :param mergeSchema: sets whether we should merge schemas collected from all
                             ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
                             The default value is specified in ``spark.sql.orc.mergeSchema``.
@@ -498,6 +546,7 @@ class DataStreamReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
             disables `partition discovery`_.
+
         >>> orc_sdf = spark.readStream.schema(sdf_schema).orc(tempfile.mkdtemp())
         >>> orc_sdf.isStreaming
         True
@@ -515,7 +564,9 @@ class DataStreamReader(OptionUtils):
     def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
         """
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
+
         .. note:: Evolving.
+
         :param mergeSchema: sets whether we should merge schemas collected from all
                             Parquet part-files. This will override
                             ``spark.sql.parquet.mergeSchema``. The default value is specified in
@@ -525,6 +576,7 @@ class DataStreamReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
+
         >>> parquet_sdf = spark.readStream.schema(sdf_schema).parquet(tempfile.mkdtemp())
         >>> parquet_sdf.isStreaming
         True
@@ -547,8 +599,11 @@ class DataStreamReader(OptionUtils):
         string column named "value", and followed by partitioned columns if there
         are any.
         The text files must be encoded as UTF-8.
+
         By default, each line in the text file is a new row in the resulting DataFrame.
+
         .. note:: Evolving.
+
         :param paths: string, or list of strings, for input path(s).
         :param wholetext: if true, read each file from input path(s) as a single row.
         :param lineSep: defines the line separator that should be used for parsing. If None is
@@ -558,6 +613,7 @@ class DataStreamReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
+
         >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
         True
@@ -582,10 +638,13 @@ class DataStreamReader(OptionUtils):
             enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
             pathGlobFilter=None, recursiveFileLookup=None):
         r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
+
         This function will go through the input once to determine the input schema if
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
+
         .. note:: Evolving.
+
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
@@ -647,7 +706,8 @@ class DataStreamReader(OptionUtils):
                                             If specified, it is ignored.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+
+                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
@@ -656,8 +716,9 @@ class DataStreamReader(OptionUtils):
                   When it meets a record having fewer tokens than the length of the schema, \
                   sets ``null`` to extra fields. When the record has more tokens than the \
                   length of the schema, it drops extra tokens.
-                * ``DROPMALFORMED`` : ignores the whole corrupted records.
-                * ``FAILFAST`` : throws an exception when it meets corrupted records.
+                * ``DROPMALFORMED``: ignores the whole corrupted records.
+                * ``FAILFAST``: throws an exception when it meets corrupted records.
+
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
@@ -682,6 +743,7 @@ class DataStreamReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
+
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
         True
@@ -712,7 +774,9 @@ class DataStreamWriter(object):
     storage systems (e.g. file systems, key-value stores, etc).
     Use :attr:`DataFrame.writeStream <pyspark.sql.DataFrame.writeStream>`
     to access this.
+
     .. note:: Evolving.
+
     .. versionadded:: 2.0
     """
 
@@ -728,15 +792,19 @@ class DataStreamWriter(object):
     @since(2.0)
     def outputMode(self, outputMode):
         """Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+
         Options include:
-        * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to
+
+        * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to
            the sink
-        * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
+        * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the sink
            every time these is some updates
-        * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+        * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
+
        .. note:: Evolving.
+
         >>> writer = sdf.writeStream.outputMode('append')
         """
         if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
@@ -747,8 +815,11 @@ class DataStreamWriter(object):
     @since(2.0)
     def format(self, source):
         """Specifies the underlying output data source.
+
         .. note:: Evolving.
+
         :param source: string, name of the data source, which for now can be 'parquet'.
+
         >>> writer = sdf.writeStream.format('json')
         """
         self._jwrite = self._jwrite.format(source)
@@ -757,17 +828,21 @@ class DataStreamWriter(object):
     @since(2.0)
     def option(self, key, value):
         """Adds an output option for the underlying data source.
+
         You can set the following option(s) for writing files:
             * ``timeZone``: sets the string that indicates a time zone ID to be used to format
                 timestamps in the JSON/CSV datasources or partition values. The following
                 formats of `timeZone` are supported:
+
                 * Region-based zone ID: It should have the form 'area/city', such as \
                   'America/Los_Angeles'.
                 * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
                  '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
                 Other short names like 'CST' are not recommended to use because they can be
                 ambiguous. If it isn't set, the current value of the SQL config
                 ``spark.sql.session.timeZone`` is used by default.
+
         .. note:: Evolving.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
@@ -776,17 +851,21 @@ class DataStreamWriter(object):
     @since(2.0)
     def options(self, **options):
         """Adds output options for the underlying data source.
+
         You can set the following option(s) for writing files:
             * ``timeZone``: sets the string that indicates a time zone ID to be used to format
                 timestamps in the JSON/CSV datasources or partition values. The following
                 formats of `timeZone` are supported:
+
                 * Region-based zone ID: It should have the form 'area/city', such as \
                   'America/Los_Angeles'.
                 * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
                  '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
                 Other short names like 'CST' are not recommended to use because they can be
                 ambiguous. If it isn't set, the current value of the SQL config
                 ``spark.sql.session.timeZone`` is used by default.
+
        .. note:: Evolving.
         """
         for k in options:
@@ -796,10 +875,14 @@ class DataStreamWriter(object):
     @since(2.0)
     def partitionBy(self, *cols):
         """Partitions the output by the given columns on the file system.
+
         If specified, the output is laid out on the file system similar
         to Hive's partitioning scheme.
+
         .. note:: Evolving.
+
         :param cols: name of columns
+
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
@@ -811,8 +894,11 @@ class DataStreamWriter(object):
         """Specifies the name of the :class:`StreamingQuery` that can be started with
         :func:`start`. This name must be unique among all the currently active queries
         in the associated SparkSession.
+
         .. note:: Evolving.
+
         :param queryName: unique name for the query
+
         >>> writer = sdf.writeStream.queryName('streaming_query')
         """
         if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
@@ -825,7 +911,9 @@ class DataStreamWriter(object):
     def trigger(self, processingTime=None, once=None, continuous=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
+
         .. note:: Evolving.
+
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
                                Set a trigger that runs a microbatch query periodically based on the
                                processing time. Only one trigger can be set.
@@ -834,6 +922,7 @@ class DataStreamWriter(object):
         :param continuous: a time interval as a string, e.g. '5 seconds', '1 minute'.
                            Set a trigger that runs a continuous query with a given checkpoint
                            interval. Only one trigger can be set.
+
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
         >>> # trigger the query for just once batch of data
@@ -879,38 +968,54 @@ class DataStreamWriter(object):
         Sets the output of the streaming query to be processed using the provided writer ``f``.
         This is often used to write the output of a streaming query to arbitrary storage systems.
         The processing logic can be specified in two ways.
+
         #. A **function** that takes a row as input.
             This is a simple way to express your processing logic. Note that this does
             not allow you to deduplicate generated data when failures cause reprocessing of
             some input data. That would require you to specify the processing logic in the next
             way.
+
         #. An **object** with a ``process`` method and optional ``open`` and ``close`` methods.
             The object can have the following methods.
+
             * ``open(partition_id, epoch_id)``: *Optional* method that initializes the processing
                 (for example, open a connection, start a transaction, etc). Additionally, you can
                 use the `partition_id` and `epoch_id` to deduplicate regenerated data
                 (discussed later).
+
             * ``process(row)``: *Non-optional* method that processes each :class:`Row`.
+
             * ``close(error)``: *Optional* method that finalizes and cleans up (for example,
                 close connection, commit transaction, etc.) after all rows have been processed.
+
             The object will be used by Spark in the following way.
+
             * A single copy of this object is responsible of all the data generated by a
                 single task in a query. In other words, one instance is responsible for
                 processing one partition of the data generated in a distributed manner.
+
             * This object must be serializable because each task will get a fresh
                 serialized-deserialized copy of the provided object. Hence, it is strongly
                 recommended that any initialization for writing data (e.g. opening a
                 connection or starting a transaction) is done after the `open(...)`
                 method has been called, which signifies that the task is ready to generate data.
+
             * The lifecycle of the methods are as follows.
+
                 For each partition with ``partition_id``:
+
                 ... For each batch/epoch of streaming data with ``epoch_id``:
+
                 ....... Method ``open(partitionId, epochId)`` is called.
+
                 ....... If ``open(...)`` returns true, for each row in the partition and
                         batch/epoch, method ``process(row)`` is called.
+
                 ....... Method ``close(errorOrNull)`` is called with error (if any) seen while
                         processing rows.
+
             Important points to note:
+
             * The `partitionId` and `epochId` can be used to deduplicate generated data when
                 failures cause reprocessing of some input data. This depends on the execution
                 mode of the query. If the streaming query is being executed in the micro-batch
@@ -920,10 +1025,13 @@ class DataStreamWriter(object):
                 guarantees. However, if the streaming query is being executed in the continuous
                 mode, then this guarantee does not hold and therefore should not be used for
                 deduplication.
+
             * The ``close()`` method (if exists) will be called if `open()` method exists and
                 returns successfully (irrespective of the return value), except if the Python
                 crashes in the middle.
+
         .. note:: Evolving.
+
         >>> # Print every row using a function
         >>> def print_row(row):
         ...     print(row)
@@ -1027,7 +1135,9 @@ class DataStreamWriter(object):
         (that is, the provided Dataset) to external systems. The output DataFrame is guaranteed
         to exactly same for the same batchId (assuming all operations are deterministic in the
         query).
+
         .. note:: Evolving.
+
         >>> def func(batch_df, batch_id):
         ...     batch_df.collect()
         ...
@@ -1048,25 +1158,30 @@ class DataStreamWriter(object):
     def start(self, path=None, format=None, outputMode=None, partitionBy=None, queryName=None,
               **options):
         """Streams the contents of the :class:`DataFrame` to a data source.
+
         The data source is specified by the ``format`` and a set of ``options``.
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
+
         .. note:: Evolving.
+
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save
         :param outputMode: specifies how data of a streaming DataFrame/Dataset is written to a
                            streaming sink.
-            * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to the
+
+            * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
-            * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
-               every time these is some updates
-            * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+            * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
+              sink every time these is some updates
+            * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
         :param partitionBy: names of partitioning columns
         :param queryName: unique name for the query
         :param options: All other string options. You may want to provide a `checkpointLocation`
                         for most streams, however it is not required for a `memory` stream.
+
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.isActive
         True
