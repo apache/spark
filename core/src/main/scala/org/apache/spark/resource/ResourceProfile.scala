@@ -245,6 +245,7 @@ object ResourceProfile extends Logging {
   // Executor resources
   val CORES = "cores"
   val MEMORY = "memory"
+  val OFFHEAP_MEM = "offHeap"
   val OVERHEAD_MEM = "memoryOverhead"
   val PYSPARK_MEM = "pyspark.memory"
 
@@ -295,6 +296,10 @@ object ResourceProfile extends Logging {
     ereqs.memory(conf.get(EXECUTOR_MEMORY).toString)
     conf.get(EXECUTOR_MEMORY_OVERHEAD).map(mem => ereqs.memoryOverhead(mem.toString))
     conf.get(PYSPARK_EXECUTOR_MEMORY).map(mem => ereqs.pysparkMemory(mem.toString))
+    if (conf.get(MEMORY_OFFHEAP_ENABLED)) {
+      // Explicitly add suffix b as default unit of offHeapMemory is Mib
+      ereqs.offHeapMemory(conf.get(MEMORY_OFFHEAP_SIZE).toString + "b")
+    }
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
     execReq.foreach { req =>
       val name = req.id.resourceName
