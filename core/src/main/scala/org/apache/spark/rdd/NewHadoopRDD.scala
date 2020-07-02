@@ -120,34 +120,6 @@ class NewHadoopRDD[K, V](
     }
   }
 
-  protected def getSplits(): Array[FileSplit] = {
-    val jobContext = new JobContextImpl(_conf, jobId)
-    if (!ignoreLocatity) {
-      inputFormat.getSplits(jobContext).asScala
-    } else {
-      inputFormat match {
-        case fileFormat: FileInputFormat =>
-          // dirs can be a mixture of dirs and files, but this matches the Hadoop impl
-          val dirs = fileFormat.getInputPaths(jobContext)
-          val filter = fileFormat.getInputPathFilter(jobContext)
-          def processInputPath(p: Path): Try[FileStatus] = {
-            val fs = p.getFileSystem(jobContext)
-            try {
-              if
-              Success()
-            } catch {
-            }
-          }
-          val fileStatuses = dirs.map { p =>
-            processInputPath(p)
-          }
-        case _ =>
-          throw new SparkException(
-            s"Input form ${inputFormat} was not a FileInputFormat but asked to skip locations")
-      }
-    }
-  }
-
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.getConstructor().newInstance()
     inputFormat match {
@@ -156,7 +128,7 @@ class NewHadoopRDD[K, V](
       case _ =>
     }
     try {
-      val allRowSplits = getSplits()
+      val allRowSplits = inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
       val rawSplits = if (ignoreEmptySplits) {
         allRowSplits.filter(_.getLength > 0)
       } else {
