@@ -1028,4 +1028,16 @@ class DataFrameAggregateSuite extends QueryTest
       checkAnswer(df, Row("abellina", 2) :: Row("mithunr", 1) :: Nil)
     }
   }
+
+  test("SPARK-32136: NormalizeFloatingNumbers should work on null struct") {
+    val df = Seq(
+      A(None),
+      A(Some(B(None))),
+      A(Some(B(Some(1.0))))).toDF
+    val groupBy = df.groupBy("b").agg(count("*"))
+    checkAnswer(groupBy, Row(null, 1) :: Row(Row(null), 1) :: Row(Row(1.0), 1) :: Nil)
+  }
 }
+
+case class B(c: Option[Double])
+case class A(b: Option[B])

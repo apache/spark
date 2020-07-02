@@ -23,7 +23,7 @@ import java.util.Properties
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOptions)
-    extends SecureConnectionProvider(driver, options) {
+  extends SecureConnectionProvider(driver, options) {
   override val appEntry: String = {
     val parseURL = driver.getClass.getMethod("parseURL", classOf[String], classOf[Properties])
     val properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]

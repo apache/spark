@@ -207,7 +207,7 @@ case class FileSourceScanExec(
   private def isDynamicPruningFilter(e: Expression): Boolean =
     e.find(_.isInstanceOf[PlanExpression[_]]).isDefined
 
-  @transient private lazy val selectedPartitions: Array[PartitionDirectory] = {
+  @transient lazy val selectedPartitions: Array[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret =

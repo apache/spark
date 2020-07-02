@@ -1078,7 +1078,10 @@ private[spark] object JsonProtocol {
         val blockManagerAddress = blockManagerIdFromJson(json \ "Block Manager Address")
         val shuffleId = (json \ "Shuffle ID").extract[Int]
         val mapId = (json \ "Map ID").extract[Long]
-        val mapIndex = (json \ "Map Index").extract[Int]
+        val mapIndex = (json \ "Map Index") match {
+          case JNothing => 0
+          case x => x.extract[Int]
+        }
         val reduceId = (json \ "Reduce ID").extract[Int]
         val message = jsonOption(json \ "Message").map(_.extract[String])
         new FetchFailed(blockManagerAddress, shuffleId, mapId, mapIndex, reduceId,
