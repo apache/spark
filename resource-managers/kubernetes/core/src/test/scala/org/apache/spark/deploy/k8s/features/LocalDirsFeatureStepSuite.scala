@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config._
 
 class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   private val defaultLocalDir = "/var/data/default-local-dir"
@@ -144,14 +145,13 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val volumeConf = KubernetesVolumeSpec(
       "spark-local-dir-test",
       "/tmp",
-      "",
       false,
       KubernetesHostPathVolumeConf("/hostPath/tmp")
     )
-    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
-    val mountVolumeStep = new MountVolumesFeatureStep(kubernetesConf)
+    val kubernetesTestConf = kubernetesConf.copy(roleVolumes = Seq(volumeConf))
+    val mountVolumeStep = new MountVolumesFeatureStep(kubernetesTestConf)
     val configuredPod = mountVolumeStep.configurePod(SparkPod.initialPod())
-    val localDirStep = new LocalDirsFeatureStep(kubernetesConf, defaultLocalDir)
+    val localDirStep = new LocalDirsFeatureStep(kubernetesTestConf, defaultLocalDir)
     val newConfiguredPod = localDirStep.configurePod(configuredPod)
 
     assert(newConfiguredPod.pod.getSpec.getVolumes.size() === 1)
