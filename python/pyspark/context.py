@@ -38,6 +38,7 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark.resource.information import ResourceInformation
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
+from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
@@ -118,6 +119,9 @@ class SparkContext(object):
             ...
         ValueError:...
         """
+        # In order to prevent SparkContext from being created in executors.
+        SparkContext._assert_on_driver()
+
         self._callsite = first_spark_call() or CallSite(None, None, None)
         if gateway is not None and gateway.gateway_parameters.auth_token is None:
             raise ValueError(
@@ -1144,6 +1148,16 @@ class SparkContext(object):
             addrs = [addr for addr in jaddresses]
             resources[name] = ResourceInformation(name, addrs)
         return resources
+
+    @staticmethod
+    def _assert_on_driver():
+        """
+        Called to ensure that SparkContext is created only on the Driver.
+
+        Throws an exception if a SparkContext is about to be created in executors.
+        """
+        if TaskContext.get() is not None:
+            raise Exception("SparkContext should only be created and accessed on the driver.")
 
 
 def _test():

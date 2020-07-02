@@ -267,6 +267,13 @@ class ContextTests(unittest.TestCase):
             resources = sc.resources
             self.assertEqual(len(resources), 0)
 
+    def test_disallow_to_create_spark_context_in_executors(self):
+        with SparkContext("local-cluster[3, 1, 1024]") as sc:
+            with self.assertRaises(Exception) as context:
+                sc.range(2).foreach(lambda _: SparkContext())
+            self.assertIn("SparkContext should only be created and accessed on the driver.",
+                          str(context.exception))
+
 
 class ContextTestsWithResources(unittest.TestCase):
 

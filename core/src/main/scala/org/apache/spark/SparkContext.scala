@@ -83,6 +83,9 @@ class SparkContext(config: SparkConf) extends Logging {
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  // In order to prevent SparkContext from being created in executors.
+  SparkContext.assertOnDriver()
+
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having started construction.
   // NOTE: this must be placed at the beginning of the SparkContext constructor.
@@ -2551,6 +2554,19 @@ object SparkContext extends Logging {
           s" The other SparkContext was created at:\n$otherContextCreationSite"
         logWarning(warnMsg)
       }
+    }
+  }
+
+  /**
+   * Called to ensure that SparkContext is created or accessed only on the Driver.
+   *
+   * Throws an exception if a SparkContext is about to be created in executors.
+   */
+  private[spark] def assertOnDriver(): Unit = {
+    if (TaskContext.get != null) {
+      // we're accessing it during task execution, fail.
+      throw new IllegalStateException(
+        "SparkContext should only be created and accessed on the driver.")
     }
   }
 
