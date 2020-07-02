@@ -1394,6 +1394,7 @@ class DataSourceV2SQLSuite
 
   test("Use: v2 catalog is used and namespace does not exist") {
     // Namespaces are not required to exist for v2 catalogs.
+    sql("create namespace testcat.ns1.ns2")
     sql("USE testcat.ns1.ns2")
     val catalogManager = spark.sessionState.catalogManager
     assert(catalogManager.currentNamespace === Array("ns1", "ns2"))
@@ -1418,6 +1419,7 @@ class DataSourceV2SQLSuite
 
     sql("USE testcat")
     testShowCurrentNamespace("testcat", "")
+    sql("create namespace testcat.ns1.ns2")
     sql("USE testcat.ns1.ns2")
     testShowCurrentNamespace("testcat", "ns1.ns2")
   }
@@ -2257,6 +2259,7 @@ class DataSourceV2SQLSuite
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
 
+    sql("create namespace testcat.ns1.ns2")
     sql("USE testcat.ns1.ns2")
     sql("CREATE TABLE t USING foo AS SELECT 1 col")
     checkAnswer(spark.table("t"), Row(1))
