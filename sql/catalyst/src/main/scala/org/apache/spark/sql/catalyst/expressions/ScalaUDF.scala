@@ -1174,7 +1174,7 @@ case class ScalaUDF(
        """.stripMargin)
   }
 
-  private[this] val resultConverter = createToCatalystConverter(dataType)
+  private[this] val resultConverter = catalystConverter(dataType)
 
   lazy val udfErrorMessage = {
     val funcCls = function.getClass.getSimpleName
