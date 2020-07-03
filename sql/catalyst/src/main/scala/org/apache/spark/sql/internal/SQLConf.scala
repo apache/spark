@@ -509,12 +509,12 @@ object SQLConf {
 
   val SKEW_JOIN_MAX_PARTITION_SPLITS =
     buildConf("spark.sql.adaptive.skewJoin.maxPartitionSplits")
-      .doc("The max partition number produced in a skewed join. Generate the plan with too many " +
-        "split partitions will take a long time and may lead to OOM in execution.")
+      .doc("The max number of partitions produced in a skewed join. Generate the plan with too " +
+        "many split partitions will take a long time and may lead to OOM in execution.")
       .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The max split number in skew join must be positive.")
-      .createWithDefault(10000000)
+      .createWithDefault(1000000)
 
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")

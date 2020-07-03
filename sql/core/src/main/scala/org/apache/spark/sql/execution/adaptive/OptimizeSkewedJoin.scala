@@ -238,7 +238,11 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           rightSidePartitions += rightSidePartition
           if (leftSidePartitions.length > conf.getConf(SQLConf.SKEW_JOIN_MAX_PARTITION_SPLITS)) {
             throw new SparkException(s"Too many partition splits produced in handling data skew." +
-              s" The threshold is ${conf.getConf(SQLConf.SKEW_JOIN_MAX_PARTITION_SPLITS)}")
+              s" Current limitation is ${conf.getConf(SQLConf.SKEW_JOIN_MAX_PARTITION_SPLITS)}. " +
+              s"Increasing the threshold ${SQLConf.SKEW_JOIN_MAX_PARTITION_SPLITS.key} as a " +
+              s"workaround may lead to OOM which is depended on the cluster settings. Another " +
+              s"approach is to increase ${SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key} which " +
+              s"could help to reduce the number of partition splits.")
           }
         }
       }
