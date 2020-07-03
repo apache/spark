@@ -582,7 +582,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             for _, i in pdf.id.iteritems():
                 assert expected[i][0] == group, "{} != {}".format(expected[i][0], group)
                 assert expected[i][1] == window_range, \
-                    "{}, != {}".format(expected[i][1], window_range)
+                    "{} != {}".format(expected[i][1], window_range)
 
             return pdf
 
