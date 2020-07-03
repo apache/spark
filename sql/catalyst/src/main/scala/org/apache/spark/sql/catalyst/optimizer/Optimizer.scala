@@ -1791,22 +1791,3 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
       empty(ll)
   }
 }
-
-/**
- * Combines all adjacent [[WithFields]] expression into a single [[WithFields]] expression.
- */
-object CombineWithFields extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case WithFields(WithFields(struct, names1, valExprs1), names2, valExprs2) =>
-      WithFields(struct, names1 ++ names2, valExprs1 ++ valExprs2)
-  }
-}
-
-/**
- * Replaces [[WithFields]] expression with an evaluable expression.
- */
-object ReplaceWithFieldsExpression extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case w: WithFields => w.evalExpr
-  }
-}
