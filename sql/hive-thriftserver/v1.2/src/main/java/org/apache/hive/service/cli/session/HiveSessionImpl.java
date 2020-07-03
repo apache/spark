@@ -464,7 +464,7 @@ public class HiveSessionImpl implements HiveSession {
 
     OperationManager operationManager = getOperationManager();
     ExecuteStatementOperation operation = operationManager
-        .newExecuteStatementOperation(getSession(), statement, confOverlay, runAsync);
+        .newExecuteStatementOperation(getSession(), statement, confOverlay, runAsync, 0);
     OperationHandle opHandle = operation.getHandle();
     try {
       operation.run();

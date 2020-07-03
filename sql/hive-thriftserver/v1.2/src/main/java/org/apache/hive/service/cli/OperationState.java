@@ -32,7 +32,8 @@ public enum OperationState {
   CLOSED(TOperationState.CLOSED_STATE, true),
   ERROR(TOperationState.ERROR_STATE, true),
   UNKNOWN(TOperationState.UKNOWN_STATE, false),
-  PENDING(TOperationState.PENDING_STATE, false);
+  PENDING(TOperationState.PENDING_STATE, false),
+  TIMEDOUT(TOperationState.TIMEDOUT_STATE, true);
 
   private final TOperationState tOperationState;
   private final boolean terminal;

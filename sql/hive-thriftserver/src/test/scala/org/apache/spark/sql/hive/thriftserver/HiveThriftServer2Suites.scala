@@ -874,6 +874,16 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(rs.getString(1) === expected.toString)
     }
   }
+
+  test("SPARK-26533: Support query auto timeout cancel on thriftserver") {
+    withJdbcStatement() { statement =>
+      statement.setQueryTimeout(1)
+      val e = intercept[SQLException] {
+        statement.execute("select java_method('java.lang.Thread', 'sleep', 50000L)")
+      }.getMessage
+      assert(e.contains("Query timed out after"))
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
