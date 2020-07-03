@@ -871,6 +871,7 @@ class Column(val expr: Expression) extends Logging {
    */
   def getItem(key: Any): Column = withExpr { UnresolvedExtractValue(expr, Literal(key)) }
 
+  // scalastyle:off line.size.limit
   /**
    * An expression that adds/replaces field in `StructType` by name.
    *
@@ -894,11 +895,16 @@ class Column(val expr: Expression) extends Logging {
    *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
    *   df.select($"struct_col".withField("a.c", lit(3)))
    *   // result: {"a":{"a":1,"b":2,"c":3}}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)))
+   *   // result: org.apache.spark.sql.AnalysisException: Ambiguous reference to fields
    * }}}
    *
    * @group expr_ops
    * @since 3.1.0
    */
+  // scalastyle:on line.size.limit
   def withField(fieldName: String, col: Column): Column = withExpr {
     require(fieldName != null, "fieldName cannot be null")
     require(col != null, "col cannot be null")
