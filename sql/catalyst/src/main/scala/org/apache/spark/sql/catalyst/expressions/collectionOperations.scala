@@ -2695,7 +2695,7 @@ object Sequence {
          |final int $stepDays = $step.days;
          |final long $stepMicros = $step.microseconds;
          |
-         |  $check
+         |$check
          |
          |if ($stepMonths == 0 && $stepMicros == 0 && ${scale}L == ${MICROS_PER_DAY}L) {
          |  ${backedSequenceImpl.genCode(ctx, start, stop, stepDays, arr, elemType)};
