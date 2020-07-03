@@ -286,7 +286,7 @@ object ResolveHints {
    */
   class DisableHints(conf: SQLConf) extends RemoveAllHints(conf: SQLConf) {
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      if (conf.optimizerIgnoreHints) super.apply(plan) else plan
+      if (conf.getConf(SQLConf.OPTIMIZER_IGNORE_HINTS)) super.apply(plan) else plan
     }
   }
 }

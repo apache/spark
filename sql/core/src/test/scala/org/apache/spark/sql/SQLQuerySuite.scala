@@ -3522,7 +3522,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("disable hint resolution when spark.sql.optimizer.ignoreHints = true") {
+  test("SPARK-31875: disable hint resolution when spark.sql.optimizer.ignoreHints = true") {
     withSQLConf(SQLConf.OPTIMIZER_IGNORE_HINTS.key -> "true") {
       withTempView("t1", "t2") {
         Seq[Integer](1, 2).toDF("c1").createOrReplaceTempView("t1")
