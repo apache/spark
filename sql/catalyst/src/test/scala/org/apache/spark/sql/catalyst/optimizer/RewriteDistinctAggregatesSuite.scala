@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.CollectSet
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, GROUP_BY_ORDINAL}
 import org.apache.spark.sql.types.{IntegerType, StringType}
@@ -43,12 +43,12 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   }
 
   private def checkGenerate(generate: LogicalPlan): Unit = generate match {
-    case Aggregate(_, _, _: Expand) =>
+    case Aggregate(_, _, _: Project) =>
     case _ => fail(s"Plan is not generated:\n$generate")
   }
 
   private def checkGenerateAndRewrite(rewrite: LogicalPlan): Unit = rewrite match {
-    case Aggregate(_, _, Aggregate(_, _, Expand(_, _, _: Expand))) =>
+    case Aggregate(_, _, Aggregate(_, _, Expand(_, _, _: Project))) =>
     case _ => fail(s"Plan is not rewritten:\n$rewrite")
   }
 
