@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+import java.time.ZoneId
 import java.util
 
 import scala.collection.JavaConverters._
@@ -25,12 +26,13 @@ import scala.collection.mutable
 import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{IdentityTransform, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{DaysTransform, IdentityTransform, Transform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, DateType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -47,8 +49,9 @@ class InMemoryTable(
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
   partitioning.foreach { t =>
-    if (!t.isInstanceOf[IdentityTransform] && !allowUnsupportedTransforms) {
-      throw new IllegalArgumentException(s"Transform $t must be IdentityTransform")
+    if (!t.isInstanceOf[IdentityTransform] && !t.isInstanceOf[DaysTransform] &&
+        !allowUnsupportedTransforms) {
+      throw new IllegalArgumentException(s"Transform $t must be IdentityTransform or DaysTransform")
     }
   }
 
@@ -67,7 +70,10 @@ class InMemoryTable(
   }
 
   private def getKey(row: InternalRow): Seq[Any] = {
-    def extractor(fieldNames: Array[String], schema: StructType, row: InternalRow): Any = {
+    def extractor(
+        fieldNames: Array[String],
+        schema: StructType,
+        row: InternalRow): (Any, DataType) = {
       val index = schema.fieldIndex(fieldNames(0))
       val value = row.toSeq(schema).apply(index)
       if (fieldNames.length > 1) {
@@ -78,10 +84,21 @@ class InMemoryTable(
             throw new IllegalArgumentException(s"Unsupported type, ${dataType.simpleString}")
         }
       } else {
-        value
+        (value, schema(index).dataType)
       }
     }
-    partCols.map(fieldNames => extractor(fieldNames, schema, row))
+
+    partitioning.map {
+      case IdentityTransform(ref) =>
+        extractor(ref.fieldNames, schema, row)._1
+      case DaysTransform(ref) =>
+        extractor(ref.fieldNames, schema, row) match {
+          case (days, DateType) =>
+            days
+          case (micros: Long, TimestampType) =>
+            DateTimeUtils.microsToDays(micros, ZoneId.of("UTC"))
+        }
+    }
   }
 
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {

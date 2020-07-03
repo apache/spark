@@ -446,8 +446,7 @@ trait InsertIntoSQLOnlyTests
       }
     }
 
-    test("InsertInto: overwrite - multiple static partitions - dynamic mode") {
-      // Since all partitions are provided statically, this should be supported by everyone
+    dynamicOverwriteTest("InsertInto: overwrite - multiple static partitions - dynamic mode") {
       withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
         val t1 = s"${catalogAndNamespace}tbl"
         withTableAndData(t1) { view =>
