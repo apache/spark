@@ -497,6 +497,18 @@ abstract class SchemaPruningSuite
         Row(Row("Janet", null, "Jones"), "Jones") ::Nil)
   }
 
+  testSchemaPruning("SPARK-32163: nested pruning should work even with cosmetic variations") {
+    withTempView("contact_alias") {
+      sql("select * from contacts")
+        .repartition(100, col("name.first"), col("name.last"))
+        .selectExpr("name").createOrReplaceTempView("contact_alias")
+
+      val query = sql("select name.first from contact_alias")
+      checkScan(query, "struct<name:struct<first:string,last:string>>")
+      checkAnswer(query, Row("Jane") :: Row("John") :: Row("Jim") :: Row("Janet") ::Nil)
+    }
+  }
+
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {
     test(s"Spark vectorized reader - without partition data column - $testName") {
       withSQLConf(vectorizedReaderEnabledKey -> "true") {
