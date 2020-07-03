@@ -2750,7 +2750,6 @@ class HiveDDLSuite
           hiveClient.alterTable(alter1)
           val table1 = catalog.getTableMetadata(TableIdentifier(tbl))
           val alter2 = table.copy(properties = table.properties ++ Map("EXTERNAL" -> "TRUE"))
-          // spark cann't modify EXTERNAL property so we have to use hive client
           hiveClient.alterTable(alter2)
           val table2 = catalog.getTableMetadata(TableIdentifier(tbl))
 
@@ -2760,14 +2759,14 @@ class HiveDDLSuite
             assert(table1.tableType == CatalogTableType.MANAGED)
             assert(table1.properties("EXTERNAL") == "true")
             assert(table2.tableType == CatalogTableType.EXTERNAL)
-            assert(table2.properties("EXTERNAL").isEmpty)
+            assert(table2.properties.get("EXTERNAL").isEmpty)
           } else {
             assert(table.tableType == CatalogTableType.MANAGED)
             assert(table.properties.get("EXTERNAL").isEmpty)
             assert(table1.tableType == CatalogTableType.MANAGED)
             assert(table1.properties("EXTERNAL") == "true")
             assert(table2.tableType == CatalogTableType.EXTERNAL)
-            assert(table2.properties("EXTERNAL").isEmpty)
+            assert(table2.properties.get("EXTERNAL").isEmpty)
           }
         }
       }
