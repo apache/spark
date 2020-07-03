@@ -21,8 +21,8 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.CastSupport
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, ExternalCatalogUtils, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, SubqueryExpression}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -41,7 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
  * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
  */
 private[sql] class PruneHiveTablePartitions(session: SparkSession)
-  extends Rule[LogicalPlan] with CastSupport {
+  extends Rule[LogicalPlan] with CastSupport with PredicateHelper {
 
   override val conf: SQLConf = session.sessionState.conf
 
@@ -103,7 +103,9 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case op @ PhysicalOperation(projections, filters, relation: HiveTableRelation)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
-      val partitionKeyFilters = getPartitionKeyFilters(filters, relation)
+      val predicates = CNFWithGroupExpressionsByReference(filters.reduceLeft(And))
+      val finalPredicates = if (predicates.nonEmpty) predicates else filters
+      val partitionKeyFilters = getPartitionKeyFilters(finalPredicates, relation)
       if (partitionKeyFilters.nonEmpty) {
         val newPartitions = prunePartitions(relation, partitionKeyFilters)
         val newTableMeta = updateTableMeta(relation.tableMeta, newPartitions)

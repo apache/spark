@@ -46,6 +46,9 @@ __all__ = ['LinearSVC', 'LinearSVCModel',
            'DecisionTreeClassifier', 'DecisionTreeClassificationModel',
            'GBTClassifier', 'GBTClassificationModel',
            'RandomForestClassifier', 'RandomForestClassificationModel',
+           'RandomForestClassificationSummary', 'RandomForestClassificationTrainingSummary',
+           'BinaryRandomForestClassificationSummary',
+           'BinaryRandomForestClassificationTrainingSummary',
            'NaiveBayes', 'NaiveBayesModel',
            'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel',
            'OneVsRest', 'OneVsRestModel',
@@ -1762,7 +1765,7 @@ class RandomForestClassifier(_JavaProbabilisticClassifier, _RandomForestClassifi
 
 class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClassificationModel,
                                       _RandomForestClassifierParams, JavaMLWritable,
-                                      JavaMLReadable):
+                                      JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by RandomForestClassifier.
 
@@ -1789,6 +1792,80 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
     def trees(self):
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
+
+    @property
+    @since("3.1.0")
+    def summary(self):
+        """
+        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
+        """
+        if self.hasSummary:
+            if self.numClasses <= 2:
+                return BinaryRandomForestClassificationTrainingSummary(
+                    super(RandomForestClassificationModel, self).summary)
+            else:
+                return RandomForestClassificationTrainingSummary(
+                    super(RandomForestClassificationModel, self).summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
+
+    @since("3.1.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+
+        :param dataset:
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+        java_rf_summary = self._call_java("evaluate", dataset)
+        if self.numClasses <= 2:
+            return BinaryRandomForestClassificationSummary(java_rf_summary)
+        else:
+            return RandomForestClassificationSummary(java_rf_summary)
+
+
+class RandomForestClassificationSummary(_ClassificationSummary):
+    """
+    Abstraction for RandomForestClassification Results for a given model.
+    .. versionadded:: 3.1.0
+    """
+    pass
+
+
+@inherit_doc
+class RandomForestClassificationTrainingSummary(RandomForestClassificationSummary,
+                                                _TrainingSummary):
+    """
+    Abstraction for RandomForestClassificationTraining Training results.
+    .. versionadded:: 3.1.0
+    """
+    pass
+
+
+@inherit_doc
+class BinaryRandomForestClassificationSummary(_BinaryClassificationSummary):
+    """
+    BinaryRandomForestClassification results for a given model.
+
+    .. versionadded:: 3.1.0
+    """
+    pass
+
+
+@inherit_doc
+class BinaryRandomForestClassificationTrainingSummary(BinaryRandomForestClassificationSummary,
+                                                      RandomForestClassificationTrainingSummary):
+    """
+    BinaryRandomForestClassification training results for a given model.
+
+    .. versionadded:: 3.1.0
+    """
+    pass
 
 
 class _GBTClassifierParams(_GBTParams, _HasVarianceImpurity):
