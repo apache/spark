@@ -231,9 +231,6 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggChildren = (regularFunChildren ++ regularFilterAttrs).distinct
       val regularAggChildrenMap = regularAggChildren.map {
         case ne: NamedExpression => ne -> ne
-        // If the expression is not a NamedExpressions, we add an alias.
-        // So, when we generate the result of the operator, the Aggregate Operator
-        // can directly get the Seq of attributes representing the grouping expressions.
         case other => other -> Alias(other, other.toString)()
       }
       val regularAggChildAttrMap = regularAggChildrenMap.map { kv =>
@@ -289,9 +286,6 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       // Construct the aggregate input projection.
       val namedGroupingExpressions = a.groupingExpressions.map {
         case ne: NamedExpression => ne
-        // If the expression is not a NamedExpressions, we add an alias.
-        // So, when we generate the result of the operator, the Aggregate Operator
-        // can directly get the Seq of attributes representing the grouping expressions.
         case other => Alias(other, other.toString)()
       }
       val rewriteAggProjection = namedGroupingExpressions ++ projections.flatten
@@ -502,4 +496,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // children, in this case attribute reuse causes the input of the regular aggregate to bound to
     // the (nulled out) input of the distinct aggregate.
     e -> AttributeReference(e.sql, e.dataType, nullable = true)()
+
+  private def addAlias(expressions: Seq[Expression]) = expressions.map {
+    case ne: NamedExpression => ne
+    case other => Alias(other, other.toString)()
+  }
 }
