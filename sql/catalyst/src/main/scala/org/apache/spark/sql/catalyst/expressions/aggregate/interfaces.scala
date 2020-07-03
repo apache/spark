@@ -217,10 +217,10 @@ abstract class AggregateFunction extends Expression {
 
   /**
    * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] with `isDistinct`
-   * flag and `filter` option of the [[AggregateExpression]] to the given value because
+   * flag and an optional `filter` of the [[AggregateExpression]] to the given value because
    * [[AggregateExpression]] is the container of an [[AggregateFunction]], aggregation mode,
-   * the flag indicating if this aggregation is distinct aggregation or not and filter option.
-   * An [[AggregateFunction]] should not be used without being wrapped in
+   * the flag indicating if this aggregation is distinct aggregation or not and the optional
+   * `filter`. An [[AggregateFunction]] should not be used without being wrapped in
    * an [[AggregateExpression]].
    */
   def toAggregateExpression(
