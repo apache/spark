@@ -570,10 +570,8 @@ case class WithFields(
   override def prettyName: String = "with_fields"
 
   lazy val evalExpr: Expression = {
-    val existingExprs = structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex.map {
-      case (StructField(name, _, nullable, _), i) =>
-        val expr = GetStructField(structExpr, i)
-        (name, (if (nullable) expr else KnownNotNull(expr)).asInstanceOf[Expression])
+    val existingExprs = structExpr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
+      case (name, i) => (name, GetStructField(KnownNotNull(structExpr), i).asInstanceOf[Expression])
     }
 
     val addOrReplaceExprs = names.zip(valExprs)
