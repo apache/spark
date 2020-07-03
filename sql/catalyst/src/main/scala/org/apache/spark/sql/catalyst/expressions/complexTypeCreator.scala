@@ -572,37 +572,30 @@ case class WithFields(
   lazy val evalExpr: Expression = {
     val existingExprs = structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex.map {
       case (StructField(name, _, nullable, _), i) =>
-        val existingFieldExpr = GetStructField(structExpr, i)
-        (name, if (nullable) existingFieldExpr else KnownNotNull(existingFieldExpr))
+        val expr = GetStructField(structExpr, i)
+        (name, (if (nullable) expr else KnownNotNull(expr)).asInstanceOf[Expression])
     }
+
     val addOrReplaceExprs = names.zip(valExprs)
-    val newExprs = addOrReplace(existingExprs, addOrReplaceExprs).flatMap {
-      case (name, valExpr) => Seq(Literal(name), valExpr)
-    }
+
+    val resolver = SQLConf.get.resolver
+    val newExprs = addOrReplaceExprs.foldLeft(existingExprs) {
+      case (resultExprs, newExpr @ (newExprName, _)) =>
+        if (resultExprs.exists(x => resolver(x._1, newExprName))) {
+          resultExprs.map {
+            case (name, _) if resolver(name, newExprName) => newExpr
+            case x => x
+          }
+        } else {
+          resultExprs :+ newExpr
+        }
+    }.flatMap { case (name, expr) => Seq(Literal(name), expr) }
+
     val expr = CreateNamedStruct(newExprs)
     if (structExpr.nullable) {
       If(IsNull(structExpr), Literal(null, expr.dataType), expr)
     } else {
       expr
-    }
-  }
-
-  private def addOrReplace[T](
-      existingFields: Seq[(String, T)],
-      addOrReplaceFields: Seq[(String, T)]): Seq[(String, T)] = {
-
-    val resolver = SQLConf.get.resolver
-
-    addOrReplaceFields.foldLeft(existingFields) {
-      case (resultFields, newField @ (newFieldName, _)) =>
-        if (resultFields.exists(x => resolver(x._1, newFieldName))) {
-          resultFields.map {
-            case (name, _) if resolver(name, newFieldName) => newField
-            case x => x
-          }
-        } else {
-          resultFields :+ newField
-        }
     }
   }
 }
