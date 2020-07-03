@@ -19,8 +19,7 @@ public enum TOperationState implements org.apache.thrift.TEnum {
   CLOSED_STATE(4),
   ERROR_STATE(5),
   UKNOWN_STATE(6),
-  PENDING_STATE(7),
-  TIMEDOUT_STATE(8);
+  PENDING_STATE(7);
 
   private final int value;
 
@@ -57,8 +56,6 @@ public enum TOperationState implements org.apache.thrift.TEnum {
         return UKNOWN_STATE;
       case 7:
         return PENDING_STATE;
-      case 8:
-        return TIMEDOUT_STATE;
       default:
         return null;
     }
