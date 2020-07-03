@@ -545,13 +545,13 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
     def test_grouped_over_window_with_key(self):
 
-        data = [(0, 1, "2018-03-10T00:00:00+00:00", False),
-                (1, 2, "2018-03-11T00:00:00+00:00", False),
-                (2, 2, "2018-03-12T00:00:00+00:00", False),
-                (3, 3, "2018-03-15T00:00:00+00:00", False),
-                (4, 3, "2018-03-16T00:00:00+00:00", False),
-                (5, 3, "2018-03-17T00:00:00+00:00", False),
-                (6, 3, "2018-03-21T00:00:00+00:00", False)]
+        data = [(0, 1, "2018-03-10T00:00:00+00:00"),
+                (1, 2, "2018-03-11T00:00:00+00:00"),
+                (2, 2, "2018-03-12T00:00:00+00:00"),
+                (3, 3, "2018-03-15T00:00:00+00:00"),
+                (4, 3, "2018-03-16T00:00:00+00:00"),
+                (5, 3, "2018-03-17T00:00:00+00:00"),
+                (6, 3, "2018-03-21T00:00:00+00:00")]
 
         expected_window = [
             {'start': datetime.datetime(2018, 3, 10, 0, 0),
@@ -570,17 +570,21 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                     5: (3, expected_window[1]),
                     6: (3, expected_window[2])}
 
-        df = self.spark.createDataFrame(data, ['id', 'group', 'ts', 'result'])
-        df = df.select(col('id'), col('group'), col('ts').cast('timestamp'), col('result'))
+        df = self.spark.createDataFrame(data, ['id', 'group', 'ts'])
+        df = df.select(col('id'), col('group'), col('ts').cast('timestamp'))
 
         @pandas_udf(df.schema, PandasUDFType.GROUPED_MAP)
         def f(key, pdf):
             group = key[0]
             window_range = key[1]
-            # Result will be True if group and window range equal to expected
-            is_expected = pdf.id.apply(lambda id: (expected[id][0] == group and
-                                                   expected[id][1] == window_range))
-            return pdf.assign(result=is_expected)
+
+            # Make sure the key with group and window values are correct
+            for _, i in pdf.id.iteritems():
+                assert expected[i][0] == group, "{} != {}".format(expected[i][0], group)
+                assert expected[i][1] == window_range, \
+                    "{}, != {}".format(expected[i][1], window_range)
+
+            return pdf
 
         result = df.groupby('group', window('ts', '5 days')).apply(f).select('result').collect()
 
