@@ -200,7 +200,7 @@ private[hive] class SparkExecuteStatementOperation(
       parentSession.getUsername)
     setHasResultSet(true) // avoid no resultset for async run
 
-    if(queryTimeout > 0) {
+    if (queryTimeout > 0) {
       Executors.newSingleThreadScheduledExecutor.schedule(new Runnable {
           override def run(): Unit = timeoutCancel()
         }, queryTimeout, TimeUnit.SECONDS)
