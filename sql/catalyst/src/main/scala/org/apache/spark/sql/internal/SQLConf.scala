@@ -2203,6 +2203,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SKIP_PARTIAL_AGGREGATE_THRESHOLD =
+    buildConf("spark.sql.aggregate.partialaggregate.skip.threshold")
+      .internal()
+      .longConf
+      .createWithDefault(100000)
+
+  val SKIP_PARTIAL_AGGREGATE_RATIO =
+    buildConf("spark.sql.aggregate.partialaggregate.skip.ratio")
+      .internal()
+      .doubleConf
+      .createWithDefault(0.5)
+
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
       "uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.")
@@ -2930,6 +2942,10 @@ class SQLConf extends Serializable with Logging {
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
   def skipPartialAggregate: Boolean = getConf(SKIP_PARTIAL_AGGREGATE_ENABLED)
+
+  def skipPartialAggregateThreshold: Long = getConf(SKIP_PARTIAL_AGGREGATE_THRESHOLD)
+
+  def skipPartialAggregateRatio: Double = getConf(SKIP_PARTIAL_AGGREGATE_RATIO)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 

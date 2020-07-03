@@ -136,6 +136,14 @@ abstract class HashMapGenerator(
      """.stripMargin
   }
 
+  protected final def generateNumRows(): String = {
+    s"""
+       |public int getNumRows() {
+       |  return batch.numRows();
+       |}
+     """.stripMargin
+  }
+
   protected final def genComputeHash(
       ctx: CodegenContext,
       input: String,
