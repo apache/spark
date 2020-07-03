@@ -20,14 +20,18 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.log4j.Level
 import org.scalatest.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
@@ -304,6 +308,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    def resolvedEncoder[T : TypeTag](): ExpressionEncoder[T] = {
+      ExpressionEncoder[T]().resolveAndBind()
+    }
+
     val testRelation = LocalRelation(
       AttributeReference("a", StringType)(),
       AttributeReference("b", DoubleType)(),
@@ -324,20 +332,21 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     // non-primitive parameters do not need special null handling
-    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil, false :: Nil)
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil,
+      Option(resolvedEncoder[String]()) :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
-      false :: true :: Nil)
+      Option(resolvedEncoder[String]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected2 =
       If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
     val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
-      true :: true :: Nil)
+      Option(resolvedEncoder[Short]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
@@ -349,7 +358,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       (s: Short, d: Double) => "x",
       StringType,
       short :: nonNullableDouble :: Nil,
-      true :: true :: Nil)
+      Option(resolvedEncoder[Short]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
@@ -360,8 +369,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
     val a = testRelation.output(0)
     val func = (x: Int, y: Int) => x + y
-    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil, false :: false :: Nil)
-    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil, false :: false :: Nil)
+    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil,
+      Option(ExpressionEncoder[java.lang.Integer]()) ::
+        Option(ExpressionEncoder[java.lang.Integer]()) :: Nil)
+    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil,
+      Option(ExpressionEncoder[java.lang.Integer]()) ::
+        Option(ExpressionEncoder[java.lang.Integer]()) :: Nil)
     val plan = Project(Alias(udf2, "")() :: Nil, testRelation)
     comparePlans(plan.analyze, plan.analyze.analyze)
   }
@@ -744,5 +757,131 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisError(
       CollectMetrics("evt1", sumWithFilter :: Nil, testRelation),
       "aggregates with filter predicate are not allowed" :: Nil)
+  }
+
+  test("Analysis exceed max iterations") {
+    // RuleExecutor only throw exception or log warning when the rule is supposed to run
+    // more than once.
+    val maxIterations = 2
+    val conf = new SQLConf().copy(SQLConf.ANALYZER_MAX_ITERATIONS -> maxIterations)
+    val testAnalyzer = new Analyzer(
+      new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+
+    val plan = testRelation2.select(
+      $"a" / Literal(2) as "div1",
+      $"a" / $"b" as "div2",
+      $"a" / $"c" as "div3",
+      $"a" / $"d" as "div4",
+      $"e" / $"e" as "div5")
+
+    val message = intercept[TreeNodeException[LogicalPlan]] {
+      testAnalyzer.execute(plan)
+    }.getMessage
+    assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+      s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+  }
+
+  test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
+    Seq("trim", "ltrim", "rtrim").foreach { f =>
+      val logAppender = new LogAppender("deprecated two-parameter TRIM/LTRIM/RTRIM functions")
+      def check(count: Int): Unit = {
+        val message = "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated."
+        assert(logAppender.loggingEvents.size == count)
+        assert(logAppender.loggingEvents.exists(
+          e => e.getLevel == Level.WARN &&
+            e.getRenderedMessage.contains(message)))
+      }
+
+      withLogAppender(logAppender) {
+        val testAnalyzer1 = new Analyzer(
+          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+
+        val plan1 = testRelation2.select(
+          UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
+        testAnalyzer1.execute(plan1)
+        // One-parameter is not deprecated.
+        assert(logAppender.loggingEvents.isEmpty)
+
+        val plan2 = testRelation2.select(
+          UnresolvedFunction(f, $"a" :: $"b" :: Nil, isDistinct = false))
+        testAnalyzer1.execute(plan2)
+        // Deprecation warning is printed out once.
+        check(1)
+
+        val plan3 = testRelation2.select(
+          UnresolvedFunction(f, $"b" :: $"a" :: Nil, isDistinct = false))
+        testAnalyzer1.execute(plan3)
+        // There is no change in the log.
+        check(1)
+
+        // New analyzer from new SessionState
+        val testAnalyzer2 = new Analyzer(
+          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+        val plan4 = testRelation2.select(
+          UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
+        testAnalyzer2.execute(plan4)
+        // Additional deprecation warning from new analyzer
+        check(2)
+
+        val plan5 = testRelation2.select(
+          UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
+        testAnalyzer2.execute(plan5)
+        // There is no change in the log.
+        check(2)
+      }
+    }
+  }
+
+  test("SPARK-32131: Fix wrong column index when we have more than two columns" +
+    " during union and set operations" ) {
+    val firstTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", FloatType)())
+
+    val secondTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", TimestampType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", FloatType)())
+
+    val thirdTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", TimestampType)(),
+      AttributeReference("d", FloatType)())
+
+    val fourthTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", TimestampType)())
+
+    val r1 = Union(firstTable, secondTable)
+    val r2 = Union(firstTable, thirdTable)
+    val r3 = Union(firstTable, fourthTable)
+    val r4 = Except(firstTable, secondTable, isAll = false)
+    val r5 = Intersect(firstTable, secondTable, isAll = false)
+
+    assertAnalysisError(r1,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+
+    assertAnalysisError(r2,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> int at the third column of the second table"))
+
+    assertAnalysisError(r3,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> float at the 4th column of the second table"))
+
+    assertAnalysisError(r4,
+      Seq("Except can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+
+    assertAnalysisError(r5,
+      Seq("Intersect can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
   }
 }

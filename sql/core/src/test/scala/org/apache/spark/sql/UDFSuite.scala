@@ -20,19 +20,17 @@ package org.apache.spark.sql
 import java.math.BigDecimal
 
 import org.apache.spark.sql.api.java._
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
-import org.apache.spark.sql.functions.{lit, udf}
+import org.apache.spark.sql.functions.{lit, struct, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.QueryExecutionListener
-
 
 private case class FunctionResult(f1: String, f2: String)
 
@@ -134,10 +132,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(df1.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
     assert(df1.head().getDouble(0) >= 0.0)
 
-    val bar = udf(() => Math.random(), DataTypes.DoubleType).asNondeterministic()
-    val df2 = testData.select(bar())
-    assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
-    assert(df2.head().getDouble(0) >= 0.0)
+    withSQLConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key -> "true") {
+      val bar = udf(() => Math.random(), DataTypes.DoubleType).asNondeterministic()
+      val df2 = testData.select(bar())
+      assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+      assert(df2.head().getDouble(0) >= 0.0)
+    }
 
     val javaUdf = udf(new UDF0[Double] {
       override def call(): Double = Math.random()
@@ -339,7 +339,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       withTempPath { path =>
         var numTotalCachedHit = 0
         val listener = new QueryExecutionListener {
-          override def onFailure(f: String, qe: QueryExecution, e: Throwable): Unit = {}
+          override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = {}
 
           override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
             qe.withCachedData match {
@@ -441,16 +441,23 @@ class UDFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-25044 Verify null input handling for primitive types - with udf(Any, DataType)") {
-    val f = udf((x: Int) => x, IntegerType)
-    checkAnswer(
-      Seq(Integer.valueOf(1), null).toDF("x").select(f($"x")),
-      Row(1) :: Row(0) :: Nil)
+    withSQLConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key -> "true") {
+      val f = udf((x: Int) => x, IntegerType)
+      checkAnswer(
+        Seq(Integer.valueOf(1), null).toDF("x").select(f($"x")),
+        Row(1) :: Row(0) :: Nil)
 
-    val f2 = udf((x: Double) => x, DoubleType)
-    checkAnswer(
-      Seq(java.lang.Double.valueOf(1.1), null).toDF("x").select(f2($"x")),
-      Row(1.1) :: Row(0.0) :: Nil)
+      val f2 = udf((x: Double) => x, DoubleType)
+      checkAnswer(
+        Seq(java.lang.Double.valueOf(1.1), null).toDF("x").select(f2($"x")),
+        Row(1.1) :: Row(0.0) :: Nil)
+    }
 
+  }
+
+  test("use untyped Scala UDF should fail by default") {
+    val e = intercept[AnalysisException](udf((x: Int) => x, IntegerType))
+    assert(e.getMessage.contains("You're using untyped Scala UDF"))
   }
 
   test("SPARK-26308: udf with decimal") {
@@ -525,21 +532,141 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(spark.range(2).select(nonDeterministicJavaUDF()).distinct().count() == 2)
   }
 
-  test("Replace _FUNC_ in UDF ExpressionInfo") {
-    val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("upper"))
-    assert(info.getName === "upper")
-    assert(info.getClassName === "org.apache.spark.sql.catalyst.expressions.Upper")
-    assert(info.getUsage === "upper(str) - Returns `str` with all characters changed to uppercase.")
-    assert(info.getExamples.contains("> SELECT upper('SparkSql');"))
-    assert(info.getSince === "1.0.1")
-    assert(info.getNote === "")
-    assert(info.getExtended.contains("> SELECT upper('SparkSql');"))
-  }
-
   test("SPARK-28521 error message for CAST(parameter types contains DataType)") {
     val e = intercept[AnalysisException] {
       spark.sql("SELECT CAST(1)")
     }
     assert(e.getMessage.contains("Invalid arguments for function cast"))
+  }
+
+  test("only one case class parameter") {
+    val f = (d: TestData) => d.key * d.value.toInt
+    val myUdf = udf(f)
+    val df = Seq(("data", TestData(50, "2"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("one case class with primitive parameter") {
+    val f = (i: Int, p: TestData) => p.key * i
+    val myUdf = udf(f)
+    val df = Seq((2, TestData(50, "data"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("multiple case class parameters") {
+    val f = (d1: TestData, d2: TestData) => d1.key * d2.key
+    val myUdf = udf(f)
+    val df = Seq((TestData(10, "d1"), TestData(50, "d2"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(500) :: Nil)
+  }
+
+  test("input case class parameter and return case class") {
+    val f = (d: TestData) => TestData(d.key * 2, "copy")
+    val myUdf = udf(f)
+    val df = Seq(("data", TestData(50, "d2"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(Row(100, "copy")) :: Nil)
+  }
+
+  test("any and case class parameter") {
+    val f = (any: Any, d: TestData) => s"${any.toString}, ${d.value}"
+    val myUdf = udf(f)
+    val df = Seq(("Hello", TestData(50, "World"))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row("Hello, World") :: Nil)
+  }
+
+  test("nested case class parameter") {
+    val f = (y: Int, training: TrainingSales) => training.sales.year + y
+    val myUdf = udf(f)
+    val df = Seq((20, TrainingSales("training", CourseSales("course", 2000, 3.14))))
+      .toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(2020) :: Nil)
+  }
+
+  test("case class as element type of Seq/Array") {
+    val f1 = (s: Seq[TestData]) => s.map(d => d.key * d.value.toInt).sum
+    val myUdf1 = udf(f1)
+    val df1 = Seq(("data", Seq(TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df1.select(myUdf1(Column("col2"))), Row(100) :: Nil)
+
+    val f2 = (s: Array[TestData]) => s.map(d => d.key * d.value.toInt).sum
+    val myUdf2 = udf(f2)
+    val df2 = Seq(("data", Array(TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df2.select(myUdf2(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("case class as key/value type of Map") {
+    val f1 = (s: Map[TestData, Int]) => s.keys.head.key * s.keys.head.value.toInt
+    val myUdf1 = udf(f1)
+    val df1 = Seq(("data", Map(TestData(50, "2") -> 502))).toDF("col1", "col2")
+    checkAnswer(df1.select(myUdf1(Column("col2"))), Row(100) :: Nil)
+
+    val f2 = (s: Map[Int, TestData]) => s.values.head.key * s.values.head.value.toInt
+    val myUdf2 = udf(f2)
+    val df2 = Seq(("data", Map(502 -> TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df2.select(myUdf2(Column("col2"))), Row(100) :: Nil)
+
+    val f3 = (s: Map[TestData, TestData]) => s.keys.head.key * s.values.head.value.toInt
+    val myUdf3 = udf(f3)
+    val df3 = Seq(("data", Map(TestData(50, "2") -> TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df3.select(myUdf3(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("case class as element of tuple") {
+    val f = (s: (TestData, Int)) => s._1.key * s._2
+    val myUdf = udf(f)
+    val df = Seq(("data", (TestData(50, "2"), 2))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("case class as generic type of Option") {
+    val f = (o: Option[TestData]) => o.map(t => t.key * t.value.toInt)
+    val myUdf = udf(f)
+    val df1 = Seq(("data", Some(TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df1.select(myUdf(Column("col2"))), Row(100) :: Nil)
+    val df2 = Seq(("data", None: Option[TestData])).toDF("col1", "col2")
+    checkAnswer(df2.select(myUdf(Column("col2"))), Row(null) :: Nil)
+  }
+
+  test("more input fields than expect for case class") {
+    val f = (t: TestData2) => t.a * t.b
+    val myUdf = udf(f)
+    val df = spark.range(1)
+      .select(lit(50).as("a"), lit(2).as("b"), lit(2).as("c"))
+      .select(struct("a", "b", "c").as("col"))
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Nil)
+  }
+
+  test("less input fields than expect for case class") {
+    val f = (t: TestData2) => t.a * t.b
+    val myUdf = udf(f)
+    val df = spark.range(1)
+      .select(lit(50).as("a"))
+      .select(struct("a").as("col"))
+    val error = intercept[AnalysisException](df.select(myUdf(Column("col"))))
+    assert(error.getMessage.contains("cannot resolve '`b`' given input columns: [a]"))
+  }
+
+  test("wrong order of input fields for case class") {
+    val f = (t: TestData) => t.key * t.value.toInt
+    val myUdf = udf(f)
+    val df = spark.range(1)
+      .select(lit("2").as("value"), lit(50).as("key"))
+      .select(struct("value", "key").as("col"))
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Nil)
+  }
+
+  test("top level Option primitive type") {
+    val f = (i: Option[Int]) => i.map(_ * 10)
+    val myUdf = udf(f)
+    val df = Seq(Some(10), None).toDF("col")
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Row(null) :: Nil)
+  }
+
+  test("array Option") {
+    val f = (i: Array[Option[TestData]]) =>
+      i.map(_.map(t => t.key * t.value.toInt).getOrElse(0)).sum
+    val myUdf = udf(f)
+    val df = Seq(Array(Some(TestData(50, "2")), None)).toDF("col")
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Nil)
   }
 }

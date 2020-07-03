@@ -19,9 +19,12 @@ package org.apache.spark.sql.connector.catalog
 
 import java.net.URI
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -108,6 +111,19 @@ class CatalogManagerSuite extends SparkFunSuite {
     assert(v1SessionCatalog.getCurrentDatabase == "default")
     catalogManager.setCurrentNamespace(Array("test2"))
     assert(v1SessionCatalog.getCurrentDatabase == "default")
+
+    // Check namespace existence if currentCatalog implements SupportsNamespaces.
+    conf.setConfString("spark.sql.catalog.testCatalog", classOf[InMemoryTableCatalog].getName)
+    catalogManager.setCurrentCatalog("testCatalog")
+    catalogManager.currentCatalog.asInstanceOf[InMemoryTableCatalog]
+      .createNamespace(Array("test3"), Map.empty[String, String].asJava)
+    assert(v1SessionCatalog.getCurrentDatabase == "default")
+    catalogManager.setCurrentNamespace(Array("test3"))
+    assert(v1SessionCatalog.getCurrentDatabase == "default")
+
+    intercept[NoSuchNamespaceException] {
+      catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
+    }
   }
 }
 

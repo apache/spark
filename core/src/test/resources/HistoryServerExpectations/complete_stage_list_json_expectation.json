@@ -41,7 +41,8 @@
   "schedulingPool" : "default",
   "rddIds" : [ 6, 5 ],
   "accumulatorUpdates" : [ ],
-  "killedTasksSummary" : { }
+  "killedTasksSummary" : { },
+  "resourceProfileId" : 0
 }, {
   "status" : "COMPLETE",
   "stageId" : 1,
@@ -85,7 +86,8 @@
   "schedulingPool" : "default",
   "rddIds" : [ 1, 0 ],
   "accumulatorUpdates" : [ ],
-  "killedTasksSummary" : { }
+  "killedTasksSummary" : { },
+  "resourceProfileId" : 0
 }, {
   "status" : "COMPLETE",
   "stageId" : 0,
@@ -129,5 +131,6 @@
   "schedulingPool" : "default",
   "rddIds" : [ 0 ],
   "accumulatorUpdates" : [ ],
-  "killedTasksSummary" : { }
+  "killedTasksSummary" : { },
+  "resourceProfileId" : 0
 } ]

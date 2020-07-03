@@ -25,6 +25,8 @@ import org.apache.spark.annotation.Evolving;
  *
  * Data sources should implement concrete data stream interfaces:
  * {@link MicroBatchStream} and {@link ContinuousStream}.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface SparkDataStream {

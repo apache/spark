@@ -265,7 +265,10 @@ class SparkSession(SparkConversionMixin):
     @since(3.0)
     def getActiveSession(cls):
         """
-        Returns the active SparkSession for the current thread, returned by the builder.
+        Returns the active SparkSession for the current thread, returned by the builder
+
+        :return: :class:`SparkSession` if an active session exists for the current thread
+
         >>> s = SparkSession.getActiveSession()
         >>> l = [('Alice', 1)]
         >>> rdd = s.sparkContext.parallelize(l)
@@ -699,12 +702,14 @@ class SparkSession(SparkConversionMixin):
     def stop(self):
         """Stop the underlying :class:`SparkContext`.
         """
+        from pyspark.sql.context import SQLContext
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         self._jvm.SparkSession.clearDefaultSession()
         self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
+        SQLContext._instantiatedContext = None
 
     @since(2.0)
     def __enter__(self):

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -49,26 +50,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)
   }
 
-  test("SPARK-30098: create table without provider should " +
-    "use default data source under non-legacy mode") {
-    val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)"
-    val defaultProvider = conf.defaultDataSourceName
-    val expectedPlan = CreateTableStatement(
-      Seq("my_tab"),
-      new StructType()
-        .add("a", IntegerType, nullable = true, "test")
-        .add("b", StringType),
-      Seq.empty[Transform],
-      None,
-      Map.empty[String, String],
-      defaultProvider,
-      Map.empty[String, String],
-      None,
-      None,
-      false)
-    parseCompare(createSql, expectedPlan)
-  }
-
   test("create/replace table using - schema") {
     val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
     val replaceSql = "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
@@ -80,7 +61,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -103,7 +84,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         None,
         Map.empty[String, String],
-        "parquet",
+        Some("parquet"),
         Map.empty[String, String],
         None,
         None),
@@ -123,7 +104,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("a"))),
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -177,7 +158,7 @@ class DDLParserSuite extends AnalysisTest {
           LiteralValue(34, IntegerType)))),
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -199,7 +180,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       Some(BucketSpec(5, Seq("a"), Seq("b"))),
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -217,7 +198,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       Some("abc"))
@@ -237,7 +218,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map("test" -> "test"),
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -255,7 +236,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         None,
         Map.empty[String, String],
-        "parquet",
+        Some("parquet"),
         Map.empty[String, String],
         Some("/tmp/file"),
         None)
@@ -273,7 +254,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       None,
       Map.empty[String, String],
-      "parquet",
+      Some("parquet"),
       Map.empty[String, String],
       None,
       None)
@@ -334,7 +315,7 @@ class DDLParserSuite extends AnalysisTest {
           Seq.empty[Transform],
           Option.empty[BucketSpec],
           Map.empty[String, String],
-          "json",
+          Some("json"),
           Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
           None,
           None),
@@ -389,7 +370,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         None,
         Map("p1" -> "v1", "p2" -> "v2"),
-        "parquet",
+        Some("parquet"),
         Map.empty[String, String],
         Some("/user/external/page_view"),
         Some("This is the staging page view table"))
@@ -646,17 +627,18 @@ class DDLParserSuite extends AnalysisTest {
         Some(first())))
   }
 
-  test("alter table: update column type, comment and position") {
-    comparePlans(
-      parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c " +
-        "TYPE bigint COMMENT 'new comment' AFTER d"),
-      AlterTableAlterColumnStatement(
-        Seq("table_name"),
-        Seq("a", "b", "c"),
-        Some(LongType),
-        None,
-        Some("new comment"),
-        Some(after("d"))))
+  test("alter table: mutiple property changes are not allowed") {
+    intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
+        "TYPE bigint COMMENT 'new comment'")}
+
+    intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
+        "TYPE bigint COMMENT AFTER d")}
+
+    intercept[ParseException] {
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
+        "TYPE bigint COMMENT 'new comment' AFTER d")}
   }
 
   test("alter table: SET/DROP NOT NULL") {
@@ -698,7 +680,7 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
-  test("alter table: hive style") {
+  test("alter table: hive style change column") {
     val sql1 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT"
     val sql2 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT COMMENT 'new_comment'"
     val sql3 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT AFTER other_col"
@@ -739,6 +721,52 @@ class DDLParserSuite extends AnalysisTest {
 
     // ALTER COLUMN for a partition is not supported.
     intercept("ALTER TABLE table_name PARTITION (a='1') CHANGE COLUMN a.b.c c INT")
+  }
+
+  test("alter table: hive style replace columns") {
+    val sql1 = "ALTER TABLE table_name REPLACE COLUMNS (x string)"
+    val sql2 = "ALTER TABLE table_name REPLACE COLUMNS (x string COMMENT 'x1')"
+    val sql3 = "ALTER TABLE table_name REPLACE COLUMNS (x string COMMENT 'x1', y int)"
+    val sql4 = "ALTER TABLE table_name REPLACE COLUMNS (x string COMMENT 'x1', y int COMMENT 'y1')"
+
+    comparePlans(
+      parsePlan(sql1),
+      AlterTableReplaceColumnsStatement(
+        Seq("table_name"),
+        Seq(QualifiedColType(Seq("x"), StringType, true, None, None))))
+
+    comparePlans(
+      parsePlan(sql2),
+      AlterTableReplaceColumnsStatement(
+        Seq("table_name"),
+        Seq(QualifiedColType(Seq("x"), StringType, true, Some("x1"), None))))
+
+    comparePlans(
+      parsePlan(sql3),
+      AlterTableReplaceColumnsStatement(
+        Seq("table_name"),
+        Seq(
+          QualifiedColType(Seq("x"), StringType, true, Some("x1"), None),
+          QualifiedColType(Seq("y"), IntegerType, true, None, None)
+        )))
+
+    comparePlans(
+      parsePlan(sql4),
+      AlterTableReplaceColumnsStatement(
+        Seq("table_name"),
+        Seq(
+          QualifiedColType(Seq("x"), StringType, true, Some("x1"), None),
+          QualifiedColType(Seq("y"), IntegerType, true, Some("y1"), None)
+        )))
+
+    intercept("ALTER TABLE table_name PARTITION (a='1') REPLACE COLUMNS (x string)",
+      "Operation not allowed: ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS")
+
+    intercept("ALTER TABLE table_name REPLACE COLUMNS (x string NOT NULL)",
+      "NOT NULL is not supported in Hive-style REPLACE COLUMNS")
+
+    intercept("ALTER TABLE table_name REPLACE COLUMNS (x string FIRST)",
+      "Column position is not supported in Hive-style REPLACE COLUMNS")
   }
 
   test("alter table/view: rename table/view") {
@@ -1106,41 +1134,87 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
-  test("merge into table: at most two matched clauses") {
+  test("merge into table: multi matched and not matched clauses") {
+    parseCompare(
+      """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target
+        |USING testcat2.ns1.ns2.tbl AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED AND (target.col2='delete') THEN DELETE
+        |WHEN MATCHED AND (target.col2='update1') THEN UPDATE SET target.col2 = 1
+        |WHEN MATCHED AND (target.col2='update2') THEN UPDATE SET target.col2 = 2
+        |WHEN NOT MATCHED AND (target.col2='insert1')
+        |THEN INSERT (target.col1, target.col2) values (source.col1, 1)
+        |WHEN NOT MATCHED AND (target.col2='insert2')
+        |THEN INSERT (target.col1, target.col2) values (source.col1, 2)
+      """.stripMargin,
+      MergeIntoTable(
+        SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+        SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update1"))),
+            Seq(Assignment(UnresolvedAttribute("target.col2"), Literal(1)))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update2"))),
+            Seq(Assignment(UnresolvedAttribute("target.col2"), Literal(2))))),
+        Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert1"))),
+          Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+            Assignment(UnresolvedAttribute("target.col2"), Literal(1)))),
+          InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert2"))),
+            Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+              Assignment(UnresolvedAttribute("target.col2"), Literal(2)))))))
+  }
+
+  test("merge into table: only the last matched clause can omit the condition") {
     val exc = intercept[ParseException] {
       parsePlan(
         """
           |MERGE INTO testcat1.ns1.ns2.tbl AS target
           |USING testcat2.ns1.ns2.tbl AS source
           |ON target.col1 = source.col1
-          |WHEN MATCHED AND (target.col2='delete') THEN DELETE
-          |WHEN MATCHED AND (target.col2='update1') THEN UPDATE SET target.col2 = source.col2
-          |WHEN MATCHED AND (target.col2='update2') THEN UPDATE SET target.col2 = source.col2
+          |WHEN MATCHED AND (target.col2 == 'update1') THEN UPDATE SET target.col2 = 1
+          |WHEN MATCHED THEN UPDATE SET target.col2 = 2
+          |WHEN MATCHED THEN DELETE
           |WHEN NOT MATCHED AND (target.col2='insert')
           |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
         """.stripMargin)
     }
 
-    assert(exc.getMessage.contains("There should be at most 2 'WHEN MATCHED' clauses."))
+    assert(exc.getMessage.contains("only the last MATCHED clause can omit the condition"))
   }
 
-  test("merge into table: at most one not matched clause") {
+  test("merge into table: only the last not matched clause can omit the condition") {
     val exc = intercept[ParseException] {
       parsePlan(
         """
           |MERGE INTO testcat1.ns1.ns2.tbl AS target
           |USING testcat2.ns1.ns2.tbl AS source
           |ON target.col1 = source.col1
-          |WHEN MATCHED AND (target.col2='delete') THEN DELETE
-          |WHEN MATCHED AND (target.col2='update1') THEN UPDATE SET target.col2 = source.col2
+          |WHEN MATCHED AND (target.col2 == 'update') THEN UPDATE SET target.col2 = source.col2
+          |WHEN MATCHED THEN DELETE
           |WHEN NOT MATCHED AND (target.col2='insert1')
-          |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
-          |WHEN NOT MATCHED AND (target.col2='insert2')
+          |THEN INSERT (target.col1, target.col2) values (source.col1, 1)
+          |WHEN NOT MATCHED
+          |THEN INSERT (target.col1, target.col2) values (source.col1, 2)
+          |WHEN NOT MATCHED
           |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
         """.stripMargin)
     }
 
-    assert(exc.getMessage.contains("There should be at most 1 'WHEN NOT MATCHED' clause."))
+    assert(exc.getMessage.contains("only the last NOT MATCHED clause can omit the condition"))
+  }
+
+  test("merge into table: there must be a when (not) matched condition") {
+    val exc = intercept[ParseException] {
+      parsePlan(
+        """
+          |MERGE INTO testcat1.ns1.ns2.tbl AS target
+          |USING testcat2.ns1.ns2.tbl AS source
+          |ON target.col1 = source.col1
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("There must be at least one WHEN clause in a MERGE statement"))
   }
 
   test("show tables") {
@@ -1148,14 +1222,23 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SHOW TABLES"),
       ShowTables(UnresolvedNamespace(Seq.empty[String]), None))
     comparePlans(
+      parsePlan("SHOW TABLES '*test*'"),
+      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW TABLES LIKE '*test*'"),
+      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+    comparePlans(
       parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
       ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
       parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
       ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
-      parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
-      ShowTables(UnresolvedNamespace(Seq("tbl")), Some("*dog*")))
+      parsePlan("SHOW TABLES IN ns1 '*test*'"),
+      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW TABLES IN ns1 LIKE '*test*'"),
+      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
   }
 
   test("show table extended") {
@@ -1181,6 +1264,30 @@ class DDLParserSuite extends AnalysisTest {
         "PARTITION(ds='2008-04-09')"),
       ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
         Some(Map("ds" -> "2008-04-09"))))
+  }
+
+  test("show views") {
+    comparePlans(
+      parsePlan("SHOW VIEWS"),
+      ShowViews(UnresolvedNamespace(Seq.empty[String]), None))
+    comparePlans(
+      parsePlan("SHOW VIEWS '*test*'"),
+      ShowViews(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW VIEWS LIKE '*test*'"),
+      ShowViews(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW VIEWS FROM testcat.ns1.ns2.tbl"),
+      ShowViews(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW VIEWS IN testcat.ns1.ns2.tbl"),
+      ShowViews(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW VIEWS IN ns1 '*test*'"),
+      ShowViews(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
+    comparePlans(
+      parsePlan("SHOW VIEWS IN ns1 LIKE '*test*'"),
+      ShowViews(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
   }
 
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
@@ -1448,7 +1555,7 @@ class DDLParserSuite extends AnalysisTest {
       AnalyzeColumnStatement(Seq("a", "b", "c"), None, allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
-      "mismatched input 'key' expecting <EOF>")
+      "mismatched input 'key' expecting {<EOF>, ';'}")
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL",
       "missing 'COLUMNS' at '<EOF>'")
   }
@@ -1899,11 +2006,11 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
-      ShowTableProperties(UnresolvedTable(Seq("a", "b", "c")), None))
+      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c")), None))
 
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
-      ShowTableProperties(UnresolvedTable(Seq("a", "b", "c")), Some("propKey1")))
+      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c")), Some("propKey1")))
   }
 
   test("DESCRIBE FUNCTION") {
@@ -2008,7 +2115,7 @@ class DDLParserSuite extends AnalysisTest {
       partitioning: Seq[Transform],
       bucketSpec: Option[BucketSpec],
       properties: Map[String, String],
-      provider: String,
+      provider: Option[String],
       options: Map[String, String],
       location: Option[String],
       comment: Option[String])
@@ -2083,5 +2190,22 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
       CommentOnTable(UnresolvedTable(Seq("a", "b", "c")), "xYz"))
+  }
+
+  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
+  ignore("create table - without using") {
+    val sql = "CREATE TABLE 1m.2g(a INT)"
+    val expectedTableSpec = TableSpec(
+      Seq("1m", "2g"),
+      Some(new StructType().add("a", IntegerType)),
+      Seq.empty[Transform],
+      None,
+      Map.empty[String, String],
+      None,
+      Map.empty[String, String],
+      None,
+      None)
+
+    testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
   }
 }

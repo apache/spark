@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.spark.resource.ResourceProfile
+
 /**
  * A backend interface for scheduling systems that allows plugging in different ones under
  * TaskSchedulerImpl. We assume a Mesos-like model where the application gets resource offers as
@@ -27,6 +29,9 @@ private[spark] trait SchedulerBackend {
 
   def start(): Unit
   def stop(): Unit
+  /**
+   * Update the current offers and schedule tasks
+   */
   def reviveOffers(): Unit
   def defaultParallelism(): Int
 
@@ -77,12 +82,14 @@ private[spark] trait SchedulerBackend {
   def getDriverAttributes: Option[Map[String, String]] = None
 
   /**
-   * Get the max number of tasks that can be concurrent launched currently.
+   * Get the max number of tasks that can be concurrent launched based on the ResourceProfile
+   * being used.
    * Note that please don't cache the value returned by this method, because the number can change
    * due to add/remove executors.
    *
+   * @param rp ResourceProfile which to use to calculate max concurrent tasks.
    * @return The max number of tasks that can be concurrent launched currently.
    */
-  def maxNumConcurrentTasks(): Int
+  def maxNumConcurrentTasks(rp: ResourceProfile): Int
 
 }

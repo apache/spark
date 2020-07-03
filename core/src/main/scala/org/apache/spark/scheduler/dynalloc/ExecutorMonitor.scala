@@ -45,12 +45,12 @@ private[spark] class ExecutorMonitor(
   private val storageTimeoutNs = TimeUnit.SECONDS.toNanos(
     conf.get(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT))
   private val shuffleTimeoutNs = TimeUnit.MILLISECONDS.toNanos(
-    conf.get(DYN_ALLOCATION_SHUFFLE_TIMEOUT))
+    conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT))
 
   private val fetchFromShuffleSvcEnabled = conf.get(SHUFFLE_SERVICE_ENABLED) &&
     conf.get(SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
   private val shuffleTrackingEnabled = !conf.get(SHUFFLE_SERVICE_ENABLED) &&
-    conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING)
+    conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)
 
   private val executors = new ConcurrentHashMap[String, Tracker]()
   private val execResourceProfileCount = new ConcurrentHashMap[Int, Int]()
@@ -70,7 +70,7 @@ private[spark] class ExecutorMonitor(
   // this listener. There are safeguards in other parts of the code that would prevent that executor
   // from being removed.
   private val nextTimeout = new AtomicLong(Long.MaxValue)
-  private var timedOutExecs = Seq.empty[String]
+  private var timedOutExecs = Seq.empty[(String, Int)]
 
   // Active job tracking.
   //
@@ -100,10 +100,10 @@ private[spark] class ExecutorMonitor(
   }
 
   /**
-   * Returns the list of executors that are currently considered to be timed out.
-   * Should only be called from the EAM thread.
+   * Returns the list of executors and their ResourceProfile id that are currently considered to
+   * be timed out. Should only be called from the EAM thread.
    */
-  def timedOutExecutors(): Seq[String] = {
+  def timedOutExecutors(): Seq[(String, Int)] = {
     val now = clock.nanoTime()
     if (now >= nextTimeout.get()) {
       // Temporarily set the next timeout at Long.MaxValue. This ensures that after
@@ -126,7 +126,7 @@ private[spark] class ExecutorMonitor(
             true
           }
         }
-        .keys
+        .map { case (name, exec) => (name, exec.resourceProfileId)}
         .toSeq
       updateNextTimeout(newNextTimeout)
     }
@@ -155,6 +155,7 @@ private[spark] class ExecutorMonitor(
     execResourceProfileCount.getOrDefault(id, 0)
   }
 
+  // for testing
   def getResourceProfileId(executorId: String): Int = {
     val execTrackingInfo = executors.get(executorId)
     if (execTrackingInfo != null) {

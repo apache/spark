@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.{AliasAwareOutputPartitioning, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{AliasAwareOutputOrdering, AliasAwareOutputPartitioning, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -38,16 +38,9 @@ case class SortAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with AliasAwareOutputPartitioning {
-
-  private[this] val aggregateBufferAttributes = {
-    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-  }
-
-  override def producedAttributes: AttributeSet =
-    AttributeSet(aggregateAttributes) ++
-      AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
-      AttributeSet(aggregateBufferAttributes)
+  extends BaseAggregateExec
+    with AliasAwareOutputPartitioning
+    with AliasAwareOutputOrdering {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -68,7 +61,7 @@ case class SortAggregateExec(
 
   override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
 
-  override def outputOrdering: Seq[SortOrder] = {
+  override protected def orderingExpressions: Seq[SortOrder] = {
     groupingExpressions.map(SortOrder(_, Ascending))
   }
 
@@ -86,7 +79,7 @@ case class SortAggregateExec(
         val outputIter = new SortBasedAggregationIterator(
           partIndex,
           groupingExpressions,
-          child.output,
+          inputAttributes,
           iter,
           aggregateExpressions,
           aggregateAttributes,

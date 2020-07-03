@@ -28,7 +28,9 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
@@ -467,7 +469,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         withTable(table) {
           TimeZone.setDefault(srcTimeZone)
           spark.range(start, end)
-            .select('id.cast(TimestampType).cast(t).as(column))
+            .select(timestamp_seconds($"id").cast(t).as(column))
             .write.saveAsTable(table)
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
 
@@ -481,12 +483,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
     }
 
-    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
-      checkTimestampStats(DateType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      val timeZone = TimeZone.getTimeZone(zid)
+      checkTimestampStats(DateType, TimeZoneUTC, timeZone) { stats =>
         assert(stats.min.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(start))
         assert(stats.max.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(end - 1))
       }
-      checkTimestampStats(TimestampType, DateTimeUtils.TimeZoneUTC, timeZone) { stats =>
+      checkTimestampStats(TimestampType, TimeZoneUTC, timeZone) { stats =>
         assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
         assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
       }
@@ -646,6 +649,23 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
           val stats = checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = None)
           assert(stats.get.sizeInBytes === tableLocationSize - stagingFileSize - metadataFileSize)
+        }
+      }
+    }
+  }
+
+  Seq(true, false).foreach { caseSensitive =>
+    test(s"SPARK-30903: Fail fast on duplicate columns when analyze columns " +
+      s"- caseSensitive=$caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val table = "test_table"
+        withTable(table) {
+          sql(s"CREATE TABLE $table (value string, name string) USING PARQUET")
+          val dupCol = if (caseSensitive) "value" else "VaLuE"
+          val errorMsg = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
+          }.getMessage
+          assert(errorMsg.contains("Found duplicate column(s)"))
         }
       }
     }

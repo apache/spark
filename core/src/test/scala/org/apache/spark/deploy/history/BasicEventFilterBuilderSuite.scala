@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history
 
 import org.apache.spark.{SparkFunSuite, Success, TaskResultLost, TaskState}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.status.ListenerEventsTestHelper
 
@@ -141,7 +142,8 @@ class BasicEventFilterBuilderSuite extends SparkFunSuite {
     // - Re-submit stage 1, all tasks, and succeed them and the stage.
     val oldS1 = stages.last
     val newS1 = new StageInfo(oldS1.stageId, oldS1.attemptNumber + 1, oldS1.name, oldS1.numTasks,
-      oldS1.rddInfos, oldS1.parentIds, oldS1.details, oldS1.taskMetrics)
+      oldS1.rddInfos, oldS1.parentIds, oldS1.details, oldS1.taskMetrics,
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     time += 1
     newS1.submissionTime = Some(time)

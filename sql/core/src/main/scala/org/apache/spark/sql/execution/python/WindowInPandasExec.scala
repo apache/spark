@@ -84,7 +84,7 @@ case class WindowInPandasExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends WindowExecBase(windowExpression, partitionSpec, orderSpec, child) {
+  extends WindowExecBase {
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpression.map(_.toAttribute)

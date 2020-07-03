@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToMillis
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -100,7 +100,7 @@ case class EventTimeWatermarkExec(
     child.execute().mapPartitions { iter =>
       val getEventTime = UnsafeProjection.create(eventTime :: Nil, child.output)
       iter.map { row =>
-        eventTimeStats.add(getEventTime(row).getLong(0) / MICROS_PER_MILLIS)
+        eventTimeStats.add(microsToMillis(getEventTime(row).getLong(0)))
         row
       }
     }

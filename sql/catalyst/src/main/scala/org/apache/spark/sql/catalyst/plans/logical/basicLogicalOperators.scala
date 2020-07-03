@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
@@ -608,16 +609,17 @@ object Expand {
    */
   private def buildBitmask(
     groupingSetAttrs: Seq[Attribute],
-    attrMap: Map[Attribute, Int]): Int = {
+    attrMap: Map[Attribute, Int]): Long = {
     val numAttributes = attrMap.size
-    val mask = (1 << numAttributes) - 1
+    assert(numAttributes <= GroupingID.dataType.defaultSize * 8)
+    val mask = if (numAttributes != 64) (1L << numAttributes) - 1 else 0xFFFFFFFFFFFFFFFFL
     // Calculate the attrbute masks of selected grouping set. For example, if we have GroupBy
     // attributes (a, b, c, d), grouping set (a, c) will produce the following sequence:
     // (15, 7, 13), whose binary form is (1111, 0111, 1101)
     val masks = (mask +: groupingSetAttrs.map(attrMap).map(index =>
       // 0 means that the column at the given index is a grouping column, 1 means it is not,
       // so we unset the bit in bitmap.
-      ~(1 << (numAttributes - 1 - index))
+      ~(1L << (numAttributes - 1 - index))
     ))
     // Reduce masks to generate an bitmask for the selected grouping set.
     masks.reduce(_ & _)
@@ -657,7 +659,11 @@ object Expand {
           attr
         }
       // groupingId is the last output, here we use the bit mask as the concrete value for it.
-      } :+ Literal.create(buildBitmask(groupingSetAttrs, attrMap), IntegerType)
+      } :+ {
+        val bitMask = buildBitmask(groupingSetAttrs, attrMap)
+        val dataType = GroupingID.dataType
+        Literal.create(if (dataType.sameType(IntegerType)) bitMask.toInt else bitMask, dataType)
+      }
 
       if (hasDuplicateGroupingSets) {
         // If `groupingSetsAttrs` has duplicate entries (e.g., GROUPING SETS ((key), (key))),
@@ -948,16 +954,18 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 }
 
 /**
- * This method repartitions data using [[Expression]]s into `numPartitions`, and receives
+ * This method repartitions data using [[Expression]]s into `optNumPartitions`, and receives
  * information about the number of partitions during execution. Used when a specific ordering or
  * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
- * `coalesce` and `repartition`.
+ * `coalesce` and `repartition`. If no `optNumPartitions` is given, by default it partitions data
+ * into `numShufflePartitions` defined in `SQLConf`, and could be coalesced by AQE.
  */
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    numPartitions: Int) extends RepartitionOperation {
+    optNumPartitions: Option[Int]) extends RepartitionOperation {
 
+  val numPartitions = optNumPartitions.getOrElse(SQLConf.get.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   val partitioning: Partitioning = {
@@ -983,6 +991,15 @@ case class RepartitionByExpression(
 
   override def maxRows: Option[Long] = child.maxRows
   override def shuffle: Boolean = true
+}
+
+object RepartitionByExpression {
+  def apply(
+      partitionExpressions: Seq[Expression],
+      child: LogicalPlan,
+      numPartitions: Int): RepartitionByExpression = {
+    RepartitionByExpression(partitionExpressions, child, Some(numPartitions))
+  }
 }
 
 /**

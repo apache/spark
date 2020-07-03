@@ -60,7 +60,7 @@ object PartitionSpec {
 
 object PartitioningUtils {
 
-  val timestampPartitionPattern = "uuuu-MM-dd HH:mm:ss[.S]"
+  val timestampPartitionPattern = "yyyy-MM-dd HH:mm:ss[.S]"
 
   private[datasources] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal])
   {
@@ -131,7 +131,10 @@ object PartitioningUtils {
     }
 
     val dateFormatter = DateFormatter(zoneId)
-    val timestampFormatter = TimestampFormatter(timestampPartitionPattern, zoneId)
+    val timestampFormatter = TimestampFormatter(
+      timestampPartitionPattern,
+      zoneId,
+      isParsing = true)
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
       parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes,
@@ -541,6 +544,9 @@ object PartitioningUtils {
       schema: StructType,
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
+
+    SchemaUtils.checkColumnNameDuplication(
+      partitionColumns, partitionColumns.mkString(", "), caseSensitive)
 
     partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
       field => field.dataType match {

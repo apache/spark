@@ -84,4 +84,8 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-30780 empty LocalTableScan should use RDD without partitions") {
+    assert(LocalTableScanExec(Nil, Nil).execute().getNumPartitions == 0)
+  }
 }

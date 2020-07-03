@@ -23,6 +23,7 @@ import scala.collection.immutable.Map
 
 import org.apache.spark.{AccumulatorSuite, SparkContext, Success, TaskState}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, SparkListenerExecutorMetricsUpdate, SparkListenerExecutorRemoved, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskEnd, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
@@ -61,7 +62,8 @@ object ListenerEventsTestHelper {
   }
 
   def createStage(id: Int, rdds: Seq[RDDInfo], parentIds: Seq[Int]): StageInfo = {
-    new StageInfo(id, 0, s"stage${id}", 4, rdds, parentIds, s"details${id}")
+    new StageInfo(id, 0, s"stage${id}", 4, rdds, parentIds, s"details${id}",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   def createStage(rdds: Seq[RDDInfo], parentIds: Seq[Int]): StageInfo = {
@@ -96,13 +98,15 @@ object ListenerEventsTestHelper {
   /** Create a stage submitted event for the specified stage Id. */
   def createStageSubmittedEvent(stageId: Int): SparkListenerStageSubmitted = {
     SparkListenerStageSubmitted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details"))
+      Seq.empty, Seq.empty, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
   }
 
   /** Create a stage completed event for the specified stage Id. */
   def createStageCompletedEvent(stageId: Int): SparkListenerStageCompleted = {
     SparkListenerStageCompleted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details"))
+      Seq.empty, Seq.empty, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
   }
 
   def createExecutorAddedEvent(executorId: Int): SparkListenerExecutorAdded = {

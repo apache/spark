@@ -27,6 +27,7 @@ import org.apache.spark.annotation.Evolving;
  * @see SupportsAdmissionControl#latestOffset(Offset, ReadLimit)
  * @see ReadAllAvailable
  * @see ReadMaxRows
+ * @since 3.0.0
  */
 @Evolving
 public interface ReadLimit {

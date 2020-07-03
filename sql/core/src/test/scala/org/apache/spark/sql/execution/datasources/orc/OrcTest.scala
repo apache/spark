@@ -22,6 +22,7 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
@@ -132,5 +133,14 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
       case _ =>
         throw new AnalysisException("Can not match OrcTable in the query.")
     }
+  }
+
+  protected def readResourceOrcFile(name: String): DataFrame = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(name)
+    // Copy to avoid URISyntaxException when `sql/hive` accesses the resources in `sql/core`
+    val file = File.createTempFile("orc-test", ".orc")
+    file.deleteOnExit();
+    FileUtils.copyURLToFile(url, file)
+    spark.read.orc(file.getAbsolutePath)
   }
 }

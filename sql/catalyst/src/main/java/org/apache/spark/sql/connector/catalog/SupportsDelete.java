@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.Filter;
 
 /**
  * A mix-in interface for {@link Table} delete support. Data sources can implement this
  * interface to provide the ability to delete data from tables that matches filter expressions.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface SupportsDelete {
   /**
    * Delete data from a data source table that matches filter expressions.

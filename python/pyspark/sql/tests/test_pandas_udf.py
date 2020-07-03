@@ -19,13 +19,11 @@ import unittest
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import *
-from pyspark.sql.utils import ParseException
+from pyspark.sql.utils import ParseException, PythonException
 from pyspark.rdd import PythonEvalType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
-
-from py4j.protocol import Py4JJavaError
 
 
 @unittest.skipIf(
@@ -157,14 +155,14 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         # plain udf (test for SPARK-23754)
         self.assertRaisesRegexp(
-            Py4JJavaError,
+            PythonException,
             exc_message,
             df.withColumn('v', udf(foo)('id')).collect
         )
 
         # pandas scalar udf
         self.assertRaisesRegexp(
-            Py4JJavaError,
+            PythonException,
             exc_message,
             df.withColumn(
                 'v', pandas_udf(foo, 'double', PandasUDFType.SCALAR)('id')
@@ -173,7 +171,7 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         # pandas grouped map
         self.assertRaisesRegexp(
-            Py4JJavaError,
+            PythonException,
             exc_message,
             df.groupBy('id').apply(
                 pandas_udf(foo, df.schema, PandasUDFType.GROUPED_MAP)
@@ -181,7 +179,7 @@ class PandasUDFTests(ReusedSQLTestCase):
         )
 
         self.assertRaisesRegexp(
-            Py4JJavaError,
+            PythonException,
             exc_message,
             df.groupBy('id').apply(
                 pandas_udf(foofoo, df.schema, PandasUDFType.GROUPED_MAP)
@@ -190,7 +188,7 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         # pandas grouped agg
         self.assertRaisesRegexp(
-            Py4JJavaError,
+            PythonException,
             exc_message,
             df.groupBy('id').agg(
                 pandas_udf(foo, 'double', PandasUDFType.GROUPED_AGG)('id')
@@ -211,14 +209,14 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         # Since 0.11.0, PyArrow supports the feature to raise an error for unsafe cast.
         with self.sql_conf({
-                "spark.sql.execution.pandas.arrowSafeTypeConversion": True}):
+                "spark.sql.execution.pandas.convertToArrowArraySafely": True}):
             with self.assertRaisesRegexp(Exception,
                                          "Exception thrown when converting pandas.Series"):
                 df.select(['A']).withColumn('udf', udf('A')).collect()
 
         # Disabling Arrow safe type check.
         with self.sql_conf({
-                "spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
+                "spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             df.select(['A']).withColumn('udf', udf('A')).collect()
 
     def test_pandas_udf_arrow_overflow(self):
@@ -232,13 +230,13 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         # When enabling safe type check, Arrow 0.11.0+ disallows overflow cast.
         with self.sql_conf({
-                "spark.sql.execution.pandas.arrowSafeTypeConversion": True}):
+                "spark.sql.execution.pandas.convertToArrowArraySafely": True}):
             with self.assertRaisesRegexp(Exception,
                                          "Exception thrown when converting pandas.Series"):
                 df.withColumn('udf', udf('id')).collect()
 
         # Disabling safe type check, let Arrow do the cast anyway.
-        with self.sql_conf({"spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
+        with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             df.withColumn('udf', udf('id')).collect()
 
 

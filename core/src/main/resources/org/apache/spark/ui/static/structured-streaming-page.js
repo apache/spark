@@ -106,12 +106,12 @@ function drawAreaStack(id, labels, values, minX, maxX, minY, maxY) {
         .on('mouseover', function(d) {
             var tip = '';
             var idx = 0;
-            var _values = timeToValues[d._x]
+            var _values = formattedTimeToValues[d._x];
             _values.forEach(function (k) {
                 tip += labels[idx] + ': ' + k + '   ';
                 idx += 1;
             });
-            tip += " at " + d._x
+            tip += " at " + formattedTimeTipStrings[d._x];
             showBootstrapTooltip(d3.select(this).node(), tip);
         })
         .on('mouseout',  function() {

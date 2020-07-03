@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
@@ -42,6 +43,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
 
@@ -94,9 +96,8 @@ case class ScriptTransformationExec(
       // This new thread will consume the ScriptTransformation's input rows and write them to the
       // external process. That process's output will be read by this current thread.
       val writerThread = new ScriptTransformationWriterThread(
-        inputIterator,
+        inputIterator.map(outputProjection),
         input.map(_.dataType),
-        outputProjection,
         inputSerde,
         inputSoi,
         ioschema,
@@ -137,6 +138,15 @@ case class ScriptTransformationExec(
             throw writerThread.exception.get
           }
 
+          // There can be a lag between reader read EOF and the process termination.
+          // If the script fails to startup, this kind of error may be missed.
+          // So explicitly waiting for the process termination.
+          val timeout = conf.getConf(SQLConf.SCRIPT_TRANSFORMATION_EXIT_TIMEOUT)
+          val exitRes = proc.waitFor(timeout, TimeUnit.SECONDS)
+          if (!exitRes) {
+            log.warn(s"Transformation script process exits timeout in $timeout seconds")
+          }
+
           if (!proc.isAlive) {
             val exitCode = proc.exitValue()
             if (exitCode != 0) {
@@ -174,7 +184,6 @@ case class ScriptTransformationExec(
                     // Ideally the proc should *not* be alive at this point but
                     // there can be a lag between EOF being written out and the process
                     // being terminated. So explicitly waiting for the process to be done.
-                    proc.waitFor()
                     checkFailureAndPropagate()
                     return false
                 }
@@ -249,16 +258,15 @@ case class ScriptTransformationExec(
 private class ScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
-    outputProjection: Projection,
     @Nullable inputSerde: AbstractSerDe,
-    @Nullable inputSoi: ObjectInspector,
+    @Nullable inputSoi: StructObjectInspector,
     ioschema: HiveScriptIOSchema,
     outputStream: OutputStream,
     proc: Process,
     stderrBuffer: CircularBuffer,
     taskContext: TaskContext,
     conf: Configuration
-  ) extends Thread("Thread-ScriptTransformation-Feed") with Logging {
+  ) extends Thread("Thread-ScriptTransformation-Feed") with HiveInspectors with Logging {
 
   setDaemon(true)
 
@@ -278,8 +286,8 @@ private class ScriptTransformationWriterThread(
     var threwException: Boolean = true
     val len = inputSchema.length
     try {
-      iter.map(outputProjection).foreach { row =>
-        if (inputSerde == null) {
+      if (inputSerde == null) {
+        iter.foreach { row =>
           val data = if (len == 0) {
             ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
           } else {
@@ -295,10 +303,21 @@ private class ScriptTransformationWriterThread(
             sb.toString()
           }
           outputStream.write(data.getBytes(StandardCharsets.UTF_8))
-        } else {
-          val writable = inputSerde.serialize(
-            row.asInstanceOf[GenericInternalRow].values, inputSoi)
+        }
+      } else {
+        // Convert Spark InternalRows to hive data via `HiveInspectors.wrapperFor`.
+        val hiveData = new Array[Any](inputSchema.length)
+        val fieldOIs = inputSoi.getAllStructFieldRefs.asScala.map(_.getFieldObjectInspector).toArray
+        val wrappers = fieldOIs.zip(inputSchema).map { case (f, dt) => wrapperFor(f, dt) }
 
+        iter.foreach { row =>
+          var i = 0
+          while (i < fieldOIs.length) {
+            hiveData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, inputSchema(i)))
+            i += 1
+          }
+
+          val writable = inputSerde.serialize(hiveData, inputSoi)
           if (scriptInputWriter != null) {
             scriptInputWriter.write(writable)
           } else {
@@ -374,14 +393,13 @@ case class HiveScriptIOSchema (
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
 
-  def initInputSerDe(input: Seq[Expression]): Option[(AbstractSerDe, ObjectInspector)] = {
+  def initInputSerDe(input: Seq[Expression]): Option[(AbstractSerDe, StructObjectInspector)] = {
     inputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(input)
       val serde = initSerDe(serdeClass, columns, columnTypes, inputSerdeProps)
       val fieldObjectInspectors = columnTypes.map(toInspector)
       val objectInspector = ObjectInspectorFactory
         .getStandardStructObjectInspector(columns.asJava, fieldObjectInspectors.asJava)
-        .asInstanceOf[ObjectInspector]
       (serde, objectInspector)
     }
   }

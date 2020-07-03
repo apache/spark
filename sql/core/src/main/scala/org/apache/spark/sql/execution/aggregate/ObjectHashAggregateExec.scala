@@ -67,11 +67,7 @@ case class ObjectHashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with AliasAwareOutputPartitioning {
-
-  private[this] val aggregateBufferAttributes = {
-    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-  }
+  extends BaseAggregateExec with AliasAwareOutputPartitioning {
 
   override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -83,11 +79,6 @@ case class ObjectHashAggregateExec(
   )
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
-
-  override def producedAttributes: AttributeSet =
-    AttributeSet(aggregateAttributes) ++
-    AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
-    AttributeSet(aggregateBufferAttributes)
 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
@@ -123,7 +114,7 @@ case class ObjectHashAggregateExec(
             resultExpressions,
             (expressions, inputSchema) =>
               MutableProjection.create(expressions, inputSchema),
-            child.output,
+            inputAttributes,
             iter,
             fallbackCountThreshold,
             numOutputRows)

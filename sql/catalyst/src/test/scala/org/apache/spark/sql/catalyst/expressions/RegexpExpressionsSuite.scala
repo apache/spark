@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -255,6 +256,10 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nonNullExpr = RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
     checkEvaluation(nonNullExpr, "num-num", row1)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      RegExpReplace(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
   test("SPARK-22570: RegExpReplace should not create a lot of global variables") {
@@ -293,6 +298,22 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nonNullExpr = RegExpExtract(Literal("100-200"), Literal("(\\d+)-(\\d+)"), Literal(1))
     checkEvaluation(nonNullExpr, "100", row1)
+
+    // invalid group index
+    val row8 = create_row("100-200", "(\\d+)-(\\d+)", 3)
+    val row9 = create_row("100-200", "(\\d+).*", 2)
+    val row10 = create_row("100-200", "\\d+", 1)
+
+    checkExceptionInExpression[IllegalArgumentException](
+      expr, row8, "Regex group count is 2, but the specified group index is 3")
+    checkExceptionInExpression[IllegalArgumentException](
+      expr, row9, "Regex group count is 1, but the specified group index is 2")
+    checkExceptionInExpression[IllegalArgumentException](
+      expr, row10, "Regex group count is 0, but the specified group index is 1")
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      RegExpExtract(Literal("\"quote"), Literal("\"quote"), Literal(1)) :: Nil)
   }
 
   test("SPLIT") {
@@ -315,6 +336,18 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringSplit(s1, s2, -1), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(StringSplit(s1, s2, -1), null, row2)
     checkEvaluation(StringSplit(s1, s2, -1), null, row3)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      StringSplit(Literal("\"quote"), Literal("\"quote"), Literal(-1)) :: Nil)
   }
 
+  test("SPARK-30759: cache initialization for literal patterns") {
+    val expr = "A" like Literal.create("a", StringType)
+    expr.eval()
+    val cache = expr.getClass.getSuperclass
+      .getDeclaredFields.filter(_.getName.endsWith("cache")).head
+    cache.setAccessible(true)
+    assert(cache.get(expr).asInstanceOf[java.util.regex.Pattern].pattern().contains("a"))
+  }
 }

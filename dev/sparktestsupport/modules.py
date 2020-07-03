@@ -364,7 +364,6 @@ pyspark_sql = Module(
         "pyspark.sql.avro.functions",
         "pyspark.sql.pandas.conversion",
         "pyspark.sql.pandas.map_ops",
-        "pyspark.sql.pandas.functions",
         "pyspark.sql.pandas.group_ops",
         "pyspark.sql.pandas.types",
         "pyspark.sql.pandas.serializers",
@@ -395,6 +394,21 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_utils",
+    ]
+)
+
+
+pyspark_resource = Module(
+    name="pyspark-resource",
+    dependencies=[
+        pyspark_core
+    ],
+    source_file_regexes=[
+        "python/pyspark/resource"
+    ],
+    python_test_goals=[
+        # unittests
+        "pyspark.resource.tests.test_resources",
     ]
 )
 

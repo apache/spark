@@ -29,7 +29,8 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
+import org.apache.spark.internal.config.{CPUS_PER_TASK, EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
+import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING, SKIP_VALIDATE_CORES_TESTING}
 import org.apache.spark.util.Utils
 
 /**
@@ -149,7 +150,7 @@ private[spark] object ResourceUtils extends Logging {
   def listResourceIds(sparkConf: SparkConf, componentName: String): Seq[ResourceID] = {
     sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_PREFIX.").map { case (key, _) =>
       key.substring(0, key.indexOf('.'))
-    }.toSet.toSeq.map(name => new ResourceID(componentName, name))
+    }.distinct.map(name => new ResourceID(componentName, name))
   }
 
   def parseAllResourceRequests(
@@ -161,19 +162,23 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   // Used to take a fraction amount from a task resource requirement and split into a real
-  // integer amount and the number of parts expected. For instance, if the amount is 0.5,
-  // the we get (1, 2) back out.
-  // Returns tuple of (amount, numParts)
-  def calculateAmountAndPartsForFraction(amount: Double): (Int, Int) = {
-    val parts = if (amount <= 0.5) {
-      Math.floor(1.0 / amount).toInt
-    } else if (amount % 1 != 0) {
+  // integer amount and the number of slots per address. For instance, if the amount is 0.5,
+  // the we get (1, 2) back out. This indicates that for each 1 address, it has 2 slots per
+  // address, which allows you to put 2 tasks on that address. Note if amount is greater
+  // than 1, then the number of slots per address has to be 1. This would indicate that a
+  // would have multiple addresses assigned per task. This can be used for calculating
+  // the number of tasks per executor -> (executorAmount * numParts) / (integer amount).
+  // Returns tuple of (integer amount, numParts)
+  def calculateAmountAndPartsForFraction(doubleAmount: Double): (Int, Int) = {
+    val parts = if (doubleAmount <= 0.5) {
+      Math.floor(1.0 / doubleAmount).toInt
+    } else if (doubleAmount % 1 != 0) {
       throw new SparkException(
-        s"The resource amount ${amount} must be either <= 0.5, or a whole number.")
+        s"The resource amount ${doubleAmount} must be either <= 0.5, or a whole number.")
     } else {
       1
     }
-    (Math.ceil(amount).toInt, parts)
+    (Math.ceil(doubleAmount).toInt, parts)
   }
 
   // Add any task resource requests from the spark conf to the TaskResourceRequests passed in
@@ -357,8 +362,13 @@ private[spark] object ResourceUtils extends Logging {
 
   def logResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
     : Unit = {
+    val resourceInfo = if (resources.isEmpty) {
+      s"No custom resources configured for $componentName."
+    } else {
+      s"Custom resources for $componentName:\n${resources.mkString("\n")}"
+    }
     logInfo("==============================================================")
-    logInfo(s"Resources for $componentName:\n${resources.mkString("\n")}")
+    logInfo(resourceInfo)
     logInfo("==============================================================")
   }
 
@@ -380,6 +390,91 @@ private[spark] object ResourceUtils extends Logging {
     }
     throw new SparkException(s"None of the discovery plugins returned ResourceInformation for " +
       s"${resourceRequest.id.resourceName}")
+  }
+
+  def validateTaskCpusLargeEnough(sparkConf: SparkConf, execCores: Int, taskCpus: Int): Boolean = {
+    // Number of cores per executor must meet at least one task requirement.
+    if (execCores < taskCpus) {
+      throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
+        s"the number of cpus per task = $taskCpus.")
+    }
+    true
+  }
+
+  // the option executor cores parameter is by the different local modes since it not configured
+  // via the config
+  def warnOnWastedResources(
+      rp: ResourceProfile,
+      sparkConf: SparkConf,
+      execCores: Option[Int] = None): Unit = {
+    // There have been checks on the ResourceProfile to make sure the executor resources were
+    // specified and are large enough if any task resources were specified.
+    // Now just do some sanity test and log warnings when it looks like the user will
+    // waste some resources.
+    val coresKnown = rp.isCoresLimitKnown
+    var limitingResource = rp.limitingResource(sparkConf)
+    var maxTaskPerExec = rp.maxTasksPerExecutor(sparkConf)
+    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, sparkConf)
+    val cores = if (execCores.isDefined) {
+      execCores.get
+    } else if (coresKnown) {
+      rp.getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
+    } else {
+      // can't calculate cores limit
+      return
+    }
+    // when executor cores config isn't set, we can't calculate the real limiting resource
+    // and number of tasks per executor ahead of time, so calculate it now.
+    if (!coresKnown) {
+      val numTasksPerExecCores = cores / taskCpus
+      val numTasksPerExecCustomResource = rp.maxTasksPerExecutor(sparkConf)
+      if (limitingResource.isEmpty ||
+        (limitingResource.nonEmpty && numTasksPerExecCores < numTasksPerExecCustomResource)) {
+        limitingResource = ResourceProfile.CPUS
+        maxTaskPerExec = numTasksPerExecCores
+      }
+    }
+    val taskReq = ResourceProfile.getCustomTaskResources(rp)
+    val execReq = ResourceProfile.getCustomExecutorResources(rp)
+
+    if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS)) {
+      if ((taskCpus * maxTaskPerExec) < cores) {
+        val resourceNumSlots = Math.floor(cores/taskCpus).toInt
+        val message = s"The configuration of cores (exec = ${cores} " +
+          s"task = ${taskCpus}, runnable tasks = ${resourceNumSlots}) will " +
+          s"result in wasted resources due to resource ${limitingResource} limiting the " +
+          s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
+          "your configuration."
+        if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
+          throw new SparkException(message)
+        } else {
+          logWarning(message)
+        }
+      }
+    }
+
+    taskReq.foreach { case (rName, treq) =>
+      val execAmount = execReq(rName).amount
+      // handles fractional
+      val taskAmount = rp.getSchedulerTaskResourceAmount(rName)
+      val numParts = rp.getNumSlotsPerAddress(rName, sparkConf)
+      if (maxTaskPerExec < (execAmount * numParts / taskAmount)) {
+        val origTaskAmount = treq.amount
+        val taskReqStr = s"${origTaskAmount}/${numParts}"
+        val resourceNumSlots = Math.floor(execAmount * numParts / taskAmount).toInt
+        val message = s"The configuration of resource: ${treq.resourceName} " +
+          s"(exec = ${execAmount}, task = ${taskReqStr}, " +
+          s"runnable tasks = ${resourceNumSlots}) will " +
+          s"result in wasted resources due to resource ${limitingResource} limiting the " +
+          s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
+          "your configuration."
+        if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
+          throw new SparkException(message)
+        } else {
+          logWarning(message)
+        }
+      }
+    }
   }
 
   // known types of resources

@@ -36,19 +36,13 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param parentSession a HiveSession from SessionManager
  */
 private[hive] class SparkGetCatalogsOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession)
-  extends GetCatalogsOperation(parentSession) with Logging {
-
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.eventManager.onOperationClosed(statementId)
-  }
+  extends GetCatalogsOperation(parentSession)
+  with SparkOperation
+  with Logging {
 
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     val logMsg = "Listing catalogs"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)

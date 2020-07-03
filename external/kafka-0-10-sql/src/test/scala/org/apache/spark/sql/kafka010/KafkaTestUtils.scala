@@ -27,6 +27,7 @@ import javax.security.auth.login.Configuration
 import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.util.Random
+import scala.util.control.NonFatal
 
 import com.google.common.io.Files
 import kafka.api.Request
@@ -36,7 +37,7 @@ import kafka.zk.KafkaZkClient
 import org.apache.hadoop.minikdc.MiniKdc
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, ListConsumerGroupsResult, NewPartitions, NewTopic}
+import org.apache.kafka.clients.admin._
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
@@ -54,7 +55,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaTokenUtil
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -67,8 +68,6 @@ class KafkaTestUtils(
     secure: Boolean = false) extends Logging {
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
-  private val IBM_KRB_DEBUG_CONFIG = "com.ibm.security.krb5.Krb5Debug"
-  private val SUN_KRB_DEBUG_CONFIG = "sun.security.krb5.debug"
 
   private val localCanonicalHostName = InetAddress.getLoopbackAddress().getCanonicalHostName()
   logInfo(s"Local host name is $localCanonicalHostName")
@@ -136,8 +135,30 @@ class KafkaTestUtils(
     val kdcDir = Utils.createTempDir()
     val kdcConf = MiniKdc.createConf()
     kdcConf.setProperty(MiniKdc.DEBUG, "true")
-    kdc = new MiniKdc(kdcConf, kdcDir)
-    kdc.start()
+    // The port for MiniKdc service gets selected in the constructor, but will be bound
+    // to it later in MiniKdc.start() -> MiniKdc.initKDCServer() -> KdcServer.start().
+    // In meantime, when some other service might capture the port during this progress, and
+    // cause BindException.
+    // This makes our tests which have dedicated JVMs and rely on MiniKDC being flaky
+    //
+    // https://issues.apache.org/jira/browse/HADOOP-12656 get fixed in Hadoop 2.8.0.
+    //
+    // The workaround here is to periodically repeat this process with a timeout , since we are
+    // using Hadoop 2.7.4 as default.
+    // https://issues.apache.org/jira/browse/SPARK-31631
+    eventually(timeout(60.seconds), interval(1.second)) {
+      try {
+        kdc = new MiniKdc(kdcConf, kdcDir)
+        kdc.start()
+      } catch {
+        case NonFatal(e) =>
+          if (kdc != null) {
+            kdc.stop()
+            kdc = null
+          }
+          throw e
+      }
+    }
     // TODO https://issues.apache.org/jira/browse/SPARK-30037
     // Need to build spark's own MiniKDC and customize krb5.conf like Kafka
     rewriteKrb5Conf()
@@ -170,6 +191,7 @@ class KafkaTestUtils(
 
     kdc.getKrb5conf.delete()
     Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
+    logDebug(s"krb5.conf file content: $krb5confStr")
   }
 
   private def addedKrb5Config(key: String, value: String): String = {
@@ -204,7 +226,7 @@ class KafkaTestUtils(
     val content =
       s"""
       |Server {
-      |  ${KafkaTokenUtil.getKrb5LoginModuleName} required
+      |  ${SecurityUtils.getKrb5LoginModuleName()} required
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
@@ -214,7 +236,7 @@ class KafkaTestUtils(
       |};
       |
       |Client {
-      |  ${KafkaTokenUtil.getKrb5LoginModuleName} required
+      |  ${SecurityUtils.getKrb5LoginModuleName()} required
       |  useKeyTab=true
       |  storeKey=true
       |  useTicketCache=false
@@ -224,7 +246,7 @@ class KafkaTestUtils(
       |};
       |
       |KafkaServer {
-      |  ${KafkaTokenUtil.getKrb5LoginModuleName} required
+      |  ${SecurityUtils.getKrb5LoginModuleName()} required
       |  serviceName="$brokerServiceName"
       |  useKeyTab=true
       |  storeKey=true
@@ -279,7 +301,7 @@ class KafkaTestUtils(
     }
 
     if (secure) {
-      setupKrbDebug()
+      SecurityUtils.setGlobalKrbDebug(true)
       setUpMiniKdc()
       val jaasConfigFile = createKeytabsAndJaasConfigFile()
       System.setProperty(JAVA_AUTH_CONFIG, jaasConfigFile)
@@ -294,14 +316,6 @@ class KafkaTestUtils(
     }
   }
 
-  private def setupKrbDebug(): Unit = {
-    if (System.getProperty("java.vendor").contains("IBM")) {
-      System.setProperty(IBM_KRB_DEBUG_CONFIG, "all")
-    } else {
-      System.setProperty(SUN_KRB_DEBUG_CONFIG, "true")
-    }
-  }
-
   /** Teardown the whole servers, including Kafka broker and Zookeeper */
   def teardown(): Unit = {
     if (leakDetector != null) {
@@ -309,6 +323,7 @@ class KafkaTestUtils(
     }
     brokerReady = false
     zkReady = false
+    kdcReady = false
 
     if (producer != null) {
       producer.close()
@@ -317,6 +332,7 @@ class KafkaTestUtils(
 
     if (adminClient != null) {
       adminClient.close()
+      adminClient = null
     }
 
     if (server != null) {
@@ -351,17 +367,10 @@ class KafkaTestUtils(
     Configuration.getConfiguration.refresh()
     if (kdc != null) {
       kdc.stop()
+      kdc = null
     }
     UserGroupInformation.reset()
-    teardownKrbDebug()
-  }
-
-  private def teardownKrbDebug(): Unit = {
-    if (System.getProperty("java.vendor").contains("IBM")) {
-      System.clearProperty(IBM_KRB_DEBUG_CONFIG)
-    } else {
-      System.clearProperty(SUN_KRB_DEBUG_CONFIG)
-    }
+    SecurityUtils.setGlobalKrbDebug(false)
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */

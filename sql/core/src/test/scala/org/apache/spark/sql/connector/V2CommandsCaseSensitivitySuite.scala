@@ -151,6 +151,17 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     }
   }
 
+  test("AlterTable: add column resolution - column position referencing new column") {
+    alterTableTest(
+      Seq(
+        TableChange.addColumn(
+          Array("x"), LongType, true, null, ColumnPosition.after("id")),
+        TableChange.addColumn(
+          Array("y"), LongType, true, null, ColumnPosition.after("X"))),
+      Seq("Couldn't find the reference column for AFTER X at root")
+    )
+  }
+
   test("AlterTable: add column resolution - nested positional") {
     Seq("X", "Y").foreach { ref =>
       alterTableTest(
@@ -159,6 +170,17 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
         Seq("reference column", ref)
       )
     }
+  }
+
+  test("AlterTable: add column resolution - column position referencing new nested column") {
+    alterTableTest(
+      Seq(
+        TableChange.addColumn(
+          Array("point", "z"), LongType, true, null),
+        TableChange.addColumn(
+          Array("point", "zz"), LongType, true, null, ColumnPosition.after("Z"))),
+      Seq("Couldn't find the reference column for AFTER Z at point")
+    )
   }
 
   test("AlterTable: drop column resolution") {
@@ -207,13 +229,17 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   }
 
   private def alterTableTest(change: TableChange, error: Seq[String]): Unit = {
+    alterTableTest(Seq(change), error)
+  }
+
+  private def alterTableTest(changes: Seq[TableChange], error: Seq[String]): Unit = {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val plan = AlterTable(
           catalog,
           Identifier.of(Array(), "table_name"),
           TestRelation2,
-          Seq(change)
+          changes
         )
 
         if (caseSensitive) {

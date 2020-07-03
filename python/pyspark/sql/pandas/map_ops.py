@@ -45,10 +45,10 @@ class PandasMapOpsMixin(object):
         :param schema: the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
-        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
-        >>> def filter_func(batch_iter):
-        ...     for pdf in batch_iter:
+        >>> def filter_func(iterator):
+        ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
         >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
         +---+---+

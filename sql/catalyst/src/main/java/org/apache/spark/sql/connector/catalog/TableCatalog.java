@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
@@ -34,8 +34,10 @@ import java.util.Map;
  * {@link #alterTable(Identifier, TableChange...)} will be normalized to match the case used in the
  * table schema when updating, renaming, or dropping existing columns when catalyst analysis is case
  * insensitive.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface TableCatalog extends CatalogPlugin {
 
   /**
@@ -133,6 +135,8 @@ public interface TableCatalog extends CatalogPlugin {
    * <p>
    * Implementations may reject the requested changes. If any change is rejected, none of the
    * changes should be applied to the table.
+   * <p>
+   * The requested changes must be applied in the order given.
    * <p>
    * If the catalog supports views and contains a view for the identifier and not a table, this
    * must throw {@link NoSuchTableException}.
