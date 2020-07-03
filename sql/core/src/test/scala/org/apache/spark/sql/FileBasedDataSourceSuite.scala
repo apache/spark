@@ -588,7 +588,6 @@ class FileBasedDataSourceSuite extends QueryTest
       }.getMessage
       assert(msg.contains("Unable to infer schema for CSV. It must be specified manually."))
     }
-    assert(true)
   }
 
   test("SPARK-31962 - when modifiedDateFilter specified and" +
@@ -597,13 +596,13 @@ class FileBasedDataSourceSuite extends QueryTest
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
-      spark.read
+      val df = spark.read
           .option("modifiedDateFilter", "2020-05-01T01:00:00")
           .option("pathGlobFilter", "*.csv")
           .format("csv")
           .load(path.toString)
+      assert(df.count() == 1)
     }
-    assert(true)
   }
 
   test("SPARK-31962 - when modifiedDateFilter specified and " +
