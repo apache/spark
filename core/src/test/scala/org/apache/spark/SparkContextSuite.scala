@@ -935,7 +935,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("Disallow to create SparkContext in executors") {
+  test("SPARK-32160: Disallow to create SparkContext in executors") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
 
     val error = intercept[SparkException] {

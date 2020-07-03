@@ -2562,7 +2562,7 @@ object SparkContext extends Logging {
    *
    * Throws an exception if a SparkContext is about to be created in executors.
    */
-  private[spark] def assertOnDriver(): Unit = {
+  private def assertOnDriver(): Unit = {
     if (TaskContext.get != null) {
       // we're accessing it during task execution, fail.
       throw new IllegalStateException(
