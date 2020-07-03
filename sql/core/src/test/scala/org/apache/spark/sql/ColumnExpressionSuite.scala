@@ -999,18 +999,20 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }.getMessage should include("No such struct field x in a")
   }
 
-  test("withField should throw an exception if any intermediate field is not a struct") {
+  test("withField should throw an exception if intermediate field is not a struct") {
     intercept[AnalysisException] {
       structLevel1.withColumn("a", 'a.withField("b.a", lit(2)))
     }.getMessage should include("struct argument should be struct type, got: int")
+  }
 
+  test("withField should throw an exception if intermediate field reference is ambiguous") {
     intercept[AnalysisException] {
       val structLevel2: DataFrame = spark.createDataFrame(
         sparkContext.parallelize(Row(Row(Row(1, null, 3), 4)) :: Nil),
         StructType(Seq(
           StructField("a", StructType(Seq(
             StructField("a", structType, nullable = false),
-            StructField("a", IntegerType, nullable = false))),
+            StructField("a", structType, nullable = false))),
             nullable = false))))
 
       structLevel2.withColumn("a", 'a.withField("a.b", lit(2)))
