@@ -39,7 +39,7 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
       // Remove redundant field extraction.
       case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
         createNamedStruct.valExprs(ordinal)
-      case GetStructField(w@WithFields(struct, names, valExprs), ordinal, maybeName) =>
+      case GetStructField(w @ WithFields(struct, names, valExprs), ordinal, maybeName) =>
         val name = w.dataType(ordinal).name
         val matches = names.zip(valExprs).filter(_._1 == name)
         if (matches.nonEmpty) {
