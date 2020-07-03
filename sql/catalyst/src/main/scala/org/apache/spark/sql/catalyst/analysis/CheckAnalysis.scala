@@ -158,7 +158,9 @@ trait CheckAnalysis extends PredicateHelper {
           case g: GroupingID =>
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
-          case Alias(w: WindowFunction, _) =>
+          case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
+            !e.isInstanceOf[WindowExpression] =>
+            val w = e.children.find(_.isInstanceOf[WindowFunction]).get
             failAnalysis(s"Window function $w requires an OVER clause.")
 
           case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
