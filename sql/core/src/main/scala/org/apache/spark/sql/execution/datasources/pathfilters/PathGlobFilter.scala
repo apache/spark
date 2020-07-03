@@ -17,19 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.pathfilters
 
-import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileStatus, GlobFilter}
 
-import org.apache.spark.sql.SparkSession
-
-class PathFilterOptions(
-    sparkSession: SparkSession,
-    hadoopConf: Configuration,
-    parameters: Map[String, String]) {
-  def filters(): Iterable[FileIndexFilter] = {
-    val pathGlobFilter = parameters.get("pathGlobFilter").map(new PathGlobFilter(_))
-    val modifiedDateFilter = parameters
-      .get("modifiedDateFilter")
-      .map(new ModifiedDateFilter(sparkSession, hadoopConf, _))
-    pathGlobFilter ++ modifiedDateFilter
-  }
+class PathGlobFilter(path: String) extends GlobFilter(path) with FileIndexFilter {
+  override def accept(fileStatus: FileStatus): Boolean = accept(fileStatus.getPath)
 }

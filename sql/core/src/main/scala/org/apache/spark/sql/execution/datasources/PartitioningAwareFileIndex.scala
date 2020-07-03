@@ -61,7 +61,7 @@ abstract class PartitioningAwareFileIndex(
     sparkSession, hadoopConf, parameters).filters()
 
   protected def matchPathPattern(file: FileStatus): Boolean = {
-    pathFilters.forall(_.accept(file.getPath))
+    pathFilters.forall(_.accept(file))
   }
 
   protected lazy val recursiveFileLookup = {

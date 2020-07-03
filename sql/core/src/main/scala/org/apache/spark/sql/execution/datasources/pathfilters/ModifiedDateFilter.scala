@@ -21,7 +21,7 @@ import java.time.{LocalDateTime, ZoneOffset}
 import java.time.format.DateTimeFormatter
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.SparkSession
 
@@ -38,21 +38,18 @@ spark.read
 .option("modifiedDateFilter", "2020-05-01T12:00:00")
 .format("csv")
 .load("/mnt/Deltas")
-  * @param sparkSession SparkSession
- *  @param hadoopConf Hadoop Configuration object
-  * @param timestamp string representing timestamp
-  */
-class ModifiedDateFilter(sparkSession: SparkSession,
-    hadoopConf: Configuration,
-    timestamp: String)
-    extends PathFilter
-    with Serializable {
-    private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
-    private val parsedDate = LocalDateTime.parse(timestamp, formatter)
-    private val afterDateSeconds = parsedDate.toEpochSecond(ZoneOffset.UTC) * 1000
+ * @param sparkSession SparkSession
+ * @param hadoopConf Hadoop Configuration object
+ * @param timestamp string representing timestamp
+ */
+class ModifiedDateFilter(sparkSession: SparkSession, hadoopConf: Configuration, timestamp: String)
+    extends FileIndexFilter {
+  private val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+  private val parsedDate = LocalDateTime.parse(timestamp, formatter)
+  private val afterDateSeconds = parsedDate.toEpochSecond(ZoneOffset.UTC) * 1000
 
-  override def accept(path: Path): Boolean = {
-    val fileName = path.getFileSystem(hadoopConf).getFileStatus(path)
-    (fileName.getModificationTime - afterDateSeconds) > 0
+  override def accept(fileStatus: FileStatus): Boolean = {
+    (fileStatus.getModificationTime - afterDateSeconds) > 0
   }
+  override def accept(path: Path): Boolean = true
 }
