@@ -310,11 +310,11 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def timeoutCancel(): Unit = {
+  private def timeoutCancel(): Unit = {
     synchronized {
       if (!getStatus.getState.isTerminal) {
-        cleanup()
         setState(OperationState.TIMEDOUT)
+        cleanup()
         logInfo(s"Timeout and Cancel query with $statementId ")
         HiveThriftServer2.eventManager.onStatementCanceled(statementId)
       }
