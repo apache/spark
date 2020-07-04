@@ -2656,6 +2656,14 @@ object SQLConf {
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
 
+  val ALLOW_MISSING_COLUMNS_IN_UNION_BY_NAME =
+    buildConf("spark.sql.allowMissingColumnsInUnionByName")
+    .doc("If this config is enabled, `Dataset.unionByName` allows different set of column names " +
+      "between two Datasets. Missing columns at each side, will be filled with null values.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3250,6 +3258,9 @@ class SQLConf extends Serializable with Logging {
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
+
+  def allowMissingColumnsInUnionByName: Boolean =
+    getConf(SQLConf.ALLOW_MISSING_COLUMNS_IN_UNION_BY_NAME)
 
   /** ********************** SQLConf functionality methods ************ */
 
