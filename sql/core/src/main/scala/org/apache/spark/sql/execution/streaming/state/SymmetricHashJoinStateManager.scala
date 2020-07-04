@@ -83,7 +83,13 @@ class SymmetricHashJoinStateManager(
   =====================================================
    */
 
-  /** Get all the values of a key */
+  /**
+   * Get all the values of a key.
+   *
+   * NOTE: the returned row "may" be reused during execution (to avoid initialization of object),
+   * so the caller should ensure that the logic doesn't affect by such behavior. Call copy()
+   * against the row if needed.
+   */
   def get(key: UnsafeRow): Iterator[UnsafeRow] = {
     val numValues = keyToNumValues.get(key)
     keyWithIndexToValue.getAll(key, numValues).map(_.value)
@@ -99,6 +105,10 @@ class SymmetricHashJoinStateManager(
   /**
    * Get all the matched values for given join condition, with marking matched.
    * This method is designed to mark joined rows properly without exposing internal index of row.
+   *
+   * NOTE: the "value" field in JoinedRow "may" be reused during execution
+   * (to avoid initialization of object), so the caller should ensure that the logic
+   * doesn't affect by such behavior. Call copy() against these rows if needed.
    */
   def getJoinedRows(
       key: UnsafeRow,
@@ -250,7 +260,7 @@ class SymmetricHashJoinStateManager(
       }
 
       override def getNext(): KeyToValuePair = {
-        val currentValue = findNextValueForIndex()
+        var currentValue = findNextValueForIndex()
 
         // If there's no value, clean up and finish. There aren't any more available.
         if (currentValue == null) {
@@ -258,6 +268,9 @@ class SymmetricHashJoinStateManager(
           finished = true
           return null
         }
+
+        // Make a copy on value row, as below cleanup logic may update the value row silently.
+        currentValue = currentValue.copy(value = currentValue.value.copy())
 
         // The backing store is arraylike - we as the caller are responsible for filling back in
         // any hole. So we swap the last element into the hole and decrement numValues to shorten.
@@ -457,8 +470,9 @@ class SymmetricHashJoinStateManager(
     /**
      * Convert the value row to (actual value, match) pair.
      *
-     * NOTE: implementations should ensure the result row is NOT reused during execution, as
-     * caller may use the value to store without copy().
+     * NOTE: depending on the implementation, the row (actual value) in the pair "may" be reused
+     * during execution (to avoid initialization of object), so the caller should ensure that
+     * the logic doesn't affect by such behavior. Call copy() against the row if needed.
      */
     def convertValue(value: UnsafeRow): ValueAndMatchPair
 
@@ -508,7 +522,7 @@ class SymmetricHashJoinStateManager(
 
     override def convertValue(value: UnsafeRow): ValueAndMatchPair = {
       if (value != null) {
-        ValueAndMatchPair(valueRowGenerator(value).copy(),
+        ValueAndMatchPair(valueRowGenerator(value),
           value.getBoolean(indexOrdinalInValueWithMatchedRow))
       } else {
         null
@@ -545,13 +559,21 @@ class SymmetricHashJoinStateManager(
     protected val stateStore = getStateStore(keyWithIndexSchema,
       valueRowConverter.valueAttributes.toStructType)
 
+    /**
+     * NOTE: the "value" field in return value "may" be reused during execution
+     * (to avoid initialization of object), so the caller should ensure that the logic
+     * doesn't affect by such behavior. Call copy() against the row if needed.
+     */
     def get(key: UnsafeRow, valueIndex: Long): ValueAndMatchPair = {
       valueRowConverter.convertValue(stateStore.get(keyWithIndexRow(key, valueIndex)))
     }
 
     /**
-     * Get all values and indices for the provided key.
-     * Should not return null.
+     * Get all values and indices for the provided key. Should not return null.
+     *
+     * NOTE: the "key" and "value" field in return value "may" be reused during execution
+     * (to avoid initialization of object), so the caller should ensure that the logic
+     * doesn't affect by such behavior. Call copy() against these rows if needed.
      */
     def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
       val keyWithIndexAndValue = new KeyWithIndexAndValue()
@@ -598,6 +620,11 @@ class SymmetricHashJoinStateManager(
       }
     }
 
+    /**
+     * NOTE: the "key" and "value" field in return value "may" be reused during execution
+     * (to avoid initialization of object), so the caller should ensure that the logic
+     * doesn't affect by such behavior. Call copy() against these rows if needed.
+     */
     def iterator: Iterator[KeyWithIndexAndValue] = {
       val keyWithIndexAndValue = new KeyWithIndexAndValue()
       stateStore.getRange(None, None).map { pair =>
