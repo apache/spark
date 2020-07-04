@@ -62,21 +62,30 @@ trait HashJoin extends BaseJoinExec {
   protected lazy val (buildKeys, streamedKeys) = {
     require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
       "Join keys from two sides should have same types")
-    val lkeys = bindReferences(HashJoin.rewriteKeyExpr(leftKeys), left.output)
-    val rkeys = bindReferences(HashJoin.rewriteKeyExpr(rightKeys), right.output)
     buildSide match {
-      case BuildLeft => (lkeys, rkeys)
-      case BuildRight => (rkeys, lkeys)
+      case BuildLeft => (leftKeys, rightKeys)
+      case BuildRight => (rightKeys, leftKeys)
     }
   }
 
+  private lazy val (buildOutput, streamedOutput) = {
+    buildSide match {
+      case BuildLeft => (left.output, right.output)
+      case BuildRight => (right.output, left.output)
+    }
+  }
 
+  protected lazy val buildBoundKeys =
+    bindReferences(HashJoin.rewriteKeyExpr(buildKeys), buildOutput)
+
+  protected lazy val streamedBoundKeys =
+    bindReferences(HashJoin.rewriteKeyExpr(streamedKeys), streamedOutput)
 
   protected def buildSideKeyGenerator(): Projection =
-    UnsafeProjection.create(buildKeys)
+    UnsafeProjection.create(buildBoundKeys)
 
   protected def streamSideKeyGenerator(): UnsafeProjection =
-    UnsafeProjection.create(streamedKeys)
+    UnsafeProjection.create(streamedBoundKeys)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
     Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _

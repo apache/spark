@@ -55,7 +55,8 @@ case class ShuffledHashJoinExec(
     val buildTime = longMetric("buildTime")
     val start = System.nanoTime()
     val context = TaskContext.get()
-    val relation = HashedRelation(iter, buildKeys, taskMemoryManager = context.taskMemoryManager())
+    val relation = HashedRelation(
+      iter, buildBoundKeys, taskMemoryManager = context.taskMemoryManager())
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.

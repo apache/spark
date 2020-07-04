@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable
+
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -51,7 +53,7 @@ case class BroadcastHashJoinExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = HashedRelationBroadcastMode(buildKeys)
+    val mode = HashedRelationBroadcastMode(buildBoundKeys)
     buildSide match {
       case BuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
@@ -61,23 +63,64 @@ case class BroadcastHashJoinExec(
   }
 
   override def outputPartitioning: Partitioning = {
-    def buildKeys: Seq[Expression] = buildSide match {
-      case BuildLeft => leftKeys
-      case BuildRight => rightKeys
-    }
-
     joinType match {
       case _: InnerLike =>
         streamedPlan.outputPartitioning match {
-          case h: HashPartitioning =>
-            PartitioningCollection(Seq(h, HashPartitioning(buildKeys, h.numPartitions)))
-          case c: PartitioningCollection
-            if c.partitionings.forall(_.isInstanceOf[HashPartitioning]) =>
-            PartitioningCollection(c.partitionings :+ HashPartitioning(buildKeys, c.numPartitions))
+          case h: HashPartitioning => PartitioningCollection(expandOutputPartitioning(h))
+          case c: PartitioningCollection =>
+            def expand(partitioning: PartitioningCollection): Partitioning = {
+              PartitioningCollection(partitioning.partitionings.flatMap {
+                case h: HashPartitioning => expandOutputPartitioning(h)
+                case c: PartitioningCollection => Seq(expand(c))
+                case other => Seq(other)
+              })
+            }
+            expand(c)
           case other => other
         }
       case _ => streamedPlan.outputPartitioning
     }
+  }
+
+  // An one-to-many mapping from a streamed key to build keys.
+  private lazy val streamedKeyToBuildKeyMapping = {
+    val mapping = mutable.Map.empty[Expression, Seq[Expression]]
+    streamedKeys.zip(buildKeys).foreach {
+      case (streamedKey, buildKey) =>
+        val key = streamedKey.canonicalized
+        mapping.get(key) match {
+          case Some(v) => mapping.put(key, v :+ buildKey)
+          case None => mapping.put(key, Seq(buildKey))
+        }
+    }
+    mapping.toMap
+  }
+
+  // Expands the given partitioning by substituting streamed keys with build keys.
+  // For example, if the expressions for the given partitioning are Seq("a", "b", "c")
+  // where the streamed keys are Seq("b", "c") and the build keys are Seq("x", "y"),
+  // the expanded partitioning will have the following expressions:
+  // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
+  private def expandOutputPartitioning(partitioning: HashPartitioning): Seq[HashPartitioning] = {
+    def generateExprCombinations(
+        current: Seq[Expression],
+        accumulated: Seq[Expression],
+        all: mutable.ListBuffer[Seq[Expression]]): Unit = {
+      if (current.isEmpty) {
+        all += accumulated
+      } else {
+        generateExprCombinations(current.tail, accumulated :+ current.head, all)
+        val mapped = streamedKeyToBuildKeyMapping.get(current.head.canonicalized)
+        if (mapped.isDefined) {
+          mapped.get.foreach(m =>
+            generateExprCombinations(current.tail, accumulated :+ m, all))
+        }
+      }
+    }
+
+    val all = mutable.ListBuffer[Seq[Expression]]()
+    generateExprCombinations(partitioning.expressions, Nil, all)
+    all.map(HashPartitioning(_, partitioning.numPartitions))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -155,13 +198,13 @@ case class BroadcastHashJoinExec(
       ctx: CodegenContext,
       input: Seq[ExprCode]): (ExprCode, String) = {
     ctx.currentVars = input
-    if (streamedKeys.length == 1 && streamedKeys.head.dataType == LongType) {
+    if (streamedBoundKeys.length == 1 && streamedBoundKeys.head.dataType == LongType) {
       // generate the join key as Long
-      val ev = streamedKeys.head.genCode(ctx)
+      val ev = streamedBoundKeys.head.genCode(ctx)
       (ev, ev.isNull)
     } else {
       // generate the join key as UnsafeRow
-      val ev = GenerateUnsafeProjection.createCode(ctx, streamedKeys)
+      val ev = GenerateUnsafeProjection.createCode(ctx, streamedBoundKeys)
       (ev, s"${ev.value}.anyNull()")
     }
   }
