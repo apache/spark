@@ -487,9 +487,4 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // children, in this case attribute reuse causes the input of the regular aggregate to bound to
     // the (nulled out) input of the distinct aggregate.
     e -> AttributeReference(e.sql, e.dataType, nullable = true)()
-
-  private def addAlias(expressions: Seq[Expression]) = expressions.map {
-    case ne: NamedExpression => ne
-    case other => Alias(other, other.toString)()
-  }
 }
