@@ -113,7 +113,7 @@ struct<count(DISTINCT id):bigint,count(DISTINCT id) FILTER (WHERE (date_format(C
 -- !query
 SELECT COUNT(DISTINCT id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00")), COUNT(DISTINCT id) FILTER (WHERE hiredate = to_date('2001-01-01 00:00:00')) FROM emp
 -- !query schema
-struct<count(DISTINCT id) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) = to_timestamp('2001-01-01 00:00:00'))):bigint,count(DISTINCT id) FILTER (WHERE (hiredate = to_date('2001-01-01 00:00:00'))):bigint>
+struct<count(DISTINCT id) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) = to_timestamp(2001-01-01 00:00:00))):bigint,count(DISTINCT id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00))):bigint>
 -- !query output
 2	2
 

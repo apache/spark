@@ -158,8 +158,8 @@ import org.apache.spark.sql.types.IntegerType
  *                          ('key, '_gen_distinct_1, null, 1, null),
  *                          ('key, null, '_gen_distinct_2, 2, null)]
  *           output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid, 'value])
- *         Expand(
- *            projections = [('key, if ('id > 1) 'cat1 else null, 'cat2, cast('value as bigint))]
+ *         Project(
+ *            projectList = ['key, if ('id > 1) 'cat1 else null, 'cat2, cast('value as bigint)]
  *            output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'value])
  *           LocalTableScan [...]
  * }}}
@@ -233,6 +233,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         case ne: NamedExpression => ne -> ne
         case other => other -> Alias(other, other.toString)()
       }
+      val namedRegularAggChildren = regularAggChildrenMap.map(_._2)
       val regularAggChildAttrMap = regularAggChildrenMap.map { kv =>
         (kv._1, kv._2.toAttribute)
       }
@@ -262,14 +263,14 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // attribute '_gen_distinct-1 and attribute '_gen_distinct-2 instead of two 'a.
           // Note: The illusionary mechanism may result in at least two distinct groups, so we
           // still need to call `rewrite`.
+          val exprId = NamedExpression.newExprId.id
           val unfoldableChildren = af.children.filter(!_.foldable)
           // Expand projection
           val projectionMap = unfoldableChildren.map {
             case e if filter.isDefined =>
               val ife = If(filter.get, e, nullify(e))
-              e -> Alias(ife, ife.toString)()
-            case ne: NamedExpression => ne -> ne
-            case e => e -> Alias(e, e.toString)()
+              e -> Alias(ife, s"_gen_distinct_$exprId")()
+            case e => e -> Alias(e, s"_gen_distinct_$exprId")()
           }
           val projection = projectionMap.map(_._2)
           val exprAttrs = projectionMap.map { kv =>
@@ -281,33 +282,23 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           val aggExpr = ae.copy(aggregateFunction = raf, filter = None)
           (projection, (ae, aggExpr))
       }.unzip
-//      val distinctAggChildAttrs = expressionAttrs.flatten.map(_._2)
-//      val allAggAttrs = regularAggChildAttrMap.map(_._2) ++ distinctAggChildAttrs
       // Construct the aggregate input projection.
       val namedGroupingExpressions = a.groupingExpressions.map {
         case ne: NamedExpression => ne
         case other => Alias(other, other.toString)()
       }
-      val rewriteAggProjection = namedGroupingExpressions ++ projections.flatten
+      val rewriteAggProjection =
+        namedGroupingExpressions ++ namedRegularAggChildren ++ projections.flatten
+      // Construct the project operator.
       val project = Project(rewriteAggProjection, a.child)
-//      val rewriteAggProjections =
-//        Seq(a.groupingExpressions ++ regularAggChildren ++ projections.flatten)
-//      val groupByMap = a.groupingExpressions.collect {
-//        case ne: NamedExpression => ne -> ne.toAttribute
-//        case e => e -> AttributeReference(e.sql, e.dataType, e.nullable)()
-//      }
-//      val groupByAttrs = groupByMap.map(_._2)
       val groupByAttrs = namedGroupingExpressions.map(_.toAttribute)
-      // Construct the expand operator.
-//      val expand = Expand(rewriteAggProjections, groupByAttrs ++ allAggAttrs, a.child)
       val rewriteAggExprLookup = (distinctAggPairs ++ regularAggPairs).toMap
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
           case ae: AggregateExpression => rewriteAggExprLookup.getOrElse(ae, ae)
         }.asInstanceOf[NamedExpression]
       }
-      val expandAggregate = Aggregate(groupByAttrs, patchedAggExpressions, project)
-      expandAggregate
+      Aggregate(groupByAttrs, patchedAggExpressions, project)
     } else {
       a
     }
