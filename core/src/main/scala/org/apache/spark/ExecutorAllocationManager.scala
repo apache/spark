@@ -281,7 +281,7 @@ private[spark] class ExecutorAllocationManager(
   private def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
     val pending = listener.totalPendingTasksPerResourceProfile(rpId)
     val pendingSpeculative = listener.pendingSpeculativeTasksPerResourceProfile(rpId)
-    val numUnschedulables = listener.pendingUnschedulableTasksPerResourceProfile(rpId)
+    val numUnschedulables = listener.pendingUnschedulableTaskSetsPerResourceProfile(rpId)
     val running = listener.totalRunningTasksPerResourceProfile(rpId)
     val numRunningOrPendingTasks = pending + running
     val rp = resourceProfileManager.resourceProfileFromId(rpId)
@@ -717,8 +717,7 @@ private[spark] class ExecutorAllocationManager(
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
         if (stageAttemptToNumTasks.isEmpty &&
-          stageAttemptToNumSpeculativeTasks.isEmpty &&
-          unschedulableTaskSets.isEmpty) {
+          stageAttemptToNumSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
         }
       }
@@ -811,10 +810,10 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    override def onUnschedulableBlacklistTaskSubmitted
-      (blacklistedTask: SparkListenerUnschedulableBlacklistTaskSubmitted): Unit = {
-      val stageId = blacklistedTask.stageId
-      val stageAttemptId = blacklistedTask.stageAttemptId
+    override def onUnschedulableTaskSet
+      (unschedulableTaskSet: SparkListenerUnschedulableTaskSet): Unit = {
+      val stageId = unschedulableTaskSet.stageId
+      val stageAttemptId = unschedulableTaskSet.stageAttemptId
       allocationManager.synchronized {
         (stageId, stageAttemptId) match {
           case (Some(stageId), Some(stageAttemptId)) =>
@@ -868,7 +867,10 @@ private[spark] class ExecutorAllocationManager(
       numTotalTasks - numRunning
     }
 
-    def pendingUnschedulableTasksPerResourceProfile(rp: Int): Int = {
+    // Currently TaskSetManager.getCompletelyBlacklistedTaskIfAny only takes the first
+    // unschedulable task due to blacklisting. So keeping track of unschedulableTaskSets
+    // should be enough as we'll always have no more than a task unschedulable at any time.
+    def pendingUnschedulableTaskSetsPerResourceProfile(rp: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
       attempts.filter(attempt => unschedulableTaskSets.contains(attempt)).size
     }

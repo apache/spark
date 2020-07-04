@@ -1028,7 +1028,7 @@ private[spark] class DAGScheduler(
       stageId: Option[Int],
       stageAttemptId: Option[Int]): Unit = {
     listenerBus.post(
-      SparkListenerUnschedulableBlacklistTaskSubmitted(stageId, stageAttemptId))
+      SparkListenerUnschedulableTaskSet(stageId, stageAttemptId))
   }
 
   private[scheduler] def handleTaskSetFailed(

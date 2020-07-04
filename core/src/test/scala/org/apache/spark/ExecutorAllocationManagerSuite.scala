@@ -524,7 +524,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
 
     // Stage 0 becomes unschedulable due to blacklisting
-    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(0), Some(0)))
+    post(SparkListenerUnschedulableTaskSet(Some(0), Some(0)))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     // Assert that we are getting additional executor to schedule unschedulable tasks
@@ -535,7 +535,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     onExecutorAddedDefaultProfile(manager, "1")
     // Now once the task becomes schedulable, clear the unschedulableTaskSets
     // by posting unschedulable event with (None, None)
-    post(SparkListenerUnschedulableBlacklistTaskSubmitted(None, None))
+    post(SparkListenerUnschedulableTaskSet(None, None))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
@@ -581,8 +581,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageCompleted(createStageInfo(0, 2)))
 
     // Stage 1 and 2 becomes unschedulable now due to blacklisting
-    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(1), Some(0)))
-    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(2), Some(0)))
+    post(SparkListenerUnschedulableTaskSet(Some(1), Some(0)))
+    post(SparkListenerUnschedulableTaskSet(Some(2), Some(0)))
 
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
@@ -595,7 +595,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Now once the task becomes schedulable, clear the unschedulableTaskSets
     // by posting unschedulable event with (None, None)
-    post(SparkListenerUnschedulableBlacklistTaskSubmitted(None, None))
+    post(SparkListenerUnschedulableTaskSet(None, None))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
@@ -639,7 +639,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     (0 to 3).foreach { i => onExecutorRemoved(manager, i.toString) }
 
     // Now due to blacklisting, the task becomes unschedulable
-    post(SparkListenerUnschedulableBlacklistTaskSubmitted(Some(0), Some(0)))
+    post(SparkListenerUnschedulableTaskSet(Some(0), Some(0)))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
@@ -650,7 +650,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Now once the task becomes schedulable, clear the unschedulableTaskSets
     // by posting unschedulable event with (None, None)
-    post(SparkListenerUnschedulableBlacklistTaskSubmitted(None, None))
+    post(SparkListenerUnschedulableTaskSet(None, None))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
