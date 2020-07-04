@@ -112,8 +112,7 @@ case class BroadcastHashJoinExec(
         generateExprCombinations(current.tail, accumulated :+ current.head, all)
         val mapped = streamedKeyToBuildKeyMapping.get(current.head.canonicalized)
         if (mapped.isDefined) {
-          mapped.get.foreach(m =>
-            generateExprCombinations(current.tail, accumulated :+ m, all))
+          mapped.get.foreach(m => generateExprCombinations(current.tail, accumulated :+ m, all))
         }
       }
     }
