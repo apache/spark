@@ -885,7 +885,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "timestamp <> double at the second column of the second table"))
   }
 
-  test("throw user facing error when use WindowFunction directly") {
+  test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
     assertAnalysisError(testRelation2.select(RowNumber()),
       Seq("Window function row_number() requires an OVER clause."))
 
