@@ -234,10 +234,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         case other => other -> Alias(other, other.toString)()
       }
       val namedRegularAggChildren = regularAggChildrenMap.map(_._2)
-      val regularAggChildAttrMap = regularAggChildrenMap.map { kv =>
+      val regularAggChildAttrLookup = regularAggChildrenMap.map { kv =>
         (kv._1, kv._2.toAttribute)
-      }
-      val regularAggChildAttrLookup = regularAggChildAttrMap.toMap
+      }.toMap
       val regularAggPairs = regularAggExprs.map {
         case ae @ AggregateExpression(af, _, _, filter, _) =>
           val newChildren = af.children.map(c => regularAggChildAttrLookup.getOrElse(c, c))
@@ -253,7 +252,6 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val distinctAggExprs = distinctAggExpressions.filter(e => e.children.exists(!_.foldable))
       val (projections, distinctAggPairs) = distinctAggExprs.map {
         case ae @ AggregateExpression(af, _, _, filter, _) =>
-          // Why do we need to construct the `exprId` ?
           // First, In order to reduce costs, it is better to handle the filter clause locally.
           // e.g. COUNT (DISTINCT a) FILTER (WHERE id > 1), evaluate expression
           // If(id > 1) 'a else null first, and use the result as output.
@@ -263,14 +261,13 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // attribute '_gen_distinct-1 and attribute '_gen_distinct-2 instead of two 'a.
           // Note: The illusionary mechanism may result in at least two distinct groups, so we
           // still need to call `rewrite`.
-          val exprId = NamedExpression.newExprId.id
           val unfoldableChildren = af.children.filter(!_.foldable)
           // Expand projection
           val projectionMap = unfoldableChildren.map {
             case e if filter.isDefined =>
               val ife = If(filter.get, e, nullify(e))
-              e -> Alias(ife, s"_gen_distinct_$exprId")()
-            case e => e -> Alias(e, s"_gen_distinct_$exprId")()
+              e -> Alias(ife, s"_gen_distinct_${NamedExpression.newExprId.id}")()
+            case e => e -> Alias(e, s"_gen_distinct_${NamedExpression.newExprId.id}")()
           }
           val projection = projectionMap.map(_._2)
           val exprAttrs = projectionMap.map { kv =>
