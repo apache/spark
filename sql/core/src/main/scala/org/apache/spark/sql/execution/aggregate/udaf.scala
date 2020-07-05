@@ -27,8 +27,11 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateMutableProjection, GenerateSafeProjection}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
+
 
 /**
  * A helper trait used to create specialized setter and getter for types supported by
@@ -458,7 +461,7 @@ case class ScalaUDAF(
 case class ScalaAggregator[IN, BUF, OUT](
     children: Seq[Expression],
     agg: Aggregator[IN, BUF, OUT],
-    inputEncoderNR: ExpressionEncoder[IN],
+    inputEncoder: ExpressionEncoder[IN],
     nullable: Boolean = true,
     isDeterministic: Boolean = true,
     mutableAggBufferOffset: Int = 0,
@@ -469,17 +472,20 @@ case class ScalaAggregator[IN, BUF, OUT](
   with ImplicitCastInputTypes
   with Logging {
 
-  private[this] lazy val inputDeserializer = inputEncoderNR.resolveAndBind().createDeserializer()
+  // input encoder is resolved by ResolveEncodersInScalaAgg
+  private[this] lazy val inputDeserializer = inputEncoder.createDeserializer()
+
   private[this] lazy val bufferEncoder =
     agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]].resolveAndBind()
   private[this] lazy val bufferSerializer = bufferEncoder.createSerializer()
   private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
+
   private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
   private[this] lazy val outputSerializer = outputEncoder.createSerializer()
 
   def dataType: DataType = outputEncoder.objSerializer.dataType
 
-  def inputTypes: Seq[DataType] = inputEncoderNR.schema.map(_.dataType)
+  def inputTypes: Seq[DataType] = inputEncoder.schema.map(_.dataType)
 
   override lazy val deterministic: Boolean = isDeterministic
 
@@ -516,4 +522,14 @@ case class ScalaAggregator[IN, BUF, OUT](
   override def toString: String = s"""${nodeName}(${children.mkString(",")})"""
 
   override def nodeName: String = agg.getClass.getSimpleName
+}
+
+class ResolveEncodersInScalaAgg extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    case p if !p.resolved => p
+    case p => p.transformExpressionsUp {
+      case agg: ScalaAggregator[_, _, _] =>
+        agg.copy(inputEncoder = agg.inputEncoder.resolveAndBind())
+    }
+  }
 }
