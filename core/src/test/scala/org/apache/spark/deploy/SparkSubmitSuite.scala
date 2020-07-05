@@ -1292,14 +1292,15 @@ class SparkSubmitSuite
       new java.io.File(tempDir, "testplugin.jar"))
 
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val unusedFile = Files.createTempFile(tempDir.toPath, "unused", null)
     val args = Seq(
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local-cluster[1,1,1024]",
       "--conf", "spark.plugins=TestSparkPlugin",
       "--conf", "spark.ui.enabled=false",
-      "--jars", jarUrl.toString,
-      "--files", tempFile.toString,
+      "--jars", jarUrl.toString + "," + unusedJar.toString,
+      "--files", tempFile.toString + "," + unusedFile.toString,
       unusedJar.toString)
     runSparkSubmit(args, timeout = 30.seconds)
   }

@@ -158,9 +158,14 @@ private[spark] class Executor(
 
   // Jars and files specified by spark.jars and spark.files.
   private val initialUserJars =
-    Map(Utils.getUserJars(conf).map(jar => (jar, appStartTime)): _*)
+    conf.getOption("spark.app.initial.jar.urls").map { urls =>
+      Map(urls.split(",").map(url => (url, appStartTime)): _*)
+    }.getOrElse(Map.empty)
+
   private val initialUserFiles =
-    Map(Utils.getUserFiles(conf).map(file => (file, appStartTime)): _*)
+    conf.getOption("spark.app.initial.file.urls").map { urls =>
+      Map(urls.split(",").map(url => (url, appStartTime)): _*)
+    }.getOrElse(Map.empty)
 
   updateDependencies(initialUserFiles, initialUserJars)
 
