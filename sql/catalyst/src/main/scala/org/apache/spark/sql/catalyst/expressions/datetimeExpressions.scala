@@ -1193,25 +1193,26 @@ trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes with Nul
       val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
         ev.copy(code = code"""
-          |boolean ${ev.isNull} = true;
-          |long ${ev.value} = 0;
-          |""".stripMargin)
+           |boolean ${ev.isNull} = true;
+           |long ${ev.value} = 0;
+         """.stripMargin)
       } else {
         val tzClass = classOf[ZoneId].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
-        val utcTerm = "java.time.ZoneOffset.UTC"
         val tzTerm = ctx.addMutableState(tzClass, "tz",
           v => s"""$v = $dtu.getZoneId("$escapedTz");""")
+        val utcTerm = "java.time.ZoneOffset.UTC"
         val (fromTz, toTz) = if (funcName == "fromUTCTime") (utcTerm, tzTerm) else (tzTerm, utcTerm)
         val eval = left.genCode(ctx)
         ev.copy(code = code"""
-          |${eval.code}
-          |boolean ${ev.isNull} = ${eval.isNull};
-          |long ${ev.value} = 0;
-          |if (!${ev.isNull}) {
-          |  ${ev.value} = $dtu.convertTz(${eval.value}, $fromTz, $toTz);
-          |}""".stripMargin)
+           |${eval.code}
+           |boolean ${ev.isNull} = ${eval.isNull};
+           |long ${ev.value} = 0;
+           |if (!${ev.isNull}) {
+           |  ${ev.value} = $dtu.convertTz(${eval.value}, $fromTz, $toTz);
+           |}
+         """.stripMargin)
       }
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
