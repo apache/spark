@@ -395,27 +395,6 @@ class LinearSVCModel private[classification] (
   override def summary: LinearSVCTrainingSummary = super.summary
 
   /**
-   * If the rawPrediction and prediction columns are set, this method returns the current model,
-   * otherwise it generates new columns for them and sets them as columns on a new copy of
-   * the current model
-   */
-  private[classification] def findSummaryModel(): (LinearSVCModel, String, String) = {
-    val model = if ($(rawPredictionCol).isEmpty && $(predictionCol).isEmpty) {
-      copy(ParamMap.empty)
-        .setRawPredictionCol("rawPrediction_" + java.util.UUID.randomUUID.toString)
-        .setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
-    } else if ($(rawPredictionCol).isEmpty) {
-      copy(ParamMap.empty).setRawPredictionCol("rawPrediction_" +
-        java.util.UUID.randomUUID.toString)
-    } else if ($(predictionCol).isEmpty) {
-      copy(ParamMap.empty).setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
-    } else {
-      this
-    }
-    (model, model.getRawPredictionCol, model.getPredictionCol)
-  }
-
-  /**
    * Evaluates the model on a test dataset.
    *
    * @param dataset Test dataset to evaluate model on.
