@@ -1176,6 +1176,51 @@ case class DateAddInterval(
     copy(timeZoneId = Option(timeZoneId))
 }
 
+trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  val func: (Long, String) => Long
+  val funcName: String
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
+  override def dataType: DataType = TimestampType
+
+  override def nullSafeEval(time: Any, timezone: Any): Any = {
+    func(time.asInstanceOf[Long], timezone.asInstanceOf[UTF8String].toString)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    if (right.foldable) {
+      val tz = right.eval().asInstanceOf[UTF8String]
+      if (tz == null) {
+        ev.copy(code = code"""
+          |boolean ${ev.isNull} = true;
+          |long ${ev.value} = 0;
+          |""".stripMargin)
+      } else {
+        val tzClass = classOf[ZoneId].getName
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
+        val utcTerm = "java.time.ZoneOffset.UTC"
+        val tzTerm = ctx.addMutableState(tzClass, "tz",
+          v => s"""$v = $dtu.getZoneId("$escapedTz");""")
+        val (fromTz, toTz) = if (funcName == "fromUTCTime") (utcTerm, tzTerm) else (tzTerm, utcTerm)
+        val eval = left.genCode(ctx)
+        ev.copy(code = code"""
+          |${eval.code}
+          |boolean ${ev.isNull} = ${eval.isNull};
+          |long ${ev.value} = 0;
+          |if (!${ev.isNull}) {
+          |  ${ev.value} = $dtu.convertTz(${eval.value}, $fromTz, $toTz);
+          |}""".stripMargin)
+      }
+    } else {
+      defineCodeGen(ctx, ev, (timestamp, format) => {
+        s"""$dtu.$funcName($timestamp, $format.toString())"""
+      })
+    }
+  }
+}
+
 /**
  * This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
  * takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in UTC, and
@@ -1201,50 +1246,41 @@ case class DateAddInterval(
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class FromUTCTimestamp(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+case class FromUTCTimestamp(left: Expression, right: Expression) extends UTCTimestamp {
+  override val func = DateTimeUtils.fromUTCTime
+  override val funcName: String = "fromUTCTime"
+  override val prettyName: String = "from_utc_timestamp"
+}
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
-  override def dataType: DataType = TimestampType
-  override def prettyName: String = "from_utc_timestamp"
-
-  override def nullSafeEval(time: Any, timezone: Any): Any = {
-    DateTimeUtils.fromUTCTime(time.asInstanceOf[Long],
-      timezone.asInstanceOf[UTF8String].toString)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    if (right.foldable) {
-      val tz = right.eval().asInstanceOf[UTF8String]
-      if (tz == null) {
-        ev.copy(code = code"""
-           |boolean ${ev.isNull} = true;
-           |long ${ev.value} = 0;
-         """.stripMargin)
-      } else {
-        val tzClass = classOf[ZoneId].getName
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-        val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
-        val tzTerm = ctx.addMutableState(tzClass, "tz",
-          v => s"""$v = $dtu.getZoneId("$escapedTz");""")
-        val utcTerm = "java.time.ZoneOffset.UTC"
-        val eval = left.genCode(ctx)
-        ev.copy(code = code"""
-           |${eval.code}
-           |boolean ${ev.isNull} = ${eval.isNull};
-           |long ${ev.value} = 0;
-           |if (!${ev.isNull}) {
-           |  ${ev.value} = $dtu.convertTz(${eval.value}, $utcTerm, $tzTerm);
-           |}
-         """.stripMargin)
-      }
-    } else {
-      defineCodeGen(ctx, ev, (timestamp, format) => {
-        s"""$dtu.fromUTCTime($timestamp, $format.toString())"""
-      })
-    }
-  }
+/**
+ * This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
+ * takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in the given
+ * timezone, and renders that timestamp as a timestamp in UTC.
+ *
+ * However, timestamp in Spark represents number of microseconds from the Unix epoch, which is not
+ * timezone-agnostic. So in Spark this function just shift the timestamp value from the given
+ * timezone to UTC timezone.
+ *
+ * This function may return confusing result if the input is a string with timezone, e.g.
+ * '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
+ * according to the timezone in the string, and finally display the result by converting the
+ * timestamp to string according to the session local timezone.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp, timezone) - Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield '2017-07-14 01:40:00.0'.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
+       2016-08-30 15:00:00
+  """,
+  group = "datetime_funcs",
+  since = "1.5.0")
+// scalastyle:on line.size.limit
+case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimestamp {
+  override val func = DateTimeUtils.toUTCTime
+  override val funcName: String = "toUTCTime"
+  override val prettyName: String = "to_utc_timestamp"
 }
 
 /**
@@ -1347,77 +1383,6 @@ case class MonthsBetween(
   }
 
   override def prettyName: String = "months_between"
-}
-
-/**
- * This is a common function for databases supporting TIMESTAMP WITHOUT TIMEZONE. This function
- * takes a timestamp which is timezone-agnostic, and interprets it as a timestamp in the given
- * timezone, and renders that timestamp as a timestamp in UTC.
- *
- * However, timestamp in Spark represents number of microseconds from the Unix epoch, which is not
- * timezone-agnostic. So in Spark this function just shift the timestamp value from the given
- * timezone to UTC timezone.
- *
- * This function may return confusing result if the input is a string with timezone, e.g.
- * '2018-03-13T06:18:23+00:00'. The reason is that, Spark firstly cast the string to timestamp
- * according to the timezone in the string, and finally display the result by converting the
- * timestamp to string according to the session local timezone.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(timestamp, timezone) - Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield '2017-07-14 01:40:00.0'.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
-       2016-08-30 15:00:00
-  """,
-  group = "datetime_funcs",
-  since = "1.5.0")
-// scalastyle:on line.size.limit
-case class ToUTCTimestamp(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
-  override def dataType: DataType = TimestampType
-  override def prettyName: String = "to_utc_timestamp"
-
-  override def nullSafeEval(time: Any, timezone: Any): Any = {
-    DateTimeUtils.toUTCTime(time.asInstanceOf[Long],
-      timezone.asInstanceOf[UTF8String].toString)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    if (right.foldable) {
-      val tz = right.eval().asInstanceOf[UTF8String]
-      if (tz == null) {
-        ev.copy(code = code"""
-           |boolean ${ev.isNull} = true;
-           |long ${ev.value} = 0;
-         """.stripMargin)
-      } else {
-        val tzClass = classOf[ZoneId].getName
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-        val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
-        val tzTerm = ctx.addMutableState(tzClass, "tz",
-          v => s"""$v = $dtu.getZoneId("$escapedTz");""")
-        val utcTerm = "java.time.ZoneOffset.UTC"
-        val eval = left.genCode(ctx)
-        ev.copy(code = code"""
-           |${eval.code}
-           |boolean ${ev.isNull} = ${eval.isNull};
-           |long ${ev.value} = 0;
-           |if (!${ev.isNull}) {
-           |  ${ev.value} = $dtu.convertTz(${eval.value}, $tzTerm, $utcTerm);
-           |}
-         """.stripMargin)
-      }
-    } else {
-      defineCodeGen(ctx, ev, (timestamp, format) => {
-        s"""$dtu.toUTCTime($timestamp, $format.toString())"""
-      })
-    }
-  }
 }
 
 /**
