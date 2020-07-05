@@ -35,7 +35,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, SparkSessionExtensions, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
@@ -46,8 +46,18 @@ import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
-import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
+import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, SPARK_SESSION_EXTENSIONS, WAREHOUSE_PATH}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+
+class TestHiveExtensions extends (SparkSessionExtensions => Unit) {
+  import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
+
+  def apply(e: SparkSessionExtensions): Unit = {
+    e.injectResolutionRule { session =>
+      new ResolveEncodersInScalaAgg() // SPARK-32159
+    }
+  }
+}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
 object TestHive
@@ -61,6 +71,7 @@ object TestHive
         .set(HiveUtils.HIVE_METASTORE_BARRIER_PREFIXES.key,
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set(WAREHOUSE_PATH.key, TestHiveContext.makeWarehouseDir().toURI.getPath)
+        .set(SPARK_SESSION_EXTENSIONS.key, classOf[TestHiveExtensions].getCanonicalName)
         // SPARK-8910
         .set(UI_ENABLED, false)
         .set(config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
