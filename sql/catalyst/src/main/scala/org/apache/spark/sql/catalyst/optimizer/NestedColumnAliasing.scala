@@ -179,7 +179,7 @@ object NestedColumnAliasing {
         // Note that we need to remove cosmetic variations first, so we only count a
         // nested field once.
         if (nestedFieldToAlias.nonEmpty &&
-          dedupNestedFields.map(_.canonicalized.asInstanceOf[ExtractValue])
+          dedupNestedFields.map(_.canonicalized)
               .distinct
               .map { nestedField => totalFieldNum(nestedField.dataType) }
               .sum < totalFieldNum(attr.dataType)) {
