@@ -1289,7 +1289,7 @@ class SparkSubmitSuite
 
     val jarUrl = TestUtils.createJar(
       Seq(compiledSparkPlugin, compiledExecutorPlugin),
-      new java.io.File(tempDir, "testplugin.jar"))
+      new File(tempDir, "testplugin.jar"))
 
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val unusedFile = Files.createTempFile(tempDir.toPath, "unused", null)
