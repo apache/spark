@@ -119,6 +119,15 @@ object CountSerDeAgg extends Aggregator[Int, CountSerDeSQL, CountSerDeSQL] {
   def outputEncoder: Encoder[CountSerDeSQL] = ExpressionEncoder[CountSerDeSQL]()
 }
 
+object ArrayDataAgg extends Aggregator[Array[Double], Double, Double] {
+  def zero: Double = 0.0
+  def reduce(s: Double, array: Array[Double]): Double = s + array.sum
+  def merge(s1: Double, s2: Double): Double = s1 + s2
+  def finish(s: Double): Double = s
+  def bufferEncoder: Encoder[Double] = Encoders.scalaDouble
+  def outputEncoder: Encoder[Double] = Encoders.scalaDouble
+}
+
 abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 
@@ -156,20 +165,11 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
       (3, null, null)).toDF("key", "value1", "value2")
     data2.write.saveAsTable("agg2")
 
-    val data3 = Seq[(Seq[Integer], Integer, Integer)](
-      (Seq[Integer](1, 1), 10, -10),
-      (Seq[Integer](null), -60, 60),
-      (Seq[Integer](1, 1), 30, -30),
-      (Seq[Integer](1), 30, 30),
-      (Seq[Integer](2), 1, 1),
-      (null, -10, 10),
-      (Seq[Integer](2, 3), -1, null),
-      (Seq[Integer](2, 3), 1, 1),
-      (Seq[Integer](2, 3, 4), null, 1),
-      (Seq[Integer](null), 100, -10),
-      (Seq[Integer](3), null, 3),
-      (null, null, null),
-      (Seq[Integer](3), null, null)).toDF("key", "value1", "value2")
+    val data3 = Seq[(Seq[Double], Int)](
+      (Seq(1.0), 0),
+      (Seq(2.0, 3.0), 0),
+      (Seq(4.0, 5.0, 6.0), 0)
+    ).toDF("data", "dummy")
     data3.write.saveAsTable("agg3")
 
     val data4 = Seq[Boolean](true, false, true).toDF("boolvalues")
@@ -184,6 +184,7 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     spark.udf.register("mydoublesum", udaf(MyDoubleSumAgg))
     spark.udf.register("mydoubleavg", udaf(MyDoubleAvgAgg))
     spark.udf.register("longProductSum", udaf(LongProductSumAgg))
+    spark.udf.register("arraysum", udaf(ArrayDataAgg))
   }
 
   override def afterAll(): Unit = {
@@ -352,6 +353,13 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
         Row(1, 2, 40, 3, -10, 3, -100, 3, 70, 3, -10, -100, 3, 3) ::
         Row(2, 2, 0, 1, 1, 1, 1, 3, 1, 3, 3, 2, 4, 4) ::
         Row(3, 0, null, 1, 3, 0, 0, 0, null, 1, 3, 0, 2, 2) :: Nil)
+  }
+
+  // SPARK-32159
+  test("array input types") {
+    checkAnswer(
+      spark.sql("SELECT arraysum(data) FROM agg3"),
+      Row(21.0) :: Nil)
   }
 
   test("verify aggregator ser/de behavior") {
