@@ -34,4 +34,4 @@ Data Definition Statements are used to create or modify the structure of databas
  * [DROP VIEW](sql-ref-syntax-ddl-drop-view.html)
  * [TRUNCATE TABLE](sql-ref-syntax-ddl-truncate-table.html)
  * [REPAIR TABLE](sql-ref-syntax-ddl-repair-table.html)
- * [USE DATABASE](sql-ref-syntax-qry-select-usedb.html)
+ * [USE DATABASE](sql-ref-syntax-ddl-usedb.html)
