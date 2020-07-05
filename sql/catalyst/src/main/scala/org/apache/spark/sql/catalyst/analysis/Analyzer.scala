@@ -3066,12 +3066,9 @@ class Analyzer(
             inputAttributes
           }
 
-          // println(s"\n\ndeserializer= $deserializer\n")
-          // println(s"\n\ninputs= $inputs\n")
           validateTopLevelTupleFields(deserializer, inputs)
           val resolved = resolveExpressionBottomUp(
             deserializer, LocalRelation(inputs), throws = true)
-          // println(s"\n\nresolved= $resolved\n")
           val result = resolved transformDown {
             case UnresolvedMapObjects(func, inputData, cls) if inputData.resolved =>
               inputData.dataType match {
