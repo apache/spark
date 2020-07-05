@@ -678,11 +678,11 @@ object MapObjects {
       elementType: DataType,
       elementNullable: Boolean = true,
       customCollectionCls: Option[Class[_]] = None): MapObjects = {
+    if (function == null) {
+      throw new UnsupportedOperationException("Cannot instantiate MapObjects with null function")
+    }
     val loopVar = LambdaVariable("MapObject", elementType, elementNullable)
-    // println(s"\n\n $function, $inputData, $elementType, $elementNullable, $customCollectionCls \n")
-    val fOfLV = if (function == null) loopVar else function(loopVar)
-    // MapObjects(loopVar, function(loopVar), inputData, customCollectionCls)
-    MapObjects(loopVar, fOfLV, inputData, customCollectionCls)
+    MapObjects(loopVar, function(loopVar), inputData, customCollectionCls)
   }
 }
 
