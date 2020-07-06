@@ -532,10 +532,17 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val date = "2019-02-26"
     val expectedDate = sql(s"SELECT CAST(DATE '$date' AS STRING)").collect().head.getString(0)
     val expectedIns = sql(s"SELECT CAST(TIMESTAMP '$ts' AS STRING)").collect().head.getString(0)
-    spark.udf.register("toDateTime", udf((d: LocalDate, i: Instant) => DateTimeResult(d, i)))
-    val df = sql(s"SELECT toDateTime(DATE '$date', TIMESTAMP '$ts') as t")
+
+    // test normal case
+    spark.udf.register("toDateTime1", udf((d: LocalDate, i: Instant) => DateTimeResult(d, i)))
+    var df = sql(s"SELECT toDateTime1(DATE '$date', TIMESTAMP '$ts') as t")
       .select('t.cast(StringType))
     assert(df.collect().toSeq === Seq(Row(s"[$expectedDate, $expectedIns]")))
+
+    // test null case
+    spark.udf.register("toDateTime2", udf((d: LocalDate, i: Instant) => DateTimeResult(null, null)))
+    df = sql(s"SELECT toDateTime2(DATE '$date', TIMESTAMP '$ts') as t").select('t.cast(StringType))
+    assert(df.collect().toSeq === Seq(Row("[,]")))
   }
 
   test("SPARK-28321 0-args Java UDF should not be called only once") {
