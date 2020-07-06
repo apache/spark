@@ -133,9 +133,8 @@ private object ParallelCollectionRDD {
           // If the range is inclusive, use inclusive range for the last slice
           if (r.isInclusive && index == numSlices - 1) {
             new Range.Inclusive(r.start + start * r.step, r.end, r.step)
-          }
-          else {
-            new Range.Inclusive(r.start + start * r.step, r.start + end * r.step - 1, r.step)
+          } else {
+            new Range.Inclusive(r.start + start * r.step, r.start + (end - 1) * r.step, r.step)
           }
         }.toSeq.asInstanceOf[Seq[Seq[T]]]
       case nr: NumericRange[T] =>
