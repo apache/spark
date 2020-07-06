@@ -638,8 +638,6 @@ case class HashAggregateExec(
          |${consume(ctx, resultVars)}
        """.stripMargin
     }
-
-
     ctx.addNewFunction(funcName,
       s"""
          |private void $funcName(UnsafeRow $keyTerm, UnsafeRow $bufferTerm)
@@ -696,6 +694,8 @@ case class HashAggregateExec(
       addMutableState(CodeGenerator.JAVA_BOOLEAN, "avoidPartialAggregate")
     val childrenConsumed = ctx.
       addMutableState(CodeGenerator.JAVA_BOOLEAN, "childrenConsumed")
+    rowCountTerm = ctx.
+      addMutableState(CodeGenerator.JAVA_LONG, "rowCount")
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
     } else if (sqlContext.conf.enableVectorizedHashMap) {
@@ -857,11 +857,11 @@ case class HashAggregateExec(
        |  long $beforeAgg = System.nanoTime();
        |  $doAggFuncName();
        |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
-       |  $shouldStopCheckCode;
+       |  if (shouldStop()) return;
        |}
        |if (!$childrenConsumed) {
        |  $doAggFuncName();
-       |  $shouldStopCheckCode;
+       |  if (shouldStop()) return;
        |}
        |// output the result
        |$outputFromFastHashMap
@@ -904,8 +904,8 @@ case class HashAggregateExec(
     val skipPartialAggregateThreshold = sqlContext.conf.skipPartialAggregateThreshold
     val skipPartialAggRatio = sqlContext.conf.skipPartialAggregateRatio
 
-    val oomeClassName = classOf[SparkOutOfMemoryError].getName
     val countTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "count")
+    val oomeClassName = classOf[SparkOutOfMemoryError].getName
     val findOrInsertRegularHashMap: String =
       s"""
          |if (!$avoidSpillInPartialAggregateTerm) {

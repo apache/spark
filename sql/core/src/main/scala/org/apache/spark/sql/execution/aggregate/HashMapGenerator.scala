@@ -75,6 +75,8 @@ abstract class HashMapGenerator(
        |
        |${generateRowIterator()}
        |
+       |${generateNumRows()}
+       |
        |${generateClose()}
        |}
      """.stripMargin

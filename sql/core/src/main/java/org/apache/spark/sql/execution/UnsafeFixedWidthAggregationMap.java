@@ -64,6 +64,14 @@ public final class UnsafeFixedWidthAggregationMap {
   private final UnsafeRow currentAggregationBuffer;
 
   /**
+   * Number of rows that were added to the map
+   * This includes the elements that were passed on sorter
+   * using {@link #destructAndCreateExternalSorter()}
+   *
+   */
+  private long numRowsAdded = 0L;
+
+  /**
    * @return true if UnsafeFixedWidthAggregationMap supports aggregation buffers with the given
    *         schema, false otherwise.
    */
@@ -147,6 +155,8 @@ public final class UnsafeFixedWidthAggregationMap {
       );
       if (!putSucceeded) {
         return null;
+      } else {
+        numRowsAdded = numRowsAdded + 1;
       }
     }
 
@@ -248,5 +258,9 @@ public final class UnsafeFixedWidthAggregationMap {
       (int) SparkEnv.get().conf().get(
         package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD()),
       map);
+  }
+
+  public long getNumRows() {
+    return numRowsAdded;
   }
 }
