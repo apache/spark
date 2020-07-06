@@ -686,13 +686,13 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timeExp[, format]) - Returns the UNIX timestamp of the given time.",
+  usage = "_FUNC_(timeExp[, fmt]) - Returns the UNIX timestamp of the given time.",
   arguments = """
     Arguments:
       * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
-      * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
-                 Default value is "yyyy-MM-dd HH:mm:ss". See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
-                 for valid date and time format patterns.
+      * fmt - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
+              Default value is "yyyy-MM-dd HH:mm:ss". See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
+              for valid date and time format patterns.
   """,
   examples = """
     Examples:
@@ -734,13 +734,13 @@ case class ToUnixTimestamp(
  * second parameter.
  */
 @ExpressionDescription(
-  usage = "_FUNC_([timeExp[, format]]) - Returns the UNIX timestamp of current or specified time.",
+  usage = "_FUNC_([timeExp[, fmt]]) - Returns the UNIX timestamp of current or specified time.",
   arguments = """
     Arguments:
       * timeExp - A date/timestamp or string. If not provided, this defaults to current time.
-      * format - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
-                 Default value is "yyyy-MM-dd HH:mm:ss". See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime Patterns</a>
-                 for valid date and time format patterns.
+      * fmt - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
+              Default value is "yyyy-MM-dd HH:mm:ss". See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime Patterns</a>
+              for valid date and time format patterns.
   """,
   examples = """
     Examples:
@@ -2172,4 +2172,3 @@ case class SubtractDates(left: Expression, right: Expression)
     })
   }
 }
-
