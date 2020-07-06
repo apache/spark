@@ -108,7 +108,7 @@ case class ScalaUDF(
   /**
    * Create the converter which converts the scala data type to the catalyst data type for
    * the return data type of udf function. We'd use `ExpressionEncoder` to create the
-   * converter for typed ScalaUDF only, since its the only case where we know the  type tag
+   * converter for typed ScalaUDF only, since its the only case where we know the type tag
    * of the return data type of udf function.
    */
   private def catalystConverter: Any => Any = {
