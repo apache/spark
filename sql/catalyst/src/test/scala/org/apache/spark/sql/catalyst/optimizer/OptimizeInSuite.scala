@@ -239,7 +239,7 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-32196: Extract convertible part if In is not convertible") {
+  test("SPARK-32196: Extract In convertible part if it is not convertible") {
     val originalQuery1 =
       testRelation
         .where(In(UnresolvedAttribute("a"), Seq(Literal(1), UnresolvedAttribute("b"))))
