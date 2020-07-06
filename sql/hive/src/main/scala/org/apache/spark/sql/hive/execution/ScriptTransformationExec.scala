@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.script.{BaseScriptTransform, BaseScriptTransformationWriterThread, BaseScriptTransformIOSchema}
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types.DataType
