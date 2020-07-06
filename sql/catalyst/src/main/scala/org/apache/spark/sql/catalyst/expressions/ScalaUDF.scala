@@ -110,10 +110,8 @@ case class ScalaUDF(
    * the return data type of udf function. We'd use `ExpressionEncoder` to create the
    * converter for typed ScalaUDF only, since its the only case where we know the  type tag
    * of the return data type of udf function.
-   * @param dataType return type of function
-   * @return the catalyst converter
    */
-  private def catalystConverter(dataType: DataType): Any => Any = {
+  private def catalystConverter: Any => Any = {
     if (returnEncoder.isDefined) {
       val enc = returnEncoder.get
       val toRow = enc.createSerializer()
@@ -1096,7 +1094,7 @@ case class ScalaUDF(
     val (converters, useEncoders): (Array[Any => Any], Array[Boolean]) =
       (children.zipWithIndex.map { case (c, i) =>
         scalaConverter(i, c.dataType)
-      }.toArray :+ (catalystConverter(dataType), false)).unzip
+      }.toArray :+ (catalystConverter, false)).unzip
     val convertersTerm = ctx.addReferenceObj("converters", converters, s"$converterClassName[]")
     val errorMsgTerm = ctx.addReferenceObj("errMsg", udfErrorMessage)
     val resultTerm = ctx.freshName("result")
@@ -1174,7 +1172,7 @@ case class ScalaUDF(
        """.stripMargin)
   }
 
-  private[this] val resultConverter = catalystConverter(dataType)
+  private[this] val resultConverter = catalystConverter
 
   lazy val udfErrorMessage = {
     val funcCls = function.getClass.getSimpleName
