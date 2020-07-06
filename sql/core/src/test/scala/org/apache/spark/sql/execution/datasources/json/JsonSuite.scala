@@ -1209,12 +1209,14 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       )
     }
   }
+
   test("toJSON with Options") {
     val df = spark.sparkContext.parallelize(Seq("1", "2", null)).toDF("col1")
     val result = df.toJSON(Map("ignoreNullFields" -> "false")).collect().mkString(",")
     val expected = """{"col1":"1"},{"col1":"2"},{"col1":null}"""
     assert(result == expected)
   }
+
   test("SPARK-4228 DataFrame to JSON") {
     withTempView("applySchema1", "applySchema2", "primitiveTable", "complexTable") {
       val schema1 = StructType(
@@ -1340,7 +1342,6 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       )
     }
   }
-
 
   test("Dataset toJSON doesn't construct rdd") {
     val containsRDD = spark.emptyDataFrame.toJSON.queryExecution.logical.find {

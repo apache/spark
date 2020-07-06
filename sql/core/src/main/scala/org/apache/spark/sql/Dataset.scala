@@ -3391,37 +3391,16 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
-    val rowSchema = this.schema
-    val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
-    mapPartitions { iter =>
-      val writer = new CharArrayWriter()
-      // create the Generator without separator inserted between 2 records
-      val gen = new JacksonGenerator(rowSchema, writer,
-        new JSONOptions(Map.empty[String, String], sessionLocalTimeZone))
-
-      new Iterator[String] {
-        private val toRow = exprEnc.createSerializer()
-        override def hasNext: Boolean = iter.hasNext
-        override def next(): String = {
-          gen.write(toRow(iter.next()))
-          gen.flush()
-
-          val json = writer.toString
-          if (hasNext) {
-            writer.reset()
-          } else {
-            gen.close()
-          }
-
-          json
-        }
-      }
-    } (Encoders.STRING)
+    toJSON(Map.empty[String, String])
   }
 
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
-   * @since 3.0.1
+   * @param options options to control how the dataset is converted into a json string.
+   *                accepts the same options and the json data source.
+   *                Additionally the function supports the `pretty` option which enables
+   *                pretty JSON generation.
+   * @since 3.1.0
    */
   def toJSON(options: Map[String, String]): Dataset[String] = {
     val rowSchema = this.schema
@@ -3473,7 +3452,6 @@ class Dataset[T] private[sql](
     }.flatten
     files.toSet.toArray
   }
-
 
   /**
    * Returns `true` when the logical query plans inside both [[Dataset]]s are equal and
