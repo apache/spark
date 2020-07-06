@@ -313,12 +313,12 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(mlorModel2.summary.isInstanceOf[LogisticRegressionTrainingSummary])
     withClue("cannot get binary summary for multiclass model") {
       intercept[RuntimeException] {
-        mlorModel.binarySummary
+        mlorModel2.binarySummary
       }
     }
     withClue("cannot cast summary to binary summary multiclass model") {
       intercept[RuntimeException] {
-        mlorModel.summary.asBinary
+        mlorModel2.summary.asBinary
       }
     }
 
@@ -342,7 +342,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       blorModel2.summary.asBinary.weightedPrecision relTol 1e-6)
     assert(blorModel.summary.asBinary.weightedRecall ~==
       blorModel2.summary.asBinary.weightedRecall relTol 1e-6)
-    assert(blorModel.summary.asBinary.asBinary.areaUnderROC ~==
+    assert(blorModel.summary.asBinary.areaUnderROC ~==
       blorModel2.summary.asBinary.areaUnderROC relTol 1e-6)
 
     assert(mlorSummary.accuracy ~== mlorSummary2.accuracy relTol 1e-6)

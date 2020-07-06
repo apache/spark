@@ -746,7 +746,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       ctx: QueryOrganizationContext,
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
-    RepartitionByExpression(expressions, query, conf.numShufflePartitions)
+    RepartitionByExpression(expressions, query, None)
   }
 
   /**

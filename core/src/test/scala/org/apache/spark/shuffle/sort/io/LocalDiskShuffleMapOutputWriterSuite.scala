@@ -136,7 +136,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   private def verifyWrittenRecords(): Unit = {
-    val committedLengths = mapOutputWriter.commitAllPartitions()
+    val committedLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths
     assert(partitionSizesInMergedFile === partitionLengths)
     assert(committedLengths === partitionLengths)
     assert(mergedOutputFile.length() === partitionLengths.sum)

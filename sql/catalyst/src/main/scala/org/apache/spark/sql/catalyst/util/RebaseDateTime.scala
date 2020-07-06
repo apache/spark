@@ -320,13 +320,14 @@ object RebaseDateTime {
    *   Julian calendar: 1582-01-01 00:00:00.123456 -> -12243196799876544
    * The code below converts -12244061221876544 to -12243196799876544.
    *
-   * @param zoneId The time zone ID at which the rebasing should be performed.
+   * @param tz The time zone at which the rebasing should be performed.
    * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
    *               in Proleptic Gregorian calendar. It can be negative.
    * @return The rebased microseconds since the epoch in Julian calendar.
    */
-  private[sql] def rebaseGregorianToJulianMicros(zoneId: ZoneId, micros: Long): Long = {
+  private[sql] def rebaseGregorianToJulianMicros(tz: TimeZone, micros: Long): Long = {
     val instant = microsToInstant(micros)
+    val zoneId = tz.toZoneId
     val zonedDateTime = instant.atZone(zoneId)
     var ldt = zonedDateTime.toLocalDateTime
     if (ldt.isAfter(julianEndTs) && ldt.isBefore(gregorianStartTs)) {
@@ -337,6 +338,7 @@ object RebaseDateTime {
       .setCalendarType("gregory")
       .setDate(ldt.getYear, ldt.getMonthValue - 1, ldt.getDayOfMonth)
       .setTimeOfDay(ldt.getHour, ldt.getMinute, ldt.getSecond)
+      .setTimeZone(tz)
       .build()
     // A local timestamp can have 2 instants in the cases of switching from:
     //  1. Summer to winter time.
@@ -379,7 +381,7 @@ object RebaseDateTime {
       val tzId = timeZone.getID
       val rebaseRecord = gregJulianRebaseMap.getOrNull(tzId)
       if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
-        rebaseGregorianToJulianMicros(timeZone.toZoneId, micros)
+        rebaseGregorianToJulianMicros(timeZone, micros)
       } else {
         rebaseMicros(rebaseRecord, micros)
       }
@@ -401,17 +403,17 @@ object RebaseDateTime {
    *   Proleptic Gregorian calendar: 1582-01-01 00:00:00.123456 -> -12244061221876544
    * The code below converts -12243196799876544 to -12244061221876544.
    *
-   * @param zoneId The time zone ID at which the rebasing should be performed.
+   * @param tz The time zone at which the rebasing should be performed.
    * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
    *               in the Julian calendar. It can be negative.
    * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
-  private[sql] def rebaseJulianToGregorianMicros(zoneId: ZoneId, micros: Long): Long = {
+  private[sql] def rebaseJulianToGregorianMicros(tz: TimeZone, micros: Long): Long = {
     val cal = new Calendar.Builder()
-      // `gregory` is a hybrid calendar that supports both
-      // the Julian and Gregorian calendar systems
+      // `gregory` is a hybrid calendar that supports both the Julian and Gregorian calendar systems
       .setCalendarType("gregory")
       .setInstant(microsToMillis(micros))
+      .setTimeZone(tz)
       .build()
     val localDateTime = LocalDateTime.of(
       cal.get(YEAR),
@@ -427,6 +429,7 @@ object RebaseDateTime {
       (Math.floorMod(micros, MICROS_PER_SECOND) * NANOS_PER_MICROS).toInt)
       .`with`(ChronoField.ERA, cal.get(ERA))
       .plusDays(cal.get(DAY_OF_MONTH) - 1)
+    val zoneId = tz.toZoneId
     val zonedDateTime = localDateTime.atZone(zoneId)
     // In the case of local timestamp overlapping, we need to choose the correct time instant
     // which is related to the original local timestamp. We look ahead of 1 day, and if the next
@@ -479,7 +482,7 @@ object RebaseDateTime {
       val tzId = timeZone.getID
       val rebaseRecord = julianGregRebaseMap.getOrNull(tzId)
       if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
-        rebaseJulianToGregorianMicros(timeZone.toZoneId, micros)
+        rebaseJulianToGregorianMicros(timeZone, micros)
       } else {
         rebaseMicros(rebaseRecord, micros)
       }

@@ -133,7 +133,7 @@ private[sql] class JSONOptions(
    * Enables inferring of TimestampType from strings matched to the timestamp pattern
    * defined by the timestampFormat option.
    */
-  val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(true)
+  val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(false)
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {

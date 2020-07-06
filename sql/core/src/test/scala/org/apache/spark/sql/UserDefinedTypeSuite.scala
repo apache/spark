@@ -134,6 +134,24 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     MyLabeledPoint(1.0, new TestUDT.MyDenseVector(Array(0.1, 1.0))),
     MyLabeledPoint(0.0, new TestUDT.MyDenseVector(Array(0.3, 3.0)))).toDF()
 
+
+  test("SPARK-32090: equal") {
+    val udt1 = new ExampleBaseTypeUDT
+    val udt2 = new ExampleSubTypeUDT
+    val udt3 = new ExampleSubTypeUDT
+    assert(udt1 !== udt2)
+    assert(udt2 !== udt1)
+    assert(udt2 === udt3)
+    assert(udt3 === udt2)
+  }
+
+  test("SPARK-32090: acceptsType") {
+    val udt1 = new ExampleBaseTypeUDT
+    val udt2 = new ExampleSubTypeUDT
+    assert(udt1.acceptsType(udt2))
+    assert(!udt2.acceptsType(udt1))
+  }
+
   test("register user type: MyDenseVector for MyLabeledPoint") {
     val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
@@ -275,11 +293,11 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
 
     // this worked already before the fix SPARK-19311:
     // return type of doUDF equals parameter type of doOtherUDF
-    sql("SELECT doOtherUDF(doUDF(41))")
+    checkAnswer(sql("SELECT doOtherUDF(doUDF(41))"), Row(41) :: Nil)
 
     // this one passes only with the fix SPARK-19311:
     // return type of doSubUDF is a subtype of the parameter type of doOtherUDF
-    sql("SELECT doOtherUDF(doSubTypeUDF(42))")
+    checkAnswer(sql("SELECT doOtherUDF(doSubTypeUDF(42))"), Row(42) :: Nil)
   }
 
   test("except on UDT") {
