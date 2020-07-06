@@ -2634,7 +2634,7 @@ object SQLConf {
         "when false, forbid the cast, more details in SPARK-31710")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED =
     buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.enabled")
