@@ -523,6 +523,8 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       df2 = Seq((3, 4, 5)).toDF("a", "b", "c")
       checkAnswer(df1.unionByName(df2),
         Row(1, 2, null) :: Row(3, 5, 4) :: Nil)
+      checkAnswer(df2.unionByName(df1),
+        Row(3, 4, 5) :: Row(1, null, 2) :: Nil)
     }
   }
 }
