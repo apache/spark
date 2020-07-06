@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.connector
 
-import java.time.ZoneId
+import java.time.{Instant, ZoneId}
+import java.time.temporal.ChronoUnit
 import java.util
 
 import scala.collection.JavaConverters._
@@ -28,7 +29,7 @@ import org.scalatest.Assertions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{DaysTransform, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
@@ -48,11 +49,15 @@ class InMemoryTable(
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
-  partitioning.foreach { t =>
-    if (!t.isInstanceOf[IdentityTransform] && !t.isInstanceOf[DaysTransform] &&
-        !allowUnsupportedTransforms) {
-      throw new IllegalArgumentException(s"Transform $t must be IdentityTransform or DaysTransform")
-    }
+  partitioning.foreach {
+    case _: IdentityTransform =>
+    case _: YearsTransform =>
+    case _: MonthsTransform =>
+    case _: DaysTransform =>
+    case _: HoursTransform =>
+    case _: BucketTransform =>
+    case t if !allowUnsupportedTransforms =>
+      throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
 
   // The key `Seq[Any]` is the partition values.
@@ -68,6 +73,9 @@ class InMemoryTable(
       case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
     }
   }
+
+  private val UTC = ZoneId.of("UTC")
+  private val EPOCH_LOCAL_DATE = Instant.EPOCH.atZone(UTC).toLocalDate
 
   private def getKey(row: InternalRow): Seq[Any] = {
     def extractor(
@@ -91,13 +99,36 @@ class InMemoryTable(
     partitioning.map {
       case IdentityTransform(ref) =>
         extractor(ref.fieldNames, schema, row)._1
+      case YearsTransform(ref) =>
+        extractor(ref.fieldNames, schema, row) match {
+          case (days: Int, DateType) =>
+            ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, DateTimeUtils.daysToLocalDate(days))
+          case (micros: Long, TimestampType) =>
+            val localDate = DateTimeUtils.microsToInstant(micros).atZone(UTC).toLocalDate
+            ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate)
+        }
+      case MonthsTransform(ref) =>
+        extractor(ref.fieldNames, schema, row) match {
+          case (days: Int, DateType) =>
+            ChronoUnit.MONTHS.between(EPOCH_LOCAL_DATE, DateTimeUtils.daysToLocalDate(days))
+          case (micros: Long, TimestampType) =>
+            val localDate = DateTimeUtils.microsToInstant(micros).atZone(UTC).toLocalDate
+            ChronoUnit.MONTHS.between(EPOCH_LOCAL_DATE, localDate)
+        }
       case DaysTransform(ref) =>
         extractor(ref.fieldNames, schema, row) match {
           case (days, DateType) =>
             days
           case (micros: Long, TimestampType) =>
-            DateTimeUtils.microsToDays(micros, ZoneId.of("UTC"))
+            ChronoUnit.DAYS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
         }
+      case HoursTransform(ref) =>
+        extractor(ref.fieldNames, schema, row) match {
+          case (micros: Long, TimestampType) =>
+            ChronoUnit.HOURS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
+        }
+      case BucketTransform(numBuckets, ref) =>
+        (extractor(ref.fieldNames, schema, row).hashCode() & Integer.MAX_VALUE) % numBuckets
     }
   }
 
