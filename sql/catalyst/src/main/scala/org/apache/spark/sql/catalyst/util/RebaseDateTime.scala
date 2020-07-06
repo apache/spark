@@ -186,7 +186,7 @@ object RebaseDateTime {
       .setTimeZone(TimeZoneUTC)
       .setDate(localDate.getYear, localDate.getMonthValue - 1, localDate.getDayOfMonth)
       .build()
-    Math.toIntExact(Math.floorDiv(utcCal.getTimeInMillis, MILLIS_PER_DAY))
+    Math.toIntExact(utcCal.getTimeInMillis/MILLIS_PER_DAY)
   }
 
   /**
