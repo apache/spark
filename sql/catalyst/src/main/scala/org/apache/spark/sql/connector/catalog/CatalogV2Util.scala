@@ -356,7 +356,7 @@ private[sql] object CatalogV2Util {
     }
     if (containsNullType(dt)) {
       throw new AnalysisException(
-        "Cannot create tables with VOID type.")
+        "Cannot create tables with unknown type.")
     }
   }
 

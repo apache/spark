@@ -2319,7 +2319,7 @@ class HiveDDLSuite
         checkAnswer(spark.table("tabVoidType"), Row(null))
         // No exception shows
         val desc = spark.sql("DESC tabVoidType").collect().toSeq
-        assert(desc.contains(Row("col", "null", null)))
+        assert(desc.contains(Row("col", NullType.simpleString, null)))
       }
     }
 
@@ -2328,17 +2328,17 @@ class HiveDDLSuite
       val e1 = intercept[AnalysisException] {
         spark.sql("CREATE TABLE t1 USING PARQUET AS SELECT null as null_col")
       }.getMessage
-      assert(e1.contains("Cannot create tables with VOID type"))
+      assert(e1.contains("Cannot create tables with unknown type"))
 
       val e2 = intercept[AnalysisException] {
         spark.sql("CREATE TABLE t2 AS SELECT null as null_col")
       }.getMessage
-      assert(e2.contains("Cannot create tables with VOID type"))
+      assert(e2.contains("Cannot create tables with unknown type"))
 
       val e3 = intercept[AnalysisException] {
         spark.sql("CREATE TABLE t3 STORED AS PARQUET AS SELECT null as null_col")
       }.getMessage
-      assert(e3.contains("Cannot create tables with VOID type"))
+      assert(e3.contains("Cannot create tables with unknown type"))
     }
 
     // Forbid Replace table AS SELECT with null type
@@ -2347,7 +2347,7 @@ class HiveDDLSuite
       val e = intercept[AnalysisException] {
         spark.sql(s"CREATE OR REPLACE TABLE t USING $v2Source AS SELECT null as null_col")
       }.getMessage
-      assert(e.contains("Cannot create tables with VOID type"))
+      assert(e.contains("Cannot create tables with unknown type"))
     }
 
     // Forbid creating table with VOID type in Spark
@@ -2355,19 +2355,19 @@ class HiveDDLSuite
       val e1 = intercept[AnalysisException] {
         spark.sql(s"CREATE TABLE t1 (v VOID) USING PARQUET")
       }.getMessage
-      assert(e1.contains("Cannot create tables with VOID type"))
+      assert(e1.contains("Cannot create tables with unknown type"))
       val e2 = intercept[AnalysisException] {
         spark.sql(s"CREATE TABLE t2 (v VOID) USING hive")
       }.getMessage
-      assert(e2.contains("Cannot create tables with VOID type"))
+      assert(e2.contains("Cannot create tables with unknown type"))
       val e3 = intercept[AnalysisException] {
         spark.sql(s"CREATE TABLE t3 (v VOID)")
       }.getMessage
-      assert(e3.contains("Cannot create tables with VOID type"))
+      assert(e3.contains("Cannot create tables with unknown type"))
       val e4 = intercept[AnalysisException] {
         spark.sql(s"CREATE TABLE t4 (v VOID) STORED AS PARQUET")
       }.getMessage
-      assert(e4.contains("Cannot create tables with VOID type"))
+      assert(e4.contains("Cannot create tables with unknown type"))
     }
 
     // Forbid Replace table with VOID type
@@ -2376,7 +2376,7 @@ class HiveDDLSuite
       val e = intercept[AnalysisException] {
         spark.sql(s"CREATE OR REPLACE TABLE t (v VOID) USING $v2Source")
       }.getMessage
-      assert(e.contains("Cannot create tables with VOID type"))
+      assert(e.contains("Cannot create tables with unknown type"))
     }
 
     // Make sure spark.catalog.createTable with null type will fail
@@ -2413,7 +2413,7 @@ class HiveDDLSuite
           schema = schema,
           options = Map("fileFormat" -> "parquet"))
       }.getMessage
-      assert(e.contains("Cannot create tables with VOID type"))
+      assert(e.contains("Cannot create tables with unknown type"))
     }
   }
 
@@ -2426,7 +2426,7 @@ class HiveDDLSuite
           schema = schema,
           options = Map.empty[String, String])
       }.getMessage
-      assert(e.contains("Cannot create tables with VOID type"))
+      assert(e.contains("Cannot create tables with unknown type"))
     }
   }
 

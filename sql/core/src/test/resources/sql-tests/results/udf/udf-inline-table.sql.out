@@ -49,7 +49,7 @@ two	2
 -- !query
 select udf(a), b from values ("one", null), ("two", null) as data(a, b)
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS STRING):string,b:null>
+struct<CAST(udf(cast(a as string)) AS STRING):string,b:unknown>
 -- !query output
 one	NULL
 two	NULL
