@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.FileNotFoundException
-
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
@@ -33,7 +31,7 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.FileStreamSink
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.HadoopFSUtils
 
 
 /**
@@ -147,24 +145,6 @@ class InMemoryFileIndex(
 
 object InMemoryFileIndex extends Logging {
 
-  /** A serializable variant of HDFS's BlockLocation. */
-  private case class SerializableBlockLocation(
-      names: Array[String],
-      hosts: Array[String],
-      offset: Long,
-      length: Long)
-
-  /** A serializable variant of HDFS's FileStatus. */
-  private case class SerializableFileStatus(
-      path: String,
-      length: Long,
-      isDir: Boolean,
-      blockReplication: Short,
-      blockSize: Long,
-      modificationTime: Long,
-      accessTime: Long,
-      blockLocations: Array[SerializableBlockLocation])
-
   private[sql] def bulkListLeafFiles(
       paths: Seq[Path],
       hadoopConf: Configuration,
@@ -177,36 +157,41 @@ object InMemoryFileIndex extends Logging {
 
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
 
+    val parallelPartitionDiscoveryParallelism =
+      sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism
+    val sc = sparkSession.sparkContext
+
+    def parallelScanCallBack(): Unit = {
+      logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
+        s" The first several paths are: ${paths.take(10).mkString(", ")}.")
+      HiveCatalogMetrics.incrementParallelListingJobCount(1)
+    }
+
     // Short-circuits parallel listing when serial listing is likely to be faster.
     val threshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold
     if (paths.size <= threshold) {
       return paths.map { path =>
         val leafFiles = HadoopFSUtils.listLeafFiles(
-          path,
-          hadoopConf,
-          filter,
-          Some(sparkSession),
+          path = path,
+          hadoopConf = hadoopConf,
+          filter = filter,
+          contextOpt = Some(sc),
           ignoreMissingFiles = ignoreMissingFiles,
           ignoreLocality = ignoreLocality,
           isSQLRootPath = areRootPaths,
-          filterFun = Some(shouldFilterOut),
-          parallelismThreshold = Some(threshold))
+          parallelScanCallBack = Some(parallelScanCallBack _),
+          filterFun = Some(shouldFilterOut _),
+          parallelismThreshold = threshold,
+          maxParallelism = parallelPartitionDiscoveryParallelism)
         (path, leafFiles)
       }
     }
 
-    val parallelPartitionDiscoveryParallelism =
-      sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism
-  }
-  private def parallelScanCallBack(): Unit = {
-    logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
-      s" The first several paths are: ${paths.take(10).mkString(", ")}.")
-    HiveCatalogMetrics.incrementParallelListingJobCount(1)
-  }
-  HadoopFSUtils.parallelListLeafFiles(sparkSession.sparkContext, paths, hadoopConf, filter,
-    areSQLRootPaths = areRootPaths, ignoreMissingFiles = ignorMissingFiles,
-    ignoreLocality = ignoreLocality, parallelPartitionDiscoveryParallelism,
-    Some(parallelScanCallBack), Some(shouldFilterOut))
+    parallelScanCallBack()
+    HadoopFSUtils.parallelListLeafFiles(sparkSession.sparkContext, paths, hadoopConf, filter,
+      areSQLRootPaths = areRootPaths, ignoreMissingFiles = ignoreMissingFiles,
+      ignoreLocality = ignoreLocality, parallelPartitionDiscoveryParallelism,
+      Some(shouldFilterOut _))
   }
 
   /** Checks if we should filter out this path name. */

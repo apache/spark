@@ -17,7 +17,20 @@
 
 package org.apache.spark.util
 
-private[spark] HadoopFSUtils extends Logging {
+import java.io.FileNotFoundException
+
+import scala.collection.mutable
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.viewfs.ViewFileSystem
+import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
+
+import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
+
+private[spark] object HadoopFSUtils extends Logging {
   /**
    * Lists a collection of paths recursively. Picks the listing strategy adaptively depending
    * on the number of paths to list.
@@ -27,12 +40,11 @@ private[spark] HadoopFSUtils extends Logging {
    * @return for each input path, the set of discovered files for the path
    */
 
-  def parallelListLeafFiles(sc: SparkContext, paths: Seq[Path], hadoopConf: HadoopConf,
-    filter: Filter, areSQLRootPaths: Boolean, ignoreMissingFiles: Boolean, ignoreLocality: Boolean,
-    maxParallelism: Int, parallelScanCallBack: Option[() => Unit] = None,
-    filterFun: Option[String => Boolean] = None): Seq[FileStatus] = {
+  def parallelListLeafFiles(sc: SparkContext, paths: Seq[Path], hadoopConf: Configuration,
+    filter: PathFilter, areSQLRootPaths: Boolean, ignoreMissingFiles: Boolean,
+    ignoreLocality: Boolean, maxParallelism: Int,
+    filterFun: Option[String => Boolean] = None): Seq[(Path, Seq[FileStatus])] = {
 
-    val sparkContext = sparkSession.sparkContext
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
     val serializedPaths = paths.map(_.toString)
 
@@ -40,7 +52,7 @@ private[spark] HadoopFSUtils extends Logging {
     // in case of large #defaultParallelism.
     val numParallelism = Math.min(paths.size, maxParallelism)
 
-    val previousJobDescription = sparkContext.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+    val previousJobDescription = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
     val statusMap = try {
       val description = paths.size match {
         case 0 =>
@@ -50,20 +62,23 @@ private[spark] HadoopFSUtils extends Logging {
         case s =>
           s"Listing leaf files and directories for $s paths:<br/>${paths(0)}, ..."
       }
-      sparkContext.setJobDescription(description)
-      sparkContext
+      sc.setJobDescription(description)
+      sc
         .parallelize(serializedPaths, numParallelism)
         .mapPartitions { pathStrings =>
           val hadoopConf = serializableConfiguration.value
           pathStrings.map(new Path(_)).toSeq.map { path =>
             val leafFiles = listLeafFiles(
-              path,
-              hadoopConf,
-              filter,
+              contextOpt = None, // Can't execute parallel scans on workers
+              path = path,
+              hadoopConf = hadoopConf,
+              filter = filter,
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
-              isRootPath = areSQLRootPaths,
-              filterFun)
+              isSQLRootPath = areSQLRootPaths,
+              filterFun = filterFun,
+              parallelScanCallBack = None  // Can't execute parallel scans on workers
+            )
             (path, leafFiles)
           }.iterator
         }.map { case (path, statuses) =>
@@ -96,7 +111,7 @@ private[spark] HadoopFSUtils extends Logging {
         (path.toString, serializableStatuses)
       }.collect()
     } finally {
-      sparkContext.setJobDescription(previousJobDescription)
+      sc.setJobDescription(previousJobDescription)
     }
 
     // turn SerializableFileStatus back to Status
@@ -122,16 +137,21 @@ private[spark] HadoopFSUtils extends Logging {
    *
    * @return all children of path that match the specified filter.
    */
-  private def listLeafFiles(
+  // scalastyle:off argcount
+  def listLeafFiles(
       path: Path,
       hadoopConf: Configuration,
       filter: PathFilter,
       contextOpt: Option[SparkContext],
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
-      isRootPath: Boolean,
-      filterFun: Option[String => Boolean] = None,
-      parallelisThreshold: Option[Int]): Seq[FileStatus] = {
+      isSQLRootPath: Boolean,
+      parallelScanCallBack: Option[() => Unit],
+      filterFun: Option[String => Boolean],
+      parallelismThreshold: Int = 1,
+      maxParallelism: Int = 1): Seq[FileStatus] = {
+    // scalastyle:on argcount
+
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
 
@@ -152,7 +172,7 @@ private[spark] HadoopFSUtils extends Logging {
         case _ => fs.listStatus(path)
       }
     } catch {
-      // If we are listing a root path (e.g. a top level directory of a table), we need to
+      // If we are listing a root path for SQL (e.g. a top level directory of a table), we need to
       // ignore FileNotFoundExceptions during this root level of the listing because
       //
       //  (a) certain code paths might construct an InMemoryFileIndex with root paths that
@@ -171,13 +191,13 @@ private[spark] HadoopFSUtils extends Logging {
       // able to detect race conditions involving root paths being deleted during
       // InMemoryFileIndex construction. However, it's still a net improvement to detect and
       // fail-fast on the non-root cases. For more info see the SPARK-27676 review discussion.
-      case _: FileNotFoundException if isRootPath || ignoreMissingFiles =>
+      case _: FileNotFoundException if isSQLRootPath || ignoreMissingFiles =>
         logWarning(s"The directory $path was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
     }
 
     val filteredStatuses = filterFun match {
-      case Some(shouldfilterOut) =>
+      case Some(shouldFilterOut) =>
         statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
       case None =>
         statuses
@@ -186,25 +206,31 @@ private[spark] HadoopFSUtils extends Logging {
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
       val nestedFiles: Seq[FileStatus] = contextOpt match {
-        case Some(context) =>
-          bulkListLeafFiles(
+        case Some(context) if dirs.size > parallelismThreshold =>
+          parallelScanCallBack.foreach(f => f())
+          parallelListLeafFiles(
             context,
             dirs.map(_.getPath),
-            hadoopConf,
-            filter,
-            ,
-            areSQLRootPaths = false
+            hadoopConf = hadoopConf,
+            filter = filter,
+            areSQLRootPaths = false,
+            ignoreMissingFiles = ignoreMissingFiles,
+            ignoreLocality = ignoreLocality,
+            filterFun = filterFun,
+            maxParallelism = maxParallelism
           ).flatMap(_._2)
         case _ =>
           dirs.flatMap { dir =>
             listLeafFiles(
-              dir.getPath,
-              hadoopConf,
-              filter,
-              sessionOpt,
+              path = dir.getPath,
+              hadoopConf = hadoopConf,
+              filter = filter,
+              contextOpt = contextOpt,
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
-              isSQLRootPath = false)
+              isSQLRootPath = false,
+              parallelScanCallBack = parallelScanCallBack,
+              filterFun = filterFun)
           }
       }
       val allFiles = topLevelFiles ++ nestedFiles
@@ -230,7 +256,7 @@ private[spark] HadoopFSUtils extends Logging {
       //   implementations don't actually issue RPC for this method.
       //
       // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
-      //   be a big deal since we always use to `bulkListLeafFiles` when the number of
+      //   be a big deal since we always use to `parallelListLeafFiles` when the number of
       //   paths exceeds threshold.
       case f if !ignoreLocality =>
         // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
@@ -267,4 +293,22 @@ private[spark] HadoopFSUtils extends Logging {
 
     resolvedLeafStatuses
   }
+
+  /** A serializable variant of HDFS's BlockLocation. */
+  private case class SerializableBlockLocation(
+      names: Array[String],
+      hosts: Array[String],
+      offset: Long,
+      length: Long)
+
+  /** A serializable variant of HDFS's FileStatus. */
+  private case class SerializableFileStatus(
+      path: String,
+      length: Long,
+      isDir: Boolean,
+      blockReplication: Short,
+      blockSize: Long,
+      modificationTime: Long,
+      accessTime: Long,
+      blockLocations: Array[SerializableBlockLocation])
 }
