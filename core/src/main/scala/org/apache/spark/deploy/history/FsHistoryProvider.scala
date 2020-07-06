@@ -1200,12 +1200,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var hybridStore: HybridStore = null
     val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
       attempt.lastIndex)
-    val isCompressed = reader.compressionCodec.isDefined
 
     // Use InMemoryStore to rebuild app store
     while (hybridStore == null) {
       // A RuntimeException will be thrown if the heap memory is not sufficient
-      memoryManager.lease(appId, attempt.info.attemptId, reader.totalSize, isCompressed)
+      memoryManager.lease(appId, attempt.info.attemptId, reader.totalSize,
+        reader.compressionCodec)
       var store: HybridStore = null
       try {
         store = new HybridStore()
@@ -1231,7 +1231,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var lease: dm.Lease = null
     try {
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
-      lease = dm.lease(reader.totalSize, isCompressed)
+      lease = dm.lease(reader.totalSize, reader.compressionCodec.isDefined)
       val levelDB = KVUtils.open(lease.tmpPath, metadata)
       hybridStore.setLevelDB(levelDB)
       hybridStore.switchToLevelDB(new HybridStore.SwitchToLevelDBListener {

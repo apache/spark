@@ -46,8 +46,8 @@ private class HistoryServerMemoryManager(
       appId: String,
       attemptId: Option[String],
       eventLogSize: Long,
-      isCompressed: Boolean): Unit = {
-    val memoryUsage = approximateMemoryUsage(eventLogSize, isCompressed)
+      codec: Option[String]): Unit = {
+    val memoryUsage = approximateMemoryUsage(eventLogSize, codec)
     if (memoryUsage + currentUsage.get > maxUsage) {
       throw new RuntimeException("Not enough memory to create hybrid store " +
         s"for app $appId / $attemptId.")
@@ -72,11 +72,14 @@ private class HistoryServerMemoryManager(
     }
   }
 
-  private def approximateMemoryUsage(eventLogSize: Long, isCompressed: Boolean): Long = {
-    if (isCompressed) {
-      eventLogSize * 2
-    } else {
-      eventLogSize / 2
+  private def approximateMemoryUsage(eventLogSize: Long, codec: Option[String]): Long = {
+    codec match {
+      case Some("zstd") =>
+        eventLogSize * 10
+      case Some(_) =>
+        eventLogSize * 4
+      case None =>
+        eventLogSize / 2
     }
   }
 }
