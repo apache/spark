@@ -134,7 +134,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         | */
         |def register[$typeTags](name: String, func: Function$x[$types]): UserDefinedFunction = {
         |  val returnEncoder = ExpressionEncoder[RT]()
-        |  val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+        |  val (dataType, nullable) = returnEncoder.dataTypeAndNullable
         |  val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = $inputEncoders
         |  val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
         |  val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -181,7 +181,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag](name: String, func: Function0[RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -202,7 +202,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag](name: String, func: Function1[A1, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -223,7 +223,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag](name: String, func: Function2[A1, A2, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -244,7 +244,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](name: String, func: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -265,7 +265,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](name: String, func: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -286,7 +286,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](name: String, func: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -307,7 +307,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](name: String, func: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -328,7 +328,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](name: String, func: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -349,7 +349,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](name: String, func: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -370,7 +370,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](name: String, func: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -391,7 +391,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](name: String, func: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -412,7 +412,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag](name: String, func: Function11[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -433,7 +433,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag](name: String, func: Function12[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -454,7 +454,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag](name: String, func: Function13[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -475,7 +475,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag](name: String, func: Function14[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -496,7 +496,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag](name: String, func: Function15[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -517,7 +517,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag](name: String, func: Function16[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -538,7 +538,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag](name: String, func: Function17[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -559,7 +559,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag](name: String, func: Function18[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Try(ExpressionEncoder[A18]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -580,7 +580,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag](name: String, func: Function19[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Try(ExpressionEncoder[A18]()).toOption :: Try(ExpressionEncoder[A19]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -601,7 +601,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag](name: String, func: Function20[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Try(ExpressionEncoder[A18]()).toOption :: Try(ExpressionEncoder[A19]()).toOption :: Try(ExpressionEncoder[A20]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -622,7 +622,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag](name: String, func: Function21[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Try(ExpressionEncoder[A18]()).toOption :: Try(ExpressionEncoder[A19]()).toOption :: Try(ExpressionEncoder[A20]()).toOption :: Try(ExpressionEncoder[A21]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()
@@ -643,7 +643,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag, A22: TypeTag](name: String, func: Function22[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, A22, RT]): UserDefinedFunction = {
     val returnEncoder = ExpressionEncoder[RT]()
-    val (dataType, nullable) = returnEncoder.dataTypeAndNullable()
+    val (dataType, nullable) = returnEncoder.dataTypeAndNullable
     val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Try(ExpressionEncoder[A1]()).toOption :: Try(ExpressionEncoder[A2]()).toOption :: Try(ExpressionEncoder[A3]()).toOption :: Try(ExpressionEncoder[A4]()).toOption :: Try(ExpressionEncoder[A5]()).toOption :: Try(ExpressionEncoder[A6]()).toOption :: Try(ExpressionEncoder[A7]()).toOption :: Try(ExpressionEncoder[A8]()).toOption :: Try(ExpressionEncoder[A9]()).toOption :: Try(ExpressionEncoder[A10]()).toOption :: Try(ExpressionEncoder[A11]()).toOption :: Try(ExpressionEncoder[A12]()).toOption :: Try(ExpressionEncoder[A13]()).toOption :: Try(ExpressionEncoder[A14]()).toOption :: Try(ExpressionEncoder[A15]()).toOption :: Try(ExpressionEncoder[A16]()).toOption :: Try(ExpressionEncoder[A17]()).toOption :: Try(ExpressionEncoder[A18]()).toOption :: Try(ExpressionEncoder[A19]()).toOption :: Try(ExpressionEncoder[A20]()).toOption :: Try(ExpressionEncoder[A21]()).toOption :: Try(ExpressionEncoder[A22]()).toOption :: Nil
     val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(returnEncoder)).withName(name)
     val finalUdf = if (nullable) udf else udf.asNonNullable()

@@ -305,7 +305,7 @@ case class ExpressionEncoder[T](
     StructField(s.name, s.dataType, s.nullable)
   })
 
-  def dataTypeAndNullable(): (DataType, Boolean) = {
+  def dataTypeAndNullable: (DataType, Boolean) = {
     if (isSerializedAsStruct) {
       (schema, objSerializer.nullable)
     } else {
