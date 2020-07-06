@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, User
  * @param inputEncoders ExpressionEncoder for each input parameters. For a input parameter which
  *                      serialized as struct will use encoder instead of CatalystTypeConverters to
  *                      convert internal value to Scala value.
- * @param returnEncoder ExpressionEncoder for the return type of function. It's only defined when
+ * @param outputEncoder ExpressionEncoder for the return type of function. It's only defined when
  *                      this is a typed Scala UDF.
  * @param udfName  The user-specified name of this UDF.
  * @param nullable  True if the UDF can return null value.
@@ -48,7 +48,7 @@ case class ScalaUDF(
     dataType: DataType,
     children: Seq[Expression],
     inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
-    returnEncoder: Option[ExpressionEncoder[_]] = None,
+    outputEncoder: Option[ExpressionEncoder[_]] = None,
     udfName: Option[String] = None,
     nullable: Boolean = true,
     udfDeterministic: Boolean = true)
@@ -112,8 +112,8 @@ case class ScalaUDF(
    * of the return data type of udf function.
    */
   private def catalystConverter: Any => Any = {
-    if (returnEncoder.isDefined) {
-      val enc = returnEncoder.get
+    if (outputEncoder.isDefined) {
+      val enc = outputEncoder.get
       val toRow = enc.createSerializer()
       if (enc.isSerializedAsStruct) {
         value => toRow.asInstanceOf[Any => Any](value).asInstanceOf[InternalRow]
