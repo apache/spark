@@ -644,6 +644,19 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val actualContentType = conn.getContentType
     assert(actualContentType === expectedContentType)
   }
+
+  test("Redirect to the root page when accessed to /history/") {
+    val port = server.boundPort
+    val url = new URL(s"http://localhost:$port/history/")
+    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+    conn.setRequestMethod("GET")
+    conn.setUseCaches(false)
+    conn.setDefaultUseCaches(false)
+    conn.setInstanceFollowRedirects(false)
+    conn.connect()
+    assert(conn.getResponseCode === 302)
+    assert(conn.getHeaderField("Location") === s"http://localhost:$port/")
+  }
 }
 
 object HistoryServerSuite {
