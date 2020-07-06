@@ -285,7 +285,7 @@ case class ExpressionEncoder[T](
       // transform attributes accessors.
       objDeserializer.transform {
         case UnresolvedExtractValue(GetColumnByOrdinal(0, _),
-        Literal(part: UTF8String, StringType)) =>
+          Literal(part: UTF8String, StringType)) =>
           UnresolvedAttribute.quoted(part.toString)
         case GetStructField(GetColumnByOrdinal(0, dt), ordinal, _) =>
           GetColumnByOrdinal(ordinal, dt)
