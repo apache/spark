@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
@@ -47,7 +46,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.{CallSite, ReflectUtils, Utils}
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -697,6 +696,24 @@ class SparkSession private(
    */
   def stop(): Unit = {
     sparkContext.stop()
+
+    val clazz = Utils.classForName("java.lang.ApplicationShutdownHooks")
+    val hooks = ReflectUtils.getStaticPrivateField(clazz, "hooks")
+      .asInstanceOf[java.util.IdentityHashMap[Thread, Thread]].asScala
+    hooks.keys.map { thread =>
+      val inheritableThreadLocals = ReflectUtils.getPrivateField(thread, "inheritableThreadLocals")
+      val tab =
+        ReflectUtils.getPrivateField(inheritableThreadLocals, "table")
+          .asInstanceOf[Array[AnyRef]]
+      for (i <- 0 to tab.length - 1 if tab(i) != null) {
+        val value = ReflectUtils.getPrivateField(tab(i), "value")
+        value match {
+          case _: SparkSession =>
+            tab(i) = null
+          case _ =>
+        }
+      }
+    }
   }
 
   /**
