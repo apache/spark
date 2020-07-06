@@ -3084,6 +3084,9 @@
         <hive.shims.scope>provided</hive.shims.scope>
         <orc.classifier>nohive</orc.classifier>
         <datanucleus-core.version>3.2.10</datanucleus-core.version>
+        <hadoop.version>2.7.4</hadoop.version>
+        <curator.version>2.7.1</curator.version>
+        <commons-io.version>2.4</commons-io.version>
       </properties>
     </profile>
 
