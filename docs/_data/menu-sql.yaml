@@ -207,13 +207,9 @@
                 - text: CLEAR CACHE
                   url: sql-ref-syntax-aux-cache-clear-cache.html
                 - text: REFRESH TABLE
-<<<<<<< HEAD
-                  url: sql-ref-syntax-aux-refresh-table.html
-                - text: REFRESH FUNCTION
-                  url: sql-ref-syntax-aux-refresh-function.html
-=======
                   url: sql-ref-syntax-aux-cache-refresh-table.html
->>>>>>> 492d5d174a435c624bd87af9ee3621f4f1c8d1c5
+                - text: REFRESH FUNCTION
+                  url: sql-ref-syntax-aux-cache-refresh-function.html
                 - text: REFRESH
                   url: sql-ref-syntax-aux-cache-refresh.html
             - text: DESCRIBE
