@@ -238,4 +238,31 @@ class OptimizeInSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-32196: Extract convertible part if In is not convertible") {
+    val originalQuery1 =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), UnresolvedAttribute("b"))))
+        .analyze
+    val optimized1 = Optimize.execute(originalQuery1)
+    val correctAnswer1 =
+      testRelation
+        .where(
+          And(EqualTo(UnresolvedAttribute("a"), Literal(1)),
+            In(UnresolvedAttribute("a"), Seq(UnresolvedAttribute("b"))))
+        )
+        .analyze
+    comparePlans(optimized1, correctAnswer1)
+
+    val originalQuery2 =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(UnresolvedAttribute("b"))))
+        .analyze
+    val optimized2 = Optimize.execute(originalQuery2)
+    val correctAnswer2 =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(UnresolvedAttribute("b"))))
+        .analyze
+    comparePlans(optimized2, correctAnswer2)
+  }
 }

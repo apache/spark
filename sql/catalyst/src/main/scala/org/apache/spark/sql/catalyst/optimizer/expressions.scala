@@ -235,26 +235,39 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
+  def optimizeIn(expr: In, v: Expression, list: Seq[Expression]): Expression = {
+    val newList = ExpressionSet(list).toSeq
+    if (newList.length == 1
+      // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
+      // TODO: we exclude them in this rule.
+      && !v.isInstanceOf[CreateNamedStruct]
+      && !newList.head.isInstanceOf[CreateNamedStruct]) {
+      EqualTo(v, newList.head)
+    } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
+      val hSet = newList.map(e => e.eval(EmptyRow))
+      InSet(v, HashSet() ++ hSet)
+    } else if (newList.length < list.length) {
+      expr.copy(list = newList)
+    } else { // newList.length == list.length && newList.length > 1
+      expr
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
       case In(v, list) if list.isEmpty =>
         // When v is not nullable, the following expression will be optimized
         // to FalseLiteral which is tested in OptimizeInSuite.scala
         If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
-      case expr @ In(v, list) if expr.inSetConvertible =>
-        val newList = ExpressionSet(list).toSeq
-        if (newList.length == 1
-          // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
-          // TODO: we exclude them in this rule.
-          && !v.isInstanceOf[CreateNamedStruct]
-          && !newList.head.isInstanceOf[CreateNamedStruct]) {
-          EqualTo(v, newList.head)
-        } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
-          val hSet = newList.map(e => e.eval(EmptyRow))
-          InSet(v, HashSet() ++ hSet)
-        } else if (newList.length < list.length) {
-          expr.copy(list = newList)
-        } else { // newList.length == list.length && newList.length > 1
+      case expr @ In(v, list) =>
+        // split list to 2 parts so that we can push down convertible part
+        val (convertible, nonConvertible) = list.partition(_.isInstanceOf[Literal])
+        if (convertible.nonEmpty && nonConvertible.isEmpty) {
+          optimizeIn(expr, v, list)
+        } else if (convertible.nonEmpty && nonConvertible.nonEmpty) {
+          val optimizedIn = optimizeIn(In(v, convertible), v, convertible)
+          And(optimizedIn, In(v, nonConvertible))
+        } else {
           expr
         }
     }
