@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.script.{ScriptTransformationWriterThreadBase, ScriptTransformBase, ScriptTransformIOSchemaBase}
+import org.apache.spark.sql.execution.script.{BaseScriptTransformationWriterThread, BaseScriptTransform, BaseScriptTransformIOSchema}
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types.DataType
@@ -57,11 +57,7 @@ case class HiveScriptTransformationExec(
     output: Seq[Attribute],
     child: SparkPlan,
     ioschema: HiveScriptIOSchema)
-  extends ScriptTransformBase {
-
-  override def producedAttributes: AttributeSet = outputSet -- inputSet
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  extends BaseScriptTransform {
 
   override def processIterator(
       inputIterator: Iterator[InternalRow],
@@ -225,7 +221,7 @@ private class HiveScriptTransformationWriterThread(
     stderrBuffer: CircularBuffer,
     taskContext: TaskContext,
     conf: Configuration)
-  extends ScriptTransformationWriterThreadBase(
+  extends BaseScriptTransformationWriterThread(
     iter,
     inputSchema,
     outputStream,
@@ -312,7 +308,7 @@ case class HiveScriptIOSchema (
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
     schemaLess: Boolean)
-  extends ScriptTransformIOSchemaBase with HiveInspectors {
+  extends BaseScriptTransformIOSchema with HiveInspectors {
 
   def initInputSerDe(input: Seq[Expression]): Option[(AbstractSerDe, StructObjectInspector)] = {
     inputSerdeClass.map { serdeClass =>

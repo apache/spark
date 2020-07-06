@@ -23,18 +23,24 @@ import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.{SparkException, TaskContext}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, UnsafeProjection}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, SerializableConfiguration, Utils}
 
-trait ScriptTransformBase extends UnaryExecNode {
+trait BaseScriptTransform extends UnaryExecNode {
+
+  override def producedAttributes: AttributeSet = outputSet -- inputSet
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
   override def doExecute(): RDD[InternalRow] = {
     val broadcastedHadoopConf =
       new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
@@ -55,7 +61,7 @@ trait ScriptTransformBase extends UnaryExecNode {
       hadoopConf: Configuration): Iterator[InternalRow]
 
   protected def checkFailureAndPropagate(
-      writerThread: ScriptTransformationWriterThreadBase,
+      writerThread: BaseScriptTransformationWriterThread,
       cause: Throwable = null,
       proc: Process,
       stderrBuffer: CircularBuffer): Unit = {
@@ -83,7 +89,7 @@ trait ScriptTransformBase extends UnaryExecNode {
   }
 }
 
-abstract class ScriptTransformationWriterThreadBase(
+abstract class BaseScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
     outputStream: OutputStream,
@@ -138,7 +144,7 @@ abstract class ScriptTransformationWriterThreadBase(
 /**
  * The wrapper class of input and output schema properties
  */
-abstract class ScriptTransformIOSchemaBase extends Serializable {
+abstract class BaseScriptTransformIOSchema extends Serializable {
   def inputRowFormat: Seq[(String, String)]
 
   def outputRowFormat: Seq[(String, String)]
