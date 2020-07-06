@@ -2618,9 +2618,11 @@ object Sequence {
       }
 
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
+        // Adding pure days to date start/end
         backedSequenceImpl.eval(start, stop, fromLong(stepDays))
 
       } else if (stepMonths == 0 && stepDays == 0 && scale == 1) {
+        // Adding pure microseconds to timestamp start/end
         backedSequenceImpl.eval(start, stop, fromLong(stepMicros))
 
       } else {
