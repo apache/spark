@@ -20,24 +20,24 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.sql.Driver
 import java.util.Properties
 
+import org.apache.spark.security.SecurityConfigurationLock
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOptions)
-  extends SecureConnectionProvider(driver, options) {
-  override val appEntry: String = {
+private[jdbc] class PostgresConnectionProvider extends SecureConnectionProvider {
+  override val driverClass = "org.postgresql.Driver"
+
+  override def appEntry(driver: Driver, options: JDBCOptions): String = {
     val parseURL = driver.getClass.getMethod("parseURL", classOf[String], classOf[Properties])
     val properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]
     properties.getProperty("jaasApplicationName", "pgjdbc")
   }
 
-  override def setAuthenticationConfigIfNeeded(): Unit = SecurityConfigurationLock.synchronized {
-    val (parent, configEntry) = getConfigWithAppEntry()
+  override def setAuthenticationConfigIfNeeded(
+      driver: Driver,
+      options: JDBCOptions): Unit = SecurityConfigurationLock.synchronized {
+    val (parent, configEntry) = getConfigWithAppEntry(driver, options)
     if (configEntry == null || configEntry.isEmpty) {
-      setAuthenticationConfig(parent)
+      setAuthenticationConfig(parent, driver, options)
     }
   }
-}
-
-private[sql] object PostgresConnectionProvider {
-  val driverClass = "org.postgresql.Driver"
 }

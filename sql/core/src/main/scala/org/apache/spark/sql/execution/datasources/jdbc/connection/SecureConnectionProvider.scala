@@ -26,39 +26,47 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.util.SecurityUtils
 
-/**
- * Some of the secure connection providers modify global JVM security configuration.
- * In order to avoid race the modification must be synchronized with this.
- */
-private[connection] object SecurityConfigurationLock
+private[jdbc] abstract class SecureConnectionProvider extends BasicConnectionProvider with Logging {
+  /**
+   * Returns the driver canonical class name which the connection provider supports.
+   */
+  protected val driverClass: String
 
-private[jdbc] abstract class SecureConnectionProvider(driver: Driver, options: JDBCOptions)
-  extends BasicConnectionProvider(driver, options) with Logging {
-  override def getConnection(): Connection = {
-    setAuthenticationConfigIfNeeded()
-    super.getConnection()
+  override def canHandle(driver: Driver, options: JDBCOptions): Boolean = {
+    options.keytab != null && options.principal != null &&
+      driverClass.equalsIgnoreCase(options.driverClass)
+  }
+
+  override def getConnection(driver: Driver, options: JDBCOptions): Connection = {
+    setAuthenticationConfigIfNeeded(driver, options)
+    super.getConnection(driver: Driver, options: JDBCOptions)
   }
 
   /**
    * Returns JAAS application name. This is sometimes configurable on the JDBC driver level.
    */
-  val appEntry: String
+  def appEntry(driver: Driver, options: JDBCOptions): String
 
   /**
    * Sets database specific authentication configuration when needed. If configuration already set
    * then later calls must be no op. When the global JVM security configuration changed then the
    * related code parts must be synchronized properly.
    */
-  def setAuthenticationConfigIfNeeded(): Unit
+  def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit
 
-  protected def getConfigWithAppEntry(): (Configuration, Array[AppConfigurationEntry]) = {
+  protected def getConfigWithAppEntry(
+      driver: Driver,
+      options: JDBCOptions): (Configuration, Array[AppConfigurationEntry]) = {
     val parent = Configuration.getConfiguration
-    (parent, parent.getAppConfigurationEntry(appEntry))
+    (parent, parent.getAppConfigurationEntry(appEntry(driver, options)))
   }
 
-  protected def setAuthenticationConfig(parent: Configuration) = {
+  protected def setAuthenticationConfig(
+      parent: Configuration,
+      driver: Driver,
+      options: JDBCOptions) = {
     val config = new SecureConnectionProvider.JDBCConfiguration(
-      parent, appEntry, options.keytab, options.principal)
+      parent, appEntry(driver, options), options.keytab, options.principal)
     logDebug("Adding database specific security configuration")
     Configuration.setConfiguration(config)
   }

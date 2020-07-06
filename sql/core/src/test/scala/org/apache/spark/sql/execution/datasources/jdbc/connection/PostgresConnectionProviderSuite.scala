@@ -19,14 +19,16 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 class PostgresConnectionProviderSuite extends ConnectionProviderSuiteBase {
   test("setAuthenticationConfigIfNeeded must set authentication if not set") {
-    val driver = registerDriver(PostgresConnectionProvider.driverClass)
-    val defaultProvider = new PostgresConnectionProvider(
-      driver, options("jdbc:postgresql://localhost/postgres"))
-    val customProvider = new PostgresConnectionProvider(
-      driver, options(s"jdbc:postgresql://localhost/postgres?jaasApplicationName=custompgjdbc"))
+    val defaultProvider = new PostgresConnectionProvider()
+    val defaultOptions = options("jdbc:postgresql://localhost/postgres")
+    val customProvider = new PostgresConnectionProvider()
+    val customOptions =
+      options(s"jdbc:postgresql://localhost/postgres?jaasApplicationName=custompgjdbc")
+    val driver = registerDriver(defaultProvider.driverClass)
 
-    assert(defaultProvider.appEntry !== customProvider.appEntry)
-    testSecureConnectionProvider(defaultProvider)
-    testSecureConnectionProvider(customProvider)
+    assert(defaultProvider.appEntry(driver, defaultOptions) !==
+      customProvider.appEntry(driver, customOptions))
+    testSecureConnectionProvider(defaultProvider, driver, defaultOptions)
+    testSecureConnectionProvider(customProvider, driver, customOptions)
   }
 }

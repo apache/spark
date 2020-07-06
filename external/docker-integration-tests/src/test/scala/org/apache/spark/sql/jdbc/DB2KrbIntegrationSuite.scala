@@ -54,7 +54,7 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
         JDBCOptions.JDBC_KEYTAB -> keytabFileName,
         JDBCOptions.JDBC_PRINCIPAL -> principal
       ))
-      new DB2ConnectionProvider(null, options).getAdditionalProperties()
+      new DB2ConnectionProvider().getAdditionalProperties(options)
     }
 
     override def beforeContainerStart(
