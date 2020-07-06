@@ -885,10 +885,16 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         assert(e.contains("Query timed out after"))
 
         statement.setQueryTimeout(0)
-        statement.execute("select java_method('java.lang.Thread', 'sleep', 3000L)")
+        val rs1 = statement.executeQuery(
+          "select 'test', java_method('java.lang.Thread', 'sleep', 3000L)")
+        rs1.next()
+        assert(rs1.getString(1) == "test")
 
         statement.setQueryTimeout(-1)
-        statement.execute("select java_method('java.lang.Thread', 'sleep', 3000L)")
+        val rs2 = statement.executeQuery(
+          "select 'test', java_method('java.lang.Thread', 'sleep', 3000L)")
+        rs2.next()
+        assert(rs2.getString(1) == "test")
       } else {
         val e = intercept[SQLException] {
           statement.setQueryTimeout(1)
