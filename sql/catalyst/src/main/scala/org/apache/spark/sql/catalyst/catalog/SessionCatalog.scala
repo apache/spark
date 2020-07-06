@@ -1344,8 +1344,8 @@ class SessionCatalog(
   /**
    * Unregister a temporary or permanent function from a session-specific [[FunctionRegistry]]
    */
-  def unregisterFunction(name: FunctionIdentifier): Unit = {
-    if (!functionRegistry.dropFunction(name)) {
+  def unregisterFunction(name: FunctionIdentifier, ignoreIfNotExists: Boolean): Unit = {
+    if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
       throw new NoSuchFunctionException(
         formatDatabaseName(name.database.getOrElse(currentDb)), name.funcName)
     }
