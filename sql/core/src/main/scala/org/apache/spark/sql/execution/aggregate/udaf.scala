@@ -474,12 +474,10 @@ case class ScalaAggregator[IN, BUF, OUT](
 
   // input encoder is resolved by ResolveEncodersInScalaAgg
   private[this] lazy val inputDeserializer = inputEncoder.createDeserializer()
-
   private[this] lazy val bufferEncoder =
     agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]].resolveAndBind()
   private[this] lazy val bufferSerializer = bufferEncoder.createSerializer()
   private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
-
   private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
   private[this] lazy val outputSerializer = outputEncoder.createSerializer()
 
