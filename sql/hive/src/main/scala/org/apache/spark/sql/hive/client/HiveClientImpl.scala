@@ -483,7 +483,6 @@ private[hive] class HiveClientImpl(
       "comment"
     )
     // We should match case 2
-    // List the case:
     // 1. MANAGED && TRUE => EXTERNAL
     // 2. MANAGED && true => MANAGED (EXTERNAL behavior)
     // 3. MANAGED && FALSE => MANAGED
