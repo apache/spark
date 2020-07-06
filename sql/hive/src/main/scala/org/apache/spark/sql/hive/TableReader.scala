@@ -47,6 +47,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
+import scala.util.{Failure, Success, Try}
+
 /**
  * A trait for subclasses that handle table scans.
  */
@@ -486,13 +488,20 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
       var i = 0
       val length = fieldRefs.length
       while (i < length) {
-        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-        if (fieldValue == null) {
-          mutableRow.setNullAt(fieldOrdinals(i))
-        } else {
-          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+        Try {
+          val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+          if (fieldValue == null) {
+            mutableRow.setNullAt(fieldOrdinals(i))
+          } else {
+            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          }
+          i += 1
+        } match {
+          case Failure(ex) =>
+            logError(s"Exception thrown in field <${fieldRefs(i).getFieldName}>")
+            throw ex
+          case Success(value) => value
         }
-        i += 1
       }
 
       mutableRow: InternalRow
