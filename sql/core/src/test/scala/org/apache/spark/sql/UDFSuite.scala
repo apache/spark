@@ -518,7 +518,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val plusSec = udf((i: java.time.Instant) => i.plusSeconds(1))
     val df = spark.sql("SELECT TIMESTAMP '2019-02-26 23:59:59Z' as t")
       .select(plusSec('t).cast(StringType))
-    assert(df.collect().toSeq === Seq(Row(expected)))
+    checkAnswer(df, Row(expected) :: Nil)
   }
 
   test("Using java.time.LocalDate in UDF") {
@@ -526,45 +526,59 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val plusDay = udf((i: java.time.LocalDate) => i.plusDays(1))
     val df = spark.sql("SELECT DATE '2019-02-26' as d")
       .select(plusDay('d).cast(StringType))
-    assert(df.collect().toSeq === Seq(Row(expected)))
+    checkAnswer(df, Row(expected) :: Nil)
   }
 
   test("Using combined types of Instant/LocalDate in UDF") {
-    val ts = "2019-02-26T23:59:59Z"
-    val date = "2019-02-26"
-    val expectedDate = sql(s"SELECT CAST(DATE '$date' AS STRING)").collect().head.getString(0)
-    val expectedIns = sql(s"SELECT CAST(TIMESTAMP '$ts' AS STRING)").collect().head.getString(0)
+    val dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    val date = LocalDate.parse("2019-02-26")
+    val instant = Instant.parse("2019-02-26T23:59:59Z")
+    val expectedDate = date.toString
+    val expectedInstant =
+      instant.atZone(DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+        .toLocalDateTime
+        .format(dtf)
+    val df = Seq((date, instant)).toDF("d", "i")
 
     // test normal case
-    spark.udf.register("toDateTime1", udf((d: LocalDate, i: Instant) => LocalDateInstantType(d, i)))
-    var df = sql(s"SELECT toDateTime1(DATE '$date', TIMESTAMP '$ts') as t")
-      .select('t.cast(StringType))
-    assert(df.collect().toSeq === Seq(Row(s"[$expectedDate, $expectedIns]")))
+    spark.udf.register("buildLocalDateInstantType",
+      udf((d: LocalDate, i: Instant) => LocalDateInstantType(d, i)))
+    checkAnswer(df.selectExpr(s"buildLocalDateInstantType(d, i) as di")
+      .select('di.cast(StringType)),
+      Row(s"[$expectedDate, $expectedInstant]") :: Nil)
 
     // test null case
-    spark.udf.register("toDateTime2",
+    spark.udf.register("buildLocalDateInstantType",
       udf((d: LocalDate, i: Instant) => LocalDateInstantType(null, null)))
-    df = sql(s"SELECT toDateTime2(DATE '$date', TIMESTAMP '$ts') as t").select('t.cast(StringType))
-    assert(df.collect().toSeq === Seq(Row("[,]")))
+    checkAnswer(df.selectExpr("buildLocalDateInstantType(d, i) as di")
+      .select('di.cast(StringType)),
+      Row("[,]"))
   }
 
   test("Using combined types of Instant/Timestamp in UDF") {
-    val ts = "2019-02-26T23:59:59Z"
-    val date = "2019-02-26"
-    val expectedDate = sql(s"SELECT CAST(DATE '$date' AS STRING)").collect().head.getString(0)
-    val expectedIns = sql(s"SELECT CAST(TIMESTAMP '$ts' AS STRING)").collect().head.getString(0)
+    val dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    val timestamp = Timestamp.valueOf("2019-02-26 23:59:59")
+    val instant = Instant.parse("2019-02-26T23:59:59Z")
+    val expectedTimestamp = timestamp.toLocalDateTime.format(dtf)
+    val expectedInstant =
+      instant.atZone(DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+      .toLocalDateTime
+      .format(dtf)
+    val df = Seq((timestamp, instant)).toDF("t", "i")
 
     // test normal case
-    spark.udf.register("toDateTime1", udf((d: LocalDate, i: Instant) => LocalDateInstantType(d, i)))
-    var df = sql(s"SELECT toDateTime1(DATE '$date', TIMESTAMP '$ts') as t")
-      .select('t.cast(StringType))
-    assert(df.collect().toSeq === Seq(Row(s"[$expectedDate, $expectedIns]")))
+    spark.udf.register("buildTimestampInstantType",
+      udf((t: Timestamp, i: Instant) => TimestampInstantType(t, i)))
+    checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti")
+      .select('ti.cast(StringType)),
+      Row(s"[$expectedTimestamp, $expectedInstant]"))
 
     // test null case
-    spark.udf.register("toDateTime2",
-      udf((d: LocalDate, i: Instant) => LocalDateInstantType(null, null)))
-    df = sql(s"SELECT toDateTime2(DATE '$date', TIMESTAMP '$ts') as t").select('t.cast(StringType))
-    assert(df.collect().toSeq === Seq(Row("[,]")))
+    spark.udf.register("buildTimestampInstantType",
+      udf((t: Timestamp, i: Instant) => TimestampInstantType(null, null)))
+    checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti")
+      .select('ti.cast(StringType)),
+      Row("[,]"))
   }
 
   test("SPARK-28321 0-args Java UDF should not be called only once") {
