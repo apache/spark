@@ -3084,10 +3084,32 @@
         <hive.shims.scope>provided</hive.shims.scope>
         <orc.classifier>nohive</orc.classifier>
         <datanucleus-core.version>3.2.10</datanucleus-core.version>
-        <hadoop.version>2.7.4</hadoop.version>
-        <curator.version>2.7.1</curator.version>
-        <commons-io.version>2.4</commons-io.version>
       </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>enforce-hadoop-versions</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <bannedDependencies>
+                      <excludes>
+                        <exclude>org.apache.hadoop:*:[3.2.0,)</exclude>
+                      </excludes>
+                    </bannedDependencies>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
     <profile>
