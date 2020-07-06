@@ -1754,15 +1754,16 @@ class JDBCSuite extends QueryTest
     df1.show()
     val df1Count = df1.count()  // df1Count is 2 at the beginning
 
-    val preSQL = "select * from test.people; insert into test.people values ('fred', 1)"
+    val preSQL = "insert into test.people values ('fred', 1); " +
+      "insert into test.people values ('kathy', 4)"
     val df2 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", "TEST.PEOPLE")
       .option("preActions", preSQL)
       .load()
     df2.show()
-    val df2Count = df2.count()  // df2Count should be 3 after running preActions
-    assert(df2Count == df1Count + 1)  // df2.count() should be 3
+    val df2Count = df2.count()  // df2Count should be 4 after running preActions
+    assert(df2Count == df1Count + 2)  // df2.count() should be 4
   }
 
   test("option preActions, run multiple SQLs before reading data with exceptions.") {
@@ -1773,7 +1774,7 @@ class JDBCSuite extends QueryTest
     df1.show()
     val df1Count = df1.count()  // df1Count is 2 at the beginning
 
-    val preSQL = "insert into test.people values ('fred', 1); select * from test.nonexists; "
+    val preSQL = "insert into test.people values ('fred', 1); select * from test.people; "
 
     val e = intercept[SQLException] {
       val df2 = spark.read.format("jdbc")
@@ -1782,7 +1783,7 @@ class JDBCSuite extends QueryTest
         .option("preActions", preSQL)
         .load()
     }.getMessage
-    assert(e.contains("Table \"NONEXISTS\" not found"))
+    assert(e.contains("Method is not allowed for a query"))
 
     val df3 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)

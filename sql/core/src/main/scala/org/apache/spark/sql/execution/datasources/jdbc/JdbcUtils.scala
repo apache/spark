@@ -129,28 +129,23 @@ object JdbcUtils extends Logging {
   def runQuery(conn: Connection, actions: String, options: JDBCOptions): Unit = {
     val autoCommit = conn.getAutoCommit
     conn.setAutoCommit(false)
+
     val commands = QueryStatementUtils.splitSemiColon(actions).asScala
+    val statement = conn.createStatement()
+    statement.setQueryTimeout(options.queryTimeout)
+
+    commands.foreach { command =>
+      statement.addBatch(command.trim())
+    }
     try {
-      commands.foreach { command =>
-        val queryString = command.trim()
-        logWarning(queryString)
-        val statement = conn.prepareStatement(queryString)
-        try {
-          statement.setQueryTimeout(options.queryTimeout)
-          val hasResultSet = statement.execute()
-          if (hasResultSet) {
-            statement.getResultSet().close()
-          }
-        } finally {
-          statement.close()
-        }
-      }
+      statement.executeBatch()
       conn.commit()
     } catch {
       case e: SQLException =>
         conn.rollback()
         throw e
     } finally {
+      statement.close()
       conn.setAutoCommit(autoCommit)
     }
   }

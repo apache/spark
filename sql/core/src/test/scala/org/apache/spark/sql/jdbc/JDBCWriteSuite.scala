@@ -635,8 +635,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     df2.show()
     assert(6 === df2.count()) // 2(df) + 2(df append) + 2(preActions)
 
-    val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1); " +
-      "select * from TEST.CUSTOMQUERY;"
+    val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1);"
     df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
       .option("Url", url1)
       .option("dbtable", "TEST.CUSTOMQUERY")
@@ -677,7 +676,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     assert(2 === df2.count()) // preActions should be rollbacked, and data write should be canceled.
 
     val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1); " +
-      "select * from TEST.NONEXISTS;"
+      "select * from TEST.CUSTOMQUERY;"
     val e2 = intercept[SQLException] {
       df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
         .option("Url", url1)
@@ -686,7 +685,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         .options(properties.asScala)
         .save()
     }.getMessage
-    assert(e2.contains("Table \"NONEXISTS\" not found"))
+    assert(e2.contains("Method is not allowed for a query"))
     val df3 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
     df3.show()
     assert(2 === df3.count()) // postActions should be rollbacked.
