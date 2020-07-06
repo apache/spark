@@ -214,7 +214,7 @@ private class HiveScriptTransformationWriterThread(
     inputSchema: Seq[DataType],
     @Nullable inputSerde: AbstractSerDe,
     @Nullable inputSoi: StructObjectInspector,
-    ioschema: HiveScriptIOSchema,
+    ioSchema: HiveScriptIOSchema,
     outputStream: OutputStream,
     proc: Process,
     stderrBuffer: CircularBuffer,
@@ -223,38 +223,19 @@ private class HiveScriptTransformationWriterThread(
   extends BaseScriptTransformationWriterThread(
     iter,
     inputSchema,
+    ioSchema,
     outputStream,
     proc,
     stderrBuffer,
     taskContext,
     conf) with HiveInspectors {
 
-  setDaemon(true)
-
-
   override def processRows(): Unit = {
     val dataOutputStream = new DataOutputStream(outputStream)
-    @Nullable val scriptInputWriter = ioschema.recordWriter(dataOutputStream, conf).orNull
+    @Nullable val scriptInputWriter = ioSchema.recordWriter(dataOutputStream, conf).orNull
 
-    val len = inputSchema.length
     if (inputSerde == null) {
-      iter.foreach { row =>
-        val data = if (len == 0) {
-          ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
-        } else {
-          val sb = new StringBuilder
-          sb.append(row.get(0, inputSchema(0)))
-          var i = 1
-          while (i < len) {
-            sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-            sb.append(row.get(i, inputSchema(i)))
-            i += 1
-          }
-          sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
-          sb.toString()
-        }
-        outputStream.write(data.getBytes(StandardCharsets.UTF_8))
-      }
+      processRowsWithoutSerde()
     } else {
       // Convert Spark InternalRows to hive data via `HiveInspectors.wrapperFor`.
       val hiveData = new Array[Any](inputSchema.length)
@@ -272,7 +253,7 @@ private class HiveScriptTransformationWriterThread(
         if (scriptInputWriter != null) {
           scriptInputWriter.write(writable)
         } else {
-          prepareWritable(writable, ioschema.outputSerdeProperties).write(dataOutputStream)
+          prepareWritable(writable, ioSchema.outputSerdeProps).write(dataOutputStream)
         }
       }
     }
@@ -381,6 +362,4 @@ case class HiveScriptIOSchema (
       instance
     }
   }
-
-  def outputSerdeProperties: Seq[(String, String)] = outputSerdeProps
 }

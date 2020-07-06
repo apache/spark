@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.script
 
 import java.io.OutputStream
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -92,17 +93,42 @@ trait BaseScriptTransform extends UnaryExecNode {
 abstract class BaseScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
+    ioSchema: BaseScriptTransformIOSchema,
     outputStream: OutputStream,
     proc: Process,
     stderrBuffer: CircularBuffer,
     taskContext: TaskContext,
     conf: Configuration) extends Thread with Logging {
+
+  setDaemon(true)
+
   @volatile protected var _exception: Throwable = null
 
   /** Contains the exception thrown while writing the parent iterator to the external process. */
   def exception: Option[Throwable] = Option(_exception)
 
   protected def processRows(): Unit
+
+  protected def processRowsWithoutSerde(): Unit = {
+    val len = inputSchema.length
+    iter.foreach { row =>
+      val data = if (len == 0) {
+        ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
+      } else {
+        val sb = new StringBuilder
+        sb.append(row.get(0, inputSchema(0)))
+        var i = 1
+        while (i < len) {
+          sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+          sb.append(row.get(i, inputSchema(i)))
+          i += 1
+        }
+        sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
+        sb.toString()
+      }
+      outputStream.write(data.getBytes(StandardCharsets.UTF_8))
+    }
+  }
 
   override def run(): Unit = Utils.logUncaughtExceptions {
     TaskContext.setTaskContext(taskContext)
