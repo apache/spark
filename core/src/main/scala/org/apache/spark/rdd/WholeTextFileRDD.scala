@@ -29,14 +29,14 @@ import org.apache.spark.input.WholeTextFileInputFormat
 /**
  * An RDD that reads a bunch of text files in, and each text file becomes one record.
  */
-private[spark] class WholeTextFileRDD(
+private[spark] class WholeTextFileRDD[F <: WholeTextFileInputFormat](
     sc : SparkContext,
-    inputFormatClass: Class[_ <: WholeTextFileInputFormat],
+    inputFormatClass: Class[F],
     keyClass: Class[Text],
     valueClass: Class[Text],
     conf: Configuration,
     minPartitions: Int)
-  extends NewHadoopRDD[Text, Text](sc, inputFormatClass, keyClass, valueClass, conf) {
+  extends NewHadoopRDD[Text, Text, F](sc, inputFormatClass, keyClass, valueClass, conf) {
 
   override def getPartitions: Array[Partition] = {
     val conf = getConf
