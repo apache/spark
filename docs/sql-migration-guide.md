@@ -970,3 +970,4 @@ Below are the scenarios in which Hive and Spark generate different results:
 * `ACOS(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
 * `ASIN(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
 * `CAST(n AS TIMESTAMP)` If n is integral numbers, Hive treats n as milliseconds, Spark SQL treats n as seconds.
+* `REGEXP(str, patten)` Hive support this function, Spark SQL use RLIKE instead.
