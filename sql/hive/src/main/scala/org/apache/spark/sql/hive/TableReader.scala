@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import java.util.Properties
 
 import scala.collection.JavaConverters._
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -47,7 +48,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
-import scala.util.{Failure, Success, Try}
 
 /**
  * A trait for subclasses that handle table scans.
