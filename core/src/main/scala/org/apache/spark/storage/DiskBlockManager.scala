@@ -70,7 +70,9 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
         old
       } else {
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        Files.createDirectory(newDir.toPath)
+        if (!newDir.exists()) {
+          Files.createDirectory(newDir.toPath)
+        }
         subDirs(dirId)(subDirId) = newDir
         newDir
       }
