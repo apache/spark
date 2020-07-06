@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.math.BigDecimal
+import java.sql.Timestamp
 import java.time.{Instant, LocalDate}
 import java.time.format.DateTimeFormatter
 
@@ -37,6 +38,7 @@ import org.apache.spark.sql.util.QueryExecutionListener
 
 private case class FunctionResult(f1: String, f2: String)
 private case class LocalDateInstantType(date: LocalDate, instant: Instant)
+private case class TimestampInstantType(t: Timestamp, instant: Instant)
 
 class UDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -540,7 +542,8 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(df.collect().toSeq === Seq(Row(s"[$expectedDate, $expectedIns]")))
 
     // test null case
-    spark.udf.register("toDateTime2", udf((d: LocalDate, i: Instant) => LocalDateInstantType(null, null)))
+    spark.udf.register("toDateTime2",
+      udf((d: LocalDate, i: Instant) => LocalDateInstantType(null, null)))
     df = sql(s"SELECT toDateTime2(DATE '$date', TIMESTAMP '$ts') as t").select('t.cast(StringType))
     assert(df.collect().toSeq === Seq(Row("[,]")))
   }
@@ -558,7 +561,8 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(df.collect().toSeq === Seq(Row(s"[$expectedDate, $expectedIns]")))
 
     // test null case
-    spark.udf.register("toDateTime2", udf((d: LocalDate, i: Instant) => LocalDateInstantType(null, null)))
+    spark.udf.register("toDateTime2",
+      udf((d: LocalDate, i: Instant) => LocalDateInstantType(null, null)))
     df = sql(s"SELECT toDateTime2(DATE '$date', TIMESTAMP '$ts') as t").select('t.cast(StringType))
     assert(df.collect().toSeq === Seq(Row("[,]")))
   }
