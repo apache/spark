@@ -891,16 +891,16 @@ abstract class UnixTime extends ToTimestamp {
  * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
  * representing the timestamp of that moment in the current system time zone in the given
  * format. If the format is missing, using format like "1970-01-01 00:00:00".
- * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
+ * Note that Hive Language Manual says it returns 0 if fail, but in fact it returns null.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(unix_time, format) - Returns `unix_time` in the specified `format`.",
+  usage = "_FUNC_(unix_time, fmt) - Returns `unix_time` in the specified `fmt`.",
   arguments = """
     Arguments:
       * unix_time - UNIX Timestamp to be converted to the provided format.
-      * format - Date/time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
-                 for valid date and time format patterns.
+      * fmt - Date/time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
+              for valid date and time format patterns.
   """,
   examples = """
     Examples:
