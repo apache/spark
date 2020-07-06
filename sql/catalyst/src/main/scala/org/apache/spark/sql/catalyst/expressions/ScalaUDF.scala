@@ -111,19 +111,16 @@ case class ScalaUDF(
    * converter for typed ScalaUDF only, since its the only case where we know the type tag
    * of the return data type of udf function.
    */
-  private def catalystConverter: Any => Any = {
-    if (outputEncoder.isDefined) {
-      val enc = outputEncoder.get
-      val toRow = enc.createSerializer()
-      if (enc.isSerializedAsStruct) {
-        value => toRow.asInstanceOf[Any => Any](value).asInstanceOf[InternalRow]
-      } else {
-        value => toRow.asInstanceOf[Any => Any](value).asInstanceOf[InternalRow].get(0, dataType)
-      }
+  private def catalystConverter: Any => Any = outputEncoder.map { enc =>
+    val toRow = enc.createSerializer()
+    if (enc.isSerializedAsStruct) {
+      value: Any =>
+        toRow.asInstanceOf[Any => Any](value).asInstanceOf[InternalRow]
     } else {
-      createToCatalystConverter(dataType)
+      value: Any =>
+        toRow.asInstanceOf[Any => Any](value).asInstanceOf[InternalRow].get(0, dataType)
     }
-  }
+  }.getOrElse(createToCatalystConverter(dataType))
 
   /**
    * Create the converter which converts the catalyst data type to the scala data type.
