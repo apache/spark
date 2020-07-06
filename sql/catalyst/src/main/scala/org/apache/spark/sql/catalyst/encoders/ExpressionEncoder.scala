@@ -307,9 +307,9 @@ case class ExpressionEncoder[T](
 
   def dataTypeAndNullable(): (DataType, Boolean) = {
     if (isSerializedAsStruct) {
-      (schema, true)
+      (schema, objSerializer.nullable)
     } else {
-      (schema.head.dataType, schema.head.nullable)
+      (schema.head.dataType, objSerializer.nullable)
     }
   }
 
