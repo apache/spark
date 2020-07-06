@@ -680,11 +680,15 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     assert(6 === df2.count()) // 2(df) + 2(df append) + 2(preActions)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1);"
 =======
     val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1); " +
       "select * from TEST.CUSTOMQUERY;"
 >>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
+=======
+    val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1);"
+>>>>>>> a75d1e846b... [SPARK-32013][SQL] Changed to allow only DDL or DML (insert/update/delete) in pre/postActions.
     df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
       .option("Url", url1)
       .option("dbtable", "TEST.CUSTOMQUERY")
@@ -730,10 +734,14 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
 
     val postSQL = "insert into TEST.CUSTOMQUERY values ('fred', 1); " +
 <<<<<<< HEAD
+<<<<<<< HEAD
       "select * from TEST.CUSTOMQUERY;"
 =======
       "select * from TEST.NONEXISTS;"
 >>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
+=======
+      "select * from TEST.CUSTOMQUERY;"
+>>>>>>> a75d1e846b... [SPARK-32013][SQL] Changed to allow only DDL or DML (insert/update/delete) in pre/postActions.
     val e2 = intercept[SQLException] {
       df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
         .option("Url", url1)
@@ -743,10 +751,14 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         .save()
     }.getMessage
 <<<<<<< HEAD
+<<<<<<< HEAD
     assert(e2.contains("Method is not allowed for a query"))
 =======
     assert(e2.contains("Table \"NONEXISTS\" not found"))
 >>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
+=======
+    assert(e2.contains("Method is not allowed for a query"))
+>>>>>>> a75d1e846b... [SPARK-32013][SQL] Changed to allow only DDL or DML (insert/update/delete) in pre/postActions.
     val df3 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
     df3.show()
     assert(2 === df3.count()) // postActions should be rollbacked.
