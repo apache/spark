@@ -1220,7 +1220,6 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   private[regression] lazy val link: Link = familyLink.link
 
-
   /**
    * summary row containing:
    *  numInstances, weightSum, deviance, rss, weighted average of label - offset.
@@ -1256,7 +1255,6 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /** Number of instances in DataFrame predictions. */
   @Since("2.2.0")
   lazy val numInstances: Long = glrSummary.getLong(0)
-
 
   /**
    * Name of features. If the name cannot be retrieved from attributes,
