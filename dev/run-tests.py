@@ -363,7 +363,8 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    build_spark_unidoc_sbt(extra_profiles)
+    if test_env != "amplab_jenkins":
+        build_spark_unidoc_sbt(extra_profiles)
 
 
 def build_apache_spark(build_tool, extra_profiles):
