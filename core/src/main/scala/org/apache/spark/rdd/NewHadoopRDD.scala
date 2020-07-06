@@ -68,9 +68,9 @@ private[spark] class NewHadoopPartition(
  * `org.apache.spark.SparkContext.newAPIHadoopRDD()`
  */
 @DeveloperApi
-class NewHadoopRDD[K, V](
+class NewHadoopRDD[K, V, F <: InputFormat[K, V]](
     sc : SparkContext,
-    inputFormatClass: Class[_ <: InputFormat[K, V]],
+    inputFormatClass: Class[F],
     keyClass: Class[K],
     valueClass: Class[V],
     @transient private val _conf: Configuration)
@@ -94,6 +94,10 @@ class NewHadoopRDD[K, V](
   private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
 
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
+
+  private val listingParallelismThreshold = 2
+
+  private val accelerateListing = true
 
   def getConf: Configuration = {
     val conf: Configuration = confBroadcast.value.value
@@ -121,14 +125,8 @@ class NewHadoopRDD[K, V](
   }
 
   override def getPartitions: Array[Partition] = {
-    val inputFormat = inputFormatClass.getConstructor().newInstance()
-    inputFormat match {
-      case configurable: Configurable =>
-        configurable.setConf(_conf)
-      case _ =>
-    }
     try {
-      val allRowSplits = inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
+      val allRowSplits = getSplits()
       val rawSplits = if (ignoreEmptySplits) {
         allRowSplits.filter(_.getLength > 0)
       } else {
@@ -162,6 +160,79 @@ class NewHadoopRDD[K, V](
             s" partitions returned from this path.", e)
         Array.empty[Partition]
     }
+  }
+
+  /**
+   * If configured and the format supports it, uses acceleratedGetSplits, otherwise
+   * asks the InputFormat directly for it's splits.
+   */
+  private def getSplits(): Array[InputSplit] = {
+    if (accelerateListing) {
+      inputFormatClass.getMethod("listStatus")
+      acceleratedGetSplits()
+    }
+    delegateGetSplits()
+  }
+
+  /**
+   * A version of get partitions which can use jobs on multiple workers,
+   * like in SQL. This does not delegate to getSplits, so any file
+   * format with custom getSplits logic should not be used.
+   * Only enable skipLocation if you know that location information is not
+   * used in split calculation.
+   */
+  private final def acceleratedGetSplits():
+      Array[InputSplit] = {
+    // Override listStatus to use Spark listing code
+    object OverriddenFormat extends F {
+      override def listStatus(job: JobConf): Array[FileStatus] = {
+        // get tokens for all the required FileSystems..
+        TokenCache.obtainTokensForNamenodes(job.getCredentials(), dirs, job);
+
+        val filters = List(hiddenFileFilter, getInputPathFilter(job)).filter(_ != null)
+        val filter = MultiPathFilter(filters)
+        val recursive = job.getBoolean(INPUT_DIR_RECURSIVE, false);
+
+        if (dirs.size < parallelListThreshold) {
+          dirs.flatMap{dir =>
+            HadoopFSUtils.listLeafFiles(
+              path = dir,
+              hadoopConf = jobConf,
+              filter = filter,
+              contextOpt = Some(sc),
+              ignoreMissingFiles = ignoreMissingFiles,
+              isSQLRootPath = false,
+              ignoreLocality = ignoreLocality,
+              parallelScanCallBack = None,
+              filterFun = None,
+              parallelismThreshold = listingParallelismThreshold,
+              maxParallelism = maxListingParallelism)
+          }
+        } else {
+          HadoopFSUtils.parallelListLeafFiles(
+            sc = sc,
+            paths = dirs,
+            hadoopConf = jobConf,
+            filter = filter,
+            areSQLRootPaths = false,
+            ignoreMissingFiles = ignoreMissingFiles,
+            ignorLocality = ignoreLocality,
+            maxParallelism = maxListingParallelism,
+            filterFun = None)
+        }
+      }
+    }
+    OverriddenFormat.getSplits()
+  }
+
+  private def delegateGetSplits(): Array[InputSplit] = {
+    val inputFormat = inputFormatClass.getConstructor().newInstance()
+    inputFormat match {
+      case configurable: Configurable =>
+        configurable.setConf(_conf)
+      case _ =>
+    }
+    inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
   }
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
