@@ -112,10 +112,14 @@ def determine_modules_to_test(changed_modules):
     ['root']
     >>> [x.name for x in determine_modules_to_test([modules.build])]
     ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.core])]
+    ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.launcher])]
+    ['root']
     >>> [x.name for x in determine_modules_to_test([modules.graphx])]
     ['graphx', 'examples']
-    >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
-    >>> x # doctest: +NORMALIZE_WHITESPACE
+    >>> [x.name for x in determine_modules_to_test([modules.sql])]
+    ... # doctest: +NORMALIZE_WHITESPACE
     ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
      'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
     """
@@ -416,7 +420,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
     exec_sbt(profiles_and_goals)
 
 
-def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags):
+def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags):
     """Function to properly execute all tests passed in as a set from the
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
@@ -426,6 +430,8 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags):
     test_profiles = extra_profiles + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
 
+    if included_tags:
+        test_profiles += ['-Dtest.include.tags=' + ",".join(included_tags)]
     if excluded_tags:
         test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
 
@@ -595,7 +601,23 @@ def main():
 
     changed_modules = None
     changed_files = None
-    if test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
+    should_only_test_modules = "TEST_ONLY_MODULES" in os.environ
+    included_tags = []
+    if should_only_test_modules:
+        str_test_modules = [m.strip() for m in os.environ.get("TEST_ONLY_MODULES").split(",")]
+        test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
+        # Directly uses test_modules as changed modules to apply tags and environments
+        # as if all specified test modules are changed.
+        changed_modules = test_modules
+        str_excluded_tags = os.environ.get("TEST_ONLY_EXCLUDED_TAGS", None)
+        str_included_tags = os.environ.get("TEST_ONLY_INCLUDED_TAGS", None)
+        excluded_tags = []
+        if str_excluded_tags:
+            excluded_tags = [t.strip() for t in str_excluded_tags.split(",")]
+        included_tags = []
+        if str_included_tags:
+            included_tags = [t.strip() for t in str_included_tags.split(",")]
+    elif test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
@@ -616,33 +638,34 @@ def main():
         test_environ.update(m.environ)
     setup_test_environ(test_environ)
 
-    test_modules = determine_modules_to_test(changed_modules)
-
-    # license checks
-    run_apache_rat_checks()
-
-    # style checks
-    if not changed_files or any(f.endswith(".scala")
-                                or f.endswith("scalastyle-config.xml")
-                                for f in changed_files):
-        run_scala_style_checks(extra_profiles)
     should_run_java_style_checks = False
-    if not changed_files or any(f.endswith(".java")
-                                or f.endswith("checkstyle.xml")
-                                or f.endswith("checkstyle-suppressions.xml")
-                                for f in changed_files):
-        # Run SBT Checkstyle after the build to prevent a side-effect to the build.
-        should_run_java_style_checks = True
-    if not changed_files or any(f.endswith("lint-python")
-                                or f.endswith("tox.ini")
-                                or f.endswith(".py")
-                                for f in changed_files):
-        run_python_style_checks()
-    if not changed_files or any(f.endswith(".R")
-                                or f.endswith("lint-r")
-                                or f.endswith(".lintr")
-                                for f in changed_files):
-        run_sparkr_style_checks()
+    if not should_only_test_modules:
+        test_modules = determine_modules_to_test(changed_modules)
+
+        # license checks
+        run_apache_rat_checks()
+
+        # style checks
+        if not changed_files or any(f.endswith(".scala")
+                                    or f.endswith("scalastyle-config.xml")
+                                    for f in changed_files):
+            run_scala_style_checks(extra_profiles)
+        if not changed_files or any(f.endswith(".java")
+                                    or f.endswith("checkstyle.xml")
+                                    or f.endswith("checkstyle-suppressions.xml")
+                                    for f in changed_files):
+            # Run SBT Checkstyle after the build to prevent a side-effect to the build.
+            should_run_java_style_checks = True
+        if not changed_files or any(f.endswith("lint-python")
+                                    or f.endswith("tox.ini")
+                                    or f.endswith(".py")
+                                    for f in changed_files):
+            run_python_style_checks()
+        if not changed_files or any(f.endswith(".R")
+                                    or f.endswith("lint-r")
+                                    or f.endswith(".lintr")
+                                    for f in changed_files):
+            run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
     # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
@@ -664,7 +687,7 @@ def main():
         build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
 
     # run the test suites
-    run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags)
+    run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
@@ -679,6 +702,10 @@ def main():
 
 
 def _test():
+    if "TEST_ONLY_MODULES" in os.environ:
+        # TODO(SPARK-32252): Enable doctests back in Github Actions.
+        return
+
     import doctest
     failure_count = doctest.testmod()[0]
     if failure_count:
