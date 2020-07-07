@@ -550,14 +550,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     // test null cases
     spark.udf.register("buildLocalDateInstantType",
       udf((d: LocalDate, i: Instant) => LocalDateInstantType(null, null)))
-    checkAnswer(df.selectExpr("buildLocalDateInstantType(d, i) as di")
-      .select('di.cast(StringType)),
-      Row("[,]"))
+    checkAnswer(df.selectExpr("buildLocalDateInstantType(d, i) as di"),
+      Row(Row(null, null)))
 
     spark.udf.register("buildLocalDateInstantType",
       udf((d: LocalDate, i: Instant) => null.asInstanceOf[LocalDateInstantType]))
-    checkAnswer(df.selectExpr("buildLocalDateInstantType(d, i) as di")
-      .select('di.cast(StringType)),
+    checkAnswer(df.selectExpr("buildLocalDateInstantType(d, i) as di"),
       Row(null))
   }
 
@@ -582,14 +580,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     // test null cases
     spark.udf.register("buildTimestampInstantType",
       udf((t: Timestamp, i: Instant) => TimestampInstantType(null, null)))
-    checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti")
-      .select('ti.cast(StringType)),
-      Row("[,]"))
+    checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti"),
+      Row(Row(null, null)))
 
     spark.udf.register("buildTimestampInstantType",
       udf((t: Timestamp, i: Instant) => null.asInstanceOf[TimestampInstantType]))
-    checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti")
-      .select('ti.cast(StringType)),
+    checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti"),
       Row(null))
   }
 
