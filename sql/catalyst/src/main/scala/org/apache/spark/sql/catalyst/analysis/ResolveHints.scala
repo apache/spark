@@ -280,7 +280,7 @@ object ResolveHints {
   }
 
   /**
-   * Removes all the hints when `spark.sql.ignorePlanHints` is set.
+   * Removes all the hints when `spark.sql.optimizer.disableHints` is set.
    * This is executed at the very beginning of the Analyzer to disable
    * the hint functionality.
    */
