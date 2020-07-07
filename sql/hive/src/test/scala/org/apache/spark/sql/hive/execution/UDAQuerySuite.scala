@@ -119,13 +119,25 @@ object CountSerDeAgg extends Aggregator[Int, CountSerDeSQL, CountSerDeSQL] {
   def outputEncoder: Encoder[CountSerDeSQL] = ExpressionEncoder[CountSerDeSQL]()
 }
 
-object ArrayDataAgg extends Aggregator[Array[Double], Double, Double] {
-  def zero: Double = 0.0
-  def reduce(s: Double, array: Array[Double]): Double = s + array.sum
-  def merge(s1: Double, s2: Double): Double = s1 + s2
-  def finish(s: Double): Double = s
-  def bufferEncoder: Encoder[Double] = Encoders.scalaDouble
-  def outputEncoder: Encoder[Double] = Encoders.scalaDouble
+object ArrayDataAgg extends Aggregator[Array[Double], Array[Double], Array[Double]] {
+  def zero: Array[Double] = Array(0.0, 0.0, 0.0)
+  def reduce(s: Array[Double], array: Array[Double]): Array[Double] = {
+    require(s.length == array.length)
+    for ( j <- 0 until s.length ) {
+      s(j) += array(j)
+    }
+    s
+  }
+  def merge(s1: Array[Double], s2: Array[Double]): Array[Double] = {
+    require(s1.length == s2.length)
+    for ( j <- 0 until s1.length ) {
+      s1(j) += s2(j)
+    }
+    s1
+  }
+  def finish(s: Array[Double]): Array[Double] = s
+  def bufferEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
+  def outputEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
 }
 
 abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -166,9 +178,9 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     data2.write.saveAsTable("agg2")
 
     val data3 = Seq[(Seq[Double], Int)](
-      (Seq(1.0), 0),
-      (Seq(2.0, 3.0), 0),
-      (Seq(4.0, 5.0, 6.0), 0)
+      (Seq(1.0, 2.0, 3.0), 0),
+      (Seq(4.0, 5.0, 6.0), 0),
+      (Seq(7.0, 8.0, 9.0), 0)
     ).toDF("data", "dummy")
     data3.write.saveAsTable("agg3")
 
@@ -355,10 +367,10 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
         Row(3, 0, null, 1, 3, 0, 0, 0, null, 1, 3, 0, 2, 2) :: Nil)
   }
 
-  test("SPARK-32159: array input types") {
+  test("SPARK-32159: array encoder types") {
     checkAnswer(
       spark.sql("SELECT arraysum(data) FROM agg3"),
-      Row(21.0) :: Nil)
+      Row(Seq(12.0, 15.0, 18.0)) :: Nil)
   }
 
   test("verify aggregator ser/de behavior") {
