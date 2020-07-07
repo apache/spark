@@ -461,6 +461,7 @@ case class ScalaAggregator[IN, BUF, OUT](
     children: Seq[Expression],
     agg: Aggregator[IN, BUF, OUT],
     inputEncoder: ExpressionEncoder[IN],
+    bufferEncoder: ExpressionEncoder[BUF],
     nullable: Boolean = true,
     isDeterministic: Boolean = true,
     mutableAggBufferOffset: Int = 0,
@@ -471,10 +472,8 @@ case class ScalaAggregator[IN, BUF, OUT](
   with ImplicitCastInputTypes
   with Logging {
 
-  // input encoder is resolved by ResolveEncodersInScalaAgg
+  // input and buffer encoders are resolved by ResolveEncodersInScalaAgg
   private[this] lazy val inputDeserializer = inputEncoder.createDeserializer()
-  private[this] lazy val bufferEncoder =
-    agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]].resolveAndBind()
   private[this] lazy val bufferSerializer = bufferEncoder.createSerializer()
   private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
   private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
@@ -522,14 +521,16 @@ case class ScalaAggregator[IN, BUF, OUT](
 }
 
 /**
- * An extension rule to resolve ScalaAggregator input types from the input encoder
+ * An extension rule to resolve encoder expressions from a ScalaAggregator
  */
 object ResolveEncodersInScalaAgg extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case p if !p.resolved => p
     case p => p.transformExpressionsUp {
       case agg: ScalaAggregator[_, _, _] =>
-        agg.copy(inputEncoder = agg.inputEncoder.resolveAndBind())
+        agg.copy(
+          inputEncoder = agg.inputEncoder.resolveAndBind(),
+          bufferEncoder = agg.bufferEncoder.resolveAndBind())
     }
   }
 }
