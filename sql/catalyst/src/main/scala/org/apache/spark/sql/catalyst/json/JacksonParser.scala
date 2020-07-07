@@ -404,12 +404,10 @@ class JacksonParser(
 
     if (skipRow) {
       None
+    } else if (badRecordException.isEmpty) {
+      Some(row)
     } else {
-      if (badRecordException.isEmpty) {
-        Some(row)
-      } else {
-        throw PartialResultException(row, badRecordException.get)
-      }
+      throw PartialResultException(row, badRecordException.get)
     }
   }
 
