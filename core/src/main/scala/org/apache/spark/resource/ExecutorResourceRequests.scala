@@ -56,7 +56,7 @@ class ExecutorResourceRequests() extends Serializable {
 
   /**
    * Specify off heap memory. The value specified will be converted to MiB.
-   * This value only take effect when MEMORY_OFFHEAP_ENABLED is true
+   * This value only take effect when MEMORY_OFFHEAP_ENABLED is true.
    *
    * @param amount Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
    *               Default unit is MiB if not specified.

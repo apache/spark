@@ -275,6 +275,9 @@ class ResourceProfileSuite extends SparkFunSuite {
       .resource("gpu", 2)
     rprof.require(eReq)
 
+    // Update this if new resource type added
+    assert(ResourceProfile.allSupportedExecutorResources.size === 5,
+      "Executor resources should have 5 supported resources")
     assert(ResourceProfile.getCustomExecutorResources(rprof.build).size === 1,
       "Executor resources should have 1 custom resource")
   }
