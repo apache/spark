@@ -91,21 +91,6 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("OptimizedIn test: In clause not optimized in case filter has attributes") {
-    val originalQuery =
-      testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
-        .analyze
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer =
-      testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), UnresolvedAttribute("b"))))
-        .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
   test("OptimizedIn test: NULL IN (expr1, ..., exprN) gets transformed to Filter(null)") {
     val originalQuery =
       testRelation
