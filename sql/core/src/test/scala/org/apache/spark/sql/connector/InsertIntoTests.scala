@@ -447,19 +447,17 @@ trait InsertIntoSQLOnlyTests
     }
 
     dynamicOverwriteTest("InsertInto: overwrite - multiple static partitions - dynamic mode") {
-      withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-        val t1 = s"${catalogAndNamespace}tbl"
-        withTableAndData(t1) { view =>
-          sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-            s"USING $v2Format PARTITIONED BY (id, p)")
-          sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
-          sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 2, p = 2) SELECT data FROM $view")
-          verifyTable(t1, Seq(
-            (2, "a", 2),
-            (2, "b", 2),
-            (2, "c", 2),
-            (4, "keep", 2)).toDF("id", "data", "p"))
-        }
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTableAndData(t1) { view =>
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
+          s"USING $v2Format PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 2, p = 2) SELECT data FROM $view")
+        verifyTable(t1, Seq(
+          (2, "a", 2),
+          (2, "b", 2),
+          (2, "c", 2),
+          (4, "keep", 2)).toDF("id", "data", "p"))
       }
     }
 
