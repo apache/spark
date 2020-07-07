@@ -267,7 +267,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
           optimizeIn(expr, v, list)
         } else if (convertible.nonEmpty && nonConvertible.nonEmpty) {
           val optimizedIn = optimizeIn(In(v, convertible), v, convertible)
-          And(optimizedIn, In(v, nonConvertible))
+          Or(optimizedIn, In(v, nonConvertible))
         } else {
           expr
         }

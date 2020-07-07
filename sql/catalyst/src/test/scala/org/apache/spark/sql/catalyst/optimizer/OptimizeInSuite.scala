@@ -233,7 +233,7 @@ class OptimizeInSuite extends PlanTest {
     val correctAnswer1 =
       testRelation
         .where(
-          And(EqualTo(UnresolvedAttribute("a"), Literal(1)),
+          Or(EqualTo(UnresolvedAttribute("a"), Literal(1)),
             In(UnresolvedAttribute("a"), Seq(UnresolvedAttribute("b"))))
         )
         .analyze
