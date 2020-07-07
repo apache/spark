@@ -2871,20 +2871,15 @@ class Analyzer(
         case udf: ScalaUDF if udf.inputEncoders.nonEmpty =>
           val boundEncoders = udf.inputEncoders.zipWithIndex.map { case (encOpt, i) =>
             val dataType = udf.children(i).dataType
-            if (dataType.existsRecursively(_.isInstanceOf[UserDefinedType[_]])) {
-              // for UDT, we use `CatalystTypeConverters`
-              None
-            } else {
-              encOpt.map { enc =>
-                val attrs = if (enc.isSerializedAsStructForTopLevel) {
-                  dataType.asInstanceOf[StructType].toAttributes
-                } else {
-                  // the field name doesn't matter here, so we use
-                  // a simple literal to avoid any overhead
-                  new StructType().add("input", dataType).toAttributes
-                }
-                enc.resolveAndBind(attrs)
+            encOpt.map { enc =>
+              val attrs = if (enc.isSerializedAsStructForTopLevel) {
+                dataType.asInstanceOf[StructType].toAttributes
+              } else {
+                // the field name doesn't matter here, so we use
+                // a simple literal to avoid any overhead
+                new StructType().add("input", dataType).toAttributes
               }
+              enc.resolveAndBind(attrs)
             }
           }
           udf.copy(inputEncoders = boundEncoders)

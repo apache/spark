@@ -436,6 +436,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val normalizedGroupingExpressions = groupingExpressions.map { e =>
           NormalizeFloatingNumbers.normalize(e) match {
             case n: NamedExpression => n
+            // Keep the name of the original expression.
             case other => Alias(other, e.name)(exprId = e.exprId)
           }
         }
@@ -460,7 +461,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // because `distinctExpressions` is not extracted during logical phase.
               NormalizeFloatingNumbers.normalize(e) match {
                 case ne: NamedExpression => ne
-                case other => Alias(other, other.toString)()
+                case other =>
+                  // Keep the name of the original expression.
+                  val name = e match {
+                    case ne: NamedExpression => ne.name
+                    case _ => e.toString
+                  }
+                  Alias(other, name)()
               }
             }
 
@@ -685,8 +692,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
+        val canChangeNumParts = r.optNumPartitions.isEmpty
         exchange.ShuffleExchangeExec(
-          r.partitioning, planLater(r.child), canChangeNumPartitions = false) :: Nil
+          r.partitioning, planLater(r.child), canChangeNumParts) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

@@ -93,8 +93,7 @@ object Cast {
                 toField.nullable)
         }
 
-    case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt1.userClass == udt2.userClass =>
-      true
+    case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
     case _ => false
   }
@@ -156,6 +155,8 @@ object Cast {
           case (f1, f2) =>
             resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
         }
+
+    case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
 
     case _ => false
   }
@@ -810,8 +811,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
         case map: MapType => castMap(from.asInstanceOf[MapType], map)
         case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
-        case udt: UserDefinedType[_]
-          if udt.userClass == from.asInstanceOf[UserDefinedType[_]].userClass =>
+        case udt: UserDefinedType[_] if udt.acceptsType(from) =>
           identity[Any]
         case _: UserDefinedType[_] =>
           throw new SparkException(s"Cannot cast $from to $to.")

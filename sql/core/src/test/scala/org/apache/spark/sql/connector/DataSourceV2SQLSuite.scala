@@ -1479,11 +1479,26 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("Database 'ns1' not found"))
   }
 
-  test("Use: v2 catalog is used and namespace does not exist") {
-    // Namespaces are not required to exist for v2 catalogs.
-    sql("USE testcat.ns1.ns2")
-    val catalogManager = spark.sessionState.catalogManager
-    assert(catalogManager.currentNamespace === Array("ns1", "ns2"))
+  test("SPARK-31100: Use: v2 catalog that implements SupportsNamespaces is used " +
+      "and namespace not exists") {
+    // Namespaces are required to exist for v2 catalogs that implements SupportsNamespaces.
+    val exception = intercept[NoSuchNamespaceException] {
+      sql("USE testcat.ns1.ns2")
+    }
+    assert(exception.getMessage.contains("Namespace 'ns1.ns2' not found"))
+  }
+
+  test("SPARK-31100: Use: v2 catalog that does not implement SupportsNameSpaces is used " +
+      "and namespace does not exist") {
+    // Namespaces are not required to exist for v2 catalogs
+    // that does not implement SupportsNamespaces.
+    withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
+      val catalogManager = spark.sessionState.catalogManager
+
+      sql("USE dummy.ns1")
+      assert(catalogManager.currentCatalog.name() == "dummy")
+      assert(catalogManager.currentNamespace === Array("ns1"))
+    }
   }
 
   test("ShowCurrentNamespace: basic tests") {
@@ -1505,6 +1520,8 @@ class DataSourceV2SQLSuite
 
     sql("USE testcat")
     testShowCurrentNamespace("testcat", "")
+
+    sql("CREATE NAMESPACE testcat.ns1.ns2")
     sql("USE testcat.ns1.ns2")
     testShowCurrentNamespace("testcat", "ns1.ns2")
   }
@@ -2342,6 +2359,7 @@ class DataSourceV2SQLSuite
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
 
+    sql("CREATE NAMESPACE testcat.ns1.ns2")
     sql("USE testcat.ns1.ns2")
     sql("CREATE TABLE t USING foo AS SELECT 1 col")
     checkAnswer(spark.table("t"), Row(1))
