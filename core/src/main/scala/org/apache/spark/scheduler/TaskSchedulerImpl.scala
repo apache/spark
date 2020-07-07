@@ -912,7 +912,8 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def executorDecommission(executorId: String): Unit = {
+  override def executorDecommission(
+      executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
     rootPool.executorDecommission(executorId)
     backend.reviveOffers()
   }
