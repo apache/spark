@@ -521,6 +521,9 @@ case class ScalaAggregator[IN, BUF, OUT](
   override def nodeName: String = agg.getClass.getSimpleName
 }
 
+/**
+ * An extension rule to resolve ScalaAggregator input types from the input encoder
+ */
 class ResolveEncodersInScalaAgg extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case p if !p.resolved => p
