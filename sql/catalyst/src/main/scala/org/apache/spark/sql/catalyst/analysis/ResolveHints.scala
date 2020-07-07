@@ -280,13 +280,13 @@ object ResolveHints {
   }
 
   /**
-   * Removes all the hints when `spark.sql.optimizer.ignoreHints` is set.
+   * Removes all the hints when `spark.sql.ignorePlanHints` is set.
    * This is executed at the very beginning of the Analyzer to disable
    * the hint functionality.
    */
   class DisableHints(conf: SQLConf) extends RemoveAllHints(conf: SQLConf) {
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      if (conf.getConf(SQLConf.OPTIMIZER_IGNORE_HINTS)) super.apply(plan) else plan
+      if (conf.getConf(SQLConf.IGNORE_HINTS)) super.apply(plan) else plan
     }
   }
 }
