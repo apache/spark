@@ -229,8 +229,8 @@ object StaticSQLConf {
       .createWithDefault(100)
 
   val SPARK_SCRATCH_DIR =
-    buildStaticConf("spark.scratchdir")
-      .doc("Scratch space for Spark temporary table and so on. Similar with hive.exec.scratchdir")
+    buildStaticConf("spark.sql.scratchdir")
+      .doc("Scratch space for Spark temporary table and so on.")
       .stringConf
       .createWithDefault("/tmp/spark")
 
