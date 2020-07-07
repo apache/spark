@@ -692,23 +692,6 @@ class AdaptiveQueryExecSuite
             'id as "value2")
           .createOrReplaceTempView("skewData2")
 
-        def checkSkewJoin(
-            joins: Seq[SortMergeJoinExec],
-            leftSkewNum: Int,
-            rightSkewNum: Int): Unit = {
-          assert(joins.size == 1 && joins.head.isSkewJoin)
-          assert(joins.head.left.collect {
-            case r: CustomShuffleReaderExec => r
-          }.head.partitionSpecs.collect {
-            case p: PartialReducerPartitionSpec => p.reducerIndex
-          }.distinct.length == leftSkewNum)
-          assert(joins.head.right.collect {
-            case r: CustomShuffleReaderExec => r
-          }.head.partitionSpecs.collect {
-            case p: PartialReducerPartitionSpec => p.reducerIndex
-          }.distinct.length == rightSkewNum)
-        }
-
         // skewed inner join optimization
         val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
           "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
@@ -726,6 +709,67 @@ class AdaptiveQueryExecSuite
           "SELECT * FROM skewData1 right outer join skewData2 ON key1 = key2")
         val rightSmj = findTopLevelSortMergeJoin(rightAdaptivePlan)
         checkSkewJoin(rightSmj, 0, 1)
+      }
+    }
+  }
+
+  private def checkSkewJoin(
+      joins: Seq[SortMergeJoinExec],
+      leftSkewNum: Int,
+      rightSkewNum: Int): Unit = {
+    assert(joins.size == 1 && joins.head.isSkewJoin)
+    assert(joins.head.left.collect {
+      case r: CustomShuffleReaderExec => r
+    }.head.partitionSpecs.collect {
+      case p: PartialReducerPartitionSpec => p.reducerIndex
+    }.distinct.length == leftSkewNum)
+    assert(joins.head.right.collect {
+      case r: CustomShuffleReaderExec => r
+    }.head.partitionSpecs.collect {
+      case p: PartialReducerPartitionSpec => p.reducerIndex
+    }.distinct.length == rightSkewNum)
+  }
+
+  test("SPARK-32201: handle general skew join pattern") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .select(
+            when('id < 250, 249)
+              .when('id >= 750, 1000)
+              .otherwise('id).as("key1"),
+            'id as "value1")
+          .createOrReplaceTempView("skewData1")
+
+        spark
+          .range(0, 1000, 1, 10)
+          .select(
+            when('id < 250, 249)
+              .otherwise('id).as("key2"),
+            'id as "value2")
+          .createOrReplaceTempView("skewData2")
+        val sqlText =
+          """
+            |SELECT * FROM
+            |  skewData1 AS data1
+            |  INNER JOIN
+            |  (
+            |    SELECT skewData2.key2, sum(skewData2.value2) AS sum2
+            |    FROM skewData2 GROUP BY skewData2.key2
+            |  ) AS data2
+            |ON data1.key1 = data2.key2
+            |""".stripMargin
+
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(sqlText)
+        val innerSmj = findTopLevelSortMergeJoin(adaptivePlan)
+        checkSkewJoin(innerSmj, 2, 0)
       }
     }
   }
