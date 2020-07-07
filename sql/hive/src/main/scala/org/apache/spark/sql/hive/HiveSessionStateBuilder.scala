@@ -77,7 +77,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
-        new ResolveEncodersInScalaAgg() +:
+        ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
           catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules

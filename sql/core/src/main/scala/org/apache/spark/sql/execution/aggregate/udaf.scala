@@ -524,7 +524,7 @@ case class ScalaAggregator[IN, BUF, OUT](
 /**
  * An extension rule to resolve ScalaAggregator input types from the input encoder
  */
-class ResolveEncodersInScalaAgg extends Rule[LogicalPlan] {
+object ResolveEncodersInScalaAgg extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case p if !p.resolved => p
     case p => p.transformExpressionsUp {
