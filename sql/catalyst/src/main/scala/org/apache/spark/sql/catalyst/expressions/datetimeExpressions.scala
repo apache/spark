@@ -1176,7 +1176,7 @@ case class DateAddInterval(
     copy(timeZoneId = Option(timeZoneId))
 }
 
-trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
   val func: (Long, String) => Long
   val funcName: String
 
@@ -1203,7 +1203,10 @@ trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes with Nul
         val tzTerm = ctx.addMutableState(tzClass, "tz",
           v => s"""$v = $dtu.getZoneId("$escapedTz");""")
         val utcTerm = "java.time.ZoneOffset.UTC"
-        val (fromTz, toTz) = if (funcName == "fromUTCTime") (utcTerm, tzTerm) else (tzTerm, utcTerm)
+        val (fromTz, toTz) = this match {
+          case _: FromUTCTimestamp => (utcTerm, tzTerm)
+          case _: ToUTCTimestamp => (tzTerm, utcTerm)
+        }
         val eval = left.genCode(ctx)
         ev.copy(code = code"""
            |${eval.code}
