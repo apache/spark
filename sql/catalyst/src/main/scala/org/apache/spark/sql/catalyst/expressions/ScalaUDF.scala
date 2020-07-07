@@ -112,15 +112,15 @@ case class ScalaUDF(
    * of the return data type of udf function.
    */
   private def catalystConverter: Any => Any = outputEncoder.map { enc =>
-    val toRow = enc.createSerializer()
+    val toRow = enc.createSerializer().asInstanceOf[Any => Any]
     if (enc.isSerializedAsStruct) {
       value: Any =>
         if (value == null) null
-        else toRow.asInstanceOf[Any => Any](value).asInstanceOf[InternalRow]
+        else toRow(value).asInstanceOf[InternalRow]
     } else {
       value: Any =>
         if (value == null) null
-        else toRow.asInstanceOf[Any => Any](value).asInstanceOf[InternalRow].get(0, dataType)
+        else toRow(value).asInstanceOf[InternalRow].get(0, dataType)
     }
   }.getOrElse(createToCatalystConverter(dataType))
 
