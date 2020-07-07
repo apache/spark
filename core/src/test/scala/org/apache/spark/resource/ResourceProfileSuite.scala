@@ -56,7 +56,7 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(rprof.executorResources.get(ResourceProfile.OVERHEAD_MEM) == None,
       "overhead memory empty if not specified")
     assert(rprof.executorResources.get(ResourceProfile.OFFHEAP_MEM) == None,
-      "pyspark memory empty if not specified")
+      "offHeap memory empty if not specified")
     assert(rprof.taskResources.size === 1,
       "Task resources should just contain cpus by default")
     assert(rprof.taskResources(ResourceProfile.CPUS).amount === 1,
@@ -265,5 +265,30 @@ class ResourceProfileSuite extends SparkFunSuite {
       rprof.require(new TaskResourceRequests().resource("gpu", 0.7))
     }.getMessage()
     assert(taskError.contains("The resource amount 0.7 must be either <= 0.5, or a whole number."))
+  }
+
+  test("ResourceProfile has correct custom executor resources") {
+    val rprof = new ResourceProfileBuilder()
+    val eReq = new ExecutorResourceRequests()
+      .cores(2).memory("4096")
+      .memoryOverhead("2048").pysparkMemory("1024").offHeapMemory("3072")
+      .resource("gpu", 2)
+    rprof.require(eReq)
+
+    assert(ResourceProfile.getCustomExecutorResources(rprof.build).size === 1,
+      "Executor resources should have 1 custom resource")
+  }
+
+  test("ResourceProfile has correct custom task resources") {
+    val rprof = new ResourceProfileBuilder()
+    val taskReq = new TaskResourceRequests()
+      .resource("gpu", 1)
+    val eReq = new ExecutorResourceRequests()
+      .cores(2).memory("4096")
+      .memoryOverhead("2048").pysparkMemory("1024").offHeapMemory("3072")
+    rprof.require(taskReq).require(eReq)
+
+    assert(ResourceProfile.getCustomTaskResources(rprof.build).size === 1,
+      "Task resources should have 1 custom resource")
   }
 }

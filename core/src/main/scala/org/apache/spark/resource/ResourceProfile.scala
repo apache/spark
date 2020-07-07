@@ -243,6 +243,7 @@ object ResourceProfile extends Logging {
   // task resources
   val CPUS = "cpus"
   // Executor resources
+  // Make sure add new executor resource in below allSupportedExecutorResources
   val CORES = "cores"
   val MEMORY = "memory"
   val OFFHEAP_MEM = "offHeap"
@@ -250,7 +251,7 @@ object ResourceProfile extends Logging {
   val PYSPARK_MEM = "pyspark.memory"
 
   // all supported spark executor resources (minus the custom resources like GPUs/FPGAs)
-  val allSupportedExecutorResources = Seq(CORES, MEMORY, OVERHEAD_MEM, PYSPARK_MEM)
+  val allSupportedExecutorResources = Seq(CORES, MEMORY, OVERHEAD_MEM, PYSPARK_MEM, OFFHEAP_MEM)
 
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0

@@ -326,7 +326,7 @@ private[yarn] class YarnAllocator(
             case ResourceProfile.PYSPARK_MEM =>
               pysparkMem = execReq.amount
             case ResourceProfile.OFFHEAP_MEM =>
-              offHeapMem = execReq.amount
+              offHeapMem = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf, execReq)
             case ResourceProfile.CORES =>
               cores = execReq.amount.toInt
             case "gpu" =>
