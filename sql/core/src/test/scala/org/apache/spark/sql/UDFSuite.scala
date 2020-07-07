@@ -547,12 +547,18 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .select('di.cast(StringType)),
       Row(s"[$expectedDate, $expectedInstant]") :: Nil)
 
-    // test null case
+    // test null cases
     spark.udf.register("buildLocalDateInstantType",
       udf((d: LocalDate, i: Instant) => LocalDateInstantType(null, null)))
     checkAnswer(df.selectExpr("buildLocalDateInstantType(d, i) as di")
       .select('di.cast(StringType)),
       Row("[,]"))
+
+    spark.udf.register("buildLocalDateInstantType",
+      udf((d: LocalDate, i: Instant) => null.asInstanceOf[LocalDateInstantType]))
+    checkAnswer(df.selectExpr("buildLocalDateInstantType(d, i) as di")
+      .select('di.cast(StringType)),
+      Row(null))
   }
 
   test("Using combined types of Instant/Timestamp in UDF") {
@@ -573,12 +579,18 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .select('ti.cast(StringType)),
       Row(s"[$expectedTimestamp, $expectedInstant]"))
 
-    // test null case
+    // test null cases
     spark.udf.register("buildTimestampInstantType",
       udf((t: Timestamp, i: Instant) => TimestampInstantType(null, null)))
     checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti")
       .select('ti.cast(StringType)),
       Row("[,]"))
+
+    spark.udf.register("buildTimestampInstantType",
+      udf((t: Timestamp, i: Instant) => null.asInstanceOf[TimestampInstantType]))
+    checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti")
+      .select('ti.cast(StringType)),
+      Row(null))
   }
 
   test("SPARK-28321 0-args Java UDF should not be called only once") {
