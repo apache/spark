@@ -300,9 +300,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       //     ..
       //       Shuffle
       val optimizePlan = optimizeSkewJoin(plan)
-      val ensuredPlan = ensureRequirements.apply(optimizePlan)
-      println(ensuredPlan)
-      val numShuffles = ensuredPlan.collect {
+      val numShuffles = ensureRequirements.apply(optimizePlan).collect {
         case e: ShuffleExchangeExec => e
       }.length
 
