@@ -195,22 +195,14 @@ class DataFrameSuite extends QueryTest
   private def assertDecimalSumOverflow(
       df: DataFrame, ansiEnabled: Boolean, expectedAnswer: Row): Unit = {
     if (!ansiEnabled) {
-      try {
-        checkAnswer(df, expectedAnswer)
-      } catch {
-        case e: SparkException if e.getCause.isInstanceOf[ArithmeticException] =>
-          // This is an existing bug that we can write overflowed decimal to UnsafeRow but fail
-          // to read it.
-          assert(e.getCause.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
-      }
+      checkAnswer(df, expectedAnswer)
     } else {
       val e = intercept[SparkException] {
-        df.collect
+        df.collect()
       }
       assert(e.getCause.isInstanceOf[ArithmeticException])
       assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
-        e.getCause.getMessage.contains("Overflow in sum of decimals") ||
-        e.getCause.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
+        e.getCause.getMessage.contains("Overflow in sum of decimals"))
     }
   }
 
