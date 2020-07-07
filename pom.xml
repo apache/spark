@@ -3067,6 +3067,24 @@
     </profile>
 
     <profile>
+     <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <id>ozone</id>
+      <properties>
+        <ozone.version>0.5.0</ozone.version>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-ozone-filesystem-lib-current</artifactId>
+          <scope>runtime</scope>
+          <version>${ozone.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <profile>
       <id>hive-1.2</id>
       <properties>
         <hive.group>org.spark-project.hive</hive.group>
