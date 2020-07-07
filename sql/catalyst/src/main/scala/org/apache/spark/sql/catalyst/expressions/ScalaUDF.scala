@@ -65,7 +65,7 @@ case class ScalaUDF(
    * Nil(has same effect with all false) and analyzer will skip null-handling
    * on them.
    */
-  val inputPrimitives: Seq[Boolean] = {
+  lazy val inputPrimitives: Seq[Boolean] = {
     inputEncoders.map { encoderOpt =>
       // It's possible that some of the inputs don't have a specific encoder(e.g. `Any`)
       if (encoderOpt.isDefined) {
