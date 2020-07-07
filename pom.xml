@@ -204,7 +204,7 @@
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     
     <!-- ozone version -->
-    <ozone.version>0.5.0</ozone.version>
+    <ozone.version>0.5.0-beta</ozone.version>
 
     <test.java.home>${java.home}</test.java.home>
 
