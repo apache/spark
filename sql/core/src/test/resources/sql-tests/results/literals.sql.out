@@ -173,11 +173,11 @@ struct<1.0:float,1.2:float,0.1:float,0.1:float>
 
 
 -- !query
-select -1F, -1.2F -.10F, -0.10F
+select -1F, -1.2F, -.10F, -0.10F
 -- !query schema
-struct<-1.0:float,(-1.2 - 0.1):float,-0.1:float>
+struct<-1.0:float,-1.2:float,-0.1:float,-0.1:float>
 -- !query output
--1.0	-1.3000001	-0.1
+-1.0	-1.2	-0.1	-0.1
 
 
 -- !query
