@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
-
 /**
  * A helper trait used to create specialized setter and getter for types supported by
  * [[org.apache.spark.sql.execution.UnsafeFixedWidthAggregationMap]]'s buffer.
