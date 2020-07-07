@@ -1873,4 +1873,17 @@ package object config {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val RDD_TAKE_ORDERED_MERGE_IN_DRIVER =
+    ConfigBuilder("spark.rdd.takeOrdered.mergeInDriver")
+      .doc("This config determine whether the intermediate results(local TopK) of each " +
+        "partition in RDD.takeOrdered will be merged in driver process or executor process. If " +
+        "set to true, merge in driver process, which will get shorter waiting time for return. " +
+        "But if the intermediate results are too large and too many partitions, the " +
+        "intermediate results may accumulate in the memory of the driver process, will cause " +
+        "excessive memory pressure. If set to false, merge in executor process, intermediate " +
+        "results will not accumulate in memory, but will cause longer runtime.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
 }

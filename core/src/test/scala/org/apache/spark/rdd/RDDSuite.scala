@@ -32,7 +32,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
+import org.apache.spark.internal.config.{RDD_PARALLEL_LISTING_THRESHOLD, RDD_TAKE_ORDERED_MERGE_IN_DRIVER}
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -695,6 +695,47 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(sortedTopK.size === 5)
     assert(sortedTopK === Array(10, 9, 8, 7, 6))
     assert(sortedTopK === nums.sorted(ord).take(5))
+  }
+
+  test("takeOrdered with predefined ordering with mergeInDriver config false") {
+    val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    sc.conf.set(RDD_TAKE_ORDERED_MERGE_IN_DRIVER, false)
+    try {
+      val rdd = sc.makeRDD(nums, 2)
+      val sortedLowerK = rdd.takeOrdered(5)
+      assert(sortedLowerK.size === 5)
+      assert(sortedLowerK === Array(1, 2, 3, 4, 5))
+    } finally {
+      sc.conf.remove(RDD_TAKE_ORDERED_MERGE_IN_DRIVER.key)
+    }
+  }
+
+  test("takeOrdered with limit 0 with mergeInDriver config false") {
+    val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    sc.conf.set(RDD_TAKE_ORDERED_MERGE_IN_DRIVER, false)
+    try {
+      val rdd = sc.makeRDD(nums, 2)
+      val sortedLowerK = rdd.takeOrdered(0)
+      assert(sortedLowerK.size === 0)
+    } finally {
+      sc.conf.remove(RDD_TAKE_ORDERED_MERGE_IN_DRIVER.key)
+    }
+  }
+
+  test("takeOrdered with custom ordering with mergeInDriver config false") {
+    val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    implicit val ord = implicitly[Ordering[Int]].reverse
+    sc.conf.set(RDD_TAKE_ORDERED_MERGE_IN_DRIVER, false)
+    try {
+      val rdd = sc.makeRDD(nums, 2)
+      val sortedTopK = rdd.takeOrdered(5)
+      assert(sortedTopK.size === 5)
+      assert(sortedTopK.size === 5)
+      assert(sortedTopK === Array(10, 9, 8, 7, 6))
+      assert(sortedTopK === nums.sorted(ord).take(5))
+    } finally {
+      sc.conf.remove(RDD_TAKE_ORDERED_MERGE_IN_DRIVER.key)
+    }
   }
 
   test("isEmpty") {

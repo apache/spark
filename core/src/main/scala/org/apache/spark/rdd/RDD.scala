@@ -1509,22 +1509,26 @@ abstract class RDD[T: ClassTag](
    * @return an array of top elements
    */
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = withScope {
-    if (num == 0) {
+    if (num == 0 || partitions.length == 0) {
       Array.empty
     } else {
-      val mapRDDs = mapPartitions { items =>
-        // Priority keeps the largest elements, so let's reverse the ordering.
-        val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
-        queue ++= collectionUtils.takeOrdered(items, num)(ord)
-        Iterator.single(queue)
-      }
-      if (mapRDDs.partitions.length == 0) {
-        Array.empty
-      } else {
+      if (conf.get(RDD_TAKE_ORDERED_MERGE_IN_DRIVER)) {
+        val mapRDDs = mapPartitions { items =>
+          // Priority keeps the largest elements, so let's reverse the ordering.
+          val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
+          queue ++= collectionUtils.takeOrdered(items, num)(ord)
+          Iterator.single(queue)
+        }
         mapRDDs.reduce { (queue1, queue2) =>
           queue1 ++= queue2
           queue1
         }.toArray.sorted(ord)
+      } else {
+        mapPartitions { items =>
+          collectionUtils.takeOrdered(items, num)(ord)
+        }.repartition(1).mapPartitions { items =>
+          collectionUtils.takeOrdered(items, num)(ord)
+        }.collect()
       }
     }
   }
