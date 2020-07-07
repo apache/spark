@@ -25,6 +25,7 @@ import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -130,13 +131,15 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     }
   }
 
-  private def canSplitLeftSide(joinType: JoinType) = {
-    joinType == Inner || joinType == Cross || joinType == LeftSemi ||
-      joinType == LeftAnti || joinType == LeftOuter
+  private def canSplitLeftSide(joinType: JoinType, plan: SparkPlan) = {
+    (joinType == Inner || joinType == Cross || joinType == LeftSemi ||
+      joinType == LeftAnti || joinType == LeftOuter) &&
+      plan.find(_.isInstanceOf[HashAggregateExec]).isEmpty
   }
 
-  private def canSplitRightSide(joinType: JoinType) = {
-    joinType == Inner || joinType == Cross || joinType == RightOuter
+  private def canSplitRightSide(joinType: JoinType, plan: SparkPlan) = {
+    (joinType == Inner || joinType == Cross || joinType == RightOuter) &&
+      plan.find(_.isInstanceOf[HashAggregateExec]).isEmpty
   }
 
   private def getSizeInfo(medianSize: Long, sizes: Seq[Long]): String = {
@@ -199,8 +202,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
              |${getSizeInfo(rightMedSize, right.mapStats.bytesByPartitionId)}
           """.stripMargin)
-        val canSplitLeft = canSplitLeftSide(joinType)
-        val canSplitRight = canSplitRightSide(joinType)
+        val canSplitLeft = canSplitLeftSide(joinType, s1)
+        val canSplitRight = canSplitRightSide(joinType, s2)
         // We use the actual partition sizes (may be coalesced) to calculate target size, so that
         // the final data distribution is even (coalesced partitions + split partitions).
         val leftActualSizes = left.partitionsWithSizes.map(_._2)
