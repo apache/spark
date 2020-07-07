@@ -57,6 +57,10 @@ class HadoopMapReduceCommitProtocol(
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
   @transient private var committer: OutputCommitter = _
 
+  /**
+   * The OutputCommitter used to deal with writing data into absolute output path or partitioned
+   * directory with dynamicPartitionOverwrite=true.
+   */
   @transient private var sparkStagingCommitter: SparkStagingOutputCommitter = _
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
@@ -67,6 +71,10 @@ class HadoopMapReduceCommitProtocol(
       case _ => ()
     }
     format.getOutputCommitter(context)
+  }
+
+  private def createSparkStagingCommitter(): SparkStagingOutputCommitter = {
+    new SparkStagingOutputCommitter(jobId, path, dynamicPartitionOverwrite)
   }
 
   override def newTaskTempFile(
@@ -122,7 +130,7 @@ class HadoopMapReduceCommitProtocol(
     committer = setupCommitter(taskAttemptContext)
     committer.setupJob(jobContext)
 
-    sparkStagingCommitter = new SparkStagingOutputCommitter(jobId, path, dynamicPartitionOverwrite)
+    sparkStagingCommitter = createSparkStagingCommitter()
     sparkStagingCommitter.setupJob(jobContext)
   }
 
@@ -151,7 +159,7 @@ class HadoopMapReduceCommitProtocol(
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
     committer = setupCommitter(taskContext)
     committer.setupTask(taskContext)
-    sparkStagingCommitter = new SparkStagingOutputCommitter(jobId, path, dynamicPartitionOverwrite)
+    sparkStagingCommitter = createSparkStagingCommitter()
     sparkStagingCommitter.setupTask(taskContext)
   }
 

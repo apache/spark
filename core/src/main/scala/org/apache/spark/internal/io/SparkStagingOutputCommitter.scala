@@ -23,7 +23,7 @@ import java.util.UUID
 import scala.collection.mutable
 import scala.util.Try
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, JobStatus, OutputCommitter, TaskAttemptContext}
 
 import org.apache.spark.internal.Logging
