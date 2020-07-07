@@ -883,7 +883,7 @@ package object config {
     .doc("Address of driver endpoints.")
     .version("0.7.0")
     .stringConf
-    .createWithDefault(Utils.localCanonicalHostName())
+    .createWithDefault("127.0.0.1")
 
   private[spark] val DRIVER_PORT = ConfigBuilder("spark.driver.port")
     .doc("Port of driver endpoints.")

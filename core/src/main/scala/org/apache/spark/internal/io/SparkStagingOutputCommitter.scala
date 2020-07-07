@@ -49,7 +49,7 @@ class SparkStagingOutputCommitter(
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  private var stagingDir: Path = _
+  private def stagingDir: Path = new Path(path, ".spark-staging-" + sparkJobId)
 
   /**
    * Tracks files staged by this task for absolute output paths. These outputs are not managed by
@@ -96,7 +96,6 @@ class SparkStagingOutputCommitter(
 
   override def setupJob(jobContext: JobContext): Unit = {
     if (hasValidPath) {
-      stagingDir = new Path(path, ".spark-staging-" + sparkJobId)
       val fs = new Path(path).getFileSystem(jobContext.getConfiguration)
       if (!fs.mkdirs(stagingDir)) {
         logError(s"Mkdirs failed to create $stagingDir")
@@ -161,11 +160,10 @@ class SparkStagingOutputCommitter(
     addedAbsPathFiles = mutable.Map[String, String]()
     partitionPaths = mutable.Set[String]()
     dynamicStagingTaskFilePartitions = mutable.Map[Path, String]()
-    stagingDir = new Path(path, ".spark-staging-" + sparkJobId)
   }
 
   override def commitTask(taskContext: TaskAttemptContext): Unit = {
-    if (dynamicPartitionOverwrite) {
+    if (hasValidPath && dynamicPartitionOverwrite) {
       val fs = stagingDir.getFileSystem(taskContext.getConfiguration)
       dynamicStagingTaskFilePartitions.foreach { case (stagingTaskFile, partitionPath) =>
         val fileName = stagingTaskFile.getName
