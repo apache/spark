@@ -355,8 +355,7 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
         Row(3, 0, null, 1, 3, 0, 0, 0, null, 1, 3, 0, 2, 2) :: Nil)
   }
 
-  // SPARK-32159
-  test("array input types") {
+  test("SPARK-32159: array input types") {
     checkAnswer(
       spark.sql("SELECT arraysum(data) FROM agg3"),
       Row(21.0) :: Nil)
