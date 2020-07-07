@@ -166,13 +166,28 @@ import org.apache.spark.sql.types.IntegerType
  *
  * The rule consists of the two phases as follows:
  *
- * In the first phase, expands data for the distinct aggregates where filter clauses exist:
- * 1. Guaranteed to compute filter clauses in the first aggregate locally.
- * 2. The attributes referenced by different distinct aggregate expressions are likely to overlap,
- *    and if no additional processing is performed, data loss will occur. To prevent this, we
- *    generate new attributes and replace the original ones.
- * 3. After generate new attributes, the aggregate may have at least two distinct aggregates,
- *    so we need the second phase too.
+ * In the first phase, if the aggregate query with distinct aggregations and
+ * filter clauses, project the output of the child of the aggregate query:
+ * 1. Project the data. There are three aggregation groups in this query:
+ *    i. the non-distinct group;
+ *    ii. the distinct 'cat1 group;
+ *    iii. the distinct 'cat2 group with filter clause.
+ *    Because there is at least one distinct group with filter clause (e.g. the distinct 'cat2
+ *    group with filter clause), then will project the data.
+ * 2. Avoid projections that may output the same attributes. There are three aggregation groups
+ *    in this query:
+ *    i. the non-distinct group;
+ *    ii. the distinct 'cat1 group;
+ *    iii. the distinct 'cat1 group with filter clause.
+ *    The attributes referenced by different distinct aggregate expressions are likely to overlap,
+ *    and if no additional processing is performed, data loss will occur. If we directly output
+ *    the attributes of the aggregate expression, we may get two attributes 'cat1. To prevent
+ *    this, we generate new attributes (e.g. '_gen_distinct_1) and replace the original ones.
+ *
+ * Why we need the first phase? guaranteed to compute filter clauses in the first aggregate
+ * locally.
+ * Note: after generate new attributes, the aggregate may have at least two distinct aggregates,
+ * so we need the second phase too.
  *
  * In the second phase, rewrite a query with two or more distinct groups:
  * 1. Expand the data. There are three aggregation groups in this query:
@@ -212,11 +227,11 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case a: Aggregate if mayNeedtoRewrite(a.aggregateExpressions) =>
-      val expandAggregate = extractFiltersInDistinctAggregates(a)
+      val expandAggregate = projectFiltersInDistinctAggregates(a)
       rewriteDistinctAggregates(expandAggregate)
   }
 
-  private def extractFiltersInDistinctAggregates(a: Aggregate): Aggregate = {
+  private def projectFiltersInDistinctAggregates(a: Aggregate): Aggregate = {
     val aggExpressions = collectAggregateExprs(a)
     val (distinctAggExpressions, regularAggExpressions) = aggExpressions.partition(_.isDistinct)
     if (distinctAggExpressions.exists(_.filter.isDefined)) {
@@ -267,6 +282,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             case e if filter.isDefined =>
               val ife = If(filter.get, e, nullify(e))
               e -> Alias(ife, s"_gen_distinct_${NamedExpression.newExprId.id}")()
+            // For convenience and unification, we always alias the distinct column, even if
+            // there is no filter.
             case e => e -> Alias(e, s"_gen_distinct_${NamedExpression.newExprId.id}")()
           }
           val projection = projectionMap.map(_._2)
