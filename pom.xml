@@ -202,6 +202,9 @@
     <arrow.version>0.15.1</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
+    
+    <!-- ozone version -->
+    <ozone.version>0.5.0</ozone.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -3059,21 +3062,19 @@
         <curator.version>2.7.1</curator.version>
         <commons-io.version>2.4</commons-io.version>
       </properties>
+     <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-ozone-filesystem-lib-legacy</artifactId>
+          <scope>runtime</scope>
+          <version>${ozone.version}</version>
+        </dependency>
+      </dependencies>
     </profile>
 
     <profile>
       <id>hadoop-3.2</id>
       <!-- Default hadoop profile. Uses global properties. -->
-    </profile>
-
-    <profile>
-     <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
-      <id>ozone</id>
-      <properties>
-        <ozone.version>0.5.0</ozone.version>
-      </properties>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
@@ -3083,7 +3084,6 @@
         </dependency>
       </dependencies>
     </profile>
-
     <profile>
       <id>hive-1.2</id>
       <properties>
