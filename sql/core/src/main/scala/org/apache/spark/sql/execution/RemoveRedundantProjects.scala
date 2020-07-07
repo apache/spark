@@ -1,0 +1,78 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution
+
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, PartialMerge}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExecBase
+import org.apache.spark.sql.execution.window.WindowExec
+import org.apache.spark.sql.internal.SQLConf
+
+
+case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
+  def apply(plan: SparkPlan): SparkPlan = {
+    if (!conf.removeRedundantProjectsEnabled) {
+      plan
+    } else {
+      removeProject(plan, true)
+    }
+  }
+
+  private def removeProject(plan: SparkPlan, requireOrdering: Boolean): SparkPlan = {
+    plan match {
+      case p @ ProjectExec(_, child) =>
+        if (isRedundant(p, child, requireOrdering)) {
+          val newPlan = removeProject(child, requireOrdering)
+          newPlan.setLogicalLink(child.logicalLink.get)
+          newPlan
+        } else {
+          p.mapChildren(removeProject(_, false))
+        }
+      case op: TakeOrderedAndProjectExec =>
+        op.mapChildren(removeProject(_, false))
+      case a: BaseAggregateExec =>
+        // BaseAggregateExec require specific column ordering when mode is Final or PartialMerge.
+        // See comments in BaseAggregateExec inputAttributes method.
+        val keepOrdering = a.aggregateExpressions
+          .exists(ae => ae.mode.equals(Final) || ae.mode.equals(PartialMerge))
+        a.mapChildren(removeProject(_, keepOrdering))
+      case w: WindowExec => w.mapChildren(removeProject(_, false))
+      // JoinExec ordering requirement will inherit from its parent. If there is no ProjectExec in
+      // its ancestors, JoinExec should require output columns to be ordered.
+      case o => o.mapChildren(removeProject(_, requireOrdering))
+    }
+  }
+
+  private def isRedundant(
+      project: ProjectExec,
+      child: SparkPlan,
+      requireOrdering: Boolean): Boolean = {
+    child match {
+      // If a DataSourceV2ScanExec node does not support columnar, a ProjectExec node is required
+      // to convert the rows to UnsafeRow. See DataSourceV2Strategy for more details.
+      case d: DataSourceV2ScanExecBase if !d.supportsColumnar => false
+      case _ =>
+        if (requireOrdering) {
+          project.output.map(_.exprId.id) == child.output.map(_.exprId.id)
+        } else {
+          project.output.map(_.exprId.id).sorted == child.output.map(_.exprId.id).sorted
+        }
+    }
+  }
+}

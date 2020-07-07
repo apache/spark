@@ -342,6 +342,7 @@ object QueryExecution {
       CoalesceBucketsInJoin(sparkSession.sessionState.conf),
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
+      RemoveRedundantProjects(sparkSession.sessionState.conf),
       EnsureRequirements(sparkSession.sessionState.conf),
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
         sparkSession.sessionState.columnarRules),
