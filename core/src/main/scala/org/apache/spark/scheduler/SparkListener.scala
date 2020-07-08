@@ -158,9 +158,14 @@ case class SparkListenerNodeUnblacklisted(time: Long, hostId: String)
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerUnschedulableTaskSet(
-  stageId: Option[Int],
-  stageAttemptId: Option[Int]) extends SparkListenerEvent
+case class SparkListenerUnschedulableTaskSetAdded(
+  stageId: Int,
+  stageAttemptId: Int) extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerUnschedulableTaskSetRemoved(
+  stageId: Int,
+  stageAttemptId: Int) extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
@@ -345,10 +350,18 @@ private[spark] trait SparkListenerInterface {
   def onNodeUnblacklisted(nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit
 
   /**
-   * Called when both dynamic allocation is enabled and there is an unschedulable blacklist task
+   * Called when a taskset becomes unschedulable due to blacklisting and dynamic allocation
+   * is enabled
    */
-  def onUnschedulableTaskSet(
-    blacklistTask: SparkListenerUnschedulableTaskSet): Unit
+  def onUnschedulableTaskSetAdded(
+      unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded): Unit
+
+  /**
+   * Called when an unschedulable taskset becomes schedulable and dynamic allocation
+   * is enabled
+   */
+  def onUnschedulableTaskSetRemoved(
+      unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved): Unit
 
   /**
    * Called when the driver receives a block update info.
@@ -436,8 +449,11 @@ abstract class SparkListener extends SparkListenerInterface {
   override def onNodeUnblacklisted(
       nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit = { }
 
-  override def onUnschedulableTaskSet(
-    unschedulableTaskSet: SparkListenerUnschedulableTaskSet): Unit = { }
+  override def onUnschedulableTaskSetAdded(
+      unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded): Unit = { }
+
+  override def onUnschedulableTaskSetRemoved(
+      unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved): Unit = { }
 
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = { }
 

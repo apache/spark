@@ -312,13 +312,23 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Called by the TaskSetManager when there is an unschedulable blacklist task and dynamic
+   * Called by the TaskSetManager when a taskset becomes unschedulable due to blacklisting and
+   * dynamic allocation is enabled
+   */
+  def unschedulableTaskSetAdded(
+       stageId: Int,
+       stageAttemptId: Int): Unit = {
+    eventProcessLoop.post(UnschedulableTaskSetAdded(stageId, stageAttemptId))
+  }
+
+  /**
+   * Called by the TaskSetManager when an unschedulable taskset becomes schedulable and dynamic
    * allocation is enabled
    */
-  def unschedulableBlacklistTaskSubmitted(
-       stageId: Option[Int],
-       stageAttemptId: Option[Int]): Unit = {
-    eventProcessLoop.post(UnschedulableBlacklistTaskSubmitted(stageId, stageAttemptId))
+  def unschedulableTaskSetRemoved(
+    stageId: Int,
+    stageAttemptId: Int): Unit = {
+    eventProcessLoop.post(UnschedulableTaskSetRemoved(stageId, stageAttemptId))
   }
 
   private[scheduler]
@@ -1024,11 +1034,18 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId, task.stageAttemptId))
   }
 
-  private[scheduler] def handleUnschedulableBlacklistTaskSubmitted(
-      stageId: Option[Int],
-      stageAttemptId: Option[Int]): Unit = {
+  private[scheduler] def handleUnschedulableTaskSetAdded(
+      stageId: Int,
+      stageAttemptId: Int): Unit = {
     listenerBus.post(
-      SparkListenerUnschedulableTaskSet(stageId, stageAttemptId))
+      SparkListenerUnschedulableTaskSetAdded(stageId, stageAttemptId))
+  }
+
+  private[scheduler] def handleUnschedulableTaskSetRemoved(
+    stageId: Int,
+    stageAttemptId: Int): Unit = {
+    listenerBus.post(
+      SparkListenerUnschedulableTaskSetRemoved(stageId, stageAttemptId))
   }
 
   private[scheduler] def handleTaskSetFailed(
@@ -2304,8 +2321,11 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case SpeculativeTaskSubmitted(task) =>
       dagScheduler.handleSpeculativeTaskSubmitted(task)
 
-    case UnschedulableBlacklistTaskSubmitted(stageId, stageAttemptId) =>
-      dagScheduler.handleUnschedulableBlacklistTaskSubmitted(stageId, stageAttemptId)
+    case UnschedulableTaskSetAdded(stageId, stageAttemptId) =>
+      dagScheduler.handleUnschedulableTaskSetAdded(stageId, stageAttemptId)
+
+    case UnschedulableTaskSetRemoved(stageId, stageAttemptId) =>
+      dagScheduler.handleUnschedulableTaskSetRemoved(stageId, stageAttemptId)
 
     case GettingResultEvent(taskInfo) =>
       dagScheduler.handleGetTaskResult(taskInfo)

@@ -637,10 +637,9 @@ private[spark] class TaskSchedulerImpl(
         if (!launchedAnyTask) {
           taskSet.getCompletelyBlacklistedTaskIfAny(hostToExecutors).foreach { taskIndex =>
               // If the taskSet is unschedulable we try to find an existing idle blacklisted
-              // executor. If we cannot find one, we abort immediately. Else we kill the idle
-              // executor and kick off an abortTimer which if it doesn't schedule a task within the
-              // the timeout will abort the taskSet if we were unable to schedule any task from the
-              // taskSet.
+              // executor and kill the idle executor and kick off an abortTimer which if it doesn't
+              // schedule a task within the the timeout will abort the taskSet if we were unable to
+              // schedule any task from the taskSet.
               // Note 1: We keep track of schedulability on a per taskSet basis rather than on a per
               // task basis.
               // Note 2: The taskSet can still be aborted when there are more than one idle
@@ -648,6 +647,10 @@ private[spark] class TaskSchedulerImpl(
               // idle executor isn't replaced in time by ExecutorAllocationManager as it relies on
               // pending tasks and doesn't kill executors on idle timeouts, resulting in the abort
               // timer to expire and abort the taskSet.
+              //
+              // If there are no idle executors and dynamic allocation is enabled, then we would
+              // notify ExecutorAllocationManager to allocate more executors to schedule the
+              // unschedulable tasks else we will abort immediately.
               executorIdToRunningTaskIds.find(x => !isExecutorBusy(x._1)) match {
                 case Some ((executorId, _)) =>
                   if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
@@ -659,11 +662,10 @@ private[spark] class TaskSchedulerImpl(
                   // in order to provision more executors to make them schedulable
                   if (Utils.isDynamicAllocationEnabled(conf)) {
                     if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
-                      logInfo(s"Notifying ExecutorAllocationManager to add executors to" +
-                        s" schedule the unschedulable blacklisted task before aborting $taskSet.")
-                      dagScheduler.unschedulableBlacklistTaskSubmitted(
-                        Some(taskSet.taskSet.stageId),
-                        Some(taskSet.taskSet.stageAttemptId))
+                      logInfo(s"Notifying ExecutorAllocationManager to allocate more executors to" +
+                        s" schedule the unschedulable task before aborting $taskSet.")
+                      dagScheduler.unschedulableTaskSetAdded(taskSet.taskSet.stageId,
+                        taskSet.taskSet.stageAttemptId)
                       updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
                     }
                   } else {
@@ -686,7 +688,8 @@ private[spark] class TaskSchedulerImpl(
               "recently scheduled.")
             // Notify ExecutorAllocationManager as well as other subscribers that a task now
             // recently becomes schedulable
-            dagScheduler.unschedulableBlacklistTaskSubmitted(None, None)
+            dagScheduler.unschedulableTaskSetRemoved(taskSet.taskSet.stageId,
+              taskSet.taskSet.stageAttemptId)
             unschedulableTaskSetToExpiryTime.clear()
           }
         }
