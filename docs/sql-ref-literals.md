@@ -246,7 +246,7 @@ E [ + | - ] digit [ ... ]
 
 * **D**
 
-    Case insensitive, indicates `FLOAT`, which is an 4-byte single-precision floating point number.
+    Case insensitive, indicates `FLOAT`, which is a 4-byte single-precision floating point number.
 
 * **BD**
 
