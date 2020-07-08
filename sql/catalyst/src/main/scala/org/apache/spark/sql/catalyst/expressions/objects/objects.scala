@@ -679,7 +679,7 @@ object MapObjects {
       elementNullable: Boolean = true,
       customCollectionCls: Option[Class[_]] = None): MapObjects = {
     // UnresolvedMapObjects does not serialize its 'function' field.
-    // If an an array expression or array Encoder is not correctly resolved before
+    // If an array expression or array Encoder is not correctly resolved before
     // serialization, this exception condition may occur.
     require(function != null,
       "MapObjects applied with a null function. " +
