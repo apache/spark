@@ -27,9 +27,9 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.util.Utils
 
 private[jdbc] object ConnectionProvider extends Logging {
-  val providers = loadProviders()
+  private val providers = loadProviders()
 
-  private def loadProviders(): Seq[JdbcConnectionProvider] = {
+  def loadProviders(): Seq[JdbcConnectionProvider] = {
     val loader = ServiceLoader.load(classOf[JdbcConnectionProvider],
       Utils.getContextOrSparkClassLoader)
     val providers = mutable.ArrayBuffer[JdbcConnectionProvider]()

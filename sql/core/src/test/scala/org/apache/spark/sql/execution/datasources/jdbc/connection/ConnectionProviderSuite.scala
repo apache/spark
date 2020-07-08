@@ -22,16 +22,16 @@ import javax.security.auth.login.Configuration
 class ConnectionProviderSuite extends ConnectionProviderSuiteBase {
   test("All built-in provides must be loaded") {
     IntentionallyFaultyConnectionProvider.constructed = false
-    assert(ConnectionProvider.providers.exists(_.isInstanceOf[BasicConnectionProvider]))
-    assert(ConnectionProvider.providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
-    assert(ConnectionProvider.providers.exists(_.isInstanceOf[MariaDBConnectionProvider]))
-    assert(ConnectionProvider.providers.exists(_.isInstanceOf[MSSQLConnectionProvider]))
-    assert(ConnectionProvider.providers.exists(_.isInstanceOf[PostgresConnectionProvider]))
-    assert(ConnectionProvider.providers.exists(_.isInstanceOf[OracleConnectionProvider]))
+    val providers = ConnectionProvider.loadProviders()
+    assert(providers.exists(_.isInstanceOf[BasicConnectionProvider]))
+    assert(providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
+    assert(providers.exists(_.isInstanceOf[MariaDBConnectionProvider]))
+    assert(providers.exists(_.isInstanceOf[MSSQLConnectionProvider]))
+    assert(providers.exists(_.isInstanceOf[PostgresConnectionProvider]))
+    assert(providers.exists(_.isInstanceOf[OracleConnectionProvider]))
     assert(IntentionallyFaultyConnectionProvider.constructed)
-    assert(!ConnectionProvider.providers.
-      exists(_.isInstanceOf[IntentionallyFaultyConnectionProvider]))
-    assert(ConnectionProvider.providers.size === 6)
+    assert(!providers.exists(_.isInstanceOf[IntentionallyFaultyConnectionProvider]))
+    assert(providers.size === 6)
   }
 
   test("Multiple security configs must be reachable") {
