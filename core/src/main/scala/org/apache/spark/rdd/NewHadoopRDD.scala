@@ -210,9 +210,10 @@ class NewHadoopRDD[K, V](
       // The hiddenFileFilter is private but we want it, but it's final so
       // we can recreate it safely.
       val filter = new PathFilter() {
+        val parentFilter = FileInputFormat.getInputPathFilter(jobContext)
         override def accept(p: Path): Boolean = {
           val name = p.getName()
-          !name.startsWith("_") && !name.startsWith(".")
+          !name.startsWith("_") && !name.startsWith(".") && parentFilter.accept(p)
         }
       }
 
