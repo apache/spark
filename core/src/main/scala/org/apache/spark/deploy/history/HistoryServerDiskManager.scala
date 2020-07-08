@@ -249,7 +249,7 @@ private class HistoryServerDiskManager(
     }
   }
 
-  private def appStorePath(appId: String, attemptId: Option[String]): File = {
+  private[history] def appStorePath(appId: String, attemptId: Option[String]): File = {
     val fileName = appId + attemptId.map("_" + _).getOrElse("") + ".ldb"
     new File(appStoreDir, fileName)
   }
