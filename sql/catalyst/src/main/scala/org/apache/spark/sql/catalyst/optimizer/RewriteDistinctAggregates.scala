@@ -154,14 +154,11 @@ import org.apache.spark.sql.types.IntegerType
  *        functions = [sum('value)]
  *        output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid, 'total])
  *       Expand(
- *           projections = [('key, null, null, 0, 'value),
- *                          ('key, '_gen_distinct_1, null, 1, null),
- *                          ('key, null, '_gen_distinct_2, 2, null)]
- *           output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid, 'value])
- *         Project(
- *            projectList = ['key, if ('id > 1) 'cat1 else null, 'cat2, cast('value as bigint)]
- *            output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'value])
- *           LocalTableScan [...]
+ *          projections = [('key, null, null, 0, cast('value as bigint)),
+ *                         ('key, if ('id > 1) 'cat1 else null, null, 1, null),
+ *                         ('key, null, 'cat2, 2, null)]
+ *          output = ['key, '_gen_distinct_1, '_gen_distinct_2, 'gid, 'value])
+ *         LocalTableScan [...]
  * }}}
  *
  * The rule consists of the two phases as follows:
@@ -206,6 +203,9 @@ import org.apache.spark.sql.types.IntegerType
  *    aggregation. In this step we use the group id to filter the inputs for the aggregate
  *    functions. The result of the non-distinct group are 'aggregated' by using the first operator,
  *    it might be more elegant to use the native UDAF merge mechanism for this in the future.
+ * 4. If the first phase inserted a project operator as the child of aggregate and the second phase
+ *    already decided to insert an expand operator as the child of aggregate, the second phase will
+ *    merge the project operator with expand operator.
  *
  * This rule duplicates the input data by two or more times (# distinct groups + an optional
  * non-distinct group). This will put quite a bit of memory pressure of the used aggregate and
@@ -227,11 +227,11 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case a: Aggregate if mayNeedtoRewrite(a.aggregateExpressions) =>
-      val expandAggregate = projectFiltersInDistinctAggregates(a)
-      rewriteDistinctAggregates(expandAggregate)
+      val (aggregate, projected) = projectFiltersInDistinctAggregates(a)
+      rewriteDistinctAggregates(aggregate, projected)
   }
 
-  private def projectFiltersInDistinctAggregates(a: Aggregate): Aggregate = {
+  private def projectFiltersInDistinctAggregates(a: Aggregate): (Aggregate, Boolean) = {
     val aggExpressions = collectAggregateExprs(a)
     val (distinctAggExpressions, regularAggExpressions) = aggExpressions.partition(_.isDistinct)
     if (distinctAggExpressions.exists(_.filter.isDefined)) {
@@ -312,13 +312,13 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           case ae: AggregateExpression => rewriteAggExprLookup.getOrElse(ae, ae)
         }.asInstanceOf[NamedExpression]
       }
-      Aggregate(groupByAttrs, patchedAggExpressions, project)
+      (Aggregate(groupByAttrs, patchedAggExpressions, project), true)
     } else {
-      a
+      (a, false)
     }
   }
 
-  private def rewriteDistinctAggregates(a: Aggregate): Aggregate = {
+  private def rewriteDistinctAggregates(a: Aggregate, projected: Boolean): Aggregate = {
     val aggExpressions = collectAggregateExprs(a)
 
     // Extract distinct aggregate expressions.
@@ -359,7 +359,15 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup unique distinct aggregate children.
       val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
-      val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair)
+      val distinctAggChildAttrMap = if (projected) {
+        // To facilitate merging Project with Expand, not need creating a new reference here.
+        distinctAggChildren.map {
+          case ar: AttributeReference => ar -> ar
+          case other => expressionAttributePair(other)
+        }
+      } else {
+        distinctAggChildren.map(expressionAttributePair)
+      }
       val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
 
       // Setup expand & aggregate operators for distinct aggregate expressions.
@@ -448,11 +456,27 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             regularAggNulls
       }
 
+      val (projections, expandChild) = if (projected) {
+        // If `projectFiltersInDistinctAggregates` inserts Project as child of Aggregate and
+        // `rewriteDistinctAggregates` will insert Expand here, merge Project with the Expand.
+        val projectAttributeExpressionMap = a.child.asInstanceOf[Project].projectList.map {
+          case ne: NamedExpression => ne.name -> ne
+        }.toMap
+        val projections = (regularAggProjection ++ distinctAggProjections).map {
+          case projection: Seq[Expression] => projection.map {
+            case ne: NamedExpression => projectAttributeExpressionMap.getOrElse(ne.name, ne)
+            case other => other
+          }
+        }
+        (projections, a.child.asInstanceOf[Project].child)
+      } else {
+        (regularAggProjection ++ distinctAggProjections, a.child)
+      }
       // Construct the expand operator.
       val expand = Expand(
-        regularAggProjection ++ distinctAggProjections,
+        projections,
         groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.map(_._2),
-        a.child)
+        expandChild)
 
       // Construct the first aggregate operator. This de-duplicates all the children of
       // distinct operators, and applies the regular aggregate operators.
