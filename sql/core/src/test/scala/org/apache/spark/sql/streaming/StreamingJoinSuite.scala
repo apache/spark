@@ -1011,11 +1011,11 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
 
     val joined = df1.as("left")
       .join(df2.as("right"),
-        expr(s"""
-                |left.id = right.id AND left.eventTime BETWEEN
-                |  right.eventTime - INTERVAL 30 seconds AND
-                |  right.eventTime + INTERVAL 30 seconds
-              """.stripMargin),
+        expr("""
+               |left.id = right.id AND left.eventTime BETWEEN
+               |  right.eventTime - INTERVAL 30 seconds AND
+               |  right.eventTime + INTERVAL 30 seconds
+             """.stripMargin),
         joinType = "leftOuter")
 
     val inputDataForInput1 = Seq(
