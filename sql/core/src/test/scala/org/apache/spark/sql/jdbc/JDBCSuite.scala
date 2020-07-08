@@ -1717,7 +1717,7 @@ class JDBCSuite extends QueryTest
     checkAnswer(jdbcDF, Row("mary", 2) :: Nil)
   }
 
-  test("option preActions, run single SQL before reading data.") {
+  test("option preActions, run single DML before reading data.") {
     val df1 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", "TEST.PEOPLE")
@@ -1734,19 +1734,9 @@ class JDBCSuite extends QueryTest
     df2.show()
     val df2Count = df2.count()  // df2Count should be 2 after running preActions
     assert(df2Count == df1Count - 1)  // df2.count() should be 2
-
-    val preSQLview = "create view test.peopleview as select * from test.people where name = 'mary'"
-    val df3 = spark.read.format("jdbc")
-      .option("url", urlWithUserAndPass)
-      .option("dbtable", "TEST.PEOPLEVIEW")
-      .option("preActions", preSQLview)
-      .load()
-    df3.show()
-    val df3Count = df3.count()
-    assert(df3Count == 1)
   }
 
-  test("option preActions, run multiple SQLs before reading data.") {
+  test("option preActions, run multiple DML/DDLs before reading data.") {
     val df1 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", "TEST.PEOPLE")
@@ -1764,9 +1754,20 @@ class JDBCSuite extends QueryTest
     df2.show()
     val df2Count = df2.count()  // df2Count should be 4 after running preActions
     assert(df2Count == df1Count + 2)  // df2.count() should be 4
+
+    val preSQLview = "drop view if exists test.peopleview; " +
+      "create view test.peopleview as select * from test.people where name = 'mary'"
+    val df3 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLEVIEW")
+      .option("preActions", preSQLview)
+      .load()
+    df3.show()
+    val df3Count = df3.count()
+    assert(df3Count == 1)
   }
 
-  test("option preActions, run multiple SQLs before reading data with exceptions.") {
+  test("option preActions, run multiple DMLs before reading data with exceptions.") {
     val df1 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", "TEST.PEOPLE")

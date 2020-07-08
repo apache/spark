@@ -576,7 +576,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
-  test("option preActions/postActions, run single SQL before writing data.") {
+  test("option preActions/postActions, run single DML before writing data.") {
 
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     df.write.format("jdbc")
@@ -611,7 +611,43 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     assert(3 === df3.count()) // 2(df) + 1(postActions)
   }
 
-  test("option preActions/postActions, run multiple SQLs before writing data.") {
+  test("option preActions/postActions, run multiple DDLs before writing data.") {
+
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    df.write.format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.CUSTOMQUERY")
+      .options(properties.asScala)
+      .save()
+    val df1 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY", properties)
+    df1.show()
+    assert(2 === df1.count())
+
+    val preSQL = "drop table if exists customquery2;" +
+      "create table customquery2 as select * from TEST.CUSTOMQUERY"
+    df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.CUSTOMQUERY2")
+      .option("preActions", preSQL)
+      .options(properties.asScala)
+      .save()
+    val df2 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY2", properties)
+    df2.show()
+    assert(2 === df2.count())
+
+    val postSQL = "drop table customquery2"
+    df.repartition(20).write.mode(SaveMode.Overwrite).format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.CUSTOMQUERY2")
+      .option("postActions", postSQL)
+      .options(properties.asScala)
+      .save()
+    val df3 = spark.read.jdbc(url1, "TEST.CUSTOMQUERY2", properties)
+    df3.show()
+    assert(2 === df3.count()) // 2(df) + 1(postActions)
+  }
+
+  test("option preActions/postActions, run multiple DMLs before writing data.") {
 
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     df.write.format("jdbc")
@@ -647,7 +683,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     assert(3 === df3.count()) // 2(df) + 1(postActions)
   }
 
-  test("option preActions/postActions, run multiple SQLs before writing data with exceptions.") {
+  test("option preActions/postActions, run multiple DMLs before writing data with exceptions.") {
 
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     df.write.format("jdbc")
