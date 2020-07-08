@@ -2030,6 +2030,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       Long.MinValue, Long.MaxValue, LongType.simpleString)(_.toLong)
   }
 
+  /**
+   * Create a Float Literal expression.
+   */
   override def visitFloatLiteral(ctx: FloatLiteralContext): Literal = {
     val rawStrippedQualifier = ctx.getText.substring(0, ctx.getText.length - 1)
     numericLiteral(ctx, rawStrippedQualifier,
