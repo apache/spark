@@ -1230,16 +1230,10 @@ private[hive] object HiveClientImpl extends Logging {
 
   // Visible for testing.
   private[hive] val HIVE_METASTORE_GENERATED_PROPERTIES: Set[String] = Set(
-    "CreateTime",
-    "transient_lastDdlTime",
-    "grantTime",
-    "lastUpdateTime",
+    hive_metastoreConstants.DDL_TIME,
+    // at org.apache.hadoop.hive.ql.exec.DDLTask.updateModifiedParameters()
     "last_modified_by",
-    "last_modified_time",
-    "Owner",
-    "totalNumberFiles",
-    "maxFileSize",
-    "minFileSize"
+    "last_modified_time"
   )
 
   def newHiveConf(
