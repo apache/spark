@@ -589,6 +589,13 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       Row(null))
   }
 
+  test("SPARK-32154: return null without explicit type is not allowed") {
+    // without explicit type
+    intercept[ClassNotFoundException](spark.udf.register("returnNull", udf((i: Int) => null)))
+    // with explicit type
+    spark.udf.register("returnNull", udf((i: Int) => null.asInstanceOf[Int]))
+  }
+
   test("SPARK-28321 0-args Java UDF should not be called only once") {
     val nonDeterministicJavaUDF = udf(
       new UDF0[Int] {
