@@ -48,7 +48,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   }
 
   private def checkGenerateAndRewrite(rewrite: LogicalPlan): Unit = rewrite match {
-    case Aggregate(_, _, Aggregate(_, _, Expand(_, _, _: Project))) =>
+    case Aggregate(_, _, Aggregate(_, _, _: Expand)) =>
     case _ => fail(s"Plan is not rewritten:\n$rewrite")
   }
 
