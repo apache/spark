@@ -1715,4 +1715,9 @@ class JDBCSuite extends QueryTest
     jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts)
     checkAnswer(jdbcDF, Row("mary", 2) :: Nil)
   }
+
+  test("SPARK-32205: Timestamp write to mysql is datetime") {
+    val mysqlDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    assert(mysqlDialect.getJDBCType(TimestampType).map(_.databaseTypeDefinition).get == "DATETIME")
+  }
 }

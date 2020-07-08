@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.Types
 import java.util.Locale
 
-import org.apache.spark.sql.types.{BooleanType, DataType, LongType, MetadataBuilder}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, ShortType, StringType, TimestampType}
 
 private case object MySQLDialect extends JdbcDialect {
 
@@ -48,4 +48,11 @@ private case object MySQLDialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    // For more details, please see
+    // https://dev.mysql.com/doc/refman/5.7/en/datetime.html
+    case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case _ => None
+  }
 }
