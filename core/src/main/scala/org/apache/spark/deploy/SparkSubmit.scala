@@ -586,6 +586,7 @@ private[spark] class SparkSubmit extends Logging {
 
       // Yarn only
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.queue"),
+      OptionAssigner(args.priority, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.priority"),
       OptionAssigner(args.pyFiles, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.pyFiles",
         mergeFn = Some(mergeFileLists(_, _))),
       OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.jars",

@@ -261,6 +261,7 @@ class SparkSubmitSuite
       "--jars", "one.jar,two.jar,three.jar",
       "--driver-memory", "4g",
       "--queue", "thequeue",
+      "--priority", "25",
       "--files", "file1.txt,file2.txt",
       "--archives", "archive1.txt,archive2.txt",
       "--num-executors", "6",
@@ -286,6 +287,7 @@ class SparkSubmitSuite
     conf.get("spark.driver.memory") should be ("4g")
     conf.get("spark.executor.cores") should be ("5")
     conf.get("spark.yarn.queue") should be ("thequeue")
+    conf.get("spark.yarn.priority") should be ("25")
     conf.get("spark.yarn.dist.jars") should include regex (".*one.jar,.*two.jar,.*three.jar")
     conf.get("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
     conf.get("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
@@ -304,6 +306,7 @@ class SparkSubmitSuite
       "--jars", "one.jar,two.jar,three.jar",
       "--driver-memory", "4g",
       "--queue", "thequeue",
+      "--priority", "25",
       "--files", "file1.txt,file2.txt",
       "--archives", "archive1.txt,archive2.txt",
       "--num-executors", "6",
@@ -324,6 +327,7 @@ class SparkSubmitSuite
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.executor.cores") should be ("5")
     conf.get("spark.yarn.queue") should be ("thequeue")
+    conf.get("spark.yarn.priority") should be ("25")
     conf.get("spark.executor.instances") should be ("6")
     conf.get("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
     conf.get("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")

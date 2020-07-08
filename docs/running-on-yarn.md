@@ -57,6 +57,7 @@ For example:
         --executor-memory 2g \
         --executor-cores 1 \
         --queue thequeue \
+        --priority 10 \
         examples/jars/spark-examples*.jar \
         10
 
