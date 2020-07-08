@@ -62,20 +62,12 @@ case class BroadcastHashJoinExec(
     }
   }
 
-  override def outputPartitioning: Partitioning = {
+  override lazy val outputPartitioning: Partitioning = {
     joinType match {
       case _: InnerLike =>
         streamedPlan.outputPartitioning match {
-          case h: HashPartitioning => PartitioningCollection(expandOutputPartitioning(h))
-          case c: PartitioningCollection =>
-            def expand(partitioning: PartitioningCollection): Partitioning = {
-              PartitioningCollection(partitioning.partitionings.flatMap {
-                case h: HashPartitioning => expandOutputPartitioning(h)
-                case c: PartitioningCollection => Seq(expand(c))
-                case other => Seq(other)
-              })
-            }
-            expand(c)
+          case h: HashPartitioning => expandOutputPartitioning(h)
+          case c: PartitioningCollection => expandOutputPartitioning(c)
           case other => other
         }
       case _ => streamedPlan.outputPartitioning
@@ -96,30 +88,39 @@ case class BroadcastHashJoinExec(
     mapping.toMap
   }
 
-  // Expands the given partitioning by substituting streamed keys with build keys.
+  // Expands the given partitioning collection recursively.
+  private def expandOutputPartitioning(
+      partitioning: PartitioningCollection): PartitioningCollection = {
+    PartitioningCollection(partitioning.partitionings.flatMap {
+      case h: HashPartitioning => expandOutputPartitioning(h).partitionings
+      case c: PartitioningCollection => Seq(expandOutputPartitioning(c))
+      case other => Seq(other)
+    })
+  }
+
+  // Expands the given hash partitioning by substituting streamed keys with build keys.
   // For example, if the expressions for the given partitioning are Seq("a", "b", "c")
   // where the streamed keys are Seq("b", "c") and the build keys are Seq("x", "y"),
   // the expanded partitioning will have the following expressions:
   // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
-  private def expandOutputPartitioning(partitioning: HashPartitioning): Seq[HashPartitioning] = {
+  // The expanded expressions are returned as PartitioningCollection.
+  private def expandOutputPartitioning(partitioning: HashPartitioning): PartitioningCollection = {
     def generateExprCombinations(
         current: Seq[Expression],
-        accumulated: Seq[Expression],
-        all: mutable.ListBuffer[Seq[Expression]]): Unit = {
+        accumulated: Seq[Expression]): Seq[Seq[Expression]] = {
       if (current.isEmpty) {
-        all += accumulated
+        Seq(accumulated)
       } else {
-        generateExprCombinations(current.tail, accumulated :+ current.head, all)
-        val mapped = streamedKeyToBuildKeyMapping.get(current.head.canonicalized)
-        if (mapped.isDefined) {
-          mapped.get.foreach(m => generateExprCombinations(current.tail, accumulated :+ m, all))
-        }
+        val buildKeys = streamedKeyToBuildKeyMapping.get(current.head.canonicalized)
+        generateExprCombinations(current.tail, accumulated :+ current.head) ++
+          buildKeys.map { _.flatMap(b => generateExprCombinations(current.tail, accumulated :+ b))
+        }.getOrElse(Nil)
       }
     }
 
-    val all = mutable.ListBuffer[Seq[Expression]]()
-    generateExprCombinations(partitioning.expressions, Nil, all)
-    all.map(HashPartitioning(_, partitioning.numPartitions))
+    PartitioningCollection(
+      generateExprCombinations(partitioning.expressions, Nil).map(
+        HashPartitioning(_, partitioning.numPartitions)))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

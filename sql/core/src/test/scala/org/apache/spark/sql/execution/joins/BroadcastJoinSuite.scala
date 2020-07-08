@@ -436,20 +436,18 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         assert(collect(plan1) { case e: ShuffleExchangeExec => e }.isEmpty)
         val broadcastJoins = collect(plan1) { case b: BroadcastHashJoinExec => b }
         assert(broadcastJoins.size == 1)
-        broadcastJoins(0).outputPartitioning match {
-          case p: PartitioningCollection =>
-            assert(p.partitionings.size == 4)
-            // Verify all the combinations of output partitioning.
-            Seq(Seq(t1("i1"), t1("j1")),
-              Seq(t1("i1"), df2("j2")),
-              Seq(df2("i2"), t1("j1")),
-              Seq(df2("i2"), df2("j2"))).foreach { expected =>
-              val expectedExpressions = expected.map(_.expr)
-              assert(p.partitionings.exists {
-                case h: HashPartitioning => expressionsEqual(h.expressions, expectedExpressions)
-              })
-            }
-          case _ => fail()
+        assert(broadcastJoins(0).outputPartitioning.isInstanceOf[PartitioningCollection])
+        val p = broadcastJoins(0).outputPartitioning.asInstanceOf[PartitioningCollection]
+        assert(p.partitionings.size == 4)
+        // Verify all the combinations of output partitioning.
+        Seq(Seq(t1("i1"), t1("j1")),
+          Seq(t1("i1"), df2("j2")),
+          Seq(df2("i2"), t1("j1")),
+          Seq(df2("i2"), df2("j2"))).foreach { expected =>
+          val expectedExpressions = expected.map(_.expr)
+          assert(p.partitionings.exists {
+            case h: HashPartitioning => expressionsEqual(h.expressions, expectedExpressions)
+          })
         }
 
         // Join on the column from the broadcasted side (i2, j2) and make sure output partitioning
@@ -490,17 +488,15 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       assert(collect(plan2) { case e: ShuffleExchangeExec => e }.size == 2)
       val broadcastJoins = collect(plan2) { case b: BroadcastHashJoinExec => b }
       assert(broadcastJoins.size == 1)
-      broadcastJoins(0).outputPartitioning match {
-        case p: PartitioningCollection =>
-          assert(p.partitionings.size == 3)
-          // Verify all the combinations of output partitioning.
-          Seq(Seq(t1("i1")), Seq(t2("i2")), Seq(t3("i3"))).foreach { expected =>
-            val expectedExpressions = expected.map(_.expr)
-            assert(p.partitionings.exists {
-              case h: HashPartitioning => expressionsEqual(h.expressions, expectedExpressions)
-            })
-          }
-        case _ => fail()
+      assert(broadcastJoins(0).outputPartitioning.isInstanceOf[PartitioningCollection])
+      val p = broadcastJoins(0).outputPartitioning.asInstanceOf[PartitioningCollection]
+      assert(p.partitionings.size == 3)
+      // Verify all the combinations of output partitioning.
+      Seq(Seq(t1("i1")), Seq(t2("i2")), Seq(t3("i3"))).foreach { expected =>
+        val expectedExpressions = expected.map(_.expr)
+        assert(p.partitionings.exists {
+          case h: HashPartitioning => expressionsEqual(h.expressions, expectedExpressions)
+        })
       }
 
       // Join on the column from the broadcasted side (i3) and make sure output partitioning
