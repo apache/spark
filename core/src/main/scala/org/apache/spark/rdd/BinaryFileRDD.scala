@@ -26,7 +26,7 @@ import org.apache.hadoop.mapreduce.task.JobContextImpl
 import org.apache.spark.{Partition, SparkContext}
 import org.apache.spark.input.StreamFileInputFormat
 
-private[spark] class BinaryFileRDD[T, F <: StreamFileInputFormat[T]](
+private[spark] class BinaryFileRDD[T](
     @transient private val sc: SparkContext,
     inputFormatClass: Class[F],
     keyClass: Class[String],

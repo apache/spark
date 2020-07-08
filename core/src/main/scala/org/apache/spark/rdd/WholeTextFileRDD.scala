@@ -29,9 +29,9 @@ import org.apache.spark.input.WholeTextFileInputFormat
 /**
  * An RDD that reads a bunch of text files in, and each text file becomes one record.
  */
-private[spark] class WholeTextFileRDD[F <: WholeTextFileInputFormat](
+private[spark] class WholeTextFileRDD(
     sc : SparkContext,
-    inputFormatClass: Class[F],
+    inputFormatClass: Class[_ <: WholeTextFileInputFormat],
     keyClass: Class[Text],
     valueClass: Class[Text],
     conf: Configuration,
