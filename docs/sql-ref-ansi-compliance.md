@@ -149,6 +149,7 @@ Below is a list of all the keywords in Spark SQL.
 |BUCKETS|non-reserved|non-reserved|non-reserved|
 |BY|non-reserved|non-reserved|reserved|
 |CACHE|non-reserved|non-reserved|non-reserved|
+|CACHED|non-reserved|non-reserved|non-reserved|
 |CASCADE|non-reserved|non-reserved|reserved|
 |CASE|reserved|non-reserved|reserved|
 |CAST|reserved|non-reserved|reserved|
