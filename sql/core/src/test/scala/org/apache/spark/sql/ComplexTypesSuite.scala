@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.expressions.CreateNamedStruct
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{ArrayType, StructType}
 
 class ComplexTypesSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   override def beforeAll() {
     super.beforeAll()
@@ -105,5 +109,12 @@ class ComplexTypesSuite extends QueryTest with SharedSQLContext {
       .selectExpr("cola.exp.i2", "cola.i4").filter("cola.i4 > 11")
     checkAnswer(df1, Row(10, 12) :: Row(11, 13) :: Nil)
     checkNamedStruct(df.queryExecution.optimizedPlan, expectedCount = 0)
+  }
+
+  test("SPARK-32167: get field from an array of struct") {
+    val innerStruct = new StructType().add("i", "int", nullable = true)
+    val schema = new StructType().add("arr", ArrayType(innerStruct, containsNull = false))
+    val df = spark.createDataFrame(List(Row(Seq(Row(1), Row(null)))).asJava, schema)
+    checkAnswer(df.select($"arr".getField("i")), Row(Seq(1, null)))
   }
 }
