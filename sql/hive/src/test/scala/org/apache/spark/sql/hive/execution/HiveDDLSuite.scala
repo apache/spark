@@ -2310,20 +2310,20 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-20680: Spark-sql do not support for void column datatype") {
+  test("SPARK-20680: Spark-sql do not support for unknown column datatype") {
     withTable("t") {
-      withView("tabVoidType") {
+      withView("tabUnknownType") {
         hiveClient.runSqlHive("CREATE TABLE t (t1 int)")
         hiveClient.runSqlHive("INSERT INTO t VALUES (3)")
-        hiveClient.runSqlHive("CREATE VIEW tabVoidType AS SELECT NULL AS col FROM t")
-        checkAnswer(spark.table("tabVoidType"), Row(null))
+        hiveClient.runSqlHive("CREATE VIEW tabUnknownType AS SELECT NULL AS col FROM t")
+        checkAnswer(spark.table("tabUnknownType"), Row(null))
         // No exception shows
-        val desc = spark.sql("DESC tabVoidType").collect().toSeq
+        val desc = spark.sql("DESC tabUnknownType").collect().toSeq
         assert(desc.contains(Row("col", NullType.simpleString, null)))
       }
     }
 
-    // Forbid CTAS with null type
+    // Forbid CTAS with unknown type
     withTable("t1", "t2", "t3") {
       val e1 = intercept[AnalysisException] {
         spark.sql("CREATE TABLE t1 USING PARQUET AS SELECT null as null_col")
@@ -2341,7 +2341,7 @@ class HiveDDLSuite
       assert(e3.contains("Cannot create tables with unknown type"))
     }
 
-    // Forbid Replace table AS SELECT with null type
+    // Forbid Replace table AS SELECT with unknown type
     withTable("t") {
       val v2Source = classOf[FakeV2Provider].getName
       val e = intercept[AnalysisException] {
