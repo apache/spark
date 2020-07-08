@@ -128,8 +128,8 @@ abstract class StructFiltersSuite extends SparkFunSuite {
       val row = InternalRow(10, 3.14, UTF8String.fromString("abc"))
       val structFilters = createFilters(filters, getSchema(schema))
       structFilters.reset()
-      for (p <- 0 until 3) {
-        assert(structFilters.skipRow(row, p) === skip)
+      for { p <- 0 until 3 if !skip } {
+        assert(structFilters.skipRow(row, p) === skip, s"p = $p filters = $filters skip = $skip")
       }
     }
   }

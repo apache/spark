@@ -108,6 +108,8 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
    * at the position `index` only if other predicates dependencies are already
    * set in the given row.
    *
+   * Note: If the function returns `true`, `refCount` of some predicates can be non decremented.
+   *
    * @param row The row with fully or partially set values.
    * @param index The index of already set value.
    * @return true if at least one of applicable predicates (all dependent row values are set)
@@ -115,13 +117,11 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
    */
   def skipRow(row: InternalRow, index: Int): Boolean = {
     var skip = false
-    predicates(index).foreach { pred =>
+    for (pred <- predicates(index) if !skip) {
       pred.refCount -= 1
       assert(pred.refCount >= 0,
         s"Predicate reference counter cannot be negative but got ${pred.refCount}.")
-      if (!skip && pred.refCount == 0) {
-        skip = !pred.predicate.eval(row)
-      }
+      skip = pred.refCount == 0 && !pred.predicate.eval(row)
     }
     skip
   }
