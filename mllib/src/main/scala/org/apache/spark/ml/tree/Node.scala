@@ -46,7 +46,7 @@ sealed abstract class Node extends Serializable {
   private[ml] def predictImpl(features: Vector): LeafNode
 
   /** Recursive prediction helper method */
-  private[ml] def predictBinned[@specialized(Byte, Short, Int) B: Integral](
+  private[ml] def predictBinned[B: Integral](
       binned: Array[B],
       splits: Array[Array[Split]]): LeafNode
 
@@ -124,7 +124,7 @@ class LeafNode private[ml] (
 
   override private[ml] def predictImpl(features: Vector): LeafNode = this
 
-  override private[ml] def predictBinned[@specialized(Byte, Short, Int) B: Integral](
+  override private[ml] def predictBinned[B: Integral](
       binned: Array[B],
       splits: Array[Array[Split]]): LeafNode = this
 
@@ -183,7 +183,7 @@ class InternalNode private[ml] (
     }
   }
 
-  override private[ml] def predictBinned[@specialized(Byte, Short, Int) B: Integral](
+  override private[ml] def predictBinned[B: Integral](
       binned: Array[B],
       splits: Array[Array[Split]]): LeafNode = {
     val i = split.featureIndex
@@ -328,7 +328,7 @@ private[tree] class LearningNode(
    *         group of nodes on one call to
    *         [[org.apache.spark.ml.tree.impl.RandomForest.findBestSplits()]].
    */
-  def predictImpl[@specialized(Byte, Short, Int) B: Integral](
+  def predictImpl[B: Integral](
       binnedFeatures: Array[B],
       splits: Array[Array[Split]]): Int = {
     if (this.isLeaf || this.split.isEmpty) {

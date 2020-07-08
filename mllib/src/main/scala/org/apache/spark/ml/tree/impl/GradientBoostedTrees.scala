@@ -161,7 +161,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * @param weight Tree weight.
    * @return Updated prediction.
    */
-  def updatePrediction[@specialized(Byte, Short, Int) B: Integral](
+  def updatePrediction[B: Integral](
       treePoint: TreePoint[B],
       prediction: Double,
       tree: DecisionTreeRegressionModel,
@@ -370,7 +370,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     // Prepare periodic checkpointers
     // Note: this is checkpointing the unweighted training error
     val predErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-      treeStrategy.getCheckpointInterval, sc)
+      treeStrategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
 
     timer.stop("init")
 
@@ -471,7 +471,7 @@ private[spark] object GradientBoostedTrees extends Logging {
           val newTreePoint = new TreePoint(newLabel, treePoint.binnedFeatures, treePoint.weight)
           // according to current design, treePoint.weight == baggedPoint.sampleWeight
           new BaggedPoint[TreePoint[B]](newTreePoint, Array(count), treePoint.weight)
-        }.setName(s"bagged points [${implicitly[ClassTag[B]]}]")
+        }.setName(s"bagged tree points [${implicitly[ClassTag[B]]}]")
 
       val model = RandomForest.runBagged[B](baggedInput = bagged,
         metadata = metadata, bcSplits = bcSplits, strategy = treeStrategy,

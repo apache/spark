@@ -317,7 +317,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       .convertToBaggedRDD(treeInput, strategy.subsamplingRate, metadata.numTrees,
         strategy.bootstrap, (tp: TreePoint[_]) => tp.weight, seed = seed)
       .persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"bagged points [${implicitly[ClassTag[B]]}]")
+      .setName(s"bagged tree points [${implicitly[ClassTag[B]]}]")
 
     val bcSplits = input.sparkContext.broadcast(splits)
     val trees = runBagged[B](baggedInput = baggedInput, metadata = metadata,
@@ -378,7 +378,7 @@ private[spark] object RandomForest extends Logging with Serializable {
    * @param numSamples Number of times this instance occurs in the sample.
    * @param sampleWeight Weight (importance) of instance in dataset.
    */
-  private def mixedBinSeqOp[@specialized(Byte, Short, Int) B: Integral](
+  private def mixedBinSeqOp[B: Integral](
       agg: DTStatsAggregator,
       treePoint: TreePoint[B],
       splits: Array[Array[Split]],
@@ -437,7 +437,7 @@ private[spark] object RandomForest extends Logging with Serializable {
    * @param numSamples Number of times this instance occurs in the sample.
    * @param sampleWeight  Weight (importance) of instance in dataset.
    */
-  private def orderedBinSeqOp[@specialized(Byte, Short, Int) B: Integral](
+  private def orderedBinSeqOp[B: Integral](
       agg: DTStatsAggregator,
       treePoint: TreePoint[B],
       numSamples: Int,
