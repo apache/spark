@@ -32,6 +32,10 @@ class NullType private() extends DataType {
   override def defaultSize: Int = 1
 
   private[spark] override def asNullable: NullType = this
+
+  // "null" is mainly used to represent a literal in Spark,
+  // it's better to avoid using it for data types.
+  override def simpleString: String = "unknown"
 }
 
 /**
