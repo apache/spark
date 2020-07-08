@@ -2989,8 +2989,6 @@ class SQLConf extends Serializable with Logging {
 
   def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
 
-  def removeRedundantProjectsEnabled: Boolean = getConf(REMOVE_REDUNDANT_PROJECTS_ENABLED)
-
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)

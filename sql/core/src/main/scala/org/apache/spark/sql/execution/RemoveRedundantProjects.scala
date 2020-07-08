@@ -24,10 +24,19 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExecBase
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 
-
+/**
+ * Remove redundant ProjectExec node from the spark plan. A ProjectExec node is redundant when
+ * - It has the same output attributes and orders as its child's output and the ordering of
+ *   the attributes is required.
+ * - It has the same output attributes as its child's output when attribute output ordering
+ *   is not required.
+ * This rule needs to be a physical rule because project nodes are useful during logical
+ * optimization to prune data. During physical planning, redundant project nodes can be removed
+ * to simplify the query plan.
+ */
 case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.removeRedundantProjectsEnabled) {
+    if (!conf.getConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED)) {
       plan
     } else {
       removeProject(plan, true)
@@ -53,6 +62,7 @@ case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
           .exists(ae => ae.mode.equals(Final) || ae.mode.equals(PartialMerge))
         a.mapChildren(removeProject(_, keepOrdering))
       case w: WindowExec => w.mapChildren(removeProject(_, false))
+      case g: GenerateExec => g.mapChildren(removeProject(_, false))
       // JoinExec ordering requirement will inherit from its parent. If there is no ProjectExec in
       // its ancestors, JoinExec should require output columns to be ordered.
       case o => o.mapChildren(removeProject(_, requireOrdering))

@@ -46,7 +46,8 @@ class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession {
     withTempPath { p =>
       val path = p.getAbsolutePath
       spark.range(100).selectExpr("id % 10 as key", "id * 2 as a",
-        "id * 3 as b", "cast(id as string) as c").write.partitionBy("key").parquet(path)
+        "id * 3 as b", "cast(id as string) as c", "array(id, id + 1, id + 3) as d")
+        .write.partitionBy("key").parquet(path)
       spark.read.parquet(path).createOrReplaceTempView("testView")
       f
     }
@@ -123,6 +124,13 @@ class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession {
       val query = "select key, avg(a) over (partition by key order by a " +
         "rows between 1 preceding and 1 following) as avg, b from testView"
       assertProjectExec(query, 1, 2)
+    }
+  }
+
+  test("generate") {
+    withTestView {
+      val query = "select a, key, explode(d) from testView where a > 10"
+      assertProjectExec(query, 0, 1)
     }
   }
 
