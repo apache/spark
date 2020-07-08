@@ -367,7 +367,7 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
         Row(3, 0, null, 1, 3, 0, 0, 0, null, 1, 3, 0, 2, 2) :: Nil)
   }
 
-  test("SPARK-32159: array encoder types") {
+  test("SPARK-32159: array encoders should be resolved in analyzer") {
     checkAnswer(
       spark.sql("SELECT arraysum(data) FROM agg3"),
       Row(Seq(12.0, 15.0, 18.0)) :: Nil)
