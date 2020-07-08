@@ -261,7 +261,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
         // to FalseLiteral which is tested in OptimizeInSuite.scala
         If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
       case expr @ In(v, list) =>
-        // split list to 2 parts so that we can push down convertible part
+        // split list to 2 parts so that we can optimize convertible part
         val (convertible, nonConvertible) = list.partition(_.isInstanceOf[Literal])
         if (convertible.nonEmpty && nonConvertible.isEmpty) {
           optimizeIn(expr, v, list)
