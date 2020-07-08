@@ -34,6 +34,11 @@ class HiveSessionImplSuite extends SparkFunSuite {
   override def beforeAll() {
     super.beforeAll()
 
+    // mock the instance first - we observed weird classloader issue on creating mock, so
+    // would like to avoid any cases classloader gets switched
+    val sessionManager = mock(classOf[SessionManager])
+    operationManager = mock(classOf[OperationManager])
+
     session = new HiveSessionImpl(
       ThriftserverShimUtils.testedProtocolVersions.head,
       "",
@@ -41,9 +46,7 @@ class HiveSessionImplSuite extends SparkFunSuite {
       new HiveConf(),
       ""
     )
-    val sessionManager = mock(classOf[SessionManager])
     session.setSessionManager(sessionManager)
-    operationManager = mock(classOf[OperationManager])
     session.setOperationManager(operationManager)
     when(operationManager.newGetCatalogsOperation(session)).thenAnswer(
       (_: InvocationOnMock) => {
@@ -71,3 +74,14 @@ class HiveSessionImplSuite extends SparkFunSuite {
     verify(operationManager).closeOperation(operationHandle2)
   }
 }
+
+// FIXME: DEBUGGING HiveSessionImplSuite - to run the suite multiple times simply
+class HiveSessionImplSuiteTrial2 extends HiveSessionImplSuite
+class HiveSessionImplSuiteTrial3 extends HiveSessionImplSuite
+class HiveSessionImplSuiteTrial4 extends HiveSessionImplSuite
+class HiveSessionImplSuiteTrial5 extends HiveSessionImplSuite
+class HiveSessionImplSuiteTrial6 extends HiveSessionImplSuite
+class HiveSessionImplSuiteTrial7 extends HiveSessionImplSuite
+class HiveSessionImplSuiteTrial8 extends HiveSessionImplSuite
+class HiveSessionImplSuiteTrial9 extends HiveSessionImplSuite
+class HiveSessionImplSuiteTrial10 extends HiveSessionImplSuite
