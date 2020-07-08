@@ -74,6 +74,7 @@ abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructT
 
 object StructFilters {
   private def checkFilterRefs(filter: sources.Filter, fieldNames: Set[String]): Boolean = {
+    // The names have been normalized and case sensitivity is not a concern here.
     filter.references.forall(fieldNames.contains)
   }
 
