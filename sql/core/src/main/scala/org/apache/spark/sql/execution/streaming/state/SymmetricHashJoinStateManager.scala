@@ -457,8 +457,8 @@ class SymmetricHashJoinStateManager(
     /**
      * Convert the value row to (actual value, match) pair.
      *
-     * NOTE: implementations should ensure the result row is NOT reused during execution, as
-     * caller may use the value to store without copy().
+     * NOTE: implementations should ensure the result row is NOT reused during execution, so
+     * that caller can safely read the value in any time.
      */
     def convertValue(value: UnsafeRow): ValueAndMatchPair
 
