@@ -952,7 +952,8 @@ case class HashAggregateExec(
            |if (!$avoidSpillInPartialAggregateTerm) {
            |  $getAggBufferFromMap
            |  // Can't allocate buffer from the hash map.
-           |  // Check if we can avoid partial aggregation. Otherwise, Spill the map and fallback to sort-based
+           |  // Check if we can avoid partial aggregation.
+           |  //  Otherwise, Spill the map and fallback to sort-based
            |  // aggregation after processing all input rows.
            |  if ($unsafeRowBuffer == null && !$avoidSpillInPartialAggregateTerm) {
            |    $countTerm = $countTerm + $hashMapTerm.getNumRows();
