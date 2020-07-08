@@ -2106,10 +2106,10 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val IGNORE_HINTS =
+  val DISABLE_HINTS =
     buildConf("spark.sql.optimizer.disableHints")
       .internal()
-      .doc("When true, the optimizer will ignore user-specified hints that are additional " +
+      .doc("When true, the optimizer will disable user-specified hints that are additional " +
         "directives for better planning of a query.")
       .version("3.1.0")
       .booleanConf
