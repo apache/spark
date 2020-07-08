@@ -43,7 +43,7 @@ install:
   - ps: .\dev\appveyor-install-dependencies.ps1
   # Required package for R unit tests
   - cmd: Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow'), repos='https://cloud.r-project.org/')"
-  - cmd: Rscript -e "pkg_list <- as.data.frame(installed.packages()[,c(1, 3:4)]); pkg_list[is.na(pkg_list$Priority), 1:2, drop=FALSE]"
+  - cmd: Rscript -e "pkg_list <- as.data.frame(installed.packages()[,c(1, 3:4)]); pkg_list[is.na(pkg_list$Priority), 1:2, drop = FALSE]"
 
 build_script:
   # '-Djna.nosys=true' is required to avoid kernel32.dll load failure.
