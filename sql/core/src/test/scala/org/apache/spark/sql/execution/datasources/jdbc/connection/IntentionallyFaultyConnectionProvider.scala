@@ -21,7 +21,7 @@ import java.sql.{Connection, Driver}
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-private[sql] class IntentionallyFaultyConnectionProvider extends JdbcConnectionProvider {
+private class IntentionallyFaultyConnectionProvider extends JdbcConnectionProvider {
   IntentionallyFaultyConnectionProvider.constructed = true
   throw new IllegalArgumentException("Intentional Exception")
   override def canHandle(driver: Driver, options: JDBCOptions): Boolean = true
