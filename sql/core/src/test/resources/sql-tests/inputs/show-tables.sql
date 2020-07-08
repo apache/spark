@@ -19,8 +19,10 @@ SHOW TABLES IN showdb LIKE 'show_t*';
 
 -- SHOW CACHED TABLES
 CACHE TABLE show_t1;
+CACHE TABLE show_t5 AS SELECT 1;
 SHOW CACHED TABLES LIKE 'show_t*'
 UNCACHE TABLE show_t1;
+UNCACHE TABLE show_t5;
 SHOW CACHED TABLES;
 
 -- SHOW TABLE EXTENDED
@@ -45,5 +47,6 @@ DROP TABLE show_t1;
 DROP TABLE show_t2;
 DROP VIEW  show_t3;
 DROP VIEW  global_temp.show_t4;
+DROP TABLE show_t5;
 USE default;
 DROP DATABASE showdb;

@@ -126,15 +126,32 @@ struct<>
 
 
 -- !query
+CACHE TABLE show_t5 AS SELECT 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SHOW CACHED TABLES LIKE 'show_t*'
 -- !query schema
 struct<database:string,tableName:string,isTemporary:boolean>
 -- !query output
 show_t1
+show_t5
 
 
 -- !query
 UNCACHE TABLE show_t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+UNCACHE TABLE show_t5
 -- !query schema
 struct<>
 -- !query output
@@ -296,6 +313,14 @@ struct<>
 
 -- !query
 DROP VIEW  global_temp.show_t4
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE show_t5
 -- !query schema
 struct<>
 -- !query output
