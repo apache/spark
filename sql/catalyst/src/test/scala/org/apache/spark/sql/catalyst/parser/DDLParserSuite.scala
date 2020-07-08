@@ -1239,6 +1239,16 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SHOW TABLES IN ns1 LIKE '*test*'"),
       ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
+
+    comparePlans(
+      parsePlan("SHOW CACHED TABLES"),
+      ShowTables(UnresolvedNamespace(Seq.empty[String]), None, true))
+    comparePlans(
+      parsePlan("SHOW CACHED TABLES '*test*'"),
+      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*"), true))
+    comparePlans(
+      parsePlan("SHOW CACHED TABLES LIKE '*test*'"),
+      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*"), true))
   }
 
   test("show table extended") {

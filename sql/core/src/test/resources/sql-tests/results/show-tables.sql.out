@@ -118,6 +118,38 @@ show_t3
 
 
 -- !query
+CACHE TABLE show_t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SHOW CACHED TABLES LIKE 'show_t*'
+-- !query schema
+struct<database:string,tableName:string,isTemporary:boolean>
+-- !query output
+show_t1
+
+
+-- !query
+UNCACHE TABLE show_t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SHOW CACHED TABLES
+-- !query schema
+struct<database:string,tableName:string,isTemporary:boolean>
+-- !query output
+
+
+
+-- !query
 SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query schema
 struct<database:string,tableName:string,isTemporary:boolean,information:string>

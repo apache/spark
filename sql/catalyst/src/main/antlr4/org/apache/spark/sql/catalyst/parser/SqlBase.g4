@@ -204,7 +204,7 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? multipartIdentifier        #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
-    | SHOW TABLES ((FROM | IN) multipartIdentifier)?
+    | SHOW CACHED? TABLES ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
@@ -1024,6 +1024,7 @@ ansiNonReserved
     | BUCKETS
     | BY
     | CACHE
+    | CACHED
     | CASCADE
     | CHANGE
     | CLEAR
@@ -1239,6 +1240,7 @@ nonReserved
     | BUCKETS
     | BY
     | CACHE
+    | CACHED
     | CASCADE
     | CASE
     | CAST
@@ -1487,6 +1489,7 @@ BUCKET: 'BUCKET';
 BUCKETS: 'BUCKETS';
 BY: 'BY';
 CACHE: 'CACHE';
+CACHED: 'CACHED';
 CASCADE: 'CASCADE';
 CASE: 'CASE';
 CAST: 'CAST';

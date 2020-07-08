@@ -29,10 +29,14 @@ current database.
 ### Syntax
 
 ```sql
-SHOW TABLES [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
+SHOW [ CACHED ] TABLES [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
 ```
 
 ### Parameters
+
+* **CACHED**
+
+     Specifies the cached tag that is used to filter cached tables.
 
 * **{ FROM `|` IN } database_name**
 
@@ -95,6 +99,15 @@ SHOW TABLES LIKE 'sam*|suj';
 | default|      sam|      false|
 | default|     sam1|      false|
 | default|      suj|      false|
++--------+---------+-----------+
+
+-- List all cached tables
+CACHE TABLE sam;
+SHOW CACHED TABLES;
++--------+---------+-----------+
+|database|tableName|isTemporary|
++--------+---------+-----------+
+| default|      sam|      false|
 +--------+---------+-----------+
 ```
 

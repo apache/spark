@@ -843,6 +843,7 @@ case class DescribeColumnCommand(
 case class ShowTablesCommand(
     databaseName: Option[String],
     tableIdentifierPattern: Option[String],
+    showCached: Boolean = false,
     isExtended: Boolean = false,
     partitionSpec: Option[TablePartitionSpec] = None) extends RunnableCommand {
 
@@ -868,7 +869,12 @@ case class ShowTablesCommand(
       // Show the information of tables.
       val tables =
         tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
-      tables.map { tableIdent =>
+      val filterCachedTables = if (showCached) {
+        tables.filter(table => sparkSession.catalog.isCached(table.quotedString))
+      } else {
+        tables
+      }
+      filterCachedTables.map { tableIdent =>
         val database = tableIdent.database.getOrElse("")
         val tableName = tableIdent.table
         val isTemp = catalog.isTemporaryTable(tableIdent)
