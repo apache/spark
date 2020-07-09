@@ -486,11 +486,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       var lastRet: Int = 0
 
       // we can not use "split" function directly as ";" may be quoted
-<<<<<<< HEAD
       val commands = org.apache.spark.sql.catalyst.util.StringUtils.splitSemiColon(line).asScala
-=======
-      val commands = QueryStatementUtils.splitSemiColon(line).asScala
->>>>>>> 0db0376b4e... [SPARK-21514][SQL] Updated logic for multiple statements to reuse `splitSemiColon` method.
       var command: String = ""
       for (oneCmd <- commands) {
         if (StringUtils.endsWith(oneCmd, "\\")) {
