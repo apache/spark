@@ -26,7 +26,7 @@ A LIKE predicate is used to search for a specific pattern.
 ### Syntax
 
 ```sql
-[ NOT ] { LIKE search_pattern [ ESCAPE esc_char ] | RLIKE regex_pattern }
+[ NOT ] { LIKE search_pattern [ ESCAPE esc_char ] | RLIKE regex_pattern | REGEXP regex_pattern}
 ```
 
 ### Parameters

@@ -359,6 +359,7 @@ object FunctionRegistry {
     expression[StringReplace]("replace"),
     expression[Overlay]("overlay"),
     expression[RLike]("rlike"),
+    expression[RLike]("regexp", true),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
     expression[Sentences]("sentences"),

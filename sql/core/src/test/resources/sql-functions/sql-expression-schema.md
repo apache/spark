@@ -209,6 +209,7 @@
 | org.apache.spark.sql.catalyst.expressions.Pow | power | SELECT power(2, 3) | struct<POWER(CAST(2 AS DOUBLE), CAST(3 AS DOUBLE)):double> |
 | org.apache.spark.sql.catalyst.expressions.Quarter | quarter | SELECT quarter('2016-08-31') | struct<quarter(CAST(2016-08-31 AS DATE)):int> |
 | org.apache.spark.sql.catalyst.expressions.RLike | rlike | SELECT '%SystemDrive%\Users\John' rlike '%SystemDrive%\\Users.*' | struct<%SystemDrive%UsersJohn RLIKE %SystemDrive%\Users.*:boolean> |
+| org.apache.spark.sql.catalyst.expressions.RLike | regexp | SELECT '%SystemDrive%\Users\John' regexp '%SystemDrive%\\Users.*' | struct<%SystemDrive%UsersJohn REGEXP %SystemDrive%\Users.*:boolean> |
 | org.apache.spark.sql.catalyst.expressions.Rand | random | SELECT random() | struct<rand():double> |
 | org.apache.spark.sql.catalyst.expressions.Rand | rand | SELECT rand() | struct<rand():double> |
 | org.apache.spark.sql.catalyst.expressions.Randn | randn | SELECT randn() | struct<randn():double> |

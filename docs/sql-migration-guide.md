@@ -31,6 +31,8 @@ license: |
   - In Spark 3.1, `from_unixtime`, `unix_timestamp`,`to_unix_timestamp`, `to_timestamp` and `to_date` will fail if the specified datetime pattern is invalid. In Spark 3.0 or earlier, they result `NULL`.
 
   - In Spark 3.1, casting numeric to timestamp will be forbidden by default. It's strongly recommended to use dedicated functions: TIMESTAMP_SECONDS, TIMESTAMP_MILLIS and TIMESTAMP_MICROS. Or you can set `spark.sql.legacy.allowCastNumericToTimestamp` to true to work around it. See more details in SPARK-31710.
+  
+  - In Spark 3.1, we can use regexp function, it is the alias of rlike funtion, which functions the same with rike funtion.
 
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
@@ -970,4 +972,3 @@ Below are the scenarios in which Hive and Spark generate different results:
 * `ACOS(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
 * `ASIN(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
 * `CAST(n AS TIMESTAMP)` If n is integral numbers, Hive treats n as milliseconds, Spark SQL treats n as seconds.
-* `REGEXP(str, patten)` Hive support this function, Spark SQL use RLIKE instead.

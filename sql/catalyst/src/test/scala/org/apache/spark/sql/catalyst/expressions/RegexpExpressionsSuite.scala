@@ -234,6 +234,43 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-32193: add alias for rlike function") {
+    checkLiteralRow(Literal.create(null, StringType) regexp _, "abdef", null)
+    checkEvaluation("abdef" regexp Literal.create(null, StringType), null)
+    checkEvaluation(Literal.create(null, StringType) regexp Literal.create(null, StringType), null)
+    checkEvaluation("abdef" regexp NonFoldableLiteral.create("abdef", StringType), true)
+    checkEvaluation("abdef" regexp NonFoldableLiteral.create(null, StringType), null)
+    checkEvaluation(
+      Literal.create(null, StringType) regexp NonFoldableLiteral.create("abdef", StringType), null)
+    checkEvaluation(
+      Literal.create(null, StringType) regexp NonFoldableLiteral.create(null, StringType), null)
+
+    checkLiteralRow("abdef" regexp _, "abdef", true)
+    checkLiteralRow("abbbbc" regexp _, "a.*c", true)
+
+    checkLiteralRow("fofo" regexp _, "^fo", true)
+    checkLiteralRow("fo\no" regexp _, "^fo\no$", true)
+    checkLiteralRow("Bn" regexp _, "^Ba*n", true)
+    checkLiteralRow("afofo" regexp _, "fo", true)
+    checkLiteralRow("afofo" regexp _, "^fo", false)
+    checkLiteralRow("Baan" regexp _, "^Ba?n", false)
+    checkLiteralRow("axe" regexp _, "pi|apa", false)
+    checkLiteralRow("pip" regexp _, "^(pi)*$", false)
+
+    checkLiteralRow("abc"  regexp _, "^ab", true)
+    checkLiteralRow("abc"  regexp _, "^bc", false)
+    checkLiteralRow("abc"  regexp _, "^ab", true)
+    checkLiteralRow("abc"  regexp _, "^bc", false)
+
+    intercept[java.util.regex.PatternSyntaxException] {
+      evaluateWithoutCodegen("abbbbc" regexp "**")
+    }
+    intercept[java.util.regex.PatternSyntaxException] {
+      val regex = 'a.string.at(0)
+      evaluateWithoutCodegen("abbbbc" regexp regex, create_row("**"))
+    }
+  }
+
   test("RegexReplace") {
     val row1 = create_row("100-200", "(\\d+)", "num")
     val row2 = create_row("100-200", "(\\d+)", "###")
