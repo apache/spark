@@ -486,7 +486,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       var lastRet: Int = 0
 
       // we can not use "split" function directly as ";" may be quoted
-      val commands = QueryStatementUtils.splitSemiColon(line).asScala
+      val commands = org.apache.spark.sql.catalyst.util.StringUtils.splitSemiColon(line).asScala
       var command: String = ""
       for (oneCmd <- commands) {
         if (StringUtils.endsWith(oneCmd, "\\")) {

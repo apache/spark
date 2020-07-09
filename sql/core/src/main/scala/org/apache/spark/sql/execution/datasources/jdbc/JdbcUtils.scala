@@ -33,11 +33,10 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData, StringUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.QueryStatementUtils
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
@@ -130,12 +129,14 @@ object JdbcUtils extends Logging {
     val autoCommit = conn.getAutoCommit
     conn.setAutoCommit(false)
 
-    val commands = QueryStatementUtils.splitSemiColon(actions).asScala
+    val commands = StringUtils.splitSemiColon(actions).asScala
     val statement = conn.createStatement()
     statement.setQueryTimeout(options.queryTimeout)
 
     commands.foreach { command =>
-      statement.addBatch(command.trim())
+      val sql = command.trim()
+      statement.addBatch(sql)
+      logInfo(s"Executing preActions/postActions: $sql")
     }
     try {
       statement.executeBatch()

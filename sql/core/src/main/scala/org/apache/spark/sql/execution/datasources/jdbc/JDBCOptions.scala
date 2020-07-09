@@ -117,7 +117,7 @@ class JDBCOptions(
   val queryTimeout = parameters.getOrElse(JDBC_QUERY_TIMEOUT, "0").toInt
 
   // the query used before reading/writing data
-  var preActions = parameters.get(JDBC_PRE_ACTIONS_STRING)
+  val preActions = parameters.get(JDBC_PRE_ACTIONS_STRING)
 
   // ------------------------------------------------------------
   // Optional parameters only for reading
@@ -211,7 +211,7 @@ class JDBCOptions(
   val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
 
   // the query used after writing data
-  var postActions = parameters.get(JDBC_POST_ACTIONS_STRING)
+  val postActions = parameters.get(JDBC_POST_ACTIONS_STRING)
 }
 
 class JdbcOptionsInWrite(

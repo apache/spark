@@ -70,7 +70,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
           //  b) `createRelation(SQLContext, Map[String, String])`
           // (a) is called only for writes, but (b) is called for both reads and writes
           // To avoid duplicate execution of preActions in writes,
-          // we need to remove preActions parameter in (a) before passing to (b)
+          // we need to remove preActions parameter here before passing it to (b)
           parametersWithoutPreActions = parameters.-(JDBCOptions.JDBC_PRE_ACTIONS_STRING)
         case None =>
       }
