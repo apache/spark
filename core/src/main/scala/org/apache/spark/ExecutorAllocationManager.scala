@@ -518,7 +518,7 @@ private[spark] class ExecutorAllocationManager(
         if (testing) {
           throw new SparkException("ResourceProfile Id was UNKNOWN, this is not expected")
         }
-        logWarning(s"Not removing executor $executorIdsToBeRemoved because the " +
+        logWarning(s"Not removing executor $executorIdToBeRemoved because the " +
           "ResourceProfile was UNKNOWN!")
       } else {
         // get the running total as we remove or initialize it to the count - pendingRemoval

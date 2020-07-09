@@ -411,12 +411,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     val mergeCondition = expression(ctx.mergeCondition)
 
-    val matchedClauses = ctx.matchedClause()
-    if (matchedClauses.size() > 2) {
-      throw new ParseException("There should be at most 2 'WHEN MATCHED' clauses.",
-        matchedClauses.get(2))
-    }
-    val matchedActions = matchedClauses.asScala.map {
+    val matchedActions = ctx.matchedClause().asScala.map {
       clause => {
         if (clause.matchedAction().DELETE() != null) {
           DeleteAction(Option(clause.matchedCond).map(expression))
@@ -435,12 +430,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         }
       }
     }
-    val notMatchedClauses = ctx.notMatchedClause()
-    if (notMatchedClauses.size() > 1) {
-      throw new ParseException("There should be at most 1 'WHEN NOT MATCHED' clause.",
-        notMatchedClauses.get(1))
-    }
-    val notMatchedActions = notMatchedClauses.asScala.map {
+    val notMatchedActions = ctx.notMatchedClause().asScala.map {
       clause => {
         if (clause.notMatchedAction().INSERT() != null) {
           val condition = Option(clause.notMatchedCond).map(expression)
@@ -468,13 +458,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       throw new ParseException("There must be at least one WHEN clause in a MERGE statement", ctx)
     }
     // children being empty means that the condition is not set
-    if (matchedActions.length == 2 && matchedActions.head.children.isEmpty) {
-      throw new ParseException("When there are 2 MATCHED clauses in a MERGE statement, " +
-        "the first MATCHED clause must have a condition", ctx)
+    val matchedActionSize = matchedActions.length
+    if (matchedActionSize >= 2 && !matchedActions.init.forall(_.condition.nonEmpty)) {
+      throw new ParseException("When there are more than one MATCHED clauses in a MERGE " +
+          "statement, only the last MATCHED clause can omit the condition.", ctx)
     }
-    if (matchedActions.groupBy(_.getClass).mapValues(_.size).exists(_._2 > 1)) {
-      throw new ParseException(
-        "UPDATE and DELETE can appear at most once in MATCHED clauses in a MERGE statement", ctx)
+    val notMatchedActionSize = notMatchedActions.length
+    if (notMatchedActionSize >= 2 && !notMatchedActions.init.forall(_.condition.nonEmpty)) {
+      throw new ParseException("When there are more than one NOT MATCHED clauses in a MERGE " +
+          "statement, only the last NOT MATCHED clause can omit the condition.", ctx)
     }
 
     MergeIntoTable(
@@ -2211,6 +2203,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         DecimalType(precision.getText.toInt, 0)
       case ("decimal" | "dec" | "numeric", precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
+      case ("void", Nil) => NullType
       case ("interval", Nil) => CalendarIntervalType
       case (dt, params) =>
         val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else dt

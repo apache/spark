@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.ParseException
 import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
 import java.time.format.DateTimeParseException
-import java.time.temporal.IsoFields
 import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
@@ -274,6 +273,27 @@ case class DateSub(startDate: Expression, days: Expression)
   override def prettyName: String = "date_sub"
 }
 
+trait GetTimeField extends UnaryExpression
+  with TimeZoneAwareExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  val func: (Long, ZoneId) => Any
+  val funcName: String
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    func(timestamp.asInstanceOf[Long], zoneId)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.$funcName($c, $zid)")
+  }
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the hour component of the string/timestamp.",
   examples = """
@@ -283,28 +303,11 @@ case class DateSub(startDate: Expression, days: Expression)
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Hour(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
-    with NullIntolerant {
-
+case class Hour(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
   def this(child: Expression) = this(child, None)
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-
-  override def dataType: DataType = IntegerType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getHours(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getHours($c, $zid)")
-  }
+  override def withTimeZone(timeZoneId: String): Hour = copy(timeZoneId = Option(timeZoneId))
+  override val func = DateTimeUtils.getHours
+  override val funcName = "getHours"
 }
 
 @ExpressionDescription(
@@ -316,28 +319,11 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Minute(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
-    with NullIntolerant {
-
+case class Minute(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
   def this(child: Expression) = this(child, None)
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-
-  override def dataType: DataType = IntegerType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getMinutes(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c, $zid)")
-  }
+  override def withTimeZone(timeZoneId: String): Minute = copy(timeZoneId = Option(timeZoneId))
+  override val func = DateTimeUtils.getMinutes
+  override val funcName = "getMinutes"
 }
 
 @ExpressionDescription(
@@ -349,52 +335,39 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Second(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
-    with NullIntolerant {
-
+case class Second(child: Expression, timeZoneId: Option[String] = None) extends GetTimeField {
   def this(child: Expression) = this(child, None)
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-
-  override def dataType: DataType = IntegerType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getSeconds(timestamp.asInstanceOf[Long], zoneId)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c, $zid)")
-  }
+  override def withTimeZone(timeZoneId: String): Second = copy(timeZoneId = Option(timeZoneId))
+  override val func = DateTimeUtils.getSeconds
+  override val funcName = "getSeconds"
 }
 
 case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
-    with NullIntolerant {
-
+  extends GetTimeField {
   def this(child: Expression) = this(child, None)
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-
   // 2 digits for seconds, and 6 digits for the fractional part with microsecond precision.
   override def dataType: DataType = DecimalType(8, 6)
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+  override def withTimeZone(timeZoneId: String): SecondWithFraction =
     copy(timeZoneId = Option(timeZoneId))
+  override val func = DateTimeUtils.getSecondsWithFraction
+  override val funcName = "getSecondsWithFraction"
+}
 
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    DateTimeUtils.getSecondsWithFraction(timestamp.asInstanceOf[Long], zoneId)
+trait GetDateField extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  val func: Int => Any
+  val funcName: String
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(date: Any): Any = {
+    func(date.asInstanceOf[Int])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getSecondsWithFraction($c, $zid)")
+    defineCodeGen(ctx, ev, c => s"$dtu.$funcName($c)")
   }
 }
 
@@ -407,24 +380,12 @@ case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = No
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class DayOfYear(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getDayInYear(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getDayInYear($c)")
-  }
+case class DayOfYear(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getDayInYear
+  override val funcName = "getDayInYear"
 }
 
-abstract class NumberToTimestampBase extends UnaryExpression
+abstract class IntegralToTimestampBase extends UnaryExpression
   with ExpectsInputTypes with NullIntolerant {
 
   protected def upScaleFactor: Long
@@ -446,19 +407,66 @@ abstract class NumberToTimestampBase extends UnaryExpression
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds since UTC epoch.",
+  usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds (can be fractional) since UTC epoch.",
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000);
        2008-12-25 07:30:00
+      > SELECT _FUNC_(1230219000.123);
+       2008-12-25 07:30:00.123
   """,
   group = "datetime_funcs",
   since = "3.1.0")
-case class SecondsToTimestamp(child: Expression)
-  extends NumberToTimestampBase {
+// scalastyle:on line.size.limit
+case class SecondsToTimestamp(child: Expression) extends UnaryExpression
+  with ExpectsInputTypes with NullIntolerant {
 
-  override def upScaleFactor: Long = MICROS_PER_SECOND
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+
+  override def dataType: DataType = TimestampType
+
+  override def nullable: Boolean = child.dataType match {
+    case _: FloatType | _: DoubleType => true
+    case _ => child.nullable
+  }
+
+  @transient
+  private lazy val evalFunc: Any => Any = child.dataType match {
+    case _: IntegralType => input =>
+      Math.multiplyExact(input.asInstanceOf[Number].longValue(), MICROS_PER_SECOND)
+    case _: DecimalType => input =>
+      val operand = new java.math.BigDecimal(MICROS_PER_SECOND)
+      input.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
+    case _: FloatType => input =>
+      val f = input.asInstanceOf[Float]
+      if (f.isNaN || f.isInfinite) null else (f * MICROS_PER_SECOND).toLong
+    case _: DoubleType => input =>
+      val d = input.asInstanceOf[Double]
+      if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
+  }
+
+  override def nullSafeEval(input: Any): Any = evalFunc(input)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
+    case _: IntegralType =>
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${MICROS_PER_SECOND}L)")
+    case _: DecimalType =>
+      val operand = s"new java.math.BigDecimal($MICROS_PER_SECOND)"
+      defineCodeGen(ctx, ev, c => s"$c.toJavaBigDecimal().multiply($operand).longValueExact()")
+    case other =>
+      nullSafeCodeGen(ctx, ev, c => {
+        val typeStr = CodeGenerator.boxedType(other)
+        s"""
+           |if ($typeStr.isNaN($c) || $typeStr.isInfinite($c)) {
+           |  ${ev.isNull} = true;
+           |} else {
+           |  ${ev.value} = (long)($c * $MICROS_PER_SECOND);
+           |}
+           |""".stripMargin
+      })
+  }
 
   override def prettyName: String = "timestamp_seconds"
 }
@@ -475,7 +483,7 @@ case class SecondsToTimestamp(child: Expression)
   since = "3.1.0")
 // scalastyle:on line.size.limit
 case class MillisToTimestamp(child: Expression)
-  extends NumberToTimestampBase {
+  extends IntegralToTimestampBase {
 
   override def upScaleFactor: Long = MICROS_PER_MILLIS
 
@@ -494,7 +502,7 @@ case class MillisToTimestamp(child: Expression)
   since = "3.1.0")
 // scalastyle:on line.size.limit
 case class MicrosToTimestamp(child: Expression)
-  extends NumberToTimestampBase {
+  extends IntegralToTimestampBase {
 
   override def upScaleFactor: Long = 1L
 
@@ -510,38 +518,14 @@ case class MicrosToTimestamp(child: Expression)
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Year(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getYear(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getYear($c)")
-  }
+case class Year(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getYear
+  override val funcName = "getYear"
 }
 
-case class YearOfWeek(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getWeekBasedYear(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getWeekBasedYear($c)")
-  }
+case class YearOfWeek(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getWeekBasedYear
+  override val funcName = "getWeekBasedYear"
 }
 
 @ExpressionDescription(
@@ -553,21 +537,9 @@ case class YearOfWeek(child: Expression)
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Quarter(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getQuarter(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getQuarter($c)")
-  }
+case class Quarter(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getQuarter
+  override val funcName = "getQuarter"
 }
 
 @ExpressionDescription(
@@ -579,21 +551,9 @@ case class Quarter(child: Expression)
   """,
   group = "datetime_funcs",
   since = "1.5.0")
-case class Month(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getMonth(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getMonth($c)")
-  }
+case class Month(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getMonth
+  override val funcName = "getMonth"
 }
 
 @ExpressionDescription(
@@ -604,21 +564,9 @@ case class Month(child: Expression)
        30
   """,
   since = "1.5.0")
-case class DayOfMonth(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    DateTimeUtils.getDayOfMonth(date.asInstanceOf[Int])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.getDayOfMonth($c)")
-  }
+case class DayOfMonth(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getDayOfMonth
+  override val funcName = "getDayOfMonth"
 }
 
 // scalastyle:off line.size.limit
@@ -632,20 +580,9 @@ case class DayOfMonth(child: Expression)
   group = "datetime_funcs",
   since = "2.3.0")
 // scalastyle:on line.size.limit
-case class DayOfWeek(child: Expression) extends DayWeek {
-
-  override protected def nullSafeEval(date: Any): Any = {
-    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
-    localDate.getDayOfWeek.plus(1).getValue
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, days => {
-      s"""
-        ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().plus(1).getValue();
-      """
-    })
-  }
+case class DayOfWeek(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getDayOfWeek
+  override val funcName = "getDayOfWeek"
 }
 
 // scalastyle:off line.size.limit
@@ -659,27 +596,9 @@ case class DayOfWeek(child: Expression) extends DayWeek {
   group = "datetime_funcs",
   since = "2.4.0")
 // scalastyle:on line.size.limit
-case class WeekDay(child: Expression) extends DayWeek {
-
-  override protected def nullSafeEval(date: Any): Any = {
-    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
-    localDate.getDayOfWeek.ordinal()
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, days => {
-      s"""
-         ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().ordinal();
-      """
-    })
-  }
-}
-
-abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
+case class WeekDay(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getWeekDay
+  override val funcName = "getWeekDay"
 }
 
 // scalastyle:off line.size.limit
@@ -693,26 +612,9 @@ abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes with 
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class WeekOfYear(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  override protected def nullSafeEval(date: Any): Any = {
-    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
-    localDate.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, days => {
-      s"""
-         |${ev.value} = java.time.LocalDate.ofEpochDay($days).get(
-         |  java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR);
-       """.stripMargin
-    })
-  }
+case class WeekOfYear(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getWeekOfYear
+  override val funcName = "getWeekOfYear"
 }
 
 // scalastyle:off line.size.limit
@@ -895,7 +797,7 @@ abstract class ToTimestamp
     } else {
       left.dataType match {
         case DateType =>
-          epochDaysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
+          daysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
         case TimestampType =>
           t.asInstanceOf[Long] / downScaleFactor
         case StringType =>
@@ -975,7 +877,7 @@ abstract class ToTimestamp
           boolean ${ev.isNull} = ${eval1.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.epochDaysToMicros(${eval1.value}, $zid) / $downScaleFactor;
+            ${ev.value} = $dtu.daysToMicros(${eval1.value}, $zid) / $downScaleFactor;
           }""")
     }
   }
@@ -1242,10 +1144,10 @@ case class DateAddInterval(
     if (ansiEnabled || itvl.microseconds == 0) {
       DateTimeUtils.dateAddInterval(start.asInstanceOf[Int], itvl)
     } else {
-      val startTs = DateTimeUtils.epochDaysToMicros(start.asInstanceOf[Int], zoneId)
+      val startTs = DateTimeUtils.daysToMicros(start.asInstanceOf[Int], zoneId)
       val resultTs = DateTimeUtils.timestampAddInterval(
         startTs, itvl.months, itvl.days, itvl.microseconds, zoneId)
-      DateTimeUtils.microsToEpochDays(resultTs, zoneId)
+      DateTimeUtils.microsToDays(resultTs, zoneId)
     }
   }
 
@@ -1261,10 +1163,10 @@ case class DateAddInterval(
          |if ($i.microseconds == 0) {
          |  ${ev.value} = $dtu.dateAddInterval($sd, $i);
          |} else {
-         |  long $startTs = $dtu.epochDaysToMicros($sd, $zid);
+         |  long $startTs = $dtu.daysToMicros($sd, $zid);
          |  long $resultTs =
          |    $dtu.timestampAddInterval($startTs, $i.months, $i.days, $i.microseconds, $zid);
-         |  ${ev.value} = $dtu.microsToEpochDays($resultTs, $zid);
+         |  ${ev.value} = $dtu.microsToDays($resultTs, $zid);
          |}
          |""".stripMargin
     })
@@ -1548,8 +1450,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) {
-      this(left, Option(format),
-        Cast(SecondsToTimestamp(UnixTimestamp(left, format)), DateType))
+    this(left, Option(format), Cast(GetTimestamp(left, format), DateType))
   }
 
   def this(left: Expression) = {
@@ -1994,13 +1895,17 @@ case class MakeTimestamp(
       day: Int,
       hour: Int,
       min: Int,
-      secAndNanos: Decimal,
+      secAndMicros: Decimal,
       zoneId: ZoneId): Any = {
     try {
-      val secFloor = secAndNanos.floor
-      val nanosPerSec = Decimal(NANOS_PER_SECOND, 10, 0)
-      val nanos = ((secAndNanos - secFloor) * nanosPerSec).toInt
-      val seconds = secFloor.toInt
+      assert(secAndMicros.scale == 6,
+        s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
+      val unscaledSecFrac = secAndMicros.toUnscaledLong
+      assert(secAndMicros.precision <= 8,
+        s"Seconds and fraction cannot have more than 8 digits but got ${secAndMicros.precision}")
+      val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
+      val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
+      val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
       val ldt = if (seconds == 60) {
         if (nanos == 0) {
           // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL

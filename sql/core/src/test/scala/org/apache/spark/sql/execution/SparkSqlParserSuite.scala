@@ -199,20 +199,20 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual(s"$baseSql distribute by a, b",
       RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
         basePlan,
-        numPartitions = newConf.numShufflePartitions))
+        None))
     assertEqual(s"$baseSql distribute by a sort by b",
       Sort(SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
         global = false,
         RepartitionByExpression(UnresolvedAttribute("a") :: Nil,
           basePlan,
-          numPartitions = newConf.numShufflePartitions)))
+          None)))
     assertEqual(s"$baseSql cluster by a, b",
       Sort(SortOrder(UnresolvedAttribute("a"), Ascending) ::
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
         global = false,
         RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
           basePlan,
-          numPartitions = newConf.numShufflePartitions)))
+          None)))
   }
 
   test("pipeline concatenation") {

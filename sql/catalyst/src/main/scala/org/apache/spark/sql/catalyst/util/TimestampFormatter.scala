@@ -180,7 +180,7 @@ class MicrosCalendar(tz: TimeZone, digitsInFraction: Int)
   // Converts parsed `MILLISECOND` field to seconds fraction in microsecond precision.
   // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
   // if the `MILLISECOND` field was parsed to `1234`.
-  def getMicros(): SQLTimestamp = {
+  def getMicros(): Long = {
     // Append 6 zeros to the field: 1234 -> 1234000000
     val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
     // Take the first 6 digits from `d`: 1234000000 -> 123400
@@ -209,7 +209,7 @@ class LegacyFastTimestampFormatter(
     fastDateFormat.getTimeZone,
     fastDateFormat.getPattern.count(_ == 'S'))
 
-  override def parse(s: String): SQLTimestamp = {
+  override def parse(s: String): Long = {
     cal.clear() // Clear the calendar because it can be re-used many times
     if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
       throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
@@ -220,7 +220,7 @@ class LegacyFastTimestampFormatter(
     rebaseJulianToGregorianMicros(julianMicros)
   }
 
-  override def format(timestamp: SQLTimestamp): String = {
+  override def format(timestamp: Long): String = {
     val julianMicros = rebaseGregorianToJulianMicros(timestamp)
     cal.setTimeInMillis(Math.floorDiv(julianMicros, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
     cal.setMicros(Math.floorMod(julianMicros, MICROS_PER_SECOND))

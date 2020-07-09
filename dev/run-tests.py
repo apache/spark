@@ -363,7 +363,8 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    build_spark_unidoc_sbt(extra_profiles)
+    if not os.environ.get("AMPLAB_JENKINS"):
+        build_spark_unidoc_sbt(extra_profiles)
 
 
 def build_apache_spark(build_tool, extra_profiles):
@@ -574,7 +575,7 @@ def main():
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
+        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3.2")
         hive_version = os.environ.get("AMPLAB_JENKINS_BUILD_HIVE_PROFILE", "hive2.3")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
@@ -648,7 +649,7 @@ def main():
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
 
-    if any(m.should_run_build_tests for m in test_modules):
+    if any(m.should_run_build_tests for m in test_modules) and test_env != "amplab_jenkins":
         run_build_tests()
 
     # spark build

@@ -18,26 +18,22 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
-import java.sql.{Date, Timestamp}
-import java.util.{Arrays, Map => JMap, UUID}
+import java.util.{Arrays, Map => JMap}
 import java.util.concurrent.RejectedExecutionException
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
-import org.apache.spark.sql.execution.HiveResult
-import org.apache.spark.sql.execution.command.SetCommand
+import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -73,7 +69,11 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int): Unit = {
+  def addNonNullColumnValue(
+      from: SparkRow,
+      to: ArrayBuffer[Any],
+      ordinal: Int,
+      timeFormatters: TimeFormatters): Unit = {
     dataTypes(ordinal) match {
       case StringType =>
         to += from.getString(ordinal)
@@ -100,13 +100,14 @@ private[hive] class SparkExecuteStatementOperation(
       // - work with spark.sql.datetime.java8API.enabled
       // These types have always been sent over the wire as string, converted later.
       case _: DateType | _: TimestampType =>
-        val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
-        to += hiveString
+        to += toHiveString((from.get(ordinal), dataTypes(ordinal)), false, timeFormatters)
       case CalendarIntervalType =>
-        to += HiveResult.toHiveString((from.getAs[CalendarInterval](ordinal), CalendarIntervalType))
+        to += toHiveString(
+          (from.getAs[CalendarInterval](ordinal), CalendarIntervalType),
+          false,
+          timeFormatters)
       case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
-        val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
-        to += hiveString
+        to += toHiveString((from.get(ordinal), dataTypes(ordinal)), false, timeFormatters)
     }
   }
 
@@ -159,6 +160,7 @@ private[hive] class SparkExecuteStatementOperation(
     if (!iter.hasNext) {
       resultRowSet
     } else {
+      val timeFormatters = getTimeFormatters
       // maxRowsL here typically maps to java.sql.Statement.getFetchSize, which is an int
       val maxRows = maxRowsL.toInt
       var curRow = 0
@@ -170,7 +172,7 @@ private[hive] class SparkExecuteStatementOperation(
           if (sparkRow.isNullAt(curCol)) {
             row += null
           } else {
-            addNonNullColumnValue(sparkRow, row, curCol)
+            addNonNullColumnValue(sparkRow, row, curCol, timeFormatters)
           }
           curCol += 1
         }
@@ -309,16 +311,11 @@ private[hive] class SparkExecuteStatementOperation(
         } else {
           logError(s"Error executing query with $statementId, currentState $currentState, ", e)
           setState(OperationState.ERROR)
+          HiveThriftServer2.eventManager.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
           e match {
-            case hiveException: HiveSQLException =>
-              HiveThriftServer2.eventManager.onStatementError(
-                statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
-              throw hiveException
-            case _ =>
-              val root = ExceptionUtils.getRootCause(e)
-              HiveThriftServer2.eventManager.onStatementError(
-                statementId, root.getMessage, SparkUtils.exceptionString(root))
-              throw new HiveSQLException("Error running query: " + root.toString, root)
+            case _: HiveSQLException => throw e
+            case _ => throw new HiveSQLException("Error running query: " + e.toString, e)
           }
         }
     } finally {
@@ -336,8 +333,8 @@ private[hive] class SparkExecuteStatementOperation(
     synchronized {
       if (!getStatus.getState.isTerminal) {
         logInfo(s"Cancel query with $statementId")
-        cleanup()
         setState(OperationState.CANCELED)
+        cleanup()
         HiveThriftServer2.eventManager.onStatementCanceled(statementId)
       }
     }

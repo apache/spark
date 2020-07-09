@@ -343,6 +343,23 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       assert(getNormalizedExplain(df1, FormattedMode) === getNormalizedExplain(df2, FormattedMode))
     }
   }
+
+  test("Coalesced bucket info should be a part of explain string") {
+    withTable("t1", "t2") {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+        SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+        Seq(1, 2).toDF("i").write.bucketBy(8, "i").saveAsTable("t1")
+        Seq(2, 3).toDF("i").write.bucketBy(4, "i").saveAsTable("t2")
+        val df1 = spark.table("t1")
+        val df2 = spark.table("t2")
+        val joined = df1.join(df2, df1("i") === df2("i"))
+        checkKeywordsExistsInExplain(
+          joined,
+          SimpleMode,
+          "SelectedBucketsCount: 8 out of 8 (Coalesced to 4)" :: Nil: _*)
+      }
+    }
+  }
 }
 
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {

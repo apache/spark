@@ -39,12 +39,16 @@ from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
 
 __all__ = ['LinearSVC', 'LinearSVCModel',
+           'LinearSVCSummary', 'LinearSVCTrainingSummary',
            'LogisticRegression', 'LogisticRegressionModel',
            'LogisticRegressionSummary', 'LogisticRegressionTrainingSummary',
            'BinaryLogisticRegressionSummary', 'BinaryLogisticRegressionTrainingSummary',
            'DecisionTreeClassifier', 'DecisionTreeClassificationModel',
            'GBTClassifier', 'GBTClassificationModel',
            'RandomForestClassifier', 'RandomForestClassificationModel',
+           'RandomForestClassificationSummary', 'RandomForestClassificationTrainingSummary',
+           'BinaryRandomForestClassificationSummary',
+           'BinaryRandomForestClassificationTrainingSummary',
            'NaiveBayes', 'NaiveBayesModel',
            'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel',
            'OneVsRest', 'OneVsRestModel',
@@ -240,6 +244,259 @@ class _JavaProbabilisticClassificationModel(ProbabilisticClassificationModel,
         return self._call_java("predictProbability", value)
 
 
+@inherit_doc
+class _ClassificationSummary(JavaWrapper):
+    """
+    Abstraction for multiclass classification results for a given model.
+
+    .. versionadded:: 3.1.0
+    """
+
+    @property
+    @since("3.1.0")
+    def predictions(self):
+        """
+        Dataframe outputted by the model's `transform` method.
+        """
+        return self._call_java("predictions")
+
+    @property
+    @since("3.1.0")
+    def predictionCol(self):
+        """
+        Field in "predictions" which gives the prediction of each class.
+        """
+        return self._call_java("predictionCol")
+
+    @property
+    @since("3.1.0")
+    def labelCol(self):
+        """
+        Field in "predictions" which gives the true label of each
+        instance.
+        """
+        return self._call_java("labelCol")
+
+    @property
+    @since("3.1.0")
+    def weightCol(self):
+        """
+        Field in "predictions" which gives the weight of each instance
+        as a vector.
+        """
+        return self._call_java("weightCol")
+
+    @property
+    @since("3.1.0")
+    def labels(self):
+        """
+        Returns the sequence of labels in ascending order. This order matches the order used
+        in metrics which are specified as arrays over labels, e.g., truePositiveRateByLabel.
+
+        Note: In most cases, it will be values {0.0, 1.0, ..., numClasses-1}, However, if the
+        training set is missing a label, then all of the arrays over labels
+        (e.g., from truePositiveRateByLabel) will be of length numClasses-1 instead of the
+        expected numClasses.
+        """
+        return self._call_java("labels")
+
+    @property
+    @since("3.1.0")
+    def truePositiveRateByLabel(self):
+        """
+        Returns true positive rate for each label (category).
+        """
+        return self._call_java("truePositiveRateByLabel")
+
+    @property
+    @since("3.1.0")
+    def falsePositiveRateByLabel(self):
+        """
+        Returns false positive rate for each label (category).
+        """
+        return self._call_java("falsePositiveRateByLabel")
+
+    @property
+    @since("3.1.0")
+    def precisionByLabel(self):
+        """
+        Returns precision for each label (category).
+        """
+        return self._call_java("precisionByLabel")
+
+    @property
+    @since("3.1.0")
+    def recallByLabel(self):
+        """
+        Returns recall for each label (category).
+        """
+        return self._call_java("recallByLabel")
+
+    @since("3.1.0")
+    def fMeasureByLabel(self, beta=1.0):
+        """
+        Returns f-measure for each label (category).
+        """
+        return self._call_java("fMeasureByLabel", beta)
+
+    @property
+    @since("3.1.0")
+    def accuracy(self):
+        """
+        Returns accuracy.
+        (equals to the total number of correctly classified instances
+        out of the total number of instances.)
+        """
+        return self._call_java("accuracy")
+
+    @property
+    @since("3.1.0")
+    def weightedTruePositiveRate(self):
+        """
+        Returns weighted true positive rate.
+        (equals to precision, recall and f-measure)
+        """
+        return self._call_java("weightedTruePositiveRate")
+
+    @property
+    @since("3.1.0")
+    def weightedFalsePositiveRate(self):
+        """
+        Returns weighted false positive rate.
+        """
+        return self._call_java("weightedFalsePositiveRate")
+
+    @property
+    @since("3.1.0")
+    def weightedRecall(self):
+        """
+        Returns weighted averaged recall.
+        (equals to precision, recall and f-measure)
+        """
+        return self._call_java("weightedRecall")
+
+    @property
+    @since("3.1.0")
+    def weightedPrecision(self):
+        """
+        Returns weighted averaged precision.
+        """
+        return self._call_java("weightedPrecision")
+
+    @since("3.1.0")
+    def weightedFMeasure(self, beta=1.0):
+        """
+        Returns weighted averaged f-measure.
+        """
+        return self._call_java("weightedFMeasure", beta)
+
+
+@inherit_doc
+class _TrainingSummary(JavaWrapper):
+    """
+    Abstraction for Training results.
+
+    .. versionadded:: 3.1.0
+    """
+
+    @property
+    @since("3.1.0")
+    def objectiveHistory(self):
+        """
+        Objective function (scaled loss + regularization) at each
+        iteration. It contains one more element, the initial state,
+        than number of iterations.
+        """
+        return self._call_java("objectiveHistory")
+
+    @property
+    @since("3.1.0")
+    def totalIterations(self):
+        """
+        Number of training iterations until termination.
+        """
+        return self._call_java("totalIterations")
+
+
+@inherit_doc
+class _BinaryClassificationSummary(_ClassificationSummary):
+    """
+    Binary classification results for a given model.
+
+    .. versionadded:: 3.1.0
+    """
+
+    @property
+    @since("3.1.0")
+    def scoreCol(self):
+        """
+        Field in "predictions" which gives the probability or raw prediction
+        of each class as a vector.
+        """
+        return self._call_java("scoreCol")
+
+    @property
+    @since("3.1.0")
+    def roc(self):
+        """
+        Returns the receiver operating characteristic (ROC) curve,
+        which is a Dataframe having two fields (FPR, TPR) with
+        (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
+
+        .. seealso:: `Wikipedia reference
+            <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
+        """
+        return self._call_java("roc")
+
+    @property
+    @since("3.1.0")
+    def areaUnderROC(self):
+        """
+        Computes the area under the receiver operating characteristic
+        (ROC) curve.
+        """
+        return self._call_java("areaUnderROC")
+
+    @property
+    @since("3.1.0")
+    def pr(self):
+        """
+        Returns the precision-recall curve, which is a Dataframe
+        containing two fields recall, precision with (0.0, 1.0) prepended
+        to it.
+        """
+        return self._call_java("pr")
+
+    @property
+    @since("3.1.0")
+    def fMeasureByThreshold(self):
+        """
+        Returns a dataframe with two fields (threshold, F-Measure) curve
+        with beta = 1.0.
+        """
+        return self._call_java("fMeasureByThreshold")
+
+    @property
+    @since("3.1.0")
+    def precisionByThreshold(self):
+        """
+        Returns a dataframe with two fields (threshold, precision) curve.
+        Every possible probability obtained in transforming the dataset
+        are used as thresholds used in calculating the precision.
+        """
+        return self._call_java("precisionByThreshold")
+
+    @property
+    @since("3.1.0")
+    def recallByThreshold(self):
+        """
+        Returns a dataframe with two fields (threshold, recall) curve.
+        Every possible probability obtained in transforming the dataset
+        are used as thresholds used in calculating the recall.
+        """
+        return self._call_java("recallByThreshold")
+
+
 class _LinearSVCParams(_ClassifierParams, HasRegParam, HasMaxIter, HasFitIntercept, HasTol,
                        HasStandardization, HasWeightCol, HasAggregationDepth, HasThreshold,
                        HasBlockSize):
@@ -430,7 +687,8 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
         return self._set(blockSize=value)
 
 
-class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable):
+class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable,
+                     HasTrainingSummary):
     """
     Model fitted by LinearSVC.
 
@@ -459,6 +717,50 @@ class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable,
         Model intercept of Linear SVM Classifier.
         """
         return self._call_java("intercept")
+
+    @since("3.1.0")
+    def summary(self):
+        """
+        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
+        """
+        if self.hasSummary:
+            return LinearSVCTrainingSummary(super(LinearSVCModel, self).summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
+
+    @since("3.1.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+
+        :param dataset:
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+        java_lsvc_summary = self._call_java("evaluate", dataset)
+        return LinearSVCSummary(java_lsvc_summary)
+
+
+class LinearSVCSummary(_BinaryClassificationSummary):
+    """
+    Abstraction for LinearSVC Results for a given model.
+    .. versionadded:: 3.1.0
+    """
+    pass
+
+
+@inherit_doc
+class LinearSVCTrainingSummary(LinearSVCSummary, _TrainingSummary):
+    """
+    Abstraction for LinearSVC Training results.
+
+    .. versionadded:: 3.1.0
+    """
+    pass
 
 
 class _LogisticRegressionParams(_ProbabilisticClassifierParams, HasRegParam,
@@ -940,20 +1242,12 @@ class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRe
             return LogisticRegressionSummary(java_blr_summary)
 
 
-class LogisticRegressionSummary(JavaWrapper):
+class LogisticRegressionSummary(_ClassificationSummary):
     """
     Abstraction for Logistic Regression Results for a given model.
 
     .. versionadded:: 2.0.0
     """
-
-    @property
-    @since("2.0.0")
-    def predictions(self):
-        """
-        Dataframe outputted by the model's `transform` method.
-        """
-        return self._call_java("predictions")
 
     @property
     @since("2.0.0")
@@ -965,23 +1259,6 @@ class LogisticRegressionSummary(JavaWrapper):
         return self._call_java("probabilityCol")
 
     @property
-    @since("2.3.0")
-    def predictionCol(self):
-        """
-        Field in "predictions" which gives the prediction of each class.
-        """
-        return self._call_java("predictionCol")
-
-    @property
-    @since("2.0.0")
-    def labelCol(self):
-        """
-        Field in "predictions" which gives the true label of each
-        instance.
-        """
-        return self._call_java("labelCol")
-
-    @property
     @since("2.0.0")
     def featuresCol(self):
         """
@@ -990,241 +1267,26 @@ class LogisticRegressionSummary(JavaWrapper):
         """
         return self._call_java("featuresCol")
 
-    @property
-    @since("3.1.0")
-    def weightCol(self):
-        """
-        Field in "predictions" which gives the weight of each instance
-        as a vector.
-        """
-        return self._call_java("weightCol")
-
-    @property
-    @since("2.3.0")
-    def labels(self):
-        """
-        Returns the sequence of labels in ascending order. This order matches the order used
-        in metrics which are specified as arrays over labels, e.g., truePositiveRateByLabel.
-
-        Note: In most cases, it will be values {0.0, 1.0, ..., numClasses-1}, However, if the
-        training set is missing a label, then all of the arrays over labels
-        (e.g., from truePositiveRateByLabel) will be of length numClasses-1 instead of the
-        expected numClasses.
-        """
-        return self._call_java("labels")
-
-    @property
-    @since("2.3.0")
-    def truePositiveRateByLabel(self):
-        """
-        Returns true positive rate for each label (category).
-        """
-        return self._call_java("truePositiveRateByLabel")
-
-    @property
-    @since("2.3.0")
-    def falsePositiveRateByLabel(self):
-        """
-        Returns false positive rate for each label (category).
-        """
-        return self._call_java("falsePositiveRateByLabel")
-
-    @property
-    @since("2.3.0")
-    def precisionByLabel(self):
-        """
-        Returns precision for each label (category).
-        """
-        return self._call_java("precisionByLabel")
-
-    @property
-    @since("2.3.0")
-    def recallByLabel(self):
-        """
-        Returns recall for each label (category).
-        """
-        return self._call_java("recallByLabel")
-
-    @since("2.3.0")
-    def fMeasureByLabel(self, beta=1.0):
-        """
-        Returns f-measure for each label (category).
-        """
-        return self._call_java("fMeasureByLabel", beta)
-
-    @property
-    @since("2.3.0")
-    def accuracy(self):
-        """
-        Returns accuracy.
-        (equals to the total number of correctly classified instances
-        out of the total number of instances.)
-        """
-        return self._call_java("accuracy")
-
-    @property
-    @since("2.3.0")
-    def weightedTruePositiveRate(self):
-        """
-        Returns weighted true positive rate.
-        (equals to precision, recall and f-measure)
-        """
-        return self._call_java("weightedTruePositiveRate")
-
-    @property
-    @since("2.3.0")
-    def weightedFalsePositiveRate(self):
-        """
-        Returns weighted false positive rate.
-        """
-        return self._call_java("weightedFalsePositiveRate")
-
-    @property
-    @since("2.3.0")
-    def weightedRecall(self):
-        """
-        Returns weighted averaged recall.
-        (equals to precision, recall and f-measure)
-        """
-        return self._call_java("weightedRecall")
-
-    @property
-    @since("2.3.0")
-    def weightedPrecision(self):
-        """
-        Returns weighted averaged precision.
-        """
-        return self._call_java("weightedPrecision")
-
-    @since("2.3.0")
-    def weightedFMeasure(self, beta=1.0):
-        """
-        Returns weighted averaged f-measure.
-        """
-        return self._call_java("weightedFMeasure", beta)
-
 
 @inherit_doc
-class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
+class LogisticRegressionTrainingSummary(LogisticRegressionSummary, _TrainingSummary):
     """
     Abstraction for multinomial Logistic Regression Training results.
-    Currently, the training summary ignores the training weights except
-    for the objective trace.
 
     .. versionadded:: 2.0.0
     """
-
-    @property
-    @since("2.0.0")
-    def objectiveHistory(self):
-        """
-        Objective function (scaled loss + regularization) at each
-        iteration. It contains one more element, the initial state,
-        than number of iterations.
-        """
-        return self._call_java("objectiveHistory")
-
-    @property
-    @since("2.0.0")
-    def totalIterations(self):
-        """
-        Number of training iterations until termination.
-        """
-        return self._call_java("totalIterations")
+    pass
 
 
 @inherit_doc
-class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
+class BinaryLogisticRegressionSummary(_BinaryClassificationSummary,
+                                      LogisticRegressionSummary):
     """
     Binary Logistic regression results for a given model.
 
     .. versionadded:: 2.0.0
     """
-
-    @property
-    @since("2.0.0")
-    def roc(self):
-        """
-        Returns the receiver operating characteristic (ROC) curve,
-        which is a Dataframe having two fields (FPR, TPR) with
-        (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
-
-        .. seealso:: `Wikipedia reference
-            <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
-        """
-        return self._call_java("roc")
-
-    @property
-    @since("2.0.0")
-    def areaUnderROC(self):
-        """
-        Computes the area under the receiver operating characteristic
-        (ROC) curve.
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
-        """
-        return self._call_java("areaUnderROC")
-
-    @property
-    @since("2.0.0")
-    def pr(self):
-        """
-        Returns the precision-recall curve, which is a Dataframe
-        containing two fields recall, precision with (0.0, 1.0) prepended
-        to it.
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
-        """
-        return self._call_java("pr")
-
-    @property
-    @since("2.0.0")
-    def fMeasureByThreshold(self):
-        """
-        Returns a dataframe with two fields (threshold, F-Measure) curve
-        with beta = 1.0.
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
-        """
-        return self._call_java("fMeasureByThreshold")
-
-    @property
-    @since("2.0.0")
-    def precisionByThreshold(self):
-        """
-        Returns a dataframe with two fields (threshold, precision) curve.
-        Every possible probability obtained in transforming the dataset
-        are used as thresholds used in calculating the precision.
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
-        """
-        return self._call_java("precisionByThreshold")
-
-    @property
-    @since("2.0.0")
-    def recallByThreshold(self):
-        """
-        Returns a dataframe with two fields (threshold, recall) curve.
-        Every possible probability obtained in transforming the dataset
-        are used as thresholds used in calculating the recall.
-
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LogisticRegression.weightCol`. This will change in later Spark
-            versions.
-        """
-        return self._call_java("recallByThreshold")
+    pass
 
 
 @inherit_doc
@@ -1703,7 +1765,7 @@ class RandomForestClassifier(_JavaProbabilisticClassifier, _RandomForestClassifi
 
 class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClassificationModel,
                                       _RandomForestClassifierParams, JavaMLWritable,
-                                      JavaMLReadable):
+                                      JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by RandomForestClassifier.
 
@@ -1730,6 +1792,80 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
     def trees(self):
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
+
+    @property
+    @since("3.1.0")
+    def summary(self):
+        """
+        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
+        """
+        if self.hasSummary:
+            if self.numClasses <= 2:
+                return BinaryRandomForestClassificationTrainingSummary(
+                    super(RandomForestClassificationModel, self).summary)
+            else:
+                return RandomForestClassificationTrainingSummary(
+                    super(RandomForestClassificationModel, self).summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
+
+    @since("3.1.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+
+        :param dataset:
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+        java_rf_summary = self._call_java("evaluate", dataset)
+        if self.numClasses <= 2:
+            return BinaryRandomForestClassificationSummary(java_rf_summary)
+        else:
+            return RandomForestClassificationSummary(java_rf_summary)
+
+
+class RandomForestClassificationSummary(_ClassificationSummary):
+    """
+    Abstraction for RandomForestClassification Results for a given model.
+    .. versionadded:: 3.1.0
+    """
+    pass
+
+
+@inherit_doc
+class RandomForestClassificationTrainingSummary(RandomForestClassificationSummary,
+                                                _TrainingSummary):
+    """
+    Abstraction for RandomForestClassificationTraining Training results.
+    .. versionadded:: 3.1.0
+    """
+    pass
+
+
+@inherit_doc
+class BinaryRandomForestClassificationSummary(_BinaryClassificationSummary):
+    """
+    BinaryRandomForestClassification results for a given model.
+
+    .. versionadded:: 3.1.0
+    """
+    pass
+
+
+@inherit_doc
+class BinaryRandomForestClassificationTrainingSummary(BinaryRandomForestClassificationSummary,
+                                                      RandomForestClassificationTrainingSummary):
+    """
+    BinaryRandomForestClassification training results for a given model.
+
+    .. versionadded:: 3.1.0
+    """
+    pass
 
 
 class _GBTClassifierParams(_GBTParams, _HasVarianceImpurity):

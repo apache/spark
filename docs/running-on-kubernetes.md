@@ -1341,7 +1341,7 @@ The following affect the driver and executor containers. All other containers in
   <td>See description</td>
   <td>
     The container name will be assigned by spark ("spark-kubernetes-driver" for the driver container, and
-    "executor" for each executor container) if not defined by the pod template. If the container is defined by the
+    "spark-kubernetes-executor" for each executor container) if not defined by the pod template. If the container is defined by the
     template, the template's name will be used.
   </td>
 </tr>

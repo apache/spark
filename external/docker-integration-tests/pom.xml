@@ -130,15 +130,9 @@
       <artifactId>postgresql</artifactId>
       <scope>test</scope>
     </dependency>
-    <!-- Oracle ojdbc jar, used for oracle  integration suite for docker testing.
-     See https://github.com/apache/spark/pull/11306 for background on why we need
-     to use a an ojdbc jar for the testcase. The maven dependency here is commented
-     because currently the maven repository does not contain the ojdbc jar mentioned.
-     Once the jar is available in maven, this could be uncommented. -->
     <dependency>
-      <groupId>com.oracle</groupId>
-      <artifactId>ojdbc6</artifactId>
-      <version>11.2.0.1.0</version>
+      <groupId>com.oracle.database.jdbc</groupId>
+      <artifactId>ojdbc8</artifactId>
       <scope>test</scope>
     </dependency>
 
@@ -166,7 +160,6 @@
     <dependency>
       <groupId>com.microsoft.sqlserver</groupId>
       <artifactId>mssql-jdbc</artifactId>
-      <version>7.2.1.jre8</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

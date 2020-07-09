@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
-import org.apache.spark.sql.functions.{lit, udf}
+import org.apache.spark.sql.functions.{lit, struct, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
@@ -580,5 +580,93 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val df = Seq((20, TrainingSales("training", CourseSales("course", 2000, 3.14))))
       .toDF("col1", "col2")
     checkAnswer(df.select(myUdf(Column("col1"), Column("col2"))), Row(2020) :: Nil)
+  }
+
+  test("case class as element type of Seq/Array") {
+    val f1 = (s: Seq[TestData]) => s.map(d => d.key * d.value.toInt).sum
+    val myUdf1 = udf(f1)
+    val df1 = Seq(("data", Seq(TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df1.select(myUdf1(Column("col2"))), Row(100) :: Nil)
+
+    val f2 = (s: Array[TestData]) => s.map(d => d.key * d.value.toInt).sum
+    val myUdf2 = udf(f2)
+    val df2 = Seq(("data", Array(TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df2.select(myUdf2(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("case class as key/value type of Map") {
+    val f1 = (s: Map[TestData, Int]) => s.keys.head.key * s.keys.head.value.toInt
+    val myUdf1 = udf(f1)
+    val df1 = Seq(("data", Map(TestData(50, "2") -> 502))).toDF("col1", "col2")
+    checkAnswer(df1.select(myUdf1(Column("col2"))), Row(100) :: Nil)
+
+    val f2 = (s: Map[Int, TestData]) => s.values.head.key * s.values.head.value.toInt
+    val myUdf2 = udf(f2)
+    val df2 = Seq(("data", Map(502 -> TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df2.select(myUdf2(Column("col2"))), Row(100) :: Nil)
+
+    val f3 = (s: Map[TestData, TestData]) => s.keys.head.key * s.values.head.value.toInt
+    val myUdf3 = udf(f3)
+    val df3 = Seq(("data", Map(TestData(50, "2") -> TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df3.select(myUdf3(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("case class as element of tuple") {
+    val f = (s: (TestData, Int)) => s._1.key * s._2
+    val myUdf = udf(f)
+    val df = Seq(("data", (TestData(50, "2"), 2))).toDF("col1", "col2")
+    checkAnswer(df.select(myUdf(Column("col2"))), Row(100) :: Nil)
+  }
+
+  test("case class as generic type of Option") {
+    val f = (o: Option[TestData]) => o.map(t => t.key * t.value.toInt)
+    val myUdf = udf(f)
+    val df1 = Seq(("data", Some(TestData(50, "2")))).toDF("col1", "col2")
+    checkAnswer(df1.select(myUdf(Column("col2"))), Row(100) :: Nil)
+    val df2 = Seq(("data", None: Option[TestData])).toDF("col1", "col2")
+    checkAnswer(df2.select(myUdf(Column("col2"))), Row(null) :: Nil)
+  }
+
+  test("more input fields than expect for case class") {
+    val f = (t: TestData2) => t.a * t.b
+    val myUdf = udf(f)
+    val df = spark.range(1)
+      .select(lit(50).as("a"), lit(2).as("b"), lit(2).as("c"))
+      .select(struct("a", "b", "c").as("col"))
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Nil)
+  }
+
+  test("less input fields than expect for case class") {
+    val f = (t: TestData2) => t.a * t.b
+    val myUdf = udf(f)
+    val df = spark.range(1)
+      .select(lit(50).as("a"))
+      .select(struct("a").as("col"))
+    val error = intercept[AnalysisException](df.select(myUdf(Column("col"))))
+    assert(error.getMessage.contains("cannot resolve '`b`' given input columns: [a]"))
+  }
+
+  test("wrong order of input fields for case class") {
+    val f = (t: TestData) => t.key * t.value.toInt
+    val myUdf = udf(f)
+    val df = spark.range(1)
+      .select(lit("2").as("value"), lit(50).as("key"))
+      .select(struct("value", "key").as("col"))
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Nil)
+  }
+
+  test("top level Option primitive type") {
+    val f = (i: Option[Int]) => i.map(_ * 10)
+    val myUdf = udf(f)
+    val df = Seq(Some(10), None).toDF("col")
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Row(null) :: Nil)
+  }
+
+  test("array Option") {
+    val f = (i: Array[Option[TestData]]) =>
+      i.map(_.map(t => t.key * t.value.toInt).getOrElse(0)).sum
+    val myUdf = udf(f)
+    val df = Seq(Array(Some(TestData(50, "2")), None)).toDF("col")
+    checkAnswer(df.select(myUdf(Column("col"))), Row(100) :: Nil)
   }
 }

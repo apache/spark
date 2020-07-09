@@ -18,12 +18,14 @@
 package org.apache.spark.sql
 
 import java.io.{File, FileNotFoundException}
+import java.net.URI
 import java.nio.file.{Files, StandardOpenOption}
 import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
@@ -403,7 +405,7 @@ class FileBasedDataSourceSuite extends QueryTest
         ""
       }
       def errorMessage(format: String): String = {
-        s"$format data source does not support null data type."
+        s"$format data source does not support unknown data type."
       }
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
         withTempDir { dir =>
@@ -845,19 +847,15 @@ class FileBasedDataSourceSuite extends QueryTest
 
   test("SPARK-31935: Hadoop file system config should be effective in data source options") {
     Seq("parquet", "").foreach { format =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> format) {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> format,
+        "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+        "fs.file.impl.disable.cache" -> "true") {
         withTempDir { dir =>
-          val path = dir.getCanonicalPath
-          val defaultFs = "nonexistFS://nonexistFS"
-          val expectMessage = "No FileSystem for scheme nonexistFS"
-          val message1 = intercept[java.io.IOException] {
-            spark.range(10).write.option("fs.defaultFS", defaultFs).parquet(path)
-          }.getMessage
-          assert(message1.filterNot(Set(':', '"').contains) == expectMessage)
-          val message2 = intercept[java.io.IOException] {
-            spark.read.option("fs.defaultFS", defaultFs).parquet(path)
-          }.getMessage
-          assert(message2.filterNot(Set(':', '"').contains) == expectMessage)
+          val path = "file:" + dir.getCanonicalPath.stripPrefix("file:")
+          spark.range(10).write.option("ds_option", "value").mode("overwrite").parquet(path)
+          checkAnswer(
+            spark.read.option("ds_option", "value").parquet(path), spark.range(10).toDF())
         }
       }
     }
@@ -930,5 +928,12 @@ object TestingUDT {
     override def deserialize(datum: Any): NullData =
       throw new UnsupportedOperationException("Not implemented")
     override def userClass: Class[NullData] = classOf[NullData]
+  }
+}
+
+class FakeFileSystemRequiringDSOption extends LocalFileSystem {
+  override def initialize(name: URI, conf: Configuration): Unit = {
+    super.initialize(name, conf)
+    require(conf.get("ds_option", "") == "value")
   }
 }
