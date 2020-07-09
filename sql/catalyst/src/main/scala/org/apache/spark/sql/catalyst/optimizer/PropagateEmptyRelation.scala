@@ -50,8 +50,25 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
   override def conf: SQLConf = SQLConf.get
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p: Union if p.children.forall(isEmptyLocalRelation) =>
-      empty(p)
+    case p @ Union(children) if children.exists(isEmptyLocalRelation) =>
+      val newChildren = children.filterNot(isEmptyLocalRelation)
+      if (newChildren.isEmpty) {
+        empty(p)
+      } else {
+        val newFirstChild = if (newChildren.head eq children.head) {
+          newChildren.head
+        } else {
+          val pl = children.head.output.zip(newChildren.head.output).map {
+            case (oa, na) => Alias(na, oa.name)(oa.exprId)
+          }
+          Project(pl, newChildren.head)
+        }
+        if (newChildren.size == 1) {
+          newFirstChild
+        } else {
+          Union(newFirstChild +: newChildren.tail)
+        }
+      }
 
     // Joins on empty LocalRelations generated from streaming sources are not eliminated
     // as stateful streaming joins need to perform other state management operations other than

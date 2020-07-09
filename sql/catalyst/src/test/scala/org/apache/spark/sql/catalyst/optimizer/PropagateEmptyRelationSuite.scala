@@ -55,6 +55,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
   val testRelation2 = LocalRelation.fromExternalRows(Seq('b.int), data = Seq(Row(1)))
+  val testRelation3 = LocalRelation.fromExternalRows(Seq('c.int), data = Seq(Row(1)))
 
   test("propagate empty relation through Union") {
     val query = testRelation1
@@ -65,6 +66,28 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val correctAnswer = LocalRelation('a.int)
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("remove empty relation children from Union") {
+    val query = testRelation1.union(testRelation2.where(false))
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation1
+    comparePlans(optimized, correctAnswer)
+
+    val query2 = testRelation1.where(false).union(testRelation2)
+    val optimized2 = Optimize.execute(query2.analyze)
+    val correctAnswer2 = testRelation2.select('b.as('a)).analyze
+    comparePlans(optimized2, correctAnswer2)
+
+    val query3 = testRelation1.union(testRelation2.where(false)).union(testRelation3)
+    val optimized3 = Optimize.execute(query3.analyze)
+    val correctAnswer3 = testRelation1.union(testRelation3)
+    comparePlans(optimized3, correctAnswer3)
+
+    val query4 = testRelation1.where(false).union(testRelation2).union(testRelation3)
+    val optimized4 = Optimize.execute(query4.analyze)
+    val correctAnswer4 = testRelation2.select('b.as('a)).union(testRelation3).analyze
+    comparePlans(optimized4, correctAnswer4)
   }
 
   test("propagate empty relation through Join") {
