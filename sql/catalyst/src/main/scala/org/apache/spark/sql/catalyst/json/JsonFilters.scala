@@ -82,17 +82,17 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
   // attributes. The i-th group contains predicates that refer to the i-th field of the given
   // schema. A predicates can be placed to many groups if it has many attributes. For example:
   //  schema: i INTEGER, s STRING
-  //  filters: IsNotNull("i"), AlwaysTrue, And(EqualTo("i", 0), StringStartsWith("s", "abc"))
+  //  filters: IsNotNull("i"), AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc"))
   //  predicates:
-  //    0: Array(IsNotNull("i"), AlwaysTrue, And(EqualTo("i", 0), StringStartsWith("s", "abc")))
-  //    1: Array(AlwaysTrue, And(EqualTo("i", 0), StringStartsWith("s", "abc")))
+  //    0: Array(IsNotNull("i"), AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
+  //    1: Array(AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
   private val predicates: Array[Array[JsonPredicate]] = {
     val groupedPredicates = Array.fill(schema.length)(Array.empty[JsonPredicate])
     if (SQLConf.get.jsonFilterPushDown) {
       val groupedByRefSet = filters
         // Group filters that have the same set of references. For example:
         //   IsNotNull("i") -> Set("i"), AlwaysTrue -> Set(),
-        //   And(EqualTo("i", 0), StringStartsWith("s", "abc")) -> Set("i", "s")
+        //   Or(EqualTo("i", 0), StringStartsWith("s", "abc")) -> Set("i", "s")
         // By grouping filters we could avoid tracking their state of references in the
         // current row separately.
         .groupBy(_.references.toSet)
@@ -112,8 +112,8 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
         }
       }
       // Build a map where key is only one field and value is seq of predicates refer to the field
-      // "i" -> Seq(AlwaysTrue, IsNotNull("i"), And(EqualTo("i", 0), StringStartsWith("s", "abc")))
-      // "s" -> Seq(AlwaysTrue, And(EqualTo("i", 0), StringStartsWith("s", "abc")))
+      // "i" -> Seq(AlwaysTrue, IsNotNull("i"), Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
+      // "s" -> Seq(AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
       val groupedByFields = withLiterals.toSeq
         .flatMap { case (refSet, pred) => refSet.map((_, pred)) }
         .groupBy(_._1)
