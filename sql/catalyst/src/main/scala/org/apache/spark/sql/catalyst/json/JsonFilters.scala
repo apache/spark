@@ -80,7 +80,7 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
 
   // Predicates compiled from the pushed down filters. The predicates are grouped by their
   // attributes. The i-th group contains predicates that refer to the i-th field of the given
-  // schema. A predicates can be places to many groups if it has many attributes. For example:
+  // schema. A predicates can be placed to many groups if it has many attributes. For example:
   //  schema: i INTEGER, s STRING
   //  filters: IsNotNull("i"), AlwaysTrue, And(EqualTo("i", 0), StringStartsWith("s", "abc"))
   //  predicates:
