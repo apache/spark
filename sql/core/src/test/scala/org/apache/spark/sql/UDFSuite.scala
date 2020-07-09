@@ -682,7 +682,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Use Utils.getSimpleName to avoid hitting Malformed class name") {
+  test("SPARK-32238: Use Utils.getSimpleName to avoid hitting Malformed class name") {
     OuterScopes.addOuterScope(MalformedClassObject)
     val f1 = new MalformedClassObject.MalformedNonPrimitiveFunction()
     val f2 = new MalformedClassObject.MalformedPrimitiveFunction()
