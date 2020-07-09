@@ -92,7 +92,7 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     comparePlans(doubleOptimized, correctAnswer)
   }
 
-  test("directly normalize on the children of If") {
+  test("normalize the children of If") {
     val cond = If(a > 0.1D, a, a + 0.2D) === b
     val query = testRelation1.join(testRelation2, condition = Some(cond))
     val optimized = Optimize.execute(query)
@@ -107,7 +107,7 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     comparePlans(doubleOptimized, correctAnswer)
   }
 
-  test("directly normalize on the children of CaseWhen") {
+  test("normalize the children of CaseWhen") {
     val cond = CaseWhen(
       Seq((a > 0.1D, a), (a > 0.2D, a + 0.2D)),
       Some(a + 0.3D)) === b
