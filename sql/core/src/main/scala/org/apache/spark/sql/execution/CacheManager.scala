@@ -27,11 +27,10 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.{DefaultCachedBatchSerializer, InMemoryRelation}
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -85,8 +84,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       val inMemoryRelation = sessionWithAqeOff.withActive {
         val qe = sessionWithAqeOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
-          sessionWithAqeOff.sessionState.conf.useCompression,
-          sessionWithAqeOff.sessionState.conf.columnBatchSize, storageLevel,
+          storageLevel,
           qe.executedPlan,
           tableName,
           optimizedPlan = qe.optimizedPlan)
