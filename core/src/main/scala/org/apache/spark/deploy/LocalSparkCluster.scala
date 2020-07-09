@@ -80,8 +80,8 @@ class LocalSparkCluster(
     Thread.sleep(1000)
     // Stop the workers before the master so they don't get upset that it disconnected
     workerRpcEnvs.foreach(_.shutdown())
-    masterRpcEnvs.foreach(_.shutdown())
     workerRpcEnvs.foreach(_.awaitTermination())
+    masterRpcEnvs.foreach(_.shutdown())
     masterRpcEnvs.foreach(_.awaitTermination())
     masterRpcEnvs.clear()
     workerRpcEnvs.clear()
