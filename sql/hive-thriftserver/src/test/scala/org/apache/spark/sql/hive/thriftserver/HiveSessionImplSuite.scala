@@ -74,14 +74,3 @@ class HiveSessionImplSuite extends SparkFunSuite {
     verify(operationManager).closeOperation(operationHandle2)
   }
 }
-
-// FIXME: DEBUGGING HiveSessionImplSuite - to run the suite multiple times simply
-class HiveSessionImplSuiteTrial2 extends HiveSessionImplSuite
-class HiveSessionImplSuiteTrial3 extends HiveSessionImplSuite
-class HiveSessionImplSuiteTrial4 extends HiveSessionImplSuite
-class HiveSessionImplSuiteTrial5 extends HiveSessionImplSuite
-class HiveSessionImplSuiteTrial6 extends HiveSessionImplSuite
-class HiveSessionImplSuiteTrial7 extends HiveSessionImplSuite
-class HiveSessionImplSuiteTrial8 extends HiveSessionImplSuite
-class HiveSessionImplSuiteTrial9 extends HiveSessionImplSuite
-class HiveSessionImplSuiteTrial10 extends HiveSessionImplSuite
