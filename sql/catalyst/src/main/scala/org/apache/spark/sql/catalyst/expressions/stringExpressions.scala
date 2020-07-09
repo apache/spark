@@ -1159,7 +1159,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
   override def children: Seq[Expression] = substr :: str :: start :: Nil
   override def nullable: Boolean = substr.nullable || str.nullable
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType)
 
   override def eval(input: InternalRow): Any = {
     val s = start.eval(input)
