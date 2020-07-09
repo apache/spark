@@ -196,34 +196,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  def sameOutput(planA: LogicalPlan, planB: LogicalPlan): Boolean = {
-    val planAOutput = planA.output
-    val planBOutput = planB.output
-    planAOutput.length == planBOutput.length && planAOutput.zip(planBOutput).forall {
-      case (a1, a2) => a1.semanticEquals(a2)
-    }
-  }
-
-
   private def prune(plan: LogicalPlan): LogicalPlan = {
     plan transformUp {
       // skip this rule if there's already a DPP subquery on the LHS of a join
       case j @ Join(Filter(_: DynamicPruningSubquery, _), _, _, _, _) => j
       case j @ Join(_, Filter(_: DynamicPruningSubquery, _), _, _, _) => j
       case j @ Join(left, right, joinType, Some(condition), hint) =>
-
-        // If left side is smaller that the right side, pruningHasBenefit will always return false.
-        // Even if this join turns out to be a BHJ, build side would be left side and because we
-        // would have inserted DPP predicate with filteringPlan as right side, DPP node will become
-        // a pass-through. This re-ordering will help in optimizing cases when both the sides are
-        // partitioned and the Left side is smaller than right side.
-        // This will also help in avoiding the overhead for the case when only left side is
-        // partitioned and left is smaller than the right side.
-        var (newLeft, newRight) = if (left.stats.sizeInBytes > right.stats.sizeInBytes) {
-          (left, right)
-        } else {
-          (right, left)
-        }
+        var newLeft = left
+        var newRight = right
 
         // extract the left and right keys of the join condition
         val (leftKeys, rightKeys) = j match {
@@ -266,16 +246,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
             }
           case _ =>
         }
-        val reOrderedJoin = Join(newLeft, newRight, joinType, Some(condition), hint)
-        if (sameOutput(reOrderedJoin, j)) {
-          reOrderedJoin
-        } else {
-          // Reordering the joins has changed the order of the columns.
-          // Inject a projection to make sure we restore to the expected ordering.
-          // Deserialization will also break otherwise if the join expression
-          // column names are identical
-          Project(j.output, reOrderedJoin)
-        }
+        Join(newLeft, newRight, joinType, Some(condition), hint)
     }
   }
 
@@ -286,4 +257,3 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     case _ => prune(plan)
   }
 }
-
