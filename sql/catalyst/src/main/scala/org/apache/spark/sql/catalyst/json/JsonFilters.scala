@@ -25,10 +25,34 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * The class provides API for applying pushed down source filters to rows with
- * struct schema parsed from JSON records. It assumes that:
- *   1. reset() is called before any skipRow() calls for new row.
- *   2. skipRow() can be called for any valid index of the struct fields,
+ * a struct schema parsed from JSON records. The class should be used in this way:
+ * 1. Before processing of the next row, `JacksonParser` (parser for short) resets the internal
+ *    state of JsonFilter` by calling the `reset()` method.
+ * 2. The parser reads JSON fields one-by-one in streaming fashion. It converts an incoming
+ *    field value to the desired type from the schema. After that, it sets the value to an instance
+ *    of `InternalRow` at the position according to the schema. Order of parsed JSON fields can
+ *    be different from the order in the schema.
+ * 3. Per every JSON field of the top-level JSON object, the parser calls `skipRow` by passing
+ *    an `InternalRow` in which some of fields can be already set, and the position of the JSON
+ *    field according to the schema.
+ *    3.1 `skipRow` finds a group of predicates that refers to this JSON field.
+ *    3.2 Per each predicate from the group, `skipRow` decrements its reference counter.
+ *    3.2.1 If predicate reference counter becomes 0, it means that all predicate attributes have
+ *          been already set in the internal row, and the predicate can be applied to it. `skipRow`
+ *          invokes the predicate for the row.
+ *    3.3 `skipRow` applies predicates until one of them returns `false`. In that case, the method
+ *        returns `true` to the parser.
+ *    3.4 If all predicates with zero reference counter return `true`, the final result of
+ *        the method is `false` which tells the parser to not skip the row.
+ * 4. If the parser gets `true` from `JsonFilters.skipRow`, it must not call the method anymore
+ *    for this internal row, and should go the step 1.
+ *
+ * JsonFilters assumes that:
+ *   - reset() is called before any skipRow() calls for new row.
+ *   - skipRow() can be called for any valid index of the struct fields,
  *      and in any order.
+ *   - After skipRow() returns `true`, the internal state of `JsonFilter` can be inconsistent,
+ *     so, skipRow() must not be called for the current row anymore without reset().
  *
  * @param pushedFilters The pushed down source filters. The filters should refer to
  *                      the fields of the provided schema.
@@ -54,9 +78,9 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
     }
   }
 
-  // Predicates compiled from the pushed down filters, and indexed by their references
-  // in the given schema. A predicate can occur in the array more than once if it
-  // has many references. For example:
+  // Predicates compiled from the pushed down filters. The predicates are grouped by their
+  // attributes. The i-th group contains predicates that refer to the i-th field of the given
+  // schema. A predicates can be places to many groups if it has many attributes. For example:
   //  schema: i INTEGER, s STRING
   //  filters: IsNotNull("i"), AlwaysTrue, And(EqualTo("i", 0), StringStartsWith("s", "abc"))
   //  predicates:
