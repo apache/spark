@@ -592,11 +592,13 @@ class UDFSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-32154: return null with or without explicit type") {
     // without explicit type
-    assert(udf((i: String) => null)
-      .asInstanceOf[SparkUserDefinedFunction].dataType === NullType)
+    val udf1 = udf((i: String) => null)
+    assert(udf1.asInstanceOf[SparkUserDefinedFunction] .dataType === NullType)
+    checkAnswer(Seq("1").toDF("a").select(udf1('a)), Row(null) :: Nil)
     // with explicit type
-    assert(udf((i: String) => null.asInstanceOf[String])
-      .asInstanceOf[SparkUserDefinedFunction].dataType === StringType)
+    val udf2 = udf((i: String) => null.asInstanceOf[String])
+    assert(udf2.asInstanceOf[SparkUserDefinedFunction].dataType === StringType)
+    checkAnswer(Seq("1").toDF("a").select(udf1('a)), Row(null) :: Nil)
   }
 
   test("SPARK-28321 0-args Java UDF should not be called only once") {
