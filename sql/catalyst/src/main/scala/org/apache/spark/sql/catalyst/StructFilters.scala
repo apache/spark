@@ -65,6 +65,7 @@ abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructT
 
   // Finds a filter attribute in the schema and converts it to a `BoundReference`
   private def toRef(attr: String): Option[BoundReference] = {
+    // The names have been normalized and case sensitivity is not a concern here.
     schema.getFieldIndex(attr).map { index =>
       val field = schema(index)
       BoundReference(index, field.dataType, field.nullable)
