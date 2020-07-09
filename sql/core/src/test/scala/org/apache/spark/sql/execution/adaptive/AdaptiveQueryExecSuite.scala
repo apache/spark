@@ -21,20 +21,19 @@ import java.io.File
 import java.net.URI
 
 import org.apache.log4j.Level
-
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql._
 import org.apache.spark.util.Utils
 
 class AdaptiveQueryExecSuite
@@ -1143,6 +1142,49 @@ class AdaptiveQueryExecSuite
           val df6 = spark.sql("SELECT /*+ REPARTITION_BY_RANGE(10, id) */ * from test")
           assert(df5.rdd.collectPartitions().length == 10)
           assert(df6.rdd.collectPartitions().length == 10)
+        }
+      }
+    }
+  }
+
+  test("SPARK-SMJ_ORIENTATION: reorient SMJ using adaptive stats") {
+    Seq(true, false).foreach { enableAQE =>
+      withTable("testTbl1", "testTbl2") {
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+
+          def getLeftTableName(plan: SparkPlan): String = {
+            val node = plan.collectLeaves()(0) match {
+              case x: ShuffleQueryStageExec =>
+                x.plan.collectLeaves()(0)
+              case x: SparkPlan =>
+                x
+            }
+            node.asInstanceOf[FileSourceScanExec].tableIdentifier.get.table
+          }
+
+          val df1 = (0 until 10).toDF("col1").as("df1")
+          df1.write.format("parquet").saveAsTable("testTbl1")
+
+          val df2 = (0 until 100).toDF("col1").as("df2")
+          df2.write.format("parquet").saveAsTable("testTbl2")
+
+          val df =
+            spark.sql("SELECT * from testTbl1 JOIN testTbl2 ON testTbl1.col1 = testTbl2.col1")
+
+          if (enableAQE) {
+            val initialPlan = df.queryExecution.executedPlan
+            df.collect
+            val adaptivePlan = df.queryExecution.executedPlan
+            val executedPlan = adaptivePlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+            assert(getLeftTableName(executedPlan) == "testTbl2")
+            assert(initialPlan.output == adaptivePlan.output)
+          } else {
+            df.collect
+            val executedPlan = df.queryExecution.executedPlan
+            assert(getLeftTableName(executedPlan) == "testTbl1")
+          }
         }
       }
     }
