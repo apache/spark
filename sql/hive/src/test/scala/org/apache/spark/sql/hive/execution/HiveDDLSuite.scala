@@ -2413,7 +2413,7 @@ class HiveDDLSuite
           schema = schema,
           options = Map("fileFormat" -> "parquet"))
       }.getMessage
-      assert(e.contains("Cannot create tables with unknown type"))
+      assert(e.contains("Cannot create tables with null type"))
     }
   }
 
@@ -2426,7 +2426,7 @@ class HiveDDLSuite
           schema = schema,
           options = Map.empty[String, String])
       }.getMessage
-      assert(e.contains("Cannot create tables with unknown type"))
+      assert(e.contains("Cannot create tables with null type"))
     }
   }
 
