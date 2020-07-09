@@ -66,14 +66,11 @@ class JdbcRelationProvider extends CreatableRelationProvider
           runQuery(conn, i, options)
 
           // Remove preActions to avoid duplicate execution when writing data
-<<<<<<< HEAD
           //  a) `createRelation(SQLContext, SaveMode, Map[String, String], DataFrame)`
           //  b) `createRelation(SQLContext, Map[String, String])`
           // (a) is called only for writes, but (b) is called for both reads and writes
           // To avoid duplicate execution of preActions in writes,
           // we need to remove preActions parameter here before passing it to (b)
-=======
->>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
           parametersWithoutPreActions = parameters.-(JDBCOptions.JDBC_PRE_ACTIONS_STRING)
         case None =>
       }

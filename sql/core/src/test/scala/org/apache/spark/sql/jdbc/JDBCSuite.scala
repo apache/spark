@@ -1717,11 +1717,7 @@ class JDBCSuite extends QueryTest
     checkAnswer(jdbcDF, Row("mary", 2) :: Nil)
   }
 
-<<<<<<< HEAD
   test("option preActions, run single DML before reading data.") {
-=======
-  test("option preActions, run single SQL before reading data.") {
->>>>>>> 6e7e5e4a53... [SPARK-21514][SQL] Added support for multiple queries. Reflected reviewers' comments.
     val df1 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", "TEST.PEOPLE")
@@ -1770,7 +1766,7 @@ class JDBCSuite extends QueryTest
     assert(df2Count == df1Count + 2)  // df2.count() should be 4
   }
 
-  test("option preActions, run multiple SQLs before reading data with exceptions.") {
+  test("option preActions, run multiple DMLs before reading data with exceptions.") {
     val df1 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", "TEST.PEOPLE")
@@ -1828,33 +1824,4 @@ class JDBCSuite extends QueryTest
     val df3Count = df3.count()
     assert(df3Count == 1)
   }
-
-  test("option preActions, run multiple DMLs before reading data with exceptions.") {
-    val df1 = spark.read.format("jdbc")
-      .option("url", urlWithUserAndPass)
-      .option("dbtable", "TEST.PEOPLE")
-      .load()
-    df1.show()
-    val df1Count = df1.count()  // df1Count is 2 at the beginning
-
-    val preSQL = "insert into test.people values ('fred', 1); select * from test.people; "
-
-    val e = intercept[SQLException] {
-      val df2 = spark.read.format("jdbc")
-        .option("url", urlWithUserAndPass)
-        .option("dbtable", "TEST.PEOPLE")
-        .option("preActions", preSQL)
-        .load()
-    }.getMessage
-    assert(e.contains("Method is not allowed for a query"))
-
-    val df3 = spark.read.format("jdbc")
-      .option("url", urlWithUserAndPass)
-      .option("dbtable", "TEST.PEOPLE")
-      .load()
-    df3.show()
-    val df3Count = df3.count()
-    assert(df1Count == df3Count)  // insert should be rollbacked.
-  }
-
 }
