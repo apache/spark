@@ -31,7 +31,7 @@ object AdaptiveJoinOrientation extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case j @ Join(left, right, _, _, _)
-      if isMaterializedShuffleStage(left) && isMaterializedShuffleStage(right) &&
+      if Seq(left, right).forall(isMaterializedShuffleStage) &&
         (left.stats.sizeInBytes < right.stats.sizeInBytes) =>
       Project(j.output, j.copy(left = right, right = left))
   }
