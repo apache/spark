@@ -36,7 +36,7 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
  * [DROP VIEW](sql-ref-syntax-ddl-drop-view.html)
  * [REPAIR TABLE](sql-ref-syntax-ddl-repair-table.html)
  * [TRUNCATE TABLE](sql-ref-syntax-ddl-truncate-table.html)
- * [USE DATABASE](sql-ref-syntax-qry-select-usedb.html)
+ * [USE DATABASE](sql-ref-syntax-ddl-usedb.html)
 
 ### DML Statements
 
@@ -82,7 +82,7 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
  * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
  * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
  * [REFRESH](sql-ref-syntax-aux-cache-refresh.html)
- * [REFRESH TABLE](sql-ref-syntax-aux-refresh-table.html)
+ * [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
  * [RESET](sql-ref-syntax-aux-conf-mgmt-reset.html)
  * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
  * [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)
