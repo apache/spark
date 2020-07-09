@@ -7,7 +7,7 @@ select typeof(null)
 -- !query schema
 struct<typeof(NULL):string>
 -- !query output
-null
+unknown
 
 
 -- !query
