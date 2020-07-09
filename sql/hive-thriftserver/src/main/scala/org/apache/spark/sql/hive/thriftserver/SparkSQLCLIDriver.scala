@@ -47,7 +47,6 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.internal.SharedState
-import org.apache.spark.sql.util.QueryStatementUtils
 import org.apache.spark.util.ShutdownHookManager
 
 /**
