@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{lit, struct, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -589,11 +590,13 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       Row(null))
   }
 
-  test("SPARK-32154: return null without explicit type is not allowed") {
+  test("SPARK-32154: return null with or without explicit type") {
     // without explicit type
-    intercept[ClassNotFoundException](spark.udf.register("returnNull", udf((i: Int) => null)))
+    assert(udf((i: String) => null)
+      .asInstanceOf[SparkUserDefinedFunction].dataType === NullType)
     // with explicit type
-    spark.udf.register("returnNull", udf((i: Int) => null.asInstanceOf[Int]))
+    assert(udf((i: String) => null.asInstanceOf[String])
+      .asInstanceOf[SparkUserDefinedFunction].dataType === StringType)
   }
 
   test("SPARK-28321 0-args Java UDF should not be called only once") {
