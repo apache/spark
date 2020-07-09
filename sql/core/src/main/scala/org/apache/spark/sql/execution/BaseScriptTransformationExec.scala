@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, SerializableConfiguration, Utils}
 
-trait BaseScriptTransform extends UnaryExecNode {
+trait BaseScriptTransformationExec extends UnaryExecNode {
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
 
@@ -170,6 +170,8 @@ abstract class BaseScriptTransformationWriterThread(
  * The wrapper class of input and output schema properties
  */
 abstract class BaseScriptTransformIOSchema extends Serializable {
+  import ScriptIOSchema._
+
   def inputRowFormat: Seq[(String, String)]
 
   def outputRowFormat: Seq[(String, String)]
@@ -188,11 +190,13 @@ abstract class BaseScriptTransformIOSchema extends Serializable {
 
   def schemaLess: Boolean
 
-  protected val defaultFormat = Map(
+  val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
+  val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
+}
+
+object ScriptIOSchema {
+  val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\t"),
     ("TOK_TABLEROWFORMATLINES", "\n")
   )
-
-  val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
-  val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 }

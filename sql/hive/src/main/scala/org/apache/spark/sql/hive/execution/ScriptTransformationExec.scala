@@ -55,7 +55,7 @@ case class HiveScriptTransformationExec(
     output: Seq[Attribute],
     child: SparkPlan,
     ioschema: HiveScriptIOSchema)
-  extends BaseScriptTransform {
+  extends BaseScriptTransformationExec {
 
   override def processIterator(
       inputIterator: Iterator[InternalRow],
