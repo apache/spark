@@ -1873,4 +1873,12 @@ package object config {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val LOCAL_CLUSTER_SHUTDOWN_WAIT_TIMEOUT =
+    ConfigBuilder("spark.localCluster.shutdown.wait.timeoutMs")
+      .internal()
+    .doc("Timeout in milliseconds for waiting for local cluster to shutdown.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(1000)
 }

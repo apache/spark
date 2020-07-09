@@ -43,6 +43,7 @@ class LocalSparkCluster(
   private val localHostname = Utils.localHostName()
   private val masterRpcEnvs = ArrayBuffer[RpcEnv]()
   private val workerRpcEnvs = ArrayBuffer[RpcEnv]()
+  private val shutdownWaitTimeout = conf.get(config.LOCAL_CLUSTER_SHUTDOWN_WAIT_TIMEOUT)
   // exposed for testing
   var masterWebUIPort = -1
 
@@ -75,6 +76,7 @@ class LocalSparkCluster(
   def stop(): Unit = {
     logInfo("Shutting down local Spark cluster.")
     // Stop the workers before the master so they don't get upset that it disconnected
+    Thread.sleep(shutdownWaitTimeout)
     workerRpcEnvs.foreach(_.shutdown())
     masterRpcEnvs.foreach(_.shutdown())
     workerRpcEnvs.foreach(_.awaitTermination())
