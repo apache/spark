@@ -174,6 +174,11 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
     */
 
+  /**
+   * Registers a deterministic Scala closure of 0 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 1.3.0
+   */
   def register[RT: TypeTag](name: String, func: Function0[RT]): UserDefinedFunction = {
     val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
     val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
