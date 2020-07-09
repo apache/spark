@@ -150,7 +150,8 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
   // This is also used by udf.register(...) when it detects a UserDefinedAggregator
   def scalaAggregator(exprs: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = {
     val iEncoder = inputEncoder.asInstanceOf[ExpressionEncoder[IN]]
-    ScalaAggregator(exprs, aggregator, iEncoder, nullable, deterministic)
+    val bEncoder = aggregator.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]]
+    ScalaAggregator(exprs, aggregator, iEncoder, bEncoder, nullable, deterministic)
   }
 
   override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {
