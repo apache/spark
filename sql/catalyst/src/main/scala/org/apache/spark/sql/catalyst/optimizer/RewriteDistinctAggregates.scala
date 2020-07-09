@@ -394,15 +394,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup unique distinct aggregate children.
       val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
-      val distinctAggChildAttrMap = if (projected) {
-        // To facilitate merging Project with Expand, not need creating a new reference here.
-        distinctAggChildren.map {
-          case ar: AttributeReference => ar -> ar
-          case other => expressionAttributePair(other)
-        }
-      } else {
-        distinctAggChildren.map(expressionAttributePair)
-      }
+      val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair)
       val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
 
       // Setup expand & aggregate operators for distinct aggregate expressions.
