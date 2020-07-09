@@ -152,21 +152,21 @@ the following case-insensitive options:
   <tr>
      <td><code>sessionInitStatement</code></td>
      <td>
-       After each database session is opened to the remote DB and before starting to read data, this option executes a custom SQL statement (or a PL/SQL block). Use this to implement session initialization code. Example: <code>option("sessionInitStatement", """BEGIN execute immediate 'alter session set "_serial_direct_read"=true'; END;""")</code>
+       After each database session is opened to the remote DB and before starting to read data, this option executes a custom SQL statement (or a PL/SQL block) in the Spark executors. Use this to implement session initialization code. Example: <code>option("sessionInitStatement", """BEGIN execute immediate 'alter session set "_serial_direct_read"=true'; END;""")</code>
      </td>
   </tr>
 
   <tr>
      <td><code>preActions</code></td>
      <td>
-       Custom queries which you want to run before reading data from JDBC or writing data to JDBC. Only DDL or DML (insert/update/delete) are allowed. It is called per DataFrame, not per session. You can specify multiple queries separated by semicolon. When exceptions occur in preActions, the queries in preActions will be rollbacked. 
+       Custom queries which you want to run in the Spark Driver before reading data from JDBC or writing data to JDBC. Only DDL or DML (insert/update/delete) are allowed. You can specify multiple queries separated by semicolon. When exceptions occur in preActions, the queries in preActions will be rollbacked. 
      </td>
   </tr>
 
   <tr>
      <td><code>postActions</code></td>
      <td>
-        This is a JDBC writer related option. Custom queries which you want to run after writing data to JDBC. Only DDL or DML (insert/update/delete) are allowed. It is called per DataFrame, not per session. You can specify multiple queries separated by semicolon. When exceptions occur in postActions, the queries in postActions will be rollbacked but the queries in preActions and queries used in saving the DataFrame will be committed. 
+        This is a JDBC writer related option. Custom queries which you want to run the Spark Driver after writing data to JDBC. Only DDL or DML (insert/update/delete) are allowed. You can specify multiple queries separated by semicolon. When exceptions occur in postActions, the queries in postActions will be rollbacked but the queries in preActions and queries used in saving the DataFrame will be committed. 
      </td>
   </tr>
 

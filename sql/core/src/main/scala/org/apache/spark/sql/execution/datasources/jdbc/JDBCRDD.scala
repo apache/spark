@@ -55,13 +55,6 @@ object JDBCRDD extends Logging {
     val table = options.tableOrQuery
     val dialect = JdbcDialects.get(url)
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
-
-    options.preActions match {
-      case Some(i) =>
-        runQuery(conn, i, options)
-      case None =>
-    }
-
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
       try {
@@ -164,7 +157,6 @@ object JDBCRDD extends Logging {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
-
     new JDBCRDD(
       sc,
       JdbcUtils.createConnectionFactory(options),

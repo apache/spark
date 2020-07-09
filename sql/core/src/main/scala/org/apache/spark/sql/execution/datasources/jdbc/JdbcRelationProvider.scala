@@ -32,6 +32,18 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val jdbcOptions = new JDBCOptions(parameters)
     val resolver = sqlContext.conf.resolver
     val timeZoneId = sqlContext.conf.sessionLocalTimeZone
+
+    val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
+    try {
+      jdbcOptions.preActions match {
+        case Some(i) =>
+          runQuery(conn, i, jdbcOptions)
+        case None =>
+      }
+    } finally {
+      conn.close()
+    }
+
     val schema = JDBCRelation.getSchema(resolver, jdbcOptions)
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
     JDBCRelation(schema, parts, jdbcOptions)(sqlContext.sparkSession)
@@ -54,6 +66,11 @@ class JdbcRelationProvider extends CreatableRelationProvider
           runQuery(conn, i, options)
 
           // Remove preActions to avoid duplicate execution when writing data
+          //  a) `createRelation(SQLContext, SaveMode, Map[String, String], DataFrame)`
+          //  b) `createRelation(SQLContext, Map[String, String])`
+          // (a) is called only for writes, but (b) is called for both reads and writes
+          // To avoid duplicate execution of preActions in writes,
+          // we need to remove preActions parameter in (a) before passing to (b)
           parametersWithoutPreActions = parameters.-(JDBCOptions.JDBC_PRE_ACTIONS_STRING)
         case None =>
       }
