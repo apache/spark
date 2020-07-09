@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, IsNull, KnownFloatingPointNormalized}
+import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, If, IsNull, KnownFloatingPointNormalized}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -87,6 +87,39 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     val joinCond = IsNull(a) === IsNull(b) &&
       KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(a, 0.0))) ===
         KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(b, 0.0)))
+    val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
+
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("directly normalize on the children of If") {
+    val cond = If(a > 0.1D, a, a + 0.2D) === b
+    val query = testRelation1.join(testRelation2, condition = Some(cond))
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+
+    val joinCond = If(a > 0.1D,
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(a)),
+        KnownFloatingPointNormalized(NormalizeNaNAndZero(a + 0.2D))) ===
+          KnownFloatingPointNormalized(NormalizeNaNAndZero(b))
+    val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
+
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("directly normalize on the children of CaseWhen") {
+    val cond = CaseWhen(
+      Seq((a > 0.1D, a), (a > 0.2D, a + 0.2D)),
+      Some(a + 0.3D)) === b
+    val query = testRelation1.join(testRelation2, condition = Some(cond))
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+
+    val joinCond = CaseWhen(
+      Seq((a > 0.1D, KnownFloatingPointNormalized(NormalizeNaNAndZero(a))),
+        (a > 0.2D, KnownFloatingPointNormalized(NormalizeNaNAndZero(a + 0.2D)))),
+      Some(KnownFloatingPointNormalized(NormalizeNaNAndZero(a + 0.3D)))) ===
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(b))
     val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
 
     comparePlans(doubleOptimized, correctAnswer)
