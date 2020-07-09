@@ -29,6 +29,7 @@ import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
+import org.apache.spark.status.api.v1.FailureReason
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{AccumulatorContext, Utils}
@@ -129,6 +130,7 @@ private class LiveTask(
   private var metrics: v1.TaskMetrics = createMetrics(default = -1L)
 
   var errorMessage: Option[String] = None
+  var failureReason: Option[FailureReason] = None
 
   /**
    * Update the metrics for the task and return the difference between the previous and new
@@ -212,6 +214,7 @@ private class LiveTask(
       info.speculative,
       newAccumulatorInfos(info.accumulables),
       errorMessage,
+      failureReason,
 
       hasMetrics,
       taskMetrics.executorDeserializeTime,

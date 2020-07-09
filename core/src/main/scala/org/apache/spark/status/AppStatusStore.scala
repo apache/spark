@@ -41,6 +41,7 @@ private[spark] class AppStatusStore(
     val store: KVStore,
     val diskStore: Option[KVStore] = None,
     val listener: Option[AppStatusListener] = None) {
+  private val EXCEPTION_SUMMARY_LIMIT = 10
 
   def applicationInfo(): v1.ApplicationInfo = {
     try {
@@ -522,6 +523,38 @@ private[spark] class AppStatusStore(
     constructTaskDataList(taskDataWrapperSeq)
   }
 
+  def failureSummary(stageId: Int, attemptId: Int): Seq[v1.FailureSummary] = {
+    val (stageData, _) = stageAttempt(stageId, attemptId)
+    val key = Array(stageId, attemptId)
+    asOption(store.read(classOf[CachedFailureSummary], key))
+      .find(p => p.failedTaskCount == stageData.numFailedTasks)
+      .map(_.failureSummary)
+      .getOrElse {
+        val failureSummary = computeFailureSummary(stageId, attemptId)
+        val cachedFailureSummary = new CachedFailureSummary(
+          stageId,
+          attemptId,
+          stageData.numFailedTasks,
+          failureSummary
+        )
+
+        store.write(cachedFailureSummary)
+        failureSummary
+      }
+  }
+
+  def computeFailureSummary(stageId: Int, attemptId: Int): Seq[v1.FailureSummary] = {
+    val tasks = taskList(stageId, attemptId, Int.MaxValue)
+    tasks.filter(t => t.status.equalsIgnoreCase("failed"))
+      .flatMap(t => t.failureReason)
+      .groupBy(e => (e.failureType, e.message))
+      .values
+      .map(t => new v1.FailureSummary(t.head, t.length))
+      .toSeq
+      .sortBy(s => (s.count, s.exceptionFailure.failureType))(Ordering[(Int, String)].reverse)
+      .take(EXCEPTION_SUMMARY_LIMIT)
+  }
+
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
     val stageKey = Array(stageId, attemptId)
     KVUtils.mapToSeq(store.view(classOf[ExecutorStageSummaryWrapper])
@@ -757,7 +790,7 @@ private[spark] class AppStatusStore(
         taskDataOld.launchTime, taskDataOld.resultFetchStart,
         taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
         taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
-        taskDataOld.errorMessage, taskDataOld.taskMetrics,
+        taskDataOld.errorMessage, taskDataOld.failureReason, taskDataOld.taskMetrics,
         executorLogs,
         AppStatusUtils.schedulerDelay(taskDataOld),
         AppStatusUtils.gettingResultTime(taskDataOld))

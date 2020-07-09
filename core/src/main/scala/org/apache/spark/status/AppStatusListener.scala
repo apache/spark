@@ -32,6 +32,7 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.resource.ResourceProfile.CPUS
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
+import org.apache.spark.status.api.v1.FailureReason
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.scope._
@@ -669,6 +670,20 @@ private[spark] class AppStatusListener(
           None
       }
       task.errorMessage = errorMessage
+      task.failureReason = event.reason match {
+        case e: ExceptionFailure =>
+          Some(new v1.FailureReason(e.className, e.description, e.toErrorString))
+        case e: ExecutorLostFailure =>
+          Some(new v1.FailureReason(e.getClass.getSimpleName,
+            e.reason.getOrElse(""), e.toErrorString))
+        case e: FetchFailed =>
+          parseErrorMessage(e.message)
+            .map(f => new v1.FailureReason(e.getClass.getSimpleName, f.message, f.stackTrace))
+        case e: TaskFailedReason =>
+          Some(new v1.FailureReason(e.getClass.getSimpleName, e.toErrorString, e.toErrorString))
+        case _ =>
+          None
+      }
       val delta = task.updateMetrics(event.taskMetrics)
       update(task, now, last = true)
       delta
@@ -1426,6 +1441,21 @@ private[spark] class AppStatusListener(
     } else {
       0L
     }
+  }
+
+  private def parseErrorMessage(errorMessage: String): Option[FailureReason] = {
+    errorMessage.split("\\r?\\n")
+      .find(s => s.contains("Exception") || s.contains("Error"))
+      .map(s => s.split("(?<=Exception|Error): "))
+      .flatMap(s => {
+        if (s.last.endsWith("Exception") || s.last.endsWith("Error")) {
+          Some(new v1.FailureReason(s.last, "", errorMessage))
+        } else if (s.length == 1) {
+          None
+        } else {
+          Some(new v1.FailureReason(s(s.length - 2), s.last, errorMessage))
+        }
+      })
   }
 
   private def onMiscellaneousProcessAdded(

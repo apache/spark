@@ -254,7 +254,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
   private def newTaskData(i: Int, status: String = "SUCCESS"): TaskDataWrapper = {
     new TaskDataWrapper(
       i.toLong, i, i, i, i, i, i,
-      i.toString, i.toString, status, i.toString, false, Nil, None, true,
+      i.toString, i.toString, status, i.toString, false, Nil, None, None, true,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, stageId, attemptId)

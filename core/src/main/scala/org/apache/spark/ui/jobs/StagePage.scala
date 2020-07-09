@@ -225,6 +225,22 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         null
     }
 
+    val failureSummaryData = store.failureSummary(stageId, stageAttemptId)
+    val failureSummary: Seq[Node] =
+      {if (failureSummaryData.nonEmpty) {
+        <span class="collapse-aggregated-exceptionSummaries collapse-table"
+              onClick="collapseTable('collapse-aggregated-exceptionSummaries',
+            'aggregated-exceptionSummaries')">
+          <h4>
+            <span class="collapse-table-arrow arrow-closed"></span>
+            <a>Failure Summary</a>
+          </h4>
+        </span>
+        <div class="aggregated-exceptionSummaries collapsible-table collapsed">
+          {failureSummaryTable(failureSummaryData)}
+        </div>
+      } else Seq.empty}
+
     val content =
       summary ++
       dagViz ++ <div id="showAdditionalMetrics"></div> ++
@@ -237,6 +253,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           taskPagedTable.dataSource.sliceData(from, to)}).getOrElse(Nil), currentTime,
         eventTimelineTaskPage, eventTimelineTaskPageSize, eventTimelineTotalPages, stageId,
         stageAttemptId, totalTasks) ++
+        failureSummary ++
         <div id="parent-container">
           <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
           <script src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
@@ -451,6 +468,22 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     </script>
   }
 
+  def failureSummaryTable(failureSummary: Seq[FailureSummary]): Seq[Node] = {
+    val propertyHeader = Seq("Exception", "Message", "Count", "Details")
+    val headerClasses = Seq("sorttable_alpha", "sorttable_alpha")
+    UIUtils.listingTable(propertyHeader, failureSummaryRow,
+      failureSummary,
+      headerClasses = headerClasses)
+  }
+
+  def failureSummaryRow(e: FailureSummary): Seq[Node] = {
+    <tr>
+      <td>{e.exceptionFailure.failureType}</td>
+      <td>{e.exceptionFailure.message}</td>
+      <td>{e.count}</td>
+      {errorMessageCell(e.exceptionFailure.stackTrace)}
+    </tr>
+  }
 }
 
 private[ui] class TaskDataSource(
@@ -713,19 +746,6 @@ private[ui] class TaskPagedTable(
   private def metricInfo(task: TaskData)(fn: TaskMetrics => Seq[Node]): Seq[Node] = {
     task.taskMetrics.map(fn).getOrElse(Nil)
   }
-
-  private def errorMessageCell(error: String): Seq[Node] = {
-    val isMultiline = error.indexOf('\n') >= 0
-    // Display the first line by default
-    val errorSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        error.substring(0, error.indexOf('\n'))
-      } else {
-        error
-      })
-    val details = UIUtils.detailsUINode(isMultiline, error)
-    <td>{errorSummary}{details}</td>
-  }
 }
 
 private[spark] object ApiHelper {
@@ -828,4 +848,16 @@ private[spark] object ApiHelper {
     }
   }
 
+  def errorMessageCell(error: String): Seq[Node] = {
+    val isMultiline = error.indexOf('\n') >= 0
+    // Display the first line by default
+    val errorSummary = StringEscapeUtils.escapeHtml4(
+      if (isMultiline) {
+        error.substring(0, error.indexOf('\n'))
+      } else {
+        error
+      })
+    val details = UIUtils.detailsUINode(isMultiline, error)
+    <td>{errorSummary}{details}</td>
+  }
 }

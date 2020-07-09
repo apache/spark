@@ -819,6 +819,45 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     }
   }
 
+  test("Stage page show failure summary for failed tasks") {
+    withSpark(newSparkContext()) { sc =>
+      val data = sc.parallelize(Seq(1, 2, 3), 1).map(identity).groupBy(identity)
+      val shuffleHandle =
+        data.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
+      // Simulate fetch failures:
+      val mappedData = data.map { x =>
+        val taskContext = TaskContext.get
+        if (taskContext.taskAttemptId() == 1) {
+          // Cause the post-shuffle stage to fail on its first attempt with a single task failure
+          val env = SparkEnv.get
+          val bmAddress = env.blockManager.blockManagerId
+          val shuffleId = shuffleHandle.shuffleId
+          val mapId = 0L
+          val mapIndex = 0
+          val reduceId = taskContext.partitionId()
+          val message = "Simulated fetch failure"
+          throw new FetchFailedException(
+            bmAddress, shuffleId, mapId, mapIndex, reduceId, message)
+        } else {
+          x
+        }
+      }
+      mappedData.count()
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/stages/stage/?id=1&attempt=0")
+        val rows = findAll(cssSelector("tbody tr")).toIndexedSeq.map {
+          _.underlying
+        }
+        rows.size should be(1)
+        val columns = rows.head.findElements(By.tagName("td"))
+        columns.size should be(4)
+        columns.get(0).getText() should be("FetchFailed")
+        columns.get(1).getText() should be("Simulated fetch failure")
+        columns.get(2).getText() should be("1")
+      }
+    }
+  }
+
   def goToUi(sc: SparkContext, path: String): Unit = {
     goToUi(sc.ui.get, path)
   }
