@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io._
 import java.net.URI
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapred.JobConf
@@ -165,9 +167,7 @@ class OrcFileFormat
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
     val capacity = sqlConf.orcVectorizedReaderBatchSize
 
-    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
-    val actualSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, resultSchemaString)
+    var resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
     val broadcastedConf =
@@ -183,9 +183,18 @@ class OrcFileFormat
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
       val requestedColIdsOrEmptyFile =
         Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+          // for ORC file written by Hive, no field names
+          // in the physical schema, there is a need to send the
+          // entire dataSchema instead of required schema
+          val orcFieldNames = reader.getSchema.getFieldNames.asScala
+          if (orcFieldNames.forall(_.startsWith("_col"))) {
+            resultSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
+          }
           OrcUtils.requestedColumnIds(
             isCaseSensitive, dataSchema, requiredSchema, reader, conf)
         }
+
+      OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
 
       if (requestedColIdsOrEmptyFile.isEmpty) {
         Iterator.empty
@@ -211,7 +220,7 @@ class OrcFileFormat
             Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
-            TypeDescription.fromString(actualSchemaString),
+            TypeDescription.fromString(resultSchemaString),
             resultSchema.fields,
             requestedDataColIds,
             requestedPartitionColIds,

@@ -77,4 +77,43 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
       assert(p1.getUTF8String(0) === partitionValues.getUTF8String(0))
     }
   }
+
+  test("orc data created by the hive tables having _col fields name") {
+    var error: Throwable = null
+    val table = """CREATE TABLE `test_date_hive_orc`
+                  | (`_col1` INT,`_col2` STRING,`_col3` INT)
+                  |  USING orc""".stripMargin
+    spark.sql(table).collect
+    spark.sql("insert into test_date_hive_orc values(9, '12', 2020)").collect
+    val df = spark.sql("select _col2 from test_date_hive_orc")
+    try {
+      val data = df.collect()
+      assert(data.length == 1)
+    } catch {
+      case e: Throwable =>
+        error = e
+    }
+    assert(error == null)
+    spark.sql(s"DROP TABLE IF EXISTS test_date_hive_orc")
+  }
+
+  test("orc data created by the spark having proper fields name") {
+    var error: Throwable = null
+    val table = """CREATE TABLE `test_date_spark_orc`
+                  | (`d_date_sk` INT,`d_date_id` STRING,`d_year` INT)
+                  |  USING orc""".stripMargin
+    spark.sql(table).collect
+    spark.sql("insert into test_date_spark_orc values(9, '12', 2020)").collect
+    val df = spark.sql("select d_date_id from test_date_spark_orc")
+    try {
+      val data = df.collect()
+      assert(data.length == 1)
+    } catch {
+      case e: Throwable =>
+        error = e
+    }
+    assert(error == null)
+    spark.sql(s"DROP TABLE IF EXISTS test_date_spark_orc")
+  }
+
 }
