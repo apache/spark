@@ -1461,8 +1461,7 @@ nonReserved
     ;
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
-// in `docs/sql-keywords.md`. If the token is a non-reserved keyword,
-// please update `ansiNonReserved` and `nonReserved` as well.
+// and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`.
 
 //============================
 // Start of the keywords list
