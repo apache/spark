@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
  */
 abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructType) {
 
-  protected val filters = pushedFilters.filter(checkFilterRefs(_, schema.fieldNames.toSet))
+  protected val filters = StructFilters.pushedFilters(pushedFilters.toArray, schema)
 
   /**
    * Applies pushed down source filters to the given row assuming that
