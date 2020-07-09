@@ -26,38 +26,41 @@ license: |
 ### Syntax
 
 ```sql
-CASE { WHEN boolean_expression THEN then_expression }{ WHEN boolean_expression THEN then_expression } [ , ... ] ELSE else_expression END
+CASE { WHEN boolean_expression THEN then_expression }{ WHEN boolean_expression THEN then_expression } [ , ... ] [ ELSE else_expression ] END
 
-CASE expression { WHEN boolean_expression THEN then_expression }{ WHEN boolean_expression THEN then_expression } [ , ... ] ELSE else_expression END
+CASE expression { WHEN boolean_expression THEN then_expression }{ WHEN boolean_expression THEN then_expression } [ , ... ] [ ELSE else_expression ] END
 ```
 
 ### Parameters
     
 * **WHEN**
 
-    Specific a boolean condition ,under which to return the `THEN` result
+    Specific a boolean condition ,under which to return the `THEN` result, `WHEN` must exist in `CASE` clause.
     
 * **THEN**
 
-    Specific a result base the `WHEN` condition
+    Specific a result base the `WHEN` condition, `THEN` must exist in `CASE` clause.
     
 * **ELSE**
 
-    Specific a default result for the `CASE` rules
+    Specific a default result for the `CASE` rules, it is optional, if user don't use else then the `CASE` will not have default result.
+    
+* **END**
+
+    Key words to finish a case clause, `END` must exist in `CASE` clause.
     
 * **boolean_expression**
 
-    Specific specified condition, it should be boolean type 
+    Specific specified condition, it should be boolean type.
     
 * **then_expression**
 
-    Specific the then expression based on the `boolean_expression` condition, `then_expression` and `else_expression` should all be same type or coercible to a common type
+    Specific the then expression based on the `boolean_expression` condition, `then_expression` and `else_expression` should all be same type or coercible to a common type.
     
 * **else_expression**
 
-    Specific the default expression, `then_expression` and `else_expression` should all be same type or coercible to a common type
+    Specific the default expression, `then_expression` and `else_expression` should all be same type or coercible to a common type.
     
-
 ### Examples
 
 ```sql
