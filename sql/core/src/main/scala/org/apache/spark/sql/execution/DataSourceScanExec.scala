@@ -55,10 +55,12 @@ trait DataSourceScanExec extends LeafExecNode {
   // Metadata that describes more details of this scan.
   protected def metadata: Map[String, String]
 
+  protected val maxMetadataValueLength = 100
+
   override def simpleString(maxFields: Int): String = {
     val metadataEntries = metadata.toSeq.sorted.map {
       case (key, value) =>
-        key + ": " + StringUtils.abbreviate(redact(value), 100)
+        key + ": " + StringUtils.abbreviate(redact(value), maxMetadataValueLength)
     }
     val metadataStr = truncatedString(metadataEntries, " ", ", ", "", maxFields)
     redact(
@@ -75,10 +77,10 @@ trait DataSourceScanExec extends LeafExecNode {
     }
 
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
-     """.stripMargin
+       |""".stripMargin
   }
 
   /**
@@ -153,7 +155,8 @@ case class RowDataSourceScanExec(
  * @param output Output attributes of the scan, including data attributes and partition attributes.
  * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
  * @param partitionFilters Predicates to use for partition pruning.
- * @param optionalBucketSet Bucket ids for bucket pruning
+ * @param optionalBucketSet Bucket ids for bucket pruning.
+ * @param optionalNumCoalescedBuckets Number of coalesced buckets.
  * @param dataFilters Filters on non-partition columns.
  * @param tableIdentifier identifier for the table in the metastore.
  */
@@ -163,6 +166,7 @@ case class FileSourceScanExec(
     requiredSchema: StructType,
     partitionFilters: Seq[Expression],
     optionalBucketSet: Option[BitSet],
+    optionalNumCoalescedBuckets: Option[Int],
     dataFilters: Seq[Expression],
     tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
@@ -203,7 +207,7 @@ case class FileSourceScanExec(
   private def isDynamicPruningFilter(e: Expression): Boolean =
     e.find(_.isInstanceOf[PlanExpression[_]]).isDefined
 
-  @transient private lazy val selectedPartitions: Array[PartitionDirectory] = {
+  @transient lazy val selectedPartitions: Array[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret =
@@ -253,85 +257,92 @@ case class FileSourceScanExec(
     partitionFilters.exists(ExecSubqueryExpression.hasSubquery)
   }
 
-  override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
-    val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
-      relation.bucketSpec
+  private def toAttribute(colName: String): Option[Attribute] =
+    output.find(_.name == colName)
+
+  // exposed for testing
+  lazy val bucketedScan: Boolean = {
+    if (relation.sparkSession.sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined) {
+      val spec = relation.bucketSpec.get
+      val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
+      bucketColumns.size == spec.bucketColumnNames.size
     } else {
-      None
+      false
     }
-    bucketSpec match {
-      case Some(spec) =>
-        // For bucketed columns:
-        // -----------------------
-        // `HashPartitioning` would be used only when:
-        // 1. ALL the bucketing columns are being read from the table
-        //
-        // For sorted columns:
-        // ---------------------
-        // Sort ordering should be used when ALL these criteria's match:
-        // 1. `HashPartitioning` is being used
-        // 2. A prefix (or all) of the sort columns are being read from the table.
-        //
-        // Sort ordering would be over the prefix subset of `sort columns` being read
-        // from the table.
-        // eg.
-        // Assume (col0, col2, col3) are the columns read from the table
-        // If sort columns are (col0, col1), then sort ordering would be considered as (col0)
-        // If sort columns are (col1, col0), then sort ordering would be empty as per rule #2
-        // above
+  }
 
-        def toAttribute(colName: String): Option[Attribute] =
-          output.find(_.name == colName)
+  override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
+    if (bucketedScan) {
+      // For bucketed columns:
+      // -----------------------
+      // `HashPartitioning` would be used only when:
+      // 1. ALL the bucketing columns are being read from the table
+      //
+      // For sorted columns:
+      // ---------------------
+      // Sort ordering should be used when ALL these criteria's match:
+      // 1. `HashPartitioning` is being used
+      // 2. A prefix (or all) of the sort columns are being read from the table.
+      //
+      // Sort ordering would be over the prefix subset of `sort columns` being read
+      // from the table.
+      // eg.
+      // Assume (col0, col2, col3) are the columns read from the table
+      // If sort columns are (col0, col1), then sort ordering would be considered as (col0)
+      // If sort columns are (col1, col0), then sort ordering would be empty as per rule #2
+      // above
+      val spec = relation.bucketSpec.get
+      val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
+      val numPartitions = optionalNumCoalescedBuckets.getOrElse(spec.numBuckets)
+      val partitioning = HashPartitioning(bucketColumns, numPartitions)
+      val sortColumns =
+        spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
+      val shouldCalculateSortOrder =
+        conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
+          sortColumns.nonEmpty &&
+          !hasPartitionsAvailableAtRunTime
 
-        val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
-        if (bucketColumns.size == spec.bucketColumnNames.size) {
-          val partitioning = HashPartitioning(bucketColumns, spec.numBuckets)
-          val sortColumns =
-            spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
-          val shouldCalculateSortOrder =
-            conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
-              sortColumns.nonEmpty &&
-              !hasPartitionsAvailableAtRunTime
+      val sortOrder = if (shouldCalculateSortOrder) {
+        // In case of bucketing, its possible to have multiple files belonging to the
+        // same bucket in a given relation. Each of these files are locally sorted
+        // but those files combined together are not globally sorted. Given that,
+        // the RDD partition will not be sorted even if the relation has sort columns set
+        // Current solution is to check if all the buckets have a single file in it
 
-          val sortOrder = if (shouldCalculateSortOrder) {
-            // In case of bucketing, its possible to have multiple files belonging to the
-            // same bucket in a given relation. Each of these files are locally sorted
-            // but those files combined together are not globally sorted. Given that,
-            // the RDD partition will not be sorted even if the relation has sort columns set
-            // Current solution is to check if all the buckets have a single file in it
+        val files = selectedPartitions.flatMap(partition => partition.files)
+        val bucketToFilesGrouping =
+          files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
+        val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
 
-            val files = selectedPartitions.flatMap(partition => partition.files)
-            val bucketToFilesGrouping =
-              files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
-            val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
-
-            if (singleFilePartitions) {
-              // TODO Currently Spark does not support writing columns sorting in descending order
-              // so using Ascending order. This can be fixed in future
-              sortColumns.map(attribute => SortOrder(attribute, Ascending))
-            } else {
-              Nil
-            }
-          } else {
-            Nil
-          }
-          (partitioning, sortOrder)
+        // TODO SPARK-24528 Sort order is currently ignored if buckets are coalesced.
+        if (singleFilePartitions && optionalNumCoalescedBuckets.isEmpty) {
+          // TODO Currently Spark does not support writing columns sorting in descending order
+          // so using Ascending order. This can be fixed in future
+          sortColumns.map(attribute => SortOrder(attribute, Ascending))
         } else {
-          (UnknownPartitioning(0), Nil)
+          Nil
         }
-      case _ =>
-        (UnknownPartitioning(0), Nil)
+      } else {
+        Nil
+      }
+      (partitioning, sortOrder)
+    } else {
+      (UnknownPartitioning(0), Nil)
     }
   }
 
   @transient
-  private lazy val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
+  private lazy val pushedDownFilters = {
+    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
+    dataFilters.flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+  }
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
     val location = relation.location
     val locationDesc =
-      location.getClass.getSimpleName + seqToString(location.rootPaths)
+      location.getClass.getSimpleName +
+        Utils.buildLocationMetadata(location.rootPaths, maxMetadataValueLength)
     val metadata =
       Map(
         "Format" -> relation.fileFormat.toString,
@@ -349,7 +360,8 @@ case class FileSourceScanExec(
         spec.numBuckets
       }
       metadata + ("SelectedBucketsCount" ->
-        s"$numSelectedBuckets out of ${spec.numBuckets}")
+        (s"$numSelectedBuckets out of ${spec.numBuckets}" +
+          optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
     } getOrElse {
       metadata
     }
@@ -376,10 +388,10 @@ case class FileSourceScanExec(
     }
 
     s"""
-       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
-       |${ExplainUtils.generateFieldString("Output", producedAttributes)}
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", output)}
        |${metadataStr.mkString("\n")}
-     """.stripMargin
+       |""".stripMargin
   }
 
   lazy val inputRDD: RDD[InternalRow] = {
@@ -393,11 +405,11 @@ case class FileSourceScanExec(
         options = relation.options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 
-    val readRDD = relation.bucketSpec match {
-      case Some(bucketing) if relation.sparkSession.sessionState.conf.bucketingEnabled =>
-        createBucketedReadRDD(bucketing, readFile, dynamicallySelectedPartitions, relation)
-      case _ =>
-        createNonBucketedReadRDD(readFile, dynamicallySelectedPartitions, relation)
+    val readRDD = if (bucketedScan) {
+      createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions,
+        relation)
+    } else {
+      createNonBucketedReadRDD(readFile, dynamicallySelectedPartitions, relation)
     }
     sendDriverMetrics()
     readRDD
@@ -537,8 +549,19 @@ case class FileSourceScanExec(
       filesGroupedToBuckets
     }
 
-    val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
+    val filePartitions = optionalNumCoalescedBuckets.map { numCoalescedBuckets =>
+      logInfo(s"Coalescing to ${numCoalescedBuckets} buckets")
+      val coalescedBuckets = prunedFilesGroupedToBuckets.groupBy(_._1 % numCoalescedBuckets)
+      Seq.tabulate(numCoalescedBuckets) { bucketId =>
+        val partitionedFiles = coalescedBuckets.get(bucketId).map {
+          _.values.flatten.toArray
+        }.getOrElse(Array.empty)
+        FilePartition(bucketId, partitionedFiles)
+      }
+    }.getOrElse {
+      Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
+        FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
+      }
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
@@ -592,6 +615,7 @@ case class FileSourceScanExec(
       requiredSchema,
       QueryPlan.normalizePredicates(partitionFilters, output),
       optionalBucketSet,
+      optionalNumCoalescedBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
       None)
   }

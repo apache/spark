@@ -196,7 +196,7 @@ package object expressions  {
       // For example, consider an example where "cat" is the catalog name, "db1" is the database
       // name, "a" is the table name and "b" is the column name and "c" is the struct field name.
       // If the name parts is cat.db1.a.b.c, then Attribute will match
-      // Attribute(b, qualifier("cat", "db1, "a")) and List("c") will be the second element
+      // Attribute(b, qualifier("cat", "db1", "a")) and List("c") will be the second element
       var matches: (Seq[Attribute], Seq[String]) = nameParts match {
         case catalogPart +: dbPart +: tblPart +: name +: nestedFields =>
           val key = (catalogPart.toLowerCase(Locale.ROOT), dbPart.toLowerCase(Locale.ROOT),

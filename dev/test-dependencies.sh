@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-set -e
+set -ex
 
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
@@ -47,7 +47,7 @@ OLD_VERSION=$($MVN -q \
     -Dexec.executable="echo" \
     -Dexec.args='${project.version}' \
     --non-recursive \
-    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec)
+    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+\.[0-9]+')
 if [ $? != 0 ]; then
     echo -e "Error while getting version string from Maven:\n$OLD_VERSION"
     exit 1

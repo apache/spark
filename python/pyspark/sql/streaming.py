@@ -339,9 +339,18 @@ class DataStreamReader(OptionUtils):
         """Adds an input option for the underlying data source.
 
         You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
 
         .. note:: Evolving.
 
@@ -355,9 +364,18 @@ class DataStreamReader(OptionUtils):
         """Adds input options for the underlying data source.
 
         You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
 
         .. note:: Evolving.
 
@@ -443,15 +461,15 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
                   When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
                   field in an output schema.
-                *  ``DROPMALFORMED`` : ignores the whole corrupted records.
-                *  ``FAILFAST`` : throws an exception when it meets corrupted records.
+                *  ``DROPMALFORMED``: ignores the whole corrupted records.
+                *  ``FAILFAST``: throws an exception when it meets corrupted records.
 
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
@@ -459,14 +477,13 @@ class DataStreamReader(OptionUtils):
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.time.format.DateTimeFormatter``. This
-                           applies to date type. If None is set, it uses the
+                           follow the formats at `datetime pattern`_.
+                           This applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
-                                Custom date formats follow the formats at
-                                ``java.time.format.DateTimeFormatter``.
+                                Custom date formats follow the formats at `datetime pattern`_.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
@@ -490,7 +507,9 @@ class DataStreamReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
-        .. _partition discovery: /sql-data-sources-parquet.html#partition-discovery
+        .. _partition discovery:
+          https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
+        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -671,14 +690,13 @@ class DataStreamReader(OptionUtils):
         :param negativeInf: sets the string representation of a negative infinity value. If None
                             is set, it uses the default value, ``Inf``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.time.format.DateTimeFormatter``. This
-                           applies to date type. If None is set, it uses the
+                           follow the formats at `datetime pattern`_.
+                           This applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
-                                Custom date formats follow the formats at
-                                ``java.time.format.DateTimeFormatter``.
+                                Custom date formats follow the formats at `datetime pattern`_.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -689,7 +707,7 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
@@ -698,8 +716,8 @@ class DataStreamReader(OptionUtils):
                   When it meets a record having fewer tokens than the length of the schema, \
                   sets ``null`` to extra fields. When the record has more tokens than the \
                   length of the schema, it drops extra tokens.
-                * ``DROPMALFORMED`` : ignores the whole corrupted records.
-                * ``FAILFAST`` : throws an exception when it meets corrupted records.
+                * ``DROPMALFORMED``: ignores the whole corrupted records.
+                * ``FAILFAST``: throws an exception when it meets corrupted records.
 
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
@@ -777,11 +795,11 @@ class DataStreamWriter(object):
 
         Options include:
 
-        * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to
+        * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to
            the sink
-        * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
+        * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the sink
            every time these is some updates
-        * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+        * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
 
@@ -812,9 +830,18 @@ class DataStreamWriter(object):
         """Adds an output option for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
 
         .. note:: Evolving.
         """
@@ -826,9 +853,18 @@ class DataStreamWriter(object):
         """Adds output options for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
 
        .. note:: Evolving.
         """
@@ -1134,11 +1170,11 @@ class DataStreamWriter(object):
         :param outputMode: specifies how data of a streaming DataFrame/Dataset is written to a
                            streaming sink.
 
-            * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to the
+            * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
-            * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
-               every time these is some updates
-            * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+            * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
+              sink every time these is some updates
+            * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
         :param partitionBy: names of partitioning columns

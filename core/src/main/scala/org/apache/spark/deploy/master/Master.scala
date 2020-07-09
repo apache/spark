@@ -715,7 +715,9 @@ private[deploy] class Master(
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(canLaunchExecutor(_, app.desc))
           .sortBy(_.coresFree).reverse
-        if (waitingApps.length == 1 && usableWorkers.isEmpty) {
+        val appMayHang = waitingApps.length == 1 &&
+          waitingApps.head.executors.isEmpty && usableWorkers.isEmpty
+        if (appMayHang) {
           logWarning(s"App ${app.id} requires more resource than any of Workers could have.")
         }
         val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)

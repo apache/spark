@@ -22,7 +22,7 @@
 # Environment Variables
 #
 #   SPARK_WORKER_INSTANCES  The number of worker instances to run on this
-#                           slave.  Default is 1.
+#                           slave.  Default is 1. Note it has been deprecate since Spark 3.0.
 #   SPARK_WORKER_PORT       The base port number for the first worker. If set,
 #                           subsequent workers will increment this number.  If
 #                           unset, Spark will find a valid port number, but

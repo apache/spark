@@ -267,7 +267,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE customer(CName STRING)
+CREATE TABLE customer(CName STRING) USING PARQUET
 -- !query schema
 struct<>
 -- !query output

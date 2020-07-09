@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.toJavaSQLType
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Spark's own SparkGetColumnsOperation
@@ -48,26 +47,19 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param columnName column name
  */
 private[hive] class SparkGetColumnsOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
     tableName: String,
     columnName: String)
   extends GetColumnsOperation(parentSession, catalogName, schemaName, tableName, columnName)
-    with Logging {
+  with SparkOperation
+  with Logging {
 
   val catalog: SessionCatalog = sqlContext.sessionState.catalog
 
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.eventManager.onOperationClosed(statementId)
-  }
-
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
@@ -129,22 +121,8 @@ private[hive] class SparkGetColumnsOperation(
         }
       }
       setState(OperationState.FINISHED)
-    } catch {
-      case e: Throwable =>
-        logError(s"Error executing get columns operation with $statementId", e)
-        setState(OperationState.ERROR)
-        e match {
-          case hiveException: HiveSQLException =>
-            HiveThriftServer2.eventManager.onStatementError(
-              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
-            throw hiveException
-          case _ =>
-            val root = ExceptionUtils.getRootCause(e)
-            HiveThriftServer2.eventManager.onStatementError(
-              statementId, root.getMessage, SparkUtils.exceptionString(root))
-            throw new HiveSQLException("Error getting columns: " + root.toString, root)
-        }
-    }
+    } catch onError()
+
     HiveThriftServer2.eventManager.onStatementFinish(statementId)
   }
 

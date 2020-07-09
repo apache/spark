@@ -105,7 +105,7 @@ class NettyBlockTransferServiceSuite
     // This is used to touch an IOException during fetching block.
     when(client.sendRpc(any(), any())).thenAnswer(_ => {throw new IOException()})
     var createClientCount = 0
-    when(clientFactory.createClient(any(), any())).thenAnswer(_ => {
+    when(clientFactory.createClient(any(), any(), any())).thenAnswer(_ => {
       createClientCount += 1
       client
     })

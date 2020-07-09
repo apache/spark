@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.sql.Timestamp
 import java.text.{ParseException, ParsePosition, SimpleDateFormat}
 import java.time._
-import java.time.format.DateTimeParseException
+import java.time.format.{DateTimeFormatter, DateTimeParseException}
 import java.time.temporal.ChronoField.MICRO_OF_SECOND
 import java.time.temporal.TemporalQueries
 import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
@@ -30,6 +31,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.types.Decimal
@@ -48,17 +50,23 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
   def parse(s: String): Long
+
   def format(us: Long): String
+  def format(ts: Timestamp): String
+  def format(instant: Instant): String
+  def validatePatternString(): Unit
 }
 
 class Iso8601TimestampFormatter(
     pattern: String,
     zoneId: ZoneId,
     locale: Locale,
-    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT)
+    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
+    isParsing: Boolean)
   extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
-  protected lazy val formatter = getOrCreateFormatter(pattern, locale)
+  protected lazy val formatter: DateTimeFormatter =
+    getOrCreateFormatter(pattern, locale, isParsing)
 
   @transient
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
@@ -76,13 +84,30 @@ class Iso8601TimestampFormatter(
         val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
         Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
-      } catch checkDiffResult(s, legacyFormatter.parse)
+      } catch checkParsedDiff(s, legacyFormatter.parse)
     }
+  }
+
+  override def format(instant: Instant): String = {
+    try {
+      formatter.withZone(zoneId).format(instant)
+    } catch checkFormattedDiff(toJavaTimestamp(instantToMicros(instant)),
+      (t: Timestamp) => format(t))
   }
 
   override def format(us: Long): String = {
     val instant = DateTimeUtils.microsToInstant(us)
-    formatter.withZone(zoneId).format(instant)
+    format(instant)
+  }
+
+  override def format(ts: Timestamp): String = {
+    legacyFormatter.format(ts)
+  }
+
+  override def validatePatternString(): Unit = {
+    try {
+      formatter
+    } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
   }
 }
 
@@ -95,10 +120,50 @@ class Iso8601TimestampFormatter(
  * @param zoneId the time zone identifier in which the formatter parses or format timestamps
  */
 class FractionTimestampFormatter(zoneId: ZoneId)
-  extends Iso8601TimestampFormatter("", zoneId, TimestampFormatter.defaultLocale) {
+  extends Iso8601TimestampFormatter(
+    TimestampFormatter.defaultPattern,
+    zoneId,
+    TimestampFormatter.defaultLocale,
+    LegacyDateFormats.FAST_DATE_FORMAT,
+    isParsing = false) {
 
   @transient
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
+
+  // The new formatter will omit the trailing 0 in the timestamp string, but the legacy formatter
+  // can't. Here we use the legacy formatter to format the given timestamp up to seconds fractions,
+  // and custom implementation to format the fractional part without trailing zeros.
+  override def format(ts: Timestamp): String = {
+    val formatted = legacyFormatter.format(ts)
+    var nanos = ts.getNanos
+    if (nanos == 0) {
+      formatted
+    } else {
+      // Formats non-zero seconds fraction w/o trailing zeros. For example:
+      //   formatted = '2020-05:27 15:55:30'
+      //   nanos = 001234000
+      // Counts the length of the fractional part: 001234000 -> 6
+      var fracLen = 9
+      while (nanos % 10 == 0) {
+        nanos /= 10
+        fracLen -= 1
+      }
+      // Places `nanos` = 1234 after '2020-05:27 15:55:30.'
+      val fracOffset = formatted.length + 1
+      val totalLen = fracOffset + fracLen
+      // The buffer for the final result: '2020-05:27 15:55:30.001234'
+      val buf = new Array[Char](totalLen)
+      formatted.getChars(0, formatted.length, buf, 0)
+      buf(formatted.length) = '.'
+      var i = totalLen
+      do {
+        i -= 1
+        buf(i) = ('0' + (nanos % 10)).toChar
+        nanos /= 10
+      } while (i > fracOffset)
+      new String(buf)
+    }
+  }
 }
 
 /**
@@ -115,7 +180,7 @@ class MicrosCalendar(tz: TimeZone, digitsInFraction: Int)
   // Converts parsed `MILLISECOND` field to seconds fraction in microsecond precision.
   // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
   // if the `MILLISECOND` field was parsed to `1234`.
-  def getMicros(): SQLTimestamp = {
+  def getMicros(): Long = {
     // Append 6 zeros to the field: 1234 -> 1234000000
     val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
     // Take the first 6 digits from `d`: 1234000000 -> 123400
@@ -144,21 +209,37 @@ class LegacyFastTimestampFormatter(
     fastDateFormat.getTimeZone,
     fastDateFormat.getPattern.count(_ == 'S'))
 
-  def parse(s: String): SQLTimestamp = {
+  override def parse(s: String): Long = {
     cal.clear() // Clear the calendar because it can be re-used many times
     if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
       throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
     }
     val micros = cal.getMicros()
     cal.set(Calendar.MILLISECOND, 0)
-    Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
+    val julianMicros = Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
+    rebaseJulianToGregorianMicros(julianMicros)
   }
 
-  def format(timestamp: SQLTimestamp): String = {
-    cal.setTimeInMillis(Math.floorDiv(timestamp, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
-    cal.setMicros(Math.floorMod(timestamp, MICROS_PER_SECOND))
+  override def format(timestamp: Long): String = {
+    val julianMicros = rebaseGregorianToJulianMicros(timestamp)
+    cal.setTimeInMillis(Math.floorDiv(julianMicros, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
+    cal.setMicros(Math.floorMod(julianMicros, MICROS_PER_SECOND))
     fastDateFormat.format(cal)
   }
+
+  override def format(ts: Timestamp): String = {
+    if (ts.getNanos == 0) {
+      fastDateFormat.format(ts)
+    } else {
+      format(fromJavaTimestamp(ts))
+    }
+  }
+
+  override def format(instant: Instant): String = {
+    format(instantToMicros(instant))
+  }
+
+  override def validatePatternString(): Unit = fastDateFormat
 }
 
 class LegacySimpleTimestampFormatter(
@@ -174,13 +255,22 @@ class LegacySimpleTimestampFormatter(
   }
 
   override def parse(s: String): Long = {
-    millisToMicros(sdf.parse(s).getTime)
+    fromJavaTimestamp(new Timestamp(sdf.parse(s).getTime))
   }
 
   override def format(us: Long): String = {
-    val timestamp = DateTimeUtils.toJavaTimestamp(us)
-    sdf.format(timestamp)
+    sdf.format(toJavaTimestamp(us))
   }
+
+  override def format(ts: Timestamp): String = {
+    sdf.format(ts)
+  }
+
+  override def format(instant: Instant): String = {
+    format(instantToMicros(instant))
+  }
+
+  override def validatePatternString(): Unit = sdf
 }
 
 object LegacyDateFormats extends Enumeration {
@@ -199,13 +289,17 @@ object TimestampFormatter {
       format: Option[String],
       zoneId: ZoneId,
       locale: Locale = defaultLocale,
-      legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT): TimestampFormatter = {
+      legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
+      isParsing: Boolean): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
-    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+    val formatter = if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      new Iso8601TimestampFormatter(pattern, zoneId, locale, legacyFormat)
+      new Iso8601TimestampFormatter(
+        pattern, zoneId, locale, legacyFormat, isParsing)
     }
+    formatter.validatePatternString()
+    formatter
   }
 
   def getLegacyFormatter(
@@ -227,20 +321,28 @@ object TimestampFormatter {
       format: String,
       zoneId: ZoneId,
       locale: Locale,
-      legacyFormat: LegacyDateFormat): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, locale, legacyFormat)
+      legacyFormat: LegacyDateFormat,
+      isParsing: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, locale, legacyFormat, isParsing)
   }
 
-  def apply(format: String, zoneId: ZoneId, legacyFormat: LegacyDateFormat): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat)
+  def apply(
+      format: String,
+      zoneId: ZoneId,
+      legacyFormat: LegacyDateFormat,
+      isParsing: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, isParsing)
   }
 
-  def apply(format: String, zoneId: ZoneId): TimestampFormatter = {
-    getFormatter(Some(format), zoneId)
+  def apply(
+      format: String,
+      zoneId: ZoneId,
+      isParsing: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, isParsing = isParsing)
   }
 
   def apply(zoneId: ZoneId): TimestampFormatter = {
-    getFormatter(None, zoneId)
+    getFormatter(None, zoneId, isParsing = false)
   }
 
   def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {

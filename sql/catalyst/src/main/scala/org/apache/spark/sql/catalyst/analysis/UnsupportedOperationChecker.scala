@@ -19,13 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID, Now}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -412,7 +410,7 @@ object UnsupportedOperationChecker extends Logging {
 
       subPlan.expressions.foreach { e =>
         if (e.collectLeaves().exists {
-          case (_: CurrentTimestamp | _: CurrentDate) => true
+          case (_: CurrentTimestamp | _: Now | _: CurrentDate) => true
           case _ => false
         }) {
           throwError(s"Continuous processing does not support current time operations.")

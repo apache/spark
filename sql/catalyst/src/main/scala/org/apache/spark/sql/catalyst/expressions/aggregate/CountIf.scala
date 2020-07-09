@@ -32,6 +32,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, Long
       > SELECT _FUNC_(col IS NULL) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col);
        1
   """,
+  group = "agg_funcs",
   since = "3.0.0")
 case class CountIf(predicate: Expression) extends UnevaluableAggregate with ImplicitCastInputTypes {
   override def prettyName: String = "count_if"

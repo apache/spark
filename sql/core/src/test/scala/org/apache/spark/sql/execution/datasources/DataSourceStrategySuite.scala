@@ -26,15 +26,61 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 
 class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
   val attrInts = Seq(
-    'cint.int
+    'cint.int,
+    Symbol("c.int").int,
+    GetStructField('a.struct(StructType(
+      StructField("cstr", StringType, nullable = true) ::
+        StructField("cint", IntegerType, nullable = true) :: Nil)), 1, None),
+    GetStructField('a.struct(StructType(
+      StructField("c.int", IntegerType, nullable = true) ::
+        StructField("cstr", StringType, nullable = true) :: Nil)), 0, None),
+    GetStructField(Symbol("a.b").struct(StructType(
+      StructField("cstr1", StringType, nullable = true) ::
+        StructField("cstr2", StringType, nullable = true) ::
+        StructField("cint", IntegerType, nullable = true) :: Nil)), 2, None),
+    GetStructField(Symbol("a.b").struct(StructType(
+      StructField("c.int", IntegerType, nullable = true) :: Nil)), 0, None),
+    GetStructField(GetStructField('a.struct(StructType(
+      StructField("cstr1", StringType, nullable = true) ::
+        StructField("b", StructType(StructField("cint", IntegerType, nullable = true) ::
+          StructField("cstr2", StringType, nullable = true) :: Nil)) :: Nil)), 1, None), 0, None)
   ).zip(Seq(
-    "cint"
+    "cint",
+    "`c.int`", // single level field that contains `dot` in name
+    "a.cint", // two level nested field
+    "a.`c.int`", // two level nested field, and nested level contains `dot`
+    "`a.b`.cint", // two level nested field, and top level contains `dot`
+    "`a.b`.`c.int`", // two level nested field, and both levels contain `dot`
+    "a.b.cint" // three level nested field
   ))
 
   val attrStrs = Seq(
-    'cstr.string
+    'cstr.string,
+    Symbol("c.str").string,
+    GetStructField('a.struct(StructType(
+      StructField("cint", IntegerType, nullable = true) ::
+        StructField("cstr", StringType, nullable = true) :: Nil)), 1, None),
+    GetStructField('a.struct(StructType(
+      StructField("c.str", StringType, nullable = true) ::
+        StructField("cint", IntegerType, nullable = true) :: Nil)), 0, None),
+    GetStructField(Symbol("a.b").struct(StructType(
+      StructField("cint1", IntegerType, nullable = true) ::
+        StructField("cint2", IntegerType, nullable = true) ::
+        StructField("cstr", StringType, nullable = true) :: Nil)), 2, None),
+    GetStructField(Symbol("a.b").struct(StructType(
+      StructField("c.str", StringType, nullable = true) :: Nil)), 0, None),
+    GetStructField(GetStructField('a.struct(StructType(
+      StructField("cint1", IntegerType, nullable = true) ::
+        StructField("b", StructType(StructField("cstr", StringType, nullable = true) ::
+          StructField("cint2", IntegerType, nullable = true) :: Nil)) :: Nil)), 1, None), 0, None)
   ).zip(Seq(
-    "cstr"
+    "cstr",
+    "`c.str`", // single level field that contains `dot` in name
+    "a.cstr", // two level nested field
+    "a.`c.str`", // two level nested field, and nested level contains `dot`
+    "`a.b`.cstr", // two level nested field, and top level contains `dot`
+    "`a.b`.`c.str`", // two level nested field, and both levels contain `dot`
+    "a.b.cstr" // three level nested field
   ))
 
   test("translate simple expression") { attrInts.zip(attrStrs)
@@ -243,14 +289,26 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
   test("SPARK-31027 test `PushableColumn.unapply` that finds the column name of " +
     "an expression that can be pushed down") {
     attrInts.foreach { case (attrInt, colName) =>
-      assert(PushableColumn.unapply(attrInt) === Some(colName))
+      assert(PushableColumnAndNestedColumn.unapply(attrInt) === Some(colName))
+
+      if (colName.contains(".")) {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrInt) === None)
+      } else {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrInt) === Some(colName))
+      }
     }
     attrStrs.foreach { case (attrStr, colName) =>
-      assert(PushableColumn.unapply(attrStr) === Some(colName))
+      assert(PushableColumnAndNestedColumn.unapply(attrStr) === Some(colName))
+
+      if (colName.contains(".")) {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrStr) === None)
+      } else {
+        assert(PushableColumnWithoutNestedColumn.unapply(attrStr) === Some(colName))
+      }
     }
 
     // `Abs(col)` can not be pushed down, so it returns `None`
-    assert(PushableColumn.unapply(Abs('col.int)) === None)
+    assert(PushableColumnAndNestedColumn.unapply(Abs('col.int)) === None)
   }
 
   /**
@@ -259,7 +317,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
    */
   def testTranslateFilter(catalystFilter: Expression, result: Option[sources.Filter]): Unit = {
     assertResult(result) {
-      DataSourceStrategy.translateFilter(catalystFilter)
+      DataSourceStrategy.translateFilter(catalystFilter, true)
     }
   }
 }

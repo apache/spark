@@ -357,7 +357,8 @@ public class SparkSaslSuite {
   public void testDelegates() throws Exception {
     Method[] rpcHandlerMethods = RpcHandler.class.getDeclaredMethods();
     for (Method m : rpcHandlerMethods) {
-      SaslRpcHandler.class.getDeclaredMethod(m.getName(), m.getParameterTypes());
+      Method delegate = SaslRpcHandler.class.getMethod(m.getName(), m.getParameterTypes());
+      assertNotEquals(delegate.getDeclaringClass(), RpcHandler.class);
     }
   }
 

@@ -61,15 +61,15 @@ class KubernetesSuite extends SparkFunSuite
   protected var appLocator: String = _
 
   // Default memory limit is 1024M + 384M (minimum overhead constant)
-  private val baseMemory = s"${1024 + 384}Mi"
+  private val baseMemory = s"${1024 + 384}"
   protected val memOverheadConstant = 0.8
-  private val standardNonJVMMemory = s"${(1024 + 0.4*1024).toInt}Mi"
+  private val standardNonJVMMemory = s"${(1024 + 0.4*1024).toInt}"
   protected val additionalMemory = 200
   // 209715200 is 200Mi
   protected val additionalMemoryInBytes = 209715200
-  private val extraDriverTotalMemory = s"${(1024 + memOverheadConstant*1024).toInt}Mi"
+  private val extraDriverTotalMemory = s"${(1024 + memOverheadConstant*1024).toInt}"
   private val extraExecTotalMemory =
-    s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}Mi"
+    s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}"
 
   /**
    * Build the image ref for the given image name, taking the repo and tag from the
@@ -476,6 +476,7 @@ class KubernetesSuite extends SparkFunSuite
 
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
+  val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
   val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"

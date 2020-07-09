@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
@@ -175,6 +176,7 @@ abstract class BaseSessionStateBuilder(
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
+        ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
           catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules
@@ -347,8 +349,14 @@ private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
 
   override protected lazy val conf: SQLConf = {
     val overrideConfigurations = overrideConfs
-    val conf = parentState.map(_.conf.clone()).getOrElse {
-      new SQLConf {
+    parentState.map { s =>
+      val cloned = s.conf.clone()
+      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
+        mergeSparkConf(conf, session.sparkContext.conf)
+      }
+      cloned
+    }.getOrElse {
+      val conf = new SQLConf {
         clear()
         override def clear(): Unit = {
           super.clear()
@@ -356,8 +364,8 @@ private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
           overrideConfigurations.foreach { case (key, value) => setConfString(key, value) }
         }
       }
+      mergeSparkConf(conf, session.sparkContext.conf)
+      conf
     }
-    mergeSparkConf(conf, session.sparkContext.conf)
-    conf
   }
 }

@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.ExecutedCommandExec
+import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
+import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.internal.SQLConf
 
@@ -45,6 +46,8 @@ case class InsertAdaptiveSparkPlan(
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _ if !conf.adaptiveExecutionEnabled => plan
     case _: ExecutedCommandExec => plan
+    case c: DataWritingCommandExec => c.copy(child = apply(c.child))
+    case c: V2CommandExec => c.withNewChildren(c.children.map(apply))
     case _ if shouldApplyAQE(plan, isSubquery) =>
       if (supportAdaptive(plan)) {
         try {
@@ -119,7 +122,7 @@ case class InsertAdaptiveSparkPlan(
           if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(p)
         verifyAdaptivePlan(executedPlan, p)
-        val subquery = SubqueryExec(s"subquery${exprId.id}", executedPlan)
+        val subquery = SubqueryExec(s"subquery#${exprId.id}", executedPlan)
         subqueryMap.put(exprId.id, subquery)
       case expressions.InSubquery(_, ListQuery(query, _, exprId, _))
           if !subqueryMap.contains(exprId.id) =>

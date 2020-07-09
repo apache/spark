@@ -430,7 +430,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
       }
 
       readBench.addCase("infer timestamps from files", numIters) { _ =>
-        spark.read.json(timestampDir).noop()
+        spark.read.option("inferTimestamp", true).json(timestampDir).noop()
       }
 
       val dateSchema = new StructType().add("date", DateType)
@@ -445,7 +445,9 @@ object JsonBenchmark extends SqlBasedBenchmark {
 
       def timestampStr: Dataset[String] = {
         spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
-          iter.map(i => s"""{"timestamp":"1970-01-01T01:02:03.${100 + i % 100}Z"}""")
+          iter.map { i =>
+            s"""{"timestamp":"1970-01-01T01:02:03.${i % 200}Z"}""".stripSuffix(".0Z")
+          }
         }.select($"value".as("timestamp")).as[String]
       }
 
@@ -458,7 +460,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
       }
 
       readBench.addCase("infer timestamps from Dataset[String]", numIters) { _ =>
-        spark.read.json(timestampStr).noop()
+        spark.read.option("inferTimestamp", true).json(timestampStr).noop()
       }
 
       def dateStr: Dataset[String] = {

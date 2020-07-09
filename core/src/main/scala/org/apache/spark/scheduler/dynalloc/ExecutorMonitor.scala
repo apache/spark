@@ -45,12 +45,12 @@ private[spark] class ExecutorMonitor(
   private val storageTimeoutNs = TimeUnit.SECONDS.toNanos(
     conf.get(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT))
   private val shuffleTimeoutNs = TimeUnit.MILLISECONDS.toNanos(
-    conf.get(DYN_ALLOCATION_SHUFFLE_TIMEOUT))
+    conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT))
 
   private val fetchFromShuffleSvcEnabled = conf.get(SHUFFLE_SERVICE_ENABLED) &&
     conf.get(SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
   private val shuffleTrackingEnabled = !conf.get(SHUFFLE_SERVICE_ENABLED) &&
-    conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING)
+    conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)
 
   private val executors = new ConcurrentHashMap[String, Tracker]()
   private val execResourceProfileCount = new ConcurrentHashMap[Int, Int]()

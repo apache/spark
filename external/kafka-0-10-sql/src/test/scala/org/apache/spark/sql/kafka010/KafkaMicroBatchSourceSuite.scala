@@ -349,7 +349,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
-  test("subscribing topic by pattern with topic deletions") {
+  // TODO (SPARK-31731): re-enable it
+  ignore("subscribing topic by pattern with topic deletions") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-seems"
     val topic2 = topicPrefix + "-bad"

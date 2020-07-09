@@ -27,6 +27,7 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
@@ -90,8 +91,12 @@ private[sql] class JSONOptions(
 
   val dateFormat: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
-  val timestampFormat: String =
-    parameters.getOrElse("timestampFormat", s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX")
+  val timestampFormat: String = parameters.getOrElse("timestampFormat",
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
+    } else {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
+    })
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
@@ -128,7 +133,7 @@ private[sql] class JSONOptions(
    * Enables inferring of TimestampType from strings matched to the timestamp pattern
    * defined by the timestampFormat option.
    */
-  val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(true)
+  val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(false)
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {

@@ -28,10 +28,9 @@ object ShufflePartitionsUtil extends Logging {
   final val MERGED_PARTITION_FACTOR = 1.2
 
   /**
-   * Coalesce the same range of partitions (`firstPartitionIndex` to `lastPartitionIndex`, the
-   * start is inclusive and the end is exclusive) from multiple shuffles. This method assumes that
-   * all the shuffles have the same number of partitions, and the partitions of same index will be
-   * read together by one task.
+   * Coalesce the partitions from multiple shuffles. This method assumes that all the shuffles
+   * have the same number of partitions, and the partitions of same index will be read together
+   * by one task.
    *
    * The strategy used to determine the number of coalesced partitions is described as follows.
    * To determine the number of coalesced partitions, we have a target size for a coalesced
@@ -56,8 +55,6 @@ object ShufflePartitionsUtil extends Logging {
    */
   def coalescePartitions(
       mapOutputStatistics: Array[MapOutputStatistics],
-      firstPartitionIndex: Int,
-      lastPartitionIndex: Int,
       advisoryTargetSize: Long,
       minNumPartitions: Int): Seq[ShufflePartitionSpec] = {
     // If `minNumPartitions` is very large, it is possible that we need to use a value less than
@@ -71,7 +68,9 @@ object ShufflePartitionsUtil extends Logging {
       math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong, 16)
     val targetSize = math.min(maxTargetSize, advisoryTargetSize)
 
-    logInfo(s"advisory target size: $advisoryTargetSize, actual target size $targetSize.")
+    val shuffleIds = mapOutputStatistics.map(_.shuffleId).mkString(", ")
+    logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
+      s"actual target size $targetSize.")
 
     // Make sure these shuffles have the same number of partitions.
     val distinctNumShufflePartitions =
@@ -87,11 +86,20 @@ object ShufflePartitionsUtil extends Logging {
       "There should be only one distinct value of the number of shuffle partitions " +
         "among registered Exchange operators.")
 
+    val numPartitions = distinctNumShufflePartitions.head
     val partitionSpecs = ArrayBuffer[CoalescedPartitionSpec]()
-    var latestSplitPoint = firstPartitionIndex
+    var latestSplitPoint = 0
     var coalescedSize = 0L
-    var i = firstPartitionIndex
-    while (i < lastPartitionIndex) {
+    var i = 0
+
+    def createPartitionSpec(): Unit = {
+      // Skip empty inputs, as it is a waste to launch an empty task.
+      if (coalescedSize > 0) {
+        partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, i)
+      }
+    }
+
+    while (i < numPartitions) {
       // We calculate the total size of i-th shuffle partitions from all shuffles.
       var totalSizeOfCurrentPartition = 0L
       var j = 0
@@ -103,7 +111,7 @@ object ShufflePartitionsUtil extends Logging {
       // If including the `totalSizeOfCurrentPartition` would exceed the target size, then start a
       // new coalesced partition.
       if (i > latestSplitPoint && coalescedSize + totalSizeOfCurrentPartition > targetSize) {
-        partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, i)
+        createPartitionSpec()
         latestSplitPoint = i
         // reset postShuffleInputSize.
         coalescedSize = totalSizeOfCurrentPartition
@@ -112,8 +120,7 @@ object ShufflePartitionsUtil extends Logging {
       }
       i += 1
     }
-    partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, lastPartitionIndex)
-
+    createPartitionSpec()
     partitionSpecs
   }
 

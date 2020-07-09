@@ -96,8 +96,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
@@ -133,8 +144,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
@@ -149,8 +171,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
@@ -391,11 +424,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * Custom date formats follow the formats at
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
+   * This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
    * <li>`encoding` (by default it is not set): allows to forcibly set one of standard basic
@@ -616,11 +653,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
    * value.</li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * Custom date formats follow the formats at
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
+   * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
+   *   Datetime Patterns</a>.
+   * This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed

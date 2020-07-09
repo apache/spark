@@ -47,11 +47,13 @@ from pyspark.join import python_join, python_left_outer_join, \
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
+from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
+from pyspark.resource.profile import ResourceProfile
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.util import fail_on_stopiteration
+from pyspark.util import fail_on_stopiteration, _parse_memory
 
 
 __all__ = ["RDD"]
@@ -123,22 +125,6 @@ class BoundedFloat(float):
         obj.low = low
         obj.high = high
         return obj
-
-
-def _parse_memory(s):
-    """
-    Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MiB
-
-    >>> _parse_memory("256m")
-    256
-    >>> _parse_memory("2g")
-    2048
-    """
-    units = {'g': 1024, 'm': 1, 't': 1 << 20, 'k': 1.0 / 1024}
-    if s[-1].lower() not in units:
-        raise ValueError("invalid format: " + s)
-    return int(float(s[:-1]) * units[s[-1].lower()])
 
 
 def _create_local_socket(sock_info):
@@ -256,6 +242,7 @@ class RDD(object):
         self._jrdd = jrdd
         self.is_cached = False
         self.is_checkpointed = False
+        self.has_resource_profile = False
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
         self._id = jrdd.id()
@@ -887,6 +874,19 @@ class RDD(object):
         """
         with SCCallSiteSync(self.context) as css:
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
+        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+
+    def collectWithJobGroup(self, groupId, description, interruptOnCancel=False):
+        """
+        .. note:: Experimental
+
+        When collect rdd, use this method to specify job group.
+
+        .. versionadded:: 3.0.0
+        """
+        with SCCallSiteSync(self.context) as css:
+            sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
+                self._jrdd.rdd(), groupId, description, interruptOnCancel)
         return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
     def reduce(self, f):
@@ -2483,6 +2483,47 @@ class RDD(object):
         """
         return self._jrdd.rdd().isBarrier()
 
+    def withResources(self, profile):
+        """
+        .. note:: Experimental
+
+        Specify a :class:`pyspark.resource.ResourceProfile` to use when calculating this RDD.
+        This is only supported on certain cluster managers and currently requires dynamic
+        allocation to be enabled. It will result in new executors with the resources specified
+        being acquired to calculate the RDD.
+
+        .. versionadded:: 3.1.0
+        """
+        self.has_resource_profile = True
+        if profile._java_resource_profile is not None:
+            jrp = profile._java_resource_profile
+        else:
+            builder = self.ctx._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+            ereqs = ExecutorResourceRequests(self.ctx._jvm, profile._executor_resource_requests)
+            treqs = TaskResourceRequests(self.ctx._jvm, profile._task_resource_requests)
+            builder.require(ereqs._java_executor_resource_requests)
+            builder.require(treqs._java_task_resource_requests)
+            jrp = builder.build()
+
+        self._jrdd.withResources(jrp)
+        return self
+
+    def getResourceProfile(self):
+        """
+        .. note:: Experimental
+
+        Get the :class:`pyspark.resource.ResourceProfile` specified with this RDD or None
+        if it wasn't specified.
+        :return: the user specified ResourceProfile or None if none were specified
+
+        .. versionadded:: 3.1.0
+        """
+        rp = self._jrdd.getResourceProfile()
+        if rp is not None:
+            return ResourceProfile(_java_resource_profile=rp)
+        else:
+            return None
+
 
 def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
@@ -2587,6 +2628,7 @@ class PipelinedRDD(RDD):
             self._prev_jrdd = prev._prev_jrdd  # maintain the pipeline
             self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
         self.is_cached = False
+        self.has_resource_profile = False
         self.is_checkpointed = False
         self.ctx = prev.ctx
         self.prev = prev
@@ -2629,7 +2671,7 @@ class PipelinedRDD(RDD):
         return self._id
 
     def _is_pipelinable(self):
-        return not (self.is_cached or self.is_checkpointed)
+        return not (self.is_cached or self.is_checkpointed or self.has_resource_profile)
 
     def _is_barrier(self):
         return self.is_barrier

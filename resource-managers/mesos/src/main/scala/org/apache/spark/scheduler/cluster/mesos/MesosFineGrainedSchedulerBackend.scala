@@ -31,6 +31,7 @@ import org.apache.spark.{SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.internal.config
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.Utils
@@ -457,7 +458,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       super.applicationId
     }
 
-  override def maxNumConcurrentTasks(): Int = {
+  override def maxNumConcurrentTasks(rp: ResourceProfile): Int = {
     // TODO SPARK-25074 support this method for MesosFineGrainedSchedulerBackend
     0
   }

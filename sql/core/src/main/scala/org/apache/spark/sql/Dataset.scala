@@ -22,6 +22,7 @@ import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
+import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
@@ -34,6 +35,7 @@ import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -2266,6 +2268,90 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * (Scala-specific) Returns a new Dataset where each row has been expanded to zero or more
+   * rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. The columns of
+   * the input row are implicitly joined with each row that is output by the function.
+   *
+   * Given that this is deprecated, as an alternative, you can explode columns either using
+   * `functions.explode()` or `flatMap()`. The following example uses these alternatives to count
+   * the number of books that contain a given word:
+   *
+   * {{{
+   *   case class Book(title: String, words: String)
+   *   val ds: Dataset[Book]
+   *
+   *   val allWords = ds.select('title, explode(split('words, " ")).as("word"))
+   *
+   *   val bookCountPerWord = allWords.groupBy("word").agg(countDistinct("title"))
+   * }}}
+   *
+   * Using `flatMap()` this can similarly be exploded as:
+   *
+   * {{{
+   *   ds.flatMap(_.words.split(" "))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 2.0.0
+   */
+  @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
+  def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
+    val elementSchema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+
+    val convert = CatalystTypeConverters.createToCatalystConverter(elementSchema)
+
+    val rowFunction =
+      f.andThen(_.map(convert(_).asInstanceOf[InternalRow]))
+    val generator = UserDefinedGenerator(elementSchema, rowFunction, input.map(_.expr))
+
+    withPlan {
+      Generate(generator, unrequiredChildIndex = Nil, outer = false,
+        qualifier = None, generatorOutput = Nil, logicalPlan)
+    }
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset where a single column has been expanded to zero
+   * or more rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. All
+   * columns of the input row are implicitly joined with each value that is output by the function.
+   *
+   * Given that this is deprecated, as an alternative, you can explode columns either using
+   * `functions.explode()`:
+   *
+   * {{{
+   *   ds.select(explode(split('words, " ")).as("word"))
+   * }}}
+   *
+   * or `flatMap()`:
+   *
+   * {{{
+   *   ds.flatMap(_.words.split(" "))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 2.0.0
+   */
+  @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
+  def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => TraversableOnce[B])
+    : DataFrame = {
+    val dataType = ScalaReflection.schemaFor[B].dataType
+    val attributes = AttributeReference(outputColumn, dataType)() :: Nil
+    // TODO handle the metadata?
+    val elementSchema = attributes.toStructType
+
+    def rowFunction(row: Row): TraversableOnce[InternalRow] = {
+      val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+      f(row(0).asInstanceOf[A]).map(o => InternalRow(convert(o)))
+    }
+    val generator = UserDefinedGenerator(elementSchema, rowFunction, apply(inputColumn).expr :: Nil)
+
+    withPlan {
+      Generate(generator, unrequiredChildIndex = Nil, outer = false,
+        qualifier = None, generatorOutput = Nil, logicalPlan)
+    }
+  }
+
+  /**
    * Returns a new Dataset by adding a column or replacing the existing column that has
    * the same name.
    *
@@ -2455,6 +2541,8 @@ class Dataset[T] private[sql](
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
+    // SPARK-31990: We must keep `toSet.toSeq` here because of the backward compatibility issue
+    // (the Streaming's state store depends on the `groupCols` order).
     val groupCols = colNames.toSet.toSeq.flatMap { (colName: String) =>
       // It is possibly there are more than one columns with the same name,
       // so we call filter instead of find.
@@ -2879,9 +2967,8 @@ class Dataset[T] private[sql](
    */
   def toLocalIterator(): java.util.Iterator[T] = {
     withAction("toLocalIterator", queryExecution) { plan =>
-      // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
-      val enc = resolvedEnc.copy()
-      plan.executeToIterator().map(enc.fromRow).asJava
+      val fromRow = resolvedEnc.createDeserializer()
+      plan.executeToIterator().map(fromRow).asJava
     }
   }
 
@@ -2904,17 +2991,9 @@ class Dataset[T] private[sql](
     Repartition(numPartitions, shuffle = true, logicalPlan)
   }
 
-  /**
-   * Returns a new Dataset partitioned by the given partitioning expressions into
-   * `numPartitions`. The resulting Dataset is hash partitioned.
-   *
-   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  @scala.annotation.varargs
-  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+  private def repartitionByExpression(
+      numPartitions: Option[Int],
+      partitionExprs: Seq[Column]): Dataset[T] = {
     // The underlying `LogicalPlan` operator special-cases all-`SortOrder` arguments.
     // However, we don't want to complicate the semantics of this API method.
     // Instead, let's give users a friendly error message, pointing them to the new method.
@@ -2929,6 +3008,20 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset partitioned by the given partitioning expressions into
+   * `numPartitions`. The resulting Dataset is hash partitioned.
+   *
+   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
+    repartitionByExpression(Some(numPartitions), partitionExprs)
+  }
+
+  /**
    * Returns a new Dataset partitioned by the given partitioning expressions, using
    * `spark.sql.shuffle.partitions` as number of partitions.
    * The resulting Dataset is hash partitioned.
@@ -2940,7 +3033,20 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(partitionExprs: Column*): Dataset[T] = {
-    repartition(sparkSession.sessionState.conf.numShufflePartitions, partitionExprs: _*)
+    repartitionByExpression(None, partitionExprs)
+  }
+
+  private def repartitionByRange(
+      numPartitions: Option[Int],
+      partitionExprs: Seq[Column]): Dataset[T] = {
+    require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
+    val sortOrder: Seq[SortOrder] = partitionExprs.map(_.expr match {
+      case expr: SortOrder => expr
+      case expr: Expression => SortOrder(expr, Ascending)
+    })
+    withTypedPlan {
+      RepartitionByExpression(sortOrder, logicalPlan, numPartitions)
+    }
   }
 
   /**
@@ -2962,14 +3068,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
-    require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
-    val sortOrder: Seq[SortOrder] = partitionExprs.map(_.expr match {
-      case expr: SortOrder => expr
-      case expr: Expression => SortOrder(expr, Ascending)
-    })
-    withTypedPlan {
-      RepartitionByExpression(sortOrder, logicalPlan, numPartitions)
-    }
+    repartitionByRange(Some(numPartitions), partitionExprs)
   }
 
   /**
@@ -2991,7 +3090,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartitionByRange(partitionExprs: Column*): Dataset[T] = {
-    repartitionByRange(sparkSession.sessionState.conf.numShufflePartitions, partitionExprs: _*)
+    repartitionByRange(None, partitionExprs)
   }
 
   /**
@@ -3128,6 +3227,18 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def javaRDD: JavaRDD[T] = toJavaRDD
+
+  /**
+   * Registers this Dataset as a temporary table using the given name. The lifetime of this
+   * temporary table is tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * @group basic
+   * @since 1.6.0
+   */
+  @deprecated("Use createOrReplaceTempView(viewName) instead.", "2.0.0")
+  def registerTempTable(tableName: String): Unit = {
+    createOrReplaceTempView(tableName)
+  }
 
   /**
    * Creates a local temporary view using the given name. The lifetime of this
@@ -3289,9 +3400,10 @@ class Dataset[T] private[sql](
         new JSONOptions(Map.empty[String, String], sessionLocalTimeZone))
 
       new Iterator[String] {
+        private val toRow = exprEnc.createSerializer()
         override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
-          gen.write(exprEnc.toRow(iter.next()))
+          gen.write(toRow(iter.next()))
           gen.flush()
 
           val json = writer.toString
@@ -3411,8 +3523,8 @@ class Dataset[T] private[sql](
   private[sql] def collectAsArrowToR(): Array[Any] = {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
 
-    withAction("collectAsArrowToR", queryExecution) { plan =>
-      RRDD.serveToStream("serve-Arrow") { outputStream =>
+    RRDD.serveToStream("serve-Arrow") { outputStream =>
+      withAction("collectAsArrowToR", queryExecution) { plan =>
         val buffer = new ByteArrayOutputStream()
         val out = new DataOutputStream(outputStream)
         val batchWriter = new ArrowBatchStreamWriter(schema, buffer, timeZoneId)
@@ -3465,8 +3577,8 @@ class Dataset[T] private[sql](
   private[sql] def collectAsArrowToPython: Array[Any] = {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
 
-    withAction("collectAsArrowToPython", queryExecution) { plan =>
-      PythonRDD.serveToStream("serve-Arrow") { outputStream =>
+    PythonRDD.serveToStream("serve-Arrow") { outputStream =>
+      withAction("collectAsArrowToPython", queryExecution) { plan =>
         val out = new DataOutputStream(outputStream)
         val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
 
@@ -3551,9 +3663,8 @@ class Dataset[T] private[sql](
    * Collect all elements from a spark plan.
    */
   private def collectFromPlan(plan: SparkPlan): Array[T] = {
-    // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
-    val enc = resolvedEnc.copy()
-    plan.executeCollect().map(enc.fromRow)
+    val fromRow = resolvedEnc.createDeserializer()
+    plan.executeCollect().map(fromRow)
   }
 
   private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {

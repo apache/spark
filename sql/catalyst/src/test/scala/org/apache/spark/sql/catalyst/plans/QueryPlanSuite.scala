@@ -78,7 +78,7 @@ class QueryPlanSuite extends SparkFunSuite {
 
     val countRelationsInPlan = plan.collect({ case _: UnresolvedRelation => 1 }).sum
     val countRelationsInPlanAndSubqueries =
-      plan.collectInPlanAndSubqueries({ case _: UnresolvedRelation => 1 }).sum
+      plan.collectWithSubqueries({ case _: UnresolvedRelation => 1 }).sum
 
     assert(countRelationsInPlan == 2)
     assert(countRelationsInPlanAndSubqueries == 5)

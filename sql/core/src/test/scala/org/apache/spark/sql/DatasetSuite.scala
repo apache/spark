@@ -1222,14 +1222,6 @@ class DatasetSuite extends QueryTest
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
 
-  test("better error message when use java reserved keyword as field name") {
-    val e = intercept[UnsupportedOperationException] {
-      Seq(InvalidInJava(1)).toDS()
-    }
-    assert(e.getMessage.contains(
-      "`abstract` is a reserved keyword and cannot be used as field name"))
-  }
-
   test("Dataset should support flat input object to be null") {
     checkDataset(Seq("a", null).toDS(), "a", null)
   }
@@ -1924,6 +1916,16 @@ class DatasetSuite extends QueryTest
     assert(df1.semanticHash !== df3.semanticHash)
     assert(df3.semanticHash === df4.semanticHash)
   }
+
+  test("SPARK-31854: Invoke in MapElementsExec should not propagate null") {
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        val ds = Seq(1.asInstanceOf[Integer], null.asInstanceOf[Integer]).toDS()
+        val expectedAnswer = Seq[(Integer, Integer)]((1, 1), (null, null))
+        checkDataset(ds.map(v => (v, v)), expectedAnswer: _*)
+      }
+    }
+  }
 }
 
 object AssertExecutionId {
@@ -1963,8 +1965,6 @@ case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
-
-case class InvalidInJava(`abstract`: Int)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using

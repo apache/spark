@@ -20,6 +20,7 @@ from collections import namedtuple
 
 from pyspark.java_gateway import launch_gateway
 
+
 ExpressionInfo = namedtuple(
     "ExpressionInfo", "className name usage arguments examples note since deprecated")
 
@@ -42,7 +43,7 @@ def _list_function_infos(jvm):
             usage=usage,
             arguments=jinfo.getArguments().replace("_FUNC_", name),
             examples=jinfo.getExamples().replace("_FUNC_", name),
-            note=jinfo.getNote(),
+            note=jinfo.getNote().replace("_FUNC_", name),
             since=jinfo.getSince(),
             deprecated=jinfo.getDeprecated()))
     return sorted(infos, key=lambda i: i.name)
@@ -159,7 +160,7 @@ def _make_pretty_deprecated(deprecated):
         return "**Deprecated:**\n%s\n" % deprecated
 
 
-def generate_sql_markdown(jvm, path):
+def generate_sql_api_markdown(jvm, path):
     """
     Generates a markdown file after listing the function information. The output file
     is created in `path`.
@@ -223,4 +224,4 @@ if __name__ == "__main__":
     jvm = launch_gateway().jvm
     spark_root_dir = os.path.dirname(os.path.dirname(__file__))
     markdown_file_path = os.path.join(spark_root_dir, "sql/docs/index.md")
-    generate_sql_markdown(jvm, markdown_file_path)
+    generate_sql_api_markdown(jvm, markdown_file_path)

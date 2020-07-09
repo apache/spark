@@ -17,6 +17,8 @@
 
 package org.apache.spark.resource
 
+import org.apache.spark.annotation.{Evolving, Since}
+
 /**
  * An Executor resource request. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
@@ -46,11 +48,10 @@ package org.apache.spark.resource
  *                        allocated. The script runs on Executors startup to discover the addresses
  *                        of the resources available.
  * @param vendor Optional vendor, required for some cluster managers
- *
- * This api is currently private until the rest of the pieces are in place and then it
- * will become public.
  */
-private[spark] class ExecutorResourceRequest(
+@Evolving
+@Since("3.1.0")
+class ExecutorResourceRequest(
     val resourceName: String,
     val amount: Long,
     val discoveryScript: String = "",

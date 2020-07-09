@@ -429,57 +429,69 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("from_json - array of arrays") {
-    val jsonDF = Seq("[[1], [2, 3], [4, 5, 6]]").toDF("a")
-    val schema = new ArrayType(ArrayType(IntegerType, false), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("[[1], [2, 3], [4, 5, 6]]").toDF("a")
+      val schema = new ArrayType(ArrayType(IntegerType, false), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(
-      sql("select json[0][0], json[1][1], json[2][2] from jsonTable"),
-      Seq(Row(1, 3, 6)))
+      checkAnswer(
+        sql("select json[0][0], json[1][1], json[2][2] from jsonTable"),
+        Seq(Row(1, 3, 6)))
+    }
   }
 
   test("from_json - array of arrays - malformed row") {
-    val jsonDF = Seq("[[1], [2, 3], 4, 5, 6]]").toDF("a")
-    val schema = new ArrayType(ArrayType(IntegerType, false), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("[[1], [2, 3], 4, 5, 6]]").toDF("a")
+      val schema = new ArrayType(ArrayType(IntegerType, false), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(sql("select json[0] from jsonTable"), Seq(Row(null)))
+      checkAnswer(sql("select json[0] from jsonTable"), Seq(Row(null)))
+    }
   }
 
   test("from_json - array of structs") {
-    val jsonDF = Seq("""[{"a":1}, {"a":2}, {"a":3}]""").toDF("a")
-    val schema = new ArrayType(new StructType().add("a", IntegerType), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("""[{"a":1}, {"a":2}, {"a":3}]""").toDF("a")
+      val schema = new ArrayType(new StructType().add("a", IntegerType), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(
-      sql("select json[0], json[1], json[2] from jsonTable"),
-      Seq(Row(Row(1), Row(2), Row(3))))
+      checkAnswer(
+        sql("select json[0], json[1], json[2] from jsonTable"),
+        Seq(Row(Row(1), Row(2), Row(3))))
+    }
   }
 
   test("from_json - array of structs - malformed row") {
-    val jsonDF = Seq("""[{"a":1}, {"a:2}, {"a":3}]""").toDF("a")
-    val schema = new ArrayType(new StructType().add("a", IntegerType), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("""[{"a":1}, {"a:2}, {"a":3}]""").toDF("a")
+      val schema = new ArrayType(new StructType().add("a", IntegerType), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(sql("select json[0], json[1]from jsonTable"), Seq(Row(null, null)))
+      checkAnswer(sql("select json[0], json[1]from jsonTable"), Seq(Row(null, null)))
+    }
   }
 
   test("from_json - array of maps") {
-    val jsonDF = Seq("""[{"a":1}, {"b":2}]""").toDF("a")
-    val schema = new ArrayType(MapType(StringType, IntegerType, false), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("""[{"a":1}, {"b":2}]""").toDF("a")
+      val schema = new ArrayType(MapType(StringType, IntegerType, false), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(
-      sql("""select json[0], json[1] from jsonTable"""),
-      Seq(Row(Map("a" -> 1), Map("b" -> 2))))
+      checkAnswer(
+        sql("""select json[0], json[1] from jsonTable"""),
+        Seq(Row(Map("a" -> 1), Map("b" -> 2))))
+    }
   }
 
   test("from_json - array of maps - malformed row") {
-    val jsonDF = Seq("""[{"a":1} "b":2}]""").toDF("a")
-    val schema = new ArrayType(MapType(StringType, IntegerType, false), false)
-    jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
+    withTempView("jsonTable") {
+      val jsonDF = Seq("""[{"a":1} "b":2}]""").toDF("a")
+      val schema = new ArrayType(MapType(StringType, IntegerType, false), false)
+      jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
-    checkAnswer(sql("""select json[0] from jsonTable"""), Seq(Row(null)))
+      checkAnswer(sql("""select json[0] from jsonTable"""), Seq(Row(null)))
+    }
   }
 
   test("to_json - array of primitive types") {
@@ -710,4 +722,15 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row("string")))
   }
 
+  test("optional datetime parser does not affect json time formatting") {
+    val s = "2015-08-26 12:34:46"
+    def toDF(p: String): DataFrame = sql(
+      s"""
+         |SELECT
+         | to_json(
+         |   named_struct('time', timestamp'$s'), map('timestampFormat', "$p")
+         | )
+         | """.stripMargin)
+    checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
+  }
 }

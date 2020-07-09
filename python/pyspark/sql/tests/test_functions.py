@@ -17,9 +17,11 @@
 
 import datetime
 import sys
+from itertools import chain
+import re
 
 from pyspark.sql import Row
-from pyspark.sql.functions import udf, input_file_name
+from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, lit
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -333,6 +335,29 @@ class FunctionsTests(ReusedSQLTestCase):
             "overlay(x, y, 2, 5)",
             "overlay(x, y, 11, -1)",
             "overlay(x, y, 2, 5)",
+        ]
+
+        self.assertListEqual(actual, expected)
+
+    def test_percentile_approx(self):
+        actual = list(chain.from_iterable([
+            re.findall("(percentile_approx\\(.*\\))", str(x)) for x in [
+                percentile_approx(col("foo"), lit(0.5)),
+                percentile_approx(col("bar"), 0.25, 42),
+                percentile_approx(col("bar"), [0.25, 0.5, 0.75]),
+                percentile_approx(col("foo"), (0.05, 0.95), 100),
+                percentile_approx("foo", 0.5),
+                percentile_approx("bar", [0.1, 0.9], lit(10)),
+            ]
+        ]))
+
+        expected = [
+            "percentile_approx(foo, 0.5, 10000)",
+            "percentile_approx(bar, 0.25, 42)",
+            "percentile_approx(bar, array(0.25, 0.5, 0.75), 10000)",
+            "percentile_approx(foo, array(0.05, 0.95), 100)",
+            "percentile_approx(foo, 0.5, 10000)",
+            "percentile_approx(bar, array(0.1, 0.9), 10)"
         ]
 
         self.assertListEqual(actual, expected)

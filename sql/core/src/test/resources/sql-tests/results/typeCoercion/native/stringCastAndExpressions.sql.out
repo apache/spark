@@ -128,7 +128,7 @@ cannot resolve 't.`a`' due to data type mismatch: cannot cast string to map<stri
 -- !query
 select to_timestamp(a) from t
 -- !query schema
-struct<to_timestamp(t.`a`):timestamp>
+struct<to_timestamp(a):timestamp>
 -- !query output
 NULL
 
@@ -136,9 +136,10 @@ NULL
 -- !query
 select to_timestamp('2018-01-01', a) from t
 -- !query schema
-struct<to_timestamp('2018-01-01', t.`a`):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'aa' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -152,9 +153,10 @@ NULL
 -- !query
 select to_unix_timestamp('2018-01-01', a) from t
 -- !query schema
-struct<to_unix_timestamp(2018-01-01, a):bigint>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'aa' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -168,9 +170,10 @@ NULL
 -- !query
 select unix_timestamp('2018-01-01', a) from t
 -- !query schema
-struct<unix_timestamp(2018-01-01, a):bigint>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'aa' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query

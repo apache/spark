@@ -88,6 +88,49 @@ sparkR.stop <- function() {
   sparkR.session.stop()
 }
 
+#' (Deprecated) Initialize a new Spark Context
+#'
+#' This function initializes a new SparkContext.
+#'
+#' @param master The Spark master URL
+#' @param appName Application name to register with cluster manager
+#' @param sparkHome Spark Home directory
+#' @param sparkEnvir Named list of environment variables to set on worker nodes
+#' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
+#' @param sparkJars Character vector of jar files to pass to the worker nodes
+#' @param sparkPackages Character vector of package coordinates
+#' @seealso \link{sparkR.session}
+#' @rdname sparkR.init-deprecated
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init("local[2]", "SparkR", "/home/spark")
+#' sc <- sparkR.init("local[2]", "SparkR", "/home/spark",
+#'                  list(spark.executor.memory="1g"))
+#' sc <- sparkR.init("yarn-client", "SparkR", "/home/spark",
+#'                  list(spark.executor.memory="4g"),
+#'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
+#'                  c("one.jar", "two.jar", "three.jar"),
+#'                  c("com.databricks:spark-avro_2.11:2.0.1"))
+#'}
+#' @note sparkR.init since 1.4.0
+sparkR.init <- function(
+  master = "",
+  appName = "SparkR",
+  sparkHome = Sys.getenv("SPARK_HOME"),
+  sparkEnvir = list(),
+  sparkExecutorEnv = list(),
+  sparkJars = "",
+  sparkPackages = "") {
+  .Deprecated("sparkR.session")
+  sparkR.sparkContext(master,
+     appName,
+     sparkHome,
+     convertNamedListToEnv(sparkEnvir),
+     convertNamedListToEnv(sparkExecutorEnv),
+     sparkJars,
+     sparkPackages)
+}
+
 # Internal function to handle creating the SparkContext.
 sparkR.sparkContext <- function(
   master = "",
@@ -111,8 +154,8 @@ sparkR.sparkContext <- function(
   connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
   if (existingPort != "") {
     if (length(packages) != 0) {
-      warning(paste("sparkPackages has no effect when using spark-submit or sparkR shell",
-                    " please use the --packages commandline instead", sep = ","))
+      warning("sparkPackages has no effect when using spark-submit or sparkR shell, ",
+              "please use the --packages commandline instead")
     }
     backendPort <- existingPort
     authSecret <- Sys.getenv("SPARKR_BACKEND_AUTH_SECRET")
@@ -201,7 +244,7 @@ sparkR.sparkContext <- function(
     uriSep <- "////"
   }
   localJarPaths <- lapply(jars,
-                          function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
+                          function(j) { utils::URLencode(paste0("file:", uriSep, j)) })
 
   # Set the start time to identify jobjs
   # Seconds resolution is good enough for this purpose, so use ints
@@ -227,6 +270,61 @@ sparkR.sparkContext <- function(
   reg.finalizer(.sparkREnv, function(x) { Sys.sleep(1) }, onexit = TRUE)
 
   sc
+}
+
+#' (Deprecated) Initialize a new SQLContext
+#'
+#' This function creates a SparkContext from an existing JavaSparkContext and
+#' then uses it to initialize a new SQLContext
+#'
+#' Starting SparkR 2.0, a SparkSession is initialized and returned instead.
+#' This API is deprecated and kept for backward compatibility only.
+#'
+#' @param jsc The existing JavaSparkContext created with SparkR.init()
+#' @seealso \link{sparkR.session}
+#' @rdname sparkRSQL.init-deprecated
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#'}
+#' @note sparkRSQL.init since 1.4.0
+sparkRSQL.init <- function(jsc = NULL) {
+  .Deprecated("sparkR.session")
+
+  if (exists(".sparkRsession", envir = .sparkREnv)) {
+    return(get(".sparkRsession", envir = .sparkREnv))
+  }
+
+  # Default to without Hive support for backward compatibility.
+  sparkR.session(enableHiveSupport = FALSE)
+}
+
+#' (Deprecated) Initialize a new HiveContext
+#'
+#' This function creates a HiveContext from an existing JavaSparkContext
+#'
+#' Starting SparkR 2.0, a SparkSession is initialized and returned instead.
+#' This API is deprecated and kept for backward compatibility only.
+#'
+#' @param jsc The existing JavaSparkContext created with SparkR.init()
+#' @seealso \link{sparkR.session}
+#' @rdname sparkRHive.init-deprecated
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRHive.init(sc)
+#'}
+#' @note sparkRHive.init since 1.4.0
+sparkRHive.init <- function(jsc = NULL) {
+  .Deprecated("sparkR.session")
+
+  if (exists(".sparkRsession", envir = .sparkREnv)) {
+    return(get(".sparkRsession", envir = .sparkREnv))
+  }
+
+  # Default to without Hive support for backward compatibility.
+  sparkR.session(enableHiveSupport = TRUE)
 }
 
 #' Get the existing SparkSession or initialize a new SparkSession.
@@ -337,12 +435,13 @@ sparkR.session <- function(
   # Check if version number of SparkSession matches version number of SparkR package
   jvmVersion <- callJMethod(sparkSession, "version")
   # Remove -SNAPSHOT from jvm versions
-  jvmVersionStrip <- gsub("-SNAPSHOT", "", jvmVersion)
+  jvmVersionStrip <- gsub("-SNAPSHOT", "", jvmVersion, fixed = TRUE)
   rPackageVersion <- paste0(packageVersion("SparkR"))
 
   if (jvmVersionStrip != rPackageVersion) {
-    warning(paste("Version mismatch between Spark JVM and SparkR package. JVM version was",
-                  jvmVersion, ", while R package version was", rPackageVersion))
+    warning("Version mismatch between Spark JVM and SparkR package. ",
+            "JVM version was ", jvmVersion,
+            ", while R package version was ", rPackageVersion)
   }
 
   sparkSession
@@ -508,7 +607,7 @@ getClientModeSparkSubmitOpts <- function(submitOps, sparkEnvirMap) {
     # process only if --option is not already specified
     if (!is.null(opsValue) &&
         nchar(opsValue) > 1 &&
-        !grepl(sparkConfToSubmitOps[[conf]], submitOps)) {
+        !grepl(sparkConfToSubmitOps[[conf]], submitOps, fixed = TRUE)) {
       # put "" around value in case it has spaces
       paste0(sparkConfToSubmitOps[[conf]], " \"", opsValue, "\" ")
     } else {

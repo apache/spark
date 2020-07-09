@@ -21,9 +21,9 @@ license: |
 
 Besides the major SQL statements such as Data Definition Statements, Data Manipulation Statements and Data Retrieval Statements, Spark SQL also supports the following Auxiliary Statements:
 
-- [ANALYZE](sql-ref-syntax-aux-analyze.html)
-- [CACHE](sql-ref-syntax-aux-cache.html)
-- [DESCRIBE](sql-ref-syntax-aux-describe.html)
-- [SHOW](sql-ref-syntax-aux-show.html)
-- [CONFIGURATION MANAGEMENT](sql-ref-syntax-aux-conf-mgmt.html)
-- [RESOURCE MANAGEMENT](sql-ref-syntax-aux-resource-mgmt.html)
+ * [ANALYZE](sql-ref-syntax-aux-analyze.html)
+ * [CACHE](sql-ref-syntax-aux-cache.html)
+ * [DESCRIBE](sql-ref-syntax-aux-describe.html)
+ * [SHOW](sql-ref-syntax-aux-show.html)
+ * [CONFIGURATION MANAGEMENT](sql-ref-syntax-aux-conf-mgmt.html)
+ * [RESOURCE MANAGEMENT](sql-ref-syntax-aux-resource-mgmt.html)

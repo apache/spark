@@ -19,6 +19,7 @@
 Worker that receives input from Piped RDD.
 """
 from __future__ import print_function
+from __future__ import absolute_import
 import os
 import sys
 import time
@@ -35,7 +36,7 @@ from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.files import SparkFiles
-from pyspark.resourceinformation import ResourceInformation
+from pyspark.resource import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
@@ -341,7 +342,7 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
 
         def func(_, iterator):
-            num_input_rows = [0]
+            num_input_rows = [0]  # TODO(SPARK-29909): Use nonlocal after we drop Python 2.
 
             def map_batch(batch):
                 udf_args = [batch[offset] for offset in arg_offsets]
@@ -357,8 +358,13 @@ def read_udfs(pickleSer, infile, eval_type):
             num_output_rows = 0
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
+                # This assert is for Scalar Iterator UDF to fail fast.
+                # The length of the entire input can only be explicitly known
+                # by consuming the input iterator in user side. Therefore,
+                # it's very unlikely the output length is higher than
+                # input length.
                 assert is_map_iter or num_output_rows <= num_input_rows[0], \
-                    "Pandas MAP_ITER UDF outputted more rows than input rows."
+                    "Pandas SCALAR_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
 
             if is_scalar_iter:
@@ -367,14 +373,14 @@ def read_udfs(pickleSer, infile, eval_type):
                 except StopIteration:
                     pass
                 else:
-                    raise RuntimeError("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input "
+                    raise RuntimeError("pandas iterator UDF should exhaust the input "
                                        "iterator.")
 
-            if is_scalar_iter and num_output_rows != num_input_rows[0]:
-                raise RuntimeError("The number of output rows of pandas iterator UDF should be "
-                                   "the same with input rows. The input rows number is %d but the "
-                                   "output rows number is %d." %
-                                   (num_input_rows[0], num_output_rows))
+                if num_output_rows != num_input_rows[0]:
+                    raise RuntimeError(
+                        "The length of output in Scalar iterator pandas UDF should be "
+                        "the same with the input's; however, the length of output was %d and the "
+                        "length of input was %d." % (num_output_rows, num_input_rows[0]))
 
         # profiling is not supported for UDF
         return func, None, ser, ser

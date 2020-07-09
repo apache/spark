@@ -21,6 +21,7 @@ import java.util.Objects
 
 import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, StringBuilder}
+import scala.xml.Utility
 
 import org.apache.commons.text.StringEscapeUtils
 
@@ -245,8 +246,9 @@ private[spark] object RDDOperationGraph extends Logging {
     } else {
       ""
     }
-    val label = s"${node.name} [${node.id}]$isCached$isBarrier\n${node.callsite}"
-    s"""${node.id} [label="${StringEscapeUtils.escapeJava(label)}"]"""
+    val escapedCallsite = Utility.escape(node.callsite)
+    val label = s"${node.name} [${node.id}]$isCached$isBarrier<br>${escapedCallsite}"
+    s"""${node.id} [labelType="html" label="${StringEscapeUtils.escapeJava(label)}"]"""
   }
 
   /** Update the dot representation of the RDDOperationGraph in cluster to subgraph. */

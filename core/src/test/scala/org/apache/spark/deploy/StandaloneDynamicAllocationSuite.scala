@@ -510,8 +510,7 @@ class StandaloneDynamicAllocationSuite
 
     val taskScheduler = mock(classOf[TaskSchedulerImpl])
     when(taskScheduler.nodeBlacklist()).thenReturn(Set("blacklisted-host"))
-    when(taskScheduler.resourceOffers(any())).thenReturn(Nil)
-    when(taskScheduler.resourcesReqsPerTask).thenReturn(Seq.empty)
+    when(taskScheduler.resourceOffers(any(), any[Boolean])).thenReturn(Nil)
     when(taskScheduler.sc).thenReturn(sc)
 
     val rpcEnv = RpcEnv.create("test-rpcenv", "localhost", 0, conf, securityManager)

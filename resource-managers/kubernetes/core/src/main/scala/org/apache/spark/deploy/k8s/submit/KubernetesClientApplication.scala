@@ -43,7 +43,8 @@ import org.apache.spark.util.Utils
 private[spark] case class ClientArguments(
     mainAppResource: MainAppResource,
     mainClass: String,
-    driverArgs: Array[String])
+    driverArgs: Array[String],
+    proxyUser: Option[String])
 
 private[spark] object ClientArguments {
 
@@ -51,6 +52,7 @@ private[spark] object ClientArguments {
     var mainAppResource: MainAppResource = JavaMainAppResource(None)
     var mainClass: Option[String] = None
     val driverArgs = mutable.ArrayBuffer.empty[String]
+    var proxyUser: Option[String] = None
 
     args.sliding(2, 2).toList.foreach {
       case Array("--primary-java-resource", primaryJavaResource: String) =>
@@ -63,6 +65,8 @@ private[spark] object ClientArguments {
         mainClass = Some(clazz)
       case Array("--arg", arg: String) =>
         driverArgs += arg
+      case Array("--proxy-user", user: String) =>
+        proxyUser = Some(user)
       case other =>
         val invalid = other.mkString(" ")
         throw new RuntimeException(s"Unknown arguments: $invalid")
@@ -73,7 +77,8 @@ private[spark] object ClientArguments {
     ClientArguments(
       mainAppResource,
       mainClass.get,
-      driverArgs.toArray)
+      driverArgs.toArray,
+      proxyUser)
   }
 }
 
@@ -199,7 +204,8 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       kubernetesAppId,
       clientArguments.mainAppResource,
       clientArguments.mainClass,
-      clientArguments.driverArgs)
+      clientArguments.driverArgs,
+      clientArguments.proxyUser)
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
     val master = KubernetesUtils.parseMasterUrl(sparkConf.get("spark.master"))

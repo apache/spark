@@ -28,7 +28,6 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
-import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -311,7 +310,7 @@ case class Invoke(
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
 
-  private lazy val encodedFunctionName = TermName(functionName).encodedName.toString
+  private lazy val encodedFunctionName = ScalaReflection.encodeFieldNameToIdentifier(functionName)
 
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
@@ -679,6 +678,13 @@ object MapObjects {
       elementType: DataType,
       elementNullable: Boolean = true,
       customCollectionCls: Option[Class[_]] = None): MapObjects = {
+    // UnresolvedMapObjects does not serialize its 'function' field.
+    // If an array expression or array Encoder is not correctly resolved before
+    // serialization, this exception condition may occur.
+    require(function != null,
+      "MapObjects applied with a null function. " +
+      "Likely cause is failure to resolve an array expression or encoder. " +
+      "(See UnresolvedMapObjects)")
     val loopVar = LambdaVariable("MapObject", elementType, elementNullable)
     MapObjects(loopVar, function(loopVar), inputData, customCollectionCls)
   }

@@ -22,7 +22,8 @@ import java.util.{List => JList}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{JobExecutionStatus, SparkConf}
+import org.apache.spark.{JobExecutionStatus, SparkConf, SparkException}
+import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Utils
@@ -36,12 +37,29 @@ private[spark] class AppStatusStore(
     val listener: Option[AppStatusListener] = None) {
 
   def applicationInfo(): v1.ApplicationInfo = {
-    store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
+    try {
+      // The ApplicationInfo may not be available when Spark is starting up.
+      Utils.tryWithResource(
+        store.view(classOf[ApplicationInfoWrapper])
+          .max(1)
+          .closeableIterator()
+      ) { it =>
+        it.next().info
+      }
+    } catch {
+      case _: NoSuchElementException =>
+        throw new NoSuchElementException("Failed to get the application information. " +
+          "If you are starting up Spark, please wait a while until it's ready.")
+    }
   }
 
   def environmentInfo(): v1.ApplicationEnvironmentInfo = {
     val klass = classOf[ApplicationEnvironmentInfoWrapper]
     store.read(klass, klass.getName()).info
+  }
+
+  def resourceProfileInfo(): Seq[v1.ResourceProfileInfo] = {
+    store.view(classOf[ResourceProfileWrapper]).asScala.map(_.rpInfo).toSeq
   }
 
   def jobsList(statuses: JList[JobExecutionStatus]): Seq[v1.JobData] = {
@@ -479,7 +497,8 @@ private[spark] class AppStatusStore(
       accumulatorUpdates = stage.accumulatorUpdates,
       tasks = Some(tasks),
       executorSummary = Some(executorSummary(stage.stageId, stage.attemptId)),
-      killedTasksSummary = stage.killedTasksSummary)
+      killedTasksSummary = stage.killedTasksSummary,
+      resourceProfileId = stage.resourceProfileId)
   }
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {
@@ -512,7 +531,13 @@ private[spark] class AppStatusStore(
   }
 
   def appSummary(): AppSummary = {
-    store.read(classOf[AppSummary], classOf[AppSummary].getName())
+    try {
+      store.read(classOf[AppSummary], classOf[AppSummary].getName())
+    } catch {
+      case _: NoSuchElementException =>
+        throw new NoSuchElementException("Failed to get the application summary. " +
+          "If you are starting up Spark, please wait a while until it's ready.")
+    }
   }
 
   def close(): Unit = {

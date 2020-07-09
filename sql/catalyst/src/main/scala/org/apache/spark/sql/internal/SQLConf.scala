@@ -434,9 +434,10 @@ object SQLConf {
 
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
-      .doc("The minimum number of shuffle partitions after coalescing. If not set, the default " +
-        "value is the default parallelism of the Spark cluster. This configuration only " +
-        s"has an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
+      .doc("The suggested (not guaranteed) minimum number of shuffle partitions after " +
+        "coalescing. If not set, the default value is the default parallelism of the " +
+        "Spark cluster. This configuration only has an effect when " +
+        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true.")
       .version("3.0.0")
       .intConf
@@ -490,11 +491,21 @@ object SQLConf {
     buildConf("spark.sql.adaptive.skewJoin.skewedPartitionFactor")
       .doc("A partition is considered as skewed if its size is larger than this factor " +
         "multiplying the median partition size and also larger than " +
-        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'")
+        "'spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes'")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The skew factor must be positive.")
-      .createWithDefault(10)
+      .createWithDefault(5)
+
+  val SKEW_JOIN_SKEWED_PARTITION_THRESHOLD =
+    buildConf("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes")
+      .doc("A partition is considered as skewed if its size in bytes is larger than this " +
+        s"threshold and also larger than '${SKEW_JOIN_SKEWED_PARTITION_FACTOR.key}' " +
+        "multiplying the median partition size. Ideally this config should be set larger " +
+        s"than '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'.")
+      .version("3.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("256MB")
 
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
@@ -533,6 +544,19 @@ object SQLConf {
     .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
+
+  val MAX_CNF_NODE_COUNT =
+    buildConf("spark.sql.optimizer.maxCNFNodeCount")
+      .internal()
+      .doc("Specifies the maximum allowable number of conjuncts in the result of CNF " +
+        "conversion. If the conversion exceeds the threshold, an empty sequence is returned. " +
+        "For example, CNF conversion of (a && b) || (c && d) generates " +
+        "four conjuncts (a || c) && (a || d) && (b || c) && (b || d).")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0,
+        "The depth of the maximum rewriting conjunction normal form must be positive.")
+      .createWithDefault(128)
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
@@ -610,7 +634,7 @@ object SQLConf {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
-    .createWithDefault(ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
+    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
     .doc("Sets the compression codec used when writing Parquet files. If either `compression` or " +
@@ -834,8 +858,10 @@ object SQLConf {
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
-      "distinct semantics. By default the optimization is disabled, since it may return " +
-      "incorrect results when the files are empty.")
+      "distinct semantics. By default the optimization is disabled, and deprecated as of Spark " +
+      "3.0 since it may return incorrect results when the files are empty, see also SPARK-26709." +
+      "It will be removed in the future releases. If you must use, use 'SparkSessionExtensions' " +
+      "instead to inject it as a custom rule.")
     .version("2.1.1")
     .booleanConf
     .createWithDefault(false)
@@ -1150,6 +1176,15 @@ object SQLConf {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
+  val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
+    .doc("The suggested (not guaranteed) minimum number of split file partitions. " +
+      "If not set, the default value is `spark.default.parallelism`. This configuration is " +
+      "effective only when using file-based sources such as Parquet, JSON and ORC.")
+    .version("3.1.0")
+    .intConf
+    .checkValue(v => v > 0, "The min partition number must be a positive integer.")
+    .createOptional
+
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
       "encountering corrupted files and the contents that have been read will still be returned. " +
@@ -1210,6 +1245,16 @@ object SQLConf {
       .version("2.0.0")
       .intConf
       .createWithDefault(10)
+
+  val STATE_STORE_FORMAT_VALIDATION_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.formatValidation.enabled")
+      .internal()
+      .doc("When true, check if the UnsafeRow from the state store is valid or not when running " +
+        "streaming queries. This can happen if the state store format has been changed. Note, " +
+        "the feature is only effective in the build-in HDFS state store provider now.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
@@ -1517,18 +1562,18 @@ object SQLConf {
 
   val STREAMING_CHECKPOINT_FILE_MANAGER_CLASS =
     buildConf("spark.sql.streaming.checkpointFileManagerClass")
+      .internal()
       .doc("The class used to write checkpoint files atomically. This class must be a subclass " +
         "of the interface CheckpointFileManager.")
       .version("2.4.0")
-      .internal()
       .stringConf
 
   val STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.escapedPathCheck.enabled")
+      .internal()
       .doc("Whether to detect a streaming query may pick up an incorrect checkpoint path due " +
         "to SPARK-26824.")
       .version("3.0.0")
-      .internal()
       .booleanConf
       .createWithDefault(true)
 
@@ -1675,14 +1720,17 @@ object SQLConf {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
 
-  val SESSION_LOCAL_TIMEZONE =
-    buildConf("spark.sql.session.timeZone")
-      .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
-      .version("2.2.0")
-      .stringConf
-      .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
-        " ZoneId.of(_, ZoneId.SHORT_IDS)")
-      .createWithDefaultFunction(() => TimeZone.getDefault.getID)
+  val SESSION_LOCAL_TIMEZONE = buildConf("spark.sql.session.timeZone")
+    .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
+      "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
+      "Zone offsets must be in the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. " +
+      "Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other short names are not " +
+      "recommended to use because they can be ambiguous.")
+    .version("2.2.0")
+    .stringConf
+    .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
+      " ZoneId.of(_, ZoneId.SHORT_IDS)")
+    .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.in.memory.threshold")
@@ -1768,6 +1816,15 @@ object SQLConf {
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
+  val PYSPARK_JVM_STACKTRACE_ENABLED =
+    buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
+      .doc("When true, it shows the JVM stacktrace in the user-facing PySpark exception " +
+        "together with Python stacktrace. By default, it is disabled and hides JVM stacktrace " +
+        "and shows a Python-friendly exception only.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ARROW_SPARKR_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.sparkr.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers in SparkR. " +
@@ -1812,7 +1869,7 @@ object SQLConf {
         s"set, the fallback is `${BUFFER_SIZE.key}`. Note that Pandas execution requires more " +
         "than 4 bytes. Lowering this value could make small Pandas UDF batch iterated and " +
         "pipelined; however, it might degrade performance. See SPARK-27870.")
-      .version("3.1.0")
+      .version("3.0.0")
       .fallbackConf(BUFFER_SIZE)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
@@ -2049,6 +2106,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST =
+    buildConf("spark.sql.optimizer.nestedPredicatePushdown.supportedFileSources")
+      .internal()
+      .doc("A comma-separated list of data source short names or fully qualified data source " +
+        "implementation class names for which Spark tries to push down predicates for nested " +
+        "columns and/or names containing `dots` to data sources. This configuration is only " +
+        "effective with file-based data source in DSv1. Currently, Parquet implements " +
+        "both optimizations while ORC only supports predicates for names containing `dots`. The " +
+        "other data sources don't support this feature yet. So the default value is 'parquet,orc'.")
+      .version("3.0.0")
+      .stringConf
+      .createWithDefault("parquet,orc")
+
   val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
       .internal()
@@ -2154,8 +2224,8 @@ object SQLConf {
 
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
-    .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
-      "The size function returns null for null input if the flag is disabled.")
+    .doc(s"If it is set to false, or ${ANSI_ENABLED.key} is true, then size of null returns " +
+      "null. Otherwise, it returns -1, which was inherited from Hive.")
     .version("2.4.0")
     .booleanConf
     .createWithDefault(true)
@@ -2195,15 +2265,6 @@ object SQLConf {
       .doc("When set to true, negative scale of Decimal type is allowed. For example, " +
         "the type of number 1E10BD under legacy mode is DecimalType(2, -9), but is " +
         "Decimal(11, 0) in non legacy mode.")
-      .version("3.0.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  val LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED =
-    buildConf("spark.sql.legacy.createHiveTableByDefault.enabled")
-      .internal()
-      .doc("When set to true, CREATE TABLE syntax without a provider will use hive " +
-        s"instead of the value of ${DEFAULT_DATA_SOURCE_NAME.key}.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -2310,6 +2371,17 @@ object SQLConf {
     .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
+
+  val UI_EXPLAIN_MODE = buildConf("spark.sql.ui.explainMode")
+    .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'simple', " +
+      "'extended', 'codegen', 'cost', or 'formatted'. The default value is 'formatted'.")
+    .version("3.1.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValue(mode => Set("SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED").contains(mode),
+      "Invalid value for 'spark.sql.ui.explainMode'. Valid values are 'simple', 'extended', " +
+      "'codegen', 'cost' and 'formatted'.")
+    .createWithDefault("formatted")
 
   val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
     .doc("The max length of a file that can be read by the binary file data source. " +
@@ -2484,8 +2556,105 @@ object SQLConf {
     buildConf("spark.sql.legacy.integerGroupingId")
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
+      .internal()
+      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars.")
+      .version("3.0.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
+      .internal()
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
+        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
+      .version("3.0.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val LEGACY_AVRO_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.avro.datetimeRebaseModeInWrite")
+      .internal()
+      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the legacy hybrid (Julian + Gregorian) calendar when writing Avro files. " +
+        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars.")
+      .version("3.0.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val LEGACY_AVRO_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.avro.datetimeRebaseModeInRead")
+      .internal()
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Avro files. " +
+        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
+        "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
+      .version("3.0.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
+    buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")
+      .internal()
+      .doc("Timeout for executor to wait for the termination of transformation script when EOF.")
+      .version("3.0.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ > 0, "The timeout value must be positive")
+      .createWithDefault(10L)
+
+  val LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP =
+    buildConf("spark.sql.legacy.allowCastNumericToTimestamp")
+      .internal()
+      .doc("When true, allow casting numeric to timestamp," +
+        "when false, forbid the cast, more details in SPARK-31710")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED =
+    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.enabled")
+      .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
+        "the side with a bigger number of buckets will be coalesced to have the same number " +
+        "of buckets as the other side. Bucket coalescing is applied only to sort-merge joins " +
+        "and only when the bigger number of buckets is divisible by the smaller number of buckets.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO =
+    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.maxBucketRatio")
+      .doc("The ratio of the number of two buckets being coalesced should be less than or " +
+        "equal to this value for bucket coalescing to be applied. This configuration only " +
+        s"has an effect when '${COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key}' is set to true.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ > 0, "The difference must be positive.")
+      .createWithDefault(4)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -2516,7 +2685,10 @@ object SQLConf {
       DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
         s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it."),
       DeprecatedConfig(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "3.0",
-        s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it.")
+        s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it."),
+      DeprecatedConfig(OPTIMIZER_METADATA_ONLY.key, "3.0",
+        "Avoid to depend on this optimization to prevent a potential correctness issue. " +
+          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -2613,6 +2785,8 @@ class SQLConf extends Serializable with Logging {
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
+  def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
+
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
@@ -2649,6 +2823,8 @@ class SQLConf extends Serializable with Logging {
 
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
+  def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
+
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
@@ -2673,7 +2849,15 @@ class SQLConf extends Serializable with Logging {
 
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
-  def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
+  def defaultNumShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
+
+  def numShufflePartitions: Int = {
+    if (adaptiveExecutionEnabled && coalesceShufflePartitionsEnabled) {
+      getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(defaultNumShufflePartitions)
+    } else {
+      defaultNumShufflePartitions
+    }
+  }
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
@@ -2685,9 +2869,6 @@ class SQLConf extends Serializable with Logging {
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
-
-  def initialShufflePartitionNum: Int =
-    getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(numShufflePartitions)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
@@ -2758,6 +2939,8 @@ class SQLConf extends Serializable with Logging {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
+  def maxCnfNodeCount: Int = getConf(MAX_CNF_NODE_COUNT)
+
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
@@ -2771,6 +2954,8 @@ class SQLConf extends Serializable with Logging {
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
+
+  def uiExplainMode: String = getConf(UI_EXPLAIN_MODE)
 
   def addSingleFileInAddFile: Boolean = getConf(LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE)
 
@@ -2959,6 +3144,8 @@ class SQLConf extends Serializable with Logging {
 
   def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
 
+  def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
+
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
 
   def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
@@ -3014,7 +3201,10 @@ class SQLConf extends Serializable with Logging {
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
-  def legacySizeOfNull: Boolean = getConf(SQLConf.LEGACY_SIZE_OF_NULL)
+  def legacySizeOfNull: Boolean = {
+    // size(null) should return null under ansi mode.
+    getConf(SQLConf.LEGACY_SIZE_OF_NULL) && !getConf(ANSI_ENABLED)
+  }
 
   def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
 
@@ -3037,9 +3227,6 @@ class SQLConf extends Serializable with Logging {
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
 
-  def createHiveTableByDefaultEnabled: Boolean =
-    getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED)
-
   def truncateTableIgnorePermissionAcl: Boolean =
     getConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL)
 
@@ -3060,6 +3247,9 @@ class SQLConf extends Serializable with Logging {
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def legacyAllowCastNumericToTimestamp: Boolean =
+    getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
 
   /** ********************** SQLConf functionality methods ************ */
 

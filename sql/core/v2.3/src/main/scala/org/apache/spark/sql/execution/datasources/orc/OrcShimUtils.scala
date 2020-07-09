@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.sql.Date
-
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch
 import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument => OrcSearchArgument}
@@ -26,6 +24,7 @@ import org.apache.hadoop.hive.ql.io.sarg.PredicateLeaf.{Operator => OrcOperator}
 import org.apache.hadoop.hive.serde2.io.{DateWritable, HiveDecimalWritable}
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.execution.datasources.DaysWritable
 import org.apache.spark.sql.types.Decimal
 
 /**
@@ -38,7 +37,9 @@ private[sql] object OrcShimUtils {
   private[sql] type Operator = OrcOperator
   private[sql] type SearchArgument = OrcSearchArgument
 
-  def getSqlDate(value: Any): Date = value.asInstanceOf[DateWritable].get
+  def getGregorianDays(value: Any): Int = {
+    new DaysWritable(value.asInstanceOf[DateWritable]).gregorianDays
+  }
 
   def getDecimal(value: Any): Decimal = {
     val decimal = value.asInstanceOf[HiveDecimalWritable].getHiveDecimal()
@@ -47,13 +48,13 @@ private[sql] object OrcShimUtils {
 
   def getDateWritable(reuseObj: Boolean): (SpecializedGetters, Int) => DateWritable = {
     if (reuseObj) {
-      val result = new DateWritable()
+      val result = new DaysWritable()
       (getter, ordinal) =>
         result.set(getter.getInt(ordinal))
         result
     } else {
       (getter: SpecializedGetters, ordinal: Int) =>
-        new DateWritable(getter.getInt(ordinal))
+        new DaysWritable(getter.getInt(ordinal))
     }
   }
 

@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkContext, SparkEnv}
+import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
@@ -67,7 +67,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
    */
   private def isSkewed(size: Long, medianSize: Long): Boolean = {
     size > medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR) &&
-      size > conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+      size > conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD)
   }
 
   private def medianSize(stats: MapOutputStatistics): Long = {
@@ -83,14 +83,16 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   /**
    * The goal of skew join optimization is to make the data distribution more even. The target size
    * to split skewed partitions is the average size of non-skewed partition, or the
-   * target post-shuffle partition size if avg size is smaller than it.
+   * advisory partition size if avg size is smaller than it.
    */
-  private def targetSize(stats: MapOutputStatistics, medianSize: Long): Long = {
-    val targetPostShuffleSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-    val nonSkewSizes = stats.bytesByPartitionId.filterNot(isSkewed(_, medianSize))
-    // It's impossible that all the partitions are skewed, as we use median size to define skew.
-    assert(nonSkewSizes.nonEmpty)
-    math.max(targetPostShuffleSize, nonSkewSizes.sum / nonSkewSizes.length)
+  private def targetSize(sizes: Seq[Long], medianSize: Long): Long = {
+    val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    val nonSkewSizes = sizes.filterNot(isSkewed(_, medianSize))
+    if (nonSkewSizes.isEmpty) {
+      advisorySize
+    } else {
+      math.max(advisorySize, nonSkewSizes.sum / nonSkewSizes.length)
+    }
   }
 
   /**
@@ -102,21 +104,30 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   /**
-   * Split the skewed partition based on the map size and the max split number.
+   * Splits the skewed partition based on the map size and the target partition size
+   * after split, and create a list of `PartialMapperPartitionSpec`. Returns None if can't split.
    */
-  private def getMapStartIndices(
-      stage: ShuffleQueryStageExec,
-      partitionId: Int,
-      targetSize: Long): Seq[Int] = {
-    val shuffleId = stage.shuffle.shuffleDependency.shuffleHandle.shuffleId
-    val mapPartitionSizes = getMapSizesForReduceId(shuffleId, partitionId)
-    ShufflePartitionsUtil.splitSizeListByTargetSize(mapPartitionSizes, targetSize)
-  }
-
-  private def getStatistics(stage: ShuffleQueryStageExec): MapOutputStatistics = {
-    assert(stage.resultOption.isDefined, "ShuffleQueryStageExec should" +
-      " already be ready when executing OptimizeSkewedPartitions rule")
-    stage.resultOption.get.asInstanceOf[MapOutputStatistics]
+  private def createSkewPartitionSpecs(
+      shuffleId: Int,
+      reducerId: Int,
+      targetSize: Long): Option[Seq[PartialReducerPartitionSpec]] = {
+    val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
+    val mapStartIndices = ShufflePartitionsUtil.splitSizeListByTargetSize(
+      mapPartitionSizes, targetSize)
+    if (mapStartIndices.length > 1) {
+      Some(mapStartIndices.indices.map { i =>
+        val startMapIndex = mapStartIndices(i)
+        val endMapIndex = if (i == mapStartIndices.length - 1) {
+          mapPartitionSizes.length
+        } else {
+          mapStartIndices(i + 1)
+        }
+        val dataSize = startMapIndex.until(endMapIndex).map(mapPartitionSizes(_)).sum
+        PartialReducerPartitionSpec(reducerId, startMapIndex, endMapIndex, dataSize)
+      })
+    } else {
+      None
+    }
   }
 
   private def canSplitLeftSide(joinType: JoinType) = {
@@ -128,12 +139,9 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     joinType == Inner || joinType == Cross || joinType == RightOuter
   }
 
-  private def getNumMappers(stage: ShuffleQueryStageExec): Int = {
-    stage.shuffle.shuffleDependency.rdd.partitions.length
-  }
-
-  private def getSizeInfo(medianSize: Long, maxSize: Long): String = {
-    s"median size: $medianSize, max size: ${maxSize}"
+  private def getSizeInfo(medianSize: Long, sizes: Seq[Long]): String = {
+    s"median size: $medianSize, max size: ${sizes.max}, min size: ${sizes.min}, avg size: " +
+      sizes.sum / sizes.length
   }
 
   /*
@@ -150,144 +158,96 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
    */
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
     case smj @ SortMergeJoinExec(_, _, joinType, _,
-        s1 @ SortExec(_, _, left: ShuffleQueryStageExec, _),
-        s2 @ SortExec(_, _, right: ShuffleQueryStageExec, _), _)
+        s1 @ SortExec(_, _, ShuffleStage(left: ShuffleStageInfo), _),
+        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleStageInfo), _), _)
         if supportedJoinTypes.contains(joinType) =>
-      val leftStats = getStatistics(left)
-      val rightStats = getStatistics(right)
-      val numPartitions = leftStats.bytesByPartitionId.length
-
-      val leftMedSize = medianSize(leftStats)
-      val rightMedSize = medianSize(rightStats)
+      assert(left.partitionsWithSizes.length == right.partitionsWithSizes.length)
+      val numPartitions = left.partitionsWithSizes.length
+      // We use the median size of the original shuffle partitions to detect skewed partitions.
+      val leftMedSize = medianSize(left.mapStats)
+      val rightMedSize = medianSize(right.mapStats)
       logDebug(
         s"""
-          |Try to optimize skewed join.
-          |Left side partition size:
-          |${getSizeInfo(leftMedSize, leftStats.bytesByPartitionId.max)}
-          |Right side partition size:
-          |${getSizeInfo(rightMedSize, rightStats.bytesByPartitionId.max)}
+          |Optimizing skewed join.
+          |Left side partitions size info:
+          |${getSizeInfo(leftMedSize, left.mapStats.bytesByPartitionId)}
+          |Right side partitions size info:
+          |${getSizeInfo(rightMedSize, right.mapStats.bytesByPartitionId)}
         """.stripMargin)
       val canSplitLeft = canSplitLeftSide(joinType)
       val canSplitRight = canSplitRightSide(joinType)
-      val leftTargetSize = targetSize(leftStats, leftMedSize)
-      val rightTargetSize = targetSize(rightStats, rightMedSize)
+      // We use the actual partition sizes (may be coalesced) to calculate target size, so that
+      // the final data distribution is even (coalesced partitions + split partitions).
+      val leftActualSizes = left.partitionsWithSizes.map(_._2)
+      val rightActualSizes = right.partitionsWithSizes.map(_._2)
+      val leftTargetSize = targetSize(leftActualSizes, leftMedSize)
+      val rightTargetSize = targetSize(rightActualSizes, rightMedSize)
 
       val leftSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
       val rightSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
-      // This is used to delay the creation of non-skew partitions so that we can potentially
-      // coalesce them like `CoalesceShufflePartitions` does.
-      val nonSkewPartitionIndices = mutable.ArrayBuffer.empty[Int]
-      val leftSkewDesc = new SkewDesc
-      val rightSkewDesc = new SkewDesc
+      var numSkewedLeft = 0
+      var numSkewedRight = 0
       for (partitionIndex <- 0 until numPartitions) {
-        val leftSize = leftStats.bytesByPartitionId(partitionIndex)
-        val isLeftSkew = isSkewed(leftSize, leftMedSize) && canSplitLeft
-        val rightSize = rightStats.bytesByPartitionId(partitionIndex)
-        val isRightSkew = isSkewed(rightSize, rightMedSize) && canSplitRight
-        if (isLeftSkew || isRightSkew) {
-          if (nonSkewPartitionIndices.nonEmpty) {
-            // As soon as we see a skew, we'll "flush" out unhandled non-skew partitions.
-            createNonSkewPartitions(leftStats, rightStats, nonSkewPartitionIndices).foreach { p =>
-              leftSidePartitions += p
-              rightSidePartitions += p
-            }
-            nonSkewPartitionIndices.clear()
-          }
+        val leftActualSize = leftActualSizes(partitionIndex)
+        val isLeftSkew = isSkewed(leftActualSize, leftMedSize) && canSplitLeft
+        val leftPartSpec = left.partitionsWithSizes(partitionIndex)._1
+        val isLeftCoalesced = leftPartSpec.startReducerIndex + 1 < leftPartSpec.endReducerIndex
 
-          val leftParts = if (isLeftSkew) {
-            val mapStartIndices = getMapStartIndices(left, partitionIndex, leftTargetSize)
-            if (mapStartIndices.length > 1) {
-              leftSkewDesc.addPartitionSize(leftSize)
-              createSkewPartitions(partitionIndex, mapStartIndices, getNumMappers(left))
-            } else {
-              Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1))
-            }
-          } else {
-            Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1))
-          }
+        val rightActualSize = rightActualSizes(partitionIndex)
+        val isRightSkew = isSkewed(rightActualSize, rightMedSize) && canSplitRight
+        val rightPartSpec = right.partitionsWithSizes(partitionIndex)._1
+        val isRightCoalesced = rightPartSpec.startReducerIndex + 1 < rightPartSpec.endReducerIndex
 
-          val rightParts = if (isRightSkew) {
-            val mapStartIndices = getMapStartIndices(right, partitionIndex, rightTargetSize)
-            if (mapStartIndices.length > 1) {
-              rightSkewDesc.addPartitionSize(rightSize)
-              createSkewPartitions(partitionIndex, mapStartIndices, getNumMappers(right))
-            } else {
-              Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1))
-            }
-          } else {
-            Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1))
+        // A skewed partition should never be coalesced, but skip it here just to be safe.
+        val leftParts = if (isLeftSkew && !isLeftCoalesced) {
+          val reducerId = leftPartSpec.startReducerIndex
+          val skewSpecs = createSkewPartitionSpecs(
+            left.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId, leftTargetSize)
+          if (skewSpecs.isDefined) {
+            logDebug(s"Left side partition $partitionIndex " +
+              s"(${FileUtils.byteCountToDisplaySize(leftActualSize)}) is skewed, " +
+              s"split it into ${skewSpecs.get.length} parts.")
+            numSkewedLeft += 1
           }
-
-          for {
-            leftSidePartition <- leftParts
-            rightSidePartition <- rightParts
-          } {
-            leftSidePartitions += leftSidePartition
-            rightSidePartitions += rightSidePartition
-          }
+          skewSpecs.getOrElse(Seq(leftPartSpec))
         } else {
-          // Add to `nonSkewPartitionIndices` first, and add real partitions later, in case we can
-          // coalesce the non-skew partitions.
-          nonSkewPartitionIndices += partitionIndex
-          // If this is the last partition, add real partition immediately.
-          if (partitionIndex == numPartitions - 1) {
-            createNonSkewPartitions(leftStats, rightStats, nonSkewPartitionIndices).foreach { p =>
-              leftSidePartitions += p
-              rightSidePartitions += p
-            }
-            nonSkewPartitionIndices.clear()
+          Seq(leftPartSpec)
+        }
+
+        // A skewed partition should never be coalesced, but skip it here just to be safe.
+        val rightParts = if (isRightSkew && !isRightCoalesced) {
+          val reducerId = rightPartSpec.startReducerIndex
+          val skewSpecs = createSkewPartitionSpecs(
+            right.shuffleStage.shuffle.shuffleDependency.shuffleId, reducerId, rightTargetSize)
+          if (skewSpecs.isDefined) {
+            logDebug(s"Right side partition $partitionIndex " +
+              s"(${FileUtils.byteCountToDisplaySize(rightActualSize)}) is skewed, " +
+              s"split it into ${skewSpecs.get.length} parts.")
+            numSkewedRight += 1
           }
+          skewSpecs.getOrElse(Seq(rightPartSpec))
+        } else {
+          Seq(rightPartSpec)
+        }
+
+        for {
+          leftSidePartition <- leftParts
+          rightSidePartition <- rightParts
+        } {
+          leftSidePartitions += leftSidePartition
+          rightSidePartitions += rightSidePartition
         }
       }
 
-      logDebug("number of skewed partitions: " +
-        s"left ${leftSkewDesc.numPartitions}, right ${rightSkewDesc.numPartitions}")
-      if (leftSkewDesc.numPartitions > 0 || rightSkewDesc.numPartitions > 0) {
-        val newLeft = CustomShuffleReaderExec(left, leftSidePartitions, leftSkewDesc.toString)
-        val newRight = CustomShuffleReaderExec(right, rightSidePartitions, rightSkewDesc.toString)
+      logDebug(s"number of skewed partitions: left $numSkewedLeft, right $numSkewedRight")
+      if (numSkewedLeft > 0 || numSkewedRight > 0) {
+        val newLeft = CustomShuffleReaderExec(left.shuffleStage, leftSidePartitions)
+        val newRight = CustomShuffleReaderExec(right.shuffleStage, rightSidePartitions)
         smj.copy(
           left = s1.copy(child = newLeft), right = s2.copy(child = newRight), isSkewJoin = true)
       } else {
         smj
       }
-  }
-
-  private def createNonSkewPartitions(
-      leftStats: MapOutputStatistics,
-      rightStats: MapOutputStatistics,
-      nonSkewPartitionIndices: Seq[Int]): Seq[ShufflePartitionSpec] = {
-    assert(nonSkewPartitionIndices.nonEmpty)
-    val shouldCoalesce = conf.getConf(SQLConf.COALESCE_PARTITIONS_ENABLED)
-    if (!shouldCoalesce || nonSkewPartitionIndices.length == 1) {
-      nonSkewPartitionIndices.map(i => CoalescedPartitionSpec(i, i + 1))
-    } else {
-      // We fall back to Spark default parallelism if the minimum number of coalesced partitions
-      // is not set, so to avoid perf regressions compared to no coalescing.
-      val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
-        .getOrElse(SparkContext.getActive.get.defaultParallelism)
-      ShufflePartitionsUtil.coalescePartitions(
-        Array(leftStats, rightStats),
-        firstPartitionIndex = nonSkewPartitionIndices.head,
-        // `lastPartitionIndex` is exclusive.
-        lastPartitionIndex = nonSkewPartitionIndices.last + 1,
-        advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
-        minNumPartitions = minPartitionNum)
-    }
-  }
-
-  private def createSkewPartitions(
-      reducerIndex: Int,
-      mapStartIndices: Seq[Int],
-      numMappers: Int): Seq[PartialReducerPartitionSpec] = {
-    mapStartIndices.indices.map { i =>
-      val startMapIndex = mapStartIndices(i)
-      val endMapIndex = if (i == mapStartIndices.length - 1) {
-        numMappers
-      } else {
-        mapStartIndices(i + 1)
-      }
-      PartialReducerPartitionSpec(reducerIndex, startMapIndex, endMapIndex)
-    }
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
@@ -304,7 +264,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
     if (shuffleStages.length == 2) {
       // When multi table join, there will be too many complex combination to consider.
-      // Currently we only handle 2 table join like following two use cases.
+      // Currently we only handle 2 table join like following use case.
       // SMJ
       //   Sort
       //     Shuffle
@@ -328,34 +288,39 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
   }
 }
 
-private class SkewDesc {
-  private[this] var numSkewedPartitions: Int = 0
-  private[this] var totalSize: Long = 0
-  private[this] var maxSize: Long = 0
-  private[this] var minSize: Long = 0
+private object ShuffleStage {
+  def unapply(plan: SparkPlan): Option[ShuffleStageInfo] = plan match {
+    case s: ShuffleQueryStageExec if s.mapStats.isDefined =>
+      val mapStats = s.mapStats.get
+      val sizes = mapStats.bytesByPartitionId
+      val partitions = sizes.zipWithIndex.map {
+        case (size, i) => CoalescedPartitionSpec(i, i + 1) -> size
+      }
+      Some(ShuffleStageInfo(s, mapStats, partitions))
 
-  def numPartitions: Int = numSkewedPartitions
+    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs)
+      if s.mapStats.isDefined && partitionSpecs.nonEmpty =>
+      val mapStats = s.mapStats.get
+      val sizes = mapStats.bytesByPartitionId
+      val partitions = partitionSpecs.map {
+        case spec @ CoalescedPartitionSpec(start, end) =>
+          var sum = 0L
+          var i = start
+          while (i < end) {
+            sum += sizes(i)
+            i += 1
+          }
+          spec -> sum
+        case other => throw new IllegalArgumentException(
+          s"Expect CoalescedPartitionSpec but got $other")
+      }
+      Some(ShuffleStageInfo(s, mapStats, partitions))
 
-  def addPartitionSize(size: Long): Unit = {
-    if (numSkewedPartitions == 0) {
-      maxSize = size
-      minSize = size
-    }
-    numSkewedPartitions += 1
-    totalSize += size
-    if (size > maxSize) maxSize = size
-    if (size < minSize) minSize = size
-  }
-
-  override def toString: String = {
-    if (numSkewedPartitions == 0) {
-      "no skewed partition"
-    } else {
-      val maxSizeStr = FileUtils.byteCountToDisplaySize(maxSize)
-      val minSizeStr = FileUtils.byteCountToDisplaySize(minSize)
-      val avgSizeStr = FileUtils.byteCountToDisplaySize(totalSize / numSkewedPartitions)
-      s"$numSkewedPartitions skewed partitions with " +
-        s"size(max=$maxSizeStr, min=$minSizeStr, avg=$avgSizeStr)"
-    }
+    case _ => None
   }
 }
+
+private case class ShuffleStageInfo(
+    shuffleStage: ShuffleQueryStageExec,
+    mapStats: MapOutputStatistics,
+    partitionsWithSizes: Seq[(CoalescedPartitionSpec, Long)])

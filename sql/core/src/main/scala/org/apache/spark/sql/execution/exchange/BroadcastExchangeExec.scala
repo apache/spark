@@ -120,7 +120,7 @@ case class BroadcastExchangeExec(
               System.nanoTime() - beforeBroadcast)
             val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
             SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
-            promise.success(broadcasted)
+            promise.trySuccess(broadcasted)
             broadcasted
           } catch {
             // SPARK-24294: To bypass scala bug: https://github.com/scala/bug/issues/9554, we throw
@@ -133,14 +133,14 @@ case class BroadcastExchangeExec(
                   s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
                   s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
                   .initCause(oe.getCause))
-              promise.failure(ex)
+              promise.tryFailure(ex)
               throw ex
             case e if !NonFatal(e) =>
               val ex = new SparkFatalException(e)
-              promise.failure(ex)
+              promise.tryFailure(ex)
               throw ex
             case e: Throwable =>
-              promise.failure(e)
+              promise.tryFailure(e)
               throw e
           }
     }

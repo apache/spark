@@ -69,6 +69,7 @@ private[spark] class DriverServiceFeatureStep(
     val driverService = new ServiceBuilder()
       .withNewMetadata()
         .withName(resolvedServiceName)
+        .addToAnnotations(kubernetesConf.serviceAnnotations.asJava)
         .endMetadata()
       .withNewSpec()
         .withClusterIP("None")

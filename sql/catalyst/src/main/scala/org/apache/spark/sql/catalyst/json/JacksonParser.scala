@@ -56,16 +56,18 @@ class JacksonParser(
 
   private val factory = options.buildJsonFactory()
 
-  private val timestampFormatter = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
-  private val dateFormatter = DateFormatter(
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+  private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
@@ -236,7 +238,7 @@ class JacksonParser(
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility.
-              val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(parser.getText))
+              val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
               DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
           }
 
@@ -253,12 +255,12 @@ class JacksonParser(
             case NonFatal(e) =>
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility.
-              val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(parser.getText))
+              val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
               DateTimeUtils.stringToDate(str, options.zoneId).getOrElse {
                 // In Spark 1.5.0, we store the data as number of days since epoch in string.
                 // So, we just convert it to Int.
                 try {
-                  parser.getText.toInt
+                  RebaseDateTime.rebaseJulianToGregorianDays(parser.getText.toInt)
                 } catch {
                   case _: NumberFormatException => throw e
                 }
@@ -455,6 +457,7 @@ class JacksonParser(
         }
       }
     } catch {
+      case e: SparkUpgradeException => throw e
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by

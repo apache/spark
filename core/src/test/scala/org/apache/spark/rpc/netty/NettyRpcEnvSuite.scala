@@ -27,6 +27,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.network.client.TransportClient
 import org.apache.spark.rpc._
+import org.apache.spark.util.ThreadUtils
 
 class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
 
@@ -130,6 +131,49 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
       failAfter(10.seconds) {
         assert(rpcEndpointRef.askSync[Int](100) === 100)
       }
+    } finally {
+      anotherEnv.shutdown()
+      anotherEnv.awaitTermination()
+    }
+  }
+
+
+  test("SPARK-31233: ask rpcEndpointRef in client mode timeout") {
+    var remoteRef: RpcEndpointRef = null
+    env.setupEndpoint("ask-remotely-server", new RpcEndpoint {
+      override val rpcEnv = env
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case Register(ref) =>
+          remoteRef = ref
+          context.reply("okay")
+        case msg: String =>
+          context.reply(msg)
+      }
+    })
+    val conf = new SparkConf()
+    val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
+    // Use anotherEnv to find out the RpcEndpointRef
+    val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-remotely-server")
+    // Register a rpcEndpointRef in anotherEnv
+    val anotherRef = anotherEnv.setupEndpoint("receiver", new RpcEndpoint {
+      override val rpcEnv = anotherEnv
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case _ =>
+          Thread.sleep(1200)
+          context.reply("okay")
+      }
+    })
+    try {
+      val reply = rpcEndpointRef.askSync[String](Register(anotherRef))
+      assert("okay" === reply)
+      val timeout = "1s"
+      val answer = remoteRef.ask[String]("msg",
+        RpcTimeout(conf, Seq("spark.rpc.askTimeout", "spark.network.timeout"), timeout))
+      val thrown = intercept[RpcTimeoutException] {
+        ThreadUtils.awaitResult(answer, Duration(1300, MILLISECONDS))
+      }
+      val remoteAddr = remoteRef.asInstanceOf[NettyRpcEndpointRef].client.getChannel.remoteAddress
+      assert(thrown.getMessage.contains(remoteAddr.toString))
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()

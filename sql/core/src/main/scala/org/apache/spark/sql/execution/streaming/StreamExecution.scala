@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdate
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
@@ -451,9 +452,9 @@ abstract class StreamExecution(
       val stackTraceException = new SparkException("The stream thread was last executing:")
       stackTraceException.setStackTrace(queryExecutionThread.getStackTrace)
       val timeoutException = new TimeoutException(
-        s"Stream Execution thread failed to stop within $timeout milliseconds (specified by " +
-        s"${SQLConf.STREAMING_STOP_TIMEOUT.key}). See the cause on what was " +
-        "being executed in the streaming query thread.")
+        s"Stream Execution thread for stream $prettyIdString failed to stop within $timeout " +
+        s"milliseconds (specified by ${SQLConf.STREAMING_STOP_TIMEOUT.key}). See the cause on " +
+        s"what was being executed in the streaming query thread.")
       timeoutException.initCause(stackTraceException)
       throw timeoutException
     }
@@ -629,14 +630,9 @@ abstract class StreamExecution(
         writeBuilder.asInstanceOf[SupportsTruncate].truncate().buildForStreaming()
 
       case Update =>
-        // Although no v2 sinks really support Update mode now, but during tests we do want them
-        // to pretend to support Update mode, and treat Update mode same as Append mode.
-        if (Utils.isTesting) {
-          writeBuilder.buildForStreaming()
-        } else {
-          throw new IllegalArgumentException(
-            "Data source v2 streaming sinks does not support Update mode.")
-        }
+        require(writeBuilder.isInstanceOf[SupportsStreamingUpdate],
+          table.name + " does not support Update mode.")
+        writeBuilder.asInstanceOf[SupportsStreamingUpdate].update().buildForStreaming()
     }
   }
 

@@ -126,6 +126,32 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
   }
 
+  test("SPARK-30532 stat functions to understand fully-qualified column name") {
+    val df1 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table1")
+    val df2 = spark.sparkContext.parallelize(0 to 10).toDF("num").as("table2")
+    val dfx = df2.crossJoin(df1)
+
+    assert(dfx.stat.corr("table1.num", "table2.num") != 0.0)
+    assert(dfx.stat.cov("table1.num", "table2.num") != 0.0)
+    assert(dfx.stat.approxQuantile("table1.num", Array(0.1), 0.0).length == 1)
+    assert(dfx.stat.approxQuantile("table2.num", Array(0.1), 0.0).length == 1)
+    assert(dfx.stat.freqItems(Array("table1.num", "table2.num")).collect()(0).length == 2)
+
+    // this should throw "Reference 'num' is ambiguous"
+    intercept[AnalysisException] {
+      dfx.stat.freqItems(Array("num"))
+    }
+    intercept[AnalysisException] {
+      dfx.stat.approxQuantile("num", Array(0.1), 0.0)
+    }
+    intercept[AnalysisException] {
+      dfx.stat.cov("num", "num")
+    }
+    intercept[AnalysisException] {
+      dfx.stat.corr("num", "num")
+    }
+  }
+
   test("covariance") {
     val df = Seq.tabulate(10)(i => (i, 2.0 * i, toLetter(i))).toDF("singles", "doubles", "letters")
 

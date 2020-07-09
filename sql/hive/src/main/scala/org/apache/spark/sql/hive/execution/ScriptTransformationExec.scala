@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
@@ -42,6 +43,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
 
@@ -136,6 +138,15 @@ case class ScriptTransformationExec(
             throw writerThread.exception.get
           }
 
+          // There can be a lag between reader read EOF and the process termination.
+          // If the script fails to startup, this kind of error may be missed.
+          // So explicitly waiting for the process termination.
+          val timeout = conf.getConf(SQLConf.SCRIPT_TRANSFORMATION_EXIT_TIMEOUT)
+          val exitRes = proc.waitFor(timeout, TimeUnit.SECONDS)
+          if (!exitRes) {
+            log.warn(s"Transformation script process exits timeout in $timeout seconds")
+          }
+
           if (!proc.isAlive) {
             val exitCode = proc.exitValue()
             if (exitCode != 0) {
@@ -173,7 +184,6 @@ case class ScriptTransformationExec(
                     // Ideally the proc should *not* be alive at this point but
                     // there can be a lag between EOF being written out and the process
                     // being terminated. So explicitly waiting for the process to be done.
-                    proc.waitFor()
                     checkFailureAndPropagate()
                     return false
                 }

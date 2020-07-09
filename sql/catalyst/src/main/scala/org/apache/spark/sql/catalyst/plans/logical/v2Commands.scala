@@ -346,25 +346,25 @@ case class MergeIntoTable(
   override def children: Seq[LogicalPlan] = Seq(targetTable, sourceTable)
 }
 
-sealed abstract class MergeAction(
-    condition: Option[Expression]) extends Expression with Unevaluable {
+sealed abstract class MergeAction extends Expression with Unevaluable {
+  def condition: Option[Expression]
   override def foldable: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException(this, "nullable")
   override def children: Seq[Expression] = condition.toSeq
 }
 
-case class DeleteAction(condition: Option[Expression]) extends MergeAction(condition)
+case class DeleteAction(condition: Option[Expression]) extends MergeAction
 
 case class UpdateAction(
     condition: Option[Expression],
-    assignments: Seq[Assignment]) extends MergeAction(condition) {
+    assignments: Seq[Assignment]) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 }
 
 case class InsertAction(
     condition: Option[Expression],
-    assignments: Seq[Assignment]) extends MergeAction(condition) {
+    assignments: Seq[Assignment]) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 }
 
@@ -434,6 +434,22 @@ case class ShowTables(
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the SHOW VIEWS command that works for v1 and v2 catalogs.
+ *
+ * Notes: v2 catalogs do not support views API yet, the command will fallback to
+ * v1 ShowViewsCommand during ResolveSessionCatalog.
+ */
+case class ShowViews(
+    namespace: LogicalPlan,
+    pattern: Option[String]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)(),
+    AttributeReference("viewName", StringType, nullable = false)())
 }
 
 /**

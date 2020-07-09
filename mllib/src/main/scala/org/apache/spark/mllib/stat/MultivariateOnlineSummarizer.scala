@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.stat
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
- * :: DeveloperApi ::
  * MultivariateOnlineSummarizer implements [[MultivariateStatisticalSummary]] to compute the mean,
  * variance, minimum, maximum, counts, and nonzero counts for instances in sparse or dense vector
  * format in an online fashion.
@@ -41,7 +40,6 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  * Reliability weights (Wikipedia)</a>.
  */
 @Since("1.1.0")
-@DeveloperApi
 class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with Serializable {
 
   private var n = 0

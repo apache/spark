@@ -374,6 +374,13 @@ private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
 
 }
 
+private[spark] class ResourceProfileWrapper(val rpInfo: ResourceProfileInfo) {
+
+  @JsonIgnore @KVIndex
+  def id: Int = rpInfo.id
+
+}
+
 private[spark] class ExecutorStageSummaryWrapper(
     val stageId: Int,
     val stageAttemptId: Int,

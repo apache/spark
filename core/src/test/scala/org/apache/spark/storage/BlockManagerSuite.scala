@@ -1706,6 +1706,64 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     verify(liveListenerBus, never()).post(SparkListenerBlockUpdated(BlockUpdatedInfo(updateInfo)))
   }
 
+  test("test decommission block manager should not be part of peers") {
+    val exec1 = "exec1"
+    val exec2 = "exec2"
+    val exec3 = "exec3"
+    val store1 = makeBlockManager(800, exec1)
+    val store2 = makeBlockManager(800, exec2)
+    val store3 = makeBlockManager(800, exec3)
+
+    assert(master.getPeers(store3.blockManagerId).map(_.executorId).toSet === Set(exec1, exec2))
+
+    val data = new Array[Byte](4)
+    val blockId = rdd(0, 0)
+    store1.putSingle(blockId, data, StorageLevel.MEMORY_ONLY_2)
+    assert(master.getLocations(blockId).size === 2)
+
+    master.decommissionBlockManagers(Seq(exec1))
+    // store1 is decommissioned, so it should not be part of peer list for store3
+    assert(master.getPeers(store3.blockManagerId).map(_.executorId).toSet === Set(exec2))
+  }
+
+  test("test decommissionRddCacheBlocks should offload all cached blocks") {
+    val store1 = makeBlockManager(800, "exec1")
+    val store2 = makeBlockManager(800, "exec2")
+    val store3 = makeBlockManager(800, "exec3")
+
+    val data = new Array[Byte](4)
+    val blockId = rdd(0, 0)
+    store1.putSingle(blockId, data, StorageLevel.MEMORY_ONLY_2)
+    assert(master.getLocations(blockId).size === 2)
+    assert(master.getLocations(blockId).contains(store1.blockManagerId))
+
+    store1.decommissionRddCacheBlocks()
+    assert(master.getLocations(blockId).size === 2)
+    assert(master.getLocations(blockId).toSet === Set(store2.blockManagerId,
+      store3.blockManagerId))
+  }
+
+  test("test decommissionRddCacheBlocks should keep the block if it is not able to offload") {
+    val store1 = makeBlockManager(3500, "exec1")
+    val store2 = makeBlockManager(1000, "exec2")
+
+    val dataLarge = new Array[Byte](1500)
+    val blockIdLarge = rdd(0, 0)
+    val dataSmall = new Array[Byte](1)
+    val blockIdSmall = rdd(0, 1)
+
+    store1.putSingle(blockIdLarge, dataLarge, StorageLevel.MEMORY_ONLY)
+    store1.putSingle(blockIdSmall, dataSmall, StorageLevel.MEMORY_ONLY)
+    assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
+    assert(master.getLocations(blockIdSmall) === Seq(store1.blockManagerId))
+
+    store1.decommissionRddCacheBlocks()
+    // Smaller block offloaded to store2
+    assert(master.getLocations(blockIdSmall) === Seq(store2.blockManagerId))
+    // Larger block still present in store1 as it can't be offloaded
+    assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
+  }
+
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
     var numCalls = 0
     var tempFileManager: DownloadFileManager = null

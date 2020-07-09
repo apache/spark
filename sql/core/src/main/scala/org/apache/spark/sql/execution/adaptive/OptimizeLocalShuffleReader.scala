@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -65,11 +66,10 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def createLocalReader(plan: SparkPlan): CustomShuffleReaderExec = {
     plan match {
-      case c @ CustomShuffleReaderExec(s: ShuffleQueryStageExec, _, _) =>
-        CustomShuffleReaderExec(
-          s, getPartitionSpecs(s, Some(c.partitionSpecs.length)), LOCAL_SHUFFLE_READER_DESCRIPTION)
+      case c @ CustomShuffleReaderExec(s: ShuffleQueryStageExec, _) =>
+        CustomShuffleReaderExec(s, getPartitionSpecs(s, Some(c.partitionSpecs.length)))
       case s: ShuffleQueryStageExec =>
-        CustomShuffleReaderExec(s, getPartitionSpecs(s, None), LOCAL_SHUFFLE_READER_DESCRIPTION)
+        CustomShuffleReaderExec(s, getPartitionSpecs(s, None))
     }
   }
 
@@ -123,8 +123,6 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
 
 object OptimizeLocalShuffleReader {
 
-  val LOCAL_SHUFFLE_READER_DESCRIPTION: String = "local"
-
   object BroadcastJoinWithShuffleLeft {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
       case join: BroadcastHashJoinExec if canUseLocalShuffleReader(join.left) =>
@@ -142,8 +140,10 @@ object OptimizeLocalShuffleReader {
   }
 
   def canUseLocalShuffleReader(plan: SparkPlan): Boolean = plan match {
-    case s: ShuffleQueryStageExec => s.shuffle.canChangeNumPartitions
-    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, _, _) => s.shuffle.canChangeNumPartitions
+    case s: ShuffleQueryStageExec =>
+      s.shuffle.canChangeNumPartitions
+    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
+      s.shuffle.canChangeNumPartitions && partitionSpecs.nonEmpty
     case _ => false
   }
 }

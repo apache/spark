@@ -20,7 +20,7 @@ package org.apache.spark.ml
 import scala.annotation.varargs
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -29,10 +29,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * :: DeveloperApi ::
  * Abstract class for transformers that transform one dataset into another.
  */
-@DeveloperApi
 abstract class Transformer extends PipelineStage {
 
   /**
@@ -75,11 +73,9 @@ abstract class Transformer extends PipelineStage {
 }
 
 /**
- * :: DeveloperApi ::
  * Abstract class for transformers that take one input column, apply transformation, and output the
  * result as a new column.
  */
-@DeveloperApi
 abstract class UnaryTransformer[IN: TypeTag, OUT: TypeTag, T <: UnaryTransformer[IN, OUT, T]]
   extends Transformer with HasInputCol with HasOutputCol with Logging {
 

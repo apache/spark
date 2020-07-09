@@ -23,6 +23,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
@@ -313,7 +314,7 @@ object InMemoryFileIndex extends Logging {
         // to retrieve the file status with the file block location. The reason to still fallback
         // to listStatus is because the default implementation would potentially throw a
         // FileNotFoundException which is better handled by doing the lookups manually below.
-        case _: DistributedFileSystem if !ignoreLocality =>
+        case (_: DistributedFileSystem | _: ViewFileSystem) if !ignoreLocality =>
           val remoteIter = fs.listLocatedStatus(path)
           new Iterator[LocatedFileStatus]() {
             def next(): LocatedFileStatus = remoteIter.next

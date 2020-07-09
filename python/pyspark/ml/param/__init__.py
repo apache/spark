@@ -76,8 +76,6 @@ class Param(object):
 
 class TypeConverters(object):
     """
-    .. note:: DeveloperApi
-
     Factory methods for common type conversion functions for `Param.typeConverter`.
 
     .. versionadded:: 2.0.0

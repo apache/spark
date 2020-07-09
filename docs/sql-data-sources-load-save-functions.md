@@ -127,7 +127,7 @@ visit the official Apache ORC/Parquet websites.
 {% include_example manual_save_options_orc r/RSparkSQLExample.R %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 CREATE TABLE users_with_options (
@@ -257,7 +257,7 @@ Bucketing and sorting are applicable only to persistent tables:
 {% include_example write_sorting_and_bucketing python/sql/datasource.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 
@@ -291,7 +291,7 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 {% include_example write_partitioning python/sql/datasource.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 
@@ -323,7 +323,7 @@ It is possible to use both partitioning and bucketing for a single table:
 {% include_example write_partition_and_bucket python/sql/datasource.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 

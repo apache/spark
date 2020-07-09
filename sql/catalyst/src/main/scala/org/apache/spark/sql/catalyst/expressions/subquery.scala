@@ -106,24 +106,6 @@ object SubExprUtils extends PredicateHelper {
   }
 
   /**
-   * Returns whether there are any null-aware predicate subqueries inside Not. If not, we could
-   * turn the null-aware predicate into not-null-aware predicate.
-   */
-  def hasNullAwarePredicateWithinNot(condition: Expression): Boolean = {
-    splitConjunctivePredicates(condition).exists {
-      case _: Exists | Not(_: Exists) => false
-      case _: InSubquery | Not(_: InSubquery) => false
-      case e => e.find { x =>
-        x.isInstanceOf[Not] && e.find {
-          case _: InSubquery => true
-          case _ => false
-        }.isDefined
-      }.isDefined
-    }
-
-  }
-
-  /**
    * Returns an expression after removing the OuterReference shell.
    */
   def stripOuterReference(e: Expression): Expression = e.transform { case OuterReference(r) => r }

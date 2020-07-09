@@ -19,4 +19,4 @@ license: |
   limitations under the License.
 ---
 
-* [ANALYZE TABLE statement](sql-ref-syntax-aux-analyze-table.html)
+ * [ANALYZE TABLE statement](sql-ref-syntax-aux-analyze-table.html)

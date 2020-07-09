@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -540,12 +540,15 @@ SparkR supports the following machine learning algorithms currently:
 * [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
 * [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
 * [`spark.svmLinear`](api/R/spark.svmLinear.html): [`Linear Support Vector Machine`](ml-classification-regression.html#linear-support-vector-machine)
+* [`spark.fmClassifier`](api/R/fmClassifier.html): [`Factorization Machines classifier`](ml-classification-regression.html#factorization-machines-classifier)
 
 #### Regression
 
 * [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival  Model`](ml-classification-regression.html#survival-regression)
 * [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model (GLM)`](ml-classification-regression.html#generalized-linear-regression)
 * [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression`](ml-classification-regression.html#isotonic-regression)
+* [`spark.lm`](api/R/spark.lm.html): [`Linear Regression`](ml-classification-regression.html#linear-regression)
+* [`spark.fmRegressor`](api/R/spark.fmRegressor.html): [`Factorization Machines regressor`](ml-classification-regression.html#factorization-machines-regressor)
 
 #### Tree
 
@@ -663,20 +666,15 @@ Apache Arrow is an in-memory columnar data format that is used in Spark to effic
 
 ## Ensure Arrow Installed
 
-Arrow R library is available on CRAN as of [ARROW-3204](https://issues.apache.org/jira/browse/ARROW-3204). It can be installed as below.
+Arrow R library is available on CRAN and it can be installed as below.
 
 ```bash
 Rscript -e 'install.packages("arrow", repos="https://cloud.r-project.org/")'
 ```
+Please refer [the official documentation of Apache Arrow](https://arrow.apache.org/docs/r/) for more detials.
 
-If you need to install old versions, it should be installed directly from Github. You can use `remotes::install_github` as below.
-
-```bash
-Rscript -e 'remotes::install_github("apache/arrow@apache-arrow-0.12.1", subdir = "r")'
-```
-
-`apache-arrow-0.12.1` is a version tag that can be checked in [Arrow at Github](https://github.com/apache/arrow/releases). You must ensure that Arrow R package is installed and available on all cluster nodes.
-The current supported minimum version is 0.12.1; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
+Note that you must ensure that Arrow R package is installed and available on all cluster nodes.
+The current supported minimum version is 0.15.1; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
 
 ## Enabling for Conversion to/from R DataFrame, `dapply` and `gapply`
 
@@ -756,4 +754,3 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 # Migration Guide
 
 The migration guide is now archived [on this page](sparkr-migration-guide.html).
-

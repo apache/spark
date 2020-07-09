@@ -77,7 +77,7 @@ class _JavaRegressor(Regressor, JavaPredictor):
 class _JavaRegressionModel(RegressionModel, JavaPredictionModel):
     """
     Java Model produced by a ``_JavaRegressor``.
-    To be mixed in with class:`pyspark.ml.JavaModel`
+    To be mixed in with :class:`pyspark.ml.JavaModel`
 
     .. versionadded:: 3.0.0
     """
@@ -87,7 +87,7 @@ class _JavaRegressionModel(RegressionModel, JavaPredictionModel):
 
 class _LinearRegressionParams(_PredictorParams, HasRegParam, HasElasticNetParam, HasMaxIter,
                               HasTol, HasFitIntercept, HasStandardization, HasWeightCol, HasSolver,
-                              HasAggregationDepth, HasLoss):
+                              HasAggregationDepth, HasLoss, HasBlockSize):
     """
     Params for :py:class:`LinearRegression` and :py:class:`LinearRegressionModel`.
 
@@ -155,6 +155,8 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     LinearRegressionModel...
     >>> model.getMaxIter()
     5
+    >>> model.getBlockSize()
+    1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.predict(test0.head().features) - (-1.0)) < 0.001
     True
@@ -194,17 +196,18 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-                 loss="squaredError", epsilon=1.35):
+                 loss="squaredError", epsilon=1.35, blockSize=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                 loss="squaredError", epsilon=1.35)
+                 loss="squaredError", epsilon=1.35, blockSize=1)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35,
+                         blockSize=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -213,12 +216,12 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-                  loss="squaredError", epsilon=1.35):
+                  loss="squaredError", epsilon=1.35, blockSize=1):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                  loss="squaredError", epsilon=1.35)
+                  loss="squaredError", epsilon=1.35, blockSize=1)
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -293,6 +296,13 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
         Sets the value of :py:attr:`loss`.
         """
         return self._set(lossType=value)
+
+    @since("3.1.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
 
 
 class LinearRegressionModel(_JavaRegressionModel, _LinearRegressionParams, GeneralJavaMLWritable,
@@ -1597,7 +1607,7 @@ class GBTRegressionModel(
 
 
 class _AFTSurvivalRegressionParams(_PredictorParams, HasMaxIter, HasTol, HasFitIntercept,
-                                   HasAggregationDepth):
+                                   HasAggregationDepth, HasBlockSize):
     """
     Params for :py:class:`AFTSurvivalRegression` and :py:class:`AFTSurvivalRegressionModel`.
 
@@ -1664,6 +1674,8 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     10
     >>> aftsr.clear(aftsr.maxIter)
     >>> model = aftsr.fit(df)
+    >>> model.getBlockSize()
+    1
     >>> model.setFeaturesCol("features")
     AFTSurvivalRegressionModel...
     >>> model.predict(Vectors.dense(6.3))
@@ -1700,19 +1712,19 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
-                 quantilesCol=None, aggregationDepth=2):
+                 quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                 quantilesCol=None, aggregationDepth=2)
+                 quantilesCol=None, aggregationDepth=2, blockSize=1)
         """
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
         self._setDefault(censorCol="censor",
                          quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
-                         maxIter=100, tol=1E-6)
+                         maxIter=100, tol=1E-6, blockSize=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1721,12 +1733,12 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
                   quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
-                  quantilesCol=None, aggregationDepth=2):
+                  quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                   quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                  quantilesCol=None, aggregationDepth=2):
+                  quantilesCol=None, aggregationDepth=2, blockSize=1):
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -1782,6 +1794,13 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
         Sets the value of :py:attr:`aggregationDepth`.
         """
         return self._set(aggregationDepth=value)
+
+    @since("3.1.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
 
 
 class AFTSurvivalRegressionModel(_JavaRegressionModel, _AFTSurvivalRegressionParams,

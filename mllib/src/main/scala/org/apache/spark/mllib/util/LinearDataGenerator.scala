@@ -21,18 +21,16 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{BLAS, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
  * Generate sample data used for Linear Data. This class generates
  * uniformly random values for every feature and adds Gaussian noise with mean `eps` to the
  * response variable `Y`.
  */
-@DeveloperApi
 @Since("0.8.0")
 object LinearDataGenerator {
 

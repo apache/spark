@@ -21,7 +21,7 @@ import java.util.Locale
 
 import breeze.linalg.{DenseVector => BDV}
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.graphx._
 import org.apache.spark.internal.Logging
@@ -281,21 +281,15 @@ class LDA private (
 
 
   /**
-   * :: DeveloperApi ::
-   *
    * LDAOptimizer used to perform the actual calculation
    */
   @Since("1.4.0")
-  @DeveloperApi
   def getOptimizer: LDAOptimizer = ldaOptimizer
 
   /**
-   * :: DeveloperApi ::
-   *
    * LDAOptimizer used to perform the actual calculation (default = EMLDAOptimizer)
    */
   @Since("1.4.0")
-  @DeveloperApi
   def setOptimizer(optimizer: LDAOptimizer): this.type = {
     this.ldaOptimizer = optimizer
     this

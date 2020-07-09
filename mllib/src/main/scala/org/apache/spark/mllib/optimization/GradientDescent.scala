@@ -21,7 +21,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{norm, DenseVector => BDV}
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -124,13 +123,11 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
   }
 
   /**
-   * :: DeveloperApi ::
    * Runs gradient descent on the given training data.
    * @param data training data
    * @param initialWeights initial weights
    * @return solution vector
    */
-  @DeveloperApi
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
     val (weights, _) = GradientDescent.runMiniBatchSGD(
       data,
@@ -148,10 +145,8 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
 }
 
 /**
- * :: DeveloperApi ::
  * Top-level method to run gradient descent.
  */
-@DeveloperApi
 object GradientDescent extends Logging {
   /**
    * Run stochastic gradient descent (SGD) in parallel using mini batches.

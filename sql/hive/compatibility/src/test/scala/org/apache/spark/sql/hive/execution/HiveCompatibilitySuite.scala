@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
-import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfter
 
@@ -36,13 +35,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private lazy val hiveQueryDir = TestHive.getHiveFile(
     "ql/src/test/queries/clientpositive".split("/").mkString(File.separator))
 
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
   private val originalColumnBatchSize = TestHive.conf.columnBatchSize
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
   private val originalSessionLocalTimeZone = TestHive.conf.sessionLocalTimeZone
-  private val originalCreateHiveTable = TestHive.conf.createHiveTableByDefaultEnabled
+  private val originalLegacyAllowCastNumericToTimestamp =
+    TestHive.conf.legacyAllowCastNumericToTimestamp
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
@@ -51,10 +49,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    // Add Locale setting
-    Locale.setDefault(Locale.US)
     // Set a relatively small column batch size for testing purposes
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, 5)
     // Enable in-memory partition pruning for testing purposes
@@ -66,21 +60,20 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Fix session local timezone to America/Los_Angeles for those timezone sensitive tests
     // (timestamp_*)
     TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, "America/Los_Angeles")
-    TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED, true)
+    // Ensures that cast numeric to timestamp enabled so that we can test them
+    TestHive.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
     RuleExecutor.resetMetrics()
   }
 
   override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
-      TimeZone.setDefault(originalTimeZone)
-      Locale.setDefault(originalLocale)
       TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
       TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, originalSessionLocalTimeZone)
-      TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED,
-        originalCreateHiveTable)
+      TestHive.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
+        originalLegacyAllowCastNumericToTimestamp)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())

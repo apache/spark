@@ -39,6 +39,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(DISTINCT col) FROM VALUES (NULL), (5), (5), (10) AS tab(col);
        2
   """,
+  group = "agg_funcs",
   since = "1.0.0")
 // scalastyle:on line.size.limit
 case class Count(children: Seq[Expression]) extends DeclarativeAggregate {

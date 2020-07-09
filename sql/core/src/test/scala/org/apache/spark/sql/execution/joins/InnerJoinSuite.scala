@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
@@ -133,7 +134,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeBroadcastHashJoin(
-              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildLeft),
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildLeft),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
@@ -145,7 +146,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeBroadcastHashJoin(
-              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildRight),
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildRight),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
@@ -157,7 +158,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeShuffledHashJoin(
-              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildLeft),
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildLeft),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
@@ -169,7 +170,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeShuffledHashJoin(
-              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildRight),
+              leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, BuildRight),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }

@@ -19,7 +19,7 @@ from __future__ import print_function
 import json
 
 from pyspark.java_gateway import local_connect_and_auth
-from pyspark.serializers import write_int, write_with_length, UTF8Deserializer
+from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 
 
 class TaskContext(object):
@@ -133,7 +133,10 @@ def _load_from_socket(port, auth_secret, function, all_gather_message=None):
     sockfile.flush()
 
     # Collect result.
-    res = UTF8Deserializer().loads(sockfile)
+    len = read_int(sockfile)
+    res = []
+    for i in range(len):
+        res.append(UTF8Deserializer().loads(sockfile))
 
     # Release resources.
     sockfile.close()
@@ -232,13 +235,7 @@ class BarrierTaskContext(TaskContext):
             raise Exception("Not supported to call barrier() before initialize " +
                             "BarrierTaskContext.")
         else:
-            gathered_items = _load_from_socket(
-                self._port,
-                self._secret,
-                ALL_GATHER_FUNCTION,
-                message,
-            )
-            return [e for e in json.loads(gathered_items)]
+            return _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
 
     def getTaskInfos(self):
         """

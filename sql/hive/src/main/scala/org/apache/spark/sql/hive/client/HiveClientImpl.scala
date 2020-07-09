@@ -755,6 +755,22 @@ private[hive] class HiveClientImpl(
     client.getTablesByPattern(dbName, pattern).asScala
   }
 
+  override def listTablesByType(
+      dbName: String,
+      pattern: String,
+      tableType: CatalogTableType): Seq[String] = withHiveState {
+    try {
+      // Try with Hive API getTablesByType first, it's supported from Hive 2.3+.
+      shim.getTablesByType(client, dbName, pattern, toHiveTableType(tableType))
+    } catch {
+      case _: UnsupportedOperationException =>
+        // Fallback to filter logic if getTablesByType not supported.
+        val tableNames = client.getTablesByPattern(dbName, pattern).asScala
+        val tables = getTablesByName(dbName, tableNames).filter(_.tableType == tableType)
+        tables.map(_.identifier.table)
+    }
+  }
+
   /**
    * Runs the specified SQL query using Hive.
    */
@@ -1011,25 +1027,29 @@ private[hive] object HiveClientImpl extends Logging {
   private def toOutputFormat(name: String) =
     Utils.classForName[org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]](name)
 
+  def toHiveTableType(catalogTableType: CatalogTableType): HiveTableType = {
+    catalogTableType match {
+      case CatalogTableType.EXTERNAL => HiveTableType.EXTERNAL_TABLE
+      case CatalogTableType.MANAGED => HiveTableType.MANAGED_TABLE
+      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
+      case t =>
+        throw new IllegalArgumentException(
+          s"Unknown table type is found at toHiveTableType: $t")
+    }
+  }
+
   /**
    * Converts the native table metadata representation format CatalogTable to Hive's Table.
    */
   def toHiveTable(table: CatalogTable, userName: Option[String] = None): HiveTable = {
     val hiveTable = new HiveTable(table.database, table.identifier.table)
+    hiveTable.setTableType(toHiveTableType(table.tableType))
     // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
-    hiveTable.setTableType(table.tableType match {
-      case CatalogTableType.EXTERNAL =>
-        hiveTable.setProperty("EXTERNAL", "TRUE")
-        HiveTableType.EXTERNAL_TABLE
-      case CatalogTableType.MANAGED =>
-        HiveTableType.MANAGED_TABLE
-      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
-      case t =>
-        throw new IllegalArgumentException(
-          s"Unknown table type is found at toHiveTable: $t")
-    })
+    if (table.tableType == CatalogTableType.EXTERNAL) {
+      hiveTable.setProperty("EXTERNAL", "TRUE")
+    }
     // Note: In Hive the schema and partition columns must be disjoint sets
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
       table.partitionColumnNames.contains(c.getName)

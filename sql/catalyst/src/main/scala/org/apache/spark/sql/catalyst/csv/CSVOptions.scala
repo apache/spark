@@ -26,6 +26,7 @@ import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, Unescape
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
@@ -148,8 +149,12 @@ class CSVOptions(
 
   val dateFormat: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
-  val timestampFormat: String =
-    parameters.getOrElse("timestampFormat", s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX")
+  val timestampFormat: String = parameters.getOrElse("timestampFormat",
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
+    } else {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
+    })
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 

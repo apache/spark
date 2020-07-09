@@ -34,6 +34,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case AlterTableAddColumnsStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
+      cols.foreach(c => failNullType(c.dataType))
+      cols.foreach(c => failCharType(c.dataType))
       val changes = cols.map { col =>
         TableChange.addColumn(
           col.name.toArray,
@@ -46,6 +48,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case AlterTableReplaceColumnsStatement(
         nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
+      cols.foreach(c => failNullType(c.dataType))
+      cols.foreach(c => failCharType(c.dataType))
       val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
         case Some(table) =>
           // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
@@ -67,6 +71,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case a @ AlterTableAlterColumnStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
+      a.dataType.foreach(failNullType)
+      a.dataType.foreach(failCharType)
       val colName = a.column.toArray
       val typeChange = a.dataType.map { newDataType =>
         TableChange.updateColumnType(colName, newDataType)
@@ -142,6 +148,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+      assertNoNullTypeInSchema(c.tableSchema)
+      assertNoCharTypeInSchema(c.tableSchema)
       CreateV2Table(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -152,7 +160,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         ignoreIfExists = c.ifNotExists)
 
     case c @ CreateTableAsSelectStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
+      if (c.asSelect.resolved) {
+        assertNoNullTypeInSchema(c.asSelect.schema)
+      }
       CreateTableAsSelect(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -160,7 +171,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         c.asSelect,
         convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        writeOptions = c.options,
+        writeOptions = c.writeOptions,
         ignoreIfExists = c.ifNotExists)
 
     case RefreshTableStatement(NonSessionCatalogAndTable(catalog, tbl)) =>
@@ -168,6 +179,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+      assertNoNullTypeInSchema(c.tableSchema)
+      assertNoCharTypeInSchema(c.tableSchema)
       ReplaceTable(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -178,7 +191,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         orCreate = c.orCreate)
 
     case c @ ReplaceTableAsSelectStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
+      if (c.asSelect.resolved) {
+        assertNoNullTypeInSchema(c.asSelect.schema)
+      }
       ReplaceTableAsSelect(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -186,7 +202,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         c.asSelect,
         convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-        writeOptions = c.options,
+        writeOptions = c.writeOptions,
         orCreate = c.orCreate)
 
     case DropTableStatement(NonSessionCatalogAndTable(catalog, tbl), ifExists, _) =>

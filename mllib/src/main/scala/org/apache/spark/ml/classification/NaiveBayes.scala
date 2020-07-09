@@ -22,6 +22,7 @@ import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
@@ -179,7 +180,7 @@ class NaiveBayes @Since("1.5.0") (
     }
 
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
     } else {
       lit(1.0)
     }
@@ -259,7 +260,7 @@ class NaiveBayes @Since("1.5.0") (
     import spark.implicits._
 
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
     } else {
       lit(1.0)
     }

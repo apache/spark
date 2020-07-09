@@ -36,14 +36,11 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: DeveloperApi ::
  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
  */
-@DeveloperApi
 abstract class PipelineStage extends Params with Logging {
 
   /**
-   * :: DeveloperApi ::
    *
    * Check transform validity and derive the output schema from the input schema.
    *
@@ -54,7 +51,6 @@ abstract class PipelineStage extends Params with Logging {
    * Typical implementation should first conduct verification on schema change and parameter
    * validity, including complex parameter interaction checks.
    */
-  @DeveloperApi
   def transformSchema(schema: StructType): StructType
 
   /**

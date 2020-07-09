@@ -16,9 +16,6 @@
 # limitations under the License.
 #
 # define test binaries + versions
-PYDOCSTYLE_BUILD="pydocstyle"
-MINIMUM_PYDOCSTYLE="3.0.0"
-
 FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.5.0"
 
@@ -165,48 +162,6 @@ flake8 checks failed."
     fi
 }
 
-function pydocstyle_test {
-    local PYDOCSTYLE_REPORT=
-    local PYDOCSTYLE_STATUS=
-    local PYDOCSTYLE_VERSION=
-    local EXPECTED_PYDOCSTYLE=
-
-    # Exclude auto-generated configuration file.
-    local DOC_PATHS_TO_CHECK="$( cd "${SPARK_ROOT_DIR}" && find . -name "*.py" | grep -vF 'functions.py' )"
-
-    # Check python document style, skip check if pydocstyle is not installed.
-    if ! hash "$PYDOCSTYLE_BUILD" 2> /dev/null; then
-        echo "The pydocstyle command was not found. Skipping pydocstyle checks for now."
-        echo
-        return
-    fi
-
-    PYDOCSTYLE_VERSION="$($PYDOCSTYLE_BUILD --version)"
-    EXPECTED_PYDOCSTYLE="$(satisfies_min_version $PYDOCSTYLE_VERSION $MINIMUM_PYDOCSTYLE)"
-
-    if [[ "$EXPECTED_PYDOCSTYLE" == "False" ]]; then
-        echo "\
-The minimum version of pydocstyle needs to be $MINIMUM_PYDOCSTYLE.
-Your current version is $PYDOCSTYLE_VERSION.
-Skipping pydocstyle checks for now."
-        echo
-        return
-    fi
-
-    echo "starting $PYDOCSTYLE_BUILD test..."
-    PYDOCSTYLE_REPORT=$( ($PYDOCSTYLE_BUILD --config=dev/tox.ini $DOC_PATHS_TO_CHECK) 2>&1)
-    PYDOCSTYLE_STATUS=$?
-
-    if [ "$PYDOCSTYLE_STATUS" -ne 0 ]; then
-        echo "pydocstyle checks failed:"
-        echo "$PYDOCSTYLE_REPORT"
-        exit "$PYDOCSTYLE_STATUS"
-    else
-        echo "pydocstyle checks passed."
-        echo
-    fi
-}
-
 function sphinx_test {
     local SPHINX_REPORT=
     local SPHINX_STATUS=
@@ -252,7 +207,6 @@ PYTHON_SOURCE="$(find . -name "*.py")"
 compile_python_test "$PYTHON_SOURCE"
 pycodestyle_test "$PYTHON_SOURCE"
 flake8_test
-pydocstyle_test
 sphinx_test
 
 echo

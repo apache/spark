@@ -528,6 +528,9 @@ setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 #' @rdname printSchema
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
+#' @rdname registerTempTable-deprecated
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
+
 #' @rdname rename
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
@@ -1189,6 +1192,11 @@ setGeneric("overlay", function(x, replace, pos, ...) { standardGeneric("overlay"
 #' @name NULL
 setGeneric("percent_rank", function(x = "missing") { standardGeneric("percent_rank") })
 
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("percentile_approx",
+           function(x, percentage, ...) { standardGeneric("percentile_approx") })
+
 #' @rdname column_math_functions
 #' @name NULL
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
@@ -1471,6 +1479,14 @@ setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
 setGeneric("spark.bisectingKmeans",
            function(data, formula, ...) { standardGeneric("spark.bisectingKmeans") })
 
+#' @rdname spark.fmClassifier
+setGeneric("spark.fmClassifier",
+           function(data, formula, ...) { standardGeneric("spark.fmClassifier") })
+
+#' @rdname spark.fmRegressor
+setGeneric("spark.fmRegressor",
+           function(data, formula, ...) { standardGeneric("spark.fmRegressor") })
+
 #' @rdname spark.gaussianMixture
 setGeneric("spark.gaussianMixture",
            function(data, formula, ...) { standardGeneric("spark.gaussianMixture") })
@@ -1538,6 +1554,10 @@ setGeneric("spark.findFrequentSequentialPatterns",
 #' @rdname spark.powerIterationClustering
 setGeneric("spark.assignClusters",
             function(data, ...) { standardGeneric("spark.assignClusters") })
+
+#' @rdname spark.lm
+setGeneric("spark.lm",
+           function(data, formula, ...) { standardGeneric("spark.lm") })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.

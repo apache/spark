@@ -1080,7 +1080,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .format("csv")
         .option("header", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -1102,7 +1102,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .option("header", "true")
         .option("inferSchema", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .load(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)
@@ -1897,6 +1897,20 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     assert(spark.read.csv(input).collect().toSet == Set(Row()))
   }
 
+  test("SPARK-31261: bad csv input with `columnNameCorruptRecord` should not cause NPE") {
+    val schema = StructType(
+      StructField("a", IntegerType) :: StructField("_corrupt_record", StringType) :: Nil)
+    val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
+
+    checkAnswer(
+      spark.read
+        .option("columnNameOfCorruptRecord", "_corrupt_record")
+        .schema(schema)
+        .csv(input),
+      Row(null, null))
+    assert(spark.read.csv(input).collect().toSet == Set(Row()))
+  }
+
   test("field names of inferred schema shouldn't compare to the first row") {
     val input = Seq("1,2").toDS()
     val df = spark.read.option("enforceSchema", false).csv(input)
@@ -2325,6 +2339,18 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
       checkAnswer(csv, Row(null))
+    }
+  }
+
+  test("SPARK-32025: infer the schema from mixed-type values") {
+    withTempPath { path =>
+      Seq("col_mixed_types", "2012", "1997", "True").toDS.write.text(path.getCanonicalPath)
+      val df = spark.read.format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .load(path.getCanonicalPath)
+
+      assert(df.schema.last == StructField("col_mixed_types", StringType, true))
     }
   }
 }

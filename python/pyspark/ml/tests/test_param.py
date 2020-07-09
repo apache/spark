@@ -366,7 +366,8 @@ class DefaultValuesTests(PySparkTestCase):
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if not name.endswith('Model') and not name.endswith('Params') \
                         and issubclass(cls, JavaParams) and not inspect.isabstract(cls) \
-                        and not re.match("_?Java", name) and name != '_LSH':
+                        and not re.match("_?Java", name) and name != '_LSH' \
+                        and name != '_Selector':
                     # NOTE: disable check_params_exist until there is parity with Scala API
 
                     check_params(self, cls(), check_params_exist=False)

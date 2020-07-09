@@ -20,10 +20,12 @@ package org.apache.spark.streaming.ui
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.util.Utils
 
 /**
  * A helper class for "scheduling delay", "processing time" and "total delay" to generate data that
@@ -80,12 +82,13 @@ private[ui] class StreamingPage(parent: StreamingTab)
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val resources = generateLoadResources(request)
+    val onClickTimelineFunc = generateOnClickTimelineFunction()
     val basicInfo = generateBasicInfo()
     val content = resources ++
-      basicInfo ++
+      onClickTimelineFunc ++ basicInfo ++
       listener.synchronized {
         generateStatTable() ++
-          generateBatchListTables()
+          generateBatchListTables(request)
       }
     SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent)
   }
@@ -99,6 +102,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
       <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
     // scalastyle:on
+  }
+
+  /** Generate html that will set onClickTimeline declared in streaming-page.js */
+  private def generateOnClickTimelineFunction(): Seq[Node] = {
+    val js = "onClickTimeline = getOnClickTimelineFunction();"
+    <script>{Unparsed(js)}</script>
   }
 
   /** Generate basic information of the streaming program */
@@ -425,50 +434,97 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </tr>
   }
 
-  private def generateBatchListTables(): Seq[Node] = {
+  private def streamingTable(request: HttpServletRequest, batches: Seq[BatchUIData],
+      tableTag: String): Seq[Node] = {
+    val interval: Long = listener.batchDuration
+    val streamingPage = Option(request.getParameter(s"$tableTag.page")).map(_.toInt).getOrElse(1)
+
+    try {
+      new StreamingPagedTable(
+        request,
+        tableTag,
+        batches,
+        SparkUIUtils.prependBaseUri(request, parent.basePath),
+        "streaming",
+        interval
+      ).table(streamingPage)
+    } catch {
+      case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
+        <div class="alert alert-error">
+          <p>Error while rendering streaming table:</p>
+          <pre>
+            {Utils.exceptionString(e)}
+          </pre>
+        </div>
+    }
+  }
+
+  private def generateBatchListTables(request: HttpServletRequest): Seq[Node] = {
     val runningBatches = listener.runningBatches.sortBy(_.batchTime.milliseconds).reverse
     val waitingBatches = listener.waitingBatches.sortBy(_.batchTime.milliseconds).reverse
     val completedBatches = listener.retainedCompletedBatches.
       sortBy(_.batchTime.milliseconds).reverse
 
-    val activeBatchesContent = {
-      <div class="row">
-        <div class="col-12">
-          <span id="activeBatches" class="collapse-aggregated-activeBatches collapse-table"
-                onClick="collapseTable('collapse-aggregated-activeBatches',
-                'aggregated-activeBatches')">
-            <h4>
-              <span class="collapse-table-arrow arrow-open"></span>
-              <a>Active Batches ({runningBatches.size + waitingBatches.size})</a>
-            </h4>
-          </span>
-          <div class="aggregated-activeBatches collapsible-table">
-            {new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq}
+    val content = mutable.ListBuffer[Node]()
+
+    if (runningBatches.nonEmpty) {
+      content ++=
+        <div class="row">
+          <div class="col-12">
+            <span id="runningBatches" class="collapse-aggregated-runningBatches collapse-table"
+                  onClick="collapseTable('collapse-aggregated-runningBatches',
+                  'aggregated-runningBatches')">
+              <h4>
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Running Batches ({runningBatches.size})</a>
+              </h4>
+            </span>
+            <div class="aggregated-runningBatches collapsible-table">
+              { streamingTable(request, runningBatches, "runningBatches") }
+            </div>
           </div>
         </div>
-      </div>
     }
 
-    val completedBatchesContent = {
-      <div class="row">
-        <div class="col-12">
-          <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
-                onClick="collapseTable('collapse-aggregated-completedBatches',
-                'aggregated-completedBatches')">
-            <h4>
-              <span class="collapse-table-arrow arrow-open"></span>
-              <a>Completed Batches (last {completedBatches.size}
-                out of {listener.numTotalCompletedBatches})</a>
-            </h4>
-          </span>
-          <div class="aggregated-completedBatches collapsible-table">
-            {new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq}
+    if (waitingBatches.nonEmpty) {
+      content ++=
+        <div class="row">
+          <div class="col-12">
+            <span id="waitingBatches" class="collapse-aggregated-waitingBatches collapse-table"
+                  onClick="collapseTable('collapse-aggregated-waitingBatches',
+                  'aggregated-waitingBatches')">
+              <h4>
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Waiting Batches ({waitingBatches.size})</a>
+              </h4>
+            </span>
+            <div class="aggregated-waitingBatches collapsible-table">
+              { streamingTable(request, waitingBatches, "waitingBatches") }
+            </div>
           </div>
         </div>
-      </div>
     }
 
-    activeBatchesContent ++ completedBatchesContent
+    if (completedBatches.nonEmpty) {
+      content ++=
+        <div class="row">
+          <div class="col-12">
+            <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
+                  onClick="collapseTable('collapse-aggregated-completedBatches',
+                  'aggregated-completedBatches')">
+              <h4>
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Completed Batches (last {completedBatches.size}
+                  out of {listener.numTotalCompletedBatches})</a>
+              </h4>
+            </span>
+            <div class="aggregated-completedBatches collapsible-table">
+              { streamingTable(request, completedBatches, "completedBatches") }
+            </div>
+          </div>
+        </div>
+    }
+    content
   }
 }
 
