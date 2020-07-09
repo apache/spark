@@ -133,10 +133,10 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         | * @since 1.3.0
         | */
         |def register[$typeTags](name: String, func: Function$x[$types]): UserDefinedFunction = {
-        |  val outputEncoder = ExpressionEncoder[RT]()
-        |  val (dataType, nullable) = outputEncoder.dataTypeAndNullable
+        |  val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
+        |  val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
         |  val inputEncoders: Seq[Option[ExpressionEncoder[_]]] = $inputEncoders
-        |  val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, Some(outputEncoder)).withName(name)
+        |  val udf = SparkUserDefinedFunction(func, dataType, inputEncoders, outputEncoder).withName(name)
         |  val finalUdf = if (nullable) udf else udf.asNonNullable()
         |  def builder(e: Seq[Expression]) = if (e.length == $x) {
         |    finalUdf.createScalaUDF(e)

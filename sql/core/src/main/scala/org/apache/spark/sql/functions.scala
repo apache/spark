@@ -4415,10 +4415,10 @@ object functions {
       | * @since 1.3.0
       | */
       |def udf[$typeTags](f: Function$x[$types]): UserDefinedFunction = {
-      |  val outputEncoder = ExpressionEncoder[RT]()
-      |  val (dataType, nullable) = outputEncoder.dataTypeAndNullable
+      |  val outputEncoder = Try(ExpressionEncoder[RT]()).toOption
+      |  val ScalaReflection.Schema(dataType, nullable) = outputEncoder.map(_.dataTypeAndNullable).getOrElse(ScalaReflection.schemaFor[RT])
       |  val inputEncoders = $inputEncoders
-      |  val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, Some(outputEncoder))
+      |  val udf = SparkUserDefinedFunction(f, dataType, inputEncoders, outputEncoder)
       |  if (nullable) udf else udf.asNonNullable()
       |}""".stripMargin)
   }
