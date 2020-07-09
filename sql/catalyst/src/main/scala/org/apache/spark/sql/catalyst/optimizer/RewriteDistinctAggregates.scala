@@ -118,7 +118,42 @@ import org.apache.spark.sql.types.IntegerType
  *       LocalTableScan [...]
  * }}}
  *
- * Third example: single distinct aggregate function with filter clauses (in sql):
+ * Third example: single distinct aggregate function with filter clauses and have
+ * not other distinct aggregate function (in sql):
+ * {{{
+ *   SELECT
+ *     COUNT(DISTINCT cat1) FILTER (WHERE id > 1) as cat1_cnt,
+ *     SUM(value) AS total
+ *  FROM
+ *    data
+ *  GROUP BY
+ *    key
+ * }}}
+ *
+ * This translates to the following (pseudo) logical plan:
+ * {{{
+ * Aggregate(
+ *    key = ['key]
+ *    functions = [COUNT(DISTINCT 'cat1) with FILTER('id > 1),
+ *                 sum('value)]
+ *    output = ['key, 'cat1_cnt, 'total])
+ *   LocalTableScan [...]
+ * }}}
+ *
+ * This rule rewrites this logical plan to the following (pseudo) logical plan:
+ * {{{
+ *   Aggregate(
+ *      key = ['key]
+ *      functions = [count('_gen_distinct_1),
+  *                  sum('value)]
+ *      output = ['key, 'cat1_cnt, 'total])
+ *     Project(
+ *        projectionList = ['key, if ('id > 1) 'cat1 else null, cast('value as bigint)]
+ *        output = ['key, '_gen_distinct_1, 'value])
+ *       LocalTableScan [...]
+ * }}}
+ *
+ * Four example: single distinct aggregate function with filter clauses (in sql):
  * {{{
  *   SELECT
  *     COUNT(DISTINCT cat1) FILTER (WHERE id > 1) as cat1_cnt,
