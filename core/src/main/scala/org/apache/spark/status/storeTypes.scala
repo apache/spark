@@ -177,6 +177,7 @@ private[spark] class TaskDataWrapper(
     val speculative: Boolean,
     val accumulatorUpdates: Seq[AccumulableInfo],
     val errorMessage: Option[String],
+    val failReason: Option[FailureReason],
 
     val hasMetrics: Boolean,
     // The following is an exploded view of a TaskMetrics API object. This saves 5 objects
@@ -295,6 +296,7 @@ private[spark] class TaskDataWrapper(
       speculative,
       accumulatorUpdates,
       errorMessage,
+      failReason,
       metrics,
       executorLogs = null,
       schedulerDelay = 0L,
@@ -512,4 +514,16 @@ private[spark] class CachedQuantile(
   @KVIndex("stage") @JsonIgnore
   def stage: Array[Int] = Array(stageId, stageAttemptId)
 
+}
+
+/**
+ * A cached view of failure summary for one stage attempt.
+ */
+private[spark] class CachedFailureSummary(
+    val stageId: Int,
+    val stageAttemptId: Int,
+    val failedTaskCount: Int,
+    val failureSummary: Seq[FailureSummary]) {
+  @KVIndex @JsonIgnore
+  def key: Array[Any] = Array(stageId, stageAttemptId)
 }
