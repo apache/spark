@@ -452,4 +452,61 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
   }
+
+  private val structAttr = 'struct1.struct('a.int)
+  private val testStructRelation = LocalRelation(structAttr)
+
+  test("simplify GetStructField on WithFields that is not changing the attribute being extracted") {
+    val query = testStructRelation.select(
+      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 0, Some("a")) as "outerAtt")
+    val expected = testStructRelation.select(GetStructField('struct1, 0, Some("a")) as "outerAtt")
+    checkRule(query, expected)
+  }
+
+  test("simplify GetStructField on WithFields that is changing the attribute being extracted") {
+    val query = testStructRelation.select(
+      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 1, Some("b")) as "outerAtt")
+    val expected = testStructRelation.select(Literal(1) as "outerAtt")
+    checkRule(query, expected)
+  }
+
+  test(
+    "simplify GetStructField on WithFields that is changing the attribute being extracted twice") {
+    val query = testStructRelation
+      .select(GetStructField(WithFields('struct1, Seq("b", "b"), Seq(Literal(1), Literal(2))), 1,
+        Some("b")) as "outerAtt")
+    val expected = testStructRelation.select(Literal(2) as "outerAtt")
+    checkRule(query, expected)
+  }
+
+  test("collapse multiple GetStructField on the same WithFields") {
+    val query = testStructRelation
+      .select(WithFields('struct1, Seq("b"), Seq(Literal(2))) as "struct2")
+      .select(
+        GetStructField('struct2, 0, Some("a")) as "struct1A",
+        GetStructField('struct2, 1, Some("b")) as "struct1B")
+    val expected = testStructRelation.select(
+      GetStructField('struct1, 0, Some("a")) as "struct1A",
+      Literal(2) as "struct1B")
+    checkRule(query, expected)
+  }
+
+  test("collapse multiple GetStructField on different WithFields") {
+    val query = testStructRelation
+      .select(
+        WithFields('struct1, Seq("b"), Seq(Literal(2))) as "struct2",
+        WithFields('struct1, Seq("b"), Seq(Literal(3))) as "struct3")
+      .select(
+        GetStructField('struct2, 0, Some("a")) as "struct2A",
+        GetStructField('struct2, 1, Some("b")) as "struct2B",
+        GetStructField('struct3, 0, Some("a")) as "struct3A",
+        GetStructField('struct3, 1, Some("b")) as "struct3B")
+    val expected = testStructRelation
+      .select(
+        GetStructField('struct1, 0, Some("a")) as "struct2A",
+        Literal(2) as "struct2B",
+        GetStructField('struct1, 0, Some("a")) as "struct3A",
+        Literal(3) as "struct3B")
+    checkRule(query, expected)
+  }
 }

@@ -1037,7 +1037,7 @@ class LinearRegressionSummary private[regression] (
   }
 
   /** Number of instances in DataFrame predictions */
-  lazy val numInstances: Long = predictions.count()
+  lazy val numInstances: Long = metrics.count
 
   /** Degrees of freedom */
   @Since("2.2.0")
