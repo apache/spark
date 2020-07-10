@@ -69,10 +69,9 @@ INSERT INTO person VALUES
     (100, 'John', 30),
     (200, 'Mary', NULL),
     (300, 'Mike', 80),
-    (400, 'Dan',  50),
-    (500, 'Evan_w', 16);
+    (400, 'Dan',  50);
 
-select id, case when id > 200 then 'bigger' else 'small' end from person;
+SELECT id, CASE WHEN id > 200 THEN 'bigger' ELSE 'small' END FROM person;
 +------+--------------------------------------------------+--+
 |  id  | CASE WHEN (id > 200) THEN bigger ELSE small END  |
 +------+--------------------------------------------------+--+
@@ -82,7 +81,7 @@ select id, case when id > 200 then 'bigger' else 'small' end from person;
 | 400  | bigger                                           |
 +------+--------------------------------------------------+--+
 
-select id, case id when 100 then 'bigger' when  id > 300 then '300' else 'small' end from person;
+SELECT id, CASE id WHEN 100 then 'bigger' WHEN  id > 300 THEN '300' ELSE 'small' END FROM person;
 +------+-----------------------------------------------------------------------------------------------+--+
 |  id  | CASE WHEN (id = 100) THEN bigger WHEN (id = CAST((id > 300) AS INT)) THEN 300 ELSE small END  |
 +------+-----------------------------------------------------------------------------------------------+--+
@@ -92,7 +91,7 @@ select id, case id when 100 then 'bigger' when  id > 300 then '300' else 'small'
 | 400  | small                                                                                         |
 +------+-----------------------------------------------------------------------------------------------+--+
 
-select * from person where case 1 = 1 when 100 then 'big' when 200 then 'bigger' when  300 then 'biggest' else 'small' end = 'small';
+SELECT * FROM person where CASE 1 = 1 WHEN 100 THEN 'big' WHEN 200 THEN 'bigger' WHEN  300 THEN 'biggest' ELSE 'small' END = 'small';
 +------+-------+-------+--+
 |  id  | name  |  age  |
 +------+-------+-------+--+
