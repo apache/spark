@@ -1073,18 +1073,16 @@ object SparkSession extends Logging {
   private val activeThreadSession = new InheritableThreadLocal[SparkSession] {
 
     override def childValue(parentValue: SparkSession): SparkSession = {
-      // note the current thread is still the parent thread but we could
-      // know whether it's creating an internal Spark thread by checking
-      // the thread's initialization stack trace.
       val stack = Thread.currentThread().getStackTrace
       stack.filter { element =>
-        !element.getClassName.startsWith("java.lang.") && element.getMethodName != "childValue"
+        !element.getClassName.startsWith("java.lang") &&
+          !element.getClassName.startsWith("org.apache.spark")
       }
-      val isWithinSpark = stack(0).getClassName.startsWith("org.apache.spark.")
-      if (isWithinSpark) {
-        parentValue
-      } else {
+      val inHiveCommon = stack(0).getClassName.startsWith("org.apache.hive.common.util")
+      if (inHiveCommon) {
         null
+      } else {
+        parentValue
       }
     }
 
