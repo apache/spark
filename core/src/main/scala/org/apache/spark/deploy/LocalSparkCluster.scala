@@ -74,14 +74,10 @@ class LocalSparkCluster(
 
   def stop(): Unit = {
     logInfo("Shutting down local Spark cluster.")
-    // SPARK-31922: wait one more second before shutting down rpcEnvs of master and worker,
-    // in order to let the cluster have time to handle the `UnregisterApplication` message.
-    // Otherwise, we could hit "RpcEnv already stopped" error.
-    Thread.sleep(1000)
     // Stop the workers before the master so they don't get upset that it disconnected
     workerRpcEnvs.foreach(_.shutdown())
-    workerRpcEnvs.foreach(_.awaitTermination())
     masterRpcEnvs.foreach(_.shutdown())
+    workerRpcEnvs.foreach(_.awaitTermination())
     masterRpcEnvs.foreach(_.awaitTermination())
     masterRpcEnvs.clear()
     workerRpcEnvs.clear()

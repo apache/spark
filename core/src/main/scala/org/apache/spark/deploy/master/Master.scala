@@ -337,9 +337,7 @@ private[deploy] class Master(
           }
           schedule()
         case None =>
-          if (completedApps.find(_.id == appId).map(_.executors.contains(execId)).isEmpty) {
-            logWarning(s"Got status update for unknown executor $appId/$execId")
-          }
+          logWarning(s"Got status update for unknown executor $appId/$execId")
       }
 
     case DriverStateChanged(driverId, state, exception) =>
