@@ -36,7 +36,6 @@ class BlockManagerMaster(
   extends Logging {
 
   val timeout = RpcUtils.askRpcTimeout(conf)
-  private val infinite = RpcUtils.infiniteTimeout
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String): Unit = {
@@ -143,8 +142,8 @@ class BlockManagerMaster(
       logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      // the underlying Futures will timeout anyway, so it's safe to use infinite here
-      infinite.awaitResult(future)
+      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
+      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
     }
   }
 
@@ -155,8 +154,8 @@ class BlockManagerMaster(
       logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      // the underlying Futures will timeout anyway, so it's safe to use infinite here
-      infinite.awaitResult(future)
+      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
+      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
     }
   }
 
@@ -169,8 +168,8 @@ class BlockManagerMaster(
         s" with removeFromMaster = $removeFromMaster - ${e.getMessage}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      // the underlying Futures will timeout anyway, so it's safe to use infinite here
-      infinite.awaitResult(future)
+      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
+      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
     }
   }
 
