@@ -2030,7 +2030,25 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.3.0
    */
-  def unionByName(other: Dataset[T]): Dataset[T] = withSetOperator {
+  def unionByName(other: Dataset[T]): Dataset[T] = unionByName(other, false)
+
+  /**
+   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
+   *
+   * This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
+   * union (that does deduplication of elements), use this function followed by a [[distinct]].
+   *
+   * The difference between this function and [[union]] is that this function
+   * resolves columns by name (not by position).
+   *
+   * When the parameter `allowMissingColumns` is true, this function allows different set
+   * of column names between two Datasets. Missing columns at each side, will be filled with
+   * null values.
+   *
+   * @group typedrel
+   * @since 3.1.0
+   */
+  def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T] = withSetOperator {
     // Check column name duplication
     val resolver = sparkSession.sessionState.analyzer.resolver
     val leftOutputAttrs = logicalPlan.output
@@ -2045,12 +2063,10 @@ class Dataset[T] private[sql](
       "in the right attributes",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
-    val allowMissingColumnsInUnionByName = SQLConf.get.allowMissingColumnsInUnionByName
-
     // Builds a project list for `other` based on `logicalPlan` output names
     val rightProjectList = leftOutputAttrs.map { lattr =>
       rightOutputAttrs.find { rattr => resolver(lattr.name, rattr.name) }.getOrElse {
-        if (allowMissingColumnsInUnionByName) {
+        if (allowMissingColumns) {
           Alias(Literal(null, lattr.dataType), lattr.name)()
         } else {
           throw new AnalysisException(
@@ -2066,7 +2082,7 @@ class Dataset[T] private[sql](
 
     // Builds a project for `logicalPlan` based on `other` output names, if allowing
     // missing columns.
-    val leftChild = if (allowMissingColumnsInUnionByName) {
+    val leftChild = if (allowMissingColumns) {
       val missingAttrs = notFoundAttrs.map { attr =>
         Alias(Literal(null, attr.dataType), attr.name)()
       }
