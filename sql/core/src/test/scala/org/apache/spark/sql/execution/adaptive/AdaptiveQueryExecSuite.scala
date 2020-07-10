@@ -738,6 +738,24 @@ class AdaptiveQueryExecSuite
       SQLConf.SHUFFLE_PARTITIONS.key -> "100",
       SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
+
+      // SMJ
+      //   Sort
+      //     CustomShuffleReader(coalesced)
+      //       Shuffle
+      //   Sort
+      //     HashAggregate
+      //       CustomShuffleReader(coalesced)
+      //         Shuffle
+      // -->
+      // SMJ
+      //   Sort
+      //     CustomShuffleReader(coalesced and skew)
+      //       Shuffle
+      //   Sort
+      //     HashAggregate
+      //       CustomShuffleReader(coalesced)
+      //         Shuffle
       withTempView("skewData1", "skewData2") {
         spark
           .range(0, 1000, 1, 10)
@@ -747,7 +765,6 @@ class AdaptiveQueryExecSuite
               .otherwise('id).as("key1"),
             'id as "value1")
           .createOrReplaceTempView("skewData1")
-
         spark
           .range(0, 1000, 1, 10)
           .select(
@@ -755,6 +772,7 @@ class AdaptiveQueryExecSuite
               .otherwise('id).as("key2"),
             'id as "value2")
           .createOrReplaceTempView("skewData2")
+
         val sqlText =
           """
             |SELECT * FROM
@@ -764,7 +782,7 @@ class AdaptiveQueryExecSuite
             |    SELECT skewData2.key2, sum(skewData2.value2) AS sum2
             |    FROM skewData2 GROUP BY skewData2.key2
             |  ) AS data2
-            |ON data1.key1 = data2.key2
+            |ON data1.key1 = data2.key2 LIMIT 10
             |""".stripMargin
 
         val (_, adaptivePlan) = runAdaptiveAndVerifyResult(sqlText)

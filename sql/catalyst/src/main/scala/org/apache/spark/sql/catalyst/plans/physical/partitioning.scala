@@ -340,3 +340,28 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
     case _ => false
   }
 }
+
+/**
+ * With AE, multiple partitions in hash partitioned output could be coalesced
+ * to a single partition. CoalescedHashPartitioning is designed for such case.
+ */
+case class CoalescedHashPartitioning(
+    expressions: Seq[Expression],
+    numPartitions: Int)
+  extends Expression with Partitioning with Unevaluable {
+
+  override def children: Seq[Expression] = expressions
+  override def nullable: Boolean = false
+  override def dataType: DataType = IntegerType
+
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
+      required match {
+        case ClusteredDistribution(requiredClustering, requiredNumPartitions) =>
+          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x))) &&
+            (requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions)
+        case _ => false
+      }
+    }
+  }
+}
