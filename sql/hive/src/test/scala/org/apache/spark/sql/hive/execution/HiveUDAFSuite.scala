@@ -167,13 +167,13 @@ class HiveUDAFSuite extends QueryTest
     val functionClass = "org.apache.spark.sql.hive.execution.LongProductSum"
     withUserDefinedFunction(functionName -> true) {
       sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$functionClass'")
-      val e1 = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"SELECT $functionName(100)")
       }.getMessage
       assert(
         Seq(s"Invalid number of arguments for function $functionName. Expected: 2; Found: 1;",
           "No handler for UDF/UDAF/UDTF 'org.apache.spark.sql.hive.execution.LongProductSum';")
-          .forall(e1.contains))
+          .forall(e.contains))
     }
   }
 }
