@@ -181,6 +181,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     blockManager.stop()
   }
 
+  /**
+   * Setup driverEndpoint, executor-1(BlockManager), executor-2(BlockManager) to simulate
+   * the real cluster before the tests. Any requests from driver to executor-1 will be responded
+   * in time. However, any requests from driver to executor-2 will be timeouted, in order to test
+   * the specific handling of `TimeoutException`, which is raised at driver side.
+   *
+   * And, when `withLost` is true, we will not register the executor-2 to the driver. Therefore,
+   * it behaves like a lost executor in terms of driver's view. When `withLost` is false, we'll
+   * register the executor-2 normally.
+   */
   private def setupBlockManagerMasterWithBlocks(withLost: Boolean): Unit = {
     // set up a simple DriverEndpoint which simply adds executorIds and
     // checks whether a certain executorId has been added before.
