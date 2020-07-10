@@ -148,6 +148,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   def postOneWayMessage(message: RequestMessage): Unit = {
     postMessage(message.receiver.name, OneWayMessage(message.senderAddress, message.content),
       (e) => e match {
+        // SPARK-31922: in local cluster mode, there's always a RpcEnvStoppedException when
+        // stop is called due to some asynchronous message handling. We catch the exception
+        // and log it at debug level to avoid verbose error message when user stop a local
+        // cluster in spark shell.
         case re: RpcEnvStoppedException => logDebug (s"Message $message dropped. ${re.getMessage}")
         case _ => throw e
       })
