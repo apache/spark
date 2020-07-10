@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.util.Utils
 
-class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession {
+class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession with SQLTestUtils {
 
   private def assertProjectExecCount(df: DataFrame, expected: Integer): Unit = {
     withClue(df.queryExecution) {
@@ -34,110 +35,94 @@ class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession {
   private def assertProjectExec(query: String, enabled: Integer, disabled: Integer): Unit = {
     val df = sql(query)
     assertProjectExecCount(df, enabled)
-    val result1 = df.collect()
+    val result = df.collect()
     withSQLConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED.key -> "false") {
       val df2 = sql(query)
       assertProjectExecCount(df2, disabled)
-      QueryTest.sameRows(result1.toSeq, df2.collect().toSeq)
+      checkAnswer(df2, result)
     }
   }
 
-  private def withTestView(f: => Unit): Unit = {
-    withTempPath { p =>
-      val path = p.getAbsolutePath
-      spark.range(100).selectExpr("id % 10 as key", "id * 2 as a",
-        "id * 3 as b", "cast(id as string) as c", "array(id, id + 1, id + 3) as d")
-        .write.partitionBy("key").parquet(path)
-      spark.read.parquet(path).createOrReplaceTempView("testView")
-      f
-    }
+  private val tmpPath = Utils.createTempDir()
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    tmpPath.delete()
+    val path = tmpPath.getAbsolutePath
+    spark.range(100).selectExpr("id % 10 as key", "cast(id * 2 as int) as a",
+      "cast(id * 3 as int) as b", "cast(id as string) as c", "array(id, id + 1, id + 3) as d")
+      .write.partitionBy("key").parquet(path)
+    spark.read.parquet(path).createOrReplaceTempView("testView")
+  }
+
+  override def afterAll(): Unit = {
+    Utils.deleteRecursively(tmpPath)
+    super.afterAll()
   }
 
   test("project") {
-    withTestView {
-      val query = "select * from testView"
-      assertProjectExec(query, 0, 0)
-    }
+    val query = "select * from testView"
+    assertProjectExec(query, 0, 0)
   }
 
   test("project with filter") {
-    withTestView {
-      val query = "select * from testView where a > 5"
-      assertProjectExec(query, 0, 1)
-    }
+    val query = "select * from testView where a > 5"
+    assertProjectExec(query, 0, 1)
   }
 
   test("project with specific column ordering") {
-    withTestView {
-      val query = "select key, a, b, c from testView"
-      assertProjectExec(query, 1, 1)
-    }
+    val query = "select key, a, b, c from testView"
+    assertProjectExec(query, 1, 1)
   }
 
   test("project with extra columns") {
-    withTestView {
-      val query = "select a, b, c, key, a from testView"
-      assertProjectExec(query, 1, 1)
-    }
+    val query = "select a, b, c, key, a from testView"
+    assertProjectExec(query, 1, 1)
   }
 
   test("project with fewer columns") {
-    withTestView {
-      val query = "select a from testView where a > 3"
-      assertProjectExec(query, 1, 1)
-    }
+    val query = "select a from testView where a > 3"
+    assertProjectExec(query, 1, 1)
   }
 
   test("aggregate without ordering requirement") {
-    withTestView {
-      val query = "select sum(a) as sum_a, key, last(b) as last_b " +
-        "from (select key, a, b from testView where a > 100) group by key"
-      assertProjectExec(query, 0, 1)
-    }
+    val query = "select sum(a) as sum_a, key, last(b) as last_b " +
+      "from (select key, a, b from testView where a > 100) group by key"
+    assertProjectExec(query, 0, 1)
   }
 
   test("aggregate with ordering requirement") {
-    withTestView {
-      val query = "select a, sum(b) as sum_b from testView group by a"
-      assertProjectExec(query, 1, 1)
-    }
+    val query = "select a, sum(b) as sum_b from testView group by a"
+    assertProjectExec(query, 1, 1)
   }
 
   test("join without ordering requirement") {
-    withTestView {
-      val query = "select t1.key, t2.key, t1.a, t2.b from (select key, a, b, c from testView)" +
-        " as t1 join (select key, a, b, c from testView) as t2 on t1.c > t2.c and t1.key > 10"
-      assertProjectExec(query, 1, 3)
-    }
+    val query = "select t1.key, t2.key, t1.a, t2.b from (select key, a, b, c from testView)" +
+      " as t1 join (select key, a, b, c from testView) as t2 on t1.c > t2.c and t1.key > 10"
+    assertProjectExec(query, 1, 3)
   }
 
   test("join with ordering requirement") {
-    withTestView {
-      val query = "select * from (select key, a, c, b from testView) as t1 join " +
-        "(select key, a, b, c from testView) as t2 on t1.key = t2.key where t2.a > 50"
-      assertProjectExec(query, 2, 2)
-    }
+    val query = "select * from (select key, a, c, b from testView) as t1 join " +
+      "(select key, a, b, c from testView) as t2 on t1.key = t2.key where t2.a > 50"
+    assertProjectExec(query, 2, 2)
   }
 
   test("window function") {
-    withTestView {
-      val query = "select key, avg(a) over (partition by key order by a " +
-        "rows between 1 preceding and 1 following) as avg, b from testView"
-      assertProjectExec(query, 1, 2)
-    }
+    val query = "select key, b, avg(a) over (partition by key order by a " +
+      "rows between 1 preceding and 1 following) as avg from testView"
+    assertProjectExec(query, 1, 2)
   }
 
   test("generate") {
-    withTestView {
-      val query = "select a, key, explode(d) from testView where a > 10"
-      assertProjectExec(query, 0, 1)
-    }
+    val query = "select a, key, explode(d) from testView where a > 10"
+    assertProjectExec(query, 0, 1)
   }
 
   test("subquery") {
-    withTestView {
-      val query = "select * from testView where a in (select b from testView where key > 5)"
-      assertProjectExec(query, 1, 1)
-    }
+    testData
+    val query = "select key, value from testData where key in " +
+      "(select sum(a) from testView where a > 5 group by key)"
+    assertProjectExec(query, 0, 1)
   }
 }

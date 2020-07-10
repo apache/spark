@@ -1216,7 +1216,7 @@ object SQLConf {
     .internal()
     .doc("Whether to remove redundant project exec node based on children's output and " +
       "ordering requirement.")
-    .version("3.0.0")
+    .version("3.1.0")
     .booleanConf
     .createWithDefault(true)
 

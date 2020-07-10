@@ -61,7 +61,6 @@ case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
         val keepOrdering = a.aggregateExpressions
           .exists(ae => ae.mode.equals(Final) || ae.mode.equals(PartialMerge))
         a.mapChildren(removeProject(_, keepOrdering))
-      case w: WindowExec => w.mapChildren(removeProject(_, false))
       case g: GenerateExec => g.mapChildren(removeProject(_, false))
       // JoinExec ordering requirement will inherit from its parent. If there is no ProjectExec in
       // its ancestors, JoinExec should require output columns to be ordered.
