@@ -21,6 +21,7 @@ import java.{util => ju}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
+import scala.collection.parallel.mutable.ParArray
 
 import org.apache.hadoop.fs.Path
 import org.json4s._
@@ -250,8 +251,9 @@ object Pipeline extends MLReadable[Pipeline] {
       DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap = Some(jsonParams))
 
       // Save stages
+      val parStages: ParArray[PipelineStage] = stages.par
       val stagesDir = new Path(path, "stages").toString
-      stages.zipWithIndex.foreach { case (stage, idx) =>
+      parStages.zipWithIndex.foreach { case (stage, idx) =>
         val writer = stage.asInstanceOf[MLWritable].write
         val stagePath = getStagePath(stage.uid, idx, stages.length, stagesDir)
         instr.withSaveInstanceEvent(writer, stagePath)(writer.save(stagePath))
@@ -270,12 +272,13 @@ object Pipeline extends MLReadable[Pipeline] {
 
       implicit val format = DefaultFormats
       val stagesDir = new Path(path, "stages").toString
-      val stageUids: Array[String] = (metadata.params \ "stageUids").extract[Seq[String]].toArray
+      val stageUids: ParArray[String] = (metadata.params \ "stageUids")
+            .extract[Seq[String]].toArray.par
       val stages: Array[PipelineStage] = stageUids.zipWithIndex.map { case (stageUid, idx) =>
         val stagePath = SharedReadWrite.getStagePath(stageUid, idx, stageUids.length, stagesDir)
         val reader = DefaultParamsReader.loadParamsInstanceReader[PipelineStage](stagePath, sc)
         instr.withLoadInstanceEvent(reader, stagePath)(reader.load(stagePath))
-      }
+      }.toArray
       (metadata.uid, stages)
     }
 
