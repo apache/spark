@@ -1307,10 +1307,8 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
         }
       }
       index += 1
-      if (index == partitions.length) {
-        updateGroups()
-      }
     }
+    updateGroups()
     groups.toArray
   }
 }
