@@ -278,4 +278,15 @@ object ResolveHints {
         h.child
     }
   }
+
+  /**
+   * Removes all the hints when `spark.sql.optimizer.disableHints` is set.
+   * This is executed at the very beginning of the Analyzer to disable
+   * the hint functionality.
+   */
+  class DisableHints(conf: SQLConf) extends RemoveAllHints(conf: SQLConf) {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (conf.getConf(SQLConf.DISABLE_HINTS)) super.apply(plan) else plan
+    }
+  }
 }

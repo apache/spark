@@ -2106,6 +2106,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DISABLE_HINTS =
+    buildConf("spark.sql.optimizer.disableHints")
+      .internal()
+      .doc("When true, the optimizer will disable user-specified hints that are additional " +
+        "directives for better planning of a query.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST =
     buildConf("spark.sql.optimizer.nestedPredicatePushdown.supportedFileSources")
       .internal()
