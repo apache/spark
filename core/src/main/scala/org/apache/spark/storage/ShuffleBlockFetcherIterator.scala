@@ -482,8 +482,8 @@ final class ShuffleBlockFetcherIterator(
         Seq((host, port, immutableHostLocalBlocksWithoutDirs.keys.toArray))
       } else {
         hostLocalBlocksByExecutor.keysIterator
-          .filter(exec => execIdsWithoutDirs.contains(exec.executorId))
-          .map(bm => (bm.host, bm.port, Array(bm))).toSeq
+          .filter(bmId => execIdsWithoutDirs.contains(bmId.executorId))
+          .map(bmId => (bmId.host, bmId.port, Array(bmId))).toSeq
       }
 
       dirFetchRequests.foreach { case (host, port, bmIds) =>
