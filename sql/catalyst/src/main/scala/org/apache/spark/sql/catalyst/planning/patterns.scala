@@ -21,7 +21,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -174,7 +173,7 @@ object ScanOperation extends OperationHelper with PredicateHelper {
  * Null-safe equality will be transformed into equality as joining key (replace null with default
  * value).
  */
-object ExtractEquiJoinKeys extends Logging with PredicateHelper with JoinSelectionHelper {
+object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild, joinHint) */
   type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression],
@@ -206,7 +205,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper with JoinSelecti
       }
       val otherPredicates = predicates.filterNot {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
-        case Equality(l, r) if !hintToShuffleReplicateNL(hint) =>
+        case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
             canEvaluate(l, right) && canEvaluate(r, left)
         case _ => false
