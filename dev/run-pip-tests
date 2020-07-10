@@ -79,12 +79,9 @@ for python in "${PYTHON_EXECS[@]}"; do
       if [ -f "$CONDA_PREFIX/etc/profile.d/conda.sh" ]; then
         # See also https://github.com/conda/conda/issues/7980
         source "$CONDA_PREFIX/etc/profile.d/conda.sh"
-        conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
-        conda activate "$VIRTUALENV_PATH"
-      else
-        conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
-        source activate "$VIRTUALENV_PATH"
       fi
+      conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
+      conda activate "$VIRTUALENV_PATH" || (echo "Falling back to 'source activate'" && source activate "$VIRTUALENV_PATH")
     else
       mkdir -p "$VIRTUALENV_PATH"
       virtualenv --python=$python "$VIRTUALENV_PATH"
