@@ -162,7 +162,7 @@ class HiveUDAFSuite extends QueryTest
     }
   }
 
-  test("Hive mode use spark udaf should show error") {
+  test("SPARK-32243: Hive mode use spark udaf should show error") {
     val functionName = "longProductSum"
     val functionClass = "org.apache.spark.sql.hive.execution.LongProductSum"
     withUserDefinedFunction(functionName -> true) {
