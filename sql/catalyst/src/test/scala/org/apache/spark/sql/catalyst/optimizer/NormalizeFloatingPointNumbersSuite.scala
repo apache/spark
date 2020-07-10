@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, If, IsNull, KnownFloatingPointNormalized}
+import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, IsNull, KnownFloatingPointNormalized}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -92,7 +92,7 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     comparePlans(doubleOptimized, correctAnswer)
   }
 
-  test("normalize the children of If") {
+  test("SPARK-32258: normalize the children of If") {
     val cond = If(a > 0.1D, a, a + 0.2D) === b
     val query = testRelation1.join(testRelation2, condition = Some(cond))
     val optimized = Optimize.execute(query)
@@ -107,7 +107,7 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     comparePlans(doubleOptimized, correctAnswer)
   }
 
-  test("normalize the children of CaseWhen") {
+  test("SPARK-32258: normalize the children of CaseWhen") {
     val cond = CaseWhen(
       Seq((a > 0.1D, a), (a > 0.2D, a + 0.2D)),
       Some(a + 0.3D)) === b
