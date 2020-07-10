@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.TaskContext
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
@@ -42,6 +43,8 @@ import org.apache.spark.util.{LongAccumulator, Utils}
  * Basic interface that all cached batches of data must support. This is primarily to allow
  * for metrics to be handled outside of the encoding and decoding steps in a standard way.
  */
+@DeveloperApi
+@Since("3.1.0")
 trait CachedBatch {
   def numRows: Int
   def sizeInBytes: Long
@@ -51,6 +54,8 @@ trait CachedBatch {
  * Provides APIs for compressing, filtering, and decompressing SQL data that will be
  * persisted/cached.
  */
+@DeveloperApi
+@Since("3.1.0")
 trait CachedBatchSerializer extends Serializable {
   /**
    * Run the given plan and convert its output to a implementation of [[CachedBatch]].
@@ -83,9 +88,10 @@ trait CachedBatchSerializer extends Serializable {
    * @param selectedAttributes the field that should be loaded from the data, and the order they
    *                           should appear in the output batch.
    * @param conf the configuration for the job.
-   * @return the batches in the ColumnarBatch format.
+   * @return an RDD of the input cached batches transformed into the ColumnarBatch format.
    */
-  def decompressColumnar(input: RDD[CachedBatch],
+  def decompressColumnar(
+      input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[ColumnarBatch]
@@ -100,16 +106,19 @@ trait CachedBatchSerializer extends Serializable {
    * @param conf the configuration for the job.
    * @return the rows that were stored in the cached batches.
    */
-  def decompressToRows(input: RDD[CachedBatch],
+  def decompressToRows(
+      input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow]
 }
 
 /**
- * A [[CachedBatch]] that stored some simple metrics that can be used for filtering of batches with
+ * A [[CachedBatch]] that stores some simple metrics that can be used for filtering of batches with
  * the [[SimpleMetricsCachedBatchSerializer]].
  */
+@DeveloperApi
+@Since("3.1.0")
 trait SimpleMetricsCachedBatch extends CachedBatch {
   /**
    * Holds the same as ColumnStats.
@@ -134,10 +143,11 @@ private object ExtractableLiteral {
 /**
  * Provides basic filtering for [[CachedBatchSerializer]] implementations.
  */
+@DeveloperApi
+@Since("3.1.0")
 trait SimpleMetricsCachedBatchSerializer extends CachedBatchSerializer with Logging {
   override def buildFilter(predicates: Seq[Expression],
-      cachedAttributes: Seq[Attribute]):
-  (Int, Iterator[CachedBatch]) => Iterator[CachedBatch] = {
+      cachedAttributes: Seq[Attribute]): (Int, Iterator[CachedBatch]) => Iterator[CachedBatch] = {
     val stats = new PartitionStatistics(cachedAttributes)
     val statsSchema = stats.schema
 
@@ -261,7 +271,6 @@ trait SimpleMetricsCachedBatchSerializer extends CachedBatchSerializer with Logg
         }
       }
     }
-
     ret
   }
 }
@@ -273,12 +282,14 @@ trait SimpleMetricsCachedBatchSerializer extends CachedBatchSerializer with Logg
  * @param buffers The buffers for serialized columns
  * @param stats The stat of columns
  */
+private[sql]
 case class DefaultCachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
     extends SimpleMetricsCachedBatch
 
 /**
  * The default implementation of CachedBatchSerializer.
  */
+private[sql]
 class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
   override def convertForCache(cachedPlan: SparkPlan): RDD[CachedBatch] = {
     val batchSize = cachedPlan.conf.columnBatchSize
@@ -339,7 +350,6 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[ColumnarBatch] = {
-
     val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
     val outputSchema = StructType.fromAttributes(selectedAttributes)
     val columnIndices =
@@ -395,6 +405,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
   }
 }
 
+private[sql]
 case class CachedRDDBuilder(
     serializer: CachedBatchSerializer,
     storageLevel: StorageLevel,

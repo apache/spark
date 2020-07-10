@@ -81,10 +81,10 @@ case class InMemoryTableScanExec(
     val numOutputRows = longMetric("numOutputRows")
     val buffers = filteredCachedBatches()
     relation.cacheBuilder.serializer.decompressColumnar(buffers, relation.output, attributes, conf)
-        .map { cb =>
-          numOutputRows += cb.numRows()
-          cb
-        }
+      .map { cb =>
+        numOutputRows += cb.numRows()
+        cb
+      }
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
