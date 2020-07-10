@@ -988,6 +988,7 @@ number
     | MINUS? SMALLINT_LITERAL         #smallIntLiteral
     | MINUS? TINYINT_LITERAL          #tinyIntLiteral
     | MINUS? DOUBLE_LITERAL           #doubleLiteral
+    | MINUS? FLOAT_LITERAL            #floatLiteral
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
@@ -1773,6 +1774,11 @@ EXPONENT_VALUE
 
 DECIMAL_VALUE
     : DECIMAL_DIGITS {isValidDecimal()}?
+    ;
+
+FLOAT_LITERAL
+    : DIGIT+ EXPONENT? 'F'
+    | DECIMAL_DIGITS EXPONENT? 'F' {isValidDecimal()}?
     ;
 
 DOUBLE_LITERAL
