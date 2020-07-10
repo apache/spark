@@ -200,10 +200,4 @@ trait HintErrorHandler {
    * @param hint the [[HintInfo]] being overridden
    */
   def hintOverridden(hint: HintInfo): Unit
-
-  /**
-   * Callback for a wrong [[SHUFFLE_REPLICATE_NL]] hint for Non Cartesian product Join
-   * @param hint the [[HintInfo]]
-   */
-  def wrongHintForNonCartesianProductJoin(hint: HintInfo): Unit
 }

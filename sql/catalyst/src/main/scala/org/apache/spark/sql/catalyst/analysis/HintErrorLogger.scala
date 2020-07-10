@@ -53,8 +53,4 @@ object HintErrorLogger extends HintErrorHandler with Logging {
     }
     s"$name${prettyParameters.mkString("(", ", ", ")")}"
   }
-
-  override def wrongHintForNonCartesianProductJoin(hint: HintInfo): Unit = {
-    logWarning(s"Hint $hint is wrong for Non Cartesian product Join")
-  }
 }

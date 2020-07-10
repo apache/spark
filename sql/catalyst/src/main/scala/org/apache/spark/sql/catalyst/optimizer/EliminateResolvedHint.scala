@@ -43,22 +43,6 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
       case h: ResolvedHint =>
         hintErrorHandler.joinNotFoundForJoinHint(h.hints)
         h.child
-      case join: Join if join.condition.isDefined =>
-        join.copy(
-          hint = join.hint.copy(
-            leftHint = removeCartesianProductJoinHint(join.hint.leftHint),
-            rightHint = removeCartesianProductJoinHint(join.hint.rightHint)))
-    }
-  }
-
-  def removeCartesianProductJoinHint(hint: Option[HintInfo]): Option[HintInfo] = {
-    val isCartesianProductJoinHint =
-      hint.exists(_.strategy.exists(_ == SHUFFLE_REPLICATE_NL))
-    if (isCartesianProductJoinHint) {
-      hintErrorHandler.wrongHintForNonCartesianProductJoin(hint.get)
-      None
-    } else {
-      hint
     }
   }
 
