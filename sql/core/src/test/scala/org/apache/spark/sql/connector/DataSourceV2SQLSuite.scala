@@ -756,6 +756,19 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-32237: Hint in CTE") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
+      checkAnswer(
+        sql(s"""
+          |WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM $t1)
+          |SELECT * FROM cte
+        """.stripMargin),
+        spark.table("source"))
+    }
+  }
+
   test("Relation: view text") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
