@@ -969,11 +969,11 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * Removes Sort operation. This can happen:
  * 1) if the sort order is empty or the sort order does not have any reference
  * 2) if the child is already sorted
- * 3) if there is another Sort operator separated by 0...n Project/Filter operators
- * 4) if the Sort operator is within Join separated by 0...n Project/Filter operators only,
- *    and the Join conditions is deterministic
- * 5) if the Sort operator is within GroupBy separated by 0...n Project/Filter operators only,
- *    and the aggregate function is order irrelevant
+ * 3) if there is another Sort operator separated by 0...n Project/Filter/Repartition operators
+ * 4) if the Sort operator is within Join separated by 0...n Project/Filter/Repartition
+ *    operators only, and the Join conditions is deterministic
+ * 5) if the Sort operator is within GroupBy separated by 0...n Project/Filter/Repartition
+ *    operators only, and the aggregate function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -999,6 +999,8 @@ object EliminateSorts extends Rule[LogicalPlan] {
   private def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
+    case r: RepartitionByExpression => r.partitionExpressions.forall(_.deterministic)
+    case _: Repartition => true
     case _ => false
   }
 
