@@ -325,7 +325,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableName: String,
       source: String,
       options: Map[String, String],
-      description: Option[String]): DataFrame = {
+      description: String): DataFrame = {
     createTable(tableName, source, new StructType, options, description)
   }
 
@@ -342,7 +342,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    createTable(tableName, source, schema, options, None)
+    createTable(tableName, source, schema, options, "")
   }
 
   /**
@@ -358,7 +358,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       source: String,
       schema: StructType,
       options: Map[String, String],
-      description: Option[String]): DataFrame = {
+      description: String = ""): DataFrame = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val storage = DataSource.buildStorageFormatFromOptions(options)
     val tableType = if (storage.locationUri.isDefined) {
@@ -372,7 +372,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       storage = storage,
       schema = schema,
       provider = Some(source),
-      comment = description
+      comment = Some(description)
     )
     val plan = CreateTable(tableDesc, SaveMode.ErrorIfExists, None)
     sparkSession.sessionState.executePlan(plan).toRdd
