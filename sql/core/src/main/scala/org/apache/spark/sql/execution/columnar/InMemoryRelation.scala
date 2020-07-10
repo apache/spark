@@ -97,14 +97,14 @@ trait CachedBatchSerializer extends Serializable {
       conf: SQLConf): RDD[ColumnarBatch]
 
   /**
-   * Decompress the cached into back into [[InternalRow]]. If you want this to be performant code
+   * Decompress the cached batch into [[InternalRow]]. If you want this to be performant, code
    * generation is advised.
    * @param input the cached batches that should be decompressed.
    * @param cacheAttributes the attributes of the data in the batch.
    * @param selectedAttributes the field that should be loaded from the data, and the order they
    *                           should appear in the output batch.
    * @param conf the configuration for the job.
-   * @return the rows that were stored in the cached batches.
+   * @return RDD of the rows that were stored in the cached batches.
    */
   def decompressToRows(
       input: RDD[CachedBatch],
@@ -346,7 +346,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     }
   }
 
-  override def decompressColumnar(input: RDD[CachedBatch],
+  override def decompressColumnar(
+      input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[ColumnarBatch] = {
