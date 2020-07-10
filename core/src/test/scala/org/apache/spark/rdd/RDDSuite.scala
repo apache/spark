@@ -1299,12 +1299,10 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
       if (currentSum + splitSize < maxSize) {
         addPartition(partition, splitSize)
       } else {
-        if (currentGroup.partitions.isEmpty) {
-          addPartition(partition, splitSize)
-        } else {
+        if (currentGroup.partitions.nonEmpty) {
           updateGroups()
-          addPartition(partition, splitSize)
         }
+        addPartition(partition, splitSize)
       }
       index += 1
     }
