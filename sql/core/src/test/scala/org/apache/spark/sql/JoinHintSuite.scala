@@ -239,7 +239,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
         .hint("shuffle_replicate_nl")
         .join(df, "id"),
       JoinHint(
-        None,
+        Some(HintInfo(strategy = Some(SHUFFLE_REPLICATE_NL))),
         None) ::
         JoinHint(
           None,
@@ -291,7 +291,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
           Some(HintInfo(strategy = Some(BROADCAST))),
           Some(HintInfo(strategy = Some(SHUFFLE_MERGE)))) ::
           JoinHint(
-            None,
+            Some(HintInfo(strategy = Some(SHUFFLE_REPLICATE_NL))),
             Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil,
         msgNoHintRelationFound("c", "broadcast(a, c)") ::
           msgJoinHintOverridden("merge") ::
@@ -336,10 +336,6 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
     hints.map("/*+ " + _ + " */").mkString(
       "SELECT ", " ", s" * FROM t1 $joinType JOIN t2 ON t1.key = t2.key")
 
-  def nonCondJoinQueryWithHint(hints: Seq[String], joinType: String = "INNER"): String =
-    hints.map("/*+ " + _ + " */").mkString(
-      "SELECT ", " ", s" * FROM t1 $joinType JOIN t2")
-
   def nonEquiJoinQueryWithHint(hints: Seq[String], joinType: String = "INNER"): String =
     hints.map("/*+ " + _ + " */").mkString(
       "SELECT ", " ", s" * FROM t1 $joinType JOIN t2 ON t1.key > t2.key")
@@ -379,12 +375,12 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
     assert(shuffleMergeJoins.size == 1)
   }
 
-  private def assertShuffleReplicateNLJoin(df: DataFrame, size: Int = 1): Unit = {
+  private def assertShuffleReplicateNLJoin(df: DataFrame): Unit = {
     val executedPlan = df.queryExecution.executedPlan
     val shuffleReplicateNLJoins = collect(executedPlan) {
       case c: CartesianProductExec => c
     }
-    assert(shuffleReplicateNLJoins.size == size)
+    assert(shuffleReplicateNLJoins.size == 1)
   }
 
   test("join strategy hint - broadcast") {
@@ -527,51 +523,29 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Int.MaxValue.toString) {
         // Shuffle-replicate-nl hint specified on one side
         assertShuffleReplicateNLJoin(
-          sql(nonCondJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1)" :: Nil)))
+          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1)" :: Nil)))
         assertShuffleReplicateNLJoin(
-          sql(nonCondJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t2)" :: Nil)))
+          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t2)" :: Nil)))
 
         // Shuffle-replicate-nl hint specified on both sides
         assertShuffleReplicateNLJoin(
-          sql(nonCondJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1, t2)" :: Nil)))
+          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1, t2)" :: Nil)))
 
         // Shuffle-merge hint prioritized over shuffle-replicate-nl hint, but shuffle-merge hint
         // is not applicable
         assertShuffleReplicateNLJoin(
-          sql(nonCondJoinQueryWithHint("MERGE(t1)" :: "SHUFFLE_REPLICATE_NL(t2)" :: Nil)))
+          sql(nonEquiJoinQueryWithHint("MERGE(t1)" :: "SHUFFLE_REPLICATE_NL(t2)" :: Nil)))
 
         // Shuffle-hash hint prioritized over shuffle-replicate-nl hint, but shuffle-hash hint is
         // not applicable
         assertShuffleReplicateNLJoin(
-          sql(nonCondJoinQueryWithHint("SHUFFLE_HASH(t2)" :: "SHUFFLE_REPLICATE_NL(t1)" :: Nil)))
+          sql(nonEquiJoinQueryWithHint("SHUFFLE_HASH(t2)" :: "SHUFFLE_REPLICATE_NL(t1)" :: Nil)))
 
         // Shuffle-replicate-nl hint specified but not doable
         assertBroadcastHashJoin(
           sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1, t2)" :: Nil, "left")), BuildRight)
         assertBroadcastNLJoin(
           sql(nonEquiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1, t2)" :: Nil, "right")), BuildLeft)
-
-
-        // Verify remove error shuffle_replicate_nl hint
-        // Shuffle-replicate-nl hint specified on one side
-        assertShuffleReplicateNLJoin(
-          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1)" :: Nil)), 0)
-        assertShuffleReplicateNLJoin(
-          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t2)" :: Nil)), 0)
-
-        // Shuffle-replicate-nl hint specified on both sides
-        assertShuffleReplicateNLJoin(
-          sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1, t2)" :: Nil)), 0)
-
-        // Shuffle-merge hint prioritized over shuffle-replicate-nl hint, but shuffle-merge hint
-        // is not applicable
-        assertShuffleReplicateNLJoin(
-          sql(nonEquiJoinQueryWithHint("MERGE(t1)" :: "SHUFFLE_REPLICATE_NL(t2)" :: Nil)), 0)
-
-        // Shuffle-hash hint prioritized over shuffle-replicate-nl hint, but shuffle-hash hint is
-        // not applicable
-        assertShuffleReplicateNLJoin(
-          sql(nonEquiJoinQueryWithHint("SHUFFLE_HASH(t2)" :: "SHUFFLE_REPLICATE_NL(t1)" :: Nil)), 0)
       }
     }
   }
