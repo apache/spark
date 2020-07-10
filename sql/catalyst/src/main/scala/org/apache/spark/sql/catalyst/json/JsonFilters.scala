@@ -68,11 +68,13 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
    * @param predicate The predicate compiled from pushed down source filters.
    * @param totalRefs The total amount of all filters references which the predicate
    *                  compiled from.
-   * @param refCount The current number of predicate references in the row that have
-   *                 been not set yet. When `refCount` reaches zero, the predicate
-   *                 has all dependencies are set, and can be applied to the row.
    */
-  case class JsonPredicate(predicate: BasePredicate, totalRefs: Int, var refCount: Int) {
+  case class JsonPredicate(predicate: BasePredicate, totalRefs: Int) {
+    // The current number of predicate references in the row that have been not set yet.
+    // When `refCount` reaches zero, the predicate has all dependencies are set, and can
+    // be applied to the row.
+    var refCount: Int = totalRefs
+
     def reset(): Unit = {
       refCount = totalRefs
     }
@@ -99,7 +101,7 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
         // Combine all filters from the same group by `And` because all filters should
         // return `true` to do not skip a row. The result is compiled to a predicate.
         .map { case (refSet, refsFilters) =>
-          (refSet, JsonPredicate(toPredicate(refsFilters), refSet.size, 0))
+          (refSet, JsonPredicate(toPredicate(refsFilters), refSet.size))
         }
       // Apply predicates w/o references like AlwaysTrue and AlwaysFalse to all fields.
       // We cannot set such predicates to a particular position because skipRow() can
