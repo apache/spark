@@ -68,7 +68,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("remove empty relation children from Union") {
+  test("SPARK-32241: remove empty relation children from Union") {
     val query = testRelation1.union(testRelation2.where(false))
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation1
@@ -86,7 +86,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
     val query4 = testRelation1.where(false).union(testRelation2).union(testRelation3)
     val optimized4 = Optimize.execute(query4.analyze)
-    val correctAnswer4 = testRelation2.select('b.as('a)).union(testRelation3).analyze
+    val correctAnswer4 = testRelation2.union(testRelation3).select('b.as('a)).analyze
     comparePlans(optimized4, correctAnswer4)
   }
 

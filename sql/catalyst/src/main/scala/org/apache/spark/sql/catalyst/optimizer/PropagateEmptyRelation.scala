@@ -55,18 +55,17 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
       if (newChildren.isEmpty) {
         empty(p)
       } else {
-        val newFirstChild = if (newChildren.head eq children.head) {
-          newChildren.head
+        val newPlan = if (newChildren.size > 1) Union(newChildren) else newChildren.head
+        val outputs = newPlan.output.zip(p.output)
+        // the original Union may produce different output attributes than the new one so we alias
+        // them if needed
+        if (outputs.forall { case (newAttr, oldAttr) => newAttr.exprId == oldAttr.exprId }) {
+          newPlan
         } else {
-          val pl = children.head.output.zip(newChildren.head.output).map {
-            case (oa, na) => Alias(na, oa.name)(oa.exprId)
+          val outputAliases = outputs.map { case (newAttr, oldAttr) =>
+            Alias(newAttr, oldAttr.name)(oldAttr.exprId)
           }
-          Project(pl, newChildren.head)
-        }
-        if (newChildren.size == 1) {
-          newFirstChild
-        } else {
-          Union(newFirstChild +: newChildren.tail)
+          Project(outputAliases, newPlan)
         }
       }
 
