@@ -147,7 +147,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   /** Posts a one-way message. */
   def postOneWayMessage(message: RequestMessage): Unit = {
     postMessage(message.receiver.name, OneWayMessage(message.senderAddress, message.content),
-      (e) => throw e)
+      (e) => e match {
+        case re: RpcEnvStoppedException => logDebug (s"Message $message dropped. ${re.getMessage}")
+        case _ => throw e
+      })
   }
 
   /**
