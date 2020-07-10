@@ -69,9 +69,10 @@ private[sql] class HiveSessionCatalog(
     // Current thread context classloader may not be the one loaded the class. Need to switch
     // context classloader to initialize instance properly.
     Utils.withContextClassLoader(clazz.getClassLoader) {
-      Try(super.makeFunctionExpression(name, clazz, input)) match {
-        case Success(value) => value
-        case Failure(exception) =>
+      try {
+        super.makeFunctionExpression(name, clazz, input)
+      } catch {
+        case NonFatal(exception) =>
           val superError =
             s"Make Expression failed in SessionCatalog for function name = ${name}:" +
               s" ${exception.getMessage}"
