@@ -464,12 +464,12 @@ final class ShuffleBlockFetcherIterator(
     val cachedDirsByExec = hostLocalDirManager.getCachedHostLocalDirs()
     val (hostLocalBlocksWithCachedDirs, hostLocalBlocksWithMissingDirs) =
       hostLocalBlocksByExecutor
-        .map { case (hostLocalBmId, bmInfos) =>
-          (hostLocalBmId, bmInfos, cachedDirsByExec.get(hostLocalBmId.executorId))
+        .map { case (hostLocalBmId, blockInfos) =>
+          (hostLocalBmId, blockInfos, cachedDirsByExec.get(hostLocalBmId.executorId))
         }.partition(_._3.isDefined)
     val immutableHostLocalBlocksWithoutDirs =
-      hostLocalBlocksWithMissingDirs.map { case (hostLocalBmId, bmInfos, _) =>
-        hostLocalBmId -> bmInfos
+      hostLocalBlocksWithMissingDirs.map { case (hostLocalBmId, blockInfos, _) =>
+        hostLocalBmId -> blockInfos
       }.toMap
     if (immutableHostLocalBlocksWithoutDirs.nonEmpty) {
       logDebug(s"Asynchronous fetching host-local blocks without cached executors' dir: " +
