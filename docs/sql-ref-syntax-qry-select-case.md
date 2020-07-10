@@ -26,9 +26,7 @@ license: |
 ### Syntax
 
 ```sql
-CASE { WHEN boolean_expression THEN then_expression }{ WHEN boolean_expression THEN then_expression } [ , ... ] [ ELSE else_expression ] END
-
-CASE expression { WHEN boolean_expression THEN then_expression }{ WHEN boolean_expression THEN then_expression } [ , ... ] [ ELSE else_expression ] END
+CASE [ expression ] { WHEN boolean_expression THEN then_expression } [ ... ] [ ELSE else_expression ] END
 ```
 
 ### Parameters
