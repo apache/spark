@@ -161,6 +161,21 @@ class HiveUDAFSuite extends QueryTest
       checkAnswer(sql("select histogram_numeric(a,2) from abc where a=3"), Row(null))
     }
   }
+
+  test("Hive mode use spark udaf should show error") {
+    val functionName = "longProductSum"
+    val functionClass = "org.apache.spark.sql.hive.execution.LongProductSum"
+    withUserDefinedFunction(functionName -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$functionClass'")
+      val e1 = intercept[AnalysisException] {
+        sql(s"SELECT $functionName(100)")
+      }.getMessage
+      assert(
+        Seq(s"Invalid number of arguments for function $functionName. Expected: 2; Found: 1;",
+          "No handler for UDF/UDAF/UDTF 'org.apache.spark.sql.hive.execution.LongProductSum';")
+          .forall(e1.contains))
+    }
+  }
 }
 
 /**
