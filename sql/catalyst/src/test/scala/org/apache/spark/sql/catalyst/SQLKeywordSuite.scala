@@ -109,7 +109,7 @@ trait SQLKeywordUtils extends SQLHelper {
   // All the SQL keywords defined in `SqlBase.g4`
   val allCandidateKeywords: Set[String] = {
     val kwDef = """([A-Z_]+):.+;""".r
-    val keywords = parseAntlrGrammars(
+    parseAntlrGrammars(
         "//--SPARK-KEYWORD-LIST-START", "//--SPARK-KEYWORD-LIST-END") {
       // Parses a pattern, e.g., `AFTER: 'AFTER';`
       case kwDef(symbol) =>
@@ -119,8 +119,6 @@ trait SQLKeywordUtils extends SQLHelper {
           symbol :: Nil
         }
     }
-    // DIV is an operator but is also a keyword
-    keywords + "DIV"
   }
 
   val nonReservedKeywordsInAnsiMode: Set[String] = {
@@ -133,7 +131,7 @@ trait SQLKeywordUtils extends SQLHelper {
         } else {
           symbol :: Nil
         }
-    } + "DIV" // DIV is non-reserved
+    }
   }
 
   val reservedKeywordsInAnsiMode = allCandidateKeywords -- nonReservedKeywordsInAnsiMode
