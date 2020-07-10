@@ -144,7 +144,8 @@ class BlockManagerMaster(
     )(ThreadUtils.sameThread)
     if (blocking) {
       // the underlying Futures will timeout anyway, so it's safe to use infinite here
-      infinite.awaitResult(future)    }
+      infinite.awaitResult(future)
+    }
   }
 
   /** Remove all blocks belonging to the given shuffle. */
@@ -155,7 +156,8 @@ class BlockManagerMaster(
     )(ThreadUtils.sameThread)
     if (blocking) {
       // the underlying Futures will timeout anyway, so it's safe to use infinite here
-      infinite.awaitResult(future)    }
+      infinite.awaitResult(future)
+    }
   }
 
   /** Remove all blocks belonging to the given broadcast. */
@@ -168,7 +170,8 @@ class BlockManagerMaster(
     )(ThreadUtils.sameThread)
     if (blocking) {
       // the underlying Futures will timeout anyway, so it's safe to use infinite here
-      infinite.awaitResult(future)    }
+      infinite.awaitResult(future)
+    }
   }
 
   /**
