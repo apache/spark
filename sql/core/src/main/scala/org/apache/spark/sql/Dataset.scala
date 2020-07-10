@@ -2035,9 +2035,6 @@ class Dataset[T] private[sql](
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
    *
-   * This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
-   * union (that does deduplication of elements), use this function followed by a [[distinct]].
-   *
    * The difference between this function and [[union]] is that this function
    * resolves columns by name (not by position).
    *
