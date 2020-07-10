@@ -55,7 +55,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
   val testRelation2 = LocalRelation.fromExternalRows(Seq('b.int), data = Seq(Row(1)))
-  val testRelation3 = LocalRelation.fromExternalRows(Seq('c.int), data = Seq(Row(1)))
+  val testRelation3 = LocalRelation.fromExternalRows(Seq('c.int.notNull), data = Seq(Row(1)))
 
   test("propagate empty relation through Union") {
     val query = testRelation1
@@ -88,6 +88,12 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val optimized4 = Optimize.execute(query4.analyze)
     val correctAnswer4 = testRelation2.union(testRelation3).select('b.as('a)).analyze
     comparePlans(optimized4, correctAnswer4)
+
+    // Nullability can change from nullable to non-nullable
+    val query5 = testRelation1.where(false).union(testRelation3).select('a.as('x)).analyze
+    val optimized5 = Optimize.execute(query5.analyze)
+    assert(query5.output.head.nullable, "Original output should be nullable")
+    assert(!optimized5.output.head.nullable, "The new output should be non-nullable")
   }
 
   test("propagate empty relation through Join") {
