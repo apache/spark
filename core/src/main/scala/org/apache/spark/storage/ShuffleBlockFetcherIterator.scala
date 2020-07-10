@@ -474,15 +474,12 @@ final class ShuffleBlockFetcherIterator(
     if (immutableHostLocalBlocksWithoutDirs.nonEmpty) {
       logDebug(s"Asynchronous fetching host-local blocks without cached executors' dir: " +
         s"${immutableHostLocalBlocksWithoutDirs.mkString(", ")}")
-      val execIdsWithoutDirs = immutableHostLocalBlocksWithoutDirs.keys.map(_.executorId).toArray
-
       val dirFetchRequests = if (blockManager.externalShuffleServiceEnabled) {
         val host = blockManager.blockManagerId.host
         val port = blockManager.externalShuffleServicePort
         Seq((host, port, immutableHostLocalBlocksWithoutDirs.keys.toArray))
       } else {
-        hostLocalBlocksByExecutor.keysIterator
-          .filter(bmId => execIdsWithoutDirs.contains(bmId.executorId))
+        immutableHostLocalBlocksWithoutDirs.keys
           .map(bmId => (bmId.host, bmId.port, Array(bmId))).toSeq
       }
 
