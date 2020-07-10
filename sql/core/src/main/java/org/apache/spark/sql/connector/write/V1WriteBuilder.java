@@ -33,6 +33,11 @@ import org.apache.spark.sql.sources.InsertableRelation;
  */
 @Unstable
 public interface V1WriteBuilder extends WriteBuilder {
+
+  default Write build() {
+    return (V1Write) this::buildForV1Write;
+  }
+
   /**
    * Creates an InsertableRelation that allows appending a DataFrame to a
    * a destination (using data source-specific parameters). The insert method will only be

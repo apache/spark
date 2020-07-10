@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -216,12 +216,12 @@ case class AppendDataExec(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
-    refreshCache: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
+    refreshCache: () => Unit,
+    override val write: Option[BatchWrite] = None)
+  extends V2ExistingTableWriteExec with BatchWriteHelper {
 
-  override protected def run(): Seq[InternalRow] = {
-    val writtenRows = writeWithV2(newWriteBuilder().buildForBatch())
-    refreshCache()
-    writtenRows
+  override protected def buildAndRun(): Seq[InternalRow] = {
+    writeWithV2(newWriteBuilder().buildForBatch())
   }
 }
 
@@ -240,14 +240,16 @@ case class OverwriteByExpressionExec(
     deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
-    refreshCache: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
+    refreshCache: () => Unit,
+    override val write: Option[BatchWrite] = None)
+  extends V2ExistingTableWriteExec with BatchWriteHelper {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
   }
 
-  override protected def run(): Seq[InternalRow] = {
-    val writtenRows = newWriteBuilder() match {
+  override protected def buildAndRun(): Seq[InternalRow] = {
+    newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
         writeWithV2(builder.truncate().buildForBatch())
 
@@ -257,8 +259,6 @@ case class OverwriteByExpressionExec(
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
     }
-    refreshCache()
-    writtenRows
   }
 }
 
@@ -276,18 +276,18 @@ case class OverwritePartitionsDynamicExec(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
-    refreshCache: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
+    refreshCache: () => Unit,
+    override val write: Option[BatchWrite] = None)
+  extends V2ExistingTableWriteExec with BatchWriteHelper {
 
-  override protected def run(): Seq[InternalRow] = {
-    val writtenRows = newWriteBuilder() match {
+  override protected def buildAndRun(): Seq[InternalRow] = {
+    newWriteBuilder() match {
       case builder: SupportsDynamicOverwrite =>
         writeWithV2(builder.overwriteDynamicPartitions().buildForBatch())
 
       case _ =>
         throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
     }
-    refreshCache()
-    writtenRows
   }
 }
 
@@ -317,6 +317,24 @@ trait BatchWriteHelper {
       writeOptions)
     table.newWriteBuilder(info)
   }
+}
+
+trait V2ExistingTableWriteExec extends V2TableWriteExec {
+  def refreshCache: () => Unit
+  def write: Option[BatchWrite] = None
+
+  override protected def run(): Seq[InternalRow] = {
+    val writtenRows = write match {
+      case Some(batchWrite) =>
+        writeWithV2(batchWrite)
+      case _ =>
+        buildAndRun()
+    }
+    refreshCache()
+    writtenRows
+  }
+
+  protected def buildAndRun(): Seq[InternalRow]
 }
 
 /**
@@ -477,9 +495,10 @@ private[v2] trait TableWriteExecHelper extends V2TableWriteExec with SupportsV1W
             writeOptions)
           val writeBuilder = table.newWriteBuilder(info)
 
-          val writtenRows = writeBuilder match {
-            case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
-            case v2 => writeWithV2(v2.buildForBatch())
+          val write = writeBuilder.build()
+          val writtenRows = write match {
+            case v1: V1Write => writeWithV1(v1.toInsertableRelation)
+            case v2 => writeWithV2(v2.toBatch)
           }
 
           table match {

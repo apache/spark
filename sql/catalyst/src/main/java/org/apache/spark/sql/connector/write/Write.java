@@ -17,38 +17,23 @@
 
 package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
 
 /**
- * An interface for building the {@link Write}. Implementations can mix in some interfaces to
- * support different ways to write data to data sources.
- *
- * Unless modified by a mixin interface, the {@link Write} configured by this builder is to
- * append data without affecting existing data.
- *
- * @since 3.0.0
+ * A logical representation of a data source write.
+ * <p>
+ * This logical representation is shared between batch and streaming write. Data sources must
+ * implement the corresponding methods in this interface to match what the table promises
+ * to support. For example, {@link #toBatch()} must be implemented if the {@link Table} that
+ * creates this {@link Write} returns {@link TableCapability#BATCH_WRITE} support in its
+ * {@link Table#capabilities()}.
  */
-@Evolving
-public interface WriteBuilder {
+public interface Write {
 
-  /**
-   * Returns a logical {@link Write} shared between batch and streaming.
-   */
-  default Write build() {
-    return new Write() {
-      @Override
-      public BatchWrite toBatch() {
-        return buildForBatch();
-      }
-
-      @Override
-      public StreamingWrite toStreaming() {
-        return buildForStreaming();
-      }
-    };
+  default String description() {
+    return this.getClass().toString();
   }
 
   /**
@@ -57,9 +42,8 @@ public interface WriteBuilder {
    * {@link Table} that creates this write returns {@link TableCapability#BATCH_WRITE} support in
    * its {@link Table#capabilities()}.
    */
-  default BatchWrite buildForBatch() {
-    throw new UnsupportedOperationException(getClass().getName() +
-      " does not support batch write");
+  default BatchWrite toBatch() {
+    throw new UnsupportedOperationException(description() + ": Batch write is not supported");
   }
 
   /**
@@ -68,8 +52,7 @@ public interface WriteBuilder {
    * {@link Table} that creates this write returns {@link TableCapability#STREAMING_WRITE} support
    * in its {@link Table#capabilities()}.
    */
-  default StreamingWrite buildForStreaming() {
-    throw new UnsupportedOperationException(getClass().getName() +
-      " does not support streaming write");
+  default StreamingWrite toStreaming() {
+    throw new UnsupportedOperationException(description() + ": Streaming write is not supported");
   }
 }

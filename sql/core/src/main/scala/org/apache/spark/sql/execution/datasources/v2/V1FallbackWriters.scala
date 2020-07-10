@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.SupportsWrite
-import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1Write, V1WriteBuilder, WriteBuilder}
 import org.apache.spark.sql.execution.{AlreadyOptimized, SparkPlan}
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter, InsertableRelation}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -38,10 +38,11 @@ case class AppendDataExecV1(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan,
-    refreshCache: () => Unit) extends V1FallbackWriters {
+    refreshCache: () => Unit,
+    override val write: Option[V1Write] = None) extends V1FallbackWriters {
 
-  override protected def run(): Seq[InternalRow] = {
-    writeWithV1(newWriteBuilder().buildForV1Write(), refreshCache = refreshCache)
+  override protected def buildAndRun(): Seq[InternalRow] = {
+    writeWithV1(newWriteBuilder().buildForV1Write())
   }
 }
 
@@ -61,20 +62,20 @@ case class OverwriteByExpressionExecV1(
     deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan,
-    refreshCache: () => Unit) extends V1FallbackWriters {
+    refreshCache: () => Unit,
+    override val write: Option[V1Write] = None) extends V1FallbackWriters {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
   }
 
-  override protected def run(): Seq[InternalRow] = {
+  override protected def buildAndRun(): Seq[InternalRow] = {
     newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        writeWithV1(builder.truncate().asV1Builder.buildForV1Write(), refreshCache = refreshCache)
+        writeWithV1(builder.truncate().asV1Builder.buildForV1Write())
 
       case builder: SupportsOverwrite =>
-        writeWithV1(builder.overwrite(deleteWhere).asV1Builder.buildForV1Write(),
-          refreshCache = refreshCache)
+        writeWithV1(builder.overwrite(deleteWhere).asV1Builder.buildForV1Write())
 
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
@@ -89,6 +90,21 @@ sealed trait V1FallbackWriters extends V2CommandExec with SupportsV1Write {
 
   def table: SupportsWrite
   def writeOptions: CaseInsensitiveStringMap
+  def refreshCache: () => Unit
+  def write: Option[V1Write] = None
+
+  override def run(): Seq[InternalRow] = {
+    val writtenRows = write match {
+      case Some(v1Write) =>
+        writeWithV1(v1Write.toInsertableRelation)
+      case _ =>
+        buildAndRun()
+    }
+    refreshCache()
+    writtenRows
+  }
+
+  protected def buildAndRun(): Seq[InternalRow]
 
   protected implicit class toV1WriteBuilder(builder: WriteBuilder) {
     def asV1Builder: V1WriteBuilder = builder match {
@@ -115,14 +131,10 @@ sealed trait V1FallbackWriters extends V2CommandExec with SupportsV1Write {
 trait SupportsV1Write extends SparkPlan {
   def plan: LogicalPlan
 
-  protected def writeWithV1(
-      relation: InsertableRelation,
-      refreshCache: () => Unit = () => ()): Seq[InternalRow] = {
+  protected def writeWithV1(relation: InsertableRelation): Seq[InternalRow] = {
     val session = sqlContext.sparkSession
     // The `plan` is already optimized, we should not analyze and optimize it again.
     relation.insert(AlreadyOptimized.dataFrame(session, plan), overwrite = false)
-    refreshCache()
-
     Nil
   }
 }

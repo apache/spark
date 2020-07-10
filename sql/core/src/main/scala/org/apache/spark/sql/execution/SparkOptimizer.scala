@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.datasources.SchemaPruning
-import org.apache.spark.sql.execution.datasources.v2.V2ScanRelationPushDown
+import org.apache.spark.sql.execution.datasources.v2.{V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning}
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs}
 
@@ -38,6 +38,9 @@ class SparkOptimizer(
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
     // TODO: move SchemaPruning into catalyst
     SchemaPruning :: V2ScanRelationPushDown :: PruneFileSourcePartitions :: Nil
+
+  override def dataSourceRewriteRules: Seq[Rule[LogicalPlan]] =
+    V2Writes :: Nil
 
   override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
@@ -70,7 +73,8 @@ class SparkOptimizer(
     ExtractPythonUDFFromJoinCondition.ruleName :+
     ExtractPythonUDFFromAggregate.ruleName :+ ExtractGroupingPythonUDFFromAggregate.ruleName :+
     ExtractPythonUDFs.ruleName :+
-    V2ScanRelationPushDown.ruleName
+    V2ScanRelationPushDown.ruleName :+
+    V2Writes.ruleName
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before
