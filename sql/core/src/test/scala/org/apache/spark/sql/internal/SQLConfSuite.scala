@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.TimeZone
+
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
@@ -382,5 +384,21 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/shanghai")
     }
     assert(e.getMessage === "Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)")
+  }
+
+  test("set time zone") {
+    TimeZone.getAvailableIDs().foreach { zid =>
+      sql(s"set time zone '$zid'")
+      assert(spark.conf.get(SQLConf.SESSION_LOCAL_TIMEZONE) === zid)
+    }
+    sql("set time zone local")
+    assert(spark.conf.get(SQLConf.SESSION_LOCAL_TIMEZONE) === TimeZone.getDefault.getID)
+
+    val df = sql("set time zone all").where("id='Asia/Chongqing'")
+    checkAnswer(df, Row("Asia/Chongqing", "China Standard Time", 28800000, false))
+
+    val e = intercept[IllegalArgumentException](sql("set time zone 'invalid'"))
+    assert(e.getMessage === "Cannot resolve the given timezone with" +
+      " ZoneId.of(_, ZoneId.SHORT_IDS)")
   }
 }

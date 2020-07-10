@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
@@ -88,6 +88,25 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
     ResetCommand
+  }
+
+  /**
+   * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]] or a
+   * [[ListTimeZonesCommand]] to retrieve all the supported region-based Zone IDs supported.
+   * Example SQL :
+   * {{{
+   *   SET TIME ZONE LOCAL;
+   *   SET TIME ZONE 'Asia/Shanghai';
+   *   SET TIME ZONE ALL;
+   * }}}
+   */
+  override def visitSetTimeZone(ctx: SetTimeZoneContext): LogicalPlan = withOrigin(ctx) {
+    ctx.timeZone.getType match {
+      case SqlBaseParser.LOCAL =>
+        SetCommand(Some(SQLConf.SESSION_LOCAL_TIMEZONE.key -> Some(TimeZone.getDefault.getID)))
+      case SqlBaseParser.ALL => ListTimeZonesCommand
+      case _ => SetCommand(Some(SQLConf.SESSION_LOCAL_TIMEZONE.key -> Some(string(ctx.STRING))))
+    }
   }
 
   /**
