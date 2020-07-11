@@ -16,7 +16,6 @@
 
 grammar SqlBase;
 
-
 @members {
   /**
    * When false, INTERSECT is given the greater precedence over the other set
