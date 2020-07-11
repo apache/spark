@@ -3560,6 +3560,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-32237: Hint in CTE") {
+    withTable("t") {
+      sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS id")
+      checkAnswer(
+        sql(s"""
+          |WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM t)
+          |SELECT * FROM cte
+        """.stripMargin),
+        Row(1) :: Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
