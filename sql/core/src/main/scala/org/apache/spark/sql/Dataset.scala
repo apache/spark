@@ -2040,7 +2040,32 @@ class Dataset[T] private[sql](
    *
    * When the parameter `allowMissingColumns` is true, this function allows different set
    * of column names between two Datasets. Missing columns at each side, will be filled with
-   * null values.
+   * null values. The missing columns at left Dataset will be added at the end in the schema
+   * of the union result:
+   *
+   * {{{
+   *   val df1 = Seq((1, 2, 3)).toDF("col0", "col1", "col2")
+   *   val df2 = Seq((4, 5, 6)).toDF("col1", "col0", "col3")
+   *   df1.unionByName(df2, true).show
+   *
+   *   // output:
+   *   // +----+----+----+----+
+   *   // |col0|col1|col2|col3|
+   *   // +----+----+----+----+
+   *   // |   1|   2|   3|null|
+   *   // |   5|   4|null|   6|
+   *   // +----+----+----+----+
+   *
+   *   df2.unionByName(df1, true).show
+   *
+   *   // output:
+   *   // +----+----+----+----+
+   *   // |col1|col0|col3|col2|
+   *   // +----+----+----+----+
+   *   // |   4|   5|   6|null|
+   *   // |   2|   1|null|   3|
+   *   // +----+----+----+----+
+   * }}}
    *
    * @group typedrel
    * @since 3.1.0

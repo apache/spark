@@ -524,5 +524,17 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       Row(1, 2, null) :: Row(3, 5, 4) :: Nil)
     checkAnswer(df2.unionByName(df1, true),
       Row(3, 4, 5) :: Row(1, null, 2) :: Nil)
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      df2 = Seq((3, 4, 5)).toDF("a", "B", "C")
+      val union1 = df1.unionByName(df2, true)
+      val union2 = df2.unionByName(df1, true)
+
+      checkAnswer(union1, Row(1, 2, null, null) :: Row(3, null, 4, 5) :: Nil)
+      checkAnswer(union2, Row(3, 4, 5, null) :: Row(1, null, null, 2) :: Nil)
+
+      assert(union1.schema.fieldNames === Array("a", "c", "B", "C"))
+      assert(union2.schema.fieldNames === Array("a", "B", "C", "c"))
+    }
   }
 }
