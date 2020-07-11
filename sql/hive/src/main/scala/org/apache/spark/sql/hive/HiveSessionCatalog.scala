@@ -73,9 +73,6 @@ private[sql] class HiveSessionCatalog(
         super.makeFunctionExpression(name, clazz, input)
       } catch {
         case NonFatal(exception) =>
-          val superError =
-            s"Make Expression failed in SessionCatalog for function name = ${name}:" +
-              s" ${exception.getMessage}"
           var udfExpr: Option[Expression] = None
           try {
             // When we instantiate hive UDF wrapper class, we may throw exception if the input
@@ -112,13 +109,18 @@ private[sql] class HiveSessionCatalog(
                 } else {
                   noHandlerMsg
                 }
-              val analysisException = new AnalysisException(s"1. $superError\n2. $errorMsg")
+              val analysisException = new AnalysisException(
+                s"Spark UDAF Error: ${exception.getMessage}\n" +
+                  s"Hive UDF/UDAF/UDTF Error: $errorMsg"
+              )
               analysisException.setStackTrace(e.getStackTrace)
               throw analysisException
           }
           udfExpr.getOrElse {
             throw new AnalysisException(
-              s"1. $superError\n2. No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
+              s"Spark UDAF Error: ${exception.getMessage}\n" +
+                s"Hive UDF/UDAF/UDTF Error: " +
+                s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
           }
       }
     }
