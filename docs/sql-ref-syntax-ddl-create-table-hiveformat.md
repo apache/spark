@@ -31,7 +31,13 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ COMMENT table_comment ]
     [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) 
         | ( col_name1, col_name2, ... ) ]
-    [ ROW FORMAT row_format ]
+    [ ROW FORMAT SERGE serde_name [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...)] ]
+    [ ROW FORMAT DELIMITED 
+        [ FIELDS TERMINATED BY fields_termiated_char [ ESCAPED BY escaped_char] ] 
+        [ COLLECTION ITEMS TERMINATED BY collection_items_termiated_char ] 
+        [ MAP KEYS TERMINATED BY map_key_termiated_char ]
+        [ LINES TERMINATED BY row_termiated_char ]
+        [ NULL DEFINED AS null_char ] ]
     [ STORED AS file_format ]
     [ LOCATION path ]
     [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
@@ -57,9 +63,31 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     Partitions are created on the table, based on the columns specified.
 
-* **ROW FORMAT**
+* **ROW FORMAT SERGE**
 
-    SERDE is used to specify a custom SerDe or the DELIMITED clause in order to use the native SerDe.
+    Specify a custom SerDe.
+    
+* **ROW FORMAT DELIMITED**
+
+    Define DELIMITED clause in order to use the native SerDe.
+    
+* **FIELDS TERMINATED BY**
+    It is used to define the column separator.
+    
+* **COLLECTION ITEMS TERMINATED BY**
+    It is used to define collection items separator.
+   
+* **MAP KEYS TERMINATED BY**
+    It is used to define map keys separator.
+    
+* **LINES TERMINATED BY**
+    It is used to define row separator.
+    
+* **NULL DEFINED AS**
+    It is used to define the specific value for NULL.
+    
+* **ESCAPED BY**
+    It is used for escape mechanism.
 
 * **STORED AS**
 
@@ -117,6 +145,21 @@ CREATE TABLE student (id INT, name STRING)
 CREATE TABLE student (id INT,name STRING)
     ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
     STORED AS TEXTFILE;
+    
+--Use complex datatype
+CREATE EXTERNAL TABLE family(
+    name STRING,
+    friends ARRAY<STRING>,
+    children MAP<STRING, INT>,
+    address STRUCT<street:STRING, city:STRING>
+    )
+    ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' ESCAPED BY '\\'
+    COLLECTION ITEMS TERMINATED BY '_'
+    MAP KEYS TERMINATED BY ':'
+    LINES TERMINATED BY '\n'
+    NULL DEFINED AS 'foonull'
+    STORED AS TEXTFILE
+    LOCATION '/tmp/family/';
 ```
 
 ### Related Statements
