@@ -1214,7 +1214,8 @@ private[spark] object JsonProtocol {
       case Some(id) => id.extract[Int]
       case None => ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     }
-    new ExecutorInfo(executorHost, totalCores, logUrls, attributes, resources, resourceProfileId)
+    new ExecutorInfo(executorHost, totalCores, logUrls, attributes.toMap, resources.toMap,
+      resourceProfileId)
   }
 
   def blockUpdatedInfoFromJson(json: JValue): BlockUpdatedInfo = {
