@@ -19,56 +19,53 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, WithFields}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, UpdateFields, WithField}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
 
-class CombineWithFieldsSuite extends PlanTest {
+class CombineUpdateFieldsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("CombineWithFields", FixedPoint(10), CombineWithFields) :: Nil
+    val batches = Batch("CombineUpdateFields", FixedPoint(10), CombineUpdateFields) :: Nil
   }
 
   private val testRelation = LocalRelation('a.struct('a1.int))
 
-  test("combines two WithFields") {
+  test("combines two adjacent UpdateFields Expressions") {
     val originalQuery = testRelation
       .select(Alias(
-        WithFields(
-          WithFields(
+        UpdateFields(
+          UpdateFields(
             'a,
-            Seq("b1"),
-            Seq(Literal(4))),
-          Seq("c1"),
-          Seq(Literal(5))), "out")())
+            WithField("b1", Literal(4)) :: Nil),
+          WithField("c1", Literal(5)) :: Nil), "out")())
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(Alias(WithFields('a, Seq("b1", "c1"), Seq(Literal(4), Literal(5))), "out")())
+      .select(Alias(UpdateFields('a, WithField("b1", Literal(4)) :: WithField("c1", Literal(5)) ::
+        Nil), "out")())
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("combines three WithFields") {
+  test("combines three adjacent UpdateFields Expressions") {
     val originalQuery = testRelation
       .select(Alias(
-        WithFields(
-          WithFields(
-            WithFields(
+        UpdateFields(
+          UpdateFields(
+            UpdateFields(
               'a,
-              Seq("b1"),
-              Seq(Literal(4))),
-            Seq("c1"),
-            Seq(Literal(5))),
-          Seq("d1"),
-          Seq(Literal(6))), "out")())
+              WithField("b1", Literal(4)) :: Nil),
+            WithField("c1", Literal(5)) :: Nil),
+          WithField("d1", Literal(6)) :: Nil), "out")())
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(Alias(WithFields('a, Seq("b1", "c1", "d1"), Seq(4, 5, 6).map(Literal(_))), "out")())
+      .select(Alias(UpdateFields('a, WithField("b1", Literal(4)) :: WithField("c1", Literal(5)) ::
+        WithField("d1", Literal(6)) :: Nil), "out")())
       .analyze
 
     comparePlans(optimized, correctAnswer)
