@@ -167,6 +167,14 @@ struct<database:string,tableName:string,isTemporary:boolean>
 
 
 -- !query
+DROP TABLE show_t5
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query schema
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
@@ -313,14 +321,6 @@ struct<>
 
 -- !query
 DROP VIEW  global_temp.show_t4
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DROP TABLE show_t5
 -- !query schema
 struct<>
 -- !query output
