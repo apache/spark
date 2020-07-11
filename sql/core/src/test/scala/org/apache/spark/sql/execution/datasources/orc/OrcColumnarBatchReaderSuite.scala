@@ -92,24 +92,13 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
           | test_date_hive_orc
           |  values(9, '12', 2020)
         """.stripMargin)
-      try {
-        val df = spark.sql("select _col2 from test_date_hive_orc")
-        checkAnswer(df, Row("12"))
-      } catch {
-        case e: Throwable =>
-          error = e
-      }
-      assert(error == null)
-      spark.sql(
-        s"""
-           |DROP TABLE IF
-           | EXISTS test_date_hive_orc
-         """.stripMargin)
+
+      val df = spark.sql("select _col2 from test_date_hive_orc")
+      checkAnswer(df, Row("12"))
     }
   }
 
   test("SPARK-32234: orc data created by the spark having proper fields name") {
-    var error: Throwable = null
     withTable("test_date_spark_orc") {
       spark.sql(
         """
@@ -122,19 +111,9 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
           | test_date_spark_orc
           |  values(9, '12', 2020)
         """.stripMargin)
-      try {
-        val df = spark.sql("select d_date_id from test_date_spark_orc")
-        checkAnswer(df, Row("12"))
-      } catch {
-        case e: Throwable =>
-          error = e
-      }
-      assert(error == null)
-      spark.sql(
-        s"""
-           |DROP TABLE IF
-           | EXISTS test_date_spark_orc
-         """.stripMargin)
+
+      val df = spark.sql("select d_date_id from test_date_spark_orc")
+      checkAnswer(df, Row("12"))
     }
   }
 }
