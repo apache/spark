@@ -2048,7 +2048,7 @@ class Dataset[T] private[sql](
    *   val df2 = Seq((4, 5, 6)).toDF("col1", "col0", "col3")
    *   df1.unionByName(df2, true).show
    *
-   *   // output:
+   *   // output: "col3" is missing at left df1 and added at the end of schema.
    *   // +----+----+----+----+
    *   // |col0|col1|col2|col3|
    *   // +----+----+----+----+
@@ -2058,7 +2058,7 @@ class Dataset[T] private[sql](
    *
    *   df2.unionByName(df1, true).show
    *
-   *   // output:
+   *   // output: "col2" is missing at left df2 and added at the end of schema.
    *   // +----+----+----+----+
    *   // |col1|col0|col3|col2|
    *   // +----+----+----+----+
