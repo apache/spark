@@ -22,6 +22,7 @@ import org.apache.orc.TypeDescription
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String.fromString
@@ -78,43 +79,28 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-32234: orc data created by the hive tables having _col fields name") {
-    withTable("test_date_hive_orc") {
-      spark.sql(
-        """
-          | CREATE TABLE test_date_hive_orc
-          | (_col1 INT, _col2 STRING, _col3 INT)
-          |  USING orc
-        """.stripMargin)
-      spark.sql(
-        """
-          | INSERT INTO
-          | test_date_hive_orc
-          | VALUES(9, '12', 2020)
-        """.stripMargin)
+  test("SPARK-32234: orc data created by the hive tables having _col fields" +
+    " name for vectorized reader") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        withTable("test_hive_orc_vect_read") {
+          spark.sql(
+            """
+              | CREATE TABLE test_hive_orc_vect_read
+              | (_col1 INT, _col2 STRING, _col3 INT)
+              | USING orc
+            """.stripMargin)
+          spark.sql(
+            """
+              | INSERT INTO
+              | test_hive_orc_vect_read
+              | VALUES(9, '12', 2020)
+            """.stripMargin)
 
-      val df = spark.sql("SELECT _col2 from test_date_hive_orc")
-      checkAnswer(df, Row("12"))
-    }
-  }
-
-  test("SPARK-32234: orc data created by the spark having proper fields name") {
-    withTable("test_date_spark_orc") {
-      spark.sql(
-        """
-          | CREATE TABLE test_date_spark_orc
-          | (d_date_sk INT, d_date_id STRING, d_year INT)
-          | USING orc
-        """.stripMargin)
-      spark.sql(
-        """
-          | INSERT INTO
-          | test_date_spark_orc
-          | VALUES(9, '12', 2020)
-        """.stripMargin)
-
-      val df = spark.sql("SELECT d_date_id FROM test_date_spark_orc")
-      checkAnswer(df, Row("12"))
+          val df = spark.sql("SELECT _col2 FROM test_hive_orc_vect_read")
+          checkAnswer(df, Row("12"))
+        }
+      }
     }
   }
 }

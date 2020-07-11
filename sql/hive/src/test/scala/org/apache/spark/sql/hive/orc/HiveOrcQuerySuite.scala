@@ -288,4 +288,31 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-32234: orc data created by the hive tables having _col fields name" +
+    " for ORC_IMPLEMENTATION") {
+    Seq("native", "hive").foreach { orcImpl =>
+      withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
+        withTempPath { dir =>
+          withTable("test_hive_orc_impl") {
+            spark.sql(
+              s"""
+                 | CREATE TABLE test_hive_orc_impl
+                 | (_col1 INT, _col2 STRING, _col3 INT)
+                 | STORED AS ORC LOCATION '$dir'
+              """.stripMargin)
+            spark.sql(
+              """
+                | INSERT INTO
+                | test_hive_orc_impl
+                | VALUES(9, '12', 2020)
+              """.stripMargin)
+
+            val df = spark.sql("SELECT _col2 FROM test_hive_orc_impl")
+            checkAnswer(df, Row("12"))
+          }
+        }
+      }
+    }
+  }
 }
