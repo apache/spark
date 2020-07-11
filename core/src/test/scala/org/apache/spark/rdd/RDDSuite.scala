@@ -1298,19 +1298,15 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
       val splitSize = fileSplit.getLength
       if (currentSum + splitSize < maxSize) {
         addPartition(partition, splitSize)
-        index += 1
-        if (index == partitions.size) {
-          updateGroups
-        }
       } else {
-        if (currentGroup.partitions.size == 0) {
-          addPartition(partition, splitSize)
-          index += 1
-        } else {
-          updateGroups
+        if (currentGroup.partitions.nonEmpty) {
+          updateGroups()
         }
+        addPartition(partition, splitSize)
       }
+      index += 1
     }
+    updateGroups()
     groups.toArray
   }
 }
