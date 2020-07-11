@@ -31,7 +31,7 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ COMMENT table_comment ]
     [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) 
         | ( col_name1, col_name2, ... ) ]
-    [ ROW FORMAT SERGE serde_name [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...)] ]
+    [ ROW FORMAT SERDE serde_name [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...)] ]
     [ ROW FORMAT DELIMITED 
         [ FIELDS TERMINATED BY fields_termiated_char [ ESCAPED BY escaped_char] ] 
         [ COLLECTION ITEMS TERMINATED BY collection_items_termiated_char ] 
@@ -63,7 +63,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     Partitions are created on the table, based on the columns specified.
 
-* **ROW FORMAT SERGE**
+* **ROW FORMAT SERDE**
 
     Specify a custom SerDe.
     
