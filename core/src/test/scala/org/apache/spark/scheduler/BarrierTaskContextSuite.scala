@@ -153,7 +153,8 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(error.contains("within 1 second(s)"))
   }
 
-  test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
+  // Disabled as it is flaky in GitHub Actions.
+  ignore("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
     val conf = new SparkConf()
       .setMaster("local-cluster[2, 1, 1024]")
       .setAppName("test-cluster")
