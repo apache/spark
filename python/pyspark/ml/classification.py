@@ -2172,6 +2172,10 @@ class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, H
     initialWeights = Param(Params._dummy(), "initialWeights", "The initial weights of the model.",
                            typeConverter=TypeConverters.toVector)
 
+    def __init__(self):
+        super(_MultilayerPerceptronParams, self).__init__()
+        self._setDefault(maxIter=100, tol=1E-6, blockSize=128, stepSize=0.03, solver="l-bfgs")
+
     @since("1.6.0")
     def getLayers(self):
         """
@@ -2275,7 +2279,6 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid)
-        self._setDefault(maxIter=100, tol=1E-6, blockSize=128, stepSize=0.03, solver="l-bfgs")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2871,9 +2874,6 @@ class FMClassifier(JavaProbabilisticClassifier, _FactorizationMachinesParams, Ja
         super(FMClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.FMClassifier", self.uid)
-        self._setDefault(factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
-                         miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                         tol=1e-6, solver="adamW")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 

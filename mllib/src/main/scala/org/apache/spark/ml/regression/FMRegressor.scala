@@ -113,6 +113,10 @@ private[ml] trait FactorizationMachinesParams extends PredictorParams
     "The solver algorithm for optimization. Supported options: " +
       s"${supportedSolvers.mkString(", ")}. (Default adamW)",
     ParamValidators.inArray[String](supportedSolvers))
+
+  setDefault(factorSize -> 8, fitIntercept -> true, fitLinear -> true, regParam -> 0.0,
+    miniBatchFraction -> 1.0, initStd -> 0.01, maxIter -> 100, stepSize -> 1.0, tol -> 1E-6,
+    solver -> AdamW)
 }
 
 private[ml] trait FactorizationMachines extends FactorizationMachinesParams {
@@ -309,7 +313,6 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setFactorSize(value: Int): this.type = set(factorSize, value)
-  setDefault(factorSize -> 8)
 
   /**
    * Set whether to fit intercept term.
@@ -319,7 +322,6 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-  setDefault(fitIntercept -> true)
 
   /**
    * Set whether to fit linear term.
@@ -329,7 +331,6 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setFitLinear(value: Boolean): this.type = set(fitLinear, value)
-  setDefault(fitLinear -> true)
 
   /**
    * Set the L2 regularization parameter.
@@ -339,7 +340,6 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
-  setDefault(regParam -> 0.0)
 
   /**
    * Set the mini-batch fraction parameter.
@@ -349,7 +349,6 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setMiniBatchFraction(value: Double): this.type = set(miniBatchFraction, value)
-  setDefault(miniBatchFraction -> 1.0)
 
   /**
    * Set the standard deviation of initial coefficients.
@@ -359,7 +358,6 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setInitStd(value: Double): this.type = set(initStd, value)
-  setDefault(initStd -> 0.01)
 
   /**
    * Set the maximum number of iterations.
@@ -369,7 +367,6 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 100)
 
   /**
    * Set the initial step size for the first step (like learning rate).
@@ -379,7 +376,6 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
-  setDefault(stepSize -> 1.0)
 
   /**
    * Set the convergence tolerance of iterations.
@@ -389,7 +385,6 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Set the solver algorithm used for optimization.
@@ -400,7 +395,6 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> AdamW)
 
   /**
    * Set the random seed for weight initialization.

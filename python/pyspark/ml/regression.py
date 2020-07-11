@@ -1847,6 +1847,11 @@ class _GeneralizedLinearRegressionParams(_JavaPredictorParams, HasFitIntercept, 
                       "or empty, we treat all instance offsets as 0.0",
                       typeConverter=TypeConverters.toString)
 
+    def __init__(self):
+        super(_GeneralizedLinearRegressionParams, self).__init__()
+        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls",
+                         variancePower=0.0, aggregationDepth=2)
+
     @since("2.0.0")
     def getFamily(self):
         """
@@ -1979,8 +1984,6 @@ class GeneralizedLinearRegression(JavaRegressor, _GeneralizedLinearRegressionPar
         super(GeneralizedLinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid)
-        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls",
-                         variancePower=0.0, aggregationDepth=2)
         kwargs = self._input_kwargs
 
         self.setParams(**kwargs)
@@ -2354,6 +2357,12 @@ class _FactorizationMachinesParams(_JavaPredictorParams, HasMaxIter, HasStepSize
     solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
                    "options: gd, adamW. (Default adamW)", typeConverter=TypeConverters.toString)
 
+    def __init__(self):
+        super(_FactorizationMachinesParams, self).__init__()
+        self._setDefault(factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
+                         miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                         tol=1e-6, solver="adamW")
+
     @since("3.0.0")
     def getFactorSize(self):
         """
@@ -2445,9 +2454,6 @@ class FMRegressor(JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, J
         super(FMRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.FMRegressor", self.uid)
-        self._setDefault(factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
-                         miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                         tol=1e-6, solver="adamW")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
