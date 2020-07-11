@@ -21,6 +21,9 @@ import threading
 import time
 import unittest
 import warnings
+import sys
+if sys.version >= '3':
+    basestring = unicode = str
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession

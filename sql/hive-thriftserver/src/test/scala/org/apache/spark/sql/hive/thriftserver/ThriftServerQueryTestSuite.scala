@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.GitHubActionsUnstableTest
 
 /**
  * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
@@ -52,6 +53,7 @@ import org.apache.spark.sql.types._
  *   2. Support DESC command.
  *   3. Support SHOW command.
  */
+@GitHubActionsUnstableTest
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
 
   override protected def testFile(fileName: String): String = {
