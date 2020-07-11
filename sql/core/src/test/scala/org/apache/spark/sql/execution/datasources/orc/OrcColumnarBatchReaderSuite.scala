@@ -79,21 +79,21 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-32234: orc data created by the hive tables having _col fields name") {
-    var error: Throwable = null
     withTable("test_date_hive_orc") {
       spark.sql(
         """
-          |CREATE TABLE `test_date_hive_orc`
-          | (`_col1` INT,`_col2` STRING,`_col3` INT)
+          | CREATE TABLE test_date_hive_orc
+          | (_col1 INT, _col2 STRING, _col3 INT)
           |  USING orc
         """.stripMargin)
       spark.sql(
-        """insert into
+        """
+          | INSERT INTO
           | test_date_hive_orc
-          |  values(9, '12', 2020)
+          | VALUES(9, '12', 2020)
         """.stripMargin)
 
-      val df = spark.sql("select _col2 from test_date_hive_orc")
+      val df = spark.sql("SELECT _col2 from test_date_hive_orc")
       checkAnswer(df, Row("12"))
     }
   }
@@ -102,17 +102,18 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
     withTable("test_date_spark_orc") {
       spark.sql(
         """
-          |CREATE TABLE `test_date_spark_orc`
-          | (`d_date_sk` INT,`d_date_id` STRING,`d_year` INT)
-          |  USING orc
+          | CREATE TABLE test_date_spark_orc
+          | (d_date_sk INT, d_date_id STRING, d_year INT)
+          | USING orc
         """.stripMargin)
       spark.sql(
-        """insert into
+        """
+          | INSERT INTO
           | test_date_spark_orc
-          |  values(9, '12', 2020)
+          | VALUES(9, '12', 2020)
         """.stripMargin)
 
-      val df = spark.sql("select d_date_id from test_date_spark_orc")
+      val df = spark.sql("SELECT d_date_id FROM test_date_spark_orc")
       checkAnswer(df, Row("12"))
     }
   }
