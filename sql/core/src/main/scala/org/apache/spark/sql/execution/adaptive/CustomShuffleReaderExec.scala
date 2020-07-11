@@ -71,7 +71,7 @@ case class CustomShuffleReaderExec private(
         case ShuffleQueryStageExec(_, ShuffleExchangeExec(p: HashPartitioning, _, _)) =>
           CoalescedHashPartitioning(p.expressions, partitionSpecs.size)
         case _ =>
-          throw new IllegalStateException("operating on canonicalization plan")
+          UnknownPartitioning(partitionSpecs.length)
       }
     } else {
       UnknownPartitioning(partitionSpecs.length)
