@@ -48,7 +48,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   /**
-   * Redact the sensitive information in the given string.
+   * Shorthand for calling redact() without specifying redacting rules
    */
   protected def redact(text: String): String = {
     Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)

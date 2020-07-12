@@ -16,10 +16,8 @@
  */
 package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.annotation.Evolving
-
 /**
- * A mix in interface for {@link FileScan}. This can be used to report metadata
+ * A mix-in interface for {@link FileScan}. This can be used to report metadata
  * for a file based scan operator. This is currently used for supporting formatted
  * explain.
  */

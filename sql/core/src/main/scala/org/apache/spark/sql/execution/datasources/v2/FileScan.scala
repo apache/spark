@@ -95,8 +95,9 @@ trait FileScan extends Scan
 
   override def hashCode(): Int = getClass.hashCode()
 
+  val maxMetadataValueLength = 100
+
   override def description(): String = {
-    val maxMetadataValueLength = 100
     val metadataStr = getMetaData().toSeq.sorted.map {
       case (key, value) =>
         val redactedValue =
@@ -107,7 +108,6 @@ trait FileScan extends Scan
   }
 
   override def getMetaData(): Map[String, String] = {
-    val maxMetadataValueLength = 100
     val locationDesc =
       fileIndex.getClass.getSimpleName +
         Utils.buildLocationMetadata(fileIndex.rootPaths, maxMetadataValueLength)
