@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io._
 import java.net.URI
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapred.JobConf
