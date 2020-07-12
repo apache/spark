@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions.CNFConversion
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -54,9 +55,15 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
     val normalizedFilters = DataSourceStrategy.normalizeExprs(
       filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)), relation.output)
     val partitionColumnSet = AttributeSet(relation.partitionCols)
-    ExpressionSet(normalizedFilters.filter { f =>
+    val (partitionFilters, remainingFilters) = normalizedFilters.partition { f =>
       !f.references.isEmpty && f.references.subsetOf(partitionColumnSet)
-    })
+    }
+    // Try extracting more convertible partition filters from the remaining filters by converting
+    // them into CNF.
+    val remainingFilterInCnf = remainingFilters.flatMap(CNFConversion)
+    val extraPartitionFilters = remainingFilterInCnf.filter(f =>
+      !f.references.isEmpty && f.references.subsetOf(partitionColumnSet))
+    ExpressionSet(partitionFilters ++ extraPartitionFilters)
   }
 
   /**
@@ -103,7 +110,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case op @ PhysicalOperation(projections, filters, relation: HiveTableRelation)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
-      val predicates = CNFWithGroupExpressionsByReference(filters.reduceLeft(And))
+      val predicates = CNFConversion(filters.reduceLeft(And))
       val finalPredicates = if (predicates.nonEmpty) predicates else filters
       val partitionKeyFilters = getPartitionKeyFilters(finalPredicates, relation)
       if (partitionKeyFilters.nonEmpty) {

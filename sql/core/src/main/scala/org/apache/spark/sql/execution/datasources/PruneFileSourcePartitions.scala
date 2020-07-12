@@ -53,11 +53,17 @@ private[sql] object PruneFileSourcePartitions
     val partitionColumns =
       relation.resolve(partitionSchema, sparkSession.sessionState.analyzer.resolver)
     val partitionSet = AttributeSet(partitionColumns)
-    val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
+    val (partitionFilters, remainingFilters) = normalizedFilters.partition(f =>
       f.references.subsetOf(partitionSet)
     )
 
-    (ExpressionSet(partitionFilters), dataFilters)
+    // Try extracting more convertible partition filters from the remaining filters by converting
+    // them into CNF.
+    val remainingFilterInCnf = remainingFilters.flatMap(CNFConversion)
+    val extraPartitionFilters =
+      remainingFilterInCnf.filter(f => f.references.subsetOf(partitionSet))
+
+    (ExpressionSet(partitionFilters ++ extraPartitionFilters), remainingFilters)
   }
 
   private def rebuildPhysicalOperation(
@@ -88,12 +94,9 @@ private[sql] object PruneFileSourcePartitions
             _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
-      val predicates = CNFWithGroupExpressionsByReference(filters.reduceLeft(And))
-      val finalPredicates = if (predicates.nonEmpty) predicates else filters
       val (partitionKeyFilters, _) = getPartitionKeyFiltersAndDataFilters(
-        fsRelation.sparkSession, logicalRelation, partitionSchema, finalPredicates,
+        fsRelation.sparkSession, logicalRelation, partitionSchema, filters,
         logicalRelation.output)
-
       if (partitionKeyFilters.nonEmpty) {
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)
         val prunedFsRelation =
