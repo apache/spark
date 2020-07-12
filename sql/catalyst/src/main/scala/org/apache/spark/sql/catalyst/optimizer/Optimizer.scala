@@ -419,7 +419,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
         // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
         // case we use the first mapping (which should be provided by the first child).
-        val mapping = AttributeMap(currentNextAttrPairs)
+        val mapping = AttributeMap(currentNextAttrPairs.toSeq)
 
         // Create a an expression cleaning function for nodes that can actually produce redundant
         // aliases, use identity otherwise.
@@ -934,7 +934,7 @@ object CombineUnions extends Rule[LogicalPlan] {
           flattened += child
       }
     }
-    Union(flattened)
+    Union(flattened.toSeq)
   }
 }
 

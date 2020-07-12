@@ -75,7 +75,7 @@ private[streaming] object MapWithStateRDDRecord {
       }
     }
 
-    MapWithStateRDDRecord(newStateMap, mappedData)
+    MapWithStateRDDRecord(newStateMap, mappedData.toSeq)
   }
 }
 

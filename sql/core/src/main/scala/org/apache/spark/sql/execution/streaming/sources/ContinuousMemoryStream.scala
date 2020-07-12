@@ -53,7 +53,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
   @GuardedBy("this")
   private val records = Seq.fill(numPartitions)(new ListBuffer[UnsafeRow])
 
-  private val recordEndpoint = new ContinuousRecordEndpoint(records, this)
+  private val recordEndpoint = new ContinuousRecordEndpoint(records.map(_.toSeq), this)
   @volatile private var endpointRef: RpcEndpointRef = _
 
   def addData(data: TraversableOnce[A]): Offset = synchronized {

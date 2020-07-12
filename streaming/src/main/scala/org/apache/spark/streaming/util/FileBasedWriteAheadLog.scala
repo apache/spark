@@ -146,7 +146,7 @@ private[streaming] class FileBasedWriteAheadLog(
     } else {
       // For performance gains, it makes sense to parallelize the recovery if
       // closeFileAfterWrite = true
-      seqToParIterator(executionContext, logFilesToRead, readFile).asJava
+      seqToParIterator(executionContext, logFilesToRead.toSeq, readFile).asJava
     }
   }
 

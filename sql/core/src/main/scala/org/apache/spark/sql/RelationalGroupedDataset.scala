@@ -479,7 +479,7 @@ class RelationalGroupedDataset protected[sql](
    * @since 2.4.0
    */
   def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
-    pivot(pivotColumn, values.asScala)
+    pivot(pivotColumn, values.asScala.toSeq)
   }
 
   /**

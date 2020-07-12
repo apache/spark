@@ -56,7 +56,7 @@ public class JavaConsumerStrategySuite implements Serializable {
             return (Object) x;
           }
         }
-      );
+      ).toMap(null);
 
     final ConsumerStrategy<String, String> sub1 =
       ConsumerStrategies.Subscribe(sTopics, sKafkaParams, sOffsets);

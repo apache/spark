@@ -366,7 +366,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
-    sQueue.enqueue(queue.asScala.map(_.rdd).toSeq: _*)
+    sQueue ++= queue.asScala.map(_.rdd)
     ssc.queueStream(sQueue)
   }
 
@@ -390,7 +390,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
-    sQueue.enqueue(queue.asScala.map(_.rdd).toSeq: _*)
+    sQueue ++= queue.asScala.map(_.rdd)
     ssc.queueStream(sQueue, oneAtATime)
   }
 
@@ -415,7 +415,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
-    sQueue.enqueue(queue.asScala.map(_.rdd).toSeq: _*)
+    sQueue ++= queue.asScala.map(_.rdd)
     ssc.queueStream(sQueue, oneAtATime, defaultRDD.rdd)
   }
 

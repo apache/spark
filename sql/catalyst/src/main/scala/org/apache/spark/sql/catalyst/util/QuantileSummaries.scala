@@ -223,7 +223,7 @@ class QuantileSummaries(
         otherIdx += 1
       }
 
-      val comp = compressImmut(mergedSampled, 2 * mergedRelativeError * mergedCount)
+      val comp = compressImmut(mergedSampled.toIndexedSeq, 2 * mergedRelativeError * mergedCount)
       new QuantileSummaries(other.compressThreshold, mergedRelativeError, comp, mergedCount, true)
     }
   }

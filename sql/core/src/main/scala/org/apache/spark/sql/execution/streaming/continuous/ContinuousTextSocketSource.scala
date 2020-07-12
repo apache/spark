@@ -74,7 +74,7 @@ class TextSocketContinuousStream(
   // Exposed for tests.
   private[spark] var startOffset: TextSocketOffset = _
 
-  private val recordEndpoint = new ContinuousRecordEndpoint(buckets, this)
+  private val recordEndpoint = new ContinuousRecordEndpoint(buckets.map(_.toSeq), this)
   @volatile private var endpointRef: RpcEndpointRef = _
 
   initialize()
