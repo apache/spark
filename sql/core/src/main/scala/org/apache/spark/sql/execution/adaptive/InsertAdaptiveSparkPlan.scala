@@ -104,7 +104,8 @@ case class InsertAdaptiveSparkPlan(
     sanityCheck(plan) &&
       !plan.logicalLink.exists(_.isStreaming) &&
       !plan.expressions.exists(_.find(_.isInstanceOf[DynamicPruningSubquery]).isDefined) &&
-    plan.children.forall(supportAdaptive)
+      plan.find(_.isInstanceOf[RecursiveRelationExec]).isEmpty &&
+      plan.children.forall(supportAdaptive)
   }
 
   private def sanityCheck(plan: SparkPlan): Boolean =

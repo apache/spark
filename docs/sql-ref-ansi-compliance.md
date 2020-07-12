@@ -308,6 +308,7 @@ Below is a list of all the keywords in Spark SQL.
 |RECOVER|non-reserved|non-reserved|non-reserved|
 |REDUCE|non-reserved|non-reserved|non-reserved|
 |REFERENCES|reserved|non-reserved|reserved|
+|RECURSIVE|reserved|non-reserved|reserved|
 |REFRESH|non-reserved|non-reserved|non-reserved|
 |REGEXP|non-reserved|non-reserved|not a keyword|
 |RENAME|non-reserved|non-reserved|non-reserved|

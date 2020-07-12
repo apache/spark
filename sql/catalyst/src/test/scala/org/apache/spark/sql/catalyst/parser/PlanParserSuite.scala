@@ -42,7 +42,10 @@ class PlanParserSuite extends AnalysisTest {
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)
 
-  private def cte(plan: LogicalPlan, namedPlans: (String, (LogicalPlan, Seq[String]))*): With = {
+  private def cte(
+      plan: LogicalPlan,
+      allowRecursion: Boolean,
+      namedPlans: (String, (LogicalPlan, Seq[String]))*): With = {
     val ctes = namedPlans.map {
       case (name, (cte, columnAliases)) =>
         val subquery = if (columnAliases.isEmpty) {
@@ -52,7 +55,7 @@ class PlanParserSuite extends AnalysisTest {
         }
         name -> SubqueryAlias(name, subquery)
     }
-    With(plan, ctes)
+    With(plan, ctes, allowRecursion)
   }
 
   test("single comment case one") {
@@ -192,13 +195,13 @@ class PlanParserSuite extends AnalysisTest {
   test("common table expressions") {
     assertEqual(
       "with cte1 as (select * from a) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> ((table("a").select(star()), Seq.empty))))
+      cte(table("cte1").select(star()), false, "cte1" -> ((table("a").select(star()), Seq.empty))))
     assertEqual(
       "with cte1 (select 1) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
+      cte(table("cte1").select(star()), false, "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
     assertEqual(
       "with cte1 (select 1), cte2 as (select * from cte1) select * from cte2",
-      cte(table("cte2").select(star()),
+      cte(table("cte2").select(star()), false,
         "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
         "cte2" -> ((table("cte1").select(star()), Seq.empty))))
     intercept(
@@ -1011,7 +1014,7 @@ class PlanParserSuite extends AnalysisTest {
         |WITH cte1 AS (SELECT * FROM testcat.db.tab)
         |SELECT * FROM cte1
       """.stripMargin,
-      cte(table("cte1").select(star()),
+      cte(table("cte1").select(star()), false,
         "cte1" -> ((table("testcat", "db", "tab").select(star()), Seq.empty))))
 
     assertEqual(
@@ -1022,7 +1025,20 @@ class PlanParserSuite extends AnalysisTest {
   test("CTE with column alias") {
     assertEqual(
       "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
-      cte(table("t").select(star()), "t" -> ((table("a").select('c), Seq("x")))))
+      cte(table("t").select(star()), false, "t" -> ((table("a").select('c), Seq("x")))))
+  }
+
+  test("Recursive CTE") {
+    assertEqual(
+      """WITH RECURSIVE t(x) AS (
+        |  SELECT 0 AS level, c FROM a
+        |  UNION ALL
+        |  SELECT level + 1, c FROM t WHERE level < 10
+        |)
+        |SELECT * FROM t""".stripMargin,
+      cte(table("t").select(star()), true,
+        "t" -> ((table("a").select(Literal(0).as("level"), 'c)
+          .union(table("t").where('level < 10).select('level + 1, 'c)), Seq("x")))))
   }
 
   test("statement containing terminal semicolons") {

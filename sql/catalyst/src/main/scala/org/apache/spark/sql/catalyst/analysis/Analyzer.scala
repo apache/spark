@@ -220,6 +220,7 @@ class Analyzer(
       ResolveRelations ::
       ResolveTables ::
       ResolveReferences ::
+      ResolveRecursiveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
       ResolveNewInstance ::
@@ -1655,6 +1656,23 @@ class Analyzer(
       }
     } catch {
       case a: AnalysisException if !throws => expr
+    }
+  }
+
+  /**
+   * This rule resolve [[RecursiveReference]]s when the anchor term of the corresponding
+   * [[RecursiveRelation]] is resolved (ie. we know the output of the recursive relation).
+   */
+  object ResolveRecursiveReferences extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case rr @ RecursiveRelation(cteName, anchorTerm, recursiveTerm)
+        if anchorTerm.resolved && !recursiveTerm.resolved =>
+
+        val newRecursiveTerm = recursiveTerm.transform {
+          case UnresolvedRecursiveReference(name, accumulated) if name == cteName =>
+            RecursiveReference(name, anchorTerm.output.map(_.newInstance()), accumulated)
+        }
+        rr.copy(recursiveTerm = newRecursiveTerm)
     }
   }
 

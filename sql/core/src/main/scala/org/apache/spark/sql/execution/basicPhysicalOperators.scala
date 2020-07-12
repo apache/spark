@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -250,6 +250,111 @@ case class FilterExec(condition: Expression, child: SparkPlan)
        |${ExplainUtils.generateFieldString("Input", child.output)}
        |Condition : ${condition}
        |""".stripMargin
+  }
+}
+
+/**
+ * Physical plan node for a recursive relation that encapsulates the physical plan of the anchor
+ * and the recursive terms. The anchor is used to initialize the query in the first, then the
+ * recursive is used to extend the result with new rows.
+ *
+ * The execution terminates once the anchor or an iteration of the recursive term return no rows.
+ *
+ * @param cteName the name of the recursive relation
+ * @param anchorTerm this child is used for initializing the query
+ * @param recursiveTerm this child is used for extending the query
+ * @param output the attributes of the recursive relation
+ */
+case class RecursiveRelationExec(
+    cteName: String,
+    anchorTerm: SparkPlan,
+    recursiveTerm: SparkPlan,
+    override val output: Seq[Attribute]) extends SparkPlan {
+  override def children: Seq[SparkPlan] = Seq(anchorTerm, recursiveTerm)
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of iterations"))
+
+  private def unionRDDs(rdds: Seq[RDD[InternalRow]]): RDD[InternalRow] = {
+    if (rdds.size == 1) {
+      rdds.head
+    } else {
+      sparkContext.union(rdds)
+    }
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
+
+    val numOutputRows = longMetric("numOutputRows")
+    val numIterations = longMetric("numIterations")
+
+    // TODO: cache before count, as the RDD can be reused in the next iteration
+    var prevIterationRDD = anchorTerm.execute().map(_.copy())
+    var prevIterationCount = prevIterationRDD.count()
+
+    val accumulatedRDDs = mutable.ArrayBuffer.empty[RDD[InternalRow]]
+
+    var level = 0
+    while (prevIterationCount > 0) {
+      if (levelLimit != -1 && level > levelLimit) {
+        throw new SparkException(s"Recursion level limit ${levelLimit} reached but query has not " +
+          s"exhausted, try increasing ${SQLConf.CTE_RECURSION_LEVEL_LIMIT.key}")
+      }
+
+      accumulatedRDDs += prevIterationRDD
+      numOutputRows += prevIterationCount
+
+      val newRecursiveTerm = recursiveTerm.transform {
+        case rr @ RecursiveReferenceExec(name, _, accumulated) if name == cteName =>
+          val newRDD = if (accumulated) {
+            unionRDDs(accumulatedRDDs)
+          } else {
+            prevIterationRDD
+          }
+          rr.withNewIteration(newRDD)
+      }
+
+
+      // TODO: cache before count, as the RDD can be reused in the next iteration
+      prevIterationRDD = newRecursiveTerm.execute().map(_.copy())
+      prevIterationCount = prevIterationRDD.count()
+
+      level = level + 1
+    }
+
+    numIterations += level
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+
+    if (accumulatedRDDs.isEmpty) {
+      prevIterationRDD
+    } else {
+      unionRDDs(accumulatedRDDs)
+    }
+  }
+}
+
+/**
+ * Physical plan node for a reference to a recursive relation in CTE definitions.
+ *
+ * Please note that during recursive execution the statistics and data are refreshed based on the
+ * results of the previous iteration to recreate the best physical plan in each iteration.
+ *
+ * @param cteName the name of the table it references to
+ * @param output the attributes of the recursive relation
+ * @param accumulated defines if the reference carries accumulated result
+ */
+case class RecursiveReferenceExec(
+    cteName: String,
+    override val output: Seq[Attribute],
+    accumulated: Boolean) extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] = sys.error(s"Invalid call to $nodeName")
+
+  def withNewIteration(data: RDD[InternalRow]): RDDScanExec = {
+    RDDScanExec(output, data, "RecursiveReference")
   }
 }
 

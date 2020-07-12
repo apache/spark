@@ -550,3 +550,9 @@ case class UnresolvedHaving(
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
 }
+
+case class UnresolvedRecursiveReference(cteName: String, accumulated: Boolean) extends LeafNode {
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+}

@@ -126,13 +126,21 @@ case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
         }
     }
 
+    def notInRecursiveRelation(plan: SparkPlan) = {
+      val recursiveRelations =
+        plan.collect { case RecursiveRelationExec(cteName, _, _, _) => cteName }.toSet
+      val recursiveReferences =
+        plan.collect { case RecursiveReferenceExec(cteName, _, _) => cteName }.toSet
+      recursiveReferences.subsetOf(recursiveRelations)
+    }
+
     plan transformUp {
-      case exchange: Exchange => reuse(exchange)
+      case exchange: Exchange if notInRecursiveRelation(exchange) => reuse(exchange)
     } transformAllExpressions {
       // Lookup inside subqueries for duplicate exchanges
       case in: InSubqueryExec =>
         val newIn = in.plan.transformUp {
-          case exchange: Exchange => reuse(exchange)
+          case exchange: Exchange if notInRecursiveRelation(exchange) => reuse(exchange)
         }
         in.copy(plan = newIn.asInstanceOf[BaseSubqueryExec])
     }

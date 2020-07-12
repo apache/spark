@@ -671,6 +671,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.ProjectExec(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         execution.FilterExec(condition, planLater(child)) :: Nil
+      case rr @ logical.RecursiveRelation(name, anchorTerm, recursiveTerm) =>
+        execution.RecursiveRelationExec(name, planLater(anchorTerm),
+          planLater(recursiveTerm), rr.output) :: Nil
+      case logical.RecursiveReference(name, output, accumulated) =>
+        RecursiveReferenceExec(name, output, accumulated) :: Nil
       case f: logical.TypedFilter =>
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>

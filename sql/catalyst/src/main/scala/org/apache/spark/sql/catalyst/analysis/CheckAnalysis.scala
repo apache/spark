@@ -660,6 +660,7 @@ trait CheckAnalysis extends PredicateHelper {
           case _ => // Analysis successful!
         }
     }
+    checkRecursion(plan)
     checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
@@ -669,6 +670,62 @@ trait CheckAnalysis extends PredicateHelper {
     }
 
     plan.setAnalyzed()
+  }
+
+  /**
+   * Recursion according to SQL standard comes with several limitations due to the fact that only
+   * those operations are allowed where the new set of rows can be computed from the result of the
+   * previous iteration. This implies that a recursive reference can't be used in some kinds of
+   * joins and aggregations.
+   * A further constraint is that a recursive term can contain one recursive reference only (except
+   * for using it on different sides of a UNION).
+   *
+   * This rule checks that these restrictions are not violated and returns the original plan.
+   */
+  private def checkRecursion(
+      plan: LogicalPlan,
+      allowedRecursiveReferencesAndCounts: mutable.Map[String, Int] = mutable.Map.empty): Unit = {
+    plan match {
+      case RecursiveRelation(name, anchorTerm, recursiveTerm) =>
+        if (allowedRecursiveReferencesAndCounts.contains(name)) {
+          throw new AnalysisException(s"Recursive CTE definition $name is already in use.")
+        }
+        checkRecursion(anchorTerm, allowedRecursiveReferencesAndCounts)
+        checkRecursion(recursiveTerm, allowedRecursiveReferencesAndCounts += name -> 0)
+        allowedRecursiveReferencesAndCounts -= name
+      case RecursiveReference(name, _, false) =>
+        if (!allowedRecursiveReferencesAndCounts.contains(name)) {
+          throw new AnalysisException(s"Recursive reference $name cannot be used here. This can " +
+            "be caused by using it on inner side of an outer join, using it with aggregate in a " +
+            "subquery or using it multiple times in a recursive term (except for using it on " +
+            "different sides of an UNION ALL).")
+        }
+        if (allowedRecursiveReferencesAndCounts(name) > 0) {
+          throw new AnalysisException(s"Recursive reference $name cannot be used multiple times " +
+            "in a recursive term.")
+        }
+
+        allowedRecursiveReferencesAndCounts +=
+          name -> (allowedRecursiveReferencesAndCounts(name) + 1)
+      case Join(left, right, Inner, _, _) =>
+        checkRecursion(left, allowedRecursiveReferencesAndCounts)
+        checkRecursion(right, allowedRecursiveReferencesAndCounts)
+      case Join(left, right, LeftOuter, _, _) =>
+        checkRecursion(left, allowedRecursiveReferencesAndCounts)
+        checkRecursion(right, mutable.Map.empty)
+      case Join(left, right, RightOuter, _, _) =>
+        checkRecursion(left, mutable.Map.empty)
+        checkRecursion(right, allowedRecursiveReferencesAndCounts)
+      case Join(left, right, _, _, _) =>
+        checkRecursion(left, mutable.Map.empty)
+        checkRecursion(right, mutable.Map.empty)
+      case Aggregate(_, _, child) => checkRecursion(child, mutable.Map.empty)
+      case Union(children) =>
+        children.foreach(checkRecursion(_,
+          mutable.Map(allowedRecursiveReferencesAndCounts.keys.map(name => name -> 0).toSeq: _*)))
+      case o =>
+        o.children.foreach(checkRecursion(_, allowedRecursiveReferencesAndCounts))
+    }
   }
 
   /**

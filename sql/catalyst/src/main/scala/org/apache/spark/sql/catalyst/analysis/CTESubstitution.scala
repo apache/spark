@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.plans.logical.{Distinct, Except, RecursiveRelation, Union}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, With}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -59,7 +60,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       startOfQuery: Boolean = true): Unit = {
     val resolver = SQLConf.get.resolver
     plan match {
-      case With(child, relations) =>
+      case With(child, relations, _) =>
         val newNames = mutable.ArrayBuffer.empty[String]
         newNames ++= outerCTERelationNames
         relations.foreach {
@@ -86,7 +87,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
 
   private def legacyTraverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case With(child, relations) =>
+      case With(child, relations, _) =>
         val resolvedCTERelations = resolveCTERelations(relations, isLegacy = true)
         substituteCTE(child, resolvedCTERelations)
     }
@@ -135,8 +136,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
    */
   private def traverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case With(child: LogicalPlan, relations) =>
-        val resolvedCTERelations = resolveCTERelations(relations, isLegacy = false)
+      case With(child: LogicalPlan, relations, allowRecursion) =>
+        val resolvedCTERelations = resolveCTERelations(relations, isLegacy = false, allowRecursion)
         substituteCTE(child, resolvedCTERelations)
 
       case other =>
@@ -148,7 +149,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
 
   private def resolveCTERelations(
       relations: Seq[(String, SubqueryAlias)],
-      isLegacy: Boolean): Seq[(String, LogicalPlan)] = {
+      isLegacy: Boolean,
+      allowRecursion: Boolean = false): Seq[(String, LogicalPlan)] = {
     val resolvedCTERelations = new mutable.ArrayBuffer[(String, LogicalPlan)](relations.size)
     for ((name, relation) <- relations) {
       val innerCTEResolved = if (isLegacy) {
@@ -161,8 +163,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
         // substitute CTE defined in `relation` first.
         traverseAndSubstituteCTE(relation)
       }
+      val recursionHandled = if (allowRecursion) {
+        handleRecursion(innerCTEResolved, name)
+      } else {
+        innerCTEResolved
+      }
       // CTE definition can reference a previous one
-      resolvedCTERelations += (name -> substituteCTE(innerCTEResolved, resolvedCTERelations.toSeq))
+      resolvedCTERelations += (name -> substituteCTE(recursionHandled, resolvedCTERelations.toSeq))
     }
     resolvedCTERelations.toSeq
   }
@@ -180,4 +187,114 @@ object CTESubstitution extends Rule[LogicalPlan] {
           case e: SubqueryExpression => e.withNewPlan(substituteCTE(e.plan, cteRelations))
         }
     }
+
+  /**
+   * If recursion is allowed, recursion handling starts with inserting unresolved self-references
+   * ([[UnresolvedRecursiveReference]]) to places where a reference to the CTE definition itself is
+   * found.
+   * If there is a self-reference then we need to check if structure of the query satisfies the SQL
+   * recursion rules and insert a [[RecursiveRelation]] finally.
+   */
+  private def handleRecursion(plan: LogicalPlan, cteName: String) = {
+    // check if there is any reference to the CTE and if there is then treat the CTE as recursive
+    val (recursiveReferencesPlan, recursiveReferenceCount) =
+      insertRecursiveReferences(plan, cteName)
+    if (recursiveReferenceCount > 0) {
+      // if there is a reference then the CTE needs to follow one of these structures
+      recursiveReferencesPlan match {
+        case SubqueryAlias(_, u: Union) =>
+          insertRecursiveRelation(cteName, Seq.empty, false, u)
+        case SubqueryAlias(_, Distinct(u: Union)) =>
+          insertRecursiveRelation(cteName, Seq.empty, true, u)
+        case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(columnNames, u: Union)) =>
+          insertRecursiveRelation(cteName, columnNames, false, u)
+        case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(columnNames, Distinct(u: Union))) =>
+          insertRecursiveRelation(cteName, columnNames, true, u)
+        case _ =>
+          throw new AnalysisException(s"Recursive query $cteName should contain UNION or UNION " +
+            "ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords " +
+            "used on result of UNION or UNION ALL.")
+      }
+    } else {
+      plan
+    }
+  }
+
+  /**
+   * If we encounter a relation that matches the recursive CTE then the relation is replaced to an
+   * [[UnresolvedRecursiveReference]]. The replacement process also checks possible references in
+   * subqueries and reports them as errors.
+   */
+  private def insertRecursiveReferences(plan: LogicalPlan, cteName: String): (LogicalPlan, Int) = {
+    val resolver = SQLConf.get.resolver
+
+    var recursiveReferenceCount = 0
+    val newPlan = plan resolveOperators {
+      case UnresolvedRelation(Seq(table)) if (resolver(cteName, table)) =>
+        recursiveReferenceCount += 1
+        UnresolvedRecursiveReference(cteName, false)
+
+      case other =>
+        other.subqueries.foreach(checkAndTraverse(_, {
+          case UnresolvedRelation(Seq(table)) if resolver(cteName, table) =>
+            throw new AnalysisException(s"Recursive query $cteName should not contain recursive " +
+              "references in its subquery.")
+          case _ => true
+        }))
+        other
+    }
+
+    (newPlan, recursiveReferenceCount)
+  }
+
+  private def insertRecursiveRelation(
+      cteName: String,
+      columnNames: Seq[String],
+      distinct: Boolean,
+      union: Union) = {
+    if (union.children.size != 2) {
+      throw new AnalysisException(s"Recursive query ${cteName} should contain one anchor term " +
+        "and one recursive term connected with UNION or UNION ALL.")
+    }
+
+    val anchorTerm :: recursiveTerm :: Nil = union.children
+
+    // The anchor term shouldn't contain a recursive reference that matches the name of the CTE,
+    // except if it is nested under an other RecursiveRelation with the same name.
+    checkAndTraverse(anchorTerm, {
+      case UnresolvedRecursiveReference(name, _) if name == cteName =>
+        throw new AnalysisException(s"Recursive query $cteName should not contain recursive " +
+          "references in its anchor (first) term.")
+      case RecursiveRelation(name, _, _) if name == cteName => false
+      case _ => true
+    })
+
+    // The anchor term has a special role, its output column are aliased if required.
+    val aliasedAnchorTerm = SubqueryAlias(cteName,
+      if (columnNames.nonEmpty) {
+        UnresolvedSubqueryColumnAliases(columnNames, anchorTerm)
+      } else {
+        anchorTerm
+      }
+    )
+
+    // If UNION combinator is used between the terms we extend the anchor with a DISTINCT and the
+    // recursive term with an EXCEPT clause and a reference to the so far accumulated result.
+    if (distinct) {
+      RecursiveRelation(cteName, Distinct(aliasedAnchorTerm),
+        Except(recursiveTerm, UnresolvedRecursiveReference(cteName, true), false))
+    } else {
+      RecursiveRelation(cteName, aliasedAnchorTerm, recursiveTerm)
+    }
+  }
+
+  /**
+   * Taverses the plan including subqueries and run the check while it returns true.
+   */
+  private def checkAndTraverse(plan: LogicalPlan, check: LogicalPlan => Boolean): Unit = {
+    if (check(plan)) {
+      plan.children.foreach(checkAndTraverse(_, check))
+      plan.subqueries.foreach(checkAndTraverse(_, check))
+    }
+  }
 }
