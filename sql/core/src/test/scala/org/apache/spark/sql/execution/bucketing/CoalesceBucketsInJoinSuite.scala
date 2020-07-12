@@ -19,17 +19,21 @@ package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.optimizer.BuildLeft
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.execution.{BinaryExecNode, FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, PartitionSpec}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkSession {
+class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
+  private val sortMergeJoin = "sortMergeJoin"
+  private val shuffledHashJoin = "shuffledHashJoin"
+  private val broadcastHashJoin = "broadcastHashJoin"
+
   case class RelationSetting(
       cols: Seq[Attribute],
       numBuckets: Int,
@@ -47,11 +51,16 @@ class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkS
       rightKeys: Seq[Attribute],
       leftRelation: RelationSetting,
       rightRelation: RelationSetting,
-      isSortMergeJoin: Boolean)
+      joinOperator: String,
+      shjBuildSide: Option[BuildSide])
 
   object JoinSetting {
-    def apply(l: RelationSetting, r: RelationSetting, isSortMergeJoin: Boolean): JoinSetting = {
-      JoinSetting(l.cols, r.cols, l, r, isSortMergeJoin)
+    def apply(
+        l: RelationSetting,
+        r: RelationSetting,
+        joinOperator: String = sortMergeJoin,
+        shjBuildSide: Option[BuildSide] = None): JoinSetting = {
+      JoinSetting(l.cols, r.cols, l, r, joinOperator, shjBuildSide)
     }
   }
 
@@ -73,17 +82,24 @@ class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkS
       leftRelation = setting.rightRelation,
       rightRelation = setting.leftRelation)
 
-    Seq(setting, swappedSetting).foreach { case s =>
+    val settings = if (setting.joinOperator != shuffledHashJoin) {
+      Seq(setting, swappedSetting)
+    } else {
+      Seq(setting)
+    }
+    settings.foreach { s =>
       val lScan = newFileSourceScanExec(s.leftRelation)
       val rScan = newFileSourceScanExec(s.rightRelation)
-      val join = if (s.isSortMergeJoin) {
+      val join = if (s.joinOperator == sortMergeJoin) {
         SortMergeJoinExec(s.leftKeys, s.rightKeys, Inner, None, lScan, rScan)
+      } else if (s.joinOperator == shuffledHashJoin) {
+        ShuffledHashJoinExec(s.leftKeys, s.rightKeys, Inner, s.shjBuildSide.get, None, lScan, rScan)
       } else {
         BroadcastHashJoinExec(
           s.leftKeys, s.rightKeys, Inner, BuildLeft, None, lScan, rScan)
       }
 
-      val plan = CoalesceBucketsInSortMergeJoin(spark.sessionState.conf)(join)
+      val plan = CoalesceBucketsInJoin(spark.sessionState.conf)(join)
 
       def verify(expected: Option[Int], subPlan: SparkPlan): Unit = {
         val coalesced = subPlan.collect {
@@ -91,7 +107,7 @@ class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkS
             f.optionalNumCoalescedBuckets.get
         }
         if (expected.isDefined) {
-          assert(coalesced.size == 1 && coalesced(0) == expected.get)
+          assert(coalesced.size == 1 && coalesced.head == expected.get)
         } else {
           assert(coalesced.isEmpty)
         }
@@ -103,46 +119,67 @@ class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkS
   }
 
   test("bucket coalescing - basic") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
       run(JoinSetting(
-        RelationSetting(4, None), RelationSetting(8, Some(4)), isSortMergeJoin = true))
+        RelationSetting(4, None), RelationSetting(8, Some(4)), joinOperator = sortMergeJoin))
+      run(JoinSetting(
+        RelationSetting(4, None), RelationSetting(8, Some(4)), joinOperator = shuffledHashJoin,
+        shjBuildSide = Some(BuildLeft)))
+      // Coalescing bucket should not happen when the target is on shuffled hash join
+      // build side.
+      run(JoinSetting(
+        RelationSetting(4, None), RelationSetting(8, None), joinOperator = shuffledHashJoin,
+        shjBuildSide = Some(BuildRight)))
     }
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "false") {
-      run(JoinSetting(RelationSetting(4, None), RelationSetting(8, None), isSortMergeJoin = true))
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
+      run(JoinSetting(
+        RelationSetting(4, None), RelationSetting(8, None), joinOperator = broadcastHashJoin))
     }
   }
 
-  test("bucket coalescing should work only for sort merge join") {
+  test("bucket coalescing should work only for sort merge join and shuffled hash join") {
     Seq(true, false).foreach { enabled =>
-      withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> enabled.toString) {
+      withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> enabled.toString) {
         run(JoinSetting(
-          RelationSetting(4, None), RelationSetting(8, None), isSortMergeJoin = false))
+          RelationSetting(4, None), RelationSetting(8, None), joinOperator = broadcastHashJoin))
       }
     }
   }
 
   test("bucket coalescing shouldn't be applied when the number of buckets are the same") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
-      run(JoinSetting(RelationSetting(8, None), RelationSetting(8, None), isSortMergeJoin = true))
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      run(JoinSetting(
+        RelationSetting(8, None), RelationSetting(8, None), joinOperator = sortMergeJoin))
+      run(JoinSetting(
+        RelationSetting(8, None), RelationSetting(8, None), joinOperator = shuffledHashJoin,
+        shjBuildSide = Some(BuildLeft)))
     }
   }
 
   test("number of bucket is not divisible by other number of bucket") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
-      run(JoinSetting(RelationSetting(3, None), RelationSetting(8, None), isSortMergeJoin = true))
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      run(JoinSetting(
+        RelationSetting(3, None), RelationSetting(8, None), joinOperator = sortMergeJoin))
+      run(JoinSetting(
+        RelationSetting(3, None), RelationSetting(8, None), joinOperator = shuffledHashJoin,
+        shjBuildSide = Some(BuildLeft)))
     }
   }
 
   test("the ratio of the number of buckets is greater than max allowed") {
     withSQLConf(
-      SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true",
-      SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO.key -> "2") {
-      run(JoinSetting(RelationSetting(4, None), RelationSetting(16, None), isSortMergeJoin = true))
+        SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+        SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
+      run(JoinSetting(
+        RelationSetting(4, None), RelationSetting(16, None), joinOperator = sortMergeJoin))
+      run(JoinSetting(
+        RelationSetting(4, None), RelationSetting(16, None), joinOperator = shuffledHashJoin,
+        shjBuildSide = Some(BuildLeft)))
     }
   }
 
   test("join keys should match with output partitioning") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
       val lCols = Seq(
         AttributeReference("l1", IntegerType)(),
         AttributeReference("l2", IntegerType)())
@@ -160,7 +197,16 @@ class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkS
         rightKeys = Seq(rCols.head),
         leftRelation = lRel,
         rightRelation = rRel,
-        isSortMergeJoin = true))
+        joinOperator = sortMergeJoin,
+        shjBuildSide = None))
+
+      run(JoinSetting(
+        leftKeys = Seq(lCols.head),
+        rightKeys = Seq(rCols.head),
+        leftRelation = lRel,
+        rightRelation = rRel,
+        joinOperator = shuffledHashJoin,
+        shjBuildSide = Some(BuildLeft)))
 
       // The following should not be coalesced because join keys do not match with output
       // partitioning (more expressions).
@@ -169,7 +215,16 @@ class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkS
         rightKeys = rCols :+ AttributeReference("r3", IntegerType)(),
         leftRelation = lRel,
         rightRelation = rRel,
-        isSortMergeJoin = true))
+        joinOperator = sortMergeJoin,
+        shjBuildSide = None))
+
+      run(JoinSetting(
+        leftKeys = lCols :+ AttributeReference("l3", IntegerType)(),
+        rightKeys = rCols :+ AttributeReference("r3", IntegerType)(),
+        leftRelation = lRel,
+        rightRelation = rRel,
+        joinOperator = shuffledHashJoin,
+        shjBuildSide = Some(BuildLeft)))
 
       // The following will be coalesced since ordering should not matter because it will be
       // adjusted in `EnsureRequirements`.
@@ -178,7 +233,16 @@ class CoalesceBucketsInSortMergeJoinSuite extends SQLTestUtils with SharedSparkS
         rightKeys = rCols.reverse,
         leftRelation = lRel,
         rightRelation = RelationSetting(rCols, 8, Some(4)),
-        isSortMergeJoin = true))
+        joinOperator = sortMergeJoin,
+        shjBuildSide = None))
+
+      run(JoinSetting(
+        leftKeys = lCols.reverse,
+        rightKeys = rCols.reverse,
+        leftRelation = lRel,
+        rightRelation = RelationSetting(rCols, 8, Some(4)),
+        joinOperator = shuffledHashJoin,
+        shjBuildSide = Some(BuildLeft)))
     }
   }
 
