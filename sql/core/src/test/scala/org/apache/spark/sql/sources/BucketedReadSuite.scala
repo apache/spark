@@ -943,6 +943,37 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("terry - hashpartitioning") {
+    withTable("t1", "t2") {
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+        val df1 = (0 until 10).map(i => (i % 5, i % 13)).toDF("i1", "j1")
+        val df2 = (0 until 10).map(i => (i % 7, i % 11)).toDF("i2", "j2")
+
+        df1.write.format("parquet").bucketBy(4, "i1", "j1").saveAsTable("t1")
+        df2.write.format("parquet").bucketBy(4, "i2", "j2").saveAsTable("t2")
+
+        val t1 = spark.table("t1")
+        val t2 = spark.table("t2")
+        val join = t1.join(t2, t1("i1") === t2("j2") && t1("i1") === t2("i2"))
+        join.explain
+      }
+    }
+  }
+
+
+  test("terry - collectionpartition") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      val df1 = (0 until 100).map(i => (i % 5, i % 13, i.toString)).toDF("i1", "j1", "k1")
+      val df2 = (0 until 100).map(i => (i % 7, i % 11, i.toString)).toDF("i2", "j2", "k2")
+      val df3 = (0 until 100).map(i => (i % 5, i % 13, i.toString)).toDF("i3", "j3", "k3")
+      val join = df1.join(df2, df1("i1") === df2("i2") && df1("j1") === df2("j2"))
+      val join2 = join.join(df3, join("j1") === df3("j3") && join("i1") === df3("i3"))
+      join2.explain
+    }
+  }
+
   test("bucket coalescing is applied when join expressions match with partitioning expressions") {
     withTable("t1", "t2") {
       df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("t1")
