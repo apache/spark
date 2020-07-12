@@ -1,6 +1,9 @@
 name: master
 
 on:
+  push:
+    branches:
+    - branch-2.4
   pull_request:
     branches:
     - branch-2.4
