@@ -116,19 +116,21 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Returns the requested column ids from the given ORC file. Column id can be -1, which means the
-   * requested column doesn't exist in the ORC file. Returns None if the given ORC file is empty.
+   * Returns the requested column ids from the given ORC file and Boolean flag to use actual
+   * schema or result scehma. Column id can be -1, which means the requested column doesn't
+   * exist in the ORC file. Returns None if the given ORC file is empty.
    */
   def requestedColumnIds(
       isCaseSensitive: Boolean,
       dataSchema: StructType,
       requiredSchema: StructType,
       reader: Reader,
-      conf: Configuration): Option[Array[Int]] = {
+      conf: Configuration): (Option[Array[Int]], Boolean) = {
+    var sendActualSchema = false
     val orcFieldNames = reader.getSchema.getFieldNames.asScala
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
-      None
+      (None, sendActualSchema)
     } else {
       if (orcFieldNames.forall(_.startsWith("_col"))) {
         // This is a ORC file written by Hive, no field names in the physical schema, assume the
@@ -136,27 +138,31 @@ object OrcUtils extends Logging {
         assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
           s"${dataSchema.catalogString} has less fields than the actual ORC physical schema, " +
           "no idea which columns were dropped, fail to read.")
-        Some(requiredSchema.fieldNames.map { name =>
+        (Some(requiredSchema.fieldNames.map { name =>
           val index = dataSchema.fieldIndex(name)
           if (index < orcFieldNames.length) {
+            // for ORC file written by Hive, no field names
+            // in the physical schema, there is a need to send the
+            // entire dataSchema instead of required schema
+            sendActualSchema = true
             index
           } else {
             -1
           }
-        })
+        }), sendActualSchema)
       } else {
         if (isCaseSensitive) {
-          Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
+          (Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
             if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
               idx
             } else {
               -1
             }
-          })
+          }), sendActualSchema)
         } else {
           // Do case-insensitive resolution only if in case-insensitive mode
           val caseInsensitiveOrcFieldMap = orcFieldNames.groupBy(_.toLowerCase(Locale.ROOT))
-          Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
+          (Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
             caseInsensitiveOrcFieldMap
               .get(requiredFieldName.toLowerCase(Locale.ROOT))
               .map { matchedOrcFields =>
@@ -170,7 +176,7 @@ object OrcUtils extends Logging {
                   idx
                 }
               }.getOrElse(-1)
-          })
+          }), sendActualSchema)
         }
       }
     }

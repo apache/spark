@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.orc.TypeDescription
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String.fromString
@@ -76,31 +75,6 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
       val p1 = batch.column(1).asInstanceOf[OnHeapColumnVector]
       assert(isConstant.get(p1).asInstanceOf[Boolean]) // Partition column is constant.
       assert(p1.getUTF8String(0) === partitionValues.getUTF8String(0))
-    }
-  }
-
-  test("SPARK-32234: orc data created by the hive tables having _col fields" +
-    " name for vectorized reader") {
-    Seq(false, true).foreach { vectorized =>
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        withTable("test_hive_orc_vect_read") {
-          spark.sql(
-            """
-              | CREATE TABLE test_hive_orc_vect_read
-              | (_col1 INT, _col2 STRING, _col3 INT)
-              | USING orc
-            """.stripMargin)
-          spark.sql(
-            """
-              | INSERT INTO
-              | test_hive_orc_vect_read
-              | VALUES(9, '12', 2020)
-            """.stripMargin)
-
-          val df = spark.sql("SELECT _col2 FROM test_hive_orc_vect_read")
-          checkAnswer(df, Row("12"))
-        }
-      }
     }
   }
 }

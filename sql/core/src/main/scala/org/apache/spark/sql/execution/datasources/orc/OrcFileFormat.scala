@@ -183,23 +183,19 @@ class OrcFileFormat
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
       val requestedColIdsOrEmptyFile =
         Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
-          // for ORC file written by Hive, no field names
-          // in the physical schema, there is a need to send the
-          // entire dataSchema instead of required schema
-          val orcFieldNames = reader.getSchema.getFieldNames.asScala
-          if (orcFieldNames.forall(_.startsWith("_col"))) {
-            resultSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
-          }
           OrcUtils.requestedColumnIds(
             isCaseSensitive, dataSchema, requiredSchema, reader, conf)
         }
 
+      if (requestedColIdsOrEmptyFile._2) {
+        resultSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
+      }
       OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
 
-      if (requestedColIdsOrEmptyFile.isEmpty) {
+      if (requestedColIdsOrEmptyFile._1.isEmpty) {
         Iterator.empty
       } else {
-        val requestedColIds = requestedColIdsOrEmptyFile.get
+        val requestedColIds = requestedColIdsOrEmptyFile._1.get
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)

@@ -80,10 +80,10 @@ case class OrcPartitionReaderFactory(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
       }
 
-    if (requestedColIdsOrEmptyFile.isEmpty) {
+    if (requestedColIdsOrEmptyFile._1.isEmpty) {
       new EmptyPartitionReader[InternalRow]
     } else {
-      val requestedColIds = requestedColIdsOrEmptyFile.get
+      val requestedColIds = requestedColIdsOrEmptyFile._1.get
       assert(requestedColIds.length == readDataSchema.length,
         "[BUG] requested column IDs do not match required schema")
 
@@ -126,10 +126,11 @@ case class OrcPartitionReaderFactory(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
       }
 
-    if (requestedColIdsOrEmptyFile.isEmpty) {
+    if (requestedColIdsOrEmptyFile._1.isEmpty) {
       new EmptyPartitionReader
     } else {
-      val requestedColIds = requestedColIdsOrEmptyFile.get ++ Array.fill(partitionSchema.length)(-1)
+      val requestedColIds =
+        requestedColIdsOrEmptyFile._1.get ++ Array.fill(partitionSchema.length)(-1)
       assert(requestedColIds.length == resultSchema.length,
         "[BUG] requested column IDs do not match required schema")
       val taskConf = new Configuration(conf)
