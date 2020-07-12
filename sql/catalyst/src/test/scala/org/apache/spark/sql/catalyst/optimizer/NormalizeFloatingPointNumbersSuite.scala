@@ -109,23 +109,6 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     comparePlans(doubleOptimized, correctAnswer)
   }
 
-  test("SPARK-32258: normalize the children of Coalesce") {
-    val cond = If(a > 0.1D, a, a + 0.2D) <=> b
-    val query = testRelation1.join(testRelation2, condition = Some(cond))
-    val optimized = Optimize.execute(query)
-    val doubleOptimized = Optimize.execute(optimized)
-
-    /*
-    val joinCond = If(a > 0.1D,
-      KnownFloatingPointNormalized(NormalizeNaNAndZero(a)),
-      KnownFloatingPointNormalized(NormalizeNaNAndZero(a + 0.2D))) ===
-      KnownFloatingPointNormalized(NormalizeNaNAndZero(b))
-    val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
-
-    comparePlans(doubleOptimized, correctAnswer)
-     */
-  }
-
   test("SPARK-32258: normalize the children of CaseWhen") {
     val cond = CaseWhen(
       Seq((a > 0.1D, a), (a > 0.2D, a + 0.2D)),
