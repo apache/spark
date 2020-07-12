@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_IN_EXTRACT_LITERAL_PART
 import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD
 import org.apache.spark.sql.types._
 
@@ -225,19 +226,32 @@ class OptimizeInSuite extends PlanTest {
   }
 
   test("SPARK-32196: Extract In convertible part if it is not convertible") {
-    val originalQuery1 =
-      testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), UnresolvedAttribute("b"))))
-        .analyze
-    val optimized1 = Optimize.execute(originalQuery1)
-    val correctAnswer1 =
-      testRelation
-        .where(
-          Or(EqualTo(UnresolvedAttribute("a"), Literal(1)),
-            In(UnresolvedAttribute("a"), Seq(UnresolvedAttribute("b"))))
-        )
-        .analyze
-    comparePlans(optimized1, correctAnswer1)
+    Seq("true", "false").foreach { enable =>
+      withSQLConf(OPTIMIZER_IN_EXTRACT_LITERAL_PART.key -> enable) {
+        val originalQuery1 =
+          testRelation
+            .where(In(UnresolvedAttribute("a"), Seq(Literal(1), UnresolvedAttribute("b"))))
+            .analyze
+        val optimized1 = Optimize.execute(originalQuery1)
+
+        if (enable.toBoolean) {
+          val correctAnswer1 =
+            testRelation
+              .where(
+                Or(EqualTo(UnresolvedAttribute("a"), Literal(1)),
+                  In(UnresolvedAttribute("a"), Seq(UnresolvedAttribute("b"))))
+              )
+              .analyze
+          comparePlans(optimized1, correctAnswer1)
+        } else {
+          val correctAnswer1 =
+            testRelation
+              .where(In(UnresolvedAttribute("a"), Seq(Literal(1), UnresolvedAttribute("b"))))
+              .analyze
+          comparePlans(optimized1, correctAnswer1)
+        }
+      }
+    }
 
     val originalQuery2 =
       testRelation

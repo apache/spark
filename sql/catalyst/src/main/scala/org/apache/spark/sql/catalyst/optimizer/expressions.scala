@@ -265,7 +265,8 @@ object OptimizeIn extends Rule[LogicalPlan] {
         val (convertible, nonConvertible) = list.partition(_.isInstanceOf[Literal])
         if (convertible.nonEmpty && nonConvertible.isEmpty) {
           optimizeIn(expr, v, list)
-        } else if (convertible.nonEmpty && nonConvertible.nonEmpty) {
+        } else if (convertible.nonEmpty && nonConvertible.nonEmpty &&
+          SQLConf.get.optimizerInExtractLiteralPart) {
           val optimizedIn = optimizeIn(In(v, convertible), v, convertible)
           Or(optimizedIn, In(v, nonConvertible))
         } else {

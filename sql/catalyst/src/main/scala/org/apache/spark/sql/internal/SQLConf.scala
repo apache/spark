@@ -197,6 +197,14 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val OPTIMIZER_IN_EXTRACT_LITERAL_PART =
+    buildConf("spark.sql.optimizer.inExtractLiteralPart")
+      .internal()
+      .doc("When true, we will extract and optimize the literal part of in if not all are literal.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZER_INSET_CONVERSION_THRESHOLD =
     buildConf("spark.sql.optimizer.inSetConversionThreshold")
       .internal()
@@ -2760,6 +2768,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerExcludedRules: Option[String] = getConf(OPTIMIZER_EXCLUDED_RULES)
 
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
+
+  def optimizerInExtractLiteralPart: Boolean = getConf(OPTIMIZER_IN_EXTRACT_LITERAL_PART)
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
