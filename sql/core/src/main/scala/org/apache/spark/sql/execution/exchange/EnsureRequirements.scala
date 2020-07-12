@@ -184,8 +184,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   /**
-   * Recursively reorders the join keys based on the partitioning. It starts reordering
-   * keys to match HashPartitioning on either side, followed by PartitioningCollection.
+   * Recursively reorders the join keys based on partitioning. It starts reordering the
+   * join keys to match HashPartitioning on either side, followed by PartitioningCollection.
    */
   private def reorderJoinKeysRecursively(
       leftKeys: Seq[Expression],
