@@ -286,7 +286,9 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
     (sink, trigger) match {
       case (table: SupportsWrite, trigger: ContinuousTrigger) =>
-        UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
+        if (operationCheckEnabled) {
+          UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
+        }
         new StreamingQueryWrapper(new ContinuousExecution(
           sparkSession,
           userSpecifiedName.orNull,
