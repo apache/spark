@@ -63,6 +63,9 @@ private[sql] object PruneFileSourcePartitions
     val extraPartitionFilters =
       remainingFilterInCnf.filter(f => f.references.subsetOf(partitionSet))
 
+    // For the filters that can't be used for partition pruning, we simply use `remainingFilters`
+    // instead of using the non-convertible part from `remainingFilterInCnf`. Otherwise, the
+    // result filters can be very long.
     (ExpressionSet(partitionFilters ++ extraPartitionFilters), remainingFilters)
   }
 

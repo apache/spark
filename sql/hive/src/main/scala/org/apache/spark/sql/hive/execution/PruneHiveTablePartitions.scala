@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions.CNFConversion
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -110,9 +109,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case op @ PhysicalOperation(projections, filters, relation: HiveTableRelation)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
-      val predicates = CNFConversion(filters.reduceLeft(And))
-      val finalPredicates = if (predicates.nonEmpty) predicates else filters
-      val partitionKeyFilters = getPartitionKeyFilters(finalPredicates, relation)
+      val partitionKeyFilters = getPartitionKeyFilters(filters, relation)
       if (partitionKeyFilters.nonEmpty) {
         val newPartitions = prunePartitions(relation, partitionKeyFilters)
         val newTableMeta = updateTableMeta(relation.tableMeta, newPartitions)

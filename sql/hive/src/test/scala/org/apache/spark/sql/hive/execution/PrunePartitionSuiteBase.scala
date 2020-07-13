@@ -67,7 +67,7 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
     }
   }
 
-  test("SPARK-32284: Avoid pushing down too many predicates in partition pruning") {
+  test("SPARK-32284: Avoid expanding too many CNF predicates in partition pruning") {
     withTempView("temp") {
       withTable("t") {
         sql(
