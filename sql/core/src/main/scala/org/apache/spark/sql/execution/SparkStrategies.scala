@@ -199,10 +199,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         def createCartesianProduct() = {
           if (joinType.isInstanceOf[InnerLike]) {
-            // Since for join hint [[SHUFFLE_REPLICATE_NL]] when having equi join conditions,
-            // we still choose Cartesian Product Join, but in ExtractEquiJoinKeys, it will filter
-            // out equi condition. Instead of using the condition extracted by ExtractEquiJoinKeys,
-            // we should use the original join condition "j.condition".
+            // `CartesianProductExec` can't implicitly evaluate equal join condition, here we should
+            // pass the original condition which includes both equal and non-equal conditions.
             Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), j.condition)))
           } else {
             None
