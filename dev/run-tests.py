@@ -100,12 +100,14 @@ def setup_test_environ(environ):
         os.environ[k] = v
 
 
-def determine_modules_to_test(changed_modules):
+def determine_modules_to_test(changed_modules, deduplicated=True):
     """
     Given a set of modules that have changed, compute the transitive closure of those modules'
     dependent modules in order to determine the set of modules that should be tested.
 
     Returns a topologically-sorted list of modules (ties are broken by sorting on module names).
+    If ``deduplicated`` is disabled, the modules are returned without tacking the deduplication
+    by dependencies into account.
 
     >>> [x.name for x in determine_modules_to_test([modules.root])]
     ['root']
@@ -121,11 +123,30 @@ def determine_modules_to_test(changed_modules):
     ... # doctest: +NORMALIZE_WHITESPACE
     ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
      'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
+    >>> sorted([x.name for x in determine_modules_to_test(
+    ...     [modules.sparkr, modules.sql], deduplicated=False)])
+    ... # doctest: +NORMALIZE_WHITESPACE
+    ['avro', 'examples', 'hive', 'hive-thriftserver', 'mllib', 'pyspark-ml',
+     'pyspark-mllib', 'pyspark-sql', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+    >>> sorted([x.name for x in determine_modules_to_test(
+    ...     [modules.sql, modules.core], deduplicated=False)])
+    ... # doctest: +NORMALIZE_WHITESPACE
+    ['avro', 'catalyst', 'core', 'examples', 'graphx', 'hive', 'hive-thriftserver',
+     'mllib', 'mllib-local', 'pyspark-core', 'pyspark-ml', 'pyspark-mllib',
+     'pyspark-sql', 'pyspark-streaming', 'repl', 'root',
+     'sparkr', 'sql', 'sql-kafka-0-10', 'streaming', 'streaming-flume',
+     'streaming-flume-assembly', 'streaming-flume-sink', 'streaming-kafka-0-10',
+     'streaming-kafka-0-8', 'streaming-kinesis-asl']
     """
     modules_to_test = set()
     for module in changed_modules:
-        modules_to_test = modules_to_test.union(determine_modules_to_test(module.dependent_modules))
+        modules_to_test = modules_to_test.union(
+            determine_modules_to_test(module.dependent_modules, deduplicated))
     modules_to_test = modules_to_test.union(set(changed_modules))
+
+    if not deduplicated:
+        return modules_to_test
+
     # If we need to run all of the tests, then we should short-circuit and return 'root'
     if modules.root in modules_to_test:
         return [modules.root]
@@ -488,6 +509,24 @@ def parse_opts():
         "-p", "--parallelism", type="int", default=4,
         help="The number of suites to test in parallel (default %default)"
     )
+    parser.add_option(
+        "-m", "--modules", type="str",
+        default=None,
+        help="A comma-separated list of modules to test "
+             "(default: %s)" % ",".join(sorted([m.name for m in modules.all_modules]))
+    )
+    parser.add_option(
+        "-e", "--excluded-tags", type="str",
+        default=None,
+        help="A comma-separated list of tags to exclude in the tests, "
+             "e.g., org.apache.spark.tags.ExtendedHiveTest "
+    )
+    parser.add_option(
+        "-i", "--included-tags", type="str",
+        default=None,
+        help="A comma-separated list of tags to include in the tests, "
+             "e.g., org.apache.spark.tags.ExtendedHiveTest "
+    )
 
     (opts, args) = parser.parse_args()
     if args:
@@ -537,40 +576,72 @@ def main():
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
     else:
-        # else we're running locally and can use local settings
+        # else we're running locally or Github Actions.
         build_tool = "sbt"
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.6")
-        test_env = "local"
+        if "GITHUB_ACTIONS" in os.environ:
+            test_env = "github_actions"
+        else:
+            test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
           "under environment", test_env)
 
     changed_modules = None
+    test_modules = None
     changed_files = None
-    should_only_test_modules = "TEST_ONLY_MODULES" in os.environ
+    should_only_test_modules = opts.modules is not None
     included_tags = []
+    excluded_tags = []
     if should_only_test_modules:
-        str_test_modules = [m.strip() for m in os.environ.get("TEST_ONLY_MODULES").split(",")]
+        str_test_modules = [m.strip() for m in opts.modules.split(",")]
         test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
-        # Directly uses test_modules as changed modules to apply tags and environments
-        # as if all specified test modules are changed.
+
+        # If we're running the tests in Github Actions, attempt to detect and test
+        # only the affected modules.
+        if test_env == "github_actions":
+            if os.environ["GITHUB_BASE_REF"] != "":
+                # Pull requests
+                changed_files = identify_changed_files_from_git_commits(
+                    os.environ["GITHUB_SHA"], target_branch=os.environ["GITHUB_BASE_REF"])
+            else:
+                # Build for each commit.
+                changed_files = identify_changed_files_from_git_commits(
+                    os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"])
+
+            modules_to_test = determine_modules_to_test(
+                determine_modules_for_files(changed_files), deduplicated=False)
+
+            if modules.root not in modules_to_test:
+                # If root module is not found, only test the intersected modules.
+                # If root module is found, just run the modules as specified initially.
+                test_modules = list(set(modules_to_test).intersection(test_modules))
+
         changed_modules = test_modules
-        str_excluded_tags = os.environ.get("TEST_ONLY_EXCLUDED_TAGS", None)
-        str_included_tags = os.environ.get("TEST_ONLY_INCLUDED_TAGS", None)
-        excluded_tags = []
-        if str_excluded_tags:
-            excluded_tags = [t.strip() for t in str_excluded_tags.split(",")]
-        included_tags = []
-        if str_included_tags:
-            included_tags = [t.strip() for t in str_included_tags.split(",")]
+        if len(changed_modules) == 0:
+            print("[info] There are no modules to test, exiting without testing.")
+            return
+
+    # If we're running the tests in AMPLab Jenkins, calculate the diff from the targeted branch, and
+    # detect modules to test.
     elif test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
+        test_modules = determine_modules_to_test(changed_modules)
         excluded_tags = determine_tags_to_exclude(changed_modules)
+
+    # If there is no changed module found, tests all.
     if not changed_modules:
         changed_modules = [modules.root]
-        excluded_tags = []
+    if not test_modules:
+        test_modules = determine_modules_to_test(changed_modules)
+
+    if opts.excluded_tags:
+        excluded_tags.extend([t.strip() for t in opts.excluded_tags.split(",")])
+    if opts.included_tags:
+        included_tags.extend([t.strip() for t in opts.included_tags.split(",")])
+
     print("[info] Found the following changed modules:",
           ", ".join(x.name for x in changed_modules))
 
@@ -585,8 +656,6 @@ def main():
 
     should_run_java_style_checks = False
     if not should_only_test_modules:
-        test_modules = determine_modules_to_test(changed_modules)
-
         # license checks
         run_apache_rat_checks()
 
@@ -643,10 +712,6 @@ def main():
 
 
 def _test():
-    if "TEST_ONLY_MODULES" in os.environ:
-        # TODO(SPARK-32252): Enable doctests back in Github Actions.
-        return
-
     import doctest
     failure_count = doctest.testmod()[0]
     if failure_count:
