@@ -118,12 +118,19 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
         assert(apps.nonEmpty)
         assert(master.idToApp.keySet.intersect(apps.keySet) == apps.keySet)
       }
-
+      // scalastyle:off
+      println("appRegistered")
+      // scalastyle:on
       appRegistered.countDown()
     case LaunchExecutor(_, appId, execId, _, _, _, _) =>
       assert(appRegistered.await(10, TimeUnit.SECONDS))
-
+      // scalastyle:off
+      println(s"failedCnt=$failedCnt")
+      // scalastyle:on
       if (failedCnt == 0) {
+        // scalastyle:off
+        println("launchExecutorReceived countDown")
+        // scalastyle:on
         launchExecutorReceived.countDown()
       }
       assert(master.idToApp.contains(appId))
@@ -686,44 +693,51 @@ class MasterSuite extends SparkFunSuite
   }
 
   // TODO(SPARK-32250): Enable the test back. It is flaky in GitHub Actions.
-  ignore("SPARK-27510: Master should avoid dead loop while launching executor failed in Worker") {
-    val master = makeAliveMaster()
-    var worker: MockExecutorLaunchFailWorker = null
-    try {
-      worker = new MockExecutorLaunchFailWorker(master)
-      worker.rpcEnv.setupEndpoint("worker", worker)
-      val workerRegMsg = RegisterWorker(
-        worker.id,
-        "localhost",
-        9999,
-        worker.self,
-        10,
-        1234 * 3,
-        "http://localhost:8080",
-        master.rpcEnv.address)
-      master.self.send(workerRegMsg)
-      val driver = DeployTestUtils.createDriverDesc()
-      // mimic DriverClient to send RequestSubmitDriver to master
-      master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
+  (Array.fill(50)(10) ++ Array.fill(50)(20)).zipWithIndex.foreach { case (time, i) =>
+    test(s"SPARK-27510: Master should avoid dead loop " +
+      s"while launching executor failed in Worker (timeout=$time)-$i") {
+      val master = makeAliveMaster()
+      var worker: MockExecutorLaunchFailWorker = null
+      try {
+        worker = new MockExecutorLaunchFailWorker(master)
+        worker.rpcEnv.setupEndpoint("worker", worker)
+        val workerRegMsg = RegisterWorker(
+          worker.id,
+          "localhost",
+          9999,
+          worker.self,
+          10,
+          1234 * 3,
+          "http://localhost:8080",
+          master.rpcEnv.address)
+        master.self.send(workerRegMsg)
+        val driver = DeployTestUtils.createDriverDesc()
+        // mimic DriverClient to send RequestSubmitDriver to master
+        master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
 
-      // LaunchExecutor message should have been received in worker side
-      assert(worker.launchExecutorReceived.await(10, TimeUnit.SECONDS))
+        // scalastyle:off
+        println(s"launchExecutorReceived await $time seconds.")
+        // scalastyle:on
+        // LaunchExecutor message should have been received in worker side
+        assert(worker.launchExecutorReceived.await(time, TimeUnit.SECONDS))
 
-      eventually(timeout(10.seconds)) {
-        val appIds = worker.appIdsToLaunchExecutor
-        // Master would continually launch executors until reach MAX_EXECUTOR_RETRIES
-        assert(worker.failedCnt == master.conf.get(MAX_EXECUTOR_RETRIES))
-        // Master would remove the app if no executor could be launched for it
-        assert(master.idToApp.keySet.intersect(appIds).isEmpty)
-      }
-    } finally {
-      if (worker != null) {
-        worker.rpcEnv.shutdown()
-      }
-      if (master != null) {
-        master.rpcEnv.shutdown()
+        eventually(timeout(10.seconds)) {
+          val appIds = worker.appIdsToLaunchExecutor
+          // Master would continually launch executors until reach MAX_EXECUTOR_RETRIES
+          assert(worker.failedCnt == master.conf.get(MAX_EXECUTOR_RETRIES))
+          // Master would remove the app if no executor could be launched for it
+          assert(master.idToApp.keySet.intersect(appIds).isEmpty)
+        }
+      } finally {
+        if (worker != null) {
+          worker.rpcEnv.shutdown()
+        }
+        if (master != null) {
+          master.rpcEnv.shutdown()
+        }
       }
     }
+
   }
 
   test("SPARK-19900: there should be a corresponding driver for the app after relaunching driver") {
