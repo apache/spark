@@ -288,7 +288,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             case e if filter.isDefined =>
               val ife = If(filter.get, e, nullify(e))
               e -> Alias(ife, s"_gen_attr_${NamedExpression.newExprId.id}")()
-            // For convenience and unification, we always alias the distinct column, even if
+            // For convenience and unification, we always alias the column, even if
             // there is no filter.
             case e => e -> Alias(e, s"_gen_attr_${NamedExpression.newExprId.id}")()
           }
