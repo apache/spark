@@ -59,7 +59,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
     }
     // Try extracting more convertible partition filters from the remaining filters by converting
     // them into CNF.
-    val remainingFilterInCnf = remainingFilters.flatMap(CNFConversion)
+    val remainingFilterInCnf = remainingFilters.flatMap(CNFConversion(_))
     val extraPartitionFilters = remainingFilterInCnf.filter(f =>
       !f.references.isEmpty && f.references.subsetOf(partitionColumnSet))
     ExpressionSet(partitionFilters ++ extraPartitionFilters)

@@ -207,13 +207,15 @@ trait PredicateHelper extends Logging {
    * CNF can explode exponentially in the size of the input expression when converting [[Or]]
    * clauses. Use a configuration [[SQLConf.MAX_CNF_NODE_COUNT]] to prevent such cases.
    *
-   * @param condition to be converted into CNF.
+   * @param condition Condition to be converted into CNF.
+   * @param groupExpsFunc A method for grouping intermediate results so that the final result can be
+   *                      shorter.
    * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
    *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
    */
-  protected def conjunctiveNormalForm(
+  protected def CNFConversion(
       condition: Expression,
-      groupExpsFunc: Seq[Expression] => Seq[Expression]): Seq[Expression] = {
+      groupExpsFunc: Seq[Expression] => Seq[Expression] = identity): Seq[Expression] = {
     val postOrderNodes = postOrderTraversal(condition)
     val resultStack = new mutable.Stack[Seq[Expression]]
     val maxCnfNodeCount = SQLConf.get.maxCnfNodeCount
@@ -256,24 +258,13 @@ trait PredicateHelper extends Logging {
    * when expand predicates, we can group by the qualifier avoiding generate unnecessary
    * expression to control the length of final result since there are multiple tables.
    *
-   * @param condition condition need to be converted
+   * @param condition Condition to be converted into CNF.
    * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
    *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
    */
   def CNFWithGroupExpressionsByQualifier(condition: Expression): Seq[Expression] = {
-    conjunctiveNormalForm(condition, (expressions: Seq[Expression]) =>
+    CNFConversion(condition, (expressions: Seq[Expression]) =>
         expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq)
-  }
-
-  /**
-   * Convert an expression to conjunctive normal form for predicate pushdown and partition pruning.
-   *
-   * @param condition condition need to be converted
-   * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
-   *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
-   */
-  def CNFConversion(condition: Expression): Seq[Expression] = {
-    conjunctiveNormalForm(condition, (expressions: Seq[Expression]) => expressions)
   }
 
   /**
@@ -287,7 +278,7 @@ trait PredicateHelper extends Logging {
    *    2.1 Pop a node from first stack and push it to second stack
    *    2.2 Push the children of the popped node to first stack
    *
-   * @param condition to be traversed as binary tree
+   * @param condition Condition to be traversed as binary tree
    * @return sub-expressions in post order traversal as a stack.
    *         The first element of result stack is the leftmost node.
    */

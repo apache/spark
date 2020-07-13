@@ -59,7 +59,7 @@ private[sql] object PruneFileSourcePartitions
 
     // Try extracting more convertible partition filters from the remaining filters by converting
     // them into CNF.
-    val remainingFilterInCnf = remainingFilters.flatMap(CNFConversion)
+    val remainingFilterInCnf = remainingFilters.flatMap(CNFConversion(_))
     val extraPartitionFilters =
       remainingFilterInCnf.filter(f => f.references.subsetOf(partitionSet))
 
