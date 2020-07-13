@@ -94,6 +94,7 @@ private[spark] case class SparkUserDefinedFunction(
     f: AnyRef,
     dataType: DataType,
     inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
+    outputEncoder: Option[ExpressionEncoder[_]] = None,
     name: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
@@ -109,6 +110,7 @@ private[spark] case class SparkUserDefinedFunction(
       dataType,
       exprs,
       inputEncoders,
+      outputEncoder,
       udfName = name,
       nullable = nullable,
       udfDeterministic = deterministic)
@@ -150,7 +152,8 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
   // This is also used by udf.register(...) when it detects a UserDefinedAggregator
   def scalaAggregator(exprs: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = {
     val iEncoder = inputEncoder.asInstanceOf[ExpressionEncoder[IN]]
-    ScalaAggregator(exprs, aggregator, iEncoder, nullable, deterministic)
+    val bEncoder = aggregator.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]]
+    ScalaAggregator(exprs, aggregator, iEncoder, bEncoder, nullable, deterministic)
   }
 
   override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {

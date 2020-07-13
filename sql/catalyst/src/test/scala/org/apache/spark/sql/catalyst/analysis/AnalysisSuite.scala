@@ -884,4 +884,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq("Intersect can only be performed on tables with the compatible column types. " +
         "timestamp <> double at the second column of the second table"))
   }
+
+  test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
+    assertAnalysisError(testRelation2.select(RowNumber()),
+      Seq("Window function row_number() requires an OVER clause."))
+
+    assertAnalysisError(testRelation2.select(Sum(RowNumber())),
+      Seq("Window function row_number() requires an OVER clause."))
+
+    assertAnalysisError(testRelation2.select(RowNumber() + 1),
+      Seq("Window function row_number() requires an OVER clause."))
+  }
 }

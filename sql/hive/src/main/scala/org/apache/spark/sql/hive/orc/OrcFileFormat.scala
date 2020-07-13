@@ -70,9 +70,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
     if (orcOptions.mergeSchema) {
       SchemaMergeUtils.mergeSchemasInParallel(
-        sparkSession,
-        files,
-        OrcFileOperator.readOrcSchemasInParallel)
+        sparkSession, options, files, OrcFileOperator.readOrcSchemasInParallel)
     } else {
       val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
       OrcFileOperator.readSchema(

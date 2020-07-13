@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.sql.SQLException
+
+import org.apache.hive.service.cli.HiveSQLException
+
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("the scratch dir will be deleted during server start but recreated with new operation") {
@@ -43,6 +47,36 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
         statement.execute(s"UNCACHE TABLE IF EXISTS $globalTempDB.globalTempTbl")
       }
       assert(cacheManager.isEmpty)
+    }
+  }
+
+  test("Full stack traces as error message for jdbc or thrift client") {
+    val sql = "select date_sub(date'2011-11-11', '1.2')"
+    withCLIServiceClient { client =>
+      val sessionHandle = client.openSession(user, "")
+
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val e = intercept[HiveSQLException] {
+        client.executeStatement(
+          sessionHandle,
+          sql,
+          confOverlay)
+      }
+
+      assert(e.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(!e.getMessage.contains("" +
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+    }
+
+    withJdbcStatement { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery(sql)
+      }
+      assert(e.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(e.getMessage.contains("" +
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
     }
   }
 }

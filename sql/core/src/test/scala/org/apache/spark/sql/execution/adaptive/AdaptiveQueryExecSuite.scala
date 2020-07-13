@@ -23,7 +23,7 @@ import java.net.URI
 import org.apache.log4j.Level
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan}
@@ -128,6 +128,17 @@ class AdaptiveQueryExecSuite
       assert(parts.forall(rdd.preferredLocations(_).nonEmpty))
     }
     assert(numShuffles === (numLocalReaders.length + numShufflesWithoutLocalReader))
+  }
+
+  private def checkInitialPartitionNum(df: Dataset[_], numPartition: Int): Unit = {
+    // repartition obeys initialPartitionNum when adaptiveExecutionEnabled
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
+    val shuffle = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan.collect {
+      case s: ShuffleExchangeExec => s
+    }
+    assert(shuffle.size == 1)
+    assert(shuffle(0).outputPartitioning.numPartitions == numPartition)
   }
 
   test("Change merge join to broadcast join") {
@@ -1040,14 +1051,8 @@ class AdaptiveQueryExecSuite
           assert(partitionsNum1 < 10)
           assert(partitionsNum2 < 10)
 
-          // repartition obeys initialPartitionNum when adaptiveExecutionEnabled
-          val plan = df1.queryExecution.executedPlan
-          assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
-          val shuffle = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan.collect {
-            case s: ShuffleExchangeExec => s
-          }
-          assert(shuffle.size == 1)
-          assert(shuffle(0).outputPartitioning.numPartitions == 10)
+          checkInitialPartitionNum(df1, 10)
+          checkInitialPartitionNum(df2, 10)
         } else {
           assert(partitionsNum1 === 10)
           assert(partitionsNum2 === 10)
@@ -1081,14 +1086,8 @@ class AdaptiveQueryExecSuite
           assert(partitionsNum1 < 10)
           assert(partitionsNum2 < 10)
 
-          // repartition obeys initialPartitionNum when adaptiveExecutionEnabled
-          val plan = df1.queryExecution.executedPlan
-          assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
-          val shuffle = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan.collect {
-            case s: ShuffleExchangeExec => s
-          }
-          assert(shuffle.size == 1)
-          assert(shuffle(0).outputPartitioning.numPartitions == 10)
+          checkInitialPartitionNum(df1, 10)
+          checkInitialPartitionNum(df2, 10)
         } else {
           assert(partitionsNum1 === 10)
           assert(partitionsNum2 === 10)
@@ -1097,6 +1096,54 @@ class AdaptiveQueryExecSuite
         // Don't coalesce partitions if the number of partitions is specified.
         val df3 = spark.range(10).repartitionByRange(10, $"id".asc)
         assert(df3.rdd.collectPartitions().length == 10)
+      }
+    }
+  }
+
+  test("SPARK-31220, SPARK-32056: repartition using sql and hint with AQE") {
+    Seq(true, false).foreach { enableAQE =>
+      withTempView("test") {
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+
+          spark.range(10).toDF.createTempView("test")
+
+          val df1 = spark.sql("SELECT /*+ REPARTITION(id) */ * from test")
+          val df2 = spark.sql("SELECT /*+ REPARTITION_BY_RANGE(id) */ * from test")
+          val df3 = spark.sql("SELECT * from test DISTRIBUTE BY id")
+          val df4 = spark.sql("SELECT * from test CLUSTER BY id")
+
+          val partitionsNum1 = df1.rdd.collectPartitions().length
+          val partitionsNum2 = df2.rdd.collectPartitions().length
+          val partitionsNum3 = df3.rdd.collectPartitions().length
+          val partitionsNum4 = df4.rdd.collectPartitions().length
+
+          if (enableAQE) {
+            assert(partitionsNum1 < 10)
+            assert(partitionsNum2 < 10)
+            assert(partitionsNum3 < 10)
+            assert(partitionsNum4 < 10)
+
+            checkInitialPartitionNum(df1, 10)
+            checkInitialPartitionNum(df2, 10)
+            checkInitialPartitionNum(df3, 10)
+            checkInitialPartitionNum(df4, 10)
+          } else {
+            assert(partitionsNum1 === 10)
+            assert(partitionsNum2 === 10)
+            assert(partitionsNum3 === 10)
+            assert(partitionsNum4 === 10)
+          }
+
+          // Don't coalesce partitions if the number of partitions is specified.
+          val df5 = spark.sql("SELECT /*+ REPARTITION(10, id) */ * from test")
+          val df6 = spark.sql("SELECT /*+ REPARTITION_BY_RANGE(10, id) */ * from test")
+          assert(df5.rdd.collectPartitions().length == 10)
+          assert(df6.rdd.collectPartitions().length == 10)
+        }
       }
     }
   }

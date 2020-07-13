@@ -142,7 +142,8 @@ class BlockManagerMaster(
       logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      timeout.awaitResult(future)
+      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
+      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
     }
   }
 
@@ -153,7 +154,8 @@ class BlockManagerMaster(
       logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      timeout.awaitResult(future)
+      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
+      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
     }
   }
 
@@ -166,7 +168,8 @@ class BlockManagerMaster(
         s" with removeFromMaster = $removeFromMaster - ${e.getMessage}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      timeout.awaitResult(future)
+      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
+      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
     }
   }
 
