@@ -38,7 +38,6 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -107,8 +106,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     if (ctx.interval != null) {
       val interval = parseIntervalLiteral(ctx.interval)
       if (interval.months != 0 || interval.days != 0 ||
-        math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR) {
-        throw new ParseException("The interval value must be in the range of [-18, +18] hours",
+        math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR ||
+        interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
+        throw new ParseException("The interval value must be in the range of [-18, +18] hours" +
+          " with second precision",
           ctx.interval())
       } else {
         val seconds = (interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt
