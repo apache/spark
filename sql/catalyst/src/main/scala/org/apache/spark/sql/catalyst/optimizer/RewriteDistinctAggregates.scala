@@ -250,18 +250,17 @@ import org.apache.spark.sql.types.IntegerType
  */
 object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
-  private def mayNeedtoRewrite(exprs: Seq[Expression]): Boolean = {
-    val distinctAggs = exprs.flatMap { _.collect {
-      case ae: AggregateExpression if ae.isDistinct => ae
-    }}
-    // We need at least two distinct aggregates or a single distinct aggregate with a filter for
+  private def mayNeedtoRewrite(a: Aggregate): Boolean = {
+    val aggExpressions = collectAggregateExprs(a)
+    val distinctAggs = aggExpressions.filter(_.isDistinct)
+    // We need at least two distinct aggregates or the aggregate query exists filter clause for
     // this rule because aggregation strategy can handle a single distinct group without a filter.
     // This check can produce false-positives, e.g., SUM(DISTINCT a) & COUNT(DISTINCT a).
-    distinctAggs.size > 1 || distinctAggs.exists(_.filter.isDefined)
+    distinctAggs.size > 1 || aggExpressions.exists(_.filter.isDefined)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case a: Aggregate if mayNeedtoRewrite(a.aggregateExpressions) =>
+    case a: Aggregate if mayNeedtoRewrite(a) =>
       val (aggregate, projected) = projectFiltersInAggregates(a)
       rewriteDistinctAggregates(aggregate, projected)
   }
