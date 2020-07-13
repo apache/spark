@@ -198,7 +198,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val metrics = metricFutures
       .map(ThreadUtils.awaitResult(_, Duration.Inf))
       .groupBy(_._1)
-      .mapValues(_.map(_._2).sum)
+      .mapValues(_.map(_._2).sum / $(numFolds))
 
     // Unpersist splits once all metrics have been produced
     splits.map(_.unpersist())
