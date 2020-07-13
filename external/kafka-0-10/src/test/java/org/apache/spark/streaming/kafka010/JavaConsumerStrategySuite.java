@@ -53,7 +53,7 @@ public class JavaConsumerStrategySuite implements Serializable {
       dummyOffsets.put(kv.getKey(), kv.getValue());
     }
     final scala.collection.Map<TopicPartition, Object> sOffsets =
-      JavaConverters.asScala(dummyOffsets);
+      JavaConverters.mapAsScalaMap(dummyOffsets);
 
     final ConsumerStrategy<String, String> sub1 =
       ConsumerStrategies.Subscribe(sTopics, sKafkaParams, sOffsets);
