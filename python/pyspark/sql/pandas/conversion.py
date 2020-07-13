@@ -414,7 +414,8 @@ class SparkConversionMixin(object):
         jsqlContext = self._wrapped._jsqlContext
 
         safecheck = self._wrapped._conf.arrowSafeTypeConversion()
-        ser = ArrowStreamPandasSerializer(timezone, safecheck)
+        col_by_name = True  # col by name only applies to StructType columns, can't happen here
+        ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
 
         def reader_func(temp_filename):
             return self._jvm.PythonSQLUtils.readArrowStreamFromFile(jsqlContext, temp_filename)
