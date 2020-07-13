@@ -628,6 +628,7 @@ def main():
     extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version)
 
     changed_modules = None
+    test_modules = None
     changed_files = None
     should_only_test_modules = opts.modules is not None
     included_tags = []
@@ -635,17 +636,15 @@ def main():
     if should_only_test_modules:
         str_test_modules = [m.strip() for m in opts.modules.split(",")]
         test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
-        changed_modules = []
 
         # If we're running the tests in Github Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
             changed_files = identify_changed_files_from_git_commits(os.environ["GITHUB_SHA"])
-            changed_modules = determine_modules_for_files(changed_files)
-            changed_modules = list(set(changed_modules).interact(test_modules))
+            test_modules = list(set(determine_modules_to_test(
+                determine_modules_for_files(changed_files))).interact(test_modules))
 
-        if not changed_modules:
-            changed_modules = test_modules
+        changed_modules = test_modules
 
     # If we're running the tests in AMPLab Jenkins, calculate the diff from the targeted branch, and
     # detect modules to test.
@@ -653,11 +652,14 @@ def main():
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
+        test_modules = determine_modules_to_test(changed_modules)
         excluded_tags = determine_tags_to_exclude(changed_modules)
 
     # If there is no changed module found, tests all.
     if not changed_modules:
         changed_modules = [modules.root]
+    if not test_modules:
+        test_modules = determine_modules_to_test(changed_modules)
 
     str_excluded_tags = opts.excluded_tags
     str_included_tags = opts.included_tags
@@ -680,8 +682,6 @@ def main():
 
     should_run_java_style_checks = False
     if not should_only_test_modules:
-        test_modules = determine_modules_to_test(changed_modules)
-
         # license checks
         run_apache_rat_checks()
 
@@ -712,33 +712,40 @@ def main():
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
 
-    if any(m.should_run_build_tests for m in test_modules) and test_env != "amplab_jenkins":
-        run_build_tests()
+    print(changed_modules)
+    print(test_modules)
+    print([m for m in test_modules if m.python_test_goals])
+    print(m.should_run_r_tests for m in test_modules)
+    print(excluded_tags)
+    print(included_tags)
 
-    # spark build
-    build_apache_spark(build_tool, extra_profiles)
-
-    # backwards compatibility checks
-    if build_tool == "sbt":
-        # Note: compatibility tests only supported in sbt for now
-        detect_binary_inop_with_mima(extra_profiles)
-        # Since we did not build assembly/package before running dev/mima, we need to
-        # do it here because the tests still rely on it; see SPARK-13294 for details.
-        build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
-
-    # run the test suites
-    run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
-
-    modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
-    if modules_with_python_tests:
-        # We only run PySpark tests with coverage report in one specific job with
-        # Spark master with SBT in Jenkins.
-        is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
-        run_python_tests(
-            modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
-        run_python_packaging_tests()
-    if any(m.should_run_r_tests for m in test_modules):
-        run_sparkr_tests()
+    # if any(m.should_run_build_tests for m in test_modules) and test_env != "amplab_jenkins":
+    #     run_build_tests()
+    #
+    # # spark build
+    # build_apache_spark(build_tool, extra_profiles)
+    #
+    # # backwards compatibility checks
+    # if build_tool == "sbt":
+    #     # Note: compatibility tests only supported in sbt for now
+    #     detect_binary_inop_with_mima(extra_profiles)
+    #     # Since we did not build assembly/package before running dev/mima, we need to
+    #     # do it here because the tests still rely on it; see SPARK-13294 for details.
+    #     build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
+    #
+    # # run the test suites
+    # run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
+    #
+    # modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
+    # if modules_with_python_tests:
+    #     # We only run PySpark tests with coverage report in one specific job with
+    #     # Spark master with SBT in Jenkins.
+    #     is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
+    #     run_python_tests(
+    #         modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
+    #     run_python_packaging_tests()
+    # if any(m.should_run_r_tests for m in test_modules):
+    #     run_sparkr_tests()
 
 
 def _test():
