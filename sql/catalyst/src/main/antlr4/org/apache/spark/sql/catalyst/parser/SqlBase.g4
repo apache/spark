@@ -496,7 +496,9 @@ fromStatementBody
 querySpecification
     : transformClause
       fromClause?
-      whereClause?                                                          #transformQuerySpecification
+      whereClause?
+      aggregationClause?
+      havingClause?                                                       #transformQuerySpecification
     | selectClause
       fromClause?
       lateralView*

@@ -2558,6 +2558,131 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-28227: test script transform with aggregation") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    val data1 = (1 to 1000).map { i => (i, i, i) }
+    data1.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
+
+    //  without aggregation
+    assert(0 === sql(
+      s"""SELECT TRANSFORM ( d2, d1, CAST(d3 AS STRING) )
+         |USING 'cat 1>&2' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100""".stripMargin).count())
+
+    // number as column
+    assert(0 === sql(
+      s"""SELECT TRANSFORM ( 1,2,3 )
+         |USING 'cat 1>&2' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100""".stripMargin).count())
+
+    // number as column output
+    checkAnswer(sql(
+      """
+        |SELECT TRANSFORM(1,2)
+        |USING 'cat' AS (a INT,b INT)
+        |FROM script_trans
+        |LIMIT 1
+      """.stripMargin), Row(1, 2))
+
+    //  without aggregation with complex function
+    assert(0 === sql(
+      s"""SELECT TRANSFORM (
+         |d2 AS d5,
+         |d1,
+         |CASE
+         |  WHEN d3 > 100 THEN 1
+         |  WHEN d3 < 100 THEN 2
+         |ELSE 3 END )
+         |USING 'cat 1>&2' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100""".stripMargin).count())
+
+    //  binary operator function
+    assert(0 === sql(
+      s"""SELECT TRANSFORM ( d2, d1, d3 + 1 )
+         |USING 'cat 1>&2' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100""".stripMargin).count())
+
+    // test all start
+    assert(100 === sql(
+      s"""SELECT TRANSFORM (*)
+         |USING 'cat' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100""".stripMargin).count())
+
+    // with aggregation and complex function
+    assert(100 === sql(
+      s"""SELECT TRANSFORM ( d2 AS d4, MAX(d1) as maxd1, CAST(SUM(d3) AS STRING))
+         |USING 'cat' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100
+         |GROUP BY d2""".stripMargin).count())
+
+
+    assert(100 === sql(
+      s"""SELECT TRANSFORM (d2, MAX(d1) as maxd1, CAST(sum(d3) AS STRING))
+         |USING 'cat' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100
+         |GROUP BY d2""".stripMargin).count())
+
+    assert(0 === sql(
+      s"""SELECT TRANSFORM (d2, MAX(d1) as maxd1, CAST(SUM(d3) AS STRING))
+         |USING 'cat 1>&2' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100
+         |GROUP BY d2
+         |HAVING maxd1 > 0""".stripMargin).count())
+
+    assert(90 === sql(
+      s"""SELECT TRANSFORM (d2, MAX(d1) as maxd1, CAST(SUM(d3) AS STRING))
+         |USING 'cat' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100
+         |GROUP BY d2
+         |HAVING max(d1) > 10""".stripMargin).count())
+
+    val data2 = (1 to 5).map { i => (i, i) }
+    data2.toDF("key", "value").createOrReplaceTempView("test")
+    checkAnswer(
+      sql(
+        """FROM
+          |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (`thing1` INT, thing2 STRING)) t
+          |SELECT thing1 + 1
+        """.stripMargin), (2 to 6).map(i => Row(i)))
+
+    val data3 = (1 to 5).map { i => (i % 2, i) }
+    data3.toDF("key", "value").createOrReplaceTempView("test")
+    checkAnswer(
+      sql(
+        """FROM
+          |(SELECT TRANSFORM(key, SUM(value) value)
+          |USING 'cat' AS (`thing1` INT, thing2 STRING)
+          |FROM test
+          |GROUP BY key
+          |) t
+          |SELECT (thing2 + 1) AS result
+        """.stripMargin).sort("result"), Array(7, 10).map(i => Row(i)))
+
+    checkAnswer(
+      sql(
+        """
+          |MAP k / 10 USING 'cat' AS (one) FROM (SELECT 10 AS k)
+        """.stripMargin
+      ), Row("1.0"))
+
+    checkAnswer(
+      sql(
+        """
+          |FROM (SELECT 1 AS key, 100 AS value) src
+          |MAP src.*, src.key, CAST(src.key / 10 AS INT), CAST(src.key % 10 AS INT), src.value
+          |USING 'cat' AS (k, v, tkey, ten, one, tvalue)
+        """.stripMargin), Row("1", "100", "1", "0", "1", "100"))
+  }
 }
 
 @SlowHiveTest

@@ -155,6 +155,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         ctx,
         ctx.transformClause,
         ctx.whereClause,
+        ctx.aggregationClause,
+        ctx.havingClause,
         plan
       )
     } else {
@@ -583,7 +585,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val from = OneRowRelation().optional(ctx.fromClause) {
       visitFromClause(ctx.fromClause)
     }
-    withTransformQuerySpecification(ctx, ctx.transformClause, ctx.whereClause, from)
+    withTransformQuerySpecification(
+      ctx,
+      ctx.transformClause,
+      ctx.whereClause,
+      ctx.aggregationClause,
+      ctx.havingClause, from
+    )
   }
 
   override def visitRegularQuerySpecification(
@@ -638,7 +646,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx: ParserRuleContext,
       transformClause: TransformClauseContext,
       whereClause: WhereClauseContext,
-    relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      aggregationClause: AggregationClauseContext,
+      havingClause: HavingClauseContext,
+      relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Add where.
     val withFilter = relation.optionalMap(whereClause)(withWhereClause)
 
@@ -660,12 +670,39 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         AttributeReference("value", StringType)()), true)
     }
 
+    val namedExpressions = expressions.map {
+      case e: NamedExpression => e
+      case e: Expression => UnresolvedAlias(e)
+    }
+
+    def createProject() = if (namedExpressions.nonEmpty) {
+      Project(namedExpressions, withFilter)
+    } else {
+      withFilter
+    }
+
+    val withProject = if (aggregationClause == null && havingClause != null) {
+      if (conf.getConf(SQLConf.LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE)) {
+        // If the legacy conf is set, treat HAVING without GROUP BY as WHERE.
+        withHavingClause(havingClause, createProject())
+      } else {
+        // According to SQL standard, HAVING without GROUP BY means global aggregate.
+        withHavingClause(havingClause, Aggregate(Nil, namedExpressions, withFilter))
+      }
+    } else if (aggregationClause != null) {
+      val aggregate = withAggregationClause(aggregationClause, namedExpressions, withFilter)
+      aggregate.optionalMap(havingClause)(withHavingClause)
+    } else {
+      // When hitting this branch, `having` must be null.
+      createProject()
+    }
+
     // Create the transform.
     ScriptTransformation(
-      expressions,
+      Seq(UnresolvedStar(None)),
       string(transformClause.script),
       attributes,
-      withFilter,
+      withProject,
       withScriptIOSchema(
         ctx,
         transformClause.inRowFormat,
