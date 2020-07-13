@@ -39,6 +39,10 @@ class CsvOutputWriter(
 
   private val gen = new UnivocityGenerator(dataSchema, writer, params)
 
+  if (params.bom) {
+    writer.write(0xFEFF)
+  }
+
   if (params.headerFlag) {
     gen.writeHeaders()
   }

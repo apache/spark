@@ -135,6 +135,8 @@ class CSVOptions(
   val positiveInf = parameters.getOrElse("positiveInf", "Inf")
   val negativeInf = parameters.getOrElse("negativeInf", "-Inf")
 
+  // Set bom to true to fix some characters are garbled when opening with Excel.
+  val bom = getBool("bom")
 
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))

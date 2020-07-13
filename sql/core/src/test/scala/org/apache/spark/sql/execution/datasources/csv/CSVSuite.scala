@@ -26,6 +26,7 @@ import java.util.Locale
 import java.util.zip.GZIPOutputStream
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.Properties
 
 import com.univocity.parsers.common.TextParsingException
@@ -34,6 +35,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -2351,6 +2353,45 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         .load(path.getCanonicalPath)
 
       assert(df.schema.last == StructField("col_mixed_types", StringType, true))
+    }
+  }
+
+  test("Some characters are garbled when opening csv files with Excel") {
+    // scalastyle:off nonascii
+    val chinese = "我爱中文"
+    val korean = "나는 한국인을 좋아한다"
+    val japanese = "私は日本人が好き"
+    // scalastyle:on nonascii
+    val english = "I love English"
+
+    val df = spark.sql(s"SELECT '$chinese' AS Chinese, '$korean' AS Korean," +
+      s"'$japanese' AS Japanese, '$english' AS English")
+
+    Seq(true, false).foreach { bom =>
+      withTempPath { p =>
+        val path = p.getAbsolutePath
+        df.write.option("bom", bom).csv(path)
+
+        val bytesReads = new mutable.ArrayBuffer[Long]()
+        val bytesReadListener = new SparkListener() {
+          override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+            bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+          }
+        }
+        sparkContext.addSparkListener(bytesReadListener)
+        try {
+          spark.read.csv(path).limit(1).collect()
+          sparkContext.listenerBus.waitUntilEmpty(1000L)
+          if (bom) {
+            assert(bytesReads.sum === 202)
+          } else {
+            assert(bytesReads.sum === 196)
+          }
+        } finally {
+          sparkContext.removeSparkListener(bytesReadListener)
+        }
+        checkAnswer(spark.read.csv(path), Seq(Row(chinese, korean, japanese, english)))
+      }
     }
   }
 }
