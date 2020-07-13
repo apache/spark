@@ -189,9 +189,9 @@ private[spark] class DAGScheduler(
    * Tracks the latest epoch of a fully processed error where shuffle files have been lost from
    * the given executor.
    *
-   * This is closely related to executorFailureEpoch.
-   * They only differ for the executor when there is a Standalone worker or an external shuffle
-   * service serving shuffle files. In that case, when an executor is lost, we do not update
+   * This is closely related to executorFailureEpoch. They only differ for the executor when
+   * there is an external shuffle service serving shuffle files and we haven't been notified that
+   * the entire worker has been lost. In that case, when an executor is lost, we do not update
    * the shuffleFileLostEpoch; we wait for a fetch failure. This way, if only the executor
    * fails, we do not unregister the shuffle data as it can still be served; but if there is
    * a failure in the shuffle service (resulting in fetch failure), we unregister the shuffle
