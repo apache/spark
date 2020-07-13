@@ -133,7 +133,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
-    sc.parallelize(list.asScala, numSlices)
+    sc.parallelize(list.asScala.toSeq, numSlices)
   }
 
   /** Get an RDD that has no partitions or elements. */
@@ -152,7 +152,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   : JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag
     implicit val ctagV: ClassTag[V] = fakeClassTag
-    JavaPairRDD.fromRDD(sc.parallelize(list.asScala, numSlices))
+    JavaPairRDD.fromRDD(sc.parallelize(list.asScala.toSeq, numSlices))
   }
 
   /** Distribute a local Scala collection to form an RDD. */
@@ -161,7 +161,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double], numSlices: Int): JavaDoubleRDD =
-    JavaDoubleRDD.fromRDD(sc.parallelize(list.asScala.map(_.doubleValue()), numSlices))
+    JavaDoubleRDD.fromRDD(sc.parallelize(list.asScala.map(_.doubleValue()).toSeq, numSlices))
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double]): JavaDoubleRDD =

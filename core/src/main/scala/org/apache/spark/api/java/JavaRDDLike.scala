@@ -265,14 +265,14 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: JList[String]): JavaRDD[String] = {
-    rdd.pipe(command.asScala)
+    rdd.pipe(command.asScala.toSeq)
   }
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: JList[String], env: JMap[String, String]): JavaRDD[String] = {
-    rdd.pipe(command.asScala, env.asScala)
+    rdd.pipe(command.asScala.toSeq, env.asScala)
   }
 
   /**
@@ -282,7 +282,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
            env: JMap[String, String],
            separateWorkingDir: Boolean,
            bufferSize: Int): JavaRDD[String] = {
-    rdd.pipe(command.asScala, env.asScala, null, null, separateWorkingDir, bufferSize)
+    rdd.pipe(command.asScala.toSeq, env.asScala, null, null, separateWorkingDir, bufferSize)
   }
 
   /**
@@ -293,7 +293,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
            separateWorkingDir: Boolean,
            bufferSize: Int,
            encoding: String): JavaRDD[String] = {
-    rdd.pipe(command.asScala, env.asScala, null, null, separateWorkingDir, bufferSize, encoding)
+    rdd.pipe(command.asScala.toSeq, env.asScala, null, null, separateWorkingDir, bufferSize,
+      encoding)
   }
 
   /**

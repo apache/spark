@@ -21,6 +21,9 @@ import threading
 import time
 import unittest
 import warnings
+import sys
+if sys.version >= '3':
+    basestring = unicode = str
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
@@ -435,12 +438,12 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(result_spark, result_arrow)
 
         # ensure original category elements are string
-        self.assertIsInstance(category_first_element, str)
+        self.assertIsInstance(category_first_element, basestring)
         # spark data frame and arrow execution mode enabled data frame type must match pandas
         self.assertEqual(spark_type, 'string')
         self.assertEqual(arrow_type, 'string')
-        self.assertIsInstance(arrow_first_category_element, str)
-        self.assertIsInstance(spark_first_category_element, str)
+        self.assertIsInstance(arrow_first_category_element, basestring)
+        self.assertIsInstance(spark_first_category_element, basestring)
 
     def test_createDataFrame_with_float_index(self):
         # SPARK-32098: float index should not produce duplicated or truncated Spark DataFrame

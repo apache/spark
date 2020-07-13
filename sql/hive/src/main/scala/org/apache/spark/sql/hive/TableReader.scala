@@ -486,13 +486,19 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
       var i = 0
       val length = fieldRefs.length
       while (i < length) {
-        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-        if (fieldValue == null) {
-          mutableRow.setNullAt(fieldOrdinals(i))
-        } else {
-          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+        try {
+          val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+          if (fieldValue == null) {
+            mutableRow.setNullAt(fieldOrdinals(i))
+          } else {
+            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          }
+          i += 1
+        } catch {
+          case ex: Throwable =>
+            logError(s"Exception thrown in field <${fieldRefs(i).getFieldName}>")
+            throw ex
         }
-        i += 1
       }
 
       mutableRow: InternalRow
