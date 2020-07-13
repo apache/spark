@@ -79,17 +79,24 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
          identify_changed_files_from_git_commits("50a0496a43", target_ref="6765ef9"))]
     True
     """
-    if target_branch is None and target_ref is None:
-        raise AttributeError("must specify either target_branch or target_ref")
-    elif target_branch is not None and target_ref is not None:
-        raise AttributeError("must specify either target_branch or target_ref, not both")
-    if target_branch is not None:
-        diff_target = target_branch
-        run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
+    if "GITHUB_ACTIONS" in os.environ:
+        # Note that Github Actions would run the tests without syncing to the latest
+        # master.
+        raw_output = subprocess.check_output(
+            ['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', patch_sha],
+            universal_newlines=True)
     else:
-        diff_target = target_ref
-    raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target],
-                                         universal_newlines=True)
+        if target_branch is None and target_ref is None:
+            raise AttributeError("must specify either target_branch or target_ref")
+        elif target_branch is not None and target_ref is not None:
+            raise AttributeError("must specify either target_branch or target_ref, not both")
+        if target_branch is not None:
+            diff_target = target_branch
+            run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
+        else:
+            diff_target = target_ref
+        raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target],
+                                             universal_newlines=True)
     # Remove any empty strings
     return [f for f in raw_output.split('\n') if f]
 
@@ -539,6 +546,24 @@ def parse_opts():
         "-p", "--parallelism", type=int, default=8,
         help="The number of suites to test in parallel (default %(default)d)"
     )
+    parser.add_argument(
+        "-m", "--modules", type=str,
+        default=None,
+        help="A comma-separated list of modules to test "
+             "(default: %s)" % ",".join(sorted([m.name for m in modules.all_modules]))
+    )
+    parser.add_argument(
+        "-e", "--excluded-tags", type=str,
+        default=None,
+        help="A comma-separated list of tags to exclude in the tests, "
+             "e.g., org.apache.spark.tags.ExtendedHiveTest "
+    )
+    parser.add_argument(
+        "-i", "--included-tags", type=str,
+        default=None,
+        help="A comma-separated list of tags to include in the tests, "
+             "e.g., org.apache.spark.tags.ExtendedHiveTest "
+    )
 
     args, unknown = parser.parse_known_args()
     if unknown:
@@ -589,11 +614,14 @@ def main():
         # /home/jenkins/anaconda2/envs/py36/bin
         os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
     else:
-        # else we're running locally and can use local settings
+        # else we're running locally or Github Actions.
         build_tool = "sbt"
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
         hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
-        test_env = "local"
+        if "GITHUB_ACTIONS" in os.environ:
+            test_env = "github_actions"
+        else:
+            test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
           "and Hive profile", hive_version, "under environment", test_env)
@@ -601,31 +629,43 @@ def main():
 
     changed_modules = None
     changed_files = None
-    should_only_test_modules = "TEST_ONLY_MODULES" in os.environ
+    should_only_test_modules = opts.modules is not None
     included_tags = []
+    excluded_tags = []
     if should_only_test_modules:
-        str_test_modules = [m.strip() for m in os.environ.get("TEST_ONLY_MODULES").split(",")]
+        str_test_modules = [m.strip() for m in opts.modules.split(",")]
         test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
-        # Directly uses test_modules as changed modules to apply tags and environments
-        # as if all specified test modules are changed.
-        changed_modules = test_modules
-        str_excluded_tags = os.environ.get("TEST_ONLY_EXCLUDED_TAGS", None)
-        str_included_tags = os.environ.get("TEST_ONLY_INCLUDED_TAGS", None)
-        excluded_tags = []
-        if str_excluded_tags:
-            excluded_tags = [t.strip() for t in str_excluded_tags.split(",")]
-        included_tags = []
-        if str_included_tags:
-            included_tags = [t.strip() for t in str_included_tags.split(",")]
+        changed_modules = []
+
+        # If we're running the tests in Github Actions, attempt to detect and test
+        # only the affected modules.
+        if test_env == "github_actions":
+            changed_files = identify_changed_files_from_git_commits(os.environ["GITHUB_SHA"])
+            changed_modules = determine_modules_for_files(changed_files)
+            changed_modules = list(set(changed_modules).interact(test_modules))
+
+        if not changed_modules:
+            changed_modules = test_modules
+
+    # If we're running the tests in AMPLab Jenkins, calculate the diff from the targeted branch, and
+    # detect modules to test.
     elif test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
         excluded_tags = determine_tags_to_exclude(changed_modules)
 
+    # If there is no changed module found, tests all.
     if not changed_modules:
         changed_modules = [modules.root]
-        excluded_tags = []
+
+    str_excluded_tags = opts.excluded_tags
+    str_included_tags = opts.included_tags
+    if str_excluded_tags:
+        excluded_tags.expend([t.strip() for t in str_excluded_tags.split(",")])
+    if str_included_tags:
+        included_tags.expend([t.strip() for t in str_included_tags.split(",")])
+
     print("[info] Found the following changed modules:",
           ", ".join(x.name for x in changed_modules))
 
@@ -702,10 +742,6 @@ def main():
 
 
 def _test():
-    if "TEST_ONLY_MODULES" in os.environ:
-        # TODO(SPARK-32252): Enable doctests back in Github Actions.
-        return
-
     import doctest
     failure_count = doctest.testmod()[0]
     if failure_count:
