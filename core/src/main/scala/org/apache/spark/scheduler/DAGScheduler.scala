@@ -1934,8 +1934,8 @@ private[spark] class DAGScheduler(
    * modify the scheduler's internal state. Use executorLost() to post a loss event from outside.
    *
    * We will also assume that we've lost all shuffle blocks associated with the executor if the
-   * executor serves its own blocks (i.e., we're not using external shuffle), or the Standalone
-   * worker (which serves the shuffle data) is lost.
+   * executor serves its own blocks (i.e., we're not using an external shuffle service), or the
+   * entire Standalone worker is lost.
    */
   private[scheduler] def handleExecutorLost(
       execId: String,
@@ -1958,9 +1958,8 @@ private[spark] class DAGScheduler(
    * @param execId executor to be removed
    * @param fileLost If true, indicates that we assume we've lost all shuffle blocks associated
    *   with the executor; this happens if the executor serves its own blocks (i.e., we're not
-   *   using external shuffle), the Standalone worker (which serves the shuffle data) is lost,
-   *   or a FetchFailed occurred (in which case we presume all shuffle data related to this
-   *   executor to be lost).
+   *   using an external shuffle service), the entire Standalone worker is lost, or a FetchFailed
+   *   occurred (in which case we presume all shuffle data related to this executor to be lost).
    * @param hostToUnregisterOutputs (optional) executor host if we're unregistering all the
    *   outputs on the host
    * @param maybeEpoch (optional) the epoch during which the failure was caught (this prevents
