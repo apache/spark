@@ -17,19 +17,12 @@
 # limitations under the License.
 #
 
-# Start all spark daemons.
-# Starts the master on this node.
-# Starts a worker on each node specified in conf/workers
-
 if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
-# Load the Spark configuration
 . "${SPARK_HOME}/sbin/spark-config.sh"
 
-# Start Master
-"${SPARK_HOME}/sbin"/start-master.sh
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
-# Start Workers
-"${SPARK_HOME}/sbin"/start-workers.sh
+"${SPARK_HOME}/sbin/workers.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin"/stop-worker.sh

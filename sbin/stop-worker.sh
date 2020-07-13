@@ -17,19 +17,28 @@
 # limitations under the License.
 #
 
-# Start all spark daemons.
-# Starts the master on this node.
-# Starts a worker on each node specified in conf/workers
+# A shell script to stop all workers on a single worker
+#
+# Environment variables
+#
+#   SPARK_WORKER_INSTANCES The number of worker instances that should be
+#                          running on this worker machine.  Default is 1.
+
+# Usage: stop-worker.sh
+#   Stops all workers on this worker machine
 
 if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
-# Load the Spark configuration
 . "${SPARK_HOME}/sbin/spark-config.sh"
 
-# Start Master
-"${SPARK_HOME}/sbin"/start-master.sh
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
-# Start Workers
-"${SPARK_HOME}/sbin"/start-workers.sh
+if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
+  "${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker 1
+else
+  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
+    "${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
+  done
+fi

@@ -17,19 +17,30 @@
 # limitations under the License.
 #
 
-# Start all spark daemons.
-# Starts the master on this node.
-# Starts a worker on each node specified in conf/workers
+# Starts a worker instance on each machine specified in the conf/workers file.
 
 if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
-# Load the Spark configuration
 . "${SPARK_HOME}/sbin/spark-config.sh"
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
-# Start Master
-"${SPARK_HOME}/sbin"/start-master.sh
+# Find the port number for the master
+if [ "$SPARK_MASTER_PORT" = "" ]; then
+  SPARK_MASTER_PORT=7077
+fi
 
-# Start Workers
-"${SPARK_HOME}/sbin"/start-workers.sh
+if [ "$SPARK_MASTER_HOST" = "" ]; then
+  case `uname` in
+      (SunOS)
+          SPARK_MASTER_HOST="`/usr/sbin/check-hostname | awk '{print $NF}'`"
+          ;;
+      (*)
+          SPARK_MASTER_HOST="`hostname -f`"
+          ;;
+  esac
+fi
+
+# Launch the workers
+"${SPARK_HOME}/sbin/workers.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin/start-worker.sh" "spark://$SPARK_MASTER_HOST:$SPARK_MASTER_PORT"
