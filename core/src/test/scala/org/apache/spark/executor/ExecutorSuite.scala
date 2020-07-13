@@ -404,74 +404,70 @@ class ExecutorSuite extends SparkFunSuite
   }
 
   test("SPARK-32175: Plugin initialization should start after heartbeater started") {
-    val tempDir = Utils.createTempDir()
+    withTempDir { tempDir =>
+      val sparkPluginCodeBody =
+        """
+          |@Override
+          |public org.apache.spark.api.plugin.ExecutorPlugin executorPlugin() {
+          |  return new TestExecutorPlugin();
+          |}
+          |
+          |@Override
+          |public org.apache.spark.api.plugin.DriverPlugin driverPlugin() { return null; }
+        """.stripMargin
+      val executorPluginBody =
+        """
+          |@Override
+          |public void init(
+          |    org.apache.spark.api.plugin.PluginContext ctx,
+          |    java.util.Map<String, String> extraConf) {
+          |  try {
+          |    Thread.sleep(30 * 1000);
+          |  } catch (InterruptedException e) {
+          |    throw new RuntimeException(e);
+          |  }
+          |}
+        """.stripMargin
 
-    val importStatements =
-      """
-        |import java.util.Map;
-        |import org.apache.spark.api.plugin.*;
-      """.stripMargin
-    val sparkPluginCodeBody =
-      """
-        |@Override
-        |public ExecutorPlugin executorPlugin() {
-        |  return new TestExecutorPlugin();
-        |}
-        |
-        |@Override
-        |public DriverPlugin driverPlugin() { return null; }
-      """.stripMargin
-    val executorPluginBody =
-      """
-        |@Override
-        |public void init(PluginContext ctx, Map<String, String> extraConf) {
-        |  try {
-        |    Thread.sleep(30 * 1000);
-        |  } catch (InterruptedException e) {
-        |    throw new RuntimeException(e);
-        |  }
-        |}
-      """.stripMargin
+      val compiledExecutorPlugin = TestUtils.createCompiledClass(
+        "TestExecutorPlugin",
+        tempDir,
+        "",
+        null,
+        Seq.empty,
+        Seq("org.apache.spark.api.plugin.ExecutorPlugin"),
+        executorPluginBody)
 
-    val compiledExecutorPlugin = TestUtils.createCompiledClass(
-      "TestExecutorPlugin",
-      tempDir,
-      "",
-      null,
-      Seq.empty,
-      importStatements,
-      Seq("ExecutorPlugin"),
-      executorPluginBody)
+      val thisClassPath =
+        sys.props("java.class.path").split(File.pathSeparator).map(p => new File(p).toURI.toURL)
+      val compiledSparkPlugin = TestUtils.createCompiledClass(
+        "TestSparkPlugin",
+        tempDir,
+        "",
+        null,
+        Seq(tempDir.toURI.toURL) ++ thisClassPath,
+        Seq("org.apache.spark.api.plugin.SparkPlugin"),
+        sparkPluginCodeBody)
 
-    val thisClassPath =
-      sys.props("java.class.path").split(File.pathSeparator).map(p => new File(p).toURI.toURL)
-    val compiledSparkPlugin = TestUtils.createCompiledClass(
-      "TestSparkPlugin",
-      tempDir,
-      "",
-      null,
-      Seq(tempDir.toURI.toURL) ++ thisClassPath,
-      importStatements,
-      Seq("SparkPlugin"),
-      sparkPluginCodeBody)
+      val jarUrl = TestUtils.createJar(
+        Seq(compiledSparkPlugin, compiledExecutorPlugin),
+        new File(tempDir, "testPlugin.jar"))
 
-    val jarUrl = TestUtils.createJar(
-      Seq(compiledSparkPlugin, compiledExecutorPlugin),
-      new File(tempDir, "testPlugin.jar"))
-
-    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-    val args = Seq(
-      "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
-      "--name", "testApp",
-      "--master", "local-cluster[1,1,1024]",
-      "--conf", "spark.plugins=TestSparkPlugin",
-      "--conf", "spark.storage.blockManagerSlaveTimeoutMs=" + 10 * 1000,
-      "--conf", "spark.network.timeoutInterval=" + 10 * 1000,
-      "--conf", "spark.executor.extraClassPath=" + jarUrl.toString,
-      "--conf", "spark.driver.extraClassPath=" + jarUrl.toString,
-      "--conf", "spark.ui.enabled=false",
-      unusedJar.toString)
-    SparkSubmitSuite.runSparkSubmit(args)
+      val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+      val args = Seq(
+        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local-cluster[1,1,1024]",
+        "--conf", "spark.plugins=TestSparkPlugin",
+        "--conf", "spark.storage.blockManagerSlaveTimeoutMs=" + 10 * 1000,
+        "--conf", "spark.network.timeoutInterval=" + 10 * 1000,
+        "--conf", "spark.executor.heartbeatInterval=" + 5 * 1000,
+        "--conf", "spark.executor.extraClassPath=" + jarUrl.toString,
+        "--conf", "spark.driver.extraClassPath=" + jarUrl.toString,
+        "--conf", "spark.ui.enabled=false",
+        unusedJar.toString)
+      SparkSubmitSuite.runSparkSubmit(args)
+    }
   }
 
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
