@@ -74,7 +74,7 @@ case class OrcPartitionReaderFactory(
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val (requestedColIdsOrEmptyFile, sendActualSchema) =
+    val (requestedColIdsOrEmptyFile, _) =
       Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
         OrcUtils.requestedColumnIds(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
@@ -120,7 +120,7 @@ case class OrcPartitionReaderFactory(
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val (requestedColIdsOrEmptyFile, sendActualSchema) =
+    val (requestedColIdsOrEmptyFile, _) =
       Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
         OrcUtils.requestedColumnIds(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
@@ -129,8 +129,7 @@ case class OrcPartitionReaderFactory(
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader
     } else {
-      val requestedColIds =
-        requestedColIdsOrEmptyFile.get ++ Array.fill(partitionSchema.length)(-1)
+      val requestedColIds = requestedColIdsOrEmptyFile.get ++ Array.fill(partitionSchema.length)(-1)
       assert(requestedColIds.length == resultSchema.length,
         "[BUG] requested column IDs do not match required schema")
       val taskConf = new Configuration(conf)
