@@ -532,6 +532,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object SparkScripts extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.ScriptTransformation(input, script, output, child, ioschema)
+        if ioschema.inputSerdeClass.isEmpty && ioschema.outputSerdeClass.isEmpty =>
+        SparkScriptTransformationExec(
+          input,
+          script,
+          output,
+          planLater(child),
+          SparkScriptIOSchema(ioschema)
+        ) :: Nil
+      case _ => Nil
+    }
+  }
+
   /**
    * This strategy is just for explaining `Dataset/DataFrame` created by `spark.readStream`.
    * It won't affect the execution, because `StreamingRelation` will be replaced with

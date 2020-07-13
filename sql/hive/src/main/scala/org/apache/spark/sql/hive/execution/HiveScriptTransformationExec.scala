@@ -275,7 +275,7 @@ object HiveScriptIOSchema {
 }
 
 /**
- * The wrapper class of Hive input and output schema properties
+ * The wrapper class of Hive script transformation input and output schema properties
  */
 case class HiveScriptIOSchema (
     inputRowFormat: Seq[(String, String)],
