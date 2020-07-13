@@ -21,7 +21,7 @@ import java.util.TimeZone
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.util.TimestampFormatter
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
 
 /**
@@ -39,7 +39,7 @@ case object ListTimeZonesCommand extends RunnableCommand {
       AttributeReference("useDaylight", BooleanType, nullable = false)())
   override def run(sparkSession: SparkSession): Seq[Row] = {
     TimeZone.getAvailableIDs().map { zid =>
-      val zone = TimeZone.getTimeZone(zid)
+      val zone = DateTimeUtils.getTimeZone(zid)
       val zoneName = zone.getDisplayName(TimestampFormatter.defaultLocale)
       val rawOffset = zone.getRawOffset
       val useDaylight = zone.useDaylightTime()

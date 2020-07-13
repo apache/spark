@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.time.ZoneOffset
 import java.util.{Locale, TimeZone}
 import javax.ws.rs.core.UriBuilder
 
@@ -32,10 +33,12 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -91,22 +94,48 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]] or a
-   * [[ListTimeZonesCommand]] to retrieve all the supported region-based Zone IDs supported.
+   * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]]
    * Example SQL :
    * {{{
    *   SET TIME ZONE LOCAL;
    *   SET TIME ZONE 'Asia/Shanghai';
-   *   SET TIME ZONE ALL;
+   *   SET TIME ZONE INTERVAL 10 HOURS;
    * }}}
    */
   override def visitSetTimeZone(ctx: SetTimeZoneContext): LogicalPlan = withOrigin(ctx) {
-    ctx.timeZone.getType match {
-      case SqlBaseParser.LOCAL =>
-        SetCommand(Some(SQLConf.SESSION_LOCAL_TIMEZONE.key -> Some(TimeZone.getDefault.getID)))
-      case SqlBaseParser.ALL => ListTimeZonesCommand
-      case _ => SetCommand(Some(SQLConf.SESSION_LOCAL_TIMEZONE.key -> Some(string(ctx.STRING))))
+    val key = SQLConf.SESSION_LOCAL_TIMEZONE.key
+    if (ctx.interval != null) {
+      val interval = parseIntervalLiteral(ctx.interval)
+      if (interval.months != 0 || interval.days != 0 ||
+        math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR) {
+        throw new ParseException("The interval value must be in the range of [-18, +18] hours",
+          ctx.interval())
+      } else {
+        val seconds = (interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt
+        SetCommand(Some(key -> Some(ZoneOffset.ofTotalSeconds(seconds).toString)))
+      }
+    } else if (ctx.timezone != null) {
+      ctx.timezone.getType match {
+        case SqlBaseParser.LOCAL =>
+          SetCommand(Some(key -> Some(TimeZone.getDefault.getID)))
+        case _ =>
+          SetCommand(Some(key -> Some(string(ctx.STRING))))
+      }
+    } else {
+      throw new ParseException("Invalid time zone displacement value", ctx)
     }
+  }
+
+  /**
+   * Create a [[ListTimeZonesCommand]] to retrieve all the supported region-based Zone IDs
+   * supported.
+   * Example SQL :
+   * {{{
+   *   SET TIME ZONE ALL;
+   * }}}
+   */
+  override def visitListTimeZones(ctx: ListTimeZonesContext): LogicalPlan = withOrigin(ctx) {
+    ListTimeZonesCommand
   }
 
   /**

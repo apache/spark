@@ -240,7 +240,10 @@ statement
     | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
     | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
-    | SET TIME ZONE timeZone=(STRING | LOCAL | ALL)                   #setTimeZone
+    | SET TIME ZONE ALL                                                #listTimeZones
+    | SET TIME ZONE interval                                           #setTimeZone
+    | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
+    | SET TIME ZONE .*?                                                #setTimeZone
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
