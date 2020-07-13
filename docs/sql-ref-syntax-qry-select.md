@@ -74,6 +74,12 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
     An expression with an assigned name. In general, it denotes a column expression.
 
     **Syntax:** `expression [AS] [alias]`
+    
+ * **FROM**
+
+     Specific the data set to be selected.
+     
+     **Syntax:** `FROM` `from_item`  [ LATERAL VIEW Clause ] [ ... ] [ PIVOT Clause ] 
 
  * **from_item**
 

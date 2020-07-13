@@ -38,6 +38,8 @@ GROUP BY GROUPING SETS (grouping_set [ , ...])
 While aggregate functions are defined as
 ```sql
 aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_expression ) ]
+
+[ FIRST | LAST ] ( expression [ IGNORE NULLS ] ) ]
 ```
 
 ### Parameters
@@ -90,6 +92,18 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
     Filters the input rows for which the `boolean_expression` in the `WHERE` clause evaluates
     to true are passed to the aggregate function; other rows are discarded.
+
+* **FIRST**
+
+    `FIRST` select a first expression value from the data set, we can specific `IGNORE NULLS` to ignore NULLS, it is optional. 
+    
+* **LAST**
+
+    `LAST` select a last expression value from the data set, we can specific `IGNORE NULLS` to ignore NULLS, it is optional. 
+    
+* **IGNORE NULLS**
+   
+   `IGNORE NULLS` is to ignore null values, which is used in `FIRST` and `LAST` 
 
 ### Examples
 
@@ -260,6 +274,30 @@ SELECT city, car_model, sum(quantity) AS sum FROM dealer
 | San Jose| HondaAccord|  8|
 | San Jose|  HondaCivic|  5|
 +---------+------------+---+
+
+--Prepare data for ignore nulls example
+CREATE TABLE person (id INT, name STRING, age INT);
+INSERT INTO person VALUES
+    (100, 'Mary', NULL),
+    (200, 'John', 30),
+    (300, 'Mike', 80),
+    (400, 'Dan',  50);
+
+--Select the first row in cloumn age
+SELECT FIRST(age) FROM person;
++--------------------+
+| first(age, false)  |
++--------------------+
+| NULL               |
++--------------------+
+
+--Get the first row in cloumn `age` ignore nulls,last row in column `id` and sum of cloumn `id`.
+SELECT FIRST(age IGNORE NULLS), LAST(id), SUM(id) FROM person;
++-------------------+------------------+----------+--+
+| first(age, true)  | last(id, false)  | sum(id)  |
++-------------------+------------------+----------+--+
+| 30                | 400              | 1000     |
++-------------------+------------------+----------+--+
 ```
 
 ### Related Statements

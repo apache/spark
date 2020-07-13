@@ -31,17 +31,19 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ COMMENT table_comment ]
     [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) 
         | ( col_name1, col_name2, ... ) ]
-    [ ROW FORMAT SERDE serde_name [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...)] ]
-    [ ROW FORMAT DELIMITED 
-        [ FIELDS TERMINATED BY fields_termiated_char [ ESCAPED BY escaped_char] ] 
-        [ COLLECTION ITEMS TERMINATED BY collection_items_termiated_char ] 
-        [ MAP KEYS TERMINATED BY map_key_termiated_char ]
-        [ LINES TERMINATED BY row_termiated_char ]
-        [ NULL DEFINED AS null_char ] ]
+    [ ROW FORMAT row_format ]
     [ STORED AS file_format ]
     [ LOCATION path ]
     [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
     [ AS select_statement ]
+
+row_format:    
+   : SERDE serde_class [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...) ]
+   | DELIMITED [ FIELDS TERMINATED BY fields_termiated_char [ ESCAPED BY escaped_char] ] 
+               [ COLLECTION ITEMS TERMINATED BY collection_items_termiated_char ] 
+               [ MAP KEYS TERMINATED BY map_key_termiated_char ]
+               [ LINES TERMINATED BY row_termiated_char ]
+               [ NULL DEFINED AS null_char ]
 ```
 
 Note that, the clauses between the columns definition clause and the AS SELECT clause can come in
@@ -62,31 +64,49 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 * **PARTITIONED BY**
 
     Partitions are created on the table, based on the columns specified.
-
-* **ROW FORMAT SERDE**
-
-    Specify a custom SerDe.
     
-* **ROW FORMAT DELIMITED**
+* **row_format**    
 
-    Define DELIMITED clause in order to use the native SerDe.
+    Use the SERDE clause to specify a custom SerDe for one table. Otherwise, use the DELIMITED clause to use the native SerDe and specify the delimiter, escape character, null character, and so on.
+    
+* **SERDE**
+
+    `SERDE` clause can be used to specify a custom `SerDe` for one table.
+    
+* **serde_class**
+
+    Specify a fully-qualified class name of a custom SerDe.
+
+* **SERDEPROPERTIES**
+
+    A list of key-value pairs that is used to tag the serde definition.
+    
+* **DELIMITED**
+
+    `DELIMITED` clause can be used to specify the native `SerDe` and state the delimiter, escape character, null character, and so on.
     
 * **FIELDS TERMINATED BY**
-    It is used to define the column separator.
+
+    It is used to define a column separator.
     
 * **COLLECTION ITEMS TERMINATED BY**
-    It is used to define collection items separator.
+
+    It is used to define a collection item separator.
    
 * **MAP KEYS TERMINATED BY**
-    It is used to define map keys separator.
+
+    It is used to define a map key separator.
     
 * **LINES TERMINATED BY**
-    It is used to define row separator.
+
+    It is used to define a row separator.
     
 * **NULL DEFINED AS**
+
     It is used to define the specific value for NULL.
     
 * **ESCAPED BY**
+
     It is used for escape mechanism.
 
 * **STORED AS**
@@ -145,7 +165,7 @@ CREATE TABLE student (id INT, name STRING)
 CREATE TABLE student (id INT,name STRING)
     ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
     STORED AS TEXTFILE;
-    
+
 --Use complex datatype
 CREATE EXTERNAL TABLE family(
     name STRING,
@@ -159,6 +179,25 @@ CREATE EXTERNAL TABLE family(
     LINES TERMINATED BY '\n'
     NULL DEFINED AS 'foonull'
     STORED AS TEXTFILE
+    LOCATION '/tmp/family/';
+
+--Use native serde
+CREATE TABLE avroExample
+    ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+    STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+               OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+    TBLPROPERTIES ('avro.schema.literal'='{ "namespace": "org.apache.hive",
+                                         "name": "first_schema",
+                                         "type": "record",
+                                         "fields": [ { "name":"string1", "type":"string" },
+                                                     { "name":"string2", "type":"string" }
+                                                   ] }');
+
+--Use custom serde(need load the class first)
+CREATE EXTERNAL TABLE family (id INT,name STRING)
+    ROW FORMAT SERDE 'com.ly.spark.serde.SerDeExample'
+    STORED AS INPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleInputFormat'
+               OUTPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleOutputFormat'
     LOCATION '/tmp/family/';
 ```
 

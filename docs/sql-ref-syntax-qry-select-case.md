@@ -21,12 +21,14 @@ license: |
 
 ### Description
 
-`CASE` clause uses rule to return specific result based on the specified condition.
+`CASE` clause uses rule to return specific result based on the specified condition, similar to if/else statements in other programming languages
 
 ### Syntax
 
 ```sql
-CASE [ expression ] { WHEN boolean_expression THEN then_expression } [ ... ] [ ELSE else_expression ] END
+CASE [ expression ] { WHEN boolean_expression THEN then_expression } [ ... ]
+                     [ ELSE else_expression ]
+END
 ```
 
 ### Parameters
@@ -70,34 +72,34 @@ INSERT INTO person VALUES
     (400, 'Dan',  50);
 
 SELECT id, CASE WHEN id > 200 THEN 'bigger' ELSE 'small' END FROM person;
-+------+--------------------------------------------------+--+
++------+--------------------------------------------------+
 |  id  | CASE WHEN (id > 200) THEN bigger ELSE small END  |
-+------+--------------------------------------------------+--+
++------+--------------------------------------------------+
 | 100  | small                                            |
 | 200  | small                                            |
 | 300  | bigger                                           |
 | 400  | bigger                                           |
-+------+--------------------------------------------------+--+
++------+--------------------------------------------------+
 
 SELECT id, CASE id WHEN 100 then 'bigger' WHEN  id > 300 THEN '300' ELSE 'small' END FROM person;
-+------+-----------------------------------------------------------------------------------------------+--+
++------+-----------------------------------------------------------------------------------------------+
 |  id  | CASE WHEN (id = 100) THEN bigger WHEN (id = CAST((id > 300) AS INT)) THEN 300 ELSE small END  |
-+------+-----------------------------------------------------------------------------------------------+--+
++------+-----------------------------------------------------------------------------------------------+
 | 100  | bigger                                                                                        |
 | 200  | small                                                                                         |
 | 300  | small                                                                                         |
 | 400  | small                                                                                         |
-+------+-----------------------------------------------------------------------------------------------+--+
++------+-----------------------------------------------------------------------------------------------+
 
 SELECT * FROM person where CASE 1 = 1 WHEN 100 THEN 'big' WHEN 200 THEN 'bigger' WHEN  300 THEN 'biggest' ELSE 'small' END = 'small';
-+------+-------+-------+--+
++------+-------+-------+
 |  id  | name  |  age  |
-+------+-------+-------+--+
++------+-------+-------+
 | 100  | John  | 30    |
 | 200  | Mary  | NULL  |
 | 300  | Mike  | 80    |
 | 400  | Dan   | 50    |
-+------+-------+-------+--+
++------+-------+-------+
 ```
 
 ### Related Statements
