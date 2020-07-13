@@ -17,10 +17,17 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.sql.catalyst.plans.InnerLike
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
-object AdaptiveJoinOrientation extends Rule[LogicalPlan] {
+/**
+ * This optimization rule detects if the probe side of the SortMerge join is smaller
+ * than build side. While joining, probe side is streamed and build side is buffered,
+ * so having a larger build side can cause memory issues.
+ */
+case class AdaptiveJoinOrientation(conf: SQLConf) extends Rule[LogicalPlan] {
 
   private def isMaterializedShuffleStage(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, shuffleExec: ShuffleQueryStageExec)
@@ -30,9 +37,10 @@ object AdaptiveJoinOrientation extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case j @ Join(left, right, _, _, _)
-      if Seq(left, right).forall(isMaterializedShuffleStage) &&
-        (left.stats.sizeInBytes < right.stats.sizeInBytes) =>
+    case j @ Join(left, right, _: InnerLike, _, _)
+      if Seq(left, right).forall(plan => isMaterializedShuffleStage(plan) &&
+        plan.stats.sizeInBytes > conf.autoBroadcastJoinThreshold) &&
+          left.stats.sizeInBytes < right.stats.sizeInBytes =>
       Project(j.output, j.copy(left = right, right = left))
   }
 }

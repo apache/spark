@@ -23,6 +23,7 @@ import java.net.URI
 import org.apache.log4j.Level
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.plans.InnerLike
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
@@ -1148,44 +1149,59 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-SMJ_ORIENTATION: reorient SMJ using adaptive stats") {
-    Seq(true, false).foreach { enableAQE =>
-      withTable("testTbl1", "testTbl2") {
-        withSQLConf(
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
-          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withTable("testTbl1", "testTbl2") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
 
-          def getLeftTableName(plan: SparkPlan): String = {
-            val node = plan.collectLeaves()(0) match {
-              case x: ShuffleQueryStageExec =>
-                x.plan.collectLeaves()(0)
-              case x: SparkPlan =>
-                x
-            }
-            node.asInstanceOf[FileSourceScanExec].tableIdentifier.get.table
-          }
-
-          val df1 = (0 until 10).toDF("col1").as("df1")
-          df1.write.format("parquet").saveAsTable("testTbl1")
-
-          val df2 = (0 until 100).toDF("col1").as("df2")
-          df2.write.format("parquet").saveAsTable("testTbl2")
-
-          val df =
-            spark.sql("SELECT * from testTbl1 JOIN testTbl2 ON testTbl1.col1 = testTbl2.col1")
-
-          if (enableAQE) {
-            val initialPlan = df.queryExecution.executedPlan
-            df.collect
-            val adaptivePlan = df.queryExecution.executedPlan
-            val executedPlan = adaptivePlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-            assert(getLeftTableName(executedPlan) == "testTbl2")
-            assert(initialPlan.output == adaptivePlan.output)
-          } else {
-            df.collect
-            val executedPlan = df.queryExecution.executedPlan
-            assert(getLeftTableName(executedPlan) == "testTbl1")
+        def getProbeBuildSides(plan: SparkPlan): Option[(SparkPlan, SparkPlan)] = {
+          plan collectFirst {
+            case SortMergeJoinExec(_, _, _: InnerLike, _, left, right, _) =>
+              (left, right)
           }
         }
+
+        def validateOrientation(initialPlan: SparkPlan, updatedPlan: SparkPlan,
+                                orderShouldBeChanged: Boolean): Unit = {
+          val (initialProbePlan, initialBuildPlan) = getProbeBuildSides(initialPlan).get
+          val (updatedProbePlan, updatedBuildPlan) = getProbeBuildSides(updatedPlan).get
+          if (orderShouldBeChanged) {
+            assert(updatedBuildPlan.output == initialProbePlan.output)
+            assert(updatedProbePlan.output == initialBuildPlan.output)
+          } else {
+            assert(updatedBuildPlan.output == initialBuildPlan.output)
+            assert(updatedProbePlan.output == initialProbePlan.output)
+          }
+        }
+
+        val df1 = (0 until 10).toDF("col1").as("df1")
+        df1.write.format("parquet").saveAsTable("testTbl1")
+
+        val df2 = (0 until 100).toDF("col1").as("df2")
+        df2.write.format("parquet").saveAsTable("testTbl2")
+
+        val dfWrongOrder =
+          spark.sql("SELECT * from testTbl1 JOIN testTbl2 ON testTbl1.col1 = testTbl2.col1")
+        val dfCorrectOrder =
+          spark.sql("SELECT * from testTbl2 JOIN testTbl1 ON testTbl1.col1 = testTbl2.col1")
+
+        val initialAdaptivePlan1 = dfWrongOrder.queryExecution.executedPlan
+        val initialPlan1 = initialAdaptivePlan1.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        dfWrongOrder.collect
+        val adaptivePlan1 = dfWrongOrder.queryExecution.executedPlan
+        val updatedPlan1 = adaptivePlan1.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        // Join orientation should have changed
+        validateOrientation(initialPlan1, updatedPlan1, true)
+        // Project should correct the result order
+        assert(initialPlan1.output == adaptivePlan1.output)
+
+        val initialAdaptivePlan2 = dfCorrectOrder.queryExecution.executedPlan
+        val initialPlan2 = initialAdaptivePlan2.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        dfCorrectOrder.collect
+        val adaptivePlan2 = dfCorrectOrder.queryExecution.executedPlan
+        val updatedPlan2 = adaptivePlan2.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        // Join orientation should not have changed
+        validateOrientation(initialPlan2, updatedPlan2, false)
       }
     }
   }
