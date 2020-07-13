@@ -179,21 +179,21 @@ class OrcFileFormat
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val requestedColIdsOrEmptyFile =
+      val (requestedColIdsOrEmptyFile, sendActualSchema) =
         Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
           OrcUtils.requestedColumnIds(
             isCaseSensitive, dataSchema, requiredSchema, reader, conf)
         }
 
-      if (requestedColIdsOrEmptyFile._2) {
+      if (sendActualSchema) {
         resultSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
       }
       OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
 
-      if (requestedColIdsOrEmptyFile._1.isEmpty) {
+      if (requestedColIdsOrEmptyFile.isEmpty) {
         Iterator.empty
       } else {
-        val requestedColIds = requestedColIdsOrEmptyFile._1.get
+        val requestedColIds = requestedColIdsOrEmptyFile.get
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)

@@ -116,7 +116,7 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Returns the requested column ids from the given ORC file and Boolean flag to use actual
+   * @return Returns the requested column ids from the given ORC file and Boolean flag to use actual
    * schema or result schema. Column id can be -1, which means the requested column doesn't
    * exist in the ORC file. Returns None if the given ORC file is empty.
    */
