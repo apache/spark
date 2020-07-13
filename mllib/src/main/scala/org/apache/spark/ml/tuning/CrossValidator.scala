@@ -36,6 +36,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.ThreadUtils
@@ -159,14 +160,17 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       Some(Array.fill($(numFolds))(Array.ofDim[Model[_]](epm.length)))
     } else None
 
+    val datasetWithSchema = sparkSession.sqlContext.createDataFrame(
+      dataset.rdd.map(_.asInstanceOf[Row]), schema)
+
     // Get splits and cache
     val splits = if ($(foldCol) == "") {
       val splitsArray = Array.fill($(numFolds))(1.0)
-      dataset.randomSplit(splitsArray)
+      datasetWithSchema.randomSplit(splitsArray)
     } else {
-      val foldColValues = dataset.select($(foldCol)).distinct().collect().flatMap(_.toSeq)
-      foldColValues.map(v => dataset.where(col($(foldCol)) <=> v))
-    }.map(_.toDF().cache())
+      val foldColValues = datasetWithSchema.select($(foldCol)).distinct().collect().flatMap(_.toSeq)
+      foldColValues.map(v => datasetWithSchema.where(col($(foldCol)) <=> v))
+    }.map(_.cache())
 
     // Compute metrics for each model across each split
     val metricFutures = (0 until $(numFolds)).toArray.flatMap { splitIndex =>
