@@ -83,6 +83,8 @@ jobs:
       # GitHub Actions' default miniconda to use in pip packaging test.
       CONDA_PREFIX: /usr/share/miniconda
     steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
     # PySpark
     - name: Install Python 3.6
       uses: actions/setup-python@v2
