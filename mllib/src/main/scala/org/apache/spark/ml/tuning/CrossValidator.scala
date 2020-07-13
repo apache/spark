@@ -166,7 +166,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     } else {
       val foldColValues = dataset.select($(foldCol)).distinct().collect().flatMap(_.toSeq)
       foldColValues.map(v => dataset.where(col($(foldCol)) <=> v))
-    }.map(_.cache())
+    }.map(_.toDF().cache())
 
     // Compute metrics for each model across each split
     val metricFutures = (0 until $(numFolds)).toArray.flatMap { splitIndex =>
