@@ -512,7 +512,6 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.ml.linalg.SparseVector",
       "org.apache.spark.ml.linalg.Vector",
       "org.apache.spark.ml.stat.distribution.MultivariateGaussian",
-      "org.apache.spark.ml.tree.impl.TreePoint",
       "org.apache.spark.mllib.clustering.VectorWithNorm",
       "org.apache.spark.mllib.linalg.DenseMatrix",
       "org.apache.spark.mllib.linalg.DenseVector",

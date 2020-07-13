@@ -25,7 +25,7 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.util.{Instrumentation, MLUtils}
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
@@ -293,8 +293,6 @@ private[spark] object GradientBoostedTrees extends Logging {
       featureSubsetStrategy: String,
       instr: Option[Instrumentation] = None):
         (Array[DecisionTreeRegressionModel], Array[Double]) = {
-    MLUtils.registerKryoClasses(input.sparkContext.getConf)
-
     val timer = new TimeTracker()
     timer.start("total")
 

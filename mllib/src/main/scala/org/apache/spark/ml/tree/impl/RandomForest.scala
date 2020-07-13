@@ -28,7 +28,7 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.util.{Instrumentation, MLUtils}
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
@@ -269,8 +269,6 @@ private[spark] object RandomForest extends Logging with Serializable {
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
-    MLUtils.registerKryoClasses(input.sparkContext.getConf)
-
     val timer = new TimeTracker()
 
     val retaggedInput = input.retag(classOf[Instance])

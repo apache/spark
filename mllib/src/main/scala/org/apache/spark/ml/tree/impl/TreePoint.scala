@@ -21,7 +21,6 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.tree.{ContinuousSplit, Split}
-import org.apache.spark.ml.util.MLUtils
 import org.apache.spark.rdd.RDD
 
 
@@ -60,8 +59,6 @@ private[spark] object TreePoint {
       input: RDD[Instance],
       splits: Array[Array[Split]],
       metadata: DecisionTreeMetadata): RDD[TreePoint[B]] = {
-    MLUtils.registerKryoClasses(input.sparkContext.getConf)
-
     // Construct arrays for featureArity for efficiency in the inner loop.
     val featureArity = new Array[Int](metadata.numFeatures)
     var i = 0
