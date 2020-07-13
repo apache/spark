@@ -127,18 +127,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[ListTimeZonesCommand]] to retrieve all the supported region-based Zone IDs
-   * supported.
-   * Example SQL :
-   * {{{
-   *   SET TIME ZONE ALL;
-   * }}}
-   */
-  override def visitListTimeZones(ctx: ListTimeZonesContext): LogicalPlan = withOrigin(ctx) {
-    ListTimeZonesCommand
-  }
-
-  /**
    * Create a [[RefreshResource]] logical plan.
    */
   override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {

@@ -395,9 +395,6 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     sql("set time zone local")
     assert(spark.conf.get(SQLConf.SESSION_LOCAL_TIMEZONE) === TimeZone.getDefault.getID)
 
-    val df = sql("set time zone all").where("id='Asia/Chongqing'")
-    checkAnswer(df, Row("Asia/Chongqing", "China Standard Time", 28800000, false))
-
     val e1 = intercept[IllegalArgumentException](sql("set time zone 'invalid'"))
     assert(e1.getMessage === "Cannot resolve the given timezone with" +
       " ZoneId.of(_, ZoneId.SHORT_IDS)")
