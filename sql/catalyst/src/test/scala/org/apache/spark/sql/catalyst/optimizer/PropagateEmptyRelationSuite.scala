@@ -92,10 +92,10 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized4, correctAnswer4)
 
     // Nullability can change from nullable to non-nullable
-    val query5 = testRelation1.where(false).union(testRelation3).select('a.as('x)).analyze
+    val query5 = testRelation1.where(false).union(testRelation3)
     val optimized5 = Optimize.execute(query5.analyze)
     assert(query5.output.head.nullable, "Original output should be nullable")
-    assert(!optimized5.output.head.nullable, "The new output should be non-nullable")
+    assert(!optimized5.output.head.nullable, "New output should be non-nullable")
 
     // Keep metadata
     val query6 = testRelation3.where(false).union(testRelation1)
