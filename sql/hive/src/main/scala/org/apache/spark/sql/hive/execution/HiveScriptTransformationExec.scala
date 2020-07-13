@@ -86,7 +86,7 @@ case class HiveScriptTransformationExec(
 
     // This new thread will consume the ScriptTransformation's input rows and write them to the
     // external process. That process's output will be read by this current thread.
-    val writerThread = new HiveScriptTransformationWriterThread(
+    val writerThread = HiveScriptTransformationWriterThread(
       inputIterator.map(outputProjection),
       input.map(_.dataType),
       inputSerde,
@@ -208,7 +208,7 @@ case class HiveScriptTransformationExec(
   }
 }
 
-private class HiveScriptTransformationWriterThread(
+case class HiveScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
     @Nullable inputSerde: AbstractSerDe,
@@ -219,15 +219,7 @@ private class HiveScriptTransformationWriterThread(
     stderrBuffer: CircularBuffer,
     taskContext: TaskContext,
     conf: Configuration)
-  extends BaseScriptTransformationWriterThread(
-    iter,
-    inputSchema,
-    ioSchema,
-    outputStream,
-    proc,
-    stderrBuffer,
-    taskContext,
-    conf) with HiveInspectors {
+  extends BaseScriptTransformationWriterThread with HiveInspectors {
 
   override def processRows(): Unit = {
     val dataOutputStream = new DataOutputStream(outputStream)

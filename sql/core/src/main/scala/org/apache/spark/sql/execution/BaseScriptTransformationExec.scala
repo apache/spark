@@ -89,15 +89,23 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   }
 }
 
-abstract class BaseScriptTransformationWriterThread(
-    iter: Iterator[InternalRow],
-    inputSchema: Seq[DataType],
-    ioSchema: BaseScriptTransformIOSchema,
-    outputStream: OutputStream,
-    proc: Process,
-    stderrBuffer: CircularBuffer,
-    taskContext: TaskContext,
-    conf: Configuration) extends Thread with Logging {
+abstract class BaseScriptTransformationWriterThread extends Thread with Logging {
+
+  def iter: Iterator[InternalRow]
+
+  def inputSchema: Seq[DataType]
+
+  def ioSchema: BaseScriptTransformIOSchema
+
+  def outputStream: OutputStream
+
+  def proc: Process
+
+  def stderrBuffer: CircularBuffer
+
+  def taskContext: TaskContext
+
+  def conf: Configuration
 
   setDaemon(true)
 

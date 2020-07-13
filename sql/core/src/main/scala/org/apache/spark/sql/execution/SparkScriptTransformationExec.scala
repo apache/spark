@@ -71,7 +71,7 @@ case class SparkScriptTransformationExec(
 
     // This new thread will consume the ScriptTransformation's input rows and write them to the
     // external process. That process's output will be read by this current thread.
-    val writerThread = new ScriptTransformationWriterThread(
+    val writerThread = ScriptTransformationWriterThread(
       inputIterator.map(outputProjection),
       input.map(_.dataType),
       ioschema,
@@ -131,7 +131,7 @@ case class SparkScriptTransformationExec(
   }
 }
 
-private class ScriptTransformationWriterThread(
+case class ScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
     ioSchema: SparkScriptIOSchema,
@@ -140,15 +140,7 @@ private class ScriptTransformationWriterThread(
     stderrBuffer: CircularBuffer,
     taskContext: TaskContext,
     conf: Configuration)
-  extends BaseScriptTransformationWriterThread(
-    iter,
-    inputSchema,
-    ioSchema,
-    outputStream,
-    proc,
-    stderrBuffer,
-    taskContext,
-    conf) {
+  extends BaseScriptTransformationWriterThread {
 
   setDaemon(true)
 
