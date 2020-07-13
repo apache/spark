@@ -108,6 +108,9 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
     }
 
     String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
+    if (mem.chars().allMatch(Character::isDigit)) {
+      mem = mem + "m";
+    }
     cmd.add("-Xmx" + mem);
     cmd.add(className);
     cmd.addAll(classArgs);

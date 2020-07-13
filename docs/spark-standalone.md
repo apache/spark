@@ -164,7 +164,10 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
-    <td>Memory to allocate to the Spark master and worker daemons themselves (default: 1g).</td>
+    <td>
+    Memory to allocate to the Spark master and worker daemons themselves (default: 1g). This can be configured with the same
+    format as JVM memory strings using a size unit suffix ("k", "m", "g" or "t") using "m" as default suffix unit.
+    </td>
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_JAVA_OPTS</code></td>

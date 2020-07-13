@@ -70,7 +70,11 @@ The history server can be configured as follows:
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
   <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
-    <td>Memory to allocate to the history server (default: 1g).</td>
+    <td>
+    Memory to allocate to the history server (default: 1g). This can be configured with the same
+    format as JVM memory strings using a size unit suffix ("k", "m", "g" or "t") using "m" as
+    default suffix unit.
+    </td>
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_JAVA_OPTS</code></td>

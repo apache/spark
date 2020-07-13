@@ -116,6 +116,22 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testParserWithDefaultUnit() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+      parser.MASTER,
+      "local",
+      parser.DRIVER_MEMORY,
+      "4200",
+      parser.DRIVER_CLASS_PATH,
+      "/driverCp",
+      SparkLauncher.NO_RESOURCE);
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+
+    assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx4200m"));
+  }
+
+  @Test
   public void testShellCliParser() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
       parser.CLASS,

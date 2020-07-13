@@ -78,11 +78,16 @@ case "$1" in
     ;;
   executor)
     shift 1
+    MEMORY_WITH_UNIT=$SPARK_EXECUTOR_MEMORY
+    if [[ $MEMORY_WITH_UNIT =~ ^[0-9]+$ ]]
+    then
+        MEMORY_WITH_UNIT="${MEMORY_WITH_UNIT}m"
+    fi
     CMD=(
       ${JAVA_HOME}/bin/java
       "${SPARK_EXECUTOR_JAVA_OPTS[@]}"
-      -Xms$SPARK_EXECUTOR_MEMORY
-      -Xmx$SPARK_EXECUTOR_MEMORY
+      -Xms$MEMORY_WITH_UNIT
+      -Xmx$MEMORY_WITH_UNIT
       -cp "$SPARK_CLASSPATH:$SPARK_DIST_CLASSPATH"
       org.apache.spark.executor.CoarseGrainedExecutorBackend
       --driver-url $SPARK_DRIVER_URL
