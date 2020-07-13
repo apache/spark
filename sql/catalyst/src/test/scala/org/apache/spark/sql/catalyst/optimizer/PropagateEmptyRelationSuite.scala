@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructType}
 
 class PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -55,7 +55,9 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
   val testRelation2 = LocalRelation.fromExternalRows(Seq('b.int), data = Seq(Row(1)))
-  val testRelation3 = LocalRelation.fromExternalRows(Seq('c.int.notNull), data = Seq(Row(1)))
+  val metadata = new MetadataBuilder().putLong("test", 1).build()
+  val testRelation3 =
+    LocalRelation.fromExternalRows(Seq('c.int.notNull.withMetadata(metadata)), data = Seq(Row(1)))
 
   test("propagate empty relation through Union") {
     val query = testRelation1
@@ -94,6 +96,11 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val optimized5 = Optimize.execute(query5.analyze)
     assert(query5.output.head.nullable, "Original output should be nullable")
     assert(!optimized5.output.head.nullable, "The new output should be non-nullable")
+
+    // Keep metadata
+    val query6 = testRelation3.where(false).union(testRelation1)
+    val optimized6 = Optimize.execute(query6.analyze)
+    assert(optimized6.output.head.metadata == metadata, "New output should keep metadata")
   }
 
   test("propagate empty relation through Join") {

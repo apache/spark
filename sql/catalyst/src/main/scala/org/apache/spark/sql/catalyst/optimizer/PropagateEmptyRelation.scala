@@ -63,7 +63,9 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
           newPlan
         } else {
           val outputAliases = outputs.map { case (newAttr, oldAttr) =>
-            Alias(newAttr, oldAttr.name)(oldAttr.exprId)
+            val newExplicitMetadata =
+              if (oldAttr.metadata != newAttr.metadata) Some(oldAttr.metadata) else None
+            Alias(newAttr, oldAttr.name)(oldAttr.exprId, explicitMetadata = newExplicitMetadata)
           }
           Project(outputAliases, newPlan)
         }
