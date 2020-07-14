@@ -18,6 +18,7 @@
 package org.apache.spark.ml
 
 import scala.annotation.varargs
+import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
@@ -26,7 +27,7 @@ import org.apache.spark.sql.Dataset
 /**
  * Abstract class for estimators that fit models to data.
  */
-abstract class Estimator[M <: Model[M]] extends PipelineStage {
+abstract class Estimator[M <: Model[M] : ClassTag] extends PipelineStage {
 
   /**
    * Fits a single model to the input data with optional parameters.

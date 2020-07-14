@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
@@ -73,7 +75,7 @@ private[spark] trait ClassifierParams
 abstract class Classifier[
     FeaturesType,
     E <: Classifier[FeaturesType, E, M],
-    M <: ClassificationModel[FeaturesType, M]]
+    M <: ClassificationModel[FeaturesType, M] : ClassTag]
   extends Predictor[FeaturesType, E, M] with ClassifierParams {
 
   /** @group setParam */

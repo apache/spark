@@ -128,7 +128,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       createTime = 0L,
       lastAccessTime = 0L,
       owner = "",
-      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
+      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
       // View texts are checked separately
       viewText = None
     )
