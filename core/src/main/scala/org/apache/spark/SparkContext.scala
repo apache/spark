@@ -489,13 +489,17 @@ class SparkContext(config: SparkConf) extends Logging {
     // Add each JAR given through the constructor
     if (jars != null) {
       jars.foreach(jar => addJar(jar, true))
+      if (addedJars.nonEmpty) {
+        _conf.set("spark.app.initial.jar.urls", addedJars.keys.toSeq.mkString(","))
+      }
     }
-    _conf.set("spark.app.initial.jar.urls", addedJars.keys.toSeq.mkString(","))
 
     if (files != null) {
       files.foreach(file => addFile(file, false, true))
+      if (addedFiles.nonEmpty) {
+        _conf.set("spark.app.initial.file.urls", addedFiles.keys.toSeq.mkString(","))
+      }
     }
-    _conf.set("spark.app.initial.file.urls", addedFiles.keys.toSeq.mkString(","))
 
     _executorMemory = _conf.getOption(EXECUTOR_MEMORY.key)
       .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
