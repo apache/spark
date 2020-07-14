@@ -59,10 +59,6 @@ class _NoValueType(object):
             cls.__instance = super(_NoValueType, cls).__new__(cls)
         return cls.__instance
 
-    # needed for python 2 to preserve identity through a pickle
-    def __reduce__(self):
-        return (self.__class__, ())
-
     def __repr__(self):
         return "<no value>"
 

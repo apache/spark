@@ -423,11 +423,7 @@ class CloudPickler(Pickler):
         Determines what kind of function obj is (e.g. lambda, defined at
         interactive prompt, etc) and handles the pickling appropriately.
         """
-        try:
-            should_special_case = obj in _BUILTIN_TYPE_CONSTRUCTORS
-        except TypeError:
-            # Methods of builtin types aren't hashable in python 2.
-            should_special_case = False
+        should_special_case = obj in _BUILTIN_TYPE_CONSTRUCTORS
 
         if should_special_case:
             # We keep a special-cased cache of built-in type constructors at
@@ -1010,11 +1006,7 @@ class CloudPickler(Pickler):
     def save_not_implemented(self, obj):
         self.save_reduce(_gen_not_implemented, ())
 
-    try:               # Python 2
-        dispatch[file] = save_file
-    except NameError:  # Python 3  # pragma: no branch
-        dispatch[io.TextIOWrapper] = save_file
-
+    dispatch[io.TextIOWrapper] = save_file
     dispatch[type(Ellipsis)] = save_ellipsis
     dispatch[type(NotImplemented)] = save_not_implemented
 
