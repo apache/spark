@@ -3058,9 +3058,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       spark.sessionState.catalog.externalCatalog.dropFunction("default", "func1")
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
-      intercept[NoSuchFunctionException] {
-        sql("REFRESH FUNCTION func1")
-      }
+      sql("REFRESH FUNCTION func1")
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
 
       val function = CatalogFunction(func, "test.non.exists.udf", Seq.empty)

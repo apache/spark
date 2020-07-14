@@ -265,9 +265,10 @@ case class RefreshFunctionCommand(
       // register overwrite function.
       val func = catalog.getFunctionMetadata(identifier)
       catalog.registerFunction(func, true)
-    } else {
-      // function is not exists, clear cached function.
+    } else if (catalog.isRegisteredFunction(identifier)) {
+      // clear cached function.
       catalog.unregisterFunction(identifier, true)
+    } else {
       throw new NoSuchFunctionException(identifier.database.get, functionName)
     }
 
