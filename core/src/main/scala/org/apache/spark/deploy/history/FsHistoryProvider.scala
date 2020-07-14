@@ -128,6 +128,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val storePath = conf.get(LOCAL_STORE_DIR).map(new File(_))
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
 
+  private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
+
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath()).toFile()
@@ -156,6 +158,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val diskManager = storePath.map { path =>
     new HistoryServerDiskManager(conf, path, listing, clock)
+  }
+
+  private var memoryManager: HistoryServerMemoryManager = null
+  if (hybridStoreEnabled) {
+    memoryManager = new HistoryServerMemoryManager(conf)
   }
 
   private val fileCompactor = new EventLogFileCompactor(conf, hadoopConf, fs,
@@ -262,6 +269,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def startPolling(): Unit = {
     diskManager.foreach(_.initialize())
+    if (memoryManager != null) {
+      memoryManager.initialize()
+    }
 
     // Validate the log directory.
     val path = new Path(logDir)
@@ -1167,6 +1177,95 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // At this point the disk data either does not exist or was deleted because it failed to
     // load, so the event log needs to be replayed.
 
+    // If the hybrid store is enabled, try it first and fail back to leveldb store.
+    if (hybridStoreEnabled) {
+      try {
+        return createHybridStore(dm, appId, attempt, metadata)
+      } catch {
+        case e: Exception =>
+          logInfo(s"Failed to create HybridStore for $appId/${attempt.info.attemptId}." +
+            " Using LevelDB.", e)
+      }
+    }
+
+    createLevelDBStore(dm, appId, attempt, metadata)
+  }
+
+  private def createHybridStore(
+      dm: HistoryServerDiskManager,
+      appId: String,
+      attempt: AttemptInfoWrapper,
+      metadata: AppStatusStoreMetadata): KVStore = {
+    var retried = false
+    var hybridStore: HybridStore = null
+    val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
+      attempt.lastIndex)
+
+    // Use InMemoryStore to rebuild app store
+    while (hybridStore == null) {
+      // A RuntimeException will be thrown if the heap memory is not sufficient
+      memoryManager.lease(appId, attempt.info.attemptId, reader.totalSize,
+        reader.compressionCodec)
+      var store: HybridStore = null
+      try {
+        store = new HybridStore()
+        rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
+        hybridStore = store
+      } catch {
+        case _: IOException if !retried =>
+          // compaction may touch the file(s) which app rebuild wants to read
+          // compaction wouldn't run in short interval, so try again...
+          logWarning(s"Exception occurred while rebuilding log path ${attempt.logPath} - " +
+            "trying again...")
+          store.close()
+          memoryManager.release(appId, attempt.info.attemptId)
+          retried = true
+        case e: Exception =>
+          store.close()
+          memoryManager.release(appId, attempt.info.attemptId)
+          throw e
+      }
+    }
+
+    // Create a LevelDB and start a background thread to dump data to LevelDB
+    var lease: dm.Lease = null
+    try {
+      logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
+      lease = dm.lease(reader.totalSize, reader.compressionCodec.isDefined)
+      val levelDB = KVUtils.open(lease.tmpPath, metadata)
+      hybridStore.setLevelDB(levelDB)
+      hybridStore.switchToLevelDB(new HybridStore.SwitchToLevelDBListener {
+        override def onSwitchToLevelDBSuccess: Unit = {
+          logInfo(s"Completely switched to LevelDB for app $appId / ${attempt.info.attemptId}.")
+          levelDB.close()
+          val newStorePath = lease.commit(appId, attempt.info.attemptId)
+          hybridStore.setLevelDB(KVUtils.open(newStorePath, metadata))
+          memoryManager.release(appId, attempt.info.attemptId)
+        }
+        override def onSwitchToLevelDBFail(e: Exception): Unit = {
+          logWarning(s"Failed to switch to LevelDB for app $appId / ${attempt.info.attemptId}", e)
+          levelDB.close()
+          lease.rollback()
+        }
+      }, appId, attempt.info.attemptId)
+    } catch {
+      case e: Exception =>
+        hybridStore.close()
+        memoryManager.release(appId, attempt.info.attemptId)
+        if (lease != null) {
+          lease.rollback()
+        }
+        throw e
+    }
+
+    hybridStore
+  }
+
+  private def createLevelDBStore(
+      dm: HistoryServerDiskManager,
+      appId: String,
+      attempt: AttemptInfoWrapper,
+      metadata: AppStatusStoreMetadata): KVStore = {
     var retried = false
     var newStorePath: File = null
     while (newStorePath == null) {
