@@ -387,8 +387,7 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    if not os.environ.get("AMPLAB_JENKINS"):
-        build_spark_unidoc_sbt(extra_profiles)
+    build_spark_unidoc_sbt(extra_profiles)
 
 
 def build_apache_spark(build_tool, extra_profiles):
