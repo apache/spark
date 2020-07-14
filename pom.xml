@@ -205,7 +205,7 @@
     If you are changing Arrow version specification, please check ./python/pyspark/sql/utils.py,
     and ./python/setup.py too.
     -->
-    <arrow.version>0.15.1</arrow.version>
+    <arrow.version>1.0.0-SNAPSHOT</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
 
@@ -2329,7 +2329,7 @@
           </exclusion>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <artifactId>jackson-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -2339,9 +2339,20 @@
             <groupId>io.netty</groupId>
             <artifactId>netty-common</artifactId>
           </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-memory-netty</artifactId>
+        <version>${arrow.version}</version>
+        <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty-handler</artifactId>
+            <artifactId>netty-buffer</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
