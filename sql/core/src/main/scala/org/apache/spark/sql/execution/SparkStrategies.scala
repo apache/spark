@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import java.time.ZoneId
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -40,7 +38,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery}
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -539,7 +537,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.ScriptTransformation(input, script, output, child, ioschema)
         if ioschema.inputSerdeClass.isEmpty && ioschema.outputSerdeClass.isEmpty =>
         SparkScriptTransformationExec(
-          input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone)),
+          input,
           script,
           output,
           planLater(child),

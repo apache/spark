@@ -713,7 +713,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
           None
         }
         (Seq.empty, Option(name), props.toSeq, recordHandler)
-
+      // SPARK-32106: When there is no definition about format, we return empty result
+      // then we finally execute with SparkScriptTransformationExec
       case null =>
         (Nil, None, Seq.empty, None)
     }

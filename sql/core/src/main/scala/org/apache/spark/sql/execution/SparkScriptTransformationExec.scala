@@ -29,7 +29,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, RedirectThread}
 
 /**
@@ -67,7 +67,9 @@ case class SparkScriptTransformationExec(
       stderrBuffer,
       "Thread-ScriptTransformation-STDERR-Consumer").start()
 
-    val outputProjection = new InterpretedProjection(input, child.output)
+    val finalInput = input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
+
+    val outputProjection = new InterpretedProjection(finalInput, child.output)
 
     // This new thread will consume the ScriptTransformation's input rows and write them to the
     // external process. That process's output will be read by this current thread.
@@ -116,11 +118,17 @@ case class SparkScriptTransformationExec(
         if (!ioschema.schemaLess) {
           new GenericInternalRow(
             prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-              .map(CatalystTypeConverters.convertToCatalyst))
+              .zip(output)
+              .map { case (data, dataType) =>
+                CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
+              })
         } else {
           new GenericInternalRow(
             prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
-              .map(CatalystTypeConverters.convertToCatalyst))
+              .zip(output)
+              .map { case (data, dataType) =>
+                CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
+              })
         }
       }
     }

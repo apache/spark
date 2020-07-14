@@ -27,12 +27,15 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{CircularBuffer, SerializableConfiguration, Utils}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
@@ -85,6 +88,41 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         throw new SparkException(s"Subprocess exited with status $exitCode. " +
           s"Error: ${stderrBuffer.toString}", cause)
       }
+    }
+  }
+
+  def wrapper(data: String, dt: DataType): Any = {
+    dt match {
+      case StringType => data
+      case ByteType => JavaUtils.stringToBytes(data)
+      case IntegerType => data.toInt
+      case ShortType => data.toShort
+      case LongType => data.toLong
+      case FloatType => data.toFloat
+      case DoubleType => data.toDouble
+      case dt: DecimalType => BigDecimal(data)
+      case DateType if conf.datetimeJava8ApiEnabled =>
+        DateTimeUtils.stringToDate(
+          UTF8String.fromString(data),
+          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+          .map(DateTimeUtils.daysToLocalDate).orNull
+      case DateType =>
+        DateTimeUtils.stringToDate(
+          UTF8String.fromString(data),
+          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+          .map(DateTimeUtils.toJavaDate).orNull
+      case TimestampType if conf.datetimeJava8ApiEnabled =>
+        DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(data),
+          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+          .map(DateTimeUtils.microsToInstant).orNull
+      case TimestampType =>
+        DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(data),
+          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+          .map(DateTimeUtils.toJavaTimestamp).orNull
+      case CalendarIntervalType => IntervalUtils.stringToInterval(UTF8String.fromString(data))
+      case dataType: DataType => data
     }
   }
 }

@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.util.{CircularBuffer, RedirectThread, Utils}
 
 /**
@@ -78,17 +78,25 @@ case class HiveScriptTransformationExec(
       stderrBuffer,
       "Thread-ScriptTransformation-STDERR-Consumer").start()
 
-    val outputProjection = new InterpretedProjection(input, child.output)
-
     // This nullability is a performance optimization in order to avoid an Option.foreach() call
     // inside of a loop
     @Nullable val (inputSerde, inputSoi) = ioschema.initInputSerDe(input).getOrElse((null, null))
+
+    // For HiveScriptTransformationExec, if inputSerde == null, but outputSerde != null
+    // We will use StringBuffer to pass data, in this case, we should cast data as string too.
+    val finalInput = if (inputSerde == null) {
+      input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
+    } else {
+      input
+    }
+
+    val outputProjection = new InterpretedProjection(finalInput, child.output)
 
     // This new thread will consume the ScriptTransformation's input rows and write them to the
     // external process. That process's output will be read by this current thread.
     val writerThread = HiveScriptTransformationWriterThread(
       inputIterator.map(outputProjection),
-      input.map(_.dataType),
+      finalInput.map(_.dataType),
       inputSerde,
       inputSoi,
       ioschema,
@@ -178,11 +186,17 @@ case class HiveScriptTransformationExec(
           if (!ioschema.schemaLess) {
             new GenericInternalRow(
               prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-                .map(CatalystTypeConverters.convertToCatalyst))
+                .zip(output)
+                .map { case (data, dataType) =>
+                  CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
+                })
           } else {
             new GenericInternalRow(
               prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
-                .map(CatalystTypeConverters.convertToCatalyst))
+                .zip(output)
+                .map { case (data, dataType) =>
+                  CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
+                })
           }
         } else {
           val raw = outputSerde.deserialize(scriptOutputWritable)
