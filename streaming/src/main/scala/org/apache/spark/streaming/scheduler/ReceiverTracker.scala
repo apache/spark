@@ -248,7 +248,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         _.runningExecutor.map {
           _.executorId
         }
-      }
+      }.toMap
     } else {
       Map.empty
     }
