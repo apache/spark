@@ -261,13 +261,13 @@ case class RefreshFunctionCommand(
     val identifier = FunctionIdentifier(
       functionName, Some(databaseName.getOrElse(catalog.getCurrentDatabase)))
     // we only refresh the permanent function.
-    // 1. clear cached function.
-    // 2. register function if exists.
-    catalog.unregisterFunction(identifier, true)
     if (catalog.isPersistentFunction(identifier)) {
+      // register overwrite function.
       val func = catalog.getFunctionMetadata(identifier)
       catalog.registerFunction(func, true)
     } else {
+      // function is not exists, clear cached function.
+      catalog.unregisterFunction(identifier, true)
       throw new NoSuchFunctionException(identifier.database.get, functionName)
     }
 
