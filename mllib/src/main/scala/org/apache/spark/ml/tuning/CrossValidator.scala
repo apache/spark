@@ -166,7 +166,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     // Get splits and cache
     val splits = if ($(foldCol) == "") {
       val splitsArray = Array.fill($(numFolds))(1.0)
-      datasetWithSchema.randomSplit(splitsArray)
+      datasetWithSchema.randomSplit(splitsArray, seed = 11L)
     } else {
       val foldColValues = datasetWithSchema.select($(foldCol)).distinct().collect().flatMap(_.toSeq)
       foldColValues.map(v => datasetWithSchema.where(col($(foldCol)) <=> v))
