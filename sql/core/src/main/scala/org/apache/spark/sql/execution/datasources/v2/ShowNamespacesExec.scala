@@ -52,6 +52,6 @@ case class ShowNamespacesExec(
       }
     }
 
-    rows
+    rows.toSeq
   }
 }

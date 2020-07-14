@@ -1050,7 +1050,7 @@ class Analyzer(
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
-        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get)
+        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get).toMap
         val query = addStaticPartitionColumns(r, i.query, staticPartitions)
 
         if (!i.overwrite) {
@@ -2238,7 +2238,7 @@ class Analyzer(
               }
           }
           if (aggregateExpressions.nonEmpty) {
-            Some(aggregateExpressions, transformedAggregateFilter)
+            Some(aggregateExpressions.toSeq, transformedAggregateFilter)
           } else {
             None
           }
@@ -2677,7 +2677,7 @@ class Analyzer(
       val windowOps =
         groupedWindowExpressions.foldLeft(child) {
           case (last, ((partitionSpec, orderSpec, _), windowExpressions)) =>
-            Window(windowExpressions, partitionSpec, orderSpec, last)
+            Window(windowExpressions.toSeq, partitionSpec, orderSpec, last)
         }
 
       // Finally, we create a Project to output windowOps's output

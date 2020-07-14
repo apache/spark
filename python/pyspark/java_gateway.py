@@ -17,7 +17,6 @@
 
 import atexit
 import os
-import sys
 import signal
 import shlex
 import shutil
@@ -27,14 +26,10 @@ import tempfile
 import time
 from subprocess import Popen, PIPE
 
-if sys.version >= '3':
-    xrange = range
-
 from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
 from py4j.clientserver import ClientServer, JavaParameters, PythonParameters
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
-from pyspark.util import _exception_message
 
 
 def launch_gateway(conf=None, popen_kwargs=None):
@@ -197,7 +192,7 @@ def local_connect_and_auth(port, auth_secret):
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
         except socket.error as e:
-            emsg = _exception_message(e)
+            emsg = str(e)
             errors.append("tried to connect to %s, but an error occured: %s" % (sa, emsg))
             sock.close()
             sock = None
