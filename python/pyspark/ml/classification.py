@@ -512,6 +512,12 @@ class _LinearSVCParams(_ClassifierParams, HasRegParam, HasMaxIter, HasFitInterce
                       " all predictions 0.0 and -Inf will make all predictions 1.0.",
                       typeConverter=TypeConverters.toFloat)
 
+    def __init__(self):
+        super(_LinearSVCParams, self).__init__()
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
+                         standardization=True, threshold=0.0, aggregationDepth=2,
+                         blockSize=1)
+
 
 @inherit_doc
 class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable):
@@ -598,9 +604,7 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
         super(LinearSVC, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LinearSVC", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
-                         standardization=True, threshold=0.0, aggregationDepth=2,
-                         blockSize=1)
+
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -815,6 +819,11 @@ class _LogisticRegressionParams(_ProbabilisticClassifierParams, HasRegParam,
                                     "equal with 1 for binomial regression, or the number of "
                                     "classes for multinomial regression.",
                                     typeConverter=TypeConverters.toVector)
+
+    def __init__(self):
+        super(_LogisticRegressionParams, self).__init__()
+        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto",
+                         blockSize=1)
 
     @since("1.4.0")
     def setThreshold(self, value):
@@ -1037,8 +1046,6 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto",
-                         blockSize=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
@@ -1305,7 +1312,12 @@ class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams):
     """
     Params for :py:class:`DecisionTreeClassifier` and :py:class:`DecisionTreeClassificationModel`.
     """
-    pass
+
+    def __init__(self):
+        super(_DecisionTreeClassifierParams, self).__init__()
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                         impurity="gini", leafCol="", minWeightFractionPerNode=0.0)
 
 
 @inherit_doc
@@ -1404,9 +1416,6 @@ class DecisionTreeClassifier(_JavaProbabilisticClassifier, _DecisionTreeClassifi
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.DecisionTreeClassifier", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini", leafCol="", minWeightFractionPerNode=0.0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1540,7 +1549,14 @@ class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams):
     """
     Params for :py:class:`RandomForestClassifier` and :py:class:`RandomForestClassificationModel`.
     """
-    pass
+
+    def __init__(self):
+        super(_RandomForestClassifierParams, self).__init__()
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                         impurity="gini", numTrees=20, featureSubsetStrategy="auto",
+                         subsamplingRate=1.0, leafCol="", minWeightFractionPerNode=0.0,
+                         bootstrap=True)
 
 
 @inherit_doc
@@ -1634,11 +1650,6 @@ class RandomForestClassifier(_JavaProbabilisticClassifier, _RandomForestClassifi
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.RandomForestClassifier", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini", numTrees=20, featureSubsetStrategy="auto",
-                         subsamplingRate=1.0, leafCol="", minWeightFractionPerNode=0.0,
-                         bootstrap=True)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1882,6 +1893,14 @@ class _GBTClassifierParams(_GBTParams, _HasVarianceImpurity):
                      "Supported options: " + ", ".join(supportedLossTypes),
                      typeConverter=TypeConverters.toString)
 
+    def __init__(self):
+        super(_GBTClassifierParams, self).__init__()
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                         lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0,
+                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
+                         leafCol="", minWeightFractionPerNode=0.0)
+
     @since("1.4.0")
     def getLossType(self):
         """
@@ -2009,11 +2028,6 @@ class GBTClassifier(_JavaProbabilisticClassifier, _GBTClassifierParams,
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.GBTClassifier", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0,
-                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                         leafCol="", minWeightFractionPerNode=0.0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2211,6 +2225,10 @@ class _NaiveBayesParams(_PredictorParams, HasWeightCol):
                       "and gaussian.",
                       typeConverter=TypeConverters.toString)
 
+    def __init__(self):
+        super(_NaiveBayesParams, self).__init__()
+        self._setDefault(smoothing=1.0, modelType="multinomial")
+
     @since("1.5.0")
     def getSmoothing(self):
         """
@@ -2329,7 +2347,6 @@ class NaiveBayes(_JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds,
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.NaiveBayes", self.uid)
-        self._setDefault(smoothing=1.0, modelType="multinomial")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
