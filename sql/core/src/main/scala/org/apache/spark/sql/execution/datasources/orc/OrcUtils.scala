@@ -126,11 +126,11 @@ object OrcUtils extends Logging {
       requiredSchema: StructType,
       reader: Reader,
       conf: Configuration): (Option[Array[Int]], Boolean) = {
-    var sendActualSchema = false
+    var canPruneCols = false
     val orcFieldNames = reader.getSchema.getFieldNames.asScala
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
-      (None, sendActualSchema)
+      (None, canPruneCols)
     } else {
       if (orcFieldNames.forall(_.startsWith("_col"))) {
         // This is a ORC file written by Hive, no field names in the physical schema, assume the
@@ -144,12 +144,12 @@ object OrcUtils extends Logging {
             // for ORC file written by Hive, no field names
             // in the physical schema, there is a need to send the
             // entire dataSchema instead of required schema
-            sendActualSchema = true
+            canPruneCols = true
             index
           } else {
             -1
           }
-        }), sendActualSchema)
+        }), canPruneCols)
       } else {
         if (isCaseSensitive) {
           (Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
@@ -158,7 +158,7 @@ object OrcUtils extends Logging {
             } else {
               -1
             }
-          }), sendActualSchema)
+          }), canPruneCols)
         } else {
           // Do case-insensitive resolution only if in case-insensitive mode
           val caseInsensitiveOrcFieldMap = orcFieldNames.groupBy(_.toLowerCase(Locale.ROOT))
@@ -176,7 +176,7 @@ object OrcUtils extends Logging {
                   idx
                 }
               }.getOrElse(-1)
-          }), sendActualSchema)
+          }), canPruneCols)
         }
       }
     }

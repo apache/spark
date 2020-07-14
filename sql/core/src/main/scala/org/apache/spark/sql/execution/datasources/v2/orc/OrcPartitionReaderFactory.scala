@@ -54,6 +54,7 @@ case class OrcPartitionReaderFactory(
     readDataSchema: StructType,
     partitionSchema: StructType) extends FilePartitionReaderFactory {
   private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
+  private val actualSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
 
@@ -66,19 +67,23 @@ case class OrcPartitionReaderFactory(
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
 
-    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
+    var resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
 
     val filePath = new Path(new URI(file.filePath))
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val (requestedColIdsOrEmptyFile, _) =
+    val (requestedColIdsOrEmptyFile, canPruneCols) =
       Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
         OrcUtils.requestedColumnIds(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
       }
+
+    if (canPruneCols) {
+      resultSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
+    }
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader[InternalRow]
@@ -112,19 +117,24 @@ case class OrcPartitionReaderFactory(
   override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
     val conf = broadcastedConf.value.value
 
-    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
+    var resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
 
     val filePath = new Path(new URI(file.filePath))
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val (requestedColIdsOrEmptyFile, _) =
+    val (requestedColIdsOrEmptyFile, canPruneCols) =
       Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
         OrcUtils.requestedColumnIds(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
       }
+
+    if (canPruneCols) {
+      resultSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
+    }
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
+
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader
