@@ -123,9 +123,11 @@ trait SimpleMetricsCachedBatch extends CachedBatch {
   /**
    * Holds the same as ColumnStats.
    * upperBound (optional), lowerBound (Optional), nullCount: Int, rowCount: Int, sizeInBytes: Long
+   * Which is repeated for each column in the original data.
    */
   val stats: InternalRow
-  override def sizeInBytes: Long = stats.getLong(4)
+  override def sizeInBytes: Long =
+    Range.apply(4, stats.numFields, 5).map(stats.getLong).sum
 }
 
 // Currently, only use statistics from atomic types except binary type only.
