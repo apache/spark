@@ -375,7 +375,7 @@ class CodegenContext extends Logging {
 
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
-    splitExpressions(expressions = initCodes, funcName = "init", arguments = Nil)
+    splitExpressions(expressions = initCodes.toSeq, funcName = "init", arguments = Nil)
   }
 
   /**
@@ -927,6 +927,7 @@ class CodegenContext extends Logging {
       length += CodeFormatter.stripExtraNewLinesAndComments(code).length
     }
     blocks += blockBuilder.toString()
+    blocks.toSeq
   }
 
   /**
@@ -1002,7 +1003,7 @@ class CodegenContext extends Logging {
   def subexprFunctionsCode: String = {
     // Whole-stage codegen's subexpression elimination is handled in another code path
     assert(currentVars == null || subexprFunctions.isEmpty)
-    splitExpressions(subexprFunctions, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
+    splitExpressions(subexprFunctions.toSeq, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
   }
 
   /**

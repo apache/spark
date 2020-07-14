@@ -18,9 +18,6 @@
 import sys
 import unittest
 
-if sys.version > '3':
-    basestring = str
-
 from pyspark.ml.classification import BinaryLogisticRegressionSummary, LinearSVC, \
     LinearSVCSummary, BinaryRandomForestClassificationSummary, LogisticRegression, \
     LogisticRegressionSummary, RandomForestClassificationSummary, \
@@ -101,7 +98,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.residualDegreeOfFreedom, 1)
         self.assertEqual(s.residualDegreeOfFreedomNull, 2)
         self.assertEqual(s.rank, 1)
-        self.assertTrue(isinstance(s.solver, basestring))
+        self.assertTrue(isinstance(s.solver, str))
         self.assertTrue(isinstance(s.aic, float))
         self.assertTrue(isinstance(s.deviance, float))
         self.assertTrue(isinstance(s.nullDeviance, float))
