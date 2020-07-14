@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable
+
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{ExplainUtils, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 
 case class BroadcastNestedLoopJoinExec(
@@ -96,6 +99,24 @@ case class BroadcastNestedLoopJoinExec(
       (r: InternalRow) => true
     }
   }
+
+
+  /**
+   * See. [SPARK-32290]
+   * Not in Subquery will almost certainly be planned as a Broadcast Nested Loop join
+   * which is very time consuming because it's a M*N calculation. But if it's a single column
+   * NotInSubquery, and buildSide data is small enough, M*N calculation could be optimized into
+   * M*log(N) using HashMap to lookup build side rows.
+   * Meet following condition the optimize will works:
+   * NOT_IN_SUBQUERY_SINGLE_COLUMN_OPTIMIZE_ENABLED is true
+   * BuildSideRowCount <= NOT_IN_SUBQUERY_SINGLE_COLUMN_OPTIMIZE_ROW_COUNT_THRESHOLD
+   */
+
+  // NotInSubquery Key in StreamedSide
+  private var notInSubquerySingleColumnOptimizeStreamedKey: Attribute = _
+
+  // NotInSubquery Key Index in StreamedSide
+  private var notInSubquerySingleColumnOptimizeStreamedKeyIndex: Int = _
 
   /**
    * The implementation for InnerJoin.
@@ -201,6 +222,117 @@ case class BroadcastNestedLoopJoinExec(
         streamedIter
       } else {
         Iterator.empty
+      }
+    }
+  }
+
+  case class NotInSubquerySingleColumnOptimizeParams(
+      buildSideHashSet: mutable.HashSet[AnyRef],
+      isNullExists: Boolean,
+      isBuildRowsEmpty: Boolean)
+
+  private def notInSubquerySingleColumnOptimizeEnabled: Boolean = {
+    if (SQLConf.get.notInSubquerySingleColumnOptimizeEnabled && right.output.length == 1) {
+      // buildSide must be single column
+      // and condition must be either of following pattern
+      // or(a=b,isnull(a=b))
+      // or(isnull(a=b),a=b)
+      condition.get match {
+        case _@Or(_@EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
+            _@IsNull(_@EqualTo(tmpLeft: AttributeReference, tmpRight: AttributeReference)))
+            if leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) =>
+          notInSubquerySingleColumnOptimizeSetStreamedKey(leftAttr, rightAttr)
+          if (notInSubquerySingleColumnOptimizeStreamedKeyIndex != -1) {
+            true
+          } else {
+            logWarning(s"failed to find notInSubquerySingleColumnOptimizeStreamedKeyIndex," +
+              s" fallback to leftExistenceJoin.")
+            false
+          }
+        case _@Or(_@IsNull(_@EqualTo(tmpLeft: AttributeReference, tmpRight: AttributeReference)),
+            _@EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference))
+            if leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) =>
+          notInSubquerySingleColumnOptimizeSetStreamedKey(leftAttr, rightAttr)
+          if (notInSubquerySingleColumnOptimizeStreamedKeyIndex != -1) {
+            true
+          } else {
+            logWarning(s"failed to find notInSubquerySingleColumnOptimizeStreamedKeyIndex," +
+              s" fallback to leftExistenceJoin.")
+            false
+          }
+        case _ => false
+      }
+    } else {
+      false
+    }
+  }
+
+  private def notInSubquerySingleColumnOptimizeBuildParams(
+      buildRows: Array[InternalRow]): NotInSubquerySingleColumnOptimizeParams = {
+    val buildRowsHashSet = mutable.HashSet[AnyRef]()
+    val dataType = right.output.head.dataType
+    var isNullExist = false
+    buildRows.foreach(row => {
+      if (row.isNullAt(0)) {
+        isNullExist = true
+      }
+      // put null as value, because we only leverage HashMap keys
+      buildRowsHashSet.add(row.get(0, dataType))
+    })
+    NotInSubquerySingleColumnOptimizeParams(buildRowsHashSet, isNullExist, buildRows.isEmpty)
+  }
+
+  private def notInSubquerySingleColumnOptimizeSetStreamedKey(
+      leftAttr: AttributeReference,
+      rightAttr: AttributeReference): Unit = {
+    val leftNotInKeyFound = left.output.find(_.semanticEquals(leftAttr))
+    if (leftNotInKeyFound.isDefined) {
+      notInSubquerySingleColumnOptimizeStreamedKey = leftAttr
+      notInSubquerySingleColumnOptimizeStreamedKeyIndex =
+        AttributeSeq(left.output).indexOf(leftAttr.exprId)
+    } else {
+      notInSubquerySingleColumnOptimizeStreamedKey = rightAttr
+      notInSubquerySingleColumnOptimizeStreamedKeyIndex =
+        AttributeSeq(left.output).indexOf(rightAttr.exprId)
+    }
+  }
+
+  /**
+   * Optimized version implementation for LeftAnti
+   * which converted from single column NotInSubquery
+   * @param relation
+   * @return
+   */
+  private def notInSubquerySingleColumnOptimize(
+      relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
+    assert(buildSide == BuildRight)
+    val buildRows = relation.value
+    if (buildRows.length > SQLConf.get.notInSubquerySingleColumnOptimizeRowCountThreshold) {
+      logWarning(s"BuildSide row count ${buildRows.length} exceeded " +
+        s"notInSubquerySingleColumnOptimizeRowCountThreshold ${SQLConf.get
+          .notInSubquerySingleColumnOptimizeRowCountThreshold}, fallback to leftExistenceJoin.")
+      leftExistenceJoin(relation, false)
+    } else {
+      val params = notInSubquerySingleColumnOptimizeBuildParams(buildRows)
+      streamed.execute().mapPartitionsInternal { streamedIter =>
+        streamedIter.filter(row => {
+          // See. not-in-unit-tests-single-column.sql for detail filter rules
+          if (params.isBuildRowsEmpty) {
+            true
+          } else {
+            val streamedRowIsNull = row.isNullAt(notInSubquerySingleColumnOptimizeStreamedKeyIndex)
+            val streamedRowNotInKey = row.get(
+              notInSubquerySingleColumnOptimizeStreamedKeyIndex,
+              notInSubquerySingleColumnOptimizeStreamedKey.dataType
+            )
+            val notInKeyEqual = params.buildSideHashSet.contains(streamedRowNotInKey)
+            if (!streamedRowIsNull && !params.isNullExists && !notInKeyEqual) {
+              true
+            } else {
+              false
+            }
+          }
+        })
       }
     }
   }
@@ -357,7 +489,13 @@ case class BroadcastNestedLoopJoinExec(
       case (LeftSemi, BuildRight) =>
         leftExistenceJoin(broadcastedRelation, exists = true)
       case (LeftAnti, BuildRight) =>
-        leftExistenceJoin(broadcastedRelation, exists = false)
+        // if LeftAnti is planed from Not In Subquery with single column
+        // use HashMap implementation to further optimize
+        if (notInSubquerySingleColumnOptimizeEnabled) {
+          notInSubquerySingleColumnOptimize(broadcastedRelation)
+        } else {
+          leftExistenceJoin(broadcastedRelation, exists = false)
+        }
       case (j: ExistenceJoin, BuildRight) =>
         existenceJoin(broadcastedRelation)
       case _ =>
