@@ -28,7 +28,7 @@ import org.apache.spark.input.StreamFileInputFormat
 
 private[spark] class BinaryFileRDD[T](
     @transient private val sc: SparkContext,
-    inputFormatClass: Class[F],
+    inputFormatClass: Class[_ <: StreamFileInputFormat[T]],
     keyClass: Class[String],
     valueClass: Class[T],
     conf: Configuration,
