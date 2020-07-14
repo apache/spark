@@ -121,6 +121,17 @@ class CollapseProjectSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("do not collapse project if number of leave expressions would be too big") {
+    var query: LogicalPlan = testRelation
+    for( _ <- 1 to 10) {
+      // after n iterations the number of leaf expressions will be 2^{n+1}
+      // => after 10 iterations we would end up with more than 1000 leaf expressions
+      query = query.select(('a + 'b).as('a), ('a - 'b).as('b))
+    }
+    val projects = Optimize.execute(query.analyze).collect { case p: Project => p }
+    assert(projects.size === 2) //  should be collapsed to two projects
+  }
+
   test("preserve top-level alias metadata while collapsing projects") {
     def hasMetadata(logicalPlan: LogicalPlan): Boolean = {
       logicalPlan.asInstanceOf[Project].projectList.exists(_.metadata.contains("key"))
