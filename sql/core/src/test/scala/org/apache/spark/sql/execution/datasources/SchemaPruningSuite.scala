@@ -505,20 +505,22 @@ abstract class SchemaPruningSuite
         Row("Jim", "Jones") ::
         Row("John", "Doe") :: Nil)
 
-    // Create a repartitioned view because `SORT BY` is a local sort
-    sql("select * from contacts").repartition(1).createOrReplaceTempView("tmp_contacts")
-    val sortBySql =
-      """
-        |select name.first, name.last from tmp_contacts
-        |sort by name.first, name.last
-        |""".stripMargin
-    val query2 = sql(sortBySql)
-    checkScan(query2, "struct<name:struct<first:string,last:string>>")
-    checkAnswer(query2,
-      Row("Jane", "Doe") ::
-        Row("Janet", "Jones") ::
-        Row("Jim", "Jones") ::
-        Row("John", "Doe") :: Nil)
+    withTempView("tmp_contacts") {
+      // Create a repartitioned view because `SORT BY` is a local sort
+      sql("select * from contacts").repartition(1).createOrReplaceTempView("tmp_contacts")
+      val sortBySql =
+        """
+          |select name.first, name.last from tmp_contacts
+          |sort by name.first, name.last
+          |""".stripMargin
+      val query2 = sql(sortBySql)
+      checkScan(query2, "struct<name:struct<first:string,last:string>>")
+      checkAnswer(query2,
+        Row("Jane", "Doe") ::
+          Row("Janet", "Jones") ::
+          Row("Jim", "Jones") ::
+          Row("John", "Doe") :: Nil)
+    }
   }
 
   testSchemaPruning("select nested field in Expand") {
