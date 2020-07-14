@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import java.nio.charset.StandardCharsets
+import java.nio.charset.StandardCharsets.UTF_8
 import java.time.ZoneId
 import java.util.Locale
 
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -101,7 +102,7 @@ class CSVOptions(
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
   val charset = parameters.getOrElse("encoding",
-    parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
+    parameters.getOrElse("charset", UTF_8.name()))
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
@@ -135,8 +136,14 @@ class CSVOptions(
   val positiveInf = parameters.getOrElse("positiveInf", "Inf")
   val negativeInf = parameters.getOrElse("negativeInf", "-Inf")
 
-  // Set bom to true to fix some characters are garbled when opening with Excel.
-  val bom = getBool("bom")
+  val writeBOM = {
+    val isWriteBOM = getBool("writeBOM")
+    if (isWriteBOM && !charset.equals(UTF_8.name())) {
+      throw new AnalysisException(
+        s"Write BOM only support ${UTF_8.name()} charset. Please disable writeBOM option.")
+    }
+    isWriteBOM
+  }
 
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))

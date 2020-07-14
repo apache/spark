@@ -39,7 +39,7 @@ class CsvOutputWriter(
 
   private val gen = new UnivocityGenerator(dataSchema, writer, params)
 
-  if (params.bom) {
+  if (params.writeBOM) {
     writer.write(0xFEFF)
   }
 

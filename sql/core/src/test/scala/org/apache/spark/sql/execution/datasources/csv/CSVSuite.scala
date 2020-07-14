@@ -35,7 +35,6 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -2356,7 +2355,7 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     }
   }
 
-  test("Some characters are garbled when opening csv files with Excel") {
+  test("Support write BOM to file before writing data if encoded by UTF-8 charset") {
     // scalastyle:off nonascii
     val chinese = "我爱中文"
     val korean = "나는 한국인을 좋아한다"
@@ -2366,40 +2365,30 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
 
     val df = spark.sql(s"SELECT '$chinese' AS Chinese, '$korean' AS Korean," +
       s"'$japanese' AS Japanese, '$english' AS English")
+    val bomBytes = 0xFEFF.toChar.toString.getBytes(StandardCharsets.UTF_8)
 
-    Seq(true, false).foreach { bom =>
+    Seq(true, false).foreach { writeBOM =>
       withTempPath { p =>
         val path = p.getAbsolutePath
-        df.write.option("bom", bom).csv(path)
-
-        val bytesReads = new mutable.ArrayBuffer[Long]()
-        val bytesReadListener = new SparkListener() {
-          override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-            bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
-          }
+        df.write.option("writeBOM", writeBOM).csv(path)
+        // Check write BOM
+        val data = spark.sparkContext.binaryFiles(path).collect().map(_._2).head.toArray()
+        if (writeBOM) {
+          assert(data.take(3) === bomBytes)
+        } else {
+          assert(data.take(3) !== bomBytes)
         }
-        sparkContext.addSparkListener(bytesReadListener)
-        try {
-          spark.read.csv(path).limit(1).collect()
-          sparkContext.listenerBus.waitUntilEmpty(1000L)
-          if (sparkConf.get(SQLConf.USE_V1_SOURCE_LIST).equals("")) {
-            if (bom) {
-              assert(bytesReads.sum === 101)
-            } else {
-              assert(bytesReads.sum === 98)
-            }
-          } else {
-            if (bom) {
-              assert(bytesReads.sum === 202)
-            } else {
-              assert(bytesReads.sum === 196)
-            }
-          }
-        } finally {
-          sparkContext.removeSparkListener(bytesReadListener)
-        }
+        // Check value
         checkAnswer(spark.read.csv(path), Seq(Row(chinese, korean, japanese, english)))
       }
+    }
+
+    withTempPath { p =>
+      val msg = intercept[AnalysisException] {
+        spark.range(5).write.option("encoding", StandardCharsets.ISO_8859_1.name())
+          .option("writeBOM", "true").csv(p.getAbsolutePath)
+      }.getMessage
+      assert(msg.contains("Write BOM only support UTF-8 charset. Please disable writeBOM option"))
     }
   }
 }

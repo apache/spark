@@ -926,6 +926,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * trailing whitespaces from values being written should be skipped.</li>
    * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.
    * Maximum length is 1 character.</li>
+   * <li>`writeBOM` (default `false`): writes BOM to file before writing data if encoded by
+   * UTF-8 charset.</li>
    * </ul>
    *
    * @since 2.0.0
