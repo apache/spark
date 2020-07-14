@@ -72,8 +72,8 @@ private[spark] class NewHadoopPartition(
  */
 @DeveloperApi
 class NewHadoopRDD[K, V](
-    sc : SparkContext,
-    inputFormatClass: Class[_  <: InputFormat[K, V]],
+    @transient sc: SparkContext,
+    inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
     @transient private val _conf: Configuration)
