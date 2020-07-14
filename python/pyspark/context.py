@@ -21,6 +21,7 @@ import signal
 import sys
 import threading
 import warnings
+import importlib
 from threading import RLock
 from tempfile import NamedTemporaryFile
 
@@ -37,14 +38,11 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
     PairDeserializer, AutoBatchedSerializer, NoOpSerializer, ChunkedStream
 from pyspark.storagelevel import StorageLevel
 from pyspark.resource.information import ResourceInformation
-from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
+from pyspark.rdd import RDD, _load_from_socket
 from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
-
-if sys.version > '3':
-    xrange = range
 
 
 __all__ = ['SparkContext']
@@ -212,15 +210,6 @@ class SparkContext(object):
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
-
-        if sys.version_info < (3, 6):
-            with warnings.catch_warnings():
-                warnings.simplefilter("once")
-                warnings.warn(
-                    "Support for Python 2 and Python 3 prior to version 3.6 is deprecated as "
-                    "of Spark 3.0. See also the plan for dropping Python 2 support at "
-                    "https://spark.apache.org/news/plan-for-dropping-python-2-support.html.",
-                    DeprecationWarning)
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -398,7 +387,6 @@ class SparkContext(object):
         return self._jsc.version()
 
     @property
-    @ignore_unicode_prefix
     def applicationId(self):
         """
         A unique identifier for the Spark application.
@@ -408,7 +396,7 @@ class SparkContext(object):
         * in case of YARN something like 'application_1433865536131_34483'
 
         >>> sc.applicationId  # doctest: +ELLIPSIS
-        u'local-...'
+        'local-...'
         """
         return self._jsc.sc().applicationId()
 
@@ -490,20 +478,20 @@ class SparkContext(object):
             end = start
             start = 0
 
-        return self.parallelize(xrange(start, end, step), numSlices)
+        return self.parallelize(range(start, end, step), numSlices)
 
     def parallelize(self, c, numSlices=None):
         """
-        Distribute a local Python collection to form an RDD. Using xrange
+        Distribute a local Python collection to form an RDD. Using range
         is recommended if the input represents a range for performance.
 
         >>> sc.parallelize([0, 2, 3, 4, 6], 5).glom().collect()
         [[0], [2], [3], [4], [6]]
-        >>> sc.parallelize(xrange(0, 6, 2), 5).glom().collect()
+        >>> sc.parallelize(range(0, 6, 2), 5).glom().collect()
         [[], [0], [], [2], [4]]
         """
         numSlices = int(numSlices) if numSlices is not None else self.defaultParallelism
-        if isinstance(c, xrange):
+        if isinstance(c, range):
             size = len(c)
             if size == 0:
                 return self.parallelize([], numSlices)
@@ -522,7 +510,7 @@ class SparkContext(object):
                 # the empty iterator to a list, thus make sure worker reuse takes effect.
                 # See more details in SPARK-26549.
                 assert len(list(iterator)) == 0
-                return xrange(getStart(split), getStart(split + 1), step)
+                return range(getStart(split), getStart(split + 1), step)
 
             return self.parallelize([], numSlices).mapPartitionsWithIndex(f)
 
@@ -591,7 +579,6 @@ class SparkContext(object):
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.objectFile(name, minPartitions), self)
 
-    @ignore_unicode_prefix
     def textFile(self, name, minPartitions=None, use_unicode=True):
         """
         Read a text file from HDFS, a local file system (available on all
@@ -608,13 +595,12 @@ class SparkContext(object):
         ...    _ = testFile.write("Hello world!")
         >>> textFile = sc.textFile(path)
         >>> textFile.collect()
-        [u'Hello world!']
+        ['Hello world!']
         """
         minPartitions = minPartitions or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minPartitions), self,
                    UTF8Deserializer(use_unicode))
 
-    @ignore_unicode_prefix
     def wholeTextFiles(self, path, minPartitions=None, use_unicode=True):
         """
         Read a directory of text files from HDFS, a local file system
@@ -658,7 +644,7 @@ class SparkContext(object):
         ...    _ = file2.write("2")
         >>> textFiles = sc.wholeTextFiles(dirPath)
         >>> sorted(textFiles.collect())
-        [(u'.../1.txt', u'1'), (u'.../2.txt', u'2')]
+        [('.../1.txt', '1'), ('.../2.txt', '2')]
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.wholeTextFiles(path, minPartitions), self,
@@ -846,7 +832,6 @@ class SparkContext(object):
         jrdd = self._jsc.checkpointFile(name)
         return RDD(jrdd, self, input_deserializer)
 
-    @ignore_unicode_prefix
     def union(self, rdds):
         """
         Build the union of a list of RDDs.
@@ -860,10 +845,10 @@ class SparkContext(object):
         ...    _ = testFile.write("Hello")
         >>> textFile = sc.textFile(path)
         >>> textFile.collect()
-        [u'Hello']
+        ['Hello']
         >>> parallelized = sc.parallelize(["World!"])
         >>> sorted(sc.union([textFile, parallelized]).collect())
-        [u'Hello', 'World!']
+        ['Hello', 'World!']
         """
         first_jrdd_deserializer = rdds[0]._jrdd_deserializer
         if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
@@ -959,9 +944,8 @@ class SparkContext(object):
             self._python_includes.append(filename)
             # for tests in local mode
             sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
-        if sys.version > '3':
-            import importlib
-            importlib.invalidate_caches()
+
+        importlib.invalidate_caches()
 
     def setCheckpointDir(self, dirName):
         """

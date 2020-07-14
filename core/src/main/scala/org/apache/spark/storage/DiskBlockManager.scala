@@ -98,7 +98,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       }
     }.filter(_ != null).flatMap { dir =>
       val files = dir.listFiles()
-      if (files != null) files else Seq.empty
+      if (files != null) files.toSeq else Seq.empty
     }
   }
 

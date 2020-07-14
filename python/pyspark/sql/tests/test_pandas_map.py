@@ -19,9 +19,6 @@ import sys
 import time
 import unittest
 
-if sys.version >= '3':
-    unicode = str
-
 from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message

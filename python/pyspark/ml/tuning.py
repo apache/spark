@@ -15,12 +15,11 @@
 # limitations under the License.
 #
 import itertools
-import sys
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
 
-from pyspark import since, keyword_only
+from pyspark import keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.common import _py2java, _java2py
 from pyspark.ml.param import Params, Param, TypeConverters

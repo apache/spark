@@ -621,7 +621,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     }
 
     override def onStageCompleted(stage: SparkListenerStageCompleted): Unit = {
-      stageInfos(stage.stageInfo) = taskInfoMetrics
+      stageInfos(stage.stageInfo) = taskInfoMetrics.toSeq
       taskInfoMetrics = mutable.Buffer.empty
     }
   }
