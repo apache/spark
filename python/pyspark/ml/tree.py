@@ -15,12 +15,10 @@
 # limitations under the License.
 #
 
-from pyspark import since, keyword_only
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
-    JavaPredictor, JavaPredictionModel
-from pyspark.ml.common import inherit_doc, _java2py, _py2java
+from pyspark.ml.wrapper import JavaPredictionModel
+from pyspark.ml.common import inherit_doc
 
 
 @inherit_doc
