@@ -466,7 +466,7 @@ class ExecutorSuite extends SparkFunSuite
         "--conf", "spark.driver.extraClassPath=" + jarUrl.toString,
         "--conf", "spark.ui.enabled=false",
         unusedJar.toString)
-      SparkSubmitSuite.runSparkSubmit(args)
+      SparkSubmitSuite.runSparkSubmit(args, timeout = 2.minutes)
     }
   }
 
