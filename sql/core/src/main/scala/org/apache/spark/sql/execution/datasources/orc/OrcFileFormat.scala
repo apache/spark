@@ -185,7 +185,7 @@ class OrcFileFormat
             isCaseSensitive, dataSchema, requiredSchema, reader, conf)
         }
 
-      if (canPruneCols) {
+      if (!canPruneCols) {
         resultSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
       }
       OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)

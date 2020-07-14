@@ -126,7 +126,7 @@ object OrcUtils extends Logging {
       requiredSchema: StructType,
       reader: Reader,
       conf: Configuration): (Option[Array[Int]], Boolean) = {
-    var canPruneCols = false
+    var canPruneCols = true
     val orcFieldNames = reader.getSchema.getFieldNames.asScala
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
@@ -138,13 +138,13 @@ object OrcUtils extends Logging {
         assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
           s"${dataSchema.catalogString} has less fields than the actual ORC physical schema, " +
           "no idea which columns were dropped, fail to read.")
+        // for ORC file written by Hive, no field names
+        // in the physical schema, there is a need to send the
+        // entire dataSchema instead of required schema
+        canPruneCols = false
         (Some(requiredSchema.fieldNames.map { name =>
           val index = dataSchema.fieldIndex(name)
           if (index < orcFieldNames.length) {
-            // for ORC file written by Hive, no field names
-            // in the physical schema, there is a need to send the
-            // entire dataSchema instead of required schema
-            canPruneCols = true
             index
           } else {
             -1

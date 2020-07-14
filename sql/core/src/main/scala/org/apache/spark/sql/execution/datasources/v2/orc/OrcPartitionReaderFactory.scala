@@ -80,7 +80,7 @@ case class OrcPartitionReaderFactory(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
       }
 
-    if (canPruneCols) {
+    if (!canPruneCols) {
       resultSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
@@ -130,11 +130,10 @@ case class OrcPartitionReaderFactory(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
       }
 
-    if (canPruneCols) {
+    if (!canPruneCols) {
       resultSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
-
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader
