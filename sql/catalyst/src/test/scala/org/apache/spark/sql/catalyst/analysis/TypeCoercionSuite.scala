@@ -1583,6 +1583,51 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(TypeCoercion.IntegralDivision, IntegralDivide(2, 1L),
       IntegralDivide(Cast(2, LongType), 1L))
   }
+
+  test("UnionCoercion") {
+    val table1 = LocalRelation(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)())
+    val table2 = LocalRelation(
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("b", ByteType)(),
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("i", IntegerType)())
+    val table3 = LocalRelation(
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("i", IntegerType)())
+
+    val rules = Seq(TypeCoercion.UnionCoercion)
+    val analyzer = new RuleExecutor[LogicalPlan] {
+      override val batches = Seq(Batch("Resolution", Once, rules: _*))
+    }
+
+    // By name resolution
+    val union1 = Union(table1 :: table2 :: Nil, true, false)
+    val analyzed1 = analyzer.execute(union1)
+    val projected1 =
+      Project(Seq(table2.output(3), table2.output(0), table2.output(1), table2.output(2)), table2)
+    val expected1 = Union(table1 :: projected1 :: Nil)
+    comparePlans(analyzed1, expected1)
+
+    // Allow missing column
+    val union2 = Union(table1 :: table3 :: Nil, true, true)
+    val analyzed2 = analyzer.execute(union2)
+    val nullAttr = Alias(Literal(null, ByteType), "b")()
+    val projected2 =
+      Project(Seq(table2.output(3), table2.output(0), nullAttr, table2.output(2)), table3)
+    val expected2 = Union(table1 :: projected2 :: Nil)
+    comparePlans(analyzed2, expected2)
+
+    // By name + Allow missing column
+    val union3 = Union(union1 :: union2 :: Nil)
+    val analyzed3 = analyzer.execute(union3)
+    val expected3 = Union(expected1 :: expected2 :: Nil)
+    comparePlans(analyzed3, expected3)
+  }
 }
 
 

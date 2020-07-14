@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -49,6 +50,7 @@ object TypeCoercion {
 
   def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
     InConversion(conf) ::
+      UnionCoercion ::
       WidenSetOperationTypes ::
       PromoteStrings(conf) ::
       DecimalPrecision ::
@@ -344,7 +346,7 @@ object TypeCoercion {
       case s: Union if s.childrenResolved &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
-        s.makeCopy(Array(newChildren))
+        Union(newChildren, s.byName, s.allowMissingCol)
     }
 
     /** Build new children with the widest types for each attribute among all the children */
@@ -1097,6 +1099,64 @@ object TypeCoercion {
             "The second argument of 'date_sub' function needs to be an integer.", cause = Some(e))
         }
         DateSub(l, Literal(days))
+    }
+  }
+
+  /**
+   * Coerces different children of Union to a common set of columns. Note that this must be
+   * run before `WidenSetOperationTypes`, because `WidenSetOperationTypes` should be run on
+   * correctly resolved column by name.
+   */
+  object UnionCoercion extends TypeCoercionRule {
+    private def unionTwoSides(
+        left: LogicalPlan, right: LogicalPlan, allowMissingCol: Boolean): LogicalPlan = {
+      val resolver = SQLConf.get.resolver
+      val leftOutputAttrs = left.output
+      val rightOutputAttrs = right.output
+
+      // Builds a project list for `right` based on `left` output names
+      val rightProjectList = leftOutputAttrs.map { lattr =>
+        rightOutputAttrs.find { rattr => resolver(lattr.name, rattr.name) }.getOrElse {
+          if (allowMissingCol) {
+            Alias(Literal(null, lattr.dataType), lattr.name)()
+          } else {
+            throw new AnalysisException(
+              s"""Cannot resolve column name "${lattr.name}" among """ +
+                s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
+          }
+        }
+      }
+
+      // Delegates failure checks to `CheckAnalysis`
+      val notFoundAttrs = rightOutputAttrs.diff(rightProjectList)
+      val rightChild = Project(rightProjectList ++ notFoundAttrs, right)
+
+      // Builds a project for `logicalPlan` based on `right` output names, if allowing
+      // missing columns.
+      val leftChild = if (allowMissingCol) {
+        val missingAttrs = notFoundAttrs.map { attr =>
+          Alias(Literal(null, attr.dataType), attr.name)()
+        }
+        if (missingAttrs.nonEmpty) {
+          Project(leftOutputAttrs ++ missingAttrs, left)
+        } else {
+          left
+        }
+      } else {
+        left
+      }
+      Union(leftChild, rightChild)
+    }
+
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+      case e if !e.childrenResolved => e
+
+      case Union(children, byName, allowMissingCol)
+          if byName =>
+        val union = children.reduceLeft { (left: LogicalPlan, right: LogicalPlan) =>
+          unionTwoSides(left, right, allowMissingCol)
+        }
+        CombineUnions(union)
     }
   }
 }

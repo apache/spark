@@ -337,6 +337,10 @@ trait CheckAnalysis extends PredicateHelper {
 
           case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
+          case Union(_, byName, allowMissingCol) if byName || allowMissingCol =>
+            failAnalysis("Union should not be with true `byName` or " +
+              "`allowMissingCol` flags after analysis phase.")
+
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
             def ordinalNumber(i: Int): String = i match {

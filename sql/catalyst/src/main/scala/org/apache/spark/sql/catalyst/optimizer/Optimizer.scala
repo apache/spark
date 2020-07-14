@@ -491,8 +491,8 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Note: right now Union means UNION ALL, which does not de-duplicate rows, so it is safe to
     // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
     // pushdown Limit.
-    case LocalLimit(exp, Union(children)) =>
-      LocalLimit(exp, Union(children.map(maybePushLocalLimit(exp, _))))
+    case LocalLimit(exp, Union(children, byName, allowMissingCol)) =>
+      LocalLimit(exp, Union(children.map(maybePushLocalLimit(exp, _)), byName, allowMissingCol))
     // Add extra limits below OUTER JOIN. For LEFT OUTER and RIGHT OUTER JOIN we push limits to
     // the left and right sides, respectively. It's not safe to push limits below FULL OUTER
     // JOIN in the general case without a more invasive rewrite.
@@ -550,7 +550,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
     // Push down deterministic projection through UNION ALL
-    case p @ Project(projectList, Union(children)) =>
+    case p @ Project(projectList, Union(children, byName, allowMissingCol)) =>
       assert(children.nonEmpty)
       if (projectList.forall(_.deterministic)) {
         val newFirstChild = Project(projectList, children.head)
@@ -558,7 +558,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
           val rewrites = buildRewrites(children.head, child)
           Project(projectList.map(pushToRight(_, rewrites)), child)
         }
-        Union(newFirstChild +: newOtherChildren)
+        Union(newFirstChild +: newOtherChildren, byName, allowMissingCol)
       } else {
         p
       }
@@ -922,19 +922,28 @@ object CombineUnions extends Rule[LogicalPlan] {
   }
 
   private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
+    val topByName = union.byName
+    val topAllowMissingCol = union.allowMissingCol
+
     val stack = mutable.Stack[LogicalPlan](union)
     val flattened = mutable.ArrayBuffer.empty[LogicalPlan]
+    // Note that we should only flatten the unions with same byName and allowMissingCol.
+    // Although we do `UnionCoercion` at analysis phase, we manually run `CombineUnions`
+    // in some places like `Dataset.union`. Flattening unions with different resolution
+    // rules (by position and by name) could cause incorrect results.
     while (stack.nonEmpty) {
       stack.pop() match {
-        case Distinct(Union(children)) if flattenDistinct =>
+        case Distinct(Union(children, byName, allowMissingCol))
+            if flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
-        case Union(children) =>
+        case Union(children, byName, allowMissingCol)
+            if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
         case child =>
           flattened += child
       }
     }
-    Union(flattened)
+    Union(flattened, topByName, topAllowMissingCol)
   }
 }
 

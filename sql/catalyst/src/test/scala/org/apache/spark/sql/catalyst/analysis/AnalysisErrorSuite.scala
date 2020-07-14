@@ -683,4 +683,18 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
     assertAnalysisError(plan, "Table or view not found:" :: Nil)
   }
+
+  test("Union should not have true byName or allowMissingCol after analysis") {
+    def testError(union: Union): Unit = {
+      val analyzer = getAnalyzer(false)
+      val e = intercept[AnalysisException] {
+        analyzer.checkAnalysis(union)
+      }
+      assert(e.getMessage.contains("Union should not be with true `byName` or `allowMissingCol` " +
+        "flags after analysis phase"))
+    }
+    testError(Union(testRelation :: testRelation :: Nil, true, false))
+    testError(Union(testRelation :: testRelation :: Nil, true, true))
+    testError(Union(testRelation :: testRelation :: Nil, false, true))
+  }
 }

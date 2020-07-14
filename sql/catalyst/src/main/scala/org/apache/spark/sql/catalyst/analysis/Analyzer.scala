@@ -1387,7 +1387,7 @@ class Analyzer(
         i.copy(right = dedupRight(left, right))
       case e @ Except(left, right, _) if !e.duplicateResolved =>
         e.copy(right = dedupRight(left, right))
-      case u @ Union(children) if !u.duplicateResolved =>
+      case u @ Union(children, _, _) if !u.duplicateResolved =>
         // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
         // feature in streaming.
         val newChildren = children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
@@ -3398,7 +3398,7 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
  */
 object EliminateUnions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case Union(children) if children.size == 1 => children.head
+    case Union(children, _, _) if children.size == 1 => children.head
   }
 }
 
