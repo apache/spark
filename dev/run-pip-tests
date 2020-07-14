@@ -100,6 +100,8 @@ for python in "${PYTHON_EXECS[@]}"; do
     cd "$FWDIR"/python
     # Delete the egg info file if it exists, this can cache the setup file.
     rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
+    # Also, delete the symbolic link if exists. It can be left over from the previous editable mode installation.
+    python3 -c "from distutils.sysconfig import get_python_lib; import os; f = os.path.join(get_python_lib(), 'pyspark.egg-link'); os.unlink(f) if os.path.isfile(f) else 0"
     python3 setup.py sdist
 
 
