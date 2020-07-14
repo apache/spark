@@ -739,7 +739,7 @@ def main():
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
 
-    if any(m.should_run_build_tests for m in test_modules) and test_env != "amplab_jenkins":
+    if any(m.should_run_build_tests for m in test_modules):
         run_build_tests()
 
     # spark build
