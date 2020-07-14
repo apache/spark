@@ -153,7 +153,8 @@ import org.apache.spark.sql.types.IntegerType
  *       LocalTableScan [...]
  * }}}
  *
- * Four example: single distinct aggregate function with filter clauses (in sql):
+ * Four example: at least two distinct aggregate function and one of them having
+ * filter clauses (in sql):
  * {{{
  *   SELECT
  *     COUNT(DISTINCT cat1) FILTER (WHERE id > 1) as cat1_cnt,
@@ -201,15 +202,15 @@ import org.apache.spark.sql.types.IntegerType
  * In the first phase, if the aggregate query exists filter clauses, project the output of
  * the child of the aggregate query:
  * 1. Project the data. There are three aggregation groups in this query:
- *    i. the non-distinct group;
- *    ii. the distinct 'cat1 group;
+ *    i. the non-distinct group without filter clause;
+ *    ii. the distinct 'cat1 group without filter clause;
  *    iii. the distinct 'cat2 group with filter clause.
- *    Because there is at least one group with filter clause (e.g. the distinct 'cat2
- *    group with filter clause), then will project the data.
+ *    When there is at least one aggregate function having the filter clause, we add a project
+ *    node on the input plan.
  * 2. Avoid projections that may output the same attributes. There are three aggregation groups
  *    in this query:
- *    i. the non-distinct 'cat1 group;
- *    ii. the distinct 'cat1 group;
+ *    i. the non-distinct 'cat1 group without filter clause;
+ *    ii. the distinct 'cat1 group without filter clause;
  *    iii. the distinct 'cat1 group with filter clause.
  *    The attributes referenced by different aggregate expressions are likely to overlap,
  *    and if no additional processing is performed, data loss will occur. If we directly output
@@ -302,21 +303,21 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           (projection, (ae, aggExpr))
       }.unzip
       // Construct the aggregate input projection.
-      val namedGroupingExpressions = a.groupingExpressions.map {
-        case ne: NamedExpression => ne
-        case other => Alias(other, other.toString)()
+      val namedGroupingProjection = a.groupingExpressions.flatMap { e =>
+        e.collect {
+          case ar: AttributeReference => ar
+        }
       }
-      val rewriteAggProjection = namedGroupingExpressions ++ projections.flatten
+      val rewriteAggProjection = namedGroupingProjection ++ projections.flatten
       // Construct the project operator.
       val project = Project(rewriteAggProjection, a.child)
-      val groupByAttrs = namedGroupingExpressions.map(_.toAttribute)
       val rewriteAggExprLookup = aggPairs.toMap
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
           case ae: AggregateExpression => rewriteAggExprLookup.getOrElse(ae, ae)
         }.asInstanceOf[NamedExpression]
       }
-      (Aggregate(groupByAttrs, patchedAggExpressions, project), true)
+      (Aggregate(a.groupingExpressions, patchedAggExpressions, project), true)
     } else {
       (a, false)
     }
