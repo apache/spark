@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.execution.SparkPlan
 
-class PruneHiveTablePartitionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
+
+  override def format(): String = "hive"
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -32,7 +32,7 @@ class PruneHiveTablePartitionsSuite extends QueryTest with SQLTestUtils with Tes
         EliminateSubqueryAliases, new PruneHiveTablePartitions(spark)) :: Nil
   }
 
-  test("SPARK-15616 statistics pruned after going throuhg PruneHiveTablePartitions") {
+  test("SPARK-15616: statistics pruned after going through PruneHiveTablePartitions") {
     withTable("test", "temp") {
       sql(
         s"""
@@ -53,5 +53,11 @@ class PruneHiveTablePartitionsSuite extends QueryTest with SQLTestUtils with Tes
       assert(Optimize.execute(analyzed1).stats.sizeInBytes / 4 ===
         Optimize.execute(analyzed2).stats.sizeInBytes)
     }
+  }
+
+  override def getScanExecPartitionSize(plan: SparkPlan): Long = {
+    plan.collectFirst {
+      case p: HiveTableScanExec => p
+    }.get.prunedPartitions.size
   }
 }

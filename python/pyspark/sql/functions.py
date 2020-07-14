@@ -1431,9 +1431,15 @@ def to_utc_timestamp(timestamp, tz):
 def timestamp_seconds(col):
     """
     >>> from pyspark.sql.functions import timestamp_seconds
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
-    >>> time_df.select(timestamp_seconds(time_df.unix_time).alias('ts')).collect()
-    [Row(ts=datetime.datetime(2008, 12, 25, 7, 30))]
+    >>> time_df.select(timestamp_seconds(time_df.unix_time).alias('ts')).show()
+    +-------------------+
+    |                 ts|
+    +-------------------+
+    |2008-12-25 07:30:00|
+    +-------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
 
     sc = SparkContext._active_spark_context

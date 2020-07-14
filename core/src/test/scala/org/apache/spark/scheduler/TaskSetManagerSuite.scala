@@ -1670,7 +1670,7 @@ class TaskSetManagerSuite
     for (i <- 0 to 99) {
       locations += Seq(TaskLocation("host" + i))
     }
-    val taskSet = FakeTask.createTaskSet(100, locations: _*)
+    val taskSet = FakeTask.createTaskSet(100, locations.toSeq: _*)
     val clock = new ManualClock
     // make sure we only do one rack resolution call, for the entire batch of hosts, as this
     // can be expensive.  The FakeTaskScheduler calls rack resolution more than the real one

@@ -2610,7 +2610,9 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
   }
 
   test("inferring timestamp type") {
-    def schemaOf(jsons: String*): StructType = spark.read.json(jsons.toDS).schema
+    def schemaOf(jsons: String*): StructType = {
+      spark.read.option("inferTimestamp", true).json(jsons.toDS).schema
+    }
 
     assert(schemaOf(
       """{"a":"2018-12-17T10:11:12.123-01:00"}""",
@@ -2633,6 +2635,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.json"
       val timestampsWithFormat = spark.read
         .option("timestampFormat", "dd/MM/yyyy HH:mm")
+        .option("inferTimestamp", true)
         .json(datesRecords)
       assert(timestampsWithFormat.schema === customSchema)
 
@@ -2645,6 +2648,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val readBack = spark.read
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
         .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+        .option("inferTimestamp", true)
         .json(timestampsWithFormatPath)
 
       assert(readBack.schema === customSchema)
