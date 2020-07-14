@@ -113,12 +113,10 @@ case class InMemoryTableScanExec(
     }
     val ret = serializer.decompressToRows(withMetrics, relOutput, attributes, conf)
     if (enableAccumulatorsForTest) {
-      @transient var seen = false
       def incParts(index: Int, iter: Iterator[InternalRow]): Iterator[InternalRow] = {
-        if (!seen) {
+        if (iter.hasNext) {
           readPartitions.add(1)
         }
-        seen = true
         iter
       }
       ret.mapPartitionsWithIndexInternal(incParts)
