@@ -5736,6 +5736,7 @@ class VarianceThresholdSelectorModel(JavaModel, _VarianceThresholdSelectorParams
 
 if __name__ == "__main__":
     import doctest
+    import sys
     import tempfile
 
     import pyspark.ml.feature
