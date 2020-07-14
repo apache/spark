@@ -166,16 +166,18 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     // Get splits and cache
     val splits = if ($(foldCol) == "") {
       val splitsArray = Array.fill($(numFolds))(1.0)
+      // Data splitting is seeded to make fitting deterministic
       datasetWithSchema.randomSplit(splitsArray, seed = 11L)
     } else {
       val foldColValues = datasetWithSchema.select($(foldCol)).distinct().collect().flatMap(_.toSeq)
       foldColValues.map(v => datasetWithSchema.where(col($(foldCol)) <=> v))
     }.map(_.cache())
 
-    // Compute metrics for each model across each split
+    // Create futures for each combination of model and split
     val metricFutures = (0 until $(numFolds)).toArray.flatMap { splitIndex =>
       epm.zipWithIndex.map { case (paramMap, paramIndex) =>
         Future[(Int, Double)] {
+          // Union all splits except the one used for validation
           val trainingDataset = splits
             .zipWithIndex
             .filter(_._2 != splitIndex)
@@ -204,7 +206,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     splits.map(_.unpersist())
 
     instr.logInfo(s"Average cross-validation metrics: ${metrics.values.toSeq}")
-    val (bestIndex: Int, bestMetric: Double) =
+    val (bestIndex, bestMetric) =
       if (eval.isLargerBetter) metrics.maxBy(_._2)
       else metrics.minBy(_._2)
     instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
