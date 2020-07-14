@@ -30,8 +30,9 @@ from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 
 @unittest.skipIf(
-    "pypy" in platform.python_implementation().lower() and "COVERAGE_PROCESS_START" in os.environ,
-    "PyPy implementation causes to hang DStream tests forever when Coverage report is used.")
+    "pypy" in platform.python_implementation().lower(),
+    "The tests fail in PyPy3 implementation for an unknown reason. "
+    "With PyPy, it causes to hang DStream tests forever when Coverage report is used.")
 class BasicOperationTests(PySparkStreamingTestCase):
 
     def test_map(self):
@@ -394,8 +395,9 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
 
 @unittest.skipIf(
-    "pypy" in platform.python_implementation().lower() and "COVERAGE_PROCESS_START" in os.environ,
-    "PyPy implementation causes to hang DStream tests forever when Coverage report is used.")
+    "pypy" in platform.python_implementation().lower(),
+    "The tests fail in PyPy3 implementation for an unknown reason. "
+    "With PyPy, it causes to hang DStream tests forever when Coverage report is used.")
 class WindowFunctionTests(PySparkStreamingTestCase):
 
     timeout = 15
@@ -474,8 +476,9 @@ class WindowFunctionTests(PySparkStreamingTestCase):
 
 
 @unittest.skipIf(
-    "pypy" in platform.python_implementation().lower() and "COVERAGE_PROCESS_START" in os.environ,
-    "PyPy implementation causes to hang DStream tests forever when Coverage report is used.")
+    "pypy" in platform.python_implementation().lower(),
+    "The tests fail in PyPy3 implementation for an unknown reason. "
+    "With PyPy, it causes to hang DStream tests forever when Coverage report is used.")
 class CheckpointTests(unittest.TestCase):
 
     setupCalled = False

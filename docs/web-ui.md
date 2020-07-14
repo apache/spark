@@ -435,10 +435,10 @@ The tracked operations are listed as follows.
 As an early-release version, the statistics page is still under development and will be improved in
 future releases.
 
-## Streaming Tab
-The web UI includes a Streaming tab if the application uses Spark streaming. This tab displays
-scheduling delay and processing time for each micro-batch in the data stream, which can be useful
-for troubleshooting the streaming application.
+## Streaming (DStreams) Tab
+The web UI includes a Streaming tab if the application uses Spark Streaming with DStream API.
+This tab displays scheduling delay and processing time for each micro-batch in the data stream,
+which can be useful for troubleshooting the streaming application.
 
 ## JDBC/ODBC Server Tab
 We can see this tab when Spark is running as a [distributed SQL engine](sql-distributed-sql-engine.html). It shows information about sessions and submitted SQL operations.

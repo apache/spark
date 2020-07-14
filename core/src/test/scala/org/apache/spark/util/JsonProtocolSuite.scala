@@ -327,6 +327,17 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
+  test("SPARK-32124: FetchFailed Map Index backwards compatibility") {
+    // FetchFailed in Spark 2.4.0 does not have "Map Index" property.
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L, 18, 19,
+      "ignored")
+    val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
+      .removeField({ _._1 == "Map Index" })
+    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L,
+      Int.MinValue, 19, "ignored")
+    assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
   test("ShuffleReadMetrics: Local bytes read backwards compatibility") {
     // Metrics about local shuffle bytes read were added in 1.3.1.
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,

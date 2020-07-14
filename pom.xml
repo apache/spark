@@ -119,11 +119,11 @@
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.30</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>2.7.4</hadoop.version>
+    <hadoop.version>3.2.0</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.4.14</zookeeper.version>
-    <curator.version>2.7.1</curator.version>
+    <curator.version>2.13.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
@@ -170,11 +170,11 @@
     <snappy.version>1.1.7.5</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.10</commons-codec.version>
-    <commons-io.version>2.4</commons-io.version>
+    <commons-io.version>2.5</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.9</commons-lang3.version>
+    <commons-lang3.version>3.10</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
@@ -669,7 +669,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.4.5-2</version>
+        <version>1.4.5-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -982,6 +982,12 @@
         <groupId>com.microsoft.sqlserver</groupId>
         <artifactId>mssql-jdbc</artifactId>
         <version>8.2.2.jre8</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.oracle.database.jdbc</groupId>
+        <artifactId>ojdbc8</artifactId>
+        <version>19.6.0.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -3048,16 +3054,16 @@
 
     <profile>
       <id>hadoop-2.7</id>
-      <!-- Default hadoop profile. Uses global properties. -->
+      <properties>
+        <hadoop.version>2.7.4</hadoop.version>
+        <curator.version>2.7.1</curator.version>
+        <commons-io.version>2.4</commons-io.version>
+      </properties>
     </profile>
 
     <profile>
       <id>hadoop-3.2</id>
-      <properties>
-        <hadoop.version>3.2.0</hadoop.version>
-        <curator.version>2.13.0</curator.version>
-        <commons-io.version>2.5</commons-io.version>
-      </properties>
+      <!-- Default hadoop profile. Uses global properties. -->
     </profile>
 
     <profile>
@@ -3153,7 +3159,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.1</scala.version>
+        <scala.version>2.13.3</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <dependencyManagement>

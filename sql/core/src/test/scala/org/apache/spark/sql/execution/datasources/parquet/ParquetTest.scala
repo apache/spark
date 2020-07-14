@@ -63,18 +63,12 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
       (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
   /**
-   * Writes `df` dataframe to a Parquet file and reads it back as a [[DataFrame]],
+   * Writes `data` to a Parquet file and reads it back as a [[DataFrame]],
    * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
-  protected def withParquetDataFrame(df: DataFrame, testVectorized: Boolean = true)
-      (f: DataFrame => Unit): Unit = {
-    withTempPath { file =>
-      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
-        df.write.format(dataSourceName).save(file.getCanonicalPath)
-      }
-      readFile(file.getCanonicalPath, testVectorized)(f)
-    }
-  }
+  protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
+      (data: Seq[T], testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = withDataSourceDataFrame(data, testVectorized)(f)
 
   /**
    * Writes `data` to a Parquet file, reads it back as a [[DataFrame]] and registers it as a

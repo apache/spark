@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector
 
+import java.sql.Timestamp
+import java.time.LocalDate
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
@@ -27,7 +30,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
@@ -1479,11 +1482,26 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("Database 'ns1' not found"))
   }
 
-  test("Use: v2 catalog is used and namespace does not exist") {
-    // Namespaces are not required to exist for v2 catalogs.
-    sql("USE testcat.ns1.ns2")
-    val catalogManager = spark.sessionState.catalogManager
-    assert(catalogManager.currentNamespace === Array("ns1", "ns2"))
+  test("SPARK-31100: Use: v2 catalog that implements SupportsNamespaces is used " +
+      "and namespace not exists") {
+    // Namespaces are required to exist for v2 catalogs that implements SupportsNamespaces.
+    val exception = intercept[NoSuchNamespaceException] {
+      sql("USE testcat.ns1.ns2")
+    }
+    assert(exception.getMessage.contains("Namespace 'ns1.ns2' not found"))
+  }
+
+  test("SPARK-31100: Use: v2 catalog that does not implement SupportsNameSpaces is used " +
+      "and namespace does not exist") {
+    // Namespaces are not required to exist for v2 catalogs
+    // that does not implement SupportsNamespaces.
+    withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
+      val catalogManager = spark.sessionState.catalogManager
+
+      sql("USE dummy.ns1")
+      assert(catalogManager.currentCatalog.name() == "dummy")
+      assert(catalogManager.currentNamespace === Array("ns1"))
+    }
   }
 
   test("ShowCurrentNamespace: basic tests") {
@@ -1505,6 +1523,8 @@ class DataSourceV2SQLSuite
 
     sql("USE testcat")
     testShowCurrentNamespace("testcat", "")
+
+    sql("CREATE NAMESPACE testcat.ns1.ns2")
     sql("USE testcat.ns1.ns2")
     testShowCurrentNamespace("testcat", "ns1.ns2")
   }
@@ -1630,7 +1650,6 @@ class DataSourceV2SQLSuite
         """
           |CREATE TABLE testcat.t (id int, `a.b` string) USING foo
           |CLUSTERED BY (`a.b`) INTO 4 BUCKETS
-          |OPTIONS ('allow-unsupported-transforms'=true)
         """.stripMargin)
 
       val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
@@ -2342,6 +2361,7 @@ class DataSourceV2SQLSuite
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
 
+    sql("CREATE NAMESPACE testcat.ns1.ns2")
     sql("USE testcat.ns1.ns2")
     sql("CREATE TABLE t USING foo AS SELECT 1 col")
     checkAnswer(spark.table("t"), Row(1))
@@ -2473,6 +2493,38 @@ class DataSourceV2SQLSuite
         sql(s"SELECT ns1.ns2.ns3.tbl.* from $t")
       }
       assert(ex.getMessage.contains("cannot resolve 'ns1.ns2.ns3.tbl.*"))
+    }
+  }
+
+  test("SPARK-32168: INSERT OVERWRITE - hidden days partition - dynamic mode") {
+    def testTimestamp(daysOffset: Int): Timestamp = {
+      Timestamp.valueOf(LocalDate.of(2020, 1, 1 + daysOffset).atStartOfDay())
+    }
+
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        val df = spark.createDataFrame(Seq(
+          (testTimestamp(1), "a"),
+          (testTimestamp(2), "b"),
+          (testTimestamp(3), "c"))).toDF("ts", "data")
+        df.createOrReplaceTempView("source_view")
+
+        sql(s"CREATE TABLE $t1 (ts timestamp, data string) " +
+            s"USING $v2Format PARTITIONED BY (days(ts))")
+        sql(s"INSERT INTO $t1 VALUES " +
+            s"(CAST(date_add('2020-01-01', 2) AS timestamp), 'dummy'), " +
+            s"(CAST(date_add('2020-01-01', 4) AS timestamp), 'keep')")
+        sql(s"INSERT OVERWRITE TABLE $t1 SELECT ts, data FROM source_view")
+
+        val expected = spark.createDataFrame(Seq(
+          (testTimestamp(1), "a"),
+          (testTimestamp(2), "b"),
+          (testTimestamp(3), "c"),
+          (testTimestamp(4), "keep"))).toDF("ts", "data")
+
+        verifyTable(t1, expected)
+      }
     }
   }
 

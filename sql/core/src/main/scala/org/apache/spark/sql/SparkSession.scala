@@ -1063,6 +1063,7 @@ object SparkSession extends Logging {
       sparkContext.addSparkListener(new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
           defaultSession.set(null)
+          listenerRegistered.set(false)
         }
       })
       listenerRegistered.set(true)
@@ -1086,7 +1087,7 @@ object SparkSession extends Logging {
   }
 
   private def assertOnDriver(): Unit = {
-    if (Utils.isTesting && TaskContext.get != null) {
+    if (TaskContext.get != null) {
       // we're accessing it during task execution, fail.
       throw new IllegalStateException(
         "SparkSession should only be created and accessed on the driver.")
