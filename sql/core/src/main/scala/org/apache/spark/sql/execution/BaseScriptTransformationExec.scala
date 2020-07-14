@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
-import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -32,9 +31,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, DateType, TimestampType}
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, SerializableConfiguration, Utils}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
@@ -129,19 +127,7 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
         var i = 1
         while (i < len) {
           sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-          val columnType = inputSchema(i)
-          val fieldValue = row.get(i, columnType)
-          val fieldStringValue = columnType match {
-            case _: DateType =>
-              val dateFormatter = DateFormatter(ZoneId.systemDefault())
-              dateFormatter.format(fieldValue.asInstanceOf[Int])
-            case _: TimestampType =>
-                TimestampFormatter.getFractionFormatter(ZoneId.systemDefault())
-                  .format(fieldValue.asInstanceOf[Long])
-            case _ =>
-              fieldValue.toString
-          }
-          sb.append(fieldStringValue)
+          sb.append(row.get(i, inputSchema(i)))
           i += 1
         }
         sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))

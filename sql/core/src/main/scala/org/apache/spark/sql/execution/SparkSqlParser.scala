@@ -714,14 +714,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         }
         (Seq.empty, Option(name), props.toSeq, recordHandler)
 
-      case null if conf.getConf(CATALOG_IMPLEMENTATION).equals("hive") =>
-        // Use default (serde) format.
-        val name = conf.getConfString("hive.script.serde",
-          "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
-        val props = Seq("field.delim" -> "\t")
-        val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
-        (Nil, Option(name), props, recordHandler)
-
       case null =>
         (Nil, None, Seq.empty, None)
     }
