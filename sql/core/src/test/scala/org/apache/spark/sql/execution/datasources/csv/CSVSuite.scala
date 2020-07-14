@@ -2382,10 +2382,18 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
         try {
           spark.read.csv(path).limit(1).collect()
           sparkContext.listenerBus.waitUntilEmpty(1000L)
-          if (bom) {
-            assert(bytesReads.sum === 202)
+          if (sparkConf.get(SQLConf.USE_V1_SOURCE_LIST).equals("")) {
+            if (bom) {
+              assert(bytesReads.sum === 101)
+            } else {
+              assert(bytesReads.sum === 98)
+            }
           } else {
-            assert(bytesReads.sum === 196)
+            if (bom) {
+              assert(bytesReads.sum === 202)
+            } else {
+              assert(bytesReads.sum === 196)
+            }
           }
         } finally {
           sparkContext.removeSparkListener(bytesReadListener)
