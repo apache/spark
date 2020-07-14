@@ -28,10 +28,7 @@ import tempfile
 from threading import Thread, Lock
 import time
 import uuid
-if sys.version < '3':
-    import Queue
-else:
-    import queue as Queue
+import queue as Queue
 from multiprocessing import Manager
 
 
@@ -75,7 +72,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         'SPARK_PREPEND_CLASSES': '1',
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
-        'PYSPARK_ROW_FIELD_SORTING_ENABLED': 'true'
     })
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
@@ -161,7 +157,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python3.6", "python2.7", "pypy"] if which(x)]
+    # TODO(SPARK-32278): install PyPy3 in Jenkins to test
+    python_execs = [x for x in ["python3.6", "python3.8", "pypy3"] if which(x)]
 
     if "python3.6" not in python_execs:
         p = which("python3")

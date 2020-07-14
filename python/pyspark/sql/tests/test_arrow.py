@@ -29,7 +29,6 @@ from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
-from pyspark.util import _exception_message
 
 if have_pandas:
     import pandas as pd
@@ -127,7 +126,7 @@ class ArrowTests(ReusedSQLTestCase):
                             warn.message for warn in warns if isinstance(warn.message, UserWarning)]
                         self.assertTrue(len(user_warns) > 0)
                         self.assertTrue(
-                            "Attempting non-optimization" in _exception_message(user_warns[-1]))
+                            "Attempting non-optimization" in str(user_warns[-1]))
                         assert_frame_equal(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
@@ -355,7 +354,7 @@ class ArrowTests(ReusedSQLTestCase):
                         warn.message for warn in warns if isinstance(warn.message, UserWarning)]
                     self.assertTrue(len(user_warns) > 0)
                     self.assertTrue(
-                        "Attempting non-optimization" in _exception_message(user_warns[-1]))
+                        "Attempting non-optimization" in str(user_warns[-1]))
                     self.assertEqual(df.collect(), [Row(a={u'a': 1})])
 
     def test_createDataFrame_fallback_disabled(self):

@@ -159,7 +159,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   4. Pick cartesian product if join type is inner like.
       //   5. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
       //      other choice.
-      case p @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, hint) =>
+      case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond, left, right, hint) =>
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
           getBroadcastBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf).map {
             buildSide =>
@@ -168,7 +168,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 rightKeys,
                 joinType,
                 buildSide,
-                condition,
+                nonEquiCond,
                 planLater(left),
                 planLater(right)))
           }
@@ -182,7 +182,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 rightKeys,
                 joinType,
                 buildSide,
-                condition,
+                nonEquiCond,
                 planLater(left),
                 planLater(right)))
           }
@@ -191,7 +191,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         def createSortMergeJoin() = {
           if (RowOrdering.isOrderable(leftKeys)) {
             Some(Seq(joins.SortMergeJoinExec(
-              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right))))
+              leftKeys, rightKeys, joinType, nonEquiCond, planLater(left), planLater(right))))
           } else {
             None
           }
@@ -199,7 +199,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         def createCartesianProduct() = {
           if (joinType.isInstanceOf[InnerLike]) {
-            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), p.condition)))
+            // `CartesianProductExec` can't implicitly evaluate equal join condition, here we should
+            // pass the original condition which includes both equal and non-equal conditions.
+            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), j.condition)))
           } else {
             None
           }
@@ -220,7 +222,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // This join could be very slow or OOM
               val buildSide = getSmallerSide(left, right)
               Seq(joins.BroadcastNestedLoopJoinExec(
-                planLater(left), planLater(right), buildSide, joinType, condition))
+                planLater(left), planLater(right), buildSide, joinType, nonEquiCond))
             }
         }
 
