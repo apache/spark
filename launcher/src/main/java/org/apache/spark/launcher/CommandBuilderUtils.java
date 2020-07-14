@@ -328,4 +328,15 @@ class CommandBuilderUtils {
     return libdir.getAbsolutePath();
   }
 
+  /**
+   * Add "m" as the default suffix unit when no explicit unit is given.
+   */
+  static String addDefaultMSuffixIfNeeded(String memoryString) {
+    if (memoryString.chars().allMatch(Character::isDigit)) {
+      return memoryString + "m";
+    } else {
+      return memoryString;
+    }
+  }
+
 }

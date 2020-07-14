@@ -128,7 +128,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     Map<String, String> env = new HashMap<>();
     List<String> cmd = buildCommand(sparkSubmitArgs, env);
 
-    assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx4200m"));
+    assertTrue("Driver -Xmx should be configured in MB by default.", cmd.contains("-Xmx4200m"));
   }
 
   @Test

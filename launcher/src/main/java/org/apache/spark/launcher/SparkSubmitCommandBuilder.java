@@ -285,10 +285,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
       String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
-      if (memory.chars().allMatch(Character::isDigit)) {
-        memory = memory + "m";
-      }
-      cmd.add("-Xmx" + memory);
+      cmd.add("-Xmx" + addDefaultMSuffixIfNeeded(memory));
       addOptionString(cmd, driverDefaultJavaOptions);
       addOptionString(cmd, driverExtraJavaOptions);
       mergeEnvPathList(env, getLibPathEnvName(),

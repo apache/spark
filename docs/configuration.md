@@ -172,8 +172,7 @@ of the most common options to set are:
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized, in the
     same format as JVM memory strings with a size unit suffix ("k", "m", "g" or "t")
-    (e.g. <code>512m</code>, <code>2g</code>) using "m" as default suffix unit.
-d
+    (e.g. <code>512m</code>, <code>2g</code>) using "m" as the default unit.
     <br />
     <em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
@@ -251,7 +250,7 @@ d
   <td>
     Amount of memory to use per executor process, in the same format as JVM memory strings with
     a size unit suffix ("k", "m", "g" or "t") (e.g. <code>512m</code>, <code>2g</code>) using
-    "m" as default suffix unit.
+    "m" as the default unit.
   </td>
   <td>0.7.0</td>
 </tr>
