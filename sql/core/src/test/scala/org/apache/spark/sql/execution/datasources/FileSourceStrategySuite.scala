@@ -528,6 +528,41 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
     }
   }
 
+  test("SPARK-32019: Add spark.sql.files.minPartitionNum config") {
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "1") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1
+        ))
+      assert(table.rdd.partitions.length == 1)
+    }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "10") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1
+        ))
+      assert(table.rdd.partitions.length == 3)
+    }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "16") {
+      val partitions = (1 to 100).map(i => s"file$i" -> 128 * 1024 * 1024)
+      val table = createTable(files = partitions)
+      // partition is limited by filesMaxPartitionBytes(128MB)
+      assert(table.rdd.partitions.length == 100)
+    }
+
+    withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> "32") {
+      val partitions = (1 to 800).map(i => s"file$i" -> 4 * 1024 * 1024)
+      val table = createTable(files = partitions)
+      assert(table.rdd.partitions.length == 50)
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =

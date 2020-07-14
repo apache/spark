@@ -34,7 +34,6 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -124,7 +123,7 @@ class ParquetFilters(
   private val ParquetTimestampMicrosType = ParquetSchemaType(TIMESTAMP_MICROS, INT64, 0, null)
   private val ParquetTimestampMillisType = ParquetSchemaType(TIMESTAMP_MILLIS, INT64, 0, null)
 
-  private def dateToDays(date: Any): SQLDate = date match {
+  private def dateToDays(date: Any): Int = date match {
     case d: Date => DateTimeUtils.fromJavaDate(d)
     case ld: LocalDate => DateTimeUtils.localDateToDays(ld)
   }

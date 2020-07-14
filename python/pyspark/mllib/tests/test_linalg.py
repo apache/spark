@@ -31,9 +31,6 @@ from pyspark.sql import Row
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.testing.utils import have_scipy
 
-if sys.version >= '3':
-    long = int
-
 
 class VectorTests(MLlibTestCase):
 
@@ -447,7 +444,7 @@ class VectorUDTTests(MLlibTestCase):
 
     def test_indexed_row_matrix_from_dataframe(self):
         from pyspark.sql.utils import IllegalArgumentException
-        df = self.spark.createDataFrame([Row(long(0), Vectors.dense(1))])
+        df = self.spark.createDataFrame([Row(int(0), Vectors.dense(1))])
         matrix = IndexedRowMatrix(df)
         self.assertEqual(matrix.numRows(), 1)
         self.assertEqual(matrix.numCols(), 1)

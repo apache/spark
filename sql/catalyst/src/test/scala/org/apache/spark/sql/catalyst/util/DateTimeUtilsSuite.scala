@@ -37,12 +37,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   private def defaultZoneId = ZoneId.systemDefault()
 
   test("nanoseconds truncation") {
-    val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
+    val tf = TimestampFormatter.getFractionFormatter(ZoneId.systemDefault())
     def checkStringToTimestamp(originalTime: String, expectedParsedTime: String): Unit = {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(originalTime), defaultZoneId)
       assert(parsedTimestampOp.isDefined, "timestamp with nanoseconds was not parsed correctly")
-      assert(DateTimeUtils.timestampToString(tf, parsedTimestampOp.get) === expectedParsedTime)
+      assert(tf.format(parsedTimestampOp.get) === expectedParsedTime)
     }
 
     checkStringToTimestamp("2015-01-02 00:00:00.123456789", "2015-01-02 00:00:00.123456")
@@ -121,7 +121,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
-  private def toDate(s: String, zoneId: ZoneId = UTC): Option[SQLDate] = {
+  private def toDate(s: String, zoneId: ZoneId = UTC): Option[Int] = {
     stringToDate(UTF8String.fromString(s), zoneId)
   }
 
@@ -149,7 +149,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999 08").isEmpty)
   }
 
-  private def toTimestamp(str: String, zoneId: ZoneId): Option[SQLTimestamp] = {
+  private def toTimestamp(str: String, zoneId: ZoneId): Option[Long] = {
     stringToTimestamp(UTF8String.fromString(str), zoneId)
   }
 
@@ -520,7 +520,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     def testTrunc(
         level: Int,
         expected: String,
-        inputTS: SQLTimestamp,
+        inputTS: Long,
         zoneId: ZoneId = defaultZoneId): Unit = {
       val truncated =
         DateTimeUtils.truncTimestamp(inputTS, level, zoneId)

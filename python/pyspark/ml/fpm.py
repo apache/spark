@@ -15,8 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark import keyword_only, since
-from pyspark.rdd import ignore_unicode_prefix
+from pyspark import keyword_only
 from pyspark.sql import DataFrame
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
@@ -132,7 +131,6 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
         return self._call_java("associationRules")
 
 
-@ignore_unicode_prefix
 class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     r"""
     A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
@@ -180,20 +178,20 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     only showing top 5 rows
     ...
     >>> fpm.associationRules.show(5)
-    +----------+----------+----------+----+
-    |antecedent|consequent|confidence|lift|
-    +----------+----------+----------+----+
-    |    [t, s]|       [y]|       1.0| 2.0|
-    |    [t, s]|       [x]|       1.0| 1.5|
-    |    [t, s]|       [z]|       1.0| 1.2|
-    |       [p]|       [r]|       1.0| 2.0|
-    |       [p]|       [z]|       1.0| 1.2|
-    +----------+----------+----------+----+
+    +----------+----------+----------+----+------------------+
+    |antecedent|consequent|confidence|lift|           support|
+    +----------+----------+----------+----+------------------+
+    |    [t, s]|       [y]|       1.0| 2.0|0.3333333333333333|
+    |    [t, s]|       [x]|       1.0| 1.5|0.3333333333333333|
+    |    [t, s]|       [z]|       1.0| 1.2|0.3333333333333333|
+    |       [p]|       [r]|       1.0| 2.0|0.3333333333333333|
+    |       [p]|       [z]|       1.0| 1.2|0.3333333333333333|
+    +----------+----------+----------+----+------------------+
     only showing top 5 rows
     ...
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().newPrediction)
-    [u'x', u'y', u'z']
+    ['x', 'y', 'z']
 
     .. versionadded:: 2.2.0
     """

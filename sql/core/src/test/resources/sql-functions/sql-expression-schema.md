@@ -166,7 +166,7 @@
 | org.apache.spark.sql.catalyst.expressions.Lower | lcase | SELECT lcase('SparkSql') | struct<lcase(SparkSql):string> |
 | org.apache.spark.sql.catalyst.expressions.Lower | lower | SELECT lower('SparkSql') | struct<lower(SparkSql):string> |
 | org.apache.spark.sql.catalyst.expressions.MakeDate | make_date | SELECT make_date(2013, 7, 15) | struct<make_date(2013, 7, 15):date> |
-| org.apache.spark.sql.catalyst.expressions.MakeInterval | make_interval | SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001) | struct<make_interval(100, 11, 1, 1, 12, 30, CAST(1.001001 AS DECIMAL(8,6))):interval> |
+| org.apache.spark.sql.catalyst.expressions.MakeInterval | make_interval | SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001) | struct<make_interval(100, 11, 1, 1, 12, 30, CAST(1.001001 AS DECIMAL(18,6))):interval> |
 | org.apache.spark.sql.catalyst.expressions.MakeTimestamp | make_timestamp | SELECT make_timestamp(2014, 12, 28, 6, 30, 45.887) | struct<make_timestamp(2014, 12, 28, 6, 30, CAST(45.887 AS DECIMAL(8,6))):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.MapConcat | map_concat | SELECT map_concat(map(1, 'a', 2, 'b'), map(3, 'c')) | struct<map_concat(map(1, a, 2, b), map(3, c)):map<int,string>> |
 | org.apache.spark.sql.catalyst.expressions.MapEntries | map_entries | SELECT map_entries(map(1, 'a', 2, 'b')) | struct<map_entries(map(1, a, 2, b)):array<struct<key:int,value:string>>> |

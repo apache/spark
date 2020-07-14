@@ -45,10 +45,11 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     valueSchema: StructType,
     indexOrdinal: Option[Int],
     sessionState: SessionState,
-    @transient private val storeCoordinator: Option[StateStoreCoordinatorRef])
+    @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
+    extraOptions: Map[String, String] = Map.empty)
   extends RDD[U](dataRDD) {
 
-  private val storeConf = new StateStoreConf(sessionState.conf)
+  private val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val hadoopConfBroadcast = dataRDD.context.broadcast(

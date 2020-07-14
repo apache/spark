@@ -33,15 +33,10 @@ from itertools import chain
 from functools import reduce
 from math import sqrt, log, isinf, isnan, pow, ceil
 
-if sys.version > '3':
-    basestring = unicode = str
-else:
-    from itertools import imap as map, ifilter as filter
-
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import AutoBatchedSerializer, BatchedSerializer, NoOpSerializer, \
     CartesianDeserializer, CloudPickleSerializer, PairDeserializer, PickleSerializer, \
-    UTF8Deserializer, pack_long, read_int, write_int
+    pack_long, read_int, write_int
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -93,7 +88,7 @@ def portable_hash(x):
     219750521
     """
 
-    if sys.version_info >= (3, 2, 3) and 'PYTHONHASHSEED' not in os.environ:
+    if 'PYTHONHASHSEED' not in os.environ:
         raise Exception("Randomness of hash of string should be disabled via PYTHONHASHSEED")
 
     if x is None:
@@ -202,19 +197,6 @@ def _local_iterator_from_socket(sock_info, serializer):
                     pass
 
     return iter(PyLocalIterable(sock_info, serializer))
-
-
-def ignore_unicode_prefix(f):
-    """
-    Ignore the 'u' prefix of string in doc tests, to make it works
-    in both python 2 and 3
-    """
-    if sys.version >= '3':
-        # the representation of unicode string in Python 3 does not have prefix 'u',
-        # so remove the prefix 'u' for doc tests
-        literal_re = re.compile(r"(\W|^)[uU](['])", re.UNICODE)
-        f.__doc__ = literal_re.sub(r'\1\2', f.__doc__)
-    return f
 
 
 class Partitioner(object):
@@ -797,13 +779,12 @@ class RDD(object):
         """
         return self.map(lambda x: (f(x), x)).groupByKey(numPartitions, partitionFunc)
 
-    @ignore_unicode_prefix
     def pipe(self, command, env=None, checkCode=False):
         """
         Return an RDD created by piping elements to a forked external process.
 
         >>> sc.parallelize(['1', '2', '', '3']).pipe('cat').collect()
-        [u'1', u'2', u'', u'3']
+        ['1', '2', '', '3']
 
         :param checkCode: whether or not to check the return value of the shell command.
         """
@@ -816,7 +797,7 @@ class RDD(object):
 
             def pipe_objs(out):
                 for obj in iterator:
-                    s = unicode(obj).rstrip('\n') + '\n'
+                    s = str(obj).rstrip('\n') + '\n'
                     out.write(s.encode('utf-8'))
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()
@@ -1591,7 +1572,6 @@ class RDD(object):
             ser = BatchedSerializer(PickleSerializer(), batchSize)
         self._reserialize(ser)._jrdd.saveAsObjectFile(path)
 
-    @ignore_unicode_prefix
     def saveAsTextFile(self, path, compressionCodecClass=None):
         """
         Save this RDD as a text file, using string representations of elements.
@@ -1625,13 +1605,13 @@ class RDD(object):
         >>> from fileinput import input, hook_compressed
         >>> result = sorted(input(glob(tempFile3.name + "/part*.gz"), openhook=hook_compressed))
         >>> b''.join(result).decode('utf-8')
-        u'bar\\nfoo\\n'
+        'bar\\nfoo\\n'
         """
         def func(split, iterator):
             for x in iterator:
-                if not isinstance(x, (unicode, bytes)):
-                    x = unicode(x)
-                if isinstance(x, unicode):
+                if not isinstance(x, (str, bytes)):
+                    x = str(x)
+                if isinstance(x, str):
                     x = x.encode("utf-8")
                 yield x
         keyed = self.mapPartitionsWithIndex(func)
@@ -2281,14 +2261,13 @@ class RDD(object):
         if n:
             return n
 
-    @ignore_unicode_prefix
     def setName(self, name):
         """
         Assign a name to this RDD.
 
         >>> rdd1 = sc.parallelize([1, 2])
         >>> rdd1.setName('RDD1').name()
-        u'RDD1'
+        'RDD1'
         """
         self._jrdd.setName(name)
         return self

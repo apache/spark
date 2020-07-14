@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.log4j.Level
 import org.scalatest.Matchers
@@ -307,6 +308,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    def resolvedEncoder[T : TypeTag](): ExpressionEncoder[T] = {
+      ExpressionEncoder[T]().resolveAndBind()
+    }
+
     val testRelation = LocalRelation(
       AttributeReference("a", StringType)(),
       AttributeReference("b", DoubleType)(),
@@ -328,20 +333,20 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // non-primitive parameters do not need special null handling
     val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil,
-      Option(ExpressionEncoder[String]()) :: Nil)
+      Option(resolvedEncoder[String]()) :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
-      Option(ExpressionEncoder[String]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
+      Option(resolvedEncoder[String]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected2 =
       If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
     val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
-      Option(ExpressionEncoder[Short]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
+      Option(resolvedEncoder[Short]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
@@ -353,7 +358,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       (s: Short, d: Double) => "x",
       StringType,
       short :: nonNullableDouble :: Nil,
-      Option(ExpressionEncoder[Short]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
+      Option(resolvedEncoder[Short]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
@@ -825,5 +830,69 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         check(2)
       }
     }
+  }
+
+  test("SPARK-32131: Fix wrong column index when we have more than two columns" +
+    " during union and set operations" ) {
+    val firstTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", FloatType)())
+
+    val secondTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", TimestampType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", FloatType)())
+
+    val thirdTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", TimestampType)(),
+      AttributeReference("d", FloatType)())
+
+    val fourthTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", TimestampType)())
+
+    val r1 = Union(firstTable, secondTable)
+    val r2 = Union(firstTable, thirdTable)
+    val r3 = Union(firstTable, fourthTable)
+    val r4 = Except(firstTable, secondTable, isAll = false)
+    val r5 = Intersect(firstTable, secondTable, isAll = false)
+
+    assertAnalysisError(r1,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+
+    assertAnalysisError(r2,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> int at the third column of the second table"))
+
+    assertAnalysisError(r3,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> float at the 4th column of the second table"))
+
+    assertAnalysisError(r4,
+      Seq("Except can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+
+    assertAnalysisError(r5,
+      Seq("Intersect can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+  }
+
+  test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
+    assertAnalysisError(testRelation2.select(RowNumber()),
+      Seq("Window function row_number() requires an OVER clause."))
+
+    assertAnalysisError(testRelation2.select(Sum(RowNumber())),
+      Seq("Window function row_number() requires an OVER clause."))
+
+    assertAnalysisError(testRelation2.select(RowNumber() + 1),
+      Seq("Window function row_number() requires an OVER clause."))
   }
 }
