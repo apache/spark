@@ -18,14 +18,33 @@
 package org.apache.spark.sql.execution.datasources.pathfilters
 
 import org.apache.hadoop.conf.Configuration
-
+import org.apache.hadoop.fs._
 import org.apache.spark.sql.SparkSession
 
-case class PathFilterOptions(
+/**
+ * [SPARK-31962]
+ * Filter used to determine whether file was modified
+ * before the provided timestamp.
+ *
+ * @param sparkSession SparkSession
+ * @param hadoopConf Hadoop Configuration object
+ * @param options Map containing options
+ */
+class ModifiedBeforeFilter(
     sparkSession: SparkSession,
     hadoopConf: Configuration,
-    parameters: Map[String, String]) {
-  def filters(): Iterable[FileIndexFilter] = {
-    PathFilterFactory.create(sparkSession, hadoopConf, parameters)
-  }
+    options: Map[String, String])
+    extends ModifiedDateFilter(sparkSession, hadoopConf, options)
+    with FileIndexFilter {
+  override def accept(fileStatus: FileStatus): Boolean =
+    (seconds - fileStatus.getModificationTime) > 0
+
+  override def accept(path: Path): Boolean = true
+  override def strategy(): String = "modifiedBefore"
+}
+case object ModifiedBeforeFilter extends PathFilterObject  {
+    def get(sparkSession: SparkSession, configuration: Configuration, options: Map[String, String]): ModifiedBeforeFilter = {
+        new ModifiedBeforeFilter(sparkSession, configuration,options)
+    }
+    def strategy(): String = "modifiedBefore"
 }

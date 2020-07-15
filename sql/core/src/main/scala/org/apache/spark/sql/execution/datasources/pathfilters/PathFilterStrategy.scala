@@ -18,14 +18,14 @@
 package org.apache.spark.sql.execution.datasources.pathfilters
 
 import org.apache.hadoop.conf.Configuration
-
+import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
 import org.apache.spark.sql.SparkSession
 
-case class PathFilterOptions(
-    sparkSession: SparkSession,
-    hadoopConf: Configuration,
-    parameters: Map[String, String]) {
-  def filters(): Iterable[FileIndexFilter] = {
-    PathFilterFactory.create(sparkSession, hadoopConf, parameters)
-  }
+abstract class PathFilterStrategy(sparkSession: SparkSession,
+                                  conf: Configuration,
+                                  options: Map[String, String]) extends FileIndexFilter
+{
+  def accept(path: Path): Boolean
+  def accept(fileStatus: FileStatus): Boolean
+  def strategy(): String
 }

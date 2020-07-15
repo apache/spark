@@ -18,14 +18,24 @@
 package org.apache.spark.sql.execution.datasources.pathfilters
 
 import org.apache.hadoop.conf.Configuration
-
+import org.apache.hadoop.fs.{FileStatus, GlobFilter}
 import org.apache.spark.sql.SparkSession
 
-case class PathFilterOptions(
-    sparkSession: SparkSession,
-    hadoopConf: Configuration,
-    parameters: Map[String, String]) {
-  def filters(): Iterable[FileIndexFilter] = {
-    PathFilterFactory.create(sparkSession, hadoopConf, parameters)
+class PathGlobFilter(sparkSession: SparkSession,
+                     conf: Configuration,
+                     options: Map[String, String])
+    extends GlobFilter(options.get("pathGlobFilter").toString)
+    with FileIndexFilter {
+
+  override def accept(fileStatus: FileStatus): Boolean =
+    accept(fileStatus.getPath)
+  override def strategy(): String = "pathGlobFilter"
+}
+case object PathGlobFilter extends PathFilterObject {
+  def get(sparkSession: SparkSession,
+          configuration: Configuration,
+          options: Map[String, String]): PathGlobFilter = {
+    new PathGlobFilter(sparkSession, configuration, options)
   }
+  def strategy(): String = "pathGlobFilter"
 }
