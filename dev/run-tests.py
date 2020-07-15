@@ -711,61 +711,61 @@ def main():
     setup_test_environ(test_environ)
 
     should_run_java_style_checks = False
-    if not should_only_test_modules:
-        # license checks
-        run_apache_rat_checks()
-
-        # style checks
-        if not changed_files or any(f.endswith(".scala")
-                                    or f.endswith("scalastyle-config.xml")
-                                    for f in changed_files):
-            run_scala_style_checks(extra_profiles)
-        if not changed_files or any(f.endswith(".java")
-                                    or f.endswith("checkstyle.xml")
-                                    or f.endswith("checkstyle-suppressions.xml")
-                                    for f in changed_files):
-            # Run SBT Checkstyle after the build to prevent a side-effect to the build.
-            should_run_java_style_checks = True
-        if not changed_files or any(f.endswith("lint-python")
-                                    or f.endswith("tox.ini")
-                                    or f.endswith(".py")
-                                    for f in changed_files):
-            run_python_style_checks()
-        if not changed_files or any(f.endswith(".R")
-                                    or f.endswith("lint-r")
-                                    or f.endswith(".lintr")
-                                    for f in changed_files):
-            run_sparkr_style_checks()
-
-    # determine if docs were changed and if we're inside the amplab environment
-    # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
-    # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
-    #    build_spark_documentation()
-
-    if any(m.should_run_build_tests for m in test_modules) and test_env != "amplab_jenkins":
-        run_build_tests()
+    # if not should_only_test_modules:
+    #     # license checks
+    #     run_apache_rat_checks()
+    #
+    #     # style checks
+    #     if not changed_files or any(f.endswith(".scala")
+    #                                 or f.endswith("scalastyle-config.xml")
+    #                                 for f in changed_files):
+    #         run_scala_style_checks(extra_profiles)
+    #     if not changed_files or any(f.endswith(".java")
+    #                                 or f.endswith("checkstyle.xml")
+    #                                 or f.endswith("checkstyle-suppressions.xml")
+    #                                 for f in changed_files):
+    #         # Run SBT Checkstyle after the build to prevent a side-effect to the build.
+    #         should_run_java_style_checks = True
+    #     if not changed_files or any(f.endswith("lint-python")
+    #                                 or f.endswith("tox.ini")
+    #                                 or f.endswith(".py")
+    #                                 for f in changed_files):
+    #         run_python_style_checks()
+    #     if not changed_files or any(f.endswith(".R")
+    #                                 or f.endswith("lint-r")
+    #                                 or f.endswith(".lintr")
+    #                                 for f in changed_files):
+    #         run_sparkr_style_checks()
+    #
+    # # determine if docs were changed and if we're inside the amplab environment
+    # # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
+    # # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
+    # #    build_spark_documentation()
+    #
+    # if any(m.should_run_build_tests for m in test_modules) and test_env != "amplab_jenkins":
+    #     run_build_tests()
 
     # spark build
     build_apache_spark(build_tool, extra_profiles)
 
-    # backwards compatibility checks
-    if build_tool == "sbt":
-        # Note: compatibility tests only supported in sbt for now
-        detect_binary_inop_with_mima(extra_profiles)
-        # Since we did not build assembly/package before running dev/mima, we need to
-        # do it here because the tests still rely on it; see SPARK-13294 for details.
-        build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
+    # # backwards compatibility checks
+    # if build_tool == "sbt":
+    #     # Note: compatibility tests only supported in sbt for now
+    #     detect_binary_inop_with_mima(extra_profiles)
+    #     # Since we did not build assembly/package before running dev/mima, we need to
+    #     # do it here because the tests still rely on it; see SPARK-13294 for details.
+    #     build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
 
     # run the test suites
-    run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
+    # run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
         # We only run PySpark tests with coverage report in one specific job with
         # Spark master with SBT in Jenkins.
         is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
-        run_python_tests(
-            modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
+        # run_python_tests(
+        #     modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
         run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
