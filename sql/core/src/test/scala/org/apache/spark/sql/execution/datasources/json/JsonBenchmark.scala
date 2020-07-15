@@ -549,7 +549,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
       jsonInFile(50 * 1000 * 1000, numIters)
       datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
       // Benchmark pushdown filters that refer to top-level columns.
-      // TODO: Add benchmarks for filters with nested column attributes.
+      // TODO (SPARK-32325): Add benchmarks for filters with nested column attributes.
       filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
     }
   }
