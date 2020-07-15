@@ -1000,6 +1000,41 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!tsm.isZombie)
   }
 
+  test("SPARK-31418 abort timer should kick in when task is completely blacklisted &" +
+    "allocation manager could not acquire a new executor before the timeout") {
+    // set the abort timer to fail immediately
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0",
+      config.DYN_ALLOCATION_ENABLED.key -> "true")
+
+    // We have only 1 task remaining with 1 executor
+    val taskSet = FakeTask.createTaskSet(numTasks = 1)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    // Fail the running task
+    val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
+    failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+      "executor0", failedTask.index)).thenReturn(true)
+
+    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
+    // timer to kick in immediately
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten.size === 0)
+    // Wait for the abort timer to kick in. Even though we configure the timeout to be 0, there is a
+    // slight delay as the abort timer is launched in a separate thread.
+    eventually(timeout(500.milliseconds)) {
+      assert(tsm.isZombie)
+    }
+  }
+
   /**
    * Helper for performance tests.  Takes the explicitly blacklisted nodes and executors; verifies
    * that the blacklists are used efficiently to ensure scheduling is not O(numPendingTasks).

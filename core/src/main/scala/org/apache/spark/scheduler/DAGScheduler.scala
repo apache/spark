@@ -313,7 +313,7 @@ private[spark] class DAGScheduler(
 
   /**
    * Called by the TaskSetManager when a taskset becomes unschedulable due to blacklisting and
-   * dynamic allocation is enabled
+   * dynamic allocation is enabled.
    */
   def unschedulableTaskSetAdded(
        stageId: Int,
@@ -323,7 +323,7 @@ private[spark] class DAGScheduler(
 
   /**
    * Called by the TaskSetManager when an unschedulable taskset becomes schedulable and dynamic
-   * allocation is enabled
+   * allocation is enabled.
    */
   def unschedulableTaskSetRemoved(
     stageId: Int,
@@ -1037,15 +1037,13 @@ private[spark] class DAGScheduler(
   private[scheduler] def handleUnschedulableTaskSetAdded(
       stageId: Int,
       stageAttemptId: Int): Unit = {
-    listenerBus.post(
-      SparkListenerUnschedulableTaskSetAdded(stageId, stageAttemptId))
+    listenerBus.post(SparkListenerUnschedulableTaskSetAdded(stageId, stageAttemptId))
   }
 
   private[scheduler] def handleUnschedulableTaskSetRemoved(
     stageId: Int,
     stageAttemptId: Int): Unit = {
-    listenerBus.post(
-      SparkListenerUnschedulableTaskSetRemoved(stageId, stageAttemptId))
+    listenerBus.post(SparkListenerUnschedulableTaskSetRemoved(stageId, stageAttemptId))
   }
 
   private[scheduler] def handleTaskSetFailed(

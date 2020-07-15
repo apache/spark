@@ -351,14 +351,14 @@ private[spark] trait SparkListenerInterface {
 
   /**
    * Called when a taskset becomes unschedulable due to blacklisting and dynamic allocation
-   * is enabled
+   * is enabled.
    */
   def onUnschedulableTaskSetAdded(
       unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded): Unit
 
   /**
    * Called when an unschedulable taskset becomes schedulable and dynamic allocation
-   * is enabled
+   * is enabled.
    */
   def onUnschedulableTaskSetRemoved(
       unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved): Unit

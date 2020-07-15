@@ -301,9 +301,9 @@ private[spark] class ExecutorAllocationManager(
     }
 
     if (unschedulableTaskSets > 0) {
-      // Request additional executors only if maxNeededWithSpeculationLocalityOffset is less than
-      // current active executors, if not requesting maxNeededWithSpeculationLocalityOffset should
-      // be enough to make the unschedulable tasks schedulable now.
+      // Request additional executors to account for task sets having tasks that are unschedulable
+      // due to blacklisting when the active executor count has already reached the max needed
+      // which we would normally get.
       val maxNeededForUnschedulables = math.ceil(unschedulableTaskSets * executorAllocationRatio /
         tasksPerExecutor).toInt
       math.max(maxNeededWithSpeculationLocalityOffset,
@@ -717,8 +717,7 @@ private[spark] class ExecutorAllocationManager(
 
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
-        if (stageAttemptToNumTasks.isEmpty &&
-          stageAttemptToNumSpeculativeTasks.isEmpty) {
+        if (stageAttemptToNumTasks.isEmpty && stageAttemptToNumSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
         }
       }
@@ -815,20 +814,20 @@ private[spark] class ExecutorAllocationManager(
         unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded): Unit = {
       val stageId = unschedulableTaskSetAdded.stageId
       val stageAttemptId = unschedulableTaskSetAdded.stageAttemptId
+      val stageAttempt = StageAttempt(stageId, stageAttemptId)
       allocationManager.synchronized {
-        val stageAttempt = StageAttempt(stageId, stageAttemptId)
         unschedulableTaskSets.add(stageAttempt)
+        allocationManager.onSchedulerBacklogged()
       }
-      allocationManager.onSchedulerBacklogged()
     }
 
     override def onUnschedulableTaskSetRemoved(
         unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved): Unit = {
       val stageId = unschedulableTaskSetRemoved.stageId
       val stageAttemptId = unschedulableTaskSetRemoved.stageAttemptId
+      val stageAttempt = StageAttempt(stageId, stageAttemptId)
       allocationManager.synchronized {
         // Clear unschedulableTaskSets since atleast one task becomes schedulable now
-        val stageAttempt = StageAttempt(stageId, stageAttemptId)
         unschedulableTaskSets.remove(stageAttempt)
       }
     }
@@ -873,9 +872,11 @@ private[spark] class ExecutorAllocationManager(
       numTotalTasks - numRunning
     }
 
-    // Currently TaskSetManager.getCompletelyBlacklistedTaskIfAny only takes the first unschedulable
-    // task found due to blacklisting. This way we only need to keep track of the unschedulable
-    // tasksets which is an indirect way to get the current number of unschedulable tasks.
+    /**
+     * Currently we only know when a task set has an unschedulable task, we don't know
+     * the exact number and since the allocation manager isn't tied closely with the scheduler,
+     * we use the number of tasks sets that are unschedulable as a heuristic to add more executors.
+     */
     def pendingUnschedulableTaskSetsPerResourceProfile(rp: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
       attempts.filter(attempt => unschedulableTaskSets.contains(attempt)).size
@@ -889,12 +890,11 @@ private[spark] class ExecutorAllocationManager(
     }
 
     def hasPendingTasks: Boolean = {
-      hasPendingSpeculativeTasks || hasPendingRegularTasks || hasPendingUnschedulableTasks
+      hasPendingSpeculativeTasks || hasPendingRegularTasks
     }
 
     def totalPendingTasksPerResourceProfile(rp: Int): Int = {
-      pendingTasksPerResourceProfile(rp) +
-        pendingSpeculativeTasksPerResourceProfile(rp)
+      pendingTasksPerResourceProfile(rp) + pendingSpeculativeTasksPerResourceProfile(rp)
     }
 
     /**
