@@ -76,7 +76,6 @@ private[spark] class IndexShuffleBlockResolver(
     }.toSet
   }
 
-
   /**
    * Get the shuffle data file.
    *

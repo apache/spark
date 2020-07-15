@@ -115,7 +115,7 @@ private[storage] class BlockManagerDecommissioner(
   // Shuffles which are either in queue for migrations or migrated
   private val migratingShuffles = mutable.HashSet[ShuffleBlockInfo]()
 
-  // Shuffles which are queued for migration
+  // Shuffles which are queued for migration & number of retries so far.
   private[storage] val shufflesToMigrate =
     new java.util.concurrent.ConcurrentLinkedQueue[(ShuffleBlockInfo, Int)]()
 
@@ -196,7 +196,7 @@ private[storage] class BlockManagerDecommissioner(
     // Update the queue of shuffles to be migrated
     logInfo("Offloading shuffle blocks")
     val localShuffles = bm.migratableResolver.getStoredShuffles()
-    val newShufflesToMigrate = localShuffles.&~(migratingShuffles).toSeq
+    val newShufflesToMigrate = localShuffles.diff(migratingShuffles).toSeq
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
 

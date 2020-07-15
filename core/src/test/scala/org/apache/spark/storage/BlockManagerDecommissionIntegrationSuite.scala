@@ -57,8 +57,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED, persist)
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, shuffle)
-    // Just replicate blocks as fast as we can during testing, there isn't another
-    // workload we need to worry about.
+      // Just replicate blocks as fast as we can during testing, there isn't another
+      // workload we need to worry about.
       .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 1L)
 
     sc = new SparkContext(master, "test", conf)
@@ -68,7 +68,6 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       numExecutors = numExecs,
       timeout = 60000) // 60s
 
-    // Create input RDD with 10 partitions
     val input = sc.parallelize(1 to numParts, numParts)
     val accum = sc.longAccumulator("mapperRunAccumulator")
     input.count()
@@ -192,8 +191,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isInstanceOf[ShuffleIndexBlockId]
         }.size
-        assert(numDataLocs >= 1, s"Expect shuffle data block updates in ${blocksUpdated}")
-        assert(numIndexLocs >= 1, s"Expect shuffle index block updates in ${blocksUpdated}")
+        assert(numDataLocs === 1, s"Expect shuffle data block updates in ${blocksUpdated}")
+        assert(numIndexLocs === 1, s"Expect shuffle index block updates in ${blocksUpdated}")
       }
     }
 

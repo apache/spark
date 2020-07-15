@@ -436,7 +436,6 @@ package object config {
       .checkValue(_ > 0, "The maximum number of threads should be positive")
       .createWithDefault(8)
 
-
   private[spark] val STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED =
     ConfigBuilder("spark.storage.decommission.rddBlocks.enabled")
       .doc("Whether to transfer RDD blocks during block manager decommissioning.")
