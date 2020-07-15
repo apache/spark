@@ -823,7 +823,7 @@ class FileBasedDataSourceSuite extends QueryTest
     assert(foundClasses == classes)
     assert(strategies.size == 3)
   }
-  
+
   test("Option pathGlobFilter: filter files correctly") {
     withTempPath { path =>
       val dataDir = path.getCanonicalPath
