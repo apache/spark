@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.joins
 
-import scala.collection.mutable
-
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -227,31 +225,19 @@ case class BroadcastNestedLoopJoinExec(
   }
 
   case class NotInSubquerySingleColumnOptimizeParams(
-      buildSideHashSet: mutable.HashSet[AnyRef],
+      buildSideHashedRelation: HashedRelation,
       isNullExists: Boolean,
       isBuildRowsEmpty: Boolean)
 
   private def notInSubquerySingleColumnOptimizeEnabled: Boolean = {
     if (SQLConf.get.notInSubquerySingleColumnOptimizeEnabled && right.output.length == 1) {
-      // buildSide must be single column
-      // and condition must be either of following pattern
-      // or(a=b,isnull(a=b))
-      // or(isnull(a=b),a=b)
+      // BuildSide must be single column, condition must be the following pattern
+      // Or(EqualTo(a, b), IsNull(EqualTo(a, b)))
       condition.get match {
-        case _@Or(_@EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
-            _@IsNull(_@EqualTo(tmpLeft: AttributeReference, tmpRight: AttributeReference)))
-            if leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) =>
-          notInSubquerySingleColumnOptimizeSetStreamedKey(leftAttr, rightAttr)
-          if (notInSubquerySingleColumnOptimizeStreamedKeyIndex != -1) {
-            true
-          } else {
-            logWarning(s"failed to find notInSubquerySingleColumnOptimizeStreamedKeyIndex," +
-              s" fallback to leftExistenceJoin.")
-            false
-          }
-        case _@Or(_@IsNull(_@EqualTo(tmpLeft: AttributeReference, tmpRight: AttributeReference)),
-            _@EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference))
-            if leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) =>
+        case _ @ Or(
+            _ @ EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
+            _ @ IsNull(_ @ EqualTo(tmpLeft: AttributeReference, tmpRight: AttributeReference)))
+          if leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) =>
           notInSubquerySingleColumnOptimizeSetStreamedKey(leftAttr, rightAttr)
           if (notInSubquerySingleColumnOptimizeStreamedKeyIndex != -1) {
             true
@@ -269,24 +255,20 @@ case class BroadcastNestedLoopJoinExec(
 
   private def notInSubquerySingleColumnOptimizeBuildParams(
       buildRows: Array[InternalRow]): NotInSubquerySingleColumnOptimizeParams = {
-    val buildRowsHashSet = mutable.HashSet[AnyRef]()
-    val dataType = right.output.head.dataType
-    var isNullExist = false
-    buildRows.foreach(row => {
-      if (row.isNullAt(0)) {
-        isNullExist = true
-      }
-      // put null as value, because we only leverage HashMap keys
-      buildRowsHashSet.add(row.get(0, dataType))
-    })
-    NotInSubquerySingleColumnOptimizeParams(buildRowsHashSet, isNullExist, buildRows.isEmpty)
+    NotInSubquerySingleColumnOptimizeParams(
+      HashedRelation(buildRows.iterator,
+        BindReferences.bindReferences[Expression](
+          Seq(right.output.head), AttributeSeq(right.output)),
+        buildRows.length),
+      buildRows.exists(row => row.isNullAt(0)),
+      buildRows.isEmpty)
   }
 
   private def notInSubquerySingleColumnOptimizeSetStreamedKey(
       leftAttr: AttributeReference,
       rightAttr: AttributeReference): Unit = {
-    val leftNotInKeyFound = left.output.find(_.semanticEquals(leftAttr))
-    if (leftNotInKeyFound.isDefined) {
+    val leftNotInKeyFound = left.output.exists(_.semanticEquals(leftAttr))
+    if (leftNotInKeyFound) {
       notInSubquerySingleColumnOptimizeStreamedKey = leftAttr
       notInSubquerySingleColumnOptimizeStreamedKeyIndex =
         AttributeSeq(left.output).indexOf(leftAttr.exprId)
@@ -315,17 +297,24 @@ case class BroadcastNestedLoopJoinExec(
     } else {
       val params = notInSubquerySingleColumnOptimizeBuildParams(buildRows)
       streamed.execute().mapPartitionsInternal { streamedIter =>
+        val keyGenerator =
+          UnsafeProjection.create(
+            BindReferences.bindReferences[Expression](
+              Seq(notInSubquerySingleColumnOptimizeStreamedKey),
+              AttributeSeq(left.output))
+          )
         streamedIter.filter(row => {
           // See. not-in-unit-tests-single-column.sql for detail filter rules
           if (params.isBuildRowsEmpty) {
             true
           } else {
             val streamedRowIsNull = row.isNullAt(notInSubquerySingleColumnOptimizeStreamedKeyIndex)
-            val streamedRowNotInKey = row.get(
-              notInSubquerySingleColumnOptimizeStreamedKeyIndex,
-              notInSubquerySingleColumnOptimizeStreamedKey.dataType
-            )
-            val notInKeyEqual = params.buildSideHashSet.contains(streamedRowNotInKey)
+            val lookupRow: UnsafeRow = keyGenerator(row)
+            val notInKeyEqual = params.buildSideHashedRelation.get(lookupRow) match {
+              case null => false
+              case _ => true
+            }
+
             if (!streamedRowIsNull && !params.isNullExists && !notInKeyEqual) {
               true
             } else {
