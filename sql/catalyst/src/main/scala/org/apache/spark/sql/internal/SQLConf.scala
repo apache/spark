@@ -2669,7 +2669,7 @@ object SQLConf {
       .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The difference must be positive.")
-      .createWithDefault(4)
+      .createWithDefault(2)
 
   val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
     buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
