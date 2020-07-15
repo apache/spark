@@ -63,17 +63,21 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
 
     sc = new SparkContext(master, "test", conf)
 
+    // Wait for the executors to start
+    TestUtils.waitUntilExecutorsUp(sc = sc,
+      numExecutors = numExecs,
+      timeout = 60000) // 60s
+
     // Create input RDD with 10 partitions
     val input = sc.parallelize(1 to numParts, numParts)
     val accum = sc.longAccumulator("mapperRunAccumulator")
-    // Do a count to wait for the executors to be registered.
     input.count()
 
     // Create a new RDD where we have sleep in each partition, we are also increasing
     // the value of accumulator in each partition
     val baseRdd = input.mapPartitions { x =>
       if (migrateDuring) {
-        Thread.sleep(500)
+        Thread.sleep(1000)
       }
       accum.add(1)
       x.map(y => (y, y))
@@ -119,20 +123,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       testRdd.persist()
     }
 
-    // Wait for the first executor to start
-    TestUtils.waitUntilExecutorsUp(sc = sc,
-      numExecutors = 1,
-      timeout = 20000) // 20s
-
     // Start the computation of RDD - this step will also cache the RDD
     val asyncCount = testRdd.countAsync()
-
-    // Wait for all of the executors to start
-    TestUtils.waitUntilExecutorsUp(sc = sc,
-      // We need to make sure there is the original plus one exec to migrate too, we don't need
-      // the full set.
-      numExecutors = 2,
-      timeout = 30000) // 30s
 
     // Wait for the job to have started.
     taskStartSem.acquire(1)
@@ -175,7 +167,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
 
     // Wait for our respective blocks to have migrated
-    eventually(timeout(15.seconds), interval(10.milliseconds)) {
+    eventually(timeout(30.seconds), interval(10.milliseconds)) {
       if (persist) {
         // One of our blocks should have moved.
         val rddUpdates = blocksUpdated.filter { update =>
