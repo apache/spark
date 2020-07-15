@@ -87,8 +87,8 @@ if sys.version_info[0] < 3:  # pragma: no branch
     PY2 = True
     PY2_WRAPPER_DESCRIPTOR_TYPE = type(object.__init__)
     PY2_METHOD_WRAPPER_TYPE = type(object.__eq__)
-    PY2_CLASS_DICT_BLACKLIST = (PY2_METHOD_WRAPPER_TYPE,
-                                PY2_WRAPPER_DESCRIPTOR_TYPE)
+    PY2_CLASS_DICT_SKIP_PICKLE_METHOD_TYPE = (PY2_METHOD_WRAPPER_TYPE,
+                                              PY2_WRAPPER_DESCRIPTOR_TYPE)
 else:
     types.ClassType = type
     from pickle import _Pickler as Pickler
@@ -327,7 +327,7 @@ def _extract_class_dict(cls):
                 if hasattr(value, "im_func"):
                     if value.im_func is getattr(base_value, "im_func", None):
                         to_remove.append(name)
-                elif isinstance(value, PY2_CLASS_DICT_BLACKLIST):
+                elif isinstance(value, PY2_CLASS_DICT_SKIP_PICKLE_METHOD_TYPE):
                     # On Python 2 we have no way to pickle those specific
                     # methods types nor to check that they are actually
                     # inherited. So we assume that they are always inherited

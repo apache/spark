@@ -656,7 +656,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   }
 
   test("top with predefined ordering") {
-    val nums = Array.range(1, 100000)
+    val nums = Seq.range(1, 100000)
     val ints = sc.makeRDD(scala.util.Random.shuffle(nums), 2)
     val topK = ints.top(5)
     assert(topK.size === 5)
@@ -1098,7 +1098,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     override def getPartitions: Array[Partition] = Array(new Partition {
       override def index: Int = 0
     })
-    override def getDependencies: Seq[Dependency[_]] = mutableDependencies
+    override def getDependencies: Seq[Dependency[_]] = mutableDependencies.toSeq
     def addDependency(dep: Dependency[_]): Unit = {
       mutableDependencies += dep
     }
@@ -1298,19 +1298,15 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
       val splitSize = fileSplit.getLength
       if (currentSum + splitSize < maxSize) {
         addPartition(partition, splitSize)
-        index += 1
-        if (index == partitions.size) {
-          updateGroups
-        }
       } else {
-        if (currentGroup.partitions.size == 0) {
-          addPartition(partition, splitSize)
-          index += 1
-        } else {
-          updateGroups
+        if (currentGroup.partitions.nonEmpty) {
+          updateGroups()
         }
+        addPartition(partition, splitSize)
       }
+      index += 1
     }
+    updateGroups()
     groups.toArray
   }
 }

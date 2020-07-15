@@ -83,6 +83,9 @@ class SparkContext(config: SparkConf) extends Logging {
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  // In order to prevent SparkContext from being created in executors.
+  SparkContext.assertOnDriver()
+
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having started construction.
   // NOTE: this must be placed at the beginning of the SparkContext constructor.
@@ -1729,7 +1732,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def version: String = SPARK_VERSION
 
   /**
-   * Return a map from the slave to the max memory available for caching and the remaining
+   * Return a map from the block manager to the max memory available for caching and the remaining
    * memory available for caching.
    */
   def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
@@ -2555,6 +2558,19 @@ object SparkContext extends Logging {
   }
 
   /**
+   * Called to ensure that SparkContext is created or accessed only on the Driver.
+   *
+   * Throws an exception if a SparkContext is about to be created in executors.
+   */
+  private def assertOnDriver(): Unit = {
+    if (TaskContext.get != null) {
+      // we're accessing it during task execution, fail.
+      throw new IllegalStateException(
+        "SparkContext should only be created and accessed on the driver.")
+    }
+  }
+
+  /**
    * This function may be used to get or instantiate a SparkContext and register it as a
    * singleton object. Because we can only have one active SparkContext per JVM,
    * this is useful when applications may wish to share a SparkContext.
@@ -2814,14 +2830,14 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
-      case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        checkResourcesPerTask(coresPerSlave.toInt)
-        // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
-        val memoryPerSlaveInt = memoryPerSlave.toInt
-        if (sc.executorMemory > memoryPerSlaveInt) {
+      case LOCAL_CLUSTER_REGEX(numWorkers, coresPerWorker, memoryPerWorker) =>
+        checkResourcesPerTask(coresPerWorker.toInt)
+        // Check to make sure memory requested <= memoryPerWorker. Otherwise Spark will just hang.
+        val memoryPerWorkerInt = memoryPerWorker.toInt
+        if (sc.executorMemory > memoryPerWorkerInt) {
           throw new SparkException(
             "Asked to launch cluster with %d MiB RAM / worker but requested %d MiB/worker".format(
-              memoryPerSlaveInt, sc.executorMemory))
+              memoryPerWorkerInt, sc.executorMemory))
         }
 
         // For host local mode setting the default of SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED
@@ -2834,7 +2850,7 @@ object SparkContext extends Logging {
 
         val scheduler = new TaskSchedulerImpl(sc)
         val localCluster = new LocalSparkCluster(
-          numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt, sc.conf)
+          numWorkers.toInt, coresPerWorker.toInt, memoryPerWorkerInt, sc.conf)
         val masterUrls = localCluster.start()
         val backend = new StandaloneSchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
