@@ -91,7 +91,7 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
   private val predicates: Array[Array[JsonPredicate]] = {
     val groupedPredicates = Array.fill(schema.length)(Array.empty[JsonPredicate])
     if (SQLConf.get.jsonFilterPushDown) {
-      val groupedByRefSet = filters
+      val groupedByRefSet: Map[Set[String], JsonPredicate] = filters
         // Group filters that have the same set of references. For example:
         //   IsNotNull("i") -> Set("i"), AlwaysTrue -> Set(),
         //   Or(EqualTo("i", 0), StringStartsWith("s", "abc")) -> Set("i", "s")
@@ -106,17 +106,15 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
       // Apply predicates w/o references like `AlwaysTrue` and `AlwaysFalse` to all fields.
       // We cannot set such predicates to a particular position because skipRow() can
       // be invoked for any index due to unpredictable order of JSON fields in JSON records.
-      val withLiterals = groupedByRefSet.map { case (refSet, pred) =>
-        if (refSet.isEmpty) {
+      val withLiterals: Map[Set[String], JsonPredicate] = groupedByRefSet.map {
+        case (refSet, pred) if refSet.isEmpty =>
           (schema.fields.map(_.name).toSet, pred.copy(totalRefs = 1))
-        } else {
-          (refSet, pred)
-        }
+        case others => others
       }
       // Build a map where key is only one field and value is seq of predicates refer to the field
       // "i" -> Seq(AlwaysTrue, IsNotNull("i"), Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
       // "s" -> Seq(AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
-      val groupedByFields = withLiterals.toSeq
+      val groupedByFields: Map[String, Seq[(String, JsonPredicate)]] = withLiterals.toSeq
         .flatMap { case (refSet, pred) => refSet.map((_, pred)) }
         .groupBy(_._1)
       // Build the final array by converting keys of `groupedByFields` to their
