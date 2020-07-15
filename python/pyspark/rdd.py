@@ -1558,6 +1558,7 @@ class RDD(object):
         used is :class:`pyspark.serializers.PickleSerializer`, default batch size
         is 10.
 
+        >>> from tempfile import NamedTemporaryFile
         >>> tmpFile = NamedTemporaryFile(delete=True)
         >>> tmpFile.close()
         >>> sc.parallelize([1, 2, 'spark', 'rdd']).saveAsPickleFile(tmpFile.name, 3)
@@ -1578,6 +1579,7 @@ class RDD(object):
         :param compressionCodecClass: (None by default) string i.e.
             "org.apache.hadoop.io.compress.GzipCodec"
 
+        >>> from tempfile import NamedTemporaryFile
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
         >>> sc.parallelize(range(10)).saveAsTextFile(tempFile.name)
@@ -1588,6 +1590,7 @@ class RDD(object):
 
         Empty lines are tolerated when saving to text files.
 
+        >>> from tempfile import NamedTemporaryFile
         >>> tempFile2 = NamedTemporaryFile(delete=True)
         >>> tempFile2.close()
         >>> sc.parallelize(['', 'foo', '', 'bar', '']).saveAsTextFile(tempFile2.name)
@@ -1596,6 +1599,7 @@ class RDD(object):
 
         Using compressionCodecClass
 
+        >>> from tempfile import NamedTemporaryFile
         >>> tempFile3 = NamedTemporaryFile(delete=True)
         >>> tempFile3.close()
         >>> codec = "org.apache.hadoop.io.compress.GzipCodec"

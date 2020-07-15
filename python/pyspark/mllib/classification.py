@@ -102,6 +102,7 @@ class LogisticRegressionModel(LinearClassificationModel):
       in Multinomial Logistic Regression. By default, it is binary
       logistic regression so numClasses will be set to 2.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 1.0]),
     ...     LabeledPoint(1.0, [1.0, 0.0]),

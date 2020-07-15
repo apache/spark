@@ -441,6 +441,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit with
     an l_2 penalty term.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),

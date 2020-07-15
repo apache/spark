@@ -58,6 +58,7 @@ class Normalizer(VectorTransformer):
 
     :param p: Normalization in L^p^ space, p = 2 by default.
 
+    >>> from pyspark.mllib.linalg import Vectors
     >>> v = Vectors.dense(range(3))
     >>> nor = Normalizer(1)
     >>> nor.transform(v)

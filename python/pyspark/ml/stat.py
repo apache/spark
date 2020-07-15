@@ -19,6 +19,7 @@ import sys
 
 from pyspark import since, SparkContext
 from pyspark.ml.common import _java2py, _py2java
+from pyspark.ml.linalg import DenseMatrix, Vectors
 from pyspark.ml.wrapper import JavaWrapper, _jvm
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.functions import lit
@@ -120,7 +121,7 @@ class Correlation(object):
           DataFrame contains a single row and a single column of name
           '$METHODNAME($COLUMN)'.
 
-        >>> from pyspark.ml.linalg import Vectors
+        >>> from pyspark.ml.linalg import DenseMatrix, Vectors
         >>> from pyspark.ml.stat import Correlation
         >>> dataset = [[Vectors.dense([1, 0, 0, -2])],
         ...            [Vectors.dense([4, 5, 0, 3])],
