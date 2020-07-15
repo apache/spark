@@ -36,7 +36,7 @@ import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
 
 /** Params for linear SVM Classifier. */
@@ -267,7 +267,26 @@ class LinearSVC @Since("2.2.0") (
       if (featuresStd(i) != 0.0) rawCoefficients(i) / featuresStd(i) else 0.0
     }
     val intercept = if ($(fitIntercept)) rawCoefficients.last else 0.0
-    copyValues(new LinearSVCModel(uid, Vectors.dense(coefficientArray), intercept))
+    createModel(dataset, Vectors.dense(coefficientArray), intercept, objectiveHistory)
+  }
+
+  private def createModel(
+      dataset: Dataset[_],
+      coefficients: Vector,
+      intercept: Double,
+      objectiveHistory: Array[Double]): LinearSVCModel = {
+    val model = copyValues(new LinearSVCModel(uid, coefficients, intercept))
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
+
+    val (summaryModel, rawPredictionColName, predictionColName) = model.findSummaryModel()
+    val summary = new LinearSVCTrainingSummaryImpl(
+      summaryModel.transform(dataset),
+      rawPredictionColName,
+      predictionColName,
+      $(labelCol),
+      weightColName,
+      objectiveHistory)
+    model.setSummary(Some(summary))
   }
 
   private def trainOnRows(
@@ -352,7 +371,7 @@ class LinearSVCModel private[classification] (
     @Since("2.2.0") val coefficients: Vector,
     @Since("2.2.0") val intercept: Double)
   extends ClassificationModel[Vector, LinearSVCModel]
-  with LinearSVCParams with MLWritable {
+  with LinearSVCParams with MLWritable with HasTrainingSummary[LinearSVCTrainingSummary] {
 
   @Since("2.2.0")
   override val numClasses: Int = 2
@@ -366,6 +385,27 @@ class LinearSVCModel private[classification] (
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, coefficients) + intercept
+  }
+
+  /**
+   * Gets summary of model on training set. An exception is thrown
+   * if `hasSummary` is false.
+   */
+  @Since("3.1.0")
+  override def summary: LinearSVCTrainingSummary = super.summary
+
+  /**
+   * Evaluates the model on a test dataset.
+   *
+   * @param dataset Test dataset to evaluate model on.
+   */
+  @Since("3.1.0")
+  def evaluate(dataset: Dataset[_]): LinearSVCSummary = {
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
+    // Handle possible missing or invalid rawPrediction or prediction columns
+    val (summaryModel, rawPrediction, predictionColName) = findSummaryModel()
+    new LinearSVCSummaryImpl(summaryModel.transform(dataset),
+      rawPrediction, predictionColName, $(labelCol), weightColName)
   }
 
   override def predict(features: Vector): Double = {
@@ -439,3 +479,53 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
     }
   }
 }
+
+/**
+ * Abstraction for LinearSVC results for a given model.
+ */
+sealed trait LinearSVCSummary extends BinaryClassificationSummary
+
+/**
+ * Abstraction for LinearSVC training results.
+ */
+sealed trait LinearSVCTrainingSummary extends LinearSVCSummary with TrainingSummary
+
+/**
+ * LinearSVC results for a given model.
+ *
+ * @param predictions dataframe output by the model's `transform` method.
+ * @param scoreCol field in "predictions" which gives the rawPrediction of each instance.
+ * @param predictionCol field in "predictions" which gives the prediction for a data instance as a
+ *                      double.
+ * @param labelCol field in "predictions" which gives the true label of each instance.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
+ */
+private class LinearSVCSummaryImpl(
+    @transient override val predictions: DataFrame,
+    override val scoreCol: String,
+    override val predictionCol: String,
+    override val labelCol: String,
+    override val weightCol: String)
+  extends LinearSVCSummary
+
+/**
+ * LinearSVC training results.
+ *
+ * @param predictions dataframe output by the model's `transform` method.
+ * @param scoreCol field in "predictions" which gives the rawPrediction of each instance.
+ * @param predictionCol field in "predictions" which gives the prediction for a data instance as a
+ *                      double.
+ * @param labelCol field in "predictions" which gives the true label of each instance.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
+ * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
+ */
+private class LinearSVCTrainingSummaryImpl(
+    predictions: DataFrame,
+    scoreCol: String,
+    predictionCol: String,
+    labelCol: String,
+    weightCol: String,
+    override val objectiveHistory: Array[Double])
+  extends LinearSVCSummaryImpl(
+    predictions, scoreCol, predictionCol, labelCol, weightCol)
+    with LinearSVCTrainingSummary

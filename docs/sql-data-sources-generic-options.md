@@ -120,13 +120,30 @@ To load all files recursively, you can use:
 </div>
 </div>
 
-### Load Files after Modification Date
-`fileModifiedDate` is an option used to only load files after a specified modification date. 
-This parameter  expects a timestamp in  the following format: `YYYY-MM-DDTHH:mm:ss`.
+### Modification Date Filter
 
-Example:<br/>
-`spark`<br/>
-`.read` <br/>
-` .format("csv")`<br/>
-` .option('fileModifiedDate','2020-05-13T08:33:05`)<br/>
-          
+`modifiedDateFilter` is an option used to only load files after a specified modification
+timestamp.  The syntax expects a timestamp
+in the form <code>YYYY-MM-DDTHH:mm:ss</code>.
+It does not change the behavior of partition discovery.
+
+To load files having modification dates after the specified timestamp, 
+you can use:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example load_with_modified_date_filter scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example load_with_modified_date_filter java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example load_with_modified_date_filter python/sql/datasource.py %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example load_with_modified_date_filter r/RSparkSQLExample.R %}
+</div>
+</div>

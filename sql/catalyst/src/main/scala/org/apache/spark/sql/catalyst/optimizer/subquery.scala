@@ -478,11 +478,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     while (true) {
       bottomPart match {
         case havingPart @ Filter(_, aggPart: Aggregate) =>
-          return (topPart, Option(havingPart), aggPart)
+          return (topPart.toSeq, Option(havingPart), aggPart)
 
         case aggPart: Aggregate =>
           // No HAVING clause
-          return (topPart, None, aggPart)
+          return (topPart.toSeq, None, aggPart)
 
         case p @ Project(_, child) =>
           topPart += p

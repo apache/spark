@@ -992,7 +992,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         subqueryExpressions ++= (getSubqueryExpressions(s.plan) :+ s)
         s
     }
-    subqueryExpressions
+    subqueryExpressions.toSeq
   }
 
   private def getNumSorts(plan: LogicalPlan): Int = {

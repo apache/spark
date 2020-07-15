@@ -25,8 +25,6 @@ r"""
  and then run the example
     `$ bin/spark-submit examples/src/main/python/streaming/network_wordcount.py localhost 9999`
 """
-from __future__ import print_function
-
 import sys
 
 from pyspark import SparkContext

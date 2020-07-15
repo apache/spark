@@ -317,7 +317,7 @@ private[deploy] object IvyTestUtils {
         val rFiles = createRFiles(root, className, artifact.groupId)
         allFiles.append(rFiles: _*)
       }
-      val jarFile = packJar(jarPath, artifact, allFiles, useIvyLayout, withR)
+      val jarFile = packJar(jarPath, artifact, allFiles.toSeq, useIvyLayout, withR)
       assert(jarFile.exists(), "Problem creating Jar file")
       val descriptor = createDescriptor(tempPath, artifact, dependencies, useIvyLayout)
       assert(descriptor.exists(), "Problem creating Pom file")

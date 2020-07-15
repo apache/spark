@@ -820,7 +820,7 @@ private[spark] class SparkSubmit extends Logging {
     }
     sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
-    (childArgs, childClasspath, sparkConf, childMainClass)
+    (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 
   private def renameResourcesToLocalFS(resources: String, localResources: String): String = {

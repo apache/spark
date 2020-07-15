@@ -38,7 +38,7 @@ object PushCNFPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelpe
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case j @ Join(left, right, joinType, Some(joinCondition), hint)
         if canPushThrough(joinType) =>
-      val predicates = conjunctiveNormalForm(joinCondition)
+      val predicates = CNFWithGroupExpressionsByQualifier(joinCondition)
       if (predicates.isEmpty) {
         j
       } else {

@@ -137,7 +137,7 @@ private[spark] class TaskSchedulerImpl(
   private val executorIdToRunningTaskIds = new HashMap[String, HashSet[Long]]
 
   def runningTasksByExecutors: Map[String, Int] = synchronized {
-    executorIdToRunningTaskIds.toMap.mapValues(_.size)
+    executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
   }
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
@@ -526,14 +526,14 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /**
-   * Called by cluster manager to offer resources on slaves. We respond by asking our active task
+   * Called by cluster manager to offer resources on workers. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
    */
   def resourceOffers(
       offers: IndexedSeq[WorkerOffer],
       isAllFreeResources: Boolean = true): Seq[Seq[TaskDescription]] = synchronized {
-    // Mark each slave as alive and remember its hostname
+    // Mark each worker as alive and remember its hostname
     // Also track if new executor is added
     var newExecAvail = false
     for (o <- offers) {
@@ -719,7 +719,7 @@ private[spark] class TaskSchedulerImpl(
     if (tasks.nonEmpty) {
       hasLaunchedTask = true
     }
-    return tasks
+    return tasks.map(_.toSeq)
   }
 
   private def createUnschedulableTaskSetAbortTimer(
@@ -765,7 +765,8 @@ private[spark] class TaskSchedulerImpl(
               })
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(
-                  SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
+                  ExecutorProcessLost(
+                    s"Task $tid was lost, so marking the executor as lost as well."))
                 removeExecutor(execId, reason.get)
                 failedExecutor = Some(execId)
               }
@@ -936,7 +937,7 @@ private[spark] class TaskSchedulerImpl(
 
           case None =>
             // We may get multiple executorLost() calls with different loss reasons. For example,
-            // one may be triggered by a dropped connection from the slave while another may be a
+            // one may be triggered by a dropped connection from the worker while another may be a
             // report of executor termination from Mesos. We produce log messages for both so we
             // eventually report the termination reason.
             logError(s"Lost an executor $executorId (already removed): $reason")

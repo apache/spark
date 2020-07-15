@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.continuous.shuffle
+package org.apache.spark.tags;
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.scalatest.TagAnnotation;
 
-/**
- * Trait for writing to a continuous processing shuffle.
- */
-trait ContinuousShuffleWriter {
-  def write(epoch: Iterator[UnsafeRow]): Unit
-}
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface SlowHiveTest { }

@@ -276,7 +276,7 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedDateFilter: an optional timestamp to only include files with
+        :param modifiedDateFilter: an optional timestamp to only include files with
                modification dates occurring after the specified time.  The provided timestamp
                must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
                Example: `2020-06-01T13:00:00`
@@ -305,7 +305,8 @@ class DataFrameReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
             samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+            locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            modifiedDateFilter=modifiedDateFilter)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -350,7 +351,7 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedDateFilter: an optional timestamp to only include files with
+        :param modifiedDateFilter: an optional timestamp to only include files with
                modification dates occurring after the specified time.  The provided timestamp
                must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
                Example: `2020-06-01T13:00:00`
@@ -361,12 +362,14 @@ class DataFrameReader(OptionUtils):
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
+
         mergeSchema = options.get('mergeSchema', None)
         pathGlobFilter = options.get('pathGlobFilter', None)
         modifiedDateFilter = options.get('modifiedDateFilter', None)
         recursiveFileLookup = options.get('recursiveFileLookup', None)
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+                       recursiveFileLookup=recursiveFileLookup,
+                       modifiedDateFilter=modifiedDateFilter)
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
     @ignore_unicode_prefix
@@ -388,7 +391,7 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedDateFilter: an optional timestamp to only include files with
+        :param modifiedDateFilter: an optional timestamp to only include files with
                modification dates occurring after the specified time.  The provided timestamp
                must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
                Example: `2020-06-01T13:00:00`
@@ -402,6 +405,7 @@ class DataFrameReader(OptionUtils):
         >>> df.collect()
         [Row(value=u'hello\\nthis')]
         """
+
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
@@ -527,7 +531,7 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedDateFilter: an optional timestamp to only include files with
+        :param modifiedDateFilter: an optional timestamp to only include files with
                modification dates occurring after the specified time.  The provided timestamp
                must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
                Example: `2020-06-01T13:00:00`
@@ -542,6 +546,7 @@ class DataFrameReader(OptionUtils):
         >>> df2.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
         """
+
         self._set_opts(
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
@@ -553,7 +558,8 @@ class DataFrameReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
             enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            modifiedDateFilter=modifiedDateFilter)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -581,7 +587,8 @@ class DataFrameReader(OptionUtils):
             raise TypeError("path can be only string, list or RDD")
 
     @since(1.5)
-    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None, modifiedDateFilter=None):
+    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None,
+            modifiedDateFilter=None):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
         :param mergeSchema: sets whether we should merge schemas collected from all
@@ -590,7 +597,7 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedDateFilter: an optional timestamp to only include files with
+        :param modifiedDateFilter: an optional timestamp to only include files with
                modification dates occurring after the specified time.  The provided timestamp
                must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
                Example: `2020-06-01T13:00:00`
@@ -602,7 +609,8 @@ class DataFrameReader(OptionUtils):
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+                       recursiveFileLookup=recursiveFileLookup,
+                       modifiedDateFilter=modifiedDateFilter)
         if isinstance(path, basestring):
             path = [path]
         return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
@@ -931,6 +939,7 @@ class DataFrameWriter(OptionUtils):
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
+
         self.mode(mode)
         self._set_opts(
             compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
@@ -1077,6 +1086,7 @@ class DataFrameWriter(OptionUtils):
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
+
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
