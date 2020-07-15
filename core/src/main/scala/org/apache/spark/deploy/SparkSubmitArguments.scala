@@ -245,7 +245,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       error("Must specify a primary resource (JAR or Python or R file)")
     }
     if (driverMemory != null
-        && Try(JavaUtils.byteStringAsBytes(driverMemory)).getOrElse(-1L) <= 0) {
+        && Try(JavaUtils.byteStringAsMb(driverMemory)).getOrElse(-1L) <= 0) {
       error("Driver memory must be a positive number")
     }
     if (executorMemory != null
