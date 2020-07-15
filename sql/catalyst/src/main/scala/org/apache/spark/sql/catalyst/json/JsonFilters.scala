@@ -103,7 +103,7 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
         .map { case (refSet, refsFilters) =>
           (refSet, JsonPredicate(toPredicate(refsFilters), refSet.size))
         }
-      // Apply predicates w/o references like AlwaysTrue and AlwaysFalse to all fields.
+      // Apply predicates w/o references like `AlwaysTrue` and `AlwaysFalse` to all fields.
       // We cannot set such predicates to a particular position because skipRow() can
       // be invoked for any index due to unpredictable order of JSON fields in JSON records.
       val withLiterals = groupedByRefSet.map { case (refSet, pred) =>
@@ -139,7 +139,7 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
    * @param row The row with fully or partially set values.
    * @param index The index of already set value.
    * @return `true` if at least one of applicable predicates (all dependent row values are set)
-   *         return false`. It returns `false` if all predicates return `true`.
+   *         return `false`. It returns `false` if all predicates return `true`.
    */
   def skipRow(row: InternalRow, index: Int): Boolean = {
     var skip = false
