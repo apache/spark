@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType
  * The class provides API for applying pushed down source filters to rows with
  * a struct schema parsed from JSON records. The class should be used in this way:
  * 1. Before processing of the next row, `JacksonParser` (parser for short) resets the internal
- *    state of JsonFilter` by calling the `reset()` method.
+ *    state of `JsonFilters` by calling the `reset()` method.
  * 2. The parser reads JSON fields one-by-one in streaming fashion. It converts an incoming
  *    field value to the desired type from the schema. After that, it sets the value to an instance
  *    of `InternalRow` at the position according to the schema. Order of parsed JSON fields can
@@ -47,12 +47,12 @@ import org.apache.spark.sql.types.StructType
  * 4. If the parser gets `true` from `JsonFilters.skipRow`, it must not call the method anymore
  *    for this internal row, and should go the step 1.
  *
- * JsonFilters assumes that:
- *   - reset() is called before any skipRow() calls for new row.
- *   - skipRow() can be called for any valid index of the struct fields,
+ * `JsonFilters` assumes that:
+ *   - `reset()` is called before any `skipRow()` calls for new row.
+ *   - `skipRow()` can be called for any valid index of the struct fields,
  *      and in any order.
- *   - After skipRow() returns `true`, the internal state of `JsonFilter` can be inconsistent,
- *     so, skipRow() must not be called for the current row anymore without reset().
+ *   - After `skipRow()` returns `true`, the internal state of `JsonFilters` can be inconsistent,
+ *     so, `skipRow()` must not be called for the current row anymore without `reset()`.
  *
  * @param pushedFilters The pushed down source filters. The filters should refer to
  *                      the fields of the provided schema.
@@ -138,8 +138,8 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
    *
    * @param row The row with fully or partially set values.
    * @param index The index of already set value.
-   * @return true if at least one of applicable predicates (all dependent row values are set)
-   *         return `false`. It returns `false` if all predicates return `true`.
+   * @return `true` if at least one of applicable predicates (all dependent row values are set)
+   *         return false`. It returns `false` if all predicates return `true`.
    */
   def skipRow(row: InternalRow, index: Int): Boolean = {
     var skip = false
