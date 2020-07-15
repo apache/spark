@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.execution.CoalesceExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -36,6 +37,7 @@ import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -3556,6 +3558,24 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           val expectedPlan = sql(sqlTextWithoutHint)
           val actualPlan = sql(sqlText)
           comparePlans(actualPlan.queryExecution.analyzed, expectedPlan.queryExecution.analyzed)
+        }
+      }
+    }
+  }
+
+  test("SPARK-32291: COALESCE should not reduce the child parallelism if it contains a Join") {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
+      withTempView("t1", "t2") {
+        spark.range(100).createTempView("t1")
+        spark.range(200).createTempView("t2")
+        spark.sql("set spark.sql.autoBroadcastJoinThreshold=0")
+        val join = spark.sql("select /*+ COALESCE(1) */ t1.* from t1 join t2 on (t1.id = t2.id)")
+        join.collect()
+        join.queryExecution.executedPlan match {
+          case CoalesceExec(numPartitions, ShuffleExchangeExec(_, _, _)) => // additional shuffle
+            assert(numPartitions == 1)
+          case _ =>
+            assert(false, "Unexpected plan")
         }
       }
     }

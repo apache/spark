@@ -80,6 +80,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ColumnPruning,
         InferFiltersFromConstraints,
         // Operator combine
+        RepartitionForCoalesceWithJoin,
         CollapseRepartition,
         CollapseProject,
         CollapseWindow,
@@ -784,7 +785,7 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     //   otherwise, keep unchanged.
     // 2) In the other cases, returns the top node with the child's child
     case r @ Repartition(_, _, child: RepartitionOperation) => (r.shuffle, child.shuffle) match {
-      case (false, true) => if (r.numPartitions >= child.numPartitions) child else r
+      case (false, true) => if (r.numPartitions > child.numPartitions) child else r
       case _ => r.copy(child = child.child)
     }
     // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
@@ -1799,5 +1800,17 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
+  }
+}
+
+/**
+ * Coalesce should not reduce the child parallelism if it contains a Join.
+ * So add a Repartition if the child of Coalesce contains a Join.
+ */
+object RepartitionForCoalesceWithJoin extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case r @ Repartition(numPartitions, shuffle, child)
+      if !shuffle && child.find(_.isInstanceOf[Join]).isDefined =>
+      r.copy(child = Repartition(numPartitions, true, child))
   }
 }
