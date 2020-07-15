@@ -103,8 +103,9 @@ object SparkKMeans {
     spark.stop()
   }
 
-  private def mergeResults(a: (Vector[Double], Int),
-                           b: (Vector[Double], Int)): (Vector[Double], Int) = {
+  private def mergeResults(
+      a: (Vector[Double], Int),
+      b: (Vector[Double], Int)): (Vector[Double], Int) = {
     (a._1 + b._1, a._2 + b._2)
   }
 }

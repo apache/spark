@@ -85,10 +85,10 @@ private[mllib] object NumericParser {
     while (parsing && tokenizer.hasMoreTokens()) {
       token = tokenizer.nextToken()
       if (token == "(") {
-        items ++= parseTuple(tokenizer)
+        items += parseTuple(tokenizer)
         allowComma = true
       } else if (token == "[") {
-        items ++= parseArray(tokenizer)
+        items += parseArray(tokenizer)
         allowComma = true
       } else if (token == ",") {
         if (allowComma) {
