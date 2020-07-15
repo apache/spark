@@ -187,12 +187,8 @@ class OrcFileFormat
         Iterator.empty
       } else {
         val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-        val resultSchemaString = if (canPruneCols) {
-          OrcUtils.orcTypeDescriptionString(resultSchema)
-        } else {
-          OrcUtils.orcTypeDescriptionString(StructType(dataSchema.fields ++ partitionSchema.fields))
-        }
-        OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
+        val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
+          dataSchema, resultSchema, partitionSchema, conf)
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)

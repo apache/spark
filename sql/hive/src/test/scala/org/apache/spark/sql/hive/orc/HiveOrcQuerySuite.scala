@@ -289,8 +289,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
-  test("SPARK-32234: orc data created by the hive tables having _col fields name" +
-    " for ORC_IMPLEMENTATION") {
+  test("SPARK-32234: read ORC table with column names all starting with '_col'") {
     Seq("native", "hive").foreach { orcImpl =>
       Seq("false", "true").foreach { vectorized =>
         withSQLConf(

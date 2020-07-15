@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.orc.{OrcFile, Reader, TypeDescription, Writer}
+import org.apache.orc.{OrcConf, OrcFile, Reader, TypeDescription, Writer}
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -116,9 +116,10 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * @return Returns the requested column ids from the given ORC file and Boolean flag to use actual
-   * schema or result schema. Column id can be -1, which means the requested column doesn't
-   * exist in the ORC file. Returns None if the given ORC file is empty.
+   * @return Returns the combination of requested column ids from the given ORC file and
+   *         boolean flag to find if the pruneCols is allowed or not. Requested Column id can be
+   *         -1, which means the requested column doesn't exist in the ORC file. Returns None
+   *         if the given ORC file is empty.
    */
   def requestedColumnIds(
       isCaseSensitive: Boolean,
@@ -203,5 +204,26 @@ object OrcUtils extends Logging {
     case m: MapType =>
       s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
     case _ => dt.catalogString
+  }
+
+  /**
+   * @return Returns the result schema string based on the canPruneCols flag.
+   *         resultSchemaString will be created using resultsSchema in case of
+   *         canPruneCols is true and for canPruneCols as false value
+   *         resultSchemaString will be created using the actual dataSchema.
+   */
+  def orcResultSchemaString(
+      canPruneCols: Boolean,
+      dataSchema: StructType,
+      resultSchema: StructType,
+      partitionSchema: StructType,
+      conf: Configuration): String = {
+    val resultSchemaString = if (canPruneCols) {
+      OrcUtils.orcTypeDescriptionString(resultSchema)
+    } else {
+      OrcUtils.orcTypeDescriptionString(StructType(dataSchema.fields ++ partitionSchema.fields))
+    }
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
+    resultSchemaString
   }
 }
