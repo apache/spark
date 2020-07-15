@@ -2594,6 +2594,12 @@
               <fileset>
                 <directory>lib_managed</directory>
               </fileset>
+              <fileset>
+                <directory>metastore_db</directory>
+              </fileset>
+              <fileset>
+                <directory>spark-warehouse</directory>
+              </fileset>
             </filesets>
           </configuration>
         </plugin>
