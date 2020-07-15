@@ -1519,10 +1519,21 @@ abstract class RDD[T: ClassTag](
           queue ++= collectionUtils.takeOrdered(items, num)(ord)
           Iterator.single(queue)
         }
-        mapRDDs.reduce { (queue1, queue2) =>
-          queue1 ++= queue2
-          queue1
-        }.toArray.sorted(ord)
+        try {
+          mapRDDs.reduce { (queue1, queue2) =>
+            queue1 ++= queue2
+            queue1
+          }.toArray.sorted(ord)
+        } catch {
+          case e: SparkException if e.getMessage.contains(s"bigger than ${MAX_RESULT_SIZE.key}") =>
+            logError(s"Total size of serialized intermediate results is bigger than " +
+              s"${MAX_RESULT_SIZE.key} (${Utils.bytesToString(conf.get(MAX_RESULT_SIZE))}). " +
+              s"If the final result size is less than this value, you can set the " +
+              s"config ${RDD_TAKE_ORDERED_MERGE_IN_DRIVER.key} to false to complete " +
+              s"the intermediate result merge in executor. But this config will " +
+              s"increase the return time of the takeOrdered method.")
+            throw e
+        }
       } else {
         mapPartitions { items =>
           collectionUtils.takeOrdered(items, num)(ord)
