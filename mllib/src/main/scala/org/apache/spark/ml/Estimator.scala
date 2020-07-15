@@ -18,7 +18,6 @@
 package org.apache.spark.ml
 
 import scala.annotation.varargs
-import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
@@ -27,7 +26,7 @@ import org.apache.spark.sql.Dataset
 /**
  * Abstract class for estimators that fit models to data.
  */
-abstract class Estimator[M <: Model[M] : ClassTag] extends PipelineStage {
+abstract class Estimator[M <: Model[M]] extends PipelineStage {
 
   /**
    * Fits a single model to the input data with optional parameters.
@@ -77,7 +76,7 @@ abstract class Estimator[M <: Model[M] : ClassTag] extends PipelineStage {
    * @return fitted models, matching the input parameter maps
    */
   @Since("2.0.0")
-  def fit(dataset: Dataset[_], paramMaps: Array[ParamMap]): Seq[M] = {
+  def fit(dataset: Dataset[_], paramMaps: Seq[ParamMap]): Seq[M] = {
     paramMaps.map(fit(dataset, _))
   }
 

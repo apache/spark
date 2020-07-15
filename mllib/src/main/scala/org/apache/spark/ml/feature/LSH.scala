@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.ml.{Estimator, Model}
@@ -325,7 +324,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
  * (2) Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
  * arXiv:1408.2927 (2014).
  */
-private[ml] abstract class LSH[T <: LSHModel[T] : ClassTag]
+private[ml] abstract class LSH[T <: LSHModel[T]]
   extends Estimator[T] with LSHParams with DefaultParamsWritable {
   self: Estimator[T] =>
 

@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
@@ -53,7 +51,7 @@ private[ml] trait ProbabilisticClassifierParams
 abstract class ProbabilisticClassifier[
     FeaturesType,
     E <: ProbabilisticClassifier[FeaturesType, E, M],
-    M <: ProbabilisticClassificationModel[FeaturesType, M] : ClassTag]
+    M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends Classifier[FeaturesType, E, M] with ProbabilisticClassifierParams {
 
   /** @group setParam */

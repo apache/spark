@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.regression
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 
 
@@ -32,7 +30,7 @@ import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 abstract class Regressor[
     FeaturesType,
     Learner <: Regressor[FeaturesType, Learner, M],
-    M <: RegressionModel[FeaturesType, M] : ClassTag]
+    M <: RegressionModel[FeaturesType, M]]
   extends Predictor[FeaturesType, Learner, M] with PredictorParams {
 
   // TODO: defaultEvaluator (follow-up PR)

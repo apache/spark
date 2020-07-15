@@ -18,7 +18,6 @@
 package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
-import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
@@ -156,7 +155,7 @@ private[feature] trait SelectorParams extends Params
  * By default, the selection method is `numTopFeatures`, with the default number of top features
  * set to 50.
  */
-private[ml] abstract class Selector[T <: SelectorModel[T] : ClassTag]
+private[ml] abstract class Selector[T <: SelectorModel[T]]
   extends Estimator[T] with SelectorParams with DefaultParamsWritable {
 
   /** @group setParam */

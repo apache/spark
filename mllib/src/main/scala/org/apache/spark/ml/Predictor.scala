@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.functions.checkNonNegativeWeight
@@ -117,7 +115,7 @@ private[ml] trait PredictorParams extends Params
 abstract class Predictor[
     FeaturesType,
     Learner <: Predictor[FeaturesType, Learner, M],
-    M <: PredictionModel[FeaturesType, M] : ClassTag]
+    M <: PredictionModel[FeaturesType, M]]
   extends Estimator[M] with PredictorParams {
 
   /** @group setParam */
