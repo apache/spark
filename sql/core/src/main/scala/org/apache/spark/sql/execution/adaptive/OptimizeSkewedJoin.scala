@@ -23,10 +23,10 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -133,21 +133,37 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def canSplitLeftSide(joinType: JoinType, plan: SparkPlan) = {
     (joinType == Inner || joinType == Cross || joinType == LeftSemi ||
-      joinType == LeftAnti || joinType == LeftOuter) && !containsAggregateExec(plan)
+      joinType == LeftAnti || joinType == LeftOuter) && canBypass(plan)
   }
 
   private def canSplitRightSide(joinType: JoinType, plan: SparkPlan) = {
     (joinType == Inner || joinType == Cross ||
-      joinType == RightOuter) && !containsAggregateExec(plan)
+      joinType == RightOuter) && canBypass(plan)
   }
 
-  private def containsAggregateExec(plan: SparkPlan) = {
-    plan.find {
-      case _: HashAggregateExec => true
-      case _: SortAggregateExec => true
-      case _: ObjectHashAggregateExec => true
+  // Bypass the node which its requiredChildDistribution contains [[UnspecifiedDistribution]]
+  private def canBypass(plan: SparkPlan) = {
+    val nodesCanBypass = plan.find {
+      case p: SparkPlan if p.requiredChildDistribution.exists {
+        case UnspecifiedDistribution => true
+        case _ => false
+      } => false // false means we bypass this node
+      case _ @ BypassTerminator() => true // terminate traverse
+      case _ => true // get the node which cannot bypass
+    }
+    nodesCanBypass.exists {
+      case _ @ BypassTerminator() => true
       case _ => false
-    }.isDefined
+    }
+  }
+
+  private object BypassTerminator {
+    def unapply(plan: SparkPlan): Boolean = plan match {
+      case _: ShuffleQueryStageExec => true
+      case _: CustomShuffleReaderExec => true
+      case _: Exchange => true
+      case _ => false
+    }
   }
 
   private def getSizeInfo(medianSize: Long, sizes: Seq[Long]): String = {
