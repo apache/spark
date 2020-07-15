@@ -539,14 +539,14 @@ private[spark] class MesosClusterScheduler(
     options ++= Seq("--py-files", formattedFiles)
 
     // --conf
-    val replicatedOptionsBlacklist = Set(
+    val replicatedOptionsExcludeList = Set(
       JARS.key, // Avoids duplicate classes in classpath
       SUBMIT_DEPLOY_MODE.key, // this would be set to `cluster`, but we need client
       "spark.master" // this contains the address of the dispatcher, not master
     )
     val defaultConf = conf.getAllWithPrefix(config.DISPATCHER_DRIVER_DEFAULT_PREFIX).toMap
     val driverConf = desc.conf.getAll
-      .filter { case (key, _) => !replicatedOptionsBlacklist.contains(key) }
+      .filter { case (key, _) => !replicatedOptionsExcludeList.contains(key) }
       .toMap
     (defaultConf ++ driverConf).foreach { case (key, value) =>
       options ++= Seq("--conf", s"${key}=${value}") }

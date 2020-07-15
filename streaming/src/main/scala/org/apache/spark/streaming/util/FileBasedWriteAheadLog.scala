@@ -277,10 +277,10 @@ private[streaming] object FileBasedWriteAheadLog {
   }
 
   def getCallerName(): Option[String] = {
-    val blacklist = Seq("WriteAheadLog", "Logging", "java.lang", "scala.")
+    val ignoreList = Seq("WriteAheadLog", "Logging", "java.lang", "scala.")
     Thread.currentThread.getStackTrace()
       .map(_.getClassName)
-      .find { c => !blacklist.exists(c.contains) }
+      .find { c => !ignoreList.exists(c.contains) }
       .flatMap(_.split("\\.").lastOption)
       .flatMap(_.split("\\$\\$").headOption)
   }

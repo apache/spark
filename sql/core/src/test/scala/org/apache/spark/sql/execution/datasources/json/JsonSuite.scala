@@ -2488,7 +2488,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
           .json(testFile("test-data/utf16LE.json"))
           .count()
       }
-      assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
+      assert(exception.getMessage.contains("encoding must not be included in the denyList"))
     }
   }
 
