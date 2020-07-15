@@ -32,7 +32,7 @@ class Module(object):
     """
 
     def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(), environ={},
-                 sbt_test_goals=(), python_test_goals=(), blacklisted_python_implementations=(),
+                 sbt_test_goals=(), python_test_goals=(), excluded_python_implementations=(),
                  test_tags=(), should_run_r_tests=False, should_run_build_tests=False):
         """
         Define a new module.
@@ -49,7 +49,7 @@ class Module(object):
             module are changed.
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
-        :param blacklisted_python_implementations: A set of Python implementations that are not
+        :param excluded_python_implementations: A set of Python implementations that are not
             supported by this module's Python components. The values in this set should match
             strings returned by Python's `platform.python_implementation()`.
         :param test_tags A set of tags that will be excluded when running unit tests if the module
@@ -64,7 +64,7 @@ class Module(object):
         self.build_profile_flags = build_profile_flags
         self.environ = environ
         self.python_test_goals = python_test_goals
-        self.blacklisted_python_implementations = blacklisted_python_implementations
+        self.excluded_python_implementations = excluded_python_implementations
         self.test_tags = test_tags
         self.should_run_r_tests = should_run_r_tests
         self.should_run_build_tests = should_run_build_tests
@@ -524,7 +524,7 @@ pyspark_mllib = Module(
         "pyspark.mllib.tests.test_streaming_algorithms",
         "pyspark.mllib.tests.test_util",
     ],
-    blacklisted_python_implementations=[
+    excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ]
 )
@@ -565,7 +565,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_tuning",
         "pyspark.ml.tests.test_wrapper",
     ],
-    blacklisted_python_implementations=[
+    excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ]
 )

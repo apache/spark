@@ -14,19 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package org.apache.spark.sql.execution.streaming.continuous.shuffle
-
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+package org.apache.spark.sql.internal.connector
 
 /**
- * Trait for reading from a continuous processing shuffle.
+ * A mix-in interface for {@link FileScan}. This can be used to report metadata
+ * for a file based scan operator. This is currently used for supporting formatted
+ * explain.
  */
-trait ContinuousShuffleReader {
-  /**
-   * Returns an iterator over the incoming rows in an epoch. Implementations should block waiting
-   * for new rows to arrive, and end the iterator once they've received epoch markers from all
-   * shuffle writers.
-   */
-  def read(): Iterator[UnsafeRow]
+trait SupportsMetadata {
+  def getMetaData(): Map[String, String]
 }
