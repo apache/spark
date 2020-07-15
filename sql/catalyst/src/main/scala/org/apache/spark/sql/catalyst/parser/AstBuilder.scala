@@ -769,7 +769,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     if (ctx.pivotClause() != null) {
       if (!ctx.lateralView.isEmpty) {
-        throw new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
+        throw new ParseException("LATERAL cannot be used before PIVOT in FROM clause", ctx)
       }
       withPivot(ctx.pivotClause, from)
     } else {

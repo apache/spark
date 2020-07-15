@@ -434,7 +434,7 @@ class PlanParserSuite extends AnalysisTest {
         |  sum(x)
         |  FOR y IN ('a', 'b')
         |)""".stripMargin,
-      "LATERAL cannot be used together with PIVOT in FROM clause")
+      "LATERAL cannot be used before PIVOT in FROM clause")
   }
 
   test("joins") {
