@@ -79,8 +79,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LimitPushDown,
         ColumnPruning,
         InferFiltersFromConstraints,
-        // Operator combine
+        // Add repartition
         RepartitionForCoalesceWithJoin,
+        // Operator combine
         CollapseRepartition,
         CollapseProject,
         CollapseWindow,
@@ -1810,7 +1811,7 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
 object RepartitionForCoalesceWithJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case r @ Repartition(numPartitions, shuffle, child)
-      if !shuffle && child.find(_.isInstanceOf[Join]).isDefined =>
-      r.copy(child = Repartition(numPartitions, true, child))
+        if !shuffle && child.find(_.isInstanceOf[Join]).isDefined =>
+      r.copy(child = Repartition(numPartitions, shuffle = true, child))
   }
 }
