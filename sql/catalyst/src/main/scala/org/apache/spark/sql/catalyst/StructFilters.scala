@@ -28,6 +28,9 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
  * The class provides API for applying pushed down filters to partially or
  * fully set internal rows that have the struct schema.
  *
+ * `StructFilters` assumes that:
+ *   - `reset()` is called before any `skipRow()` calls for new row.
+ *
  * @param pushedFilters The pushed down source filters. The filters should refer to
  *                      the fields of the provided schema.
  * @param schema The required schema of records from datasource files.

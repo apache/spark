@@ -47,8 +47,7 @@ import org.apache.spark.sql.types.StructType
  * 4. If the parser gets `true` from `JsonFilters.skipRow`, it must not call the method anymore
  *    for this internal row, and should go the step 1.
  *
- * `JsonFilters` assumes that:
- *   - `reset()` is called before any `skipRow()` calls for new row.
+ * Besides of `StructFilters` assumptions, `JsonFilters` assumes that:
  *   - `skipRow()` can be called for any valid index of the struct fields,
  *      and in any order.
  *   - After `skipRow()` returns `true`, the internal state of `JsonFilters` can be inconsistent,
