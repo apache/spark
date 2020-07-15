@@ -198,7 +198,8 @@ private[hive] case class HiveGenericUDF(
 private[hive] case class HiveGenericUDTF(
     name: String,
     funcWrapper: HiveFunctionWrapper,
-    children: Seq[Expression])
+    children: Seq[Expression],
+    deprecated: Boolean = true)
   extends Generator with HiveInspectors with CodegenFallback with UserDefinedExpression {
 
   @transient
@@ -212,7 +213,19 @@ private[hive] case class HiveGenericUDTF(
   protected lazy val inputInspectors = children.map(toInspector)
 
   @transient
-  protected lazy val outputInspector = function.initialize(inputInspectors.toArray)
+  protected lazy val inpuColNames = children.map(_ => "field_name").asJava
+
+  @transient
+  protected lazy val rowOI = ObjectInspectorFactory.getStandardStructObjectInspector(
+    inpuColNames, inputInspectors.asJava)
+
+  @transient
+  protected lazy val outputInspector =
+    if (deprecated) {
+      function.initialize(inputInspectors.toArray)
+    } else {
+      function.initialize(rowOI)
+    }
 
   @transient
   protected lazy val udtInput = new Array[AnyRef](children.length)

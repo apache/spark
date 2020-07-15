@@ -91,8 +91,18 @@ private[sql] class HiveSessionCatalog(
               isUDAFBridgeRequired = true))
             udfExpr.get.dataType // Force it to check input data types.
           } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-            udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
-            udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema // Force it to check data types.
+            try {
+              udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
+              // Force it to check input data types.
+              udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema
+            } catch {
+              case exception: Exception =>
+                logInfo(s"HiveGenericUDTF initialize(ObjectInspector[] args) is deprecated, and" +
+                  s" we will suit the latest version of initialize(StructObjectInspector argOIs).")
+                udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName),
+                  input, false))
+                udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema
+            }
           }
         } catch {
           case NonFatal(e) =>
