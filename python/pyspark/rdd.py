@@ -18,7 +18,6 @@
 import copy
 import sys
 import os
-import re
 import operator
 import shlex
 import warnings
@@ -26,7 +25,6 @@ import heapq
 import bisect
 import random
 from subprocess import Popen, PIPE
-from tempfile import NamedTemporaryFile
 from threading import Thread
 from collections import defaultdict
 from itertools import chain

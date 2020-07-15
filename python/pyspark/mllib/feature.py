@@ -25,9 +25,7 @@ from py4j.protocol import Py4JJavaError
 from pyspark import since
 from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import (
-    Vectors, DenseVector, SparseVector, _convert_to_vector)
-from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.linalg import Vectors, _convert_to_vector
 from pyspark.mllib.util import JavaLoader, JavaSaveable
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',

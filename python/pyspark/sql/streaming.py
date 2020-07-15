@@ -1209,7 +1209,7 @@ def _test():
     import doctest
     import os
     import tempfile
-    from pyspark.sql import Row, SparkSession, SQLContext
+    from pyspark.sql import SparkSession, SQLContext
     import pyspark.sql.streaming
 
     os.chdir(os.environ["SPARK_HOME"])

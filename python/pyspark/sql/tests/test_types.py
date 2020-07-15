@@ -969,7 +969,7 @@ class DataTypeVerificationTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_types import *
+    from pyspark.sql.tests.test_types import *  # noqa: F401
 
     try:
         import xmlrunner

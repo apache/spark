@@ -27,13 +27,13 @@ from pyspark import SparkContext, SparkConf
 have_scipy = False
 have_numpy = False
 try:
-    import scipy.sparse
+    import scipy.sparse  # noqa: F401
     have_scipy = True
 except:
     # No SciPy, but that's okay, we'll skip those tests
     pass
 try:
-    import numpy as np
+    import numpy as np  # noqa: F401
     have_numpy = True
 except:
     # No NumPy, but that's okay, we'll skip those tests

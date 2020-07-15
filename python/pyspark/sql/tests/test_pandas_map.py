@@ -15,11 +15,9 @@
 # limitations under the License.
 #
 import os
-import sys
 import time
 import unittest
 
-from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 
@@ -116,7 +114,7 @@ class MapInPandasTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_map import *
+    from pyspark.sql.tests.test_pandas_map import *  # noqa: F401
 
     try:
         import xmlrunner
