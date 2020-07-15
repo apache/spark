@@ -288,7 +288,7 @@ private[sql] object V2SessionCatalog {
           s"SessionCatalog does not support partition transform: $transform")
     }
 
-    (identityCols, bucketSpec)
+    (identityCols.toSeq, bucketSpec)
   }
 
   private def toCatalogDatabase(

@@ -650,7 +650,7 @@ case class AlterTableRecoverPartitionsCommand(
     val pathFilter = getPathFilter(hadoopConf)
 
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
-    val partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)] =
+    val partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)] =
       try {
         scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
           spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
@@ -697,7 +697,7 @@ case class AlterTableRecoverPartitionsCommand(
         // parallelize the list of partitions here, then we can have better parallelism later.
         val parArray = new ParVector(statuses.toVector)
         parArray.tasksupport = evalTaskSupport
-        parArray
+        parArray.seq
       } else {
         statuses
       }

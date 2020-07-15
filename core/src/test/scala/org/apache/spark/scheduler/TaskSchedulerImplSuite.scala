@@ -641,7 +641,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(0 === taskDescriptions2.length)
 
     // provide the actual loss reason for executor0
-    taskScheduler.executorLost("executor0", SlaveLost("oops"))
+    taskScheduler.executorLost("executor0", ExecutorProcessLost("oops"))
 
     // executor0's tasks should have failed now that the loss reason is known, so offering more
     // resources should make them be scheduled on the new executor.
@@ -1141,7 +1141,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // Now we fail our second executor.  The other task can still run on executor1, so make an offer
     // on that executor, and make sure that the other task (not the failed one) is assigned there.
-    taskScheduler.executorLost("executor1", SlaveLost("oops"))
+    taskScheduler.executorLost("executor1", ExecutorProcessLost("oops"))
     val nextTaskAttempts =
       taskScheduler.resourceOffers(IndexedSeq(new WorkerOffer("executor0", "host0", 1))).flatten
     // Note: Its OK if some future change makes this already realize the taskset has become
@@ -1273,7 +1273,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(1 === taskDescriptions.length)
 
     // mark executor0 as dead
-    taskScheduler.executorLost("executor0", SlaveLost())
+    taskScheduler.executorLost("executor0", ExecutorProcessLost())
     assert(!taskScheduler.isExecutorAlive("executor0"))
     assert(!taskScheduler.hasExecutorsAliveOnHost("host0"))
     assert(taskScheduler.getExecutorsAliveOnHost("host0").isEmpty)

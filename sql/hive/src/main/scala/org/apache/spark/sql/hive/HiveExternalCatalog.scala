@@ -61,6 +61,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   import HiveExternalCatalog._
   import CatalogTableType._
 
+  // SPARK-32256: Make sure `VersionInfo` is initialized before touching the isolated classloader.
+  // This is to ensure Hive can get the Hadoop version when using the isolated classloader.
+  org.apache.hadoop.util.VersionInfo.getVersion()
+
   /**
    * A Hive client used to interact with the metastore.
    */

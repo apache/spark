@@ -669,7 +669,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.4.5-2</version>
+        <version>1.4.5-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -2594,6 +2594,12 @@
               <fileset>
                 <directory>lib_managed</directory>
               </fileset>
+              <fileset>
+                <directory>metastore_db</directory>
+              </fileset>
+              <fileset>
+                <directory>spark-warehouse</directory>
+              </fileset>
             </filesets>
           </configuration>
         </plugin>
@@ -3159,7 +3165,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.1</scala.version>
+        <scala.version>2.13.3</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <dependencyManagement>

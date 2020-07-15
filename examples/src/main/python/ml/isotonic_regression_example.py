@@ -21,8 +21,6 @@ Isotonic Regression Example.
 Run with:
   bin/spark-submit examples/src/main/python/ml/isotonic_regression_example.py
 """
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml.regression import IsotonicRegression
 # $example off$

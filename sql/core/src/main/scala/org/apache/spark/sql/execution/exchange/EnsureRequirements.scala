@@ -167,7 +167,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
           return None
       }
     }
-    Some(leftKeysBuffer, rightKeysBuffer)
+    (leftKeysBuffer.toSeq, rightKeysBuffer.toSeq)
   }
 
   private def reorderJoinKeys(

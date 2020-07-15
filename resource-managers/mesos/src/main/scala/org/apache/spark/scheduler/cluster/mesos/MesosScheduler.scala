@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.continuous.shuffle
+package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.mesos.Protos.{SlaveID => AgentID}
 
-/**
- * Trait for writing to a continuous processing shuffle.
- */
-trait ContinuousShuffleWriter {
-  def write(epoch: Iterator[UnsafeRow]): Unit
+trait MesosScheduler extends org.apache.mesos.Scheduler {
+  override def slaveLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit = {
+    agentLost(d, agentId)
+  }
+
+  def agentLost(d: org.apache.mesos.SchedulerDriver, agentId: AgentID): Unit
 }
