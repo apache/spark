@@ -1007,21 +1007,22 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0",
       config.DYN_ALLOCATION_ENABLED.key -> "true")
 
-    // We have only 1 task remaining with 1 executor
-    val taskSet = FakeTask.createTaskSet(numTasks = 1)
+    // We have 2 tasks remaining with 1 executor
+    val taskSet = FakeTask.createTaskSet(numTasks = 2)
     taskScheduler.submitTasks(taskSet)
     val tsm = stageToMockTaskSetManager(0)
 
     // submit an offer with one executor
-    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor0", "host0", 1)
-    )).flatten
+    taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("executor0", "host0", 2))).flatten
 
     // Fail the running task
-    val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
-    failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
+    failTask(0, TaskState.FAILED, UnknownReason, tsm)
     when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
-      "executor0", failedTask.index)).thenReturn(true)
+      "executor0", 0)).thenReturn(true)
+
+    // If the executor is busy, then dynamic allocation should kick in and try
+    // to acquire additional executors to schedule the blacklisted task
+    assert(taskScheduler.isExecutorBusy("executor0"))
 
     // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
     // timer to kick in immediately
