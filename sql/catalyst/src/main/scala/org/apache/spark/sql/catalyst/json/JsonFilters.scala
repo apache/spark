@@ -83,11 +83,11 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
   // Predicates compiled from the pushed down filters. The predicates are grouped by their
   // attributes. The i-th group contains predicates that refer to the i-th field of the given
   // schema. A predicates can be placed to many groups if it has many attributes. For example:
-  //  schema: i INTEGER, s STRING
-  //  filters: IsNotNull("i"), AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc"))
-  //  predicates:
-  //    0: Array(IsNotNull("i"), AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
-  //    1: Array(AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
+  //   schema: i INTEGER, s STRING
+  //   filters: IsNotNull("i"), AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc"))
+  //   predicates:
+  //     0: Array(IsNotNull("i"), AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
+  //     1: Array(AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
   private val predicates: Array[Array[JsonPredicate]] = {
     val groupedPredicates = Array.fill(schema.length)(Array.empty[JsonPredicate])
     if (SQLConf.get.jsonFilterPushDown) {
@@ -112,8 +112,8 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
         case others => others
       }
       // Build a map where key is only one field and value is seq of predicates refer to the field
-      // "i" -> Seq(AlwaysTrue, IsNotNull("i"), Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
-      // "s" -> Seq(AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
+      //   "i" -> Seq(AlwaysTrue, IsNotNull("i"), Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
+      //   "s" -> Seq(AlwaysTrue, Or(EqualTo("i", 0), StringStartsWith("s", "abc")))
       val groupedByFields: Map[String, Seq[(String, JsonPredicate)]] = withLiterals.toSeq
         .flatMap { case (refSet, pred) => refSet.map((_, pred)) }
         .groupBy(_._1)
