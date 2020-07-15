@@ -36,7 +36,8 @@ import org.apache.spark.sql.internal.SQLConf
  *   - The larger bucket number is divisible by the smaller bucket number.
  *   - COALESCE_BUCKETS_IN_JOIN_ENABLED is set to true.
  *   - The ratio of the number of buckets is less than the value set in
- *     COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.
+ *     COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO (`SortMergeJoin`) or,
+ *     COALESCE_BUCKETS_IN_SHUFFLED_HASH_JOIN_MAX_BUCKET_RATIO (`ShuffledHashJoin`).
  */
 case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
   private def updateNumCoalescedBuckets(
@@ -83,17 +84,19 @@ case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
     }
 
     plan transform {
-      case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets)
-        if math.max(numLeftBuckets, numRightBuckets) / math.min(numLeftBuckets, numRightBuckets) <=
-          conf.coalesceBucketsInJoinMaxBucketRatio =>
+      case ExtractJoinWithBuckets(join, numLeftBuckets, numRightBuckets) =>
+        val bucketRatio = math.max(numLeftBuckets, numRightBuckets) /
+          math.min(numLeftBuckets, numRightBuckets)
         val numCoalescedBuckets = math.min(numLeftBuckets, numRightBuckets)
         join match {
-          case j: SortMergeJoinExec =>
+          case j: SortMergeJoinExec
+            if bucketRatio <= conf.coalesceBucketsInSortMergeJoinMaxBucketRatio =>
             updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets)
           case j: ShuffledHashJoinExec
             // Only coalesce the buckets for shuffled hash join stream side,
             // to avoid OOM for build side.
-            if isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets) =>
+            if bucketRatio <= conf.coalesceBucketsInShuffledHashJoinMaxBucketRatio &&
+              isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets) =>
             updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets)
           case other => other
         }

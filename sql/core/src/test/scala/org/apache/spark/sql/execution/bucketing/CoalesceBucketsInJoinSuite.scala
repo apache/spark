@@ -167,14 +167,16 @@ class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
   }
 
   test("the ratio of the number of buckets is greater than max allowed") {
-    withSQLConf(
-        SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-        SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
-      run(JoinSetting(
-        RelationSetting(4, None), RelationSetting(16, None), joinOperator = sortMergeJoin))
-      run(JoinSetting(
-        RelationSetting(4, None), RelationSetting(16, None), joinOperator = shuffledHashJoin,
-        shjBuildSide = Some(BuildLeft)))
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO.key -> "2") {
+        run(JoinSetting(
+          RelationSetting(4, None), RelationSetting(16, None), joinOperator = sortMergeJoin))
+      }
+      withSQLConf(SQLConf.COALESCE_BUCKETS_IN_SHUFFLED_HASH_JOIN_MAX_BUCKET_RATIO.key -> "2") {
+        run(JoinSetting(
+          RelationSetting(4, None), RelationSetting(16, None), joinOperator = shuffledHashJoin,
+          shjBuildSide = Some(BuildLeft)))
+      }
     }
   }
 
