@@ -125,12 +125,11 @@ object OrcUtils extends Logging {
       dataSchema: StructType,
       requiredSchema: StructType,
       reader: Reader,
-      conf: Configuration): (Option[Array[Int]], Boolean) = {
-    var canPruneCols = true
+      conf: Configuration): Option[(Array[Int], Boolean)] = {
     val orcFieldNames = reader.getSchema.getFieldNames.asScala
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
-      (None, canPruneCols)
+      None
     } else {
       if (orcFieldNames.forall(_.startsWith("_col"))) {
         // This is a ORC file written by Hive, no field names in the physical schema, assume the
@@ -140,29 +139,29 @@ object OrcUtils extends Logging {
           "no idea which columns were dropped, fail to read.")
         // for ORC file written by Hive, no field names
         // in the physical schema, there is a need to send the
-        // entire dataSchema instead of required schema
-        canPruneCols = false
-        (Some(requiredSchema.fieldNames.map { name =>
+        // entire dataSchema instead of required schema.
+        // So pruneCols is not done in this case
+        Some(requiredSchema.fieldNames.map { name =>
           val index = dataSchema.fieldIndex(name)
           if (index < orcFieldNames.length) {
             index
           } else {
             -1
           }
-        }), canPruneCols)
+        }, false)
       } else {
         if (isCaseSensitive) {
-          (Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
             if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
               idx
             } else {
               -1
             }
-          }), canPruneCols)
+          }, true)
         } else {
           // Do case-insensitive resolution only if in case-insensitive mode
           val caseInsensitiveOrcFieldMap = orcFieldNames.groupBy(_.toLowerCase(Locale.ROOT))
-          (Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
             caseInsensitiveOrcFieldMap
               .get(requiredFieldName.toLowerCase(Locale.ROOT))
               .map { matchedOrcFields =>
@@ -176,7 +175,7 @@ object OrcUtils extends Logging {
                   idx
                 }
               }.getOrElse(-1)
-          }), canPruneCols)
+          }, true)
         }
       }
     }

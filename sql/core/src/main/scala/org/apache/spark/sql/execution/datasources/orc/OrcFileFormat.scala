@@ -160,12 +160,10 @@ class OrcFileFormat
     }
 
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
-    val actualSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
     val sqlConf = sparkSession.sessionState.conf
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
     val capacity = sqlConf.orcVectorizedReaderBatchSize
 
-    var resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
     val broadcastedConf =
@@ -179,21 +177,22 @@ class OrcFileFormat
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val (requestedColIdsOrEmptyFile, canPruneCols) =
+      val resultedColPruneInfo =
         Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
           OrcUtils.requestedColumnIds(
             isCaseSensitive, dataSchema, requiredSchema, reader, conf)
         }
 
-      if (!canPruneCols) {
-        resultSchemaString = OrcUtils.orcTypeDescriptionString(actualSchema)
-      }
-      OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
-
-      if (requestedColIdsOrEmptyFile.isEmpty) {
+      if (resultedColPruneInfo.isEmpty) {
         Iterator.empty
       } else {
-        val requestedColIds = requestedColIdsOrEmptyFile.get
+        val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
+        val resultSchemaString = if (canPruneCols) {
+          OrcUtils.orcTypeDescriptionString(resultSchema)
+        } else {
+          OrcUtils.orcTypeDescriptionString(StructType(dataSchema.fields ++ partitionSchema.fields))
+        }
+        OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)
