@@ -42,13 +42,13 @@ abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructT
    *
    * @param row The row with fully or partially set values.
    * @param index The index of already set value.
-   * @return true if currently processed row can be skipped otherwise false.
+   * @return `true` if currently processed row can be skipped otherwise false.
    */
   def skipRow(row: InternalRow, index: Int): Boolean
 
   /**
    * Resets states of pushed down filters. The method must be called before
-   * precessing any new row otherwise skipRow() may return wrong result.
+   * precessing any new row otherwise `skipRow()` may return wrong result.
    */
   def reset(): Unit
 
@@ -103,7 +103,7 @@ object StructFilters {
    *
    * @param filter The filter to convert.
    * @param toRef The function converts a filter attribute to a bound reference.
-   * @return some expression with resolved attributes or None if the conversion
+   * @return some expression with resolved attributes or `None` if the conversion
    *         of the given filter to an expression is impossible.
    */
   def filterToExpression(
