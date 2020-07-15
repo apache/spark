@@ -131,7 +131,7 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
    * at the position `index` only if other predicates dependencies are already
    * set in the given row.
    *
-   * Note: If the function returns `true`, `refCount` of some predicates can be non decremented.
+   * Note: If the function returns `true`, `refCount` of some predicates can be not decremented.
    *
    * @param row The row with fully or partially set values.
    * @param index The index of already set value.
