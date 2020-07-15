@@ -60,23 +60,8 @@ case class HiveScriptTransformationExec(
   override def processIterator(
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow] = {
-    val cmd = List("/bin/bash", "-c", script)
-    val builder = new ProcessBuilder(cmd.asJava)
 
-    val proc = builder.start()
-    val inputStream = proc.getInputStream
-    val outputStream = proc.getOutputStream
-    val errorStream = proc.getErrorStream
-
-    // In order to avoid deadlocks, we need to consume the error output of the child process.
-    // To avoid issues caused by large error output, we use a circular buffer to limit the amount
-    // of error output that we retain. See SPARK-7862 for more discussion of the deadlock / hang
-    // that motivates this.
-    val stderrBuffer = new CircularBuffer(2048)
-    new RedirectThread(
-      errorStream,
-      stderrBuffer,
-      "Thread-ScriptTransformation-STDERR-Consumer").start()
+    val (outputStream, proc, inputStream, stderrBuffer) = initProc(this.getClass.getSimpleName)
 
     // This nullability is a performance optimization in order to avoid an Option.foreach() call
     // inside of a loop
@@ -183,21 +168,7 @@ case class HiveScriptTransformationExec(
         if (outputSerde == null) {
           val prevLine = curLine
           curLine = reader.readLine()
-          if (!ioschema.schemaLess) {
-            new GenericInternalRow(
-              prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-                .zip(output)
-                .map { case (data, dataType) =>
-                  CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
-                })
-          } else {
-            new GenericInternalRow(
-              prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
-                .zip(output)
-                .map { case (data, dataType) =>
-                  CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
-                })
-          }
+          processOutputWithoutSerde(prevLine, reader)
         } else {
           val raw = outputSerde.deserialize(scriptOutputWritable)
           scriptOutputWritable = null

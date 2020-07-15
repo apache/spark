@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.types._
@@ -47,25 +47,11 @@ case class SparkScriptTransformationExec(
     ioschema: SparkScriptIOSchema)
   extends BaseScriptTransformationExec {
 
-  override def processIterator(inputIterator: Iterator[InternalRow], hadoopConf: Configuration)
-  : Iterator[InternalRow] = {
-    val cmd = List("/bin/bash", "-c", script)
-    val builder = new ProcessBuilder(cmd.asJava)
+  override def processIterator(
+      inputIterator: Iterator[InternalRow],
+      hadoopConf: Configuration): Iterator[InternalRow] = {
 
-    val proc = builder.start()
-    val inputStream = proc.getInputStream
-    val outputStream = proc.getOutputStream
-    val errorStream = proc.getErrorStream
-
-    // In order to avoid deadlocks, we need to consume the error output of the child process.
-    // To avoid issues caused by large error output, we use a circular buffer to limit the amount
-    // of error output that we retain. See SPARK-7862 for more discussion of the deadlock / hang
-    // that motivates this.
-    val stderrBuffer = new CircularBuffer(2048)
-    new RedirectThread(
-      errorStream,
-      stderrBuffer,
-      "Thread-ScriptTransformation-STDERR-Consumer").start()
+    val (outputStream, proc, inputStream, stderrBuffer) = initProc(this.getClass.getSimpleName)
 
     val finalInput = input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
 
@@ -73,9 +59,9 @@ case class SparkScriptTransformationExec(
 
     // This new thread will consume the ScriptTransformation's input rows and write them to the
     // external process. That process's output will be read by this current thread.
-    val writerThread = ScriptTransformationWriterThread(
+    val writerThread = SparkScriptTransformationWriterThread(
       inputIterator.map(outputProjection),
-      input.map(_.dataType),
+      finalInput.map(_.dataType),
       ioschema,
       outputStream,
       proc,
@@ -87,7 +73,6 @@ case class SparkScriptTransformationExec(
     val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
     val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] {
       var curLine: String = null
-      val mutableRow = new SpecificInternalRow(output.map(_.dataType))
 
       override def hasNext: Boolean = {
         try {
@@ -115,21 +100,7 @@ case class SparkScriptTransformationExec(
         }
         val prevLine = curLine
         curLine = reader.readLine()
-        if (!ioschema.schemaLess) {
-          new GenericInternalRow(
-            prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-              .zip(output)
-              .map { case (data, dataType) =>
-                CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
-              })
-        } else {
-          new GenericInternalRow(
-            prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
-              .zip(output)
-              .map { case (data, dataType) =>
-                CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
-              })
-        }
+        processOutputWithoutSerde(prevLine, reader)
       }
     }
 
@@ -139,7 +110,7 @@ case class SparkScriptTransformationExec(
   }
 }
 
-case class ScriptTransformationWriterThread(
+case class SparkScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
     ioSchema: SparkScriptIOSchema,

@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.OutputStream
+import java.io.{BufferedReader, InputStream, OutputStream}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -29,16 +30,21 @@ import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, UnsafeProjection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{CircularBuffer, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
+  def input: Seq[Expression]
+  def script: String
+  def output: Seq[Attribute]
+  def child: SparkPlan
+  def ioschema: BaseScriptTransformIOSchema
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
 
@@ -59,9 +65,48 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     }
   }
 
+  def initProc(name: String): (OutputStream, Process, InputStream, CircularBuffer) = {
+    val cmd = List("/bin/bash", "-c", script)
+    val builder = new ProcessBuilder(cmd.asJava)
+
+    val proc = builder.start()
+    val inputStream = proc.getInputStream
+    val outputStream = proc.getOutputStream
+    val errorStream = proc.getErrorStream
+
+    // In order to avoid deadlocks, we need to consume the error output of the child process.
+    // To avoid issues caused by large error output, we use a circular buffer to limit the amount
+    // of error output that we retain. See SPARK-7862 for more discussion of the deadlock / hang
+    // that motivates this.
+    val stderrBuffer = new CircularBuffer(2048)
+    new RedirectThread(
+      errorStream,
+      stderrBuffer,
+      s"Thread-$name-STDERR-Consumer").start()
+    (outputStream, proc, inputStream, stderrBuffer)
+  }
+
   def processIterator(
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow]
+
+  def processOutputWithoutSerde(prevLine: String, reader: BufferedReader): InternalRow = {
+    if (!ioschema.schemaLess) {
+      new GenericInternalRow(
+        prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+          .zip(output)
+          .map { case (data, dataType) =>
+            CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
+          })
+    } else {
+      new GenericInternalRow(
+        prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
+          .zip(output)
+          .map { case (data, dataType) =>
+            CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
+          })
+    }
+  }
 
   protected def checkFailureAndPropagate(
       writerThread: BaseScriptTransformationWriterThread,
@@ -91,7 +136,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     }
   }
 
-  def wrapper(data: String, dt: DataType): Any = {
+  protected def wrapper(data: String, dt: DataType): Any = {
     dt match {
       case StringType => data
       case ByteType => JavaUtils.stringToBytes(data)
@@ -130,19 +175,12 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
 abstract class BaseScriptTransformationWriterThread extends Thread with Logging {
 
   def iter: Iterator[InternalRow]
-
   def inputSchema: Seq[DataType]
-
   def ioSchema: BaseScriptTransformIOSchema
-
   def outputStream: OutputStream
-
   def proc: Process
-
   def stderrBuffer: CircularBuffer
-
   def taskContext: TaskContext
-
   def conf: Configuration
 
   setDaemon(true)
@@ -219,21 +257,13 @@ abstract class BaseScriptTransformIOSchema extends Serializable {
   import ScriptIOSchema._
 
   def inputRowFormat: Seq[(String, String)]
-
   def outputRowFormat: Seq[(String, String)]
-
   def inputSerdeClass: Option[String]
-
   def outputSerdeClass: Option[String]
-
   def inputSerdeProps: Seq[(String, String)]
-
   def outputSerdeProps: Seq[(String, String)]
-
   def recordReaderClass: Option[String]
-
   def recordWriterClass: Option[String]
-
   def schemaLess: Boolean
 
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
