@@ -94,17 +94,13 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     if (!ioschema.schemaLess) {
       new GenericInternalRow(
         prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-          .zip(output)
-          .map { case (data, dataType) =>
-            CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
-          })
+          .zip(fieldWriters)
+          .map { case (data, writer) => writer(data) })
     } else {
       new GenericInternalRow(
         prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
-          .zip(output)
-          .map { case (data, dataType) =>
-            CatalystTypeConverters.convertToCatalyst(wrapper(data, dataType.dataType))
-          })
+          .zip(fieldWriters)
+          .map { case (data, writer) => writer(data) })
     }
   }
 
@@ -136,38 +132,40 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     }
   }
 
-  protected def wrapper(data: String, dt: DataType): Any = {
-    dt match {
-      case StringType => data
-      case ByteType => JavaUtils.stringToBytes(data)
-      case IntegerType => data.toInt
-      case ShortType => data.toShort
-      case LongType => data.toLong
-      case FloatType => data.toFloat
-      case DoubleType => data.toDouble
-      case dt: DecimalType => BigDecimal(data)
-      case DateType if conf.datetimeJava8ApiEnabled =>
-        DateTimeUtils.stringToDate(
+  private lazy val fieldWriters: Seq[String => Any] = output.map { attr =>
+    val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
+    attr.dataType match {
+      case StringType => (data: String) => converter(data)
+      case ByteType => (data: String) => converter(JavaUtils.stringToBytes(data))
+      case IntegerType => (data: String) => converter(data.toInt)
+      case ShortType => (data: String) => converter(data.toShort)
+      case LongType => (data: String) => converter(data.toLong)
+      case FloatType => (data: String) => converter(data.toFloat)
+      case DoubleType => (data: String) => converter(data.toDouble)
+      case dt: DecimalType => (data: String) => converter(BigDecimal(data))
+      case DateType if conf.datetimeJava8ApiEnabled => (data: String) =>
+        converter(DateTimeUtils.stringToDate(
           UTF8String.fromString(data),
           DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-          .map(DateTimeUtils.daysToLocalDate).orNull
-      case DateType =>
-        DateTimeUtils.stringToDate(
+          .map(DateTimeUtils.daysToLocalDate).orNull)
+      case DateType => (data: String) =>
+        converter(DateTimeUtils.stringToDate(
           UTF8String.fromString(data),
           DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-          .map(DateTimeUtils.toJavaDate).orNull
-      case TimestampType if conf.datetimeJava8ApiEnabled =>
-        DateTimeUtils.stringToTimestamp(
+          .map(DateTimeUtils.toJavaDate).orNull)
+      case TimestampType if conf.datetimeJava8ApiEnabled => (data: String) =>
+        converter(DateTimeUtils.stringToTimestamp(
           UTF8String.fromString(data),
           DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-          .map(DateTimeUtils.microsToInstant).orNull
-      case TimestampType =>
-        DateTimeUtils.stringToTimestamp(
+          .map(DateTimeUtils.microsToInstant).orNull)
+      case TimestampType => (data: String) =>
+        converter(DateTimeUtils.stringToTimestamp(
           UTF8String.fromString(data),
           DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-          .map(DateTimeUtils.toJavaTimestamp).orNull
-      case CalendarIntervalType => IntervalUtils.stringToInterval(UTF8String.fromString(data))
-      case dataType: DataType => data
+          .map(DateTimeUtils.toJavaTimestamp).orNull)
+      case CalendarIntervalType => (data: String) =>
+        converter(IntervalUtils.stringToInterval(UTF8String.fromString(data)))
+      case dataType: DataType => (data: String) => converter(data)
     }
   }
 }
