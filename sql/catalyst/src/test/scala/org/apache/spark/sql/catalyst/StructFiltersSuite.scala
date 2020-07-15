@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class StructFiltersSuite extends SparkFunSuite {
 
-  def createFilters(filters: Seq[sources.Filter], schema: StructType): StructFilters
+  protected def createFilters(filters: Seq[sources.Filter], schema: StructType): StructFilters
 
   test("filter to expression conversion") {
     val ref = BoundReference(0, IntegerType, true)

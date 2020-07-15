@@ -22,7 +22,7 @@ import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 
 class CSVFiltersSuite extends StructFiltersSuite {
-  def createFilters(filters: Seq[sources.Filter], schema: StructType): StructFilters = {
+  override def createFilters(filters: Seq[sources.Filter], schema: StructType): StructFilters = {
     new CSVFilters(filters, schema)
   }
 }
