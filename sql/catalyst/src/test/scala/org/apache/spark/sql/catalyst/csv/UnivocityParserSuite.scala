@@ -303,6 +303,20 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       requiredSchema = StructType.fromDDL("i INTEGER, d DOUBLE"),
       filters = Seq(EqualTo("d", 3.14)),
       expected = Some(InternalRow(1, 3.14)))
+
+    val errMsg = intercept[IllegalArgumentException] {
+      check(filters = Seq(EqualTo("invalid attr", 1)), expected = None)
+    }.getMessage
+    assert(errMsg.contains("invalid attr does not exist"))
+
+    val errMsg2 = intercept[IllegalArgumentException] {
+      check(
+        dataSchema = new StructType(),
+        requiredSchema = new StructType(),
+        filters = Seq(EqualTo("i", 1)),
+        expected = Some(InternalRow.empty))
+    }.getMessage
+    assert(errMsg2.contains("i does not exist"))
   }
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {
