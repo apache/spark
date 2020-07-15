@@ -15,9 +15,15 @@
 # limitations under the License.
 #
 
+import sys
+
+if sys.version >= '3':
+    basestring = unicode = str
+
 from py4j.java_gateway import JavaClass
 
 from pyspark import RDD, since
+from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
 from pyspark.sql import utils
@@ -88,7 +94,7 @@ class DataFrameReader(OptionUtils):
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
-        elif isinstance(schema, str):
+        elif isinstance(schema, basestring):
             self._jreader = self._jreader.schema(schema)
         else:
             raise TypeError("schema should be StructType or string")
@@ -114,6 +120,10 @@ class DataFrameReader(OptionUtils):
             * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
                 the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
                 It does not change the behavior of partition discovery.
+            * ``modifiedDateFilter``: an optional timestamp to only include files with
+                modification dates occurring after the specified time.  The provided timestamp
+                must be in the following form:  YYYY-MM-DDTHH:mm:ss
+                Example: 2020-06-01T13:00:00
         """
         self._jreader = self._jreader.option(key, to_str(value))
         return self
@@ -138,6 +148,10 @@ class DataFrameReader(OptionUtils):
             * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
                 the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
                 It does not change the behavior of partition discovery.
+            * ``modifiedDateFilter``: an optional timestamp to only include files with
+                modification dates occurring after the specified time.  The provided timestamp
+                must be in the following form:  YYYY-MM-DDTHH:mm:ss
+                Example: 2020-06-01T13:00:00
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
@@ -168,7 +182,7 @@ class DataFrameReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if isinstance(path, str):
+        if isinstance(path, basestring):
             return self._df(self._jreader.load(path))
         elif path is not None:
             if type(path) != list:
@@ -184,7 +198,7 @@ class DataFrameReader(OptionUtils):
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
              dropFieldIfAllNull=None, encoding=None, locale=None, pathGlobFilter=None,
-             recursiveFileLookup=None):
+             recursiveFileLookup=None, modifiedDateFilter=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -262,6 +276,10 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
+        :param modifiedDateFilter: an optional timestamp to only include files with
+               modification dates occurring after the specified time.  The provided timestamp
+               must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
+               Example: `2020-06-01T13:00:00`
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -287,17 +305,18 @@ class DataFrameReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
             samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, str):
+            locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            modifiedDateFilter=modifiedDateFilter)
+        if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             def func(iterator):
                 for x in iterator:
-                    if not isinstance(x, str):
-                        x = str(x)
-                    if isinstance(x, str):
+                    if not isinstance(x, basestring):
+                        x = unicode(x)
+                    if isinstance(x, unicode):
                         x = x.encode("utf-8")
                     yield x
             keyed = path.mapPartitions(func)
@@ -332,6 +351,10 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
+        :param modifiedDateFilter: an optional timestamp to only include files with
+               modification dates occurring after the specified time.  The provided timestamp
+               must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
+               Example: `2020-06-01T13:00:00`
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -339,16 +362,20 @@ class DataFrameReader(OptionUtils):
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
+
         mergeSchema = options.get('mergeSchema', None)
         pathGlobFilter = options.get('pathGlobFilter', None)
+        modifiedDateFilter = options.get('modifiedDateFilter', None)
         recursiveFileLookup = options.get('recursiveFileLookup', None)
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup)
+                       recursiveFileLookup=recursiveFileLookup,
+                       modifiedDateFilter=modifiedDateFilter)
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
+    @ignore_unicode_prefix
     @since(1.6)
     def text(self, paths, wholetext=False, lineSep=None, pathGlobFilter=None,
-             recursiveFileLookup=None):
+             recursiveFileLookup=None, modifiedDateFilter=None):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -364,20 +391,25 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
+        :param modifiedDateFilter: an optional timestamp to only include files with
+               modification dates occurring after the specified time.  The provided timestamp
+               must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
+               Example: `2020-06-01T13:00:00`
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
-        [Row(value='hello'), Row(value='this')]
+        [Row(value=u'hello'), Row(value=u'this')]
         >>> df = spark.read.text('python/test_support/sql/text-test.txt', wholetext=True)
         >>> df.collect()
-        [Row(value='hello\\nthis')]
+        [Row(value=u'hello\\nthis')]
         """
+
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
-            recursiveFileLookup=recursiveFileLookup)
-        if isinstance(paths, str):
+            recursiveFileLookup=recursiveFileLookup, modifiedDateFilter=modifiedDateFilter)
+        if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
@@ -389,7 +421,7 @@ class DataFrameReader(OptionUtils):
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             samplingRatio=None, enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
-            pathGlobFilter=None, recursiveFileLookup=None):
+            pathGlobFilter=None, recursiveFileLookup=None, modifiedDateFilter=None):
         r"""Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -499,6 +531,10 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
+        :param modifiedDateFilter: an optional timestamp to only include files with
+               modification dates occurring after the specified time.  The provided timestamp
+               must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
+               Example: `2020-06-01T13:00:00`
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -510,6 +546,7 @@ class DataFrameReader(OptionUtils):
         >>> df2.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
         """
+
         self._set_opts(
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
@@ -521,17 +558,18 @@ class DataFrameReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
             enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, str):
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            modifiedDateFilter=modifiedDateFilter)
+        if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             def func(iterator):
                 for x in iterator:
-                    if not isinstance(x, str):
-                        x = str(x)
-                    if isinstance(x, str):
+                    if not isinstance(x, basestring):
+                        x = unicode(x)
+                    if isinstance(x, unicode):
                         x = x.encode("utf-8")
                     yield x
             keyed = path.mapPartitions(func)
@@ -549,7 +587,8 @@ class DataFrameReader(OptionUtils):
             raise TypeError("path can be only string, list or RDD")
 
     @since(1.5)
-    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
+    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None,
+            modifiedDateFilter=None):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
         :param mergeSchema: sets whether we should merge schemas collected from all
@@ -558,6 +597,10 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
+        :param modifiedDateFilter: an optional timestamp to only include files with
+               modification dates occurring after the specified time.  The provided timestamp
+               must be in the following form:  `YYYY-MM-DDTHH:mm:ss`
+               Example: `2020-06-01T13:00:00`
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
@@ -566,8 +609,9 @@ class DataFrameReader(OptionUtils):
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, str):
+                       recursiveFileLookup=recursiveFileLookup,
+                       modifiedDateFilter=modifiedDateFilter)
+        if isinstance(path, basestring):
             path = [path]
         return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
 
@@ -756,7 +800,7 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]
 
-        if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
+        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
@@ -781,7 +825,7 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]
 
-        if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
+        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.sortBy(col, _to_seq(self._spark._sc, cols))
@@ -895,6 +939,7 @@ class DataFrameWriter(OptionUtils):
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
+
         self.mode(mode)
         self._set_opts(
             compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
@@ -1041,6 +1086,7 @@ class DataFrameWriter(OptionUtils):
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
+
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
