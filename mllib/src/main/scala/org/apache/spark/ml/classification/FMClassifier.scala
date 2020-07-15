@@ -30,7 +30,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Vector => OldVector}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -212,14 +212,34 @@ class FMClassifier @Since("3.0.0") (
 
     if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val coefficients = trainImpl(data, numFeatures, LogisticLoss)
+    val (coefficients, objectiveHistory) = trainImpl(data, numFeatures, LogisticLoss)
 
     val (intercept, linear, factors) = splitCoefficients(
       coefficients, numFeatures, $(factorSize), $(fitIntercept), $(fitLinear))
 
     if (handlePersistence) data.unpersist()
 
-    copyValues(new FMClassificationModel(uid, intercept, linear, factors))
+    createModel(dataset, intercept, linear, factors, objectiveHistory)
+  }
+
+  private def createModel(
+    dataset: Dataset[_],
+    intercept: Double,
+    linear: Vector,
+    factors: Matrix,
+    objectiveHistory: Array[Double]): FMClassificationModel = {
+    val model = copyValues(new FMClassificationModel(uid, intercept, linear, factors))
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
+
+    val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
+    val summary = new FMClassificationTrainingSummaryImpl(
+      summaryModel.transform(dataset),
+      probabilityColName,
+      predictionColName,
+      $(labelCol),
+      weightColName,
+      objectiveHistory)
+    model.setSummary(Some(summary))
   }
 
   @Since("3.0.0")
@@ -243,13 +263,35 @@ class FMClassificationModel private[classification] (
   @Since("3.0.0") val linear: Vector,
   @Since("3.0.0") val factors: Matrix)
   extends ProbabilisticClassificationModel[Vector, FMClassificationModel]
-    with FMClassifierParams with MLWritable {
+    with FMClassifierParams with MLWritable
+    with HasTrainingSummary[FMClassificationTrainingSummary]{
 
   @Since("3.0.0")
   override val numClasses: Int = 2
 
   @Since("3.0.0")
   override val numFeatures: Int = linear.size
+
+  /**
+   * Gets summary of model on training set. An exception is thrown
+   * if `hasSummary` is false.
+   */
+  @Since("3.1.0")
+  override def summary: FMClassificationTrainingSummary = super.summary
+
+  /**
+   * Evaluates the model on a test dataset.
+   *
+   * @param dataset Test dataset to evaluate model on.
+   */
+  @Since("3.1.0")
+  def evaluate(dataset: Dataset[_]): FMClassificationSummary = {
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
+    // Handle possible missing or invalid probability or prediction columns
+    val (summaryModel, probability, predictionColName) = findSummaryModel()
+    new FMClassificationSummaryImpl(summaryModel.transform(dataset),
+      probability, predictionColName, $(labelCol), weightColName)
+  }
 
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
@@ -328,3 +370,53 @@ object FMClassificationModel extends MLReadable[FMClassificationModel] {
     }
   }
 }
+
+/**
+ * Abstraction for FMClassifier results for a given model.
+ */
+sealed trait FMClassificationSummary extends BinaryClassificationSummary
+
+/**
+ * Abstraction for FMClassifier training results.
+ */
+sealed trait FMClassificationTrainingSummary extends FMClassificationSummary with TrainingSummary
+
+/**
+ * FMClassifier results for a given model.
+ *
+ * @param predictions dataframe output by the model's `transform` method.
+ * @param scoreCol field in "predictions" which gives the probability of each instance.
+ * @param predictionCol field in "predictions" which gives the prediction for a data instance as a
+ *                      double.
+ * @param labelCol field in "predictions" which gives the true label of each instance.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
+ */
+private class FMClassificationSummaryImpl(
+    @transient override val predictions: DataFrame,
+    override val scoreCol: String,
+    override val predictionCol: String,
+    override val labelCol: String,
+    override val weightCol: String)
+  extends FMClassificationSummary
+
+/**
+ * FMClassifier training results.
+ *
+ * @param predictions dataframe output by the model's `transform` method.
+ * @param scoreCol field in "predictions" which gives the probability of each instance.
+ * @param predictionCol field in "predictions" which gives the prediction for a data instance as a
+ *                      double.
+ * @param labelCol field in "predictions" which gives the true label of each instance.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
+ * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
+ */
+private class FMClassificationTrainingSummaryImpl(
+    predictions: DataFrame,
+    scoreCol: String,
+    predictionCol: String,
+    labelCol: String,
+    weightCol: String,
+    override val objectiveHistory: Array[Double])
+  extends FMClassificationSummaryImpl(
+    predictions, scoreCol, predictionCol, labelCol, weightCol)
+    with FMClassificationTrainingSummary

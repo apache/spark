@@ -677,7 +677,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whitelist of all [[UnaryNode]]s for which allow foldable propagation.
+   * List of all [[UnaryNode]]s which allow foldable propagation.
    */
   private def canPropagateFoldables(u: UnaryNode): Boolean = u match {
     case _: Project => true
@@ -765,7 +765,7 @@ object CombineConcats extends Rule[LogicalPlan] {
           flattened += child
       }
     }
-    Concat(flattened)
+    Concat(flattened.toSeq)
   }
 
   private def hasNestedConcats(concat: Concat): Boolean = concat.children.exists {

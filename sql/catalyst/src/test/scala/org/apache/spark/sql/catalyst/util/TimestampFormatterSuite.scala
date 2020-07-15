@@ -288,14 +288,14 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zoneId.getId) {
           withDefaultTimeZone(zoneId) {
             withClue(s"zoneId = ${zoneId.getId}") {
-              val formatters = LegacyDateFormats.values.map { legacyFormat =>
+              val formatters = LegacyDateFormats.values.toSeq.map { legacyFormat =>
                 TimestampFormatter(
                   TimestampFormatter.defaultPattern,
                   zoneId,
                   TimestampFormatter.defaultLocale,
                   legacyFormat,
                   isParsing = false)
-              }.toSeq :+ TimestampFormatter.getFractionFormatter(zoneId)
+              } :+ TimestampFormatter.getFractionFormatter(zoneId)
               formatters.foreach { formatter =>
                 assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
                   .atZone(zoneId)

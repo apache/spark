@@ -678,6 +678,13 @@ object MapObjects {
       elementType: DataType,
       elementNullable: Boolean = true,
       customCollectionCls: Option[Class[_]] = None): MapObjects = {
+    // UnresolvedMapObjects does not serialize its 'function' field.
+    // If an array expression or array Encoder is not correctly resolved before
+    // serialization, this exception condition may occur.
+    require(function != null,
+      "MapObjects applied with a null function. " +
+      "Likely cause is failure to resolve an array expression or encoder. " +
+      "(See UnresolvedMapObjects)")
     val loopVar = LambdaVariable("MapObject", elementType, elementNullable)
     MapObjects(loopVar, function(loopVar), inputData, customCollectionCls)
   }
@@ -734,7 +741,7 @@ case class MapObjects private(
     case ObjectType(cls) if cls.isArray =>
       _.asInstanceOf[Array[_]].toSeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
-      _.asInstanceOf[java.util.List[_]].asScala
+      _.asInstanceOf[java.util.List[_]].asScala.toSeq
     case ObjectType(cls) if cls == classOf[Object] =>
       (inputCollection) => {
         if (inputCollection.getClass.isArray) {

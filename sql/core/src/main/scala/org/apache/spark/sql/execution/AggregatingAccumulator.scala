@@ -257,16 +257,16 @@ object AggregatingAccumulator {
         imperative
     })
 
-    val updateAttrSeq: AttributeSeq = aggBufferAttributes ++ inputAttributes
-    val mergeAttrSeq: AttributeSeq = aggBufferAttributes ++ inputAggBufferAttributes
-    val aggBufferAttributesSeq: AttributeSeq = aggBufferAttributes
+    val updateAttrSeq: AttributeSeq = (aggBufferAttributes ++ inputAttributes).toSeq
+    val mergeAttrSeq: AttributeSeq = (aggBufferAttributes ++ inputAggBufferAttributes).toSeq
+    val aggBufferAttributesSeq: AttributeSeq = aggBufferAttributes.toSeq
 
     // Create the accumulator.
     new AggregatingAccumulator(
-      aggBufferAttributes.map(_.dataType),
-      initialValues,
-      updateExpressions.map(BindReferences.bindReference(_, updateAttrSeq)),
-      mergeExpressions.map(BindReferences.bindReference(_, mergeAttrSeq)),
+      aggBufferAttributes.map(_.dataType).toSeq,
+      initialValues.toSeq,
+      updateExpressions.map(BindReferences.bindReference(_, updateAttrSeq)).toSeq,
+      mergeExpressions.map(BindReferences.bindReference(_, mergeAttrSeq)).toSeq,
       resultExpressions.map(BindReferences.bindReference(_, aggBufferAttributesSeq)),
       imperatives.toArray,
       typedImperatives.toArray,

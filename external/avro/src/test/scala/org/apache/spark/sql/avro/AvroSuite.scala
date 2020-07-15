@@ -39,9 +39,10 @@ import org.apache.spark.sql.TestingUDT.IntervalData
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1808,7 +1809,7 @@ class AvroV1Suite extends AvroSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 }
 
-class AvroV2Suite extends AvroSuite {
+class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
   import testImplicits._
 
   override protected def sparkConf: SparkConf =
@@ -1905,6 +1906,34 @@ class AvroV2Suite extends AvroSuite {
       val scan1 = getBatchScanExec(plan1)
       val scan2 = getBatchScanExec(plan2)
       assert(scan1.sameResult(scan2))
+    }
+  }
+
+  test("explain formatted on an avro data source v2") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath + "/avro"
+      val expected_plan_fragment =
+        s"""
+           |\\(1\\) BatchScan
+           |Output \\[2\\]: \\[value#xL, id#x\\]
+           |DataFilters: \\[isnotnull\\(value#xL\\), \\(value#xL > 2\\)\\]
+           |Format: avro
+           |Location: InMemoryFileIndex\\[.*\\]
+           |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
+           |ReadSchema: struct\\<value:bigint\\>
+           |""".stripMargin.trim
+      spark.range(10)
+        .select(col("id"), col("id").as("value"))
+        .write.option("header", true)
+        .partitionBy("id")
+        .format("avro")
+        .save(basePath)
+      val df = spark
+        .read
+        .format("avro")
+        .load(basePath).where($"id" > 1 && $"value" > 2)
+      val normalizedOutput = getNormalizedExplain(df, FormattedMode)
+      assert(expected_plan_fragment.r.findAllMatchIn(normalizedOutput).length == 1)
     }
   }
 }
