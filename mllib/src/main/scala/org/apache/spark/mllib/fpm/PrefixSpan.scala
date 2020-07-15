@@ -335,7 +335,7 @@ object PrefixSpan extends Logging {
       largePrefixes = newLargePrefixes
     }
 
-    var freqPatterns = sc.parallelize(localFreqPatterns, 1)
+    var freqPatterns = sc.parallelize(localFreqPatterns.toSeq, 1)
 
     val numSmallPrefixes = smallPrefixes.size
     logInfo(s"number of small prefixes for local processing: $numSmallPrefixes")
