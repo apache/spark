@@ -127,11 +127,11 @@ case class OrcPartitionReaderFactory(
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader
     } else {
-      val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
+      val (requestedDataColIds, canPruneCols) = resultedColPruneInfo.get
       val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
         dataSchema, resultSchema, partitionSchema, conf)
-      val requestedDataColIds = requestedColIds ++ Array.fill(partitionSchema.length)(-1)
-      assert(requestedDataColIds.length == resultSchema.length,
+      val requestedColIds = requestedDataColIds ++ Array.fill(partitionSchema.length)(-1)
+      assert(requestedColIds.length == resultSchema.length,
         "[BUG] requested column IDs do not match required schema")
       val taskConf = new Configuration(conf)
 
@@ -147,7 +147,7 @@ case class OrcPartitionReaderFactory(
       batchReader.initBatch(
         TypeDescription.fromString(resultSchemaString),
         resultSchema.fields,
-        requestedDataColIds,
+        requestedColIds,
         requestedPartitionColIds,
         file.partitionValues)
       new PartitionRecordReader(batchReader)
