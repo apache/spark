@@ -2199,19 +2199,23 @@ object SQLConf {
   val SKIP_PARTIAL_AGGREGATE_ENABLED =
     buildConf("spark.sql.aggregate.partialaggregate.skip.enabled")
       .internal()
-      .doc("Avoid sort/spill to disk during partial aggregation")
+      .doc("Avoid sorter(sort/spill) during partial aggregation")
       .booleanConf
       .createWithDefault(true)
 
   val SKIP_PARTIAL_AGGREGATE_THRESHOLD =
     buildConf("spark.sql.aggregate.partialaggregate.skip.threshold")
       .internal()
+      .doc("Number of records after which aggregate operator checks if " +
+        "partial aggregation phase can be avoided")
       .longConf
       .createWithDefault(100000)
 
-  val SKIP_PARTIAL_AGGREGATE_RATIO =
+  val SKIP_PARTIAL_AGGREGATE_REDUCTION_RATIO =
     buildConf("spark.sql.aggregate.partialaggregate.skip.ratio")
       .internal()
+      .doc("Ratio of number of records present in map of Aggregate operator" +
+        "to the total number of records processed by the Aggregate operator")
       .doubleConf
       .createWithDefault(0.5)
 
@@ -2945,7 +2949,7 @@ class SQLConf extends Serializable with Logging {
 
   def skipPartialAggregateThreshold: Long = getConf(SKIP_PARTIAL_AGGREGATE_THRESHOLD)
 
-  def skipPartialAggregateRatio: Double = getConf(SKIP_PARTIAL_AGGREGATE_RATIO)
+  def skipPartialAggregateRatio: Double = getConf(SKIP_PARTIAL_AGGREGATE_REDUCTION_RATIO)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 

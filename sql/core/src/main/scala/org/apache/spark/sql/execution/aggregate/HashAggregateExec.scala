@@ -943,7 +943,7 @@ case class HashAggregateExec(
       def getHeuristicToAvoidAgg: String = {
         s"""
           |!($rowCountTerm < $skipPartialAggregateThreshold) &&
-          |      ($countTerm/$rowCountTerm) > $skipPartialAggRatio;
+          |      ((float)$countTerm/$rowCountTerm) > $skipPartialAggRatio;
           |""".stripMargin
       }
 
