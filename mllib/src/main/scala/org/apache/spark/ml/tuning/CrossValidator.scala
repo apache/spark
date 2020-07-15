@@ -71,6 +71,19 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
   def getFoldCol: String = $(foldCol)
 
   setDefault(foldCol, "")
+
+  /**
+   * Param for the method by which to perform cross-validation. Options are "kfold", to perform
+   * k-fold cross-validation, or "rrss", to perform repeated random sub-sampling validation.
+   * Setting the method to "kfold" will parallelize training across models and folds, while setting
+   * it to "rrss" will only parallelize across models and will train each fold in series.
+   */
+  val method: Param[String] = new Param[String](this, "method",
+    "the type of cross-validation to perform")
+
+  def getMethod: String = $(method)
+
+  setDefault(method, "rrss")
 }
 
 /**
@@ -113,6 +126,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("3.1.0")
   def setFoldCol(value: String): this.type = set(foldCol, value)
 
+  /** @group setParam */
+  @Since("3.1.0")
+  def setMethod(value: String): this.type = set(method, value)
+
   /**
    * Set the maximum level of parallelism to evaluate models in parallel.
    * Default is 1 for serial evaluation
@@ -139,6 +156,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CrossValidatorModel = instrumented { instr =>
+    if ($(method) != "kfold" && $(method) != "rrss") {
+      throw new IllegalArgumentException("Value for method parameter is not recognized.")
+    }
+
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sparkSession = dataset.sparkSession
@@ -160,60 +181,111 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       Some(Array.fill($(numFolds))(Array.ofDim[Model[_]](epm.length)))
     } else None
 
-    val datasetWithSchema = sparkSession.sqlContext.createDataFrame(
-      dataset.rdd.map(_.asInstanceOf[Row]), schema)
+    if ($(method) == "kfold") {
+      val datasetWithSchema = sparkSession.sqlContext.createDataFrame(
+        dataset.rdd.map(_.asInstanceOf[Row]), schema)
 
-    // Get splits and cache
-    val splits = if ($(foldCol) == "") {
-      val splitsArray = Array.fill($(numFolds))(1.0)
-      // Data splitting is seeded to make fitting deterministic
-      datasetWithSchema.randomSplit(splitsArray, seed = 11L)
-    } else {
-      val foldColValues = datasetWithSchema.select($(foldCol)).distinct().collect().flatMap(_.toSeq)
-      foldColValues.map(v => datasetWithSchema.where(col($(foldCol)) <=> v))
-    }.map(_.cache())
+      // Get splits and cache
+      val splits = if ($(foldCol) == "") {
+        val splitsArray = Array.fill($(numFolds))(1.0)
+        // Data splitting is seeded to make fitting deterministic
+        datasetWithSchema.randomSplit(splitsArray, seed = 11L)
+      } else {
+        val foldColValues = datasetWithSchema
+          .select($(foldCol))
+          .distinct()
+          .collect()
+          .flatMap(_.toSeq)
+        foldColValues.map(v => datasetWithSchema.where(col($(foldCol)) <=> v))
+      }.map(_.cache())
 
-    // Create futures for each combination of model and split
-    val metricFutures = (0 until $(numFolds)).toArray.flatMap { splitIndex =>
-      epm.zipWithIndex.map { case (paramMap, paramIndex) =>
-        Future[(Int, Double)] {
-          // Union all splits except the one used for validation
-          val trainingDataset = splits
-            .zipWithIndex
-            .filter(_._2 != splitIndex)
-            .map(_._1)
-            .reduce(_ union _)
-          val validationDataset = splits(splitIndex)
-          val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
-          if (collectSubModelsParam) {
-            subModels.get(splitIndex)(paramIndex) = model
-          }
-          // TODO: duplicate evaluator to take extra params from input
-          val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-          instr.logDebug(s"Got metric $metric for model trained with $paramMap.")
-          (paramIndex, metric)
-        } (executionContext)
+      // Create futures for each combination of model and split
+      val metricFutures = (0 until $(numFolds)).toArray.flatMap { splitIndex =>
+        epm.zipWithIndex.map { case (paramMap, paramIndex) =>
+          Future[(Int, Double)] {
+            // Union all splits except the one used for validation
+            val trainingDataset = splits
+              .zipWithIndex
+              .filter(_._2 != splitIndex)
+              .map(_._1)
+              .reduce(_ union _)
+            val validationDataset = splits(splitIndex)
+            val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
+            if (collectSubModelsParam) {
+              subModels.get(splitIndex)(paramIndex) = model
+            }
+            // TODO: duplicate evaluator to take extra params from input
+            val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+            instr.logDebug(s"Got metric $metric for model trained with $paramMap.")
+            (paramIndex, metric)
+          }(executionContext)
+        }
       }
+
+      // Wait for metrics to be calculated
+      val metrics = metricFutures
+        .map(ThreadUtils.awaitResult(_, Duration.Inf))
+        .groupBy(_._1)
+        .mapValues(_.map(_._2).sum / $(numFolds))
+
+      // Unpersist splits once all metrics have been produced
+      splits.map(_.unpersist())
+
+      instr.logInfo(s"Average cross-validation metrics: ${metrics.values.toSeq}")
+      val (bestIndex, bestMetric) =
+        if (eval.isLargerBetter) metrics.maxBy(_._2)
+        else metrics.minBy(_._2)
+      instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
+      instr.logInfo(s"Best cross-validation metric: $bestMetric.")
+      val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
+      copyValues(new CrossValidatorModel(uid, bestModel, metrics.values.toArray)
+        .setSubModels(subModels).setParent(this))
+    } else {
+      // Compute metrics for each model over each split
+      val (splits, schemaWithoutFold) = if ($(foldCol) == "") {
+        (MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed)), schema)
+      } else {
+        val filteredSchema = StructType(schema.filter(_.name != $(foldCol)).toArray)
+        (MLUtils.kFold(dataset.toDF, $(numFolds), $(foldCol)), filteredSchema)
+      }
+      val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
+        val trainingDataset = sparkSession.createDataFrame(training, schemaWithoutFold).cache()
+        val validationDataset = sparkSession.createDataFrame(validation, schemaWithoutFold).cache()
+        instr.logDebug(s"Train split $splitIndex with multiple sets of parameters.")
+
+        // Fit models in a Future for training in parallel
+        val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
+          Future[Double] {
+            val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
+            if (collectSubModelsParam) {
+              subModels.get(splitIndex)(paramIndex) = model
+            }
+            // TODO: duplicate evaluator to take extra params from input
+            val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+            instr.logDebug(s"Got metric $metric for model trained with $paramMap.")
+            metric
+          }(executionContext)
+        }
+
+        // Wait for metrics to be calculated
+        val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+
+        // Unpersist training & validation set once all metrics have been produced
+        trainingDataset.unpersist()
+        validationDataset.unpersist()
+        foldMetrics
+      }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
+
+      instr.logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
+      val (bestMetric, bestIndex) =
+        if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
+        else metrics.zipWithIndex.minBy(_._1)
+      instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
+      instr.logInfo(s"Best cross-validation metric: $bestMetric.")
+      val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
+      copyValues(new CrossValidatorModel(uid, bestModel, metrics)
+        .setSubModels(subModels).setParent(this))
     }
-
-    // Wait for metrics to be calculated
-    val metrics = metricFutures
-      .map(ThreadUtils.awaitResult(_, Duration.Inf))
-      .groupBy(_._1)
-      .mapValues(_.map(_._2).sum / $(numFolds))
-
-    // Unpersist splits once all metrics have been produced
-    splits.map(_.unpersist())
-
-    instr.logInfo(s"Average cross-validation metrics: ${metrics.values.toSeq}")
-    val (bestIndex, bestMetric) =
-      if (eval.isLargerBetter) metrics.maxBy(_._2)
-      else metrics.minBy(_._2)
-    instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
-    instr.logInfo(s"Best cross-validation metric: $bestMetric.")
-    val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
-    copyValues(new CrossValidatorModel(uid, bestModel, metrics.values.toArray)
-      .setSubModels(subModels).setParent(this))
   }
 
   @Since("1.4.0")
