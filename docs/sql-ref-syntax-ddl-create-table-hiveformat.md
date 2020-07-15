@@ -27,18 +27,18 @@ The `CREATE TABLE` statement defines a new table using Hive format.
 
 ```sql
 CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
-    [ ( col_name1[:] col_type1 [ COMMENT col_comment1 ], ... ) ]
+    [ ( col_name1[ : ] col_type1 [ COMMENT col_comment1 ], ... ) ]
     [ COMMENT table_comment ]
-    [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) 
+    [ PARTITIONED BY ( col_name2[ : ] col_type2 [ COMMENT col_comment2 ], ... ) 
         | ( col_name1, col_name2, ... ) ]
     [ ROW FORMAT row_format ]
     [ STORED AS file_format ]
     [ LOCATION path ]
-    [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
+    [ TBLPROPERTIES ( key1 = val1, key2 = val2, ... ) ]
     [ AS select_statement ]
 
 row_format:    
-   : SERDE serde_class [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...) ]
+   : SERDE serde_class [WITH SERDEPROPERTIES (k1 = v1, k2 = v2, ...) ]
    | DELIMITED [ FIELDS TERMINATED BY fields_termiated_char [ ESCAPED BY escaped_char] ] 
                [ COLLECTION ITEMS TERMINATED BY collection_items_termiated_char ] 
                [ MAP KEYS TERMINATED BY map_key_termiated_char ]
@@ -59,7 +59,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **EXTERNAL**
 
-    Table is defined using the path provided as LOCATION, does not use default location for this table.
+    Table is defined using the path provided as `LOCATION`, does not use default location for this table.
 
 * **PARTITIONED BY**
 
@@ -67,7 +67,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     
 * **row_format**    
 
-    Use the SERDE clause to specify a custom SerDe for one table. Otherwise, use the DELIMITED clause to use the native SerDe and specify the delimiter, escape character, null character, and so on.
+    Use the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character, and so on.
     
 * **SERDE**
 
@@ -143,12 +143,12 @@ CREATE TABLE student_copy STORED AS ORC
 CREATE TABLE student (id INT, name STRING, age INT)
     COMMENT 'this is a comment'
     STORED AS ORC
-    TBLPROPERTIES ('foo'='bar');  
+    TBLPROPERTIES ('foo' = 'bar');  
 
 --Specify table comment and properties with different clauses order
 CREATE TABLE student (id INT, name STRING, age INT)
     STORED AS ORC
-    TBLPROPERTIES ('foo'='bar')
+    TBLPROPERTIES ('foo' = 'bar')
     COMMENT 'this is a comment';
 
 --Create partitioned table
@@ -162,7 +162,7 @@ CREATE TABLE student (id INT, name STRING)
     PARTITIONED BY (age INT);
 
 --Use Row Format and file format
-CREATE TABLE student (id INT,name STRING)
+CREATE TABLE student (id INT, name STRING)
     ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
     STORED AS TEXTFILE;
 
@@ -171,7 +171,7 @@ CREATE EXTERNAL TABLE family(
     name STRING,
     friends ARRAY<STRING>,
     children MAP<STRING, INT>,
-    address STRUCT<street:STRING, city:STRING>
+    address STRUCT<street: STRING, city: STRING>
     )
     ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' ESCAPED BY '\\'
     COLLECTION ITEMS TERMINATED BY '_'
@@ -185,19 +185,19 @@ CREATE EXTERNAL TABLE family(
 CREATE TABLE avroExample
     ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
     STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
-               OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
     TBLPROPERTIES ('avro.schema.literal'='{ "namespace": "org.apache.hive",
-                                         "name": "first_schema",
-                                         "type": "record",
-                                         "fields": [ { "name":"string1", "type":"string" },
-                                                     { "name":"string2", "type":"string" }
-                                                   ] }');
+        "name": "first_schema",
+        "type": "record",
+        "fields": [ { "name":"string1", "type":"string" },
+            { "name":"string2", "type":"string" }
+            ] }');
 
 --Use custom serde(need load the class first)
-CREATE EXTERNAL TABLE family (id INT,name STRING)
+CREATE EXTERNAL TABLE family (id INT, name STRING)
     ROW FORMAT SERDE 'com.ly.spark.serde.SerDeExample'
     STORED AS INPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleInputFormat'
-               OUTPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleOutputFormat'
+        OUTPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleOutputFormat'
     LOCATION '/tmp/family/';
 ```
 

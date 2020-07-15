@@ -43,9 +43,21 @@ While `select_statement` is defined as
 ```sql
 SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
     FROM { from_item [ , ...] }
+    [ `PIVOT` clause ]
+    [ LATERAL VIEW clause ] [ ... ] 
     [ WHERE boolean_expression ]
     [ GROUP BY expression [ , ...] ]
     [ HAVING boolean_expression ]
+```
+
+While `PIVOT clause` is defined as
+```
+PIVOT ( { group_expression [ AS group_expression_alias ] } [ , ... ] FOR column_list IN ( expression_list ) )
+```
+
+While `LATERAL VIEW clause` is defined as
+```
+LATERAL VIEW [ OUTER ] { udtf_expression [ table_alias ] AS column_alias [ , ... ] } [ ... ]
 ```
 
 ### Parameters
@@ -78,8 +90,6 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
  * **FROM**
 
      Specific the data set to be selected.
-     
-     **Syntax:** `FROM` `from_item`  [ LATERAL VIEW Clause ] [ ... ] [ PIVOT Clause ] 
 
  * **from_item**
 
@@ -89,8 +99,14 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
      * Subquery
+     
+  * **PIVOT**
+     `PIVOT` clause is used for data perspective, we can get the aggregated values based on specific column value.
 
-
+ * **LATERAL VIEW**
+     
+     `LATERAL VIEW` clause  is used in conjunction with user-defined table generating functions such as explode(), a UDTF generates zero or more output rows foreach input row. A lateral view first applies the UDTF to each row of base table and then joins resulting output rows to the input rows to form a virtual table having the supplied table alias.
+ 
  * **WHERE**
 
      Filters the result of the FROM clause based on the supplied predicates.

@@ -21,21 +21,20 @@ license: |
 
 ### Description
 
-`LATERAL VIEW` clause  is used in conjunction with user-defined table generating functions such as explode(), a UDTF generates zero or more output rows foreach input row. A lateral view first applies the UDTF to each row of base table and then joins resulting output rows to the input rows to form a virtual table having the supplied table alias.
- 
+`LATERAL VIEW` clause is used in conjunction with UDTF such as explode(), which will generate a vitual table containing one or more rows. `LATERAL VIEW` will  apply the rows to each original output rows.
 
 ### Syntax
 
 ```sql
-LATERAL VIEW [ OUTER ] { udtf_Expression [ table_Alias ] AS column_alias [ , ... ] } [ ... ]
+LATERAL VIEW [ OUTER ] { udtf_expression [ table_alias ] AS column_alias [ , ... ] } [ ... ]
 ```
 
 ### Parameters
 
 * **OUTER**
 
-    If `LATERAL VIEW` is used without `OUTER`, and `udtf_Expression` return empty, then no results will be output in select.
-    If `LATERAL VIEW` is used with `OUTER`, and `udtf_Expression` return empty, then results will be output normally with `NULL` as `udtf_Expression` output.  .
+    If `LATERAL VIEW` is used without `OUTER`, and `udtf_expression` return empty, then no results will be output in select.
+    If `LATERAL VIEW` is used with `OUTER`, and `udtf_expression` return empty, then results will be output normally with `NULL` as `udtf_expression` output.  .
     
 * **udtf_Expression**
 
@@ -43,11 +42,11 @@ LATERAL VIEW [ OUTER ] { udtf_Expression [ table_Alias ] AS column_alias [ , ...
     
 * **table_Alias**
 
-    It is the alias for `udtf_Expression`, which is optional.
+    It is the alias for `udtf_expression`, which is optional.
      
 * **column_alias**
 
-    It lists the column alias of `udtf_Expression`, which may be used in output rows, we may have multiple alias if `udtf_Expression` have multiple output columns.
+    It lists the column alias of `udtf_expression`, which may be used in output rows, we may have multiple alias if `udtf_expression` have multiple output columns.
          
 ### Examples
 
@@ -57,11 +56,11 @@ INSERT INTO person VALUES
     (100, 'John', 30, 1, 'Street 1'),
     (200, 'Mary', NULL, 1, 'Street 2'),
     (300, 'Mike', 80, 3, 'Street 3'),
-    (400, 'Dan',  50, 4, 'Street 4');
+    (400, 'Dan', 50, 4, 'Street 4');
 
 SELECT * FROM person
-LATERAL VIEW EXPLODE(ARRAY(30,60)) tabelName AS c_age
-LATERAL VIEW EXPLODE(ARRAY(40,80)) AS d_age;
+LATERAL VIEW EXPLODE(ARRAY(30, 60)) tabelName AS c_age
+LATERAL VIEW EXPLODE(ARRAY(40, 80)) AS d_age;
 +------+-------+-------+--------+-----------+--------+--------+
 | 100  | John  | 30    | 1      | Street 1  | 30     | 40     |
 | 100  | John  | 30    | 1      | Street 1  | 30     | 80     |
@@ -82,8 +81,8 @@ LATERAL VIEW EXPLODE(ARRAY(40,80)) AS d_age;
 +------+-------+-------+--------+-----------+--------+--------+
 
 SELECT c_age, COUNT(1) FROM person
-LATERAL VIEW EXPLODE(ARRAY(30,60)) AS c_age
-LATERAL VIEW EXPLODE(ARRAY(40,80)) AS d_age 
+LATERAL VIEW EXPLODE(ARRAY(30, 60)) AS c_age
+LATERAL VIEW EXPLODE(ARRAY(40, 80)) AS d_age 
 GROUP BY c_age;
 +--------+-----------+--+
 | c_age  | count(1)  |

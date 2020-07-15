@@ -21,13 +21,13 @@ license: |
 
 ### Description
 
-`CASE` clause uses rule to return specific result based on the specified condition, similar to if/else statements in other programming languages
+`CASE` clause uses rule to return specific result based on the specified condition, similar to if/else statements in other programming languages.
 
 ### Syntax
 
 ```sql
 CASE [ expression ] { WHEN boolean_expression THEN then_expression } [ ... ]
-                     [ ELSE else_expression ]
+    [ ELSE else_expression ]
 END
 ```
 
@@ -69,7 +69,7 @@ INSERT INTO person VALUES
     (100, 'John', 30),
     (200, 'Mary', NULL),
     (300, 'Mike', 80),
-    (400, 'Dan',  50);
+    (400, 'Dan', 50);
 
 SELECT id, CASE WHEN id > 200 THEN 'bigger' ELSE 'small' END FROM person;
 +------+--------------------------------------------------+
@@ -91,7 +91,7 @@ SELECT id, CASE id WHEN 100 then 'bigger' WHEN  id > 300 THEN '300' ELSE 'small'
 | 400  | small                                                                                         |
 +------+-----------------------------------------------------------------------------------------------+
 
-SELECT * FROM person where CASE 1 = 1 WHEN 100 THEN 'big' WHEN 200 THEN 'bigger' WHEN  300 THEN 'biggest' ELSE 'small' END = 'small';
+SELECT * FROM person where CASE 1 = 1 WHEN 100 THEN 'big' WHEN 200 THEN 'bigger' WHEN 300 THEN 'biggest' ELSE 'small' END = 'small';
 +------+-------+-------+
 |  id  | name  |  age  |
 +------+-------+-------+

@@ -26,24 +26,24 @@ license: |
 ### Syntax
 
 ```sql
-PIVOT ( { aggregate_Expression [ AS aggregate_Expression_Alias ] } [ , ... ] FOR column_List IN ( expression_List ) )
+PIVOT ( { group_expression [ AS group_expression_alias ] } [ , ... ] FOR column_list IN ( expression_list ) )
 ```
 
 ### Parameters
     
-* **aggregate_Expression**
+* **group_expression**
 
-    We will get specific aggregated results by the `aggregate_Expression`, such as `SUM(a)` or `COUNT(DISTINCT b)`.
+    We will get specific aggregated results by the `aggregate_expression`, such as `SUM(a)` or `COUNT(DISTINCT b)`.
     
-* **aggregate_Expression_Alias**
+* **group_expression_alias**
 
-    It is the alias for `aggregate_Expression`, which is optional, we can use it in `SELECT` clause.
+    It is the alias for `group_expression`, which is optional, we can use it in `SELECT` clause.
      
-* **column_List**
+* **column_list**
 
     It contains columns in the `FROM` clause, which specific the columns we want to replaced with new columns, we can use brackets to surround the columns, such as `( c1, c2 )`.
       
-* **expression_List**
+* **expression_list**
 
     It specifics new columns , which used to match values in `column_List` as the aggregating condition, we can also add alias for them.
     
@@ -55,30 +55,30 @@ INSERT INTO person VALUES
     (100, 'John', 30, 1, 'Street 1'),
     (200, 'Mary', NULL, 1, 'Street 2'),
     (300, 'Mike', 80, 3, 'Street 3'),
-    (400, 'Dan',  50, 4, 'Street 4');
+    (400, 'Dan', 50, 4, 'Street 4');
 
 SELECT * FROM person
 PIVOT (
   SUM(age) AS a, AVG(class) AS c
   FOR name IN ('John' AS john, 'Mike' AS mike)
 );
-+------+-----------+---------+---------+---------+---------+--+
++------+-----------+---------+---------+---------+---------+
 |  id  |  address  | john_a  | john_c  | mike_a  | mike_c  |
-+------+-----------+---------+---------+---------+---------+--+
++------+-----------+---------+---------+---------+---------+
 | 200  | Street 2  | NULL    | NULL    | NULL    | NULL    |
 | 100  | Street 1  | 30      | 1.0     | NULL    | NULL    |
 | 300  | Street 3  | NULL    | NULL    | 80      | 3.0     |
 | 400  | Street 4  | NULL    | NULL    | NULL    | NULL    |
-+------+-----------+---------+---------+---------+---------+--+
++------+-----------+---------+---------+---------+---------+
 
 SELECT * FROM person
 PIVOT (
   SUM(age) AS a, AVG(class) AS c
   FOR (name, age) IN (('John', 30) AS c1, ('Mike', 40) AS c2)
 );
-+------+-----------+-------+-------+-------+-------+--+
++------+-----------+-------+-------+-------+-------+
 |  id  |  address  | c1_a  | c1_c  | c2_a  | c2_c  |
-+------+-----------+-------+-------+-------+-------+--+
++------+-----------+-------+-------+-------+-------+
 | 200  | Street 2  | NULL  | NULL  | NULL  | NULL  |
 | 100  | Street 1  | 30    | 1.0   | NULL  | NULL  |
 | 300  | Street 3  | NULL  | NULL  | NULL  | NULL  |
