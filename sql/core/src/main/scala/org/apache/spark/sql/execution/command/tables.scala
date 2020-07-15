@@ -920,7 +920,7 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (catalog.isTemporaryTable(table)) {
-      Seq.empty[Row]
+      throw new AnalysisException(s"SHOW TBLPROPERTIES is not allowed on a temporary view: $table")
     } else {
       val catalogTable = catalog.getTableMetadata(table)
       propertyKey match {

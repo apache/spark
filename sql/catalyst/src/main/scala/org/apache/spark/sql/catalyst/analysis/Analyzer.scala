@@ -858,6 +858,11 @@ class Analyzer(
         u
       case u @ UnresolvedTableOrView(ident) =>
         lookupTempView(ident).map(_ => ResolvedView(ident.asIdentifier)).getOrElse(u)
+      case u @ UnresolvedTableOrPermanentView(ident) =>
+        lookupTempView(ident).foreach { _ =>
+          u.failAnalysis(s"${ident.quoted} is a temp view, not a table or permanent view.")
+        }
+        u
     }
 
     def lookupTempView(identifier: Seq[String]): Option[LogicalPlan] = {
@@ -906,6 +911,11 @@ class Analyzer(
           .getOrElse(u)
 
       case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+        CatalogV2Util.loadTable(catalog, ident)
+          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .getOrElse(u)
+
+      case u @ UnresolvedTableOrPermanentView(NonSessionCatalogAndIdentifier(catalog, ident)) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
@@ -995,6 +1005,9 @@ class Analyzer(
         }.getOrElse(u)
 
       case u @ UnresolvedTableOrView(identifier) =>
+        lookupTableOrView(identifier).getOrElse(u)
+
+      case u @ UnresolvedTableOrPermanentView(identifier) =>
         lookupTableOrView(identifier).getOrElse(u)
     }
 

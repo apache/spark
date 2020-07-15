@@ -101,9 +101,10 @@ struct<>
 -- !query
 SHOW TBLPROPERTIES tv
 -- !query schema
-struct<key:string,value:string>
+struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+tv is a temp view, not a table or permanent view.; line 1 pos 0
 
 
 -- !query
