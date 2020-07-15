@@ -53,20 +53,20 @@ class CSVFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
       for (filter <- filters) {
         val refs = filter.references
         val index = if (refs.isEmpty) {
-          // For example, AlwaysTrue and AlwaysFalse doesn't have any references
+          // For example, `AlwaysTrue` and `AlwaysFalse` doesn't have any references
           // Filters w/o refs always return the same result. Taking into account
-          // that predicates are combined via And, we can apply such filters only
+          // that predicates are combined via `And`, we can apply such filters only
           // once at the position 0.
           0
         } else {
           // readSchema must contain attributes of all filters.
-          // Accordingly, fieldIndex() returns a valid index always.
+          // Accordingly, `fieldIndex()` returns a valid index always.
           refs.map(requiredSchema.fieldIndex).max
         }
         groupedFilters(index) :+= filter
       }
       if (len > 0 && !groupedFilters(0).isEmpty) {
-        // We assume that filters w/o refs like AlwaysTrue and AlwaysFalse
+        // We assume that filters w/o refs like `AlwaysTrue` and `AlwaysFalse`
         // can be evaluated faster that others. We put them in front of others.
         val (literals, others) = groupedFilters(0).partition(_.references.isEmpty)
         groupedFilters(0) = literals ++ others
@@ -81,13 +81,13 @@ class CSVFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
   }
 
   /**
-   * Applies all filters that refer to row fields at the positions from 0 to index.
+   * Applies all filters that refer to row fields at the positions from 0 to `index`.
    * @param row The internal row to check.
    * @param index Maximum field index. The function assumes that all fields
-   *              from 0 to index position are set.
-   * @return false iff row fields at the position from 0 to index pass filters
+   *              from 0 to `index`` position are set.
+   * @return `false` iff row fields at the position from 0 to `index` pass filters
    *         or there are no applicable filters
-   *         otherwise false if at least one of the filters returns false.
+   *         otherwise `false` if at least one of the filters returns `false`.
    */
   def skipRow(row: InternalRow, index: Int): Boolean = {
     val predicate = predicates(index)
@@ -95,7 +95,7 @@ class CSVFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
   }
 
   // CSV filters are applied sequentially, and no need to track which filter references
-  // point out to already set row values. The reset() method is trivial because
+  // point out to already set row values. The `reset()` method is trivial because
   // the filters don't have any states.
   def reset(): Unit = {}
 }
