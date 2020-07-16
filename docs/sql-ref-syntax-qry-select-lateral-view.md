@@ -21,32 +21,36 @@ license: |
 
 ### Description
 
-`LATERAL VIEW` clause is used in conjunction with UDTF such as explode(), which will generate a virtual table containing one or more rows. `LATERAL VIEW` will  apply the rows to each original output rows.
+`LATERAL VIEW` clause is used in conjunction with generator  functions such as explode(), which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
 
 ### Syntax
 
 ```sql
-LATERAL VIEW [ OUTER ] { udtf_expression [ table_alias ] AS column_alias [ , ... ] } [ ... ]
+LATERAL VIEW [ OUTER ] { generating_function (generating_function_expression) [ table_function_alias ] AS column_alias [ , ... ] } [ ... ]
 ```
 
 ### Parameters
 
 * **OUTER**
 
-    If `LATERAL VIEW` is used without `OUTER`, and `udtf_expression` returns empty, then no results will be output in select.
-    If `LATERAL VIEW` is used with `OUTER`, and `udtf_expression` returns empty, then results will be output normally with `NULL` as `udtf_expression` output.  .
+    If `LATERAL VIEW` is used without `OUTER`, and `generating_function` returns empty, then no results will be output in `SELECT` clause.
+    If `LATERAL VIEW` is used with `OUTER`, and `generating_function` returns empty, then results will be output normally with `NULL` as `generating_function` output.  .
     
-* **udtf_Expression**
+* **generating_function**
 
     This expression will output a virtual table with single input row.
+
+* **generating_function_expression**
+
+    Paramters for  generating_function.
     
 * **table_Alias**
 
-    It is the alias for `udtf_expression`, which is optional.
+    It is the alias for `generating_function`, which is optional.
      
 * **column_alias**
 
-    It lists the column aliases of `udtf_expression`, which may be used in output rows, we may have multiple alias if `udtf_expression` have multiple output columns.
+    It lists the column aliases of `generating_function`, which may be used in output rows, we may have multiple alias if `generating_function` have multiple output columns.
          
 ### Examples
 

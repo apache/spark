@@ -39,7 +39,7 @@ While aggregate functions are defined as
 ```sql
 aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_expression ) ]
 
-[ FIRST | LAST ] ( expression [ IGNORE NULLS ] ) ]
+[ FIRST | LAST ] ( expression [ IGNORE NULLS ] ) [ FILTER ( WHERE boolean_expression ) ]
 ```
 
 ### Parameters
@@ -310,3 +310,6 @@ SELECT FIRST(age IGNORE NULLS), LAST(id), SUM(id) FROM person;
 * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [CASE Clause](sql-ref-syntax-qry-select-case.html)
+* [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+* [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
