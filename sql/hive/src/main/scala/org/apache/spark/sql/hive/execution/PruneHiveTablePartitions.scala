@@ -54,7 +54,8 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
     val normalizedFilters = DataSourceStrategy.normalizeExprs(
       filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)), relation.output)
     val partitionColumnSet = AttributeSet(relation.partitionCols)
-    ExpressionSet(normalizedFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionColumnSet)))
+    ExpressionSet(
+      normalizedFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionColumnSet)))
   }
 
   /**

@@ -56,7 +56,8 @@ private[sql] object PruneFileSourcePartitions
     val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
       f.references.subsetOf(partitionSet)
     )
-    val extraPartitionFilter = dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
+    val extraPartitionFilter =
+      dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
 
     (ExpressionSet(partitionFilters ++ extraPartitionFilter), dataFilters)
   }
