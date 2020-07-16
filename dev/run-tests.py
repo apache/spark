@@ -654,7 +654,7 @@ def main():
         # only the affected modules.
         if test_env == "github_actions":
             # Set the log level as ERROR to make the github action more readable.
-            extra_profiles += ["--error"]
+            extra_profiles.append("--error")
             if os.environ["GITHUB_BASE_REF"] != "":
                 # Pull requests
                 changed_files = identify_changed_files_from_git_commits(
