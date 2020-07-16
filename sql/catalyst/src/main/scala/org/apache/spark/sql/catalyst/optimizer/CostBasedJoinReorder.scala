@@ -162,7 +162,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     val topOutputSet = AttributeSet(output)
     while (foundPlans.size < items.length) {
       // Build plans for the next level.
-      foundPlans += searchLevel(foundPlans, conf, conditions, topOutputSet, filters)
+      foundPlans += searchLevel(foundPlans.toSeq, conf, conditions, topOutputSet, filters)
     }
 
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)

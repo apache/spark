@@ -550,7 +550,7 @@ private[spark] class ExecutorAllocationManager(
     } else {
       // We don't want to change our target number of executors, because we already did that
       // when the task backlog decreased.
-      client.killExecutors(executorIdsToBeRemoved, adjustTargetNumExecutors = false,
+      client.killExecutors(executorIdsToBeRemoved.toSeq, adjustTargetNumExecutors = false,
         countFailures = false, force = false)
     }
 
@@ -563,9 +563,9 @@ private[spark] class ExecutorAllocationManager(
 
     // reset the newExecutorTotal to the existing number of executors
     if (testing || executorsRemoved.nonEmpty) {
-      executorMonitor.executorsKilled(executorsRemoved)
+      executorMonitor.executorsKilled(executorsRemoved.toSeq)
       logInfo(s"Executors ${executorsRemoved.mkString(",")} removed due to idle timeout.")
-      executorsRemoved
+      executorsRemoved.toSeq
     } else {
       logWarning(s"Unable to reach the cluster manager to kill executor/s " +
         s"${executorIdsToBeRemoved.mkString(",")} or no executor eligible to kill!")

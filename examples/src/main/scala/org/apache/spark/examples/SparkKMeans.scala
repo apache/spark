@@ -82,7 +82,7 @@ object SparkKMeans {
     while(tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 
-      val pointStats = closest.reduceByKey{case ((p1, c1), (p2, c2)) => (p1 + p2, c1 + c2)}
+      val pointStats = closest.reduceByKey(mergeResults)
 
       val newPoints = pointStats.map {pair =>
         (pair._1, pair._2._1 * (1.0 / pair._2._2))}.collectAsMap()
@@ -101,6 +101,12 @@ object SparkKMeans {
     println("Final centers:")
     kPoints.foreach(println)
     spark.stop()
+  }
+
+  private def mergeResults(
+      a: (Vector[Double], Int),
+      b: (Vector[Double], Int)): (Vector[Double], Int) = {
+    (a._1 + b._1, a._2 + b._2)
   }
 }
 // scalastyle:on println

@@ -89,10 +89,7 @@ TypeError:...
 import sys
 import select
 import struct
-if sys.version < '3':
-    import SocketServer
-else:
-    import socketserver as SocketServer
+import socketserver as SocketServer
 import threading
 from pyspark.serializers import read_int, PickleSerializer
 
