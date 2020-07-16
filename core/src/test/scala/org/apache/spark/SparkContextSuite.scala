@@ -934,6 +934,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
     }
   }
+
+  test("SPARK-32160: Disallow to create SparkContext in executors") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+
+    val error = intercept[SparkException] {
+      sc.range(0, 1).foreach { _ =>
+        new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      }
+    }.getMessage()
+
+    assert(error.contains("SparkContext should only be created and accessed on the driver."))
+  }
 }
 
 object SparkContextSuite {

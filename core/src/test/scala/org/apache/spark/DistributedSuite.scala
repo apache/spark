@@ -45,11 +45,11 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     // this test will hang. Correct behavior is that executors don't crash but fail tasks
     // and the scheduler throws a SparkException.
 
-    // numSlaves must be less than numPartitions
-    val numSlaves = 3
+    // numWorkers must be less than numPartitions
+    val numWorkers = 3
     val numPartitions = 10
 
-    sc = new SparkContext("local-cluster[%s,1,1024]".format(numSlaves), "test")
+    sc = new SparkContext("local-cluster[%s,1,1024]".format(numWorkers), "test")
     val data = sc.parallelize(1 to 100, numPartitions).
       map(x => throw new NotSerializableExn(new NotSerializableClass))
     intercept[SparkException] {
@@ -69,10 +69,10 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     )
 
     masterStrings.foreach {
-      case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        assert(numSlaves.toInt == 2)
-        assert(coresPerSlave.toInt == 1)
-        assert(memoryPerSlave.toInt == 1024)
+      case LOCAL_CLUSTER_REGEX(numWorkers, coresPerWorker, memoryPerWorker) =>
+        assert(numWorkers.toInt == 2)
+        assert(coresPerWorker.toInt == 1)
+        assert(memoryPerWorker.toInt == 1024)
     }
   }
 
@@ -227,7 +227,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === size)
     assert(data.count() === size)
     // ensure only a subset of partitions were cached
-    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD, askSlaves = true)
+    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD,
+      askStorageEndpoints = true)
     assert(rddBlocks.size === 0, s"expected no RDD blocks, found ${rddBlocks.size}")
   }
 
@@ -244,7 +245,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(data.count() === size)
     assert(data.count() === size)
     // ensure only a subset of partitions were cached
-    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD, askSlaves = true)
+    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD,
+      askStorageEndpoints = true)
     assert(rddBlocks.size > 0, "no RDD blocks found")
     assert(rddBlocks.size < numPartitions, s"too many RDD blocks found, expected <$numPartitions")
   }

@@ -23,15 +23,12 @@ from py4j.protocol import Py4JJavaError
 from pyspark import shuffle, PickleSerializer, SparkConf, SparkContext
 from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 
-if sys.version_info[0] >= 3:
-    xrange = range
-
 
 class MergerTests(unittest.TestCase):
 
     def setUp(self):
         self.N = 1 << 12
-        self.l = [i for i in xrange(self.N)]
+        self.l = [i for i in range(self.N)]
         self.data = list(zip(self.l, self.l))
         self.agg = Aggregator(lambda x: [x],
                               lambda x, y: x.append(y) or x,
@@ -42,26 +39,26 @@ class MergerTests(unittest.TestCase):
         m.mergeValues(self.data)
         self.assertEqual(m.spills, 0)
         self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
+                         sum(range(self.N)))
 
         m = ExternalMerger(self.agg, 1000)
         m.mergeCombiners(map(lambda x_y1: (x_y1[0], [x_y1[1]]), self.data))
         self.assertEqual(m.spills, 0)
         self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
+                         sum(range(self.N)))
 
     def test_medium_dataset(self):
         m = ExternalMerger(self.agg, 20)
         m.mergeValues(self.data)
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
+                         sum(range(self.N)))
 
         m = ExternalMerger(self.agg, 10)
         m.mergeCombiners(map(lambda x_y2: (x_y2[0], [x_y2[1]]), self.data * 3))
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)) * 3)
+                         sum(range(self.N)) * 3)
 
     def test_huge_dataset(self):
         m = ExternalMerger(self.agg, 5, partitions=3)
