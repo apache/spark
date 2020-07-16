@@ -481,15 +481,15 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
-    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite",
-    "org.apache.spark.sql.hive.execution.HashAggregationQueryWithControlledFallbackSuite",
-    "org.apache.spark.sql.hive.execution.HiveCompatibilitySuite"
+    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
+  private val HIVE_EXECUTION_TEST_GROUP = "hive_execution_test_group"
 
   private def testNameToTestGroup(name: String): String = name match {
     case _ if testsWhichShouldRunInTheirOwnDedicatedJvm.contains(name) => name
+    case _ if name.contains("org.apache.spark.sql.hive.execution") => VirtualMachineError
     case _ => DEFAULT_TEST_GROUP
   }
 
