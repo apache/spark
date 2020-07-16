@@ -489,7 +489,7 @@ object SparkParallelTestGrouping {
 
   private def testNameToTestGroup(name: String): String = name match {
     case _ if testsWhichShouldRunInTheirOwnDedicatedJvm.contains(name) => name
-    case _ if name.contains("org.apache.spark.sql.hive.execution") => VirtualMachineError
+    case _ if name.contains("org.apache.spark.sql.hive.execution") => HIVE_EXECUTION_TEST_GROUP
     case _ => DEFAULT_TEST_GROUP
   }
 
