@@ -21,7 +21,7 @@ import org.apache.hadoop.io._
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{MutableAny, MutableBoolean, MutableByte, MutableDouble, MutableFloat, MutableInt, MutableLong, MutableShort, MutableValue, SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianDays
 import org.apache.spark.sql.types._
@@ -47,8 +47,9 @@ class OrcDeserializer(
         if (requestedColIds(index) == -1) {
           null
         } else {
-          val writer = newWriter(f.dataType, new RowUpdater(resultRow))
-          (value: WritableComparable[_]) => writer(index, value)
+          val writer = newWriter(f.dataType)
+          val updater = new RowUpdater(resultRow)
+          (value: WritableComparable[_]) => writer(updater, index, value)
         }
       }.toArray
   }
@@ -73,136 +74,180 @@ class OrcDeserializer(
    * Creates a writer to write ORC values to Catalyst data structure at the given ordinal.
    */
   private def newWriter(
-      dataType: DataType, updater: CatalystDataUpdater): (Int, WritableComparable[_]) => Unit =
+      dataType: DataType): (CatalystDataUpdater, Int, WritableComparable[_]) => Unit =
     dataType match {
-      case NullType => (ordinal, _) =>
+      case NullType => (updater, ordinal, _) =>
         updater.setNullAt(ordinal)
 
-      case BooleanType => (ordinal, value) =>
+      case BooleanType => (updater, ordinal, value) =>
         updater.setBoolean(ordinal, value.asInstanceOf[BooleanWritable].get)
 
-      case ByteType => (ordinal, value) =>
+      case ByteType => (updater, ordinal, value) =>
         updater.setByte(ordinal, value.asInstanceOf[ByteWritable].get)
 
-      case ShortType => (ordinal, value) =>
+      case ShortType => (updater, ordinal, value) =>
         updater.setShort(ordinal, value.asInstanceOf[ShortWritable].get)
 
-      case IntegerType => (ordinal, value) =>
+      case IntegerType => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[IntWritable].get)
 
-      case LongType => (ordinal, value) =>
+      case LongType => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[LongWritable].get)
 
-      case FloatType => (ordinal, value) =>
+      case FloatType => (updater, ordinal, value) =>
         updater.setFloat(ordinal, value.asInstanceOf[FloatWritable].get)
 
-      case DoubleType => (ordinal, value) =>
+      case DoubleType => (updater, ordinal, value) =>
         updater.setDouble(ordinal, value.asInstanceOf[DoubleWritable].get)
 
-      case StringType => (ordinal, value) =>
+      case StringType => (updater, ordinal, value) =>
         updater.set(ordinal, UTF8String.fromBytes(value.asInstanceOf[Text].copyBytes))
 
-      case BinaryType => (ordinal, value) =>
+      case BinaryType => (updater, ordinal, value) =>
         val binary = value.asInstanceOf[BytesWritable]
         val bytes = new Array[Byte](binary.getLength)
         System.arraycopy(binary.getBytes, 0, bytes, 0, binary.getLength)
         updater.set(ordinal, bytes)
 
-      case DateType => (ordinal, value) =>
+      case DateType => (updater, ordinal, value) =>
         updater.setInt(ordinal, OrcShimUtils.getGregorianDays(value))
 
-      case TimestampType => (ordinal, value) =>
+      case TimestampType => (updater, ordinal, value) =>
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
 
-      case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
+      case DecimalType.Fixed(precision, scale) => (updater, ordinal, value) =>
         val v = OrcShimUtils.getDecimal(value)
         v.changePrecision(precision, scale)
         updater.set(ordinal, v)
 
-      case st: StructType => (ordinal, value) =>
-        val result = new SpecificInternalRow(st)
-        val fieldUpdater = new RowUpdater(result)
+      case st: StructType =>
+        val createRow: () => InternalRow = getRowCreator(st)
         val fieldConverters = st.map(_.dataType).map { dt =>
-          newWriter(dt, fieldUpdater)
+          newWriter(dt)
         }.toArray
-        val orcStruct = value.asInstanceOf[OrcStruct]
+        (updater, ordinal, value) => {
+          val result = createRow.apply()
+          val fieldUpdater = new RowUpdater(result)
+          val orcStruct = value.asInstanceOf[OrcStruct]
 
-        var i = 0
-        while (i < st.length) {
-          val value = orcStruct.getFieldValue(i)
-          if (value == null) {
-            result.setNullAt(i)
-          } else {
-            fieldConverters(i)(i, value)
+          var i = 0
+          while (i < st.length) {
+            val value = orcStruct.getFieldValue(i)
+            if (value == null) {
+              result.setNullAt(i)
+            } else {
+              fieldConverters(i)(fieldUpdater, i, value)
+            }
+            i += 1
           }
-          i += 1
+
+          updater.set(ordinal, result)
         }
 
-        updater.set(ordinal, result)
+      case ArrayType(elementType, _) =>
+        val elementConverter = newWriter(elementType)
+        val createArray = getArrayDataCreator(elementType)
+        (updater, ordinal, value) => {
+          val orcArray = value.asInstanceOf[OrcList[WritableComparable[_]]]
+          val length = orcArray.size()
+          val result = createArray(length)
+          val elementUpdater = new ArrayDataUpdater(result)
 
-      case ArrayType(elementType, _) => (ordinal, value) =>
-        val orcArray = value.asInstanceOf[OrcList[WritableComparable[_]]]
-        val length = orcArray.size()
-        val result = createArrayData(elementType, length)
-        val elementUpdater = new ArrayDataUpdater(result)
-        val elementConverter = newWriter(elementType, elementUpdater)
-
-        var i = 0
-        while (i < length) {
-          val value = orcArray.get(i)
-          if (value == null) {
-            result.setNullAt(i)
-          } else {
-            elementConverter(i, value)
+          var i = 0
+          while (i < length) {
+            val value = orcArray.get(i)
+            if (value == null) {
+              result.setNullAt(i)
+            } else {
+              elementConverter(elementUpdater, i, value)
+            }
+            i += 1
           }
-          i += 1
+
+          updater.set(ordinal, result)
         }
 
-        updater.set(ordinal, result)
+      case MapType(keyType, valueType, _) =>
+        val keyConverter = newWriter(keyType)
+        val createKeyArray = getArrayDataCreator(keyType)
+        val valueConverter = newWriter(valueType)
+        val createValueArray = getArrayDataCreator(valueType)
+        (updater, ordinal, value) => {
+          val orcMap = value.asInstanceOf[OrcMap[WritableComparable[_], WritableComparable[_]]]
+          val length = orcMap.size()
+          val keyArray = createKeyArray(length)
+          val keyUpdater = new ArrayDataUpdater(keyArray)
+          val valueArray = createValueArray(length)
+          val valueUpdater = new ArrayDataUpdater(valueArray)
 
-      case MapType(keyType, valueType, _) => (ordinal, value) =>
-        val orcMap = value.asInstanceOf[OrcMap[WritableComparable[_], WritableComparable[_]]]
-        val length = orcMap.size()
-        val keyArray = createArrayData(keyType, length)
-        val keyUpdater = new ArrayDataUpdater(keyArray)
-        val keyConverter = newWriter(keyType, keyUpdater)
-        val valueArray = createArrayData(valueType, length)
-        val valueUpdater = new ArrayDataUpdater(valueArray)
-        val valueConverter = newWriter(valueType, valueUpdater)
-
-        var i = 0
-        val it = orcMap.entrySet().iterator()
-        while (it.hasNext) {
-          val entry = it.next()
-          keyConverter(i, entry.getKey)
-          val value = entry.getValue
-          if (value == null) {
-            valueArray.setNullAt(i)
-          } else {
-            valueConverter(i, value)
+          var i = 0
+          val it = orcMap.entrySet().iterator()
+          while (it.hasNext) {
+            val entry = it.next()
+            keyConverter(keyUpdater, i, entry.getKey)
+            val value = entry.getValue
+            if (value == null) {
+              valueArray.setNullAt(i)
+            } else {
+              valueConverter(valueUpdater, i, value)
+            }
+            i += 1
           }
-          i += 1
+
+          // The ORC map will never have null or duplicated map keys, it's safe to create a
+          // ArrayBasedMapData directly here.
+          updater.set(ordinal, new ArrayBasedMapData(keyArray, valueArray))
         }
 
-        // The ORC map will never have null or duplicated map keys, it's safe to create a
-        // ArrayBasedMapData directly here.
-        updater.set(ordinal, new ArrayBasedMapData(keyArray, valueArray))
-
-      case udt: UserDefinedType[_] => newWriter(udt.sqlType, updater)
+      case udt: UserDefinedType[_] =>
+        val converter = newWriter(udt.sqlType)
+        (updater, ordinal, value) => {
+          converter(updater, ordinal, value)
+        }
 
       case _ =>
         throw new UnsupportedOperationException(s"$dataType is not supported yet.")
     }
 
-  private def createArrayData(elementType: DataType, length: Int): ArrayData = elementType match {
-    case BooleanType => UnsafeArrayData.fromPrimitiveArray(new Array[Boolean](length))
-    case ByteType => UnsafeArrayData.fromPrimitiveArray(new Array[Byte](length))
-    case ShortType => UnsafeArrayData.fromPrimitiveArray(new Array[Short](length))
-    case IntegerType => UnsafeArrayData.fromPrimitiveArray(new Array[Int](length))
-    case LongType => UnsafeArrayData.fromPrimitiveArray(new Array[Long](length))
-    case FloatType => UnsafeArrayData.fromPrimitiveArray(new Array[Float](length))
-    case DoubleType => UnsafeArrayData.fromPrimitiveArray(new Array[Double](length))
-    case _ => new GenericArrayData(new Array[Any](length))
+  private def getArrayDataCreator(elementType: DataType): Int => ArrayData = elementType match {
+    case BooleanType => length => UnsafeArrayData.createFreshArray(length, 1)
+    case ByteType => length => UnsafeArrayData.createFreshArray(length, 1)
+    case ShortType => length => UnsafeArrayData.createFreshArray(length, 2)
+    case IntegerType => length => UnsafeArrayData.createFreshArray(length, 4)
+    case LongType => length => UnsafeArrayData.createFreshArray(length, 8)
+    case FloatType => length => UnsafeArrayData.createFreshArray(length, 4)
+    case DoubleType => length => UnsafeArrayData.createFreshArray(length, 8)
+    case _ => length => new GenericArrayData(new Array[Any](length))
+  }
+
+  private def getRowCreator(st: StructType): () => InternalRow = {
+    val constructorsArray = new Array[() => MutableValue](st.fields.length)
+    var i = 0
+    while (i < st.fields.length) {
+      st.fields(i).dataType match {
+        case BooleanType => constructorsArray(i) = () => new MutableBoolean
+        case ByteType => constructorsArray(i) = () => new MutableByte
+        case ShortType => constructorsArray(i) = () => new MutableShort
+        // We use INT for DATE internally
+        case IntegerType | DateType => constructorsArray(i) = () => new MutableInt
+        // We use Long for Timestamp internally
+        case LongType | TimestampType => constructorsArray(i) = () => new MutableLong
+        case FloatType => constructorsArray(i) = () => new MutableFloat
+        case DoubleType => constructorsArray(i) = () => new MutableDouble
+        case _ => constructorsArray(i) = () => new MutableAny
+      }
+      i += 1
+    }
+
+    () => {
+      val array = new Array[MutableValue](constructorsArray.length)
+      var i = 0
+      while (i < constructorsArray.length) {
+        array(i) = constructorsArray(i).apply()
+        i += 1
+      }
+      new SpecificInternalRow(array)
+    }
   }
 
   /**
