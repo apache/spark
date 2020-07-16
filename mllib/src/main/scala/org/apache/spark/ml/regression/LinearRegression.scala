@@ -220,8 +220,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   @Since("1.5.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
 
-
-
   /**
    * Set the ElasticNet mixing parameter.
    * For alpha = 0, the penalty is an L2 penalty.

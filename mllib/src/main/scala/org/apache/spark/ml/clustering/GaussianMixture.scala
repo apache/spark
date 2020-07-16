@@ -59,11 +59,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   @Since("2.0.0")
   def getK: Int = $(k)
 
-  setDefault(
-    k -> 2,
-    maxIter -> 100,
-    tol -> 0.01,
-    blockSize -> 1)
+  setDefault(k -> 2, maxIter -> 100, tol -> 0.01, blockSize -> 1)
 
   /**
    * Validates and transforms the input schema.

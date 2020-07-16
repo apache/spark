@@ -68,15 +68,11 @@ private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
     "The minimum number of points (if >= 1.0) or the minimum proportion " +
       "of points (if < 1.0) of a divisible cluster.", ParamValidators.gt(0.0))
 
-
-  setDefault(
-    k -> 4,
-    maxIter -> 20,
-    minDivisibleClusterSize -> 1.0)
-
   /** @group expertGetParam */
   @Since("2.0.0")
   def getMinDivisibleClusterSize: Double = $(minDivisibleClusterSize)
+
+  setDefault(k -> 4, maxIter -> 20, minDivisibleClusterSize -> 1.0)
 
   /**
    * Validates and transforms the input schema.

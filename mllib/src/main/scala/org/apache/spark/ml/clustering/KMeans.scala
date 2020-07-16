@@ -87,13 +87,8 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   @Since("1.5.0")
   def getInitSteps: Int = $(initSteps)
 
-  setDefault(
-    k -> 2,
-    maxIter -> 20,
-    initMode -> MLlibKMeans.K_MEANS_PARALLEL,
-    initSteps -> 2,
-    tol -> 1e-4,
-    distanceMeasure -> DistanceMeasure.EUCLIDEAN)
+  setDefault(k -> 2, maxIter -> 20, initMode -> MLlibKMeans.K_MEANS_PARALLEL, initSteps -> 2,
+    tol -> 1e-4, distanceMeasure -> DistanceMeasure.EUCLIDEAN)
 
   /**
    * Validates and transforms the input schema.
