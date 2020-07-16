@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.pathfilters
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 /**
   * [SPARK-31962]
@@ -29,24 +30,25 @@ import org.apache.spark.sql.SparkSession
   * @param sparkSession SparkSession
   * @param hadoopConf Hadoop Configuration object
   * @param options Map containing options
-  * @param timestamp string representing timestamp
   */
 case class ModifiedAfterFilter(sparkSession: SparkSession,
                                hadoopConf: Configuration,
                                options: Map[String, String])
-    extends ModifiedDateFilter(sparkSession, hadoopConf,  options) {
+    extends ModifiedDateFilter(sparkSession, hadoopConf, options)
+    with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
-    (fileStatus.getModificationTime - seconds) > 0
+    (localTime(DateTimeUtils.millisToMicros(fileStatus.getModificationTime))
+      - microseconds) > 0
 
   override def accept(path: Path): Boolean = true
   override def strategy(): String = "modifiedAfter"
 }
 
-case object ModifiedAfterFilter extends PathFilterObject  {
-    def get(sparkSession: SparkSession, configuration: Configuration, options: Map[String, String]): ModifiedAfterFilter = {
-        new ModifiedAfterFilter(sparkSession, configuration,options)
-    }
-    def strategy(): String = "modifiedAfter"
+case object ModifiedAfterFilter extends PathFilterObject {
+  def get(sparkSession: SparkSession,
+          configuration: Configuration,
+          options: Map[String, String]): ModifiedAfterFilter = {
+    new ModifiedAfterFilter(sparkSession, configuration, options)
+  }
+  def strategy(): String = "modifiedAfter"
 }
-
-

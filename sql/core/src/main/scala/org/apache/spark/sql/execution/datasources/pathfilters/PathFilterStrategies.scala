@@ -24,6 +24,7 @@ case object PathFilterStrategies {
           .headOption
           .getOrElse(null)
       })
+      .filter(_ != null)
 
   def register(filter: PathFilterObject): Unit = {
     cache = cache.++(Iterable[PathFilterObject](filter))
