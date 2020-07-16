@@ -54,9 +54,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
     val normalizedFilters = DataSourceStrategy.normalizeExprs(
       filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)), relation.output)
     val partitionColumnSet = AttributeSet(relation.partitionCols)
-    ExpressionSet(normalizedFilters.filter { f =>
-      !f.references.isEmpty && f.references.subsetOf(partitionColumnSet)
-    })
+    ExpressionSet(normalizedFilters.flatMap(convertibleFilter(_, partitionColumnSet)))
   }
 
   /**
@@ -103,9 +101,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case op @ PhysicalOperation(projections, filters, relation: HiveTableRelation)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
-      val predicates = CNFWithGroupExpressionsByReference(filters.reduceLeft(And))
-      val finalPredicates = if (predicates.nonEmpty) predicates else filters
-      val partitionKeyFilters = getPartitionKeyFilters(finalPredicates, relation)
+      val partitionKeyFilters = getPartitionKeyFilters(filters, relation)
       if (partitionKeyFilters.nonEmpty) {
         val newPartitions = prunePartitions(relation, partitionKeyFilters)
         val newTableMeta = updateTableMeta(relation.tableMeta, newPartitions)
