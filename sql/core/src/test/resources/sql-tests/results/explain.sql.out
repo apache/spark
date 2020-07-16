@@ -898,11 +898,12 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-* HashAggregate (5)
-+- Exchange (4)
-   +- HashAggregate (3)
-      +- * ColumnarToRow (2)
-         +- Scan parquet default.explain_temp1 (1)
+* HashAggregate (6)
++- Exchange (5)
+   +- HashAggregate (4)
+      +- * Project (3)
+         +- * ColumnarToRow (2)
+            +- Scan parquet default.explain_temp1 (1)
 
 
 (1) Scan parquet default.explain_temp1
@@ -914,23 +915,27 @@ ReadSchema: struct<key:int,val:int>
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
 
-(3) HashAggregate
+(3) Project [codegen id : 1]
+Output [3]: [val#x AS _gen_attr_348#x, cast(key#x as bigint) AS _gen_attr_350#xL, if ((val#x > 1)) key#x else null AS _gen_attr_352#x]
 Input [2]: [key#x, val#x]
+
+(4) HashAggregate
+Input [3]: [_gen_attr_348#x, _gen_attr_350#xL, _gen_attr_352#x]
 Keys: []
-Functions [3]: [partial_count(val#x), partial_sum(cast(key#x as bigint)), partial_count(key#x) FILTER (WHERE (val#x > 1))]
+Functions [3]: [partial_count(_gen_attr_348#x), partial_sum(_gen_attr_350#xL), partial_count(_gen_attr_352#x) FILTER (WHERE isnotnull(_gen_attr_352#x))]
 Aggregate Attributes [3]: [count#xL, sum#xL, count#xL]
 Results [3]: [count#xL, sum#xL, count#xL]
 
-(4) Exchange
+(5) Exchange
 Input [3]: [count#xL, sum#xL, count#xL]
 Arguments: SinglePartition, true, [id=#x]
 
-(5) HashAggregate [codegen id : 2]
+(6) HashAggregate [codegen id : 2]
 Input [3]: [count#xL, sum#xL, count#xL]
 Keys: []
-Functions [3]: [count(val#x), sum(cast(key#x as bigint)), count(key#x)]
-Aggregate Attributes [3]: [count(val#x)#xL, sum(cast(key#x as bigint))#xL, count(key#x)#xL]
-Results [2]: [(count(val#x)#xL + sum(cast(key#x as bigint))#xL) AS TOTAL#xL, count(key#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
+Functions [3]: [count(_gen_attr_348#x), sum(_gen_attr_350#xL), count(_gen_attr_352#x)]
+Aggregate Attributes [3]: [count(_gen_attr_348#x)#xL, sum(_gen_attr_350#xL)#xL, count(_gen_attr_352#x)#xL]
+Results [2]: [(count(_gen_attr_348#x)#xL + sum(_gen_attr_350#xL)#xL) AS TOTAL#xL, count(_gen_attr_352#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
 
 
 -- !query

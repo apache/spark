@@ -107,12 +107,25 @@ object ProjectFilterInAggregates extends Rule[LogicalPlan] {
     }}
   }
 
-  private def mayNeedtoProject(exprs: Seq[Expression]): Boolean = {
-    collectAggregateExprs(exprs).exists(_.filter.isDefined)
+  private def mayNeedtoProject(a: Aggregate): Boolean = {
+    if (collectAggregateExprs(a.aggregateExpressions).exists(_.filter.isDefined)) {
+      var flag = true
+      a resolveOperatorsUp {
+        case p: Project =>
+          if (p.output.exists(_.name.startsWith("_gen_attr_"))) {
+            flag = false
+          }
+          p
+        case other => other
+      }
+      flag
+    } else {
+      false
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case a: Aggregate if mayNeedtoProject(a.aggregateExpressions) => project(a)
+    case a: Aggregate if mayNeedtoProject(a) => project(a)
   }
 
   def project(a: Aggregate): Aggregate = {

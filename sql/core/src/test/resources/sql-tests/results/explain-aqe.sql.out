@@ -692,11 +692,12 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (5)
-+- HashAggregate (4)
-   +- Exchange (3)
-      +- HashAggregate (2)
-         +- Scan parquet default.explain_temp1 (1)
+AdaptiveSparkPlan (6)
++- HashAggregate (5)
+   +- Exchange (4)
+      +- HashAggregate (3)
+         +- Project (2)
+            +- Scan parquet default.explain_temp1 (1)
 
 
 (1) Scan parquet default.explain_temp1
@@ -705,25 +706,29 @@ Batched: true
 Location [not included in comparison]/{warehouse_dir}/explain_temp1]
 ReadSchema: struct<key:int,val:int>
 
-(2) HashAggregate
+(2) Project
+Output [3]: [val#x AS _gen_attr_324#x, cast(key#x as bigint) AS _gen_attr_326#xL, if ((val#x > 1)) key#x else null AS _gen_attr_328#x]
 Input [2]: [key#x, val#x]
+
+(3) HashAggregate
+Input [3]: [_gen_attr_324#x, _gen_attr_326#xL, _gen_attr_328#x]
 Keys: []
-Functions [3]: [partial_count(val#x), partial_sum(cast(key#x as bigint)), partial_count(key#x) FILTER (WHERE (val#x > 1))]
+Functions [3]: [partial_count(_gen_attr_324#x), partial_sum(_gen_attr_326#xL), partial_count(_gen_attr_328#x) FILTER (WHERE isnotnull(_gen_attr_328#x))]
 Aggregate Attributes [3]: [count#xL, sum#xL, count#xL]
 Results [3]: [count#xL, sum#xL, count#xL]
 
-(3) Exchange
+(4) Exchange
 Input [3]: [count#xL, sum#xL, count#xL]
 Arguments: SinglePartition, true, [id=#x]
 
-(4) HashAggregate
+(5) HashAggregate
 Input [3]: [count#xL, sum#xL, count#xL]
 Keys: []
-Functions [3]: [count(val#x), sum(cast(key#x as bigint)), count(key#x)]
-Aggregate Attributes [3]: [count(val#x)#xL, sum(cast(key#x as bigint))#xL, count(key#x)#xL]
-Results [2]: [(count(val#x)#xL + sum(cast(key#x as bigint))#xL) AS TOTAL#xL, count(key#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
+Functions [3]: [count(_gen_attr_324#x), sum(_gen_attr_326#xL), count(_gen_attr_328#x)]
+Aggregate Attributes [3]: [count(_gen_attr_324#x)#xL, sum(_gen_attr_326#xL)#xL, count(_gen_attr_328#x)#xL]
+Results [2]: [(count(_gen_attr_324#x)#xL + sum(_gen_attr_326#xL)#xL) AS TOTAL#xL, count(_gen_attr_328#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
 
-(5) AdaptiveSparkPlan
+(6) AdaptiveSparkPlan
 Output [2]: [TOTAL#xL, count(key) FILTER (WHERE (val > 1))#xL]
 Arguments: isFinalPlan=false
 
