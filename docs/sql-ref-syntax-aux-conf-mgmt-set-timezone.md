@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-The `SET TIME ZONE` command sets the current default time zone(`spark.sql.session.timeZone`) displacement for the `SparkSession`. 
+The SET TIME ZONE command sets the time zone of the current session.
 
 ### Syntax
 
@@ -35,7 +35,7 @@ SET TIME ZONE INTERVAL interval_literal
 
 * **LOCAL**
 
-    Respectively set the time zone the one specified in environment variable `TZ`, or to the operating system time zone if `TZ` is undefined.
+    Set the time zone to the one specified in the java `user.timezone` property or environment variable `TZ`, or to the system time zone if they are undefined.
 
 * **timezone_value**
 
@@ -43,7 +43,7 @@ SET TIME ZONE INTERVAL interval_literal
 
 * **interval_literal**
 
-    The [interval literal](sql-ref-literals.html#interval-literal) represents the displacement of time zone to the 'UTC'. It must be in the range of [-18, 18] hours and max to second precision, e.g. `INTERVAL 2 HOURS 30 MINITUES` or `INTERVAL '15:40:32' HOUR TO SECOND`.
+    The [interval literal](sql-ref-literals.html#interval-literal) represents the difference between the session time zone to the 'UTC'. It must be in the range of [-18, 18] hours and max to second precision, e.g. `INTERVAL 2 HOURS 30 MINITUES` or `INTERVAL '15:40:32' HOUR TO SECOND`.
 
 ### Examples
 
@@ -52,7 +52,7 @@ SET TIME ZONE INTERVAL interval_literal
 SET TIME ZONE LOCAL;
 
 -- Set time zone to the region-based zone ID.
-SET TIME ZONE 'America/Los_Angeles'
+SET TIME ZONE 'America/Los_Angeles';
 
 -- Set time zone to the Zone offset.
 SET TIME ZONE '+08:00';
