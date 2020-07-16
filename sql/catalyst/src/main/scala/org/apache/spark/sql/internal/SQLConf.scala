@@ -2543,6 +2543,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val JSON_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.json.filterPushdown.enabled")
+    .doc("When true, enable filter pushdown to JSON datasource.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val ADD_PARTITION_BATCH_SIZE =
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
@@ -3254,6 +3260,8 @@ class SQLConf extends Serializable with Logging {
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
+
+  def jsonFilterPushDown: Boolean = getConf(JSON_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
