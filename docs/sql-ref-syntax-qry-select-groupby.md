@@ -281,7 +281,7 @@ INSERT INTO person VALUES
     (100, 'Mary', NULL),
     (200, 'John', 30),
     (300, 'Mike', 80),
-    (400, 'Dan',  50);
+    (400, 'Dan', 50);
 
 --Select the first row in cloumn age
 SELECT FIRST(age) FROM person;

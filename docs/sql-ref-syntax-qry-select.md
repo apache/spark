@@ -57,7 +57,7 @@ PIVOT ( { group_expression [ AS group_expression_alias ] } [ , ... ] FOR column_
 
 While `LATERAL VIEW clause` is defined as
 ```
-LATERAL VIEW [ OUTER ] { udtf_expression [ table_alias ] AS column_alias [ , ... ] } [ ... ]
+LATERAL VIEW [ OUTER ] { generating_function (generating_function_expression) [ table_function_alias ] AS column_alias [ , ... ] } [ ... ]
 ```
 
 ### Parameters
@@ -105,7 +105,7 @@ LATERAL VIEW [ OUTER ] { udtf_expression [ table_alias ] AS column_alias [ , ...
 
  * **LATERAL VIEW**
      
-     `LATERAL VIEW` clause  is used in conjunction with user-defined table generating functions such as explode(), a UDTF generates zero or more output rows foreach input row. A lateral view first applies the UDTF to each row of base table and then joins resulting output rows to the input rows to form a virtual table having the supplied table alias.
+     `LATERAL VIEW` clause is used in conjunction with generator functions such as explode(), which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
  
  * **WHERE**
 

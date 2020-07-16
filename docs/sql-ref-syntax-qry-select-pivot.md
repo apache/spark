@@ -45,7 +45,7 @@ PIVOT ( { group_expression [ AS group_expression_alias ] } [ , ... ] FOR column_
       
 * **expression_list**
 
-    It specifics new columns , which used to match values in `column_List` as the aggregating condition, we can also add alias for them.
+    It specifics new columns, which used to match values in `column_List` as the aggregating condition, we can also add alias for them.
     
 ### Examples
 
@@ -83,7 +83,7 @@ SELECT * FROM person
 | 100  | Street 1  | 30    | 1.0   | NULL  | NULL  |
 | 300  | Street 3  | NULL  | NULL  | NULL  | NULL  |
 | 400  | Street 4  | NULL  | NULL  | NULL  | NULL  |
-+------+-----------+-------+-------+-------+-------+--+
++------+-----------+-------+-------+-------+-------+
 ```
 
 ### Related Statements

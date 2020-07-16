@@ -143,12 +143,12 @@ CREATE TABLE student_copy STORED AS ORC
 CREATE TABLE student (id INT, name STRING, age INT)
     COMMENT 'this is a comment'
     STORED AS ORC
-    TBLPROPERTIES ('foo' = 'bar');  
+    TBLPROPERTIES ('foo'='bar');  
 
 --Specify table comment and properties with different clauses order
 CREATE TABLE student (id INT, name STRING, age INT)
     STORED AS ORC
-    TBLPROPERTIES ('foo' = 'bar')
+    TBLPROPERTIES ('foo'='bar')
     COMMENT 'this is a comment';
 
 --Create partitioned table

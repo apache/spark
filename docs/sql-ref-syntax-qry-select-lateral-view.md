@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-`LATERAL VIEW` clause is used in conjunction with generator  functions such as explode(), which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
+`LATERAL VIEW` clause is used in conjunction with generator functions such as explode(), which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
 
 ### Syntax
 
@@ -105,7 +105,7 @@ SELECT * FROM person
 +-----+-------+------+--------+----------+--------+
 
 SELECT * FROM person
-    LATERAL VIEW  OUTER EXPLODE(ARRAY()) tabelName AS c_age;
+    LATERAL VIEW OUTER EXPLODE(ARRAY()) tabelName AS c_age;
 +------+-------+-------+--------+-----------+--------+
 |  id  | name  |  age  | class  |  address  | c_age  |
 +------+-------+-------+--------+-----------+--------+
