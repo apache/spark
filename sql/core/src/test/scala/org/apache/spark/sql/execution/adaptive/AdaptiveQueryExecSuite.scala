@@ -733,12 +733,13 @@ class AdaptiveQueryExecSuite
   test("SPARK-32201: handle general skew join pattern") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1199",
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.SHUFFLE_PARTITIONS.key -> "100",
       SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
 
+      // CASE 1:
       // SMJ
       //   Sort
       //     CustomShuffleReader(coalesced)
@@ -765,6 +766,7 @@ class AdaptiveQueryExecSuite
               .otherwise('id).as("key1"),
             'id as "value1")
           .createOrReplaceTempView("skewData1")
+
         spark
           .range(0, 1000, 1, 10)
           .select(
@@ -788,6 +790,41 @@ class AdaptiveQueryExecSuite
         val (_, adaptivePlan) = runAdaptiveAndVerifyResult(sqlText)
         val innerSmj = findTopLevelSortMergeJoin(adaptivePlan)
         checkSkewJoin(innerSmj, 2, 0)
+
+        // CASE 2:
+        // SMJ
+        //   Sort
+        //     SMJ
+        //       CustomShuffleReader(coalesced)
+        //         Shuffle
+        //   Sort
+        //     CustomShuffleReader(coalesced)
+        //       Shuffle
+        // -->
+        // SMJ
+        //   Sort
+        //     BroadcastHashJoin <-- SMJ change to BCJ
+        //       CustomShuffleReader(coalesced and skew)
+        //         Shuffle
+        //   Sort
+        //     CustomShuffleReader(coalesced)
+        //       Shuffle
+        val sqlText2 =
+          """
+            |SELECT * FROM
+            |  (
+            |    SELECT t1.*
+            |    FROM skewData1 t1 LEFT JOIN testData t2
+            |    ON t1.value1 = t2.key
+            |    AND t2.value = '2' || t2.value = '1'
+            |  ) AS data1
+            |  LEFT JOIN
+            |  skewData2 AS data2
+            |ON data1.key1 = data2.key2 LIMIT 10
+            |""".stripMargin
+        val (_, adaptivePlan2) = runAdaptiveAndVerifyResult(sqlText2)
+        val innerSmj2 = findTopLevelSortMergeJoin(adaptivePlan2)
+        checkSkewJoin(innerSmj2, 2, 0)
       }
     }
   }
