@@ -44,7 +44,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       ids: Set[(Int, Long, Int)]): Unit = {
 
     when(mockMigratableShuffleResolver.getStoredShuffles())
-      .thenReturn(ids.map(triple => ShuffleBlockInfo(triple._1, triple._2)).toSet)
+      .thenReturn(ids.map(triple => ShuffleBlockInfo(triple._1, triple._2)).toSeq)
 
     ids.foreach { case (shuffleId: Int, mapId: Long, reduceId: Int) =>
       when(mockMigratableShuffleResolver.getMigrationBlocks(mc.any()))

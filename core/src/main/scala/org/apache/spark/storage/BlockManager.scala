@@ -668,7 +668,7 @@ private[spark] class BlockManager(
     }
 
     if (blockId.isShuffle) {
-      logInfo(s"Putting shuffle block ${blockId}")
+      logDebug(s"Putting shuffle block ${blockId}")
       try {
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {
@@ -677,7 +677,7 @@ private[spark] class BlockManager(
           s"resolver ${shuffleManager.shuffleBlockResolver}")
       }
     }
-    logInfo(s"Putting regular block ${blockId}")
+    logDebug(s"Putting regular block ${blockId}")
     // All other blocks
     val (_, tmpFile) = diskBlockManager.createTempLocalBlock()
     val channel = new CountingWritableChannel(

@@ -47,6 +47,7 @@ import org.apache.spark.util.Utils
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getSortBasedShuffleBlockData().
 private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
+    // var for testing
     var _blockManager: BlockManager = null)
   extends ShuffleBlockResolver
   with Logging with MigratableResolver {
@@ -61,19 +62,14 @@ private[spark] class IndexShuffleBlockResolver(
   /**
    * Get the shuffle files that are stored locally. Used for block migrations.
    */
-  override def getStoredShuffles(): Set[ShuffleBlockInfo] = {
-    // Matches ShuffleIndexBlockId name
-    val pattern = "shuffle_(\\d+)_(\\d+)_.+\\.index".r
-    val rootDirs = blockManager.diskBlockManager.localDirs
-    // ExecutorDiskUtil puts things inside one level hashed sub directories
-    val searchDirs = rootDirs.flatMap(_.listFiles()).filter(_.isDirectory()) ++ rootDirs
-    val filenames = searchDirs.flatMap(_.list())
-    logDebug(s"Got block files ${filenames.toList}")
-    filenames.flatMap { fname =>
-      pattern.findAllIn(fname).matchData.map {
-        matched => ShuffleBlockInfo(matched.group(1).toInt, matched.group(2).toLong)
-      }
-    }.toSet
+  override def getStoredShuffles(): Seq[ShuffleBlockInfo] = {
+    val allBlocks = blockManager.diskBlockManager.getAllBlocks()
+    allBlocks.flatMap {
+      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+        Some(ShuffleBlockInfo(shuffleId, mapId))
+      case _ =>
+        None
+    }
   }
 
   /**

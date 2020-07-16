@@ -35,8 +35,8 @@ import org.apache.spark.util.ThreadUtils
  * It creates a Thread to retry offloading all RDD cache and Shuffle blocks
  */
 private[storage] class BlockManagerDecommissioner(
-  conf: SparkConf,
-  bm: BlockManager) extends Logging {
+    conf: SparkConf,
+    bm: BlockManager) extends Logging {
 
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
@@ -195,7 +195,7 @@ private[storage] class BlockManagerDecommissioner(
   private[storage] def refreshOffloadingShuffleBlocks(): Unit = {
     // Update the queue of shuffles to be migrated
     logInfo("Offloading shuffle blocks")
-    val localShuffles = bm.migratableResolver.getStoredShuffles()
+    val localShuffles = bm.migratableResolver.getStoredShuffles().toSet
     val newShufflesToMigrate = localShuffles.diff(migratingShuffles).toSeq
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
@@ -223,7 +223,7 @@ private[storage] class BlockManagerDecommissioner(
   private[storage] def stopOffloadingShuffleBlocks(): Unit = {
     logInfo("Stopping offloading shuffle blocks.")
     // Stop as gracefully as possible.
-    migrationPeers.values.foreach{_.running = false}
+    migrationPeers.values.foreach{ _.running = false }
     shuffleMigrationPool.shutdown()
     shuffleMigrationPool.shutdownNow()
   }
