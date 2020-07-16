@@ -168,7 +168,7 @@ case class BroadcastExchangeExec(
       "BroadcastExchange does not support the execute() code path.")
   }
 
-  override protected[sql] def doExecuteColumnar(): RDD[ColumnarBatch] = {
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     throw new UnsupportedOperationException(
       "BroadcastExchange does not support the executeColumnar() code path.")
   }
