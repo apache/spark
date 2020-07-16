@@ -142,19 +142,25 @@ object AggUtils {
 
     val distinctAttributes = normalizedNamedDistinctExpressions.map(_.toAttribute)
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
+    val distinctFilterAttributes = functionsWithDistinct.flatMap(_.filterAttributes.toSeq)
 
     // 1. Create an Aggregate Operator for partial aggregations.
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       // We will group by the original grouping expression, plus an additional expression for the
-      // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
-      // expressions will be [key, value].
+      // DISTINCT column and the referred attributes in the FILTER clause associated with each
+      // aggregate function. For example,
+      // 1.for AVG(DISTINCT value) GROUP BY key, the grouping expressions will be [key, value].
+      // 2.for AVG (DISTINCT value) Filter (WHERE age > 20) GROUP BY key, the grouping expression
+      // will be [key, value, age].
       createAggregate(
-        groupingExpressions = groupingExpressions ++ normalizedNamedDistinctExpressions,
+        groupingExpressions = groupingExpressions ++ normalizedNamedDistinctExpressions ++
+          distinctFilterAttributes,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
+          distinctFilterAttributes ++
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
         child = child)
     }
@@ -166,11 +172,13 @@ object AggUtils {
       createAggregate(
         requiredChildDistributionExpressions =
           Some(groupingAttributes ++ distinctAttributes),
-        groupingExpressions = groupingAttributes ++ distinctAttributes,
+        groupingExpressions = groupingAttributes ++ distinctAttributes ++
+          distinctFilterAttributes,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = (groupingAttributes ++ distinctAttributes).length,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
+          distinctFilterAttributes ++
           aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
         child = partialAggregate)
     }
@@ -201,7 +209,8 @@ object AggUtils {
           // its input will have distinct arguments.
           // We just keep the isDistinct setting to true, so when users look at the query plan,
           // they still can see distinct aggregations.
-          val expr = AggregateExpression(func, Partial, isDistinct = true)
+          val filter = functionsWithDistinct(i).filter
+          val expr = AggregateExpression(func, Partial, isDistinct = true, filter)
           // Use original AggregationFunction to lookup attributes, which is used to build
           // aggregateFunctionToAttribute
           val attr = functionsWithDistinct(i).resultAttribute

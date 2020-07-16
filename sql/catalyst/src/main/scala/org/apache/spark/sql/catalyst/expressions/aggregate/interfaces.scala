@@ -216,15 +216,21 @@ abstract class AggregateFunction extends Expression {
   def toAggregateExpression(): AggregateExpression = toAggregateExpression(isDistinct = false)
 
   /**
-   * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] and sets `isDistinct`
-   * flag of the [[AggregateExpression]] to the given value because
+   * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] with `isDistinct`
+   * flag and an optional `filter` of the [[AggregateExpression]] to the given value because
    * [[AggregateExpression]] is the container of an [[AggregateFunction]], aggregation mode,
-   * and the flag indicating if this aggregation is distinct aggregation or not.
-   * An [[AggregateFunction]] should not be used without being wrapped in
+   * the flag indicating if this aggregation is distinct aggregation or not and the optional
+   * `filter`. An [[AggregateFunction]] should not be used without being wrapped in
    * an [[AggregateExpression]].
    */
-  def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
-    AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
+  def toAggregateExpression(
+      isDistinct: Boolean,
+      filter: Option[Expression] = None): AggregateExpression = {
+    AggregateExpression(
+      aggregateFunction = this,
+      mode = Complete,
+      isDistinct = isDistinct,
+      filter = filter)
   }
 
   def sql(isDistinct: Boolean): String = {

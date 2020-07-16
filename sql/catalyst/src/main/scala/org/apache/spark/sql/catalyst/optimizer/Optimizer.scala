@@ -140,6 +140,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNonCorrelatedExists,
       ComputeCurrentTime,
       GetCurrentDatabaseAndCatalog(catalogManager),
+      ProjectFilterInAggregates,
       RewriteDistinctAggregates,
       ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -237,6 +238,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions.ruleName ::
       ComputeCurrentTime.ruleName ::
       GetCurrentDatabaseAndCatalog(catalogManager).ruleName ::
+      ProjectFilterInAggregates.ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
       ReplaceIntersectWithSemiJoin.ruleName ::

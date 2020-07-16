@@ -226,7 +226,10 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             val naf = patchAggregateFunctionChildren(af) { x =>
               distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _))
             }
-            (e, e.copy(aggregateFunction = naf, isDistinct = false))
+            val filterOpt = e.filter.map(_.transform {
+              case a: Attribute => distinctAggChildAttrLookup.getOrElse(a, a)
+            })
+            (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = filterOpt))
           }
 
           (projection, operators)
