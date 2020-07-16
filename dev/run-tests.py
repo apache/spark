@@ -653,8 +653,9 @@ def main():
         # If we're running the tests in Github Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
-            # Set the log level as ERROR to make the github action more readable.
-            extra_profiles.append("--error")
+            # Set the log level of sbt as ERROR to make the output more readable.
+            if build_tool == "sbt":
+                extra_profiles.append("--error")
             if os.environ["GITHUB_BASE_REF"] != "":
                 # Pull requests
                 changed_files = identify_changed_files_from_git_commits(
