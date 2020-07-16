@@ -660,9 +660,9 @@ class AdaptiveQueryExecSuite
 
         checkSkewJoin(
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2", true)
-        // Additional shuffle introduced, so disable the "OptimizeSkewedJoin" optimization
+        // After patched SPARK-32201, this query won't introduce additional shuffle anymore.
         checkSkewJoin(
-          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1", false)
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1", true)
       }
     }
   }

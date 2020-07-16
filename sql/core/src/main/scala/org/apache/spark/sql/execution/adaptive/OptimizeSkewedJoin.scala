@@ -199,9 +199,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
    *    3 tasks separately.
    */
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case smj @ SortMergeJoinExec(_, _, joinType, _,
-        s1 @ SortExec(_, _, _, _),
-        s2 @ SortExec(_, _, _, _), _)
+    case smj @ SortMergeJoinExec(_, _, joinType, _, s1: SortExec, s2: SortExec, _)
         if supportedJoinTypes.contains(joinType) =>
       // find the shuffleStage from the plan tree
       val leftOpt = findShuffleStage(s1)
