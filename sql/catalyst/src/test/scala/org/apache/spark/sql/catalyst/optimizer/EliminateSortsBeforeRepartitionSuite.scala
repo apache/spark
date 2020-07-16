@@ -173,7 +173,7 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
 }
 
 class EliminateSortsBeforeRepartitionByExprsSuite extends EliminateSortsBeforeRepartitionSuite {
-  override def repartition(plan: LogicalPlan): LogicalPlan = plan.distribute('a, 'b)(10)
+  override def repartition(plan: LogicalPlan): LogicalPlan = plan.distribute('a)(10)
 
   test("sortBy before repartition with non-deterministic expressions") {
     val plan = testRelation.sortBy('a.asc, 'b.asc).limit(10)
