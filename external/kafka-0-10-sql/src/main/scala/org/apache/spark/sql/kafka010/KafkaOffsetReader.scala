@@ -295,24 +295,21 @@ private[kafka010] class KafkaOffsetReader(
       val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
       logDebug(s"Got earliest offsets for partition : $partitionOffsets")
       partitionOffsets
-    }, fetchingEarliestOffset = true)
+    })
 
   /**
    * Fetch the latest offsets for the topic partitions that are indicated
    * in the [[ConsumerStrategy]].
    *
    * Kafka may return earliest offsets when we are requesting latest offsets if `poll` is called
-   * right before `seekToEnd` (KAFKA-7703). As a workaround, we will call `position` right after
-   * `poll` to wait until the potential offset request triggered by `poll(0)` is done.
-   *
-   * In addition, to avoid other unknown issues, we also use the given `knownOffsets` to audit the
-   * latest offsets returned by Kafka. If we find some incorrect offsets (a latest offset is less
-   * than an offset in `knownOffsets`), we will retry at most `maxOffsetFetchAttempts` times. When
-   * a topic is recreated, the latest offsets may be less than offsets in `knownOffsets`. We cannot
-   * distinguish this with KAFKA-7703, so we just return whatever we get from Kafka after retrying.
+   * right before `seekToEnd` (KAFKA-7703). This has been resolved but to avoid other unknown
+   * issues, we also use the given `knownOffsets` to audit the latest offsets returned by Kafka.
+   * If we find some incorrect offsets (a latest offset is less than an offset in `knownOffsets`),
+   * we will retry at most `maxOffsetFetchAttempts` times. When a topic is recreated, the latest
+   * offsets may be less than offsets in `knownOffsets`. We cannot distinguish this with KAFKA-7703
+   * like issues, so we just return whatever we get from Kafka after retrying.
    */
-  def fetchLatestOffsets(
-      knownOffsets: Option[PartitionOffsetMap]): PartitionOffsetMap =
+  def fetchLatestOffsets(knownOffsets: Option[PartitionOffsetMap]): PartitionOffsetMap =
     partitionsAssignedToConsumer { partitions => {
       logDebug("Seeking to the end.")
 
@@ -343,8 +340,8 @@ private[kafka010] class KafkaOffsetReader(
         // `withRetriesWithoutInterrupt` to retry because:
         //
         // - `withRetriesWithoutInterrupt` will reset the consumer for each attempt but a fresh
-        //    consumer has a much bigger chance to hit KAFKA-7703.
-        // - Avoid calling `consumer.poll(0)` which may cause KAFKA-7703.
+        //    consumer has a much bigger chance to hit KAFKA-7703 like issues.
+        // - Avoid calling `consumer.poll(0)` which may cause KAFKA-7703 like issues.
         var incorrectOffsets: Seq[(TopicPartition, Long, Long)] = Nil
         var attempt = 0
         do {
@@ -388,7 +385,7 @@ private[kafka010] class KafkaOffsetReader(
         }.map(p => p -> consumer.position(p)).toMap
         logDebug(s"Got earliest offsets for new partitions: $partitionOffsets")
         partitionOffsets
-      }, fetchingEarliestOffset = true)
+      })
     }
   }
 
@@ -529,22 +526,13 @@ private[kafka010] class KafkaOffsetReader(
   }
 
   private def partitionsAssignedToConsumer(
-      body: ju.Set[TopicPartition] => Map[TopicPartition, Long],
-      fetchingEarliestOffset: Boolean = false)
+      body: ju.Set[TopicPartition] => Map[TopicPartition, Long])
     : Map[TopicPartition, Long] = runUninterruptibly {
 
     withRetriesWithoutInterrupt {
       // Poll to get the latest assigned partitions
       consumer.poll(0)
       val partitions = consumer.assignment()
-
-      if (!fetchingEarliestOffset) {
-        // Call `position` to wait until the potential offset request triggered by `poll(0)` is
-        // done. This is a workaround for KAFKA-7703, which an async `seekToBeginning` triggered by
-        // `poll(0)` may reset offsets that should have been set by another request.
-        partitions.asScala.map(p => p -> consumer.position(p)).foreach(_ => {})
-      }
-
       consumer.pause(partitions)
       logDebug(s"Partitions assigned to consumer: $partitions.")
       body(partitions)
