@@ -37,8 +37,22 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
+
+/**
+ * Base class for implementations of shuffle exchanges. This was added to enable plugins to
+ * provide columnar implementations of shuffle exchanges when Adaptive Query Execution is
+ * enabled.
+ */
+abstract class ShuffleExchange extends Exchange {
+  def shuffleId: Int
+  def getNumMappers: Int
+  def getNumReducers: Int
+  def canChangeNumPartitions: Boolean
+  def mapOutputStatisticsFuture: Future[MapOutputStatistics]
+}
 
 /**
  * Performs a shuffle that will result in the desired partitioning.
@@ -46,7 +60,7 @@ import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordCo
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    canChangeNumPartitions: Boolean = true) extends Exchange {
+    canChangeNumPartitions: Boolean = true) extends ShuffleExchange {
 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
@@ -62,6 +76,12 @@ case class ShuffleExchangeExec(
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
   @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
+
+  override def shuffleId: Int = shuffleDependency.shuffleId
+
+  override def getNumMappers: Int = shuffleDependency.rdd.getNumPartitions
+
+  override def getNumReducers: Int = shuffleDependency.partitioner.numPartitions
 
   // 'mapOutputStatisticsFuture' is only needed when enable AQE.
   @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
