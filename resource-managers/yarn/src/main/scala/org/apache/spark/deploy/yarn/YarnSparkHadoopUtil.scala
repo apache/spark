@@ -107,7 +107,7 @@ object YarnSparkHadoopUtil {
    * Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
    * an inconsistent state.
    * TODO: If the OOM is not recoverable by rescheduling it on different node, then do
-   * 'something' to fail job ... akin to blacklisting trackers in mapred ?
+   * 'something' to fail job ... akin to unhealthy trackers in mapred ?
    *
    * The handler if an OOM Exception is thrown by the JVM must be configured on Windows
    * differently: the 'taskkill' command should be used, whereas Unix-based systems use 'kill'.

@@ -94,9 +94,10 @@ private[window] object AggregateProcessor {
     }
 
     // Create the projections.
-    val initialProj = newMutableProjection(initialValues, partitionSize.toSeq)
-    val updateProj = newMutableProjection(updateExpressions, aggBufferAttributes ++ inputAttributes)
-    val evalProj = newMutableProjection(evaluateExpressions, aggBufferAttributes)
+    val initialProj = newMutableProjection(initialValues.toSeq, partitionSize.toSeq)
+    val updateProj =
+      newMutableProjection(updateExpressions.toSeq, (aggBufferAttributes ++ inputAttributes).toSeq)
+    val evalProj = newMutableProjection(evaluateExpressions.toSeq, aggBufferAttributes.toSeq)
 
     // Create the processor
     new AggregateProcessor(

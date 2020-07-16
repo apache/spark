@@ -200,6 +200,8 @@ class Analyzer(
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
+    Batch("Disable Hints", Once,
+      new ResolveHints.DisableHints(conf)),
     Batch("Hints", fixedPoint,
       new ResolveHints.ResolveJoinStrategyHints(conf),
       new ResolveHints.ResolveCoalesceHints(conf)),
@@ -1048,7 +1050,7 @@ class Analyzer(
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
-        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get)
+        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get).toMap
         val query = addStaticPartitionColumns(r, i.query, staticPartitions)
 
         if (!i.overwrite) {
@@ -2236,7 +2238,7 @@ class Analyzer(
               }
           }
           if (aggregateExpressions.nonEmpty) {
-            Some(aggregateExpressions, transformedAggregateFilter)
+            Some(aggregateExpressions.toSeq, transformedAggregateFilter)
           } else {
             None
           }
@@ -2675,7 +2677,7 @@ class Analyzer(
       val windowOps =
         groupedWindowExpressions.foldLeft(child) {
           case (last, ((partitionSpec, orderSpec, _), windowExpressions)) =>
-            Window(windowExpressions, partitionSpec, orderSpec, last)
+            Window(windowExpressions.toSeq, partitionSpec, orderSpec, last)
         }
 
       // Finally, we create a Project to output windowOps's output
@@ -2817,13 +2819,12 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(_, _, inputs, _, _, _, _)
-            if udf.inputPrimitives.contains(true) =>
+        case udf: ScalaUDF if udf.inputPrimitives.contains(true) =>
           // Otherwise, add special handling of null for fields that can't accept null.
           // The result of operations like this, when passed null, is generally to return null.
-          assert(udf.inputPrimitives.length == inputs.length)
+          assert(udf.inputPrimitives.length == udf.children.length)
 
-          val inputPrimitivesPair = udf.inputPrimitives.zip(inputs)
+          val inputPrimitivesPair = udf.inputPrimitives.zip(udf.children)
           val inputNullCheck = inputPrimitivesPair.collect {
             case (isPrimitive, input) if isPrimitive && input.nullable =>
               IsNull(input)

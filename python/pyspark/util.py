@@ -19,50 +19,8 @@
 import re
 import sys
 import traceback
-import os
-import warnings
-import inspect
-from py4j.protocol import Py4JJavaError
 
 __all__ = []
-
-
-def _exception_message(excp):
-    """Return the message from an exception as either a str or unicode object.  Supports both
-    Python 2 and Python 3.
-
-    >>> msg = "Exception message"
-    >>> excp = Exception(msg)
-    >>> msg == _exception_message(excp)
-    True
-
-    >>> msg = u"unicöde"
-    >>> excp = Exception(msg)
-    >>> msg == _exception_message(excp)
-    True
-    """
-    if isinstance(excp, Py4JJavaError):
-        # 'Py4JJavaError' doesn't contain the stack trace available on the Java side in 'message'
-        # attribute in Python 2. We should call 'str' function on this exception in general but
-        # 'Py4JJavaError' has an issue about addressing non-ascii strings. So, here we work
-        # around by the direct call, '__str__()'. Please see SPARK-23517.
-        return excp.__str__()
-    if hasattr(excp, "message"):
-        return excp.message
-    return str(excp)
-
-
-def _get_argspec(f):
-    """
-    Get argspec of a function. Supports both Python 2 and Python 3.
-    """
-    if sys.version_info[0] < 3:
-        argspec = inspect.getargspec(f)
-    else:
-        # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
-        # See SPARK-23569.
-        argspec = inspect.getfullargspec(f)
-    return argspec
 
 
 def print_exec(stream):

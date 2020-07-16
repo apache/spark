@@ -444,10 +444,10 @@ object SparkBuild extends PomBuild {
 object SparkParallelTestGrouping {
   // Settings for parallelizing tests. The basic strategy here is to run the slowest suites (or
   // collections of suites) in their own forked JVMs, allowing us to gain parallelism within a
-  // SBT project. Here, we take a whitelisting approach where the default behavior is to run all
+  // SBT project. Here, we take an opt-in approach where the default behavior is to run all
   // tests sequentially in a single JVM, requiring us to manually opt-in to the extra parallelism.
   //
-  // There are a reasons why such a whitelist approach is good:
+  // There are a reasons why such an opt-in approach is good:
   //
   //    1. Launching one JVM per suite adds significant overhead for short-running suites. In
   //       addition to JVM startup time and JIT warmup, it appears that initialization of Derby
@@ -476,6 +476,7 @@ object SparkParallelTestGrouping {
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
     "org.apache.spark.ml.classification.LinearSVCSuite",
     "org.apache.spark.sql.SQLQueryTestSuite",
+    "org.apache.spark.sql.hive.client.HadoopVersionInfoSuite",
     "org.apache.spark.sql.hive.thriftserver.SparkExecuteStatementOperationSuite",
     "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite",
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
@@ -1015,9 +1016,20 @@ object TestSettings {
       sys.props.get("test.exclude.tags").map { tags =>
         Seq("--exclude-categories=" + tags)
       }.getOrElse(Nil): _*),
+    // Include tags defined in a system property
+    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
+      sys.props.get("test.include.tags").map { tags =>
+        tags.split(",").flatMap { tag => Seq("-n", tag) }.toSeq
+      }.getOrElse(Nil): _*),
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit,
+      sys.props.get("test.include.tags").map { tags =>
+        Seq("--include-categories=" + tags)
+      }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
+    // Required to detect Junit tests for each project, see also https://github.com/sbt/junit-interface/issues/35
+    crossPaths := false,
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project

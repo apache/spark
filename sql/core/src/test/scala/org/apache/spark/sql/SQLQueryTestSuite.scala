@@ -153,8 +153,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
   /** List of test cases to ignore, in lower cases. */
-  protected def blackList: Set[String] = Set(
-    "blacklist.sql"   // Do NOT remove this one. It is here to test the blacklist functionality.
+  protected def ignoreList: Set[String] = Set(
+    "ignored.sql"   // Do NOT remove this one. It is here to test the ignore functionality.
   )
 
   // Create all the test cases.
@@ -222,7 +222,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
-    if (blackList.exists(t =>
+    if (ignoreList.exists(t =>
         testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }

@@ -15,18 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.continuous.shuffle
+package org.apache.spark.tags;
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.scalatest.TagAnnotation;
 
-/**
- * Trait for reading from a continuous processing shuffle.
- */
-trait ContinuousShuffleReader {
-  /**
-   * Returns an iterator over the incoming rows in an epoch. Implementations should block waiting
-   * for new rows to arrive, and end the iterator once they've received epoch markers from all
-   * shuffle writers.
-   */
-  def read(): Iterator[UnsafeRow]
-}
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface SlowHiveTest { }

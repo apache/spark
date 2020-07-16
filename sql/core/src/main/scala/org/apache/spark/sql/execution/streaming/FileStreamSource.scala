@@ -482,7 +482,7 @@ object FileStreamSource {
     }
 
     private def buildSourceGlobFilters(sourcePath: Path): Seq[GlobFilter] = {
-      val filters = new scala.collection.mutable.MutableList[GlobFilter]()
+      val filters = new scala.collection.mutable.ArrayBuffer[GlobFilter]()
 
       var currentPath = sourcePath
       while (!currentPath.isRoot) {
@@ -490,7 +490,7 @@ object FileStreamSource {
         currentPath = currentPath.getParent
       }
 
-      filters.toList
+      filters.toSeq
     }
 
     override protected def cleanTask(entry: FileEntry): Unit = {

@@ -867,7 +867,7 @@ trait CheckAnalysis extends PredicateHelper {
 
     // Simplify the predicates before validating any unsupported correlation patterns in the plan.
     AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
-      // Whitelist operators allowed in a correlated subquery
+      // Approve operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,
       //    by definition of the operators, they either do not contain

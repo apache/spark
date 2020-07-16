@@ -18,6 +18,7 @@
 import functools
 import sys
 import warnings
+from inspect import getfullargspec
 
 from pyspark import since
 from pyspark.rdd import PythonEvalType
@@ -25,7 +26,6 @@ from pyspark.sql.pandas.typehints import infer_eval_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType
 from pyspark.sql.udf import _create_udf
-from pyspark.util import _get_argspec
 
 
 class PandasUDFType(object):
@@ -371,30 +371,29 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
 
 def _create_pandas_udf(f, returnType, evalType):
-    argspec = _get_argspec(f)
+    argspec = getfullargspec(f)
 
     # pandas UDF by type hints.
-    if sys.version_info >= (3, 6):
-        from inspect import signature
+    from inspect import signature
 
-        if evalType in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-                        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-                        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
-            warnings.warn(
-                "In Python 3.6+ and Spark 3.0+, it is preferred to specify type hints for "
-                "pandas UDF instead of specifying pandas UDF type which will be deprecated "
-                "in the future releases. See SPARK-28264 for more details.", UserWarning)
-        elif evalType in [PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                          PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
-                          PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF]:
-            # In case of 'SQL_GROUPED_MAP_PANDAS_UDF',  deprecation warning is being triggered
-            # at `apply` instead.
-            # In case of 'SQL_MAP_PANDAS_ITER_UDF' and 'SQL_COGROUPED_MAP_PANDAS_UDF', the
-            # evaluation type will always be set.
-            pass
-        elif len(argspec.annotations) > 0:
-            evalType = infer_eval_type(signature(f))
-            assert evalType is not None
+    if evalType in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                    PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
+        warnings.warn(
+            "In Python 3.6+ and Spark 3.0+, it is preferred to specify type hints for "
+            "pandas UDF instead of specifying pandas UDF type which will be deprecated "
+            "in the future releases. See SPARK-28264 for more details.", UserWarning)
+    elif evalType in [PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                      PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+                      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF]:
+        # In case of 'SQL_GROUPED_MAP_PANDAS_UDF',  deprecation warning is being triggered
+        # at `apply` instead.
+        # In case of 'SQL_MAP_PANDAS_ITER_UDF' and 'SQL_COGROUPED_MAP_PANDAS_UDF', the
+        # evaluation type will always be set.
+        pass
+    elif len(argspec.annotations) > 0:
+        evalType = infer_eval_type(signature(f))
+        assert evalType is not None
 
     if evalType is None:
         # Set default is scalar UDF.
