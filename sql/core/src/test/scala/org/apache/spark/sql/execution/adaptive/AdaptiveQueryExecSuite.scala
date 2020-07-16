@@ -733,7 +733,7 @@ class AdaptiveQueryExecSuite
   test("SPARK-32201: handle general skew join pattern") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1199",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.SHUFFLE_PARTITIONS.key -> "100",
       SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
@@ -757,7 +757,7 @@ class AdaptiveQueryExecSuite
       //     HashAggregate
       //       CustomShuffleReader(coalesced)
       //         Shuffle
-      withTempView("skewData1", "skewData2") {
+      withTempView("skewData1", "skewData2", "smallData") {
         spark
           .range(0, 1000, 1, 10)
           .select(
@@ -809,22 +809,30 @@ class AdaptiveQueryExecSuite
         //   Sort
         //     CustomShuffleReader(coalesced)
         //       Shuffle
+        spark
+          .range(0, 100, 1, 10)
+          .select(
+            when('id < 250, 249)
+              .otherwise('id).as("key3"),
+            expr("concat(id, 'aaa')") as "value3")
+          .createOrReplaceTempView("smallData")
+
         val sqlText2 =
           """
             |SELECT * FROM
             |  (
             |    SELECT t1.*
-            |    FROM skewData1 t1 LEFT JOIN testData t2
-            |    ON t1.value1 = t2.key
-            |    AND t2.value = '2' || t2.value = '1'
+            |    FROM skewData1 t1 LEFT JOIN smallData t2
+            |    ON t1.key1 = t2.key3
+            |    AND t2.value3 = 'xyz'
             |  ) AS data1
-            |  LEFT JOIN
+            |  INNER JOIN
             |  skewData2 AS data2
             |ON data1.key1 = data2.key2 LIMIT 10
             |""".stripMargin
         val (_, adaptivePlan2) = runAdaptiveAndVerifyResult(sqlText2)
         val innerSmj2 = findTopLevelSortMergeJoin(adaptivePlan2)
-        checkSkewJoin(innerSmj2, 2, 0)
+        checkSkewJoin(innerSmj2, 2, 1)
       }
     }
   }
