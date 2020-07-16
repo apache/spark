@@ -69,11 +69,11 @@ abstract class ModifiedDateFilter(sparkSession: SparkSession,
   val timeString = UTF8String.fromString(options.get(strategy()).get)
 
   val microseconds: Long = {
-    DateTimeUtils.stringToTimestamp(timeString, timeZone.toZoneId).getOrElse(0)
+    DateTimeUtils.stringToTimestamp(timeString, timeZone.toZoneId).get
   }
 
-  def localTime(milli: Long): Long = {
-    DateTimeUtils.fromUTCTime(DateTimeUtils.millisToMicros(milli), timeZoneId)
+  def localTime(micros: Long): Long = {
+    DateTimeUtils.fromUTCTime(micros, timeZoneId)
   }
 
   def accept(fileStatus: FileStatus): Boolean
