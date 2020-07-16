@@ -35,7 +35,7 @@ SET TIME ZONE INTERVAL interval_literal
 
 * **LOCAL**
 
-    Set the time zone to the one specified in the java `user.timezone` property or environment variable `TZ`, or to the system time zone if they are undefined.
+    Set the time zone to the one specified in the java `user.timezone` property, or to the environment variable `TZ` if `user.timezone` is undefined, or to the system time zone if both of them are undefined.
 
 * **timezone_value**
 
