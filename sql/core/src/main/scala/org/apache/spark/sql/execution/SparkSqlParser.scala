@@ -67,16 +67,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
     // Construct the command.
-    val raw = remainder(ctx.SET.getSymbol)
-    val keyValueSeparatorIndex = raw.indexOf('=')
-    if (keyValueSeparatorIndex >= 0) {
-      val key = raw.substring(0, keyValueSeparatorIndex).trim
-      val value = raw.substring(keyValueSeparatorIndex + 1).trim
-      SetCommand(Some(key -> Option(value)))
-    } else if (raw.nonEmpty) {
-      SetCommand(Some(raw.trim -> None))
-    } else {
-      SetCommand(None)
+    val keyValueDef = """\s*([a-zA-Z\d\\.:]+|`[a-zA-Z\d\s\\.:]+`)\s*=(.*)""".r
+    val keyOnlyDef = """\s*([a-zA-Z\d\\.:]+|`[a-zA-Z\d\s\\.:]+`|-v)\s*""".r
+    remainder(ctx.SET.getSymbol) match {
+      case keyValueDef(key, value) =>
+        SetCommand(Some(key.replaceAll("`", "") -> Option(value.trim)))
+      case keyOnlyDef(key) =>
+        SetCommand(Some(key.replaceAll("`", "") -> None))
+      case s if s.trim.isEmpty =>
+        SetCommand(None)
+      case _ =>
+        throw new ParseException("Expected format is 'SET key=value' or 'SET key'. " +
+          "If you want to include spaces in key, please use backquotes, " +
+          "e.g., 'SET `ke y`=value'.", ctx)
     }
   }
 

@@ -61,6 +61,34 @@ class SparkSqlParserSuite extends AnalysisTest {
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
 
+  test("Report Error for invalid usage of SET command") {
+    assertEqual("SET", SetCommand(None))
+    assertEqual("SET   ", SetCommand(None))
+    assertEqual("SET -v", SetCommand(Some("-v", None)))
+    assertEqual("SET  -v  ", SetCommand(Some("-v", None)))
+    assertEqual("SET spark.sql.key", SetCommand(Some("spark.sql.key" -> None)))
+    assertEqual("SET   spark.sql.key ", SetCommand(Some("spark.sql.key" -> None)))
+    assertEqual("SET spark.sql.key1=value", SetCommand(Some("spark.sql.key1" -> Some("value"))))
+    assertEqual("SET spark:sql:key2=value", SetCommand(Some("spark:sql:key2" -> Some("value"))))
+    assertEqual("SET spark.sql.key3 =  value",
+      SetCommand(Some("spark.sql.key3" -> Some("value"))))
+    assertEqual("SET spark.sql.key4= v al u   e ",
+      SetCommand(Some("spark.sql.key4" -> Some("v al u   e"))))
+    assertEqual("SET spark.sql.key= value1= value2",
+      SetCommand(Some("spark.sql.key" -> Some("value1= value2"))))
+    assertEqual("SET `spark.sql.    key`=value",
+      SetCommand(Some("spark.sql.    key" -> Some("value"))))
+
+    val expectedErrMsg = "Expected format is 'SET key=value' or 'SET key'. " +
+      "If you want to include spaces in key, please use backquotes, " +
+      "e.g., 'SET `ke y`=value'."
+    intercept("SET spark.sql.key value", expectedErrMsg)
+    intercept("SET spark.sql.key   'value'", expectedErrMsg)
+    intercept("""SET    spark.sql.key "value" """, expectedErrMsg)
+    intercept("SET spark.sql.key value1 value2", expectedErrMsg)
+    intercept("SET spark.sql.    key=value", expectedErrMsg)
+  }
+
   test("refresh resource") {
     assertEqual("REFRESH prefix_path", RefreshResource("prefix_path"))
     assertEqual("REFRESH /", RefreshResource("/"))
