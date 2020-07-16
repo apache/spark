@@ -202,13 +202,13 @@ trait PredicateHelper extends Logging {
   }
 
   /*
-   * Returns a filter that it's output is a subset of `outputSet` and it contains all possible
+   * Returns a filter that its reference is a subset of `outputSet` and it contains the maximum
    * constraints from `condition`. This is used for predicate pushdown.
-   * When there is no such convertible filter, `None` is returned.
+   * When there is no such filter, `None` is returned.
    */
   protected def extractPredicatesWithinOutputSet(
-    condition: Expression,
-    outputSet: AttributeSet): Option[Expression] = condition match {
+      condition: Expression,
+      outputSet: AttributeSet): Option[Expression] = condition match {
     case And(left, right) =>
       val leftResultOptional = extractPredicatesWithinOutputSet(left, outputSet)
       val rightResultOptional = extractPredicatesWithinOutputSet(right, outputSet)

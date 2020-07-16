@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 
 /**
- * Try pushing down convertible disjunctive join condition into left and right child.
+ * Try pushing down disjunctive join condition into left and right child.
  * To avoid expanding the join condition, the join condition will be kept in the original form even
  * when predicate pushdown happens.
  */
@@ -35,39 +35,6 @@ object PushExtraPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHel
   private def canPushThrough(joinType: JoinType): Boolean = joinType match {
     case _: InnerLike | LeftSemi | RightOuter | LeftOuter | LeftAnti | ExistenceJoin(_) => true
     case _ => false
-  }
-
-  /**
-   * Splits join condition expressions (on a given join's output) into three
-   * categories based on the attributes required to evaluate them. Note that we explicitly exclude
-   * non-deterministic (i.e., stateful) condition expressions in canEvaluateInLeft or
-   * canEvaluateInRight to prevent pushing these predicates on either side of the join.
-   *
-   * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
-   */
-  protected def extractConvertibleFilters(
-    condition: Seq[Expression],
-    left: LogicalPlan,
-    right: LogicalPlan): (Seq[Expression], Seq[Expression], Seq[Expression]) = {
-    val (pushDownCandidates, nonDeterministic) = condition.partition(_.deterministic)
-    val (leftEvaluateCondition, rest) =
-      pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
-    val (rightEvaluateCondition, commonCondition) =
-        rest.partition(expr => expr.references.subsetOf(right.outputSet))
-
-    // For the predicates in `commonCondition`, it is still possible to find sub-predicates which
-    // are able to be pushed down.
-    val leftExtraCondition =
-      commonCondition.flatMap(extractPredicatesWithinOutputSet(_, left.outputSet))
-
-    val rightExtraCondition =
-      commonCondition.flatMap(extractPredicatesWithinOutputSet(_, right.outputSet))
-
-    // To avoid expanding the join condition into conjunctive normal form and making the size
-    // of codegen much larger, `commonCondition` will be kept as original form in the new join
-    // condition.
-    (leftEvaluateCondition ++ leftExtraCondition, rightEvaluateCondition ++ rightExtraCondition,
-      commonCondition ++ nonDeterministic)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
