@@ -492,12 +492,7 @@ class GaussianMixture @Since("2.0.0") (
             (i, (agg.means(i), agg.covs(i), agg.weights(i), ws))
           }
         } else Iterator.empty
-      }.reduceByKey { case ((mean1, cov1, w1, ws1), (mean2, cov2, w2, ws2)) =>
-        // update the weights, means and covariances for i-th distributions
-        BLAS.axpy(1.0, mean2, mean1)
-        BLAS.axpy(1.0, cov2, cov1)
-        (mean1, cov1, w1 + w2, ws1 + ws2)
-      }.mapValues { case (mean, cov, w, ws) =>
+      }.reduceByKey(GaussianMixture.mergeWeightsMeans).mapValues { case (mean, cov, w, ws) =>
         // Create new distributions based on the partial assignments
         // (often referred to as the "M" step in literature)
         GaussianMixture.updateWeightsAndGaussians(mean, cov, w, ws)
@@ -560,12 +555,7 @@ class GaussianMixture @Since("2.0.0") (
           agg.meanIter.zip(agg.covIter).zipWithIndex
             .map { case ((mean, cov), i) => (i, (mean, cov, agg.weights(i), ws)) }
         } else Iterator.empty
-      }.reduceByKey { case ((mean1, cov1, w1, ws1), (mean2, cov2, w2, ws2)) =>
-        // update the weights, means and covariances for i-th distributions
-        BLAS.axpy(1.0, mean2, mean1)
-        BLAS.axpy(1.0, cov2, cov1)
-        (mean1, cov1, w1 + w2, ws1 + ws2)
-      }.mapValues { case (mean, cov, w, ws) =>
+      }.reduceByKey(GaussianMixture.mergeWeightsMeans).mapValues { case (mean, cov, w, ws) =>
         // Create new distributions based on the partial assignments
         // (often referred to as the "M" step in literature)
         GaussianMixture.updateWeightsAndGaussians(mean, cov, w, ws)
@@ -624,8 +614,8 @@ class GaussianMixture @Since("2.0.0") (
     val gaussians = Array.tabulate(numClusters) { i =>
       val start = i * numSamples
       val end = start + numSamples
-      val sampleSlice = samples.view(start, end)
-      val weightSlice = sampleWeights.view(start, end)
+      val sampleSlice = samples.view.slice(start, end)
+      val weightSlice = sampleWeights.view.slice(start, end)
       val localWeightSum = weightSlice.sum
       weights(i) = localWeightSum / weightSum
 
@@ -689,6 +679,16 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
       triangularValues: Array[Double]): DenseMatrix = {
     val symmetricValues = unpackUpperTriangular(n, triangularValues)
     new DenseMatrix(n, n, symmetricValues)
+  }
+
+  private def mergeWeightsMeans(
+      a: (DenseVector, DenseVector, Double, Double),
+      b: (DenseVector, DenseVector, Double, Double)): (DenseVector, DenseVector, Double, Double) =
+  {
+    // update the weights, means and covariances for i-th distributions
+    BLAS.axpy(1.0, b._1, a._1)
+    BLAS.axpy(1.0, b._2, a._2)
+    (a._1, a._2, a._3 + b._3, a._4 + b._4)
   }
 
   /**

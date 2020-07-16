@@ -33,7 +33,7 @@ class FilterPushdownSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
 
-    override protected val blacklistedOnceBatches: Set[String] =
+    override protected val excludedOnceBatches: Set[String] =
       Set("Push CNF predicate through join")
 
     val batches =

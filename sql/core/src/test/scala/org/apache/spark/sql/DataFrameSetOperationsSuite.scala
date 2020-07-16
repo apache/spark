@@ -297,13 +297,12 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     // When generating expected results at here, we need to follow the implementation of
     // Rand expression.
-    def expected(df: DataFrame): Seq[Row] = {
+    def expected(df: DataFrame): Seq[Row] =
       df.rdd.collectPartitions().zipWithIndex.flatMap {
         case (data, index) =>
           val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
           data.filter(_.getInt(0) < rng.nextDouble() * 10)
-      }
-    }
+      }.toSeq
 
     val union = df1.union(df2)
     checkAnswer(

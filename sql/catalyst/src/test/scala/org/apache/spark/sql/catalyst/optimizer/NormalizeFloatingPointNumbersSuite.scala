@@ -85,25 +85,23 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     val optimized = Optimize.execute(query)
     val doubleOptimized = Optimize.execute(optimized)
     val joinCond = IsNull(a) === IsNull(b) &&
-      coalesce(KnownFloatingPointNormalized(NormalizeNaNAndZero(a)),
-        KnownFloatingPointNormalized(NormalizeNaNAndZero(0.0))) ===
-        coalesce(KnownFloatingPointNormalized(NormalizeNaNAndZero(b)),
-          KnownFloatingPointNormalized(NormalizeNaNAndZero(0.0)))
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(a, 0.0))) ===
+        KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(b, 0.0)))
     val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
 
     comparePlans(doubleOptimized, correctAnswer)
   }
 
   test("SPARK-32258: normalize the children of If") {
-    val cond = If(a > 0.1D, a, a + 0.2D) === b
+    val cond = If(a > 0.1D, namedStruct("a", a), namedStruct("a", a + 0.2D)) === namedStruct("a", b)
     val query = testRelation1.join(testRelation2, condition = Some(cond))
     val optimized = Optimize.execute(query)
     val doubleOptimized = Optimize.execute(optimized)
 
     val joinCond = If(a > 0.1D,
-      KnownFloatingPointNormalized(NormalizeNaNAndZero(a)),
-        KnownFloatingPointNormalized(NormalizeNaNAndZero(a + 0.2D))) ===
-          KnownFloatingPointNormalized(NormalizeNaNAndZero(b))
+      namedStruct("a", KnownFloatingPointNormalized(NormalizeNaNAndZero(a))),
+        namedStruct("a", KnownFloatingPointNormalized(NormalizeNaNAndZero(a + 0.2D)))) ===
+          namedStruct("a", KnownFloatingPointNormalized(NormalizeNaNAndZero(b)))
     val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
 
     comparePlans(doubleOptimized, correctAnswer)
@@ -111,17 +109,17 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
 
   test("SPARK-32258: normalize the children of CaseWhen") {
     val cond = CaseWhen(
-      Seq((a > 0.1D, a), (a > 0.2D, a + 0.2D)),
-      Some(a + 0.3D)) === b
+      Seq((a > 0.1D, namedStruct("a", a)), (a > 0.2D, namedStruct("a", a + 0.2D))),
+      Some(namedStruct("a", a + 0.3D))) === namedStruct("a", b)
     val query = testRelation1.join(testRelation2, condition = Some(cond))
     val optimized = Optimize.execute(query)
     val doubleOptimized = Optimize.execute(optimized)
 
     val joinCond = CaseWhen(
-      Seq((a > 0.1D, KnownFloatingPointNormalized(NormalizeNaNAndZero(a))),
-        (a > 0.2D, KnownFloatingPointNormalized(NormalizeNaNAndZero(a + 0.2D)))),
-      Some(KnownFloatingPointNormalized(NormalizeNaNAndZero(a + 0.3D)))) ===
-      KnownFloatingPointNormalized(NormalizeNaNAndZero(b))
+      Seq((a > 0.1D, namedStruct("a", KnownFloatingPointNormalized(NormalizeNaNAndZero(a)))),
+        (a > 0.2D, namedStruct("a", KnownFloatingPointNormalized(NormalizeNaNAndZero(a + 0.2D))))),
+      Some(namedStruct("a", KnownFloatingPointNormalized(NormalizeNaNAndZero(a + 0.3D))))) ===
+      namedStruct("a", KnownFloatingPointNormalized(NormalizeNaNAndZero(b)))
     val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
 
     comparePlans(doubleOptimized, correctAnswer)

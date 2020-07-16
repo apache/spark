@@ -347,7 +347,7 @@ object CompactibleFileStreamLog {
     } else if (defaultInterval < (latestCompactBatchId + 1) / 2) {
       // Find the first divisor >= default compact interval
       def properDivisors(min: Int, n: Int) =
-        (min to n/2).view.filter(i => n % i == 0) :+ n
+        (min to n/2).view.filter(i => n % i == 0).toSeq :+ n
 
       properDivisors(defaultInterval, latestCompactBatchId + 1).head
     } else {
