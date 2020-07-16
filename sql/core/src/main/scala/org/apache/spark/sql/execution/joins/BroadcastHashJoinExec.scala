@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioning, Partitioning, PartitioningCollection, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, LongType}
 
 /**
@@ -64,7 +65,7 @@ case class BroadcastHashJoinExec(
 
   override lazy val outputPartitioning: Partitioning = {
     joinType match {
-      case _: InnerLike =>
+      case Inner =>
         streamedPlan.outputPartitioning match {
           case h: HashPartitioning => expandOutputPartitioning(h)
           case c: PartitioningCollection => expandOutputPartitioning(c)
@@ -105,22 +106,36 @@ case class BroadcastHashJoinExec(
   // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
   // The expanded expressions are returned as PartitioningCollection.
   private def expandOutputPartitioning(partitioning: HashPartitioning): PartitioningCollection = {
+    val maxNumCombinations = sqlContext.conf.getConf(
+      SQLConf.BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
+    var currentNumCombinations = 0
+
     def generateExprCombinations(
         current: Seq[Expression],
         accumulated: Seq[Expression]): Seq[Seq[Expression]] = {
-      if (current.isEmpty) {
+      if (currentNumCombinations > maxNumCombinations) {
+        Nil
+      } else if (current.isEmpty) {
+        currentNumCombinations += 1
         Seq(accumulated)
       } else {
         val buildKeys = streamedKeyToBuildKeyMapping.get(current.head.canonicalized)
         generateExprCombinations(current.tail, accumulated :+ current.head) ++
-          buildKeys.map { _.flatMap(b => generateExprCombinations(current.tail, accumulated :+ b))
-        }.getOrElse(Nil)
+          buildKeys.map { bKeys =>
+            bKeys.flatMap { bKey =>
+              if (currentNumCombinations < maxNumCombinations) {
+                generateExprCombinations(current.tail, accumulated :+ bKey)
+              } else {
+                Nil
+              }
+            }
+          }.getOrElse(Nil)
       }
     }
 
     PartitioningCollection(
-      generateExprCombinations(partitioning.expressions, Nil).map(
-        HashPartitioning(_, partitioning.numPartitions)))
+      generateExprCombinations(partitioning.expressions, Nil)
+        .map(HashPartitioning(_, partitioning.numPartitions)))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

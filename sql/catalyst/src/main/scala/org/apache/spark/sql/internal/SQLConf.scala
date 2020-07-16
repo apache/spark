@@ -2665,6 +2665,15 @@ object SQLConf {
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
 
+  val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
+    buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
+      .doc("The maximum number of partitionings that a HashPartitioning can be expanded to. " +
+        "This configuration is applicable only for inner joins.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ > 0, "The value must be positive.")
+      .createWithDefault(8)
+
   /**
    * Holds information about keys that have been deprecated.
    *

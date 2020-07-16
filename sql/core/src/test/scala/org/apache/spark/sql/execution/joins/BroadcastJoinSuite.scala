@@ -596,6 +596,34 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     assert(bhj.outputPartitioning === expected)
   }
 
+  test("BroadcastHashJoinExec output partitioning size should be limited with a config") {
+    val l1 = AttributeReference("l1", LongType)()
+    val l2 = AttributeReference("l2", LongType)()
+    val r1 = AttributeReference("r1", LongType)()
+    val r2 = AttributeReference("r2", LongType)()
+
+    val expected = Seq(
+      HashPartitioning(Seq(l1, l2), 1),
+      HashPartitioning(Seq(l1, r2), 1),
+      HashPartitioning(Seq(r1, l2), 1),
+      HashPartitioning(Seq(r1, r2), 1))
+
+    Seq(1, 2, 3, 4).foreach { limit =>
+      withSQLConf(
+        SQLConf.BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT.key -> s"$limit") {
+        val bhj = BroadcastHashJoinExec(
+          leftKeys = Seq(l1, l2),
+          rightKeys = Seq(r1, r2),
+          Inner,
+          BuildRight,
+          None,
+          left = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(l1, l2), 1)),
+          right = DummySparkPlan())
+        assert(bhj.outputPartitioning === PartitioningCollection(expected.take(limit)))
+      }
+    }
+  }
+
   private def expressionsEqual(l: Seq[Expression], r: Seq[Expression]): Boolean = {
     l.length == r.length && l.zip(r).forall { case (e1, e2) => e1.semanticEquals(e2) }
   }
