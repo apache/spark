@@ -1027,6 +1027,10 @@ object TestSettings {
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
+    // Show only the failed test cases in github action to make the log more readable.
+    testOptions in Test += Tests.Argument(sys.env.get("GITHUB_ACTIONS").map { _ =>
+      Seq("-eNCXEHLOPQMDSF")
+    }.getOrElse(Seq(Nil)): _*),
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Required to detect Junit tests for each project, see also https://github.com/sbt/junit-interface/issues/35
     crossPaths := false,
