@@ -43,7 +43,7 @@ While `select_statement` is defined as
 ```sql
 SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
     FROM { from_item [ , ...] }
-    [ `PIVOT` clause ]
+    [ PIVOT clause ]
     [ LATERAL VIEW clause ] [ ... ] 
     [ WHERE boolean_expression ]
     [ GROUP BY expression [ , ...] ]

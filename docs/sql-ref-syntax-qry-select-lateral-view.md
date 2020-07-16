@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-`LATERAL VIEW` clause is used in conjunction with UDTF such as explode(), which will generate a vitual table containing one or more rows. `LATERAL VIEW` will  apply the rows to each original output rows.
+`LATERAL VIEW` clause is used in conjunction with UDTF such as explode(), which will generate a virtual table containing one or more rows. `LATERAL VIEW` will  apply the rows to each original output rows.
 
 ### Syntax
 
@@ -33,12 +33,12 @@ LATERAL VIEW [ OUTER ] { udtf_expression [ table_alias ] AS column_alias [ , ...
 
 * **OUTER**
 
-    If `LATERAL VIEW` is used without `OUTER`, and `udtf_expression` return empty, then no results will be output in select.
-    If `LATERAL VIEW` is used with `OUTER`, and `udtf_expression` return empty, then results will be output normally with `NULL` as `udtf_expression` output.  .
+    If `LATERAL VIEW` is used without `OUTER`, and `udtf_expression` returns empty, then no results will be output in select.
+    If `LATERAL VIEW` is used with `OUTER`, and `udtf_expression` returns empty, then results will be output normally with `NULL` as `udtf_expression` output.  .
     
 * **udtf_Expression**
 
-    This expression will output an vitual table with single input row.
+    This expression will output a virtual table with single input row.
     
 * **table_Alias**
 
@@ -46,7 +46,7 @@ LATERAL VIEW [ OUTER ] { udtf_expression [ table_alias ] AS column_alias [ , ...
      
 * **column_alias**
 
-    It lists the column alias of `udtf_expression`, which may be used in output rows, we may have multiple alias if `udtf_expression` have multiple output columns.
+    It lists the column aliases of `udtf_expression`, which may be used in output rows, we may have multiple alias if `udtf_expression` have multiple output columns.
          
 ### Examples
 
@@ -59,8 +59,10 @@ INSERT INTO person VALUES
     (400, 'Dan', 50, 4, 'Street 4');
 
 SELECT * FROM person
-LATERAL VIEW EXPLODE(ARRAY(30, 60)) tabelName AS c_age
-LATERAL VIEW EXPLODE(ARRAY(40, 80)) AS d_age;
+    LATERAL VIEW EXPLODE(ARRAY(30, 60)) tabelName AS c_age
+    LATERAL VIEW EXPLODE(ARRAY(40, 80)) AS d_age;
++------+-------+-------+--------+-----------+--------+--------+
+|  id  | name  |  age  | class  |  address  | c_age  | d_age  |
 +------+-------+-------+--------+-----------+--------+--------+
 | 100  | John  | 30    | 1      | Street 1  | 30     | 40     |
 | 100  | John  | 30    | 1      | Street 1  | 30     | 80     |
@@ -81,25 +83,25 @@ LATERAL VIEW EXPLODE(ARRAY(40, 80)) AS d_age;
 +------+-------+-------+--------+-----------+--------+--------+
 
 SELECT c_age, COUNT(1) FROM person
-LATERAL VIEW EXPLODE(ARRAY(30, 60)) AS c_age
-LATERAL VIEW EXPLODE(ARRAY(40, 80)) AS d_age 
+    LATERAL VIEW EXPLODE(ARRAY(30, 60)) AS c_age
+    LATERAL VIEW EXPLODE(ARRAY(40, 80)) AS d_age 
 GROUP BY c_age;
-+--------+-----------+--+
++--------+-----------+
 | c_age  | count(1)  |
-+--------+-----------+--+
++--------+-----------+
 | 60     | 8         |
 | 30     | 8         |
-+--------+-----------+--+
++--------+-----------+
 
 SELECT * FROM person
-LATERAL VIEW EXPLODE(ARRAY()) tabelName AS c_age;
+    LATERAL VIEW EXPLODE(ARRAY()) tabelName AS c_age;
 +-----+-------+------+--------+----------+--------+
 | id  | name  | age  | class  | address  | c_age  |
 +-----+-------+------+--------+----------+--------+
 +-----+-------+------+--------+----------+--------+
 
 SELECT * FROM person
-LATERAL VIEW  OUTER EXPLODE(ARRAY()) tabelName AS c_age;
+    LATERAL VIEW  OUTER EXPLODE(ARRAY()) tabelName AS c_age;
 +------+-------+-------+--------+-----------+--------+
 |  id  | name  |  age  | class  |  address  | c_age  |
 +------+-------+-------+--------+-----------+--------+
@@ -120,3 +122,5 @@ LATERAL VIEW  OUTER EXPLODE(ARRAY()) tabelName AS c_age;
 * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [CASE Clause](sql-ref-syntax-qry-select-case.html)
+* [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)

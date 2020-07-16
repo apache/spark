@@ -58,10 +58,10 @@ INSERT INTO person VALUES
     (400, 'Dan', 50, 4, 'Street 4');
 
 SELECT * FROM person
-PIVOT (
-  SUM(age) AS a, AVG(class) AS c
-  FOR name IN ('John' AS john, 'Mike' AS mike)
-);
+    PIVOT (
+        SUM(age) AS a, AVG(class) AS c
+        FOR name IN ('John' AS john, 'Mike' AS mike)
+    );
 +------+-----------+---------+---------+---------+---------+
 |  id  |  address  | john_a  | john_c  | mike_a  | mike_c  |
 +------+-----------+---------+---------+---------+---------+
@@ -72,10 +72,10 @@ PIVOT (
 +------+-----------+---------+---------+---------+---------+
 
 SELECT * FROM person
-PIVOT (
-  SUM(age) AS a, AVG(class) AS c
-  FOR (name, age) IN (('John', 30) AS c1, ('Mike', 40) AS c2)
-);
+    PIVOT (
+        SUM(age) AS a, AVG(class) AS c
+        FOR (name, age) IN (('John', 30) AS c1, ('Mike', 40) AS c2)
+    );
 +------+-----------+-------+-------+-------+-------+
 |  id  |  address  | c1_a  | c1_c  | c2_a  | c2_c  |
 +------+-----------+-------+-------+-------+-------+
@@ -96,3 +96,5 @@ PIVOT (
 * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [CASE Clause](sql-ref-syntax-qry-select-case.html)
+* [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)

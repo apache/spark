@@ -293,11 +293,11 @@ SELECT FIRST(age) FROM person;
 
 --Get the first row in cloumn `age` ignore nulls,last row in column `id` and sum of cloumn `id`.
 SELECT FIRST(age IGNORE NULLS), LAST(id), SUM(id) FROM person;
-+-------------------+------------------+----------+--+
++-------------------+------------------+----------+
 | first(age, true)  | last(id, false)  | sum(id)  |
-+-------------------+------------------+----------+--+
++-------------------+------------------+----------+
 | 30                | 400              | 1000     |
-+-------------------+------------------+----------+--+
++-------------------+------------------+----------+
 ```
 
 ### Related Statements

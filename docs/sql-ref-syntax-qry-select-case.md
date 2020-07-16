@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-`CASE` clause uses rule to return specific result based on the specified condition, similar to if/else statements in other programming languages.
+`CASE` clause uses a rule to return specific result based on the specified condition, similar to if/else statements in other programming languages.
 
 ### Syntax
 
@@ -91,7 +91,14 @@ SELECT id, CASE id WHEN 100 then 'bigger' WHEN  id > 300 THEN '300' ELSE 'small'
 | 400  | small                                                                                         |
 +------+-----------------------------------------------------------------------------------------------+
 
-SELECT * FROM person where CASE 1 = 1 WHEN 100 THEN 'big' WHEN 200 THEN 'bigger' WHEN 300 THEN 'biggest' ELSE 'small' END = 'small';
+SELECT * FROM person
+    WHERE 
+        CASE 1 = 1 
+            WHEN 100 THEN 'big' 
+            WHEN 200 THEN 'bigger'
+            WHEN 300 THEN 'biggest' 
+            ELSE 'small'
+        END = 'small';
 +------+-------+-------+
 |  id  | name  |  age  |
 +------+-------+-------+
@@ -112,3 +119,5 @@ SELECT * FROM person where CASE 1 = 1 WHEN 100 THEN 'big' WHEN 200 THEN 'bigger'
 * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+* [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
