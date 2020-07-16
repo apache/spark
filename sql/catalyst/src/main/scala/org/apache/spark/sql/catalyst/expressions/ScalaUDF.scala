@@ -57,12 +57,6 @@ case class ScalaUDF(
 
   override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
 
-  override lazy val canonicalized: Expression = {
-    // SPARK-32307: `ExpressionEncoder` can't be canonicalized, and technically we don't
-    // need it to identify a `ScalaUDF`.
-    Canonicalize.execute(copy(children = children.map(_.canonicalized), inputEncoders = Nil))
-  }
-
   /**
    * The analyzer should be aware of Scala primitive types so as to make the
    * UDF return null if there is any null input value of these types. On the

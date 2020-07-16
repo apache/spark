@@ -609,16 +609,4 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     }
     assert(e2.getMessage.contains("UDFSuite$MalformedClassObject$MalformedPrimitiveFunction"))
   }
-
-  test("SPARK-32307: Aggression that use map type input UDF as group expression") {
-    spark.udf.register("key", udf((m: Map[String, String]) => m.keys.head.toInt))
-    Seq(Map("1" -> "one", "2" -> "two")).toDF("a").createOrReplaceTempView("t")
-    checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
-  }
-
-  test("SPARK-32307: Aggression that use array type input UDF as group expression") {
-    spark.udf.register("key", udf((m: Array[Int]) => m.head))
-    Seq(Array(1)).toDF("a").createOrReplaceTempView("t")
-    checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
-  }
 }
