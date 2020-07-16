@@ -24,8 +24,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 
 /**
- * Try converting join condition to conjunctive normal form expression so that more predicates may
- * be able to be pushed down.
+ * Try pushing down convertible disjunctive join condition into left and right child.
  * To avoid expanding the join condition, the join condition will be kept in the original form even
  * when predicate pushdown happens.
  */
@@ -39,7 +38,7 @@ object PushExtraPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHel
   }
 
   /**
-   * Splits join condition expressions or filter predicates (on a given join's output) into three
+   * Splits join condition expressions (on a given join's output) into three
    * categories based on the attributes required to evaluate them. Note that we explicitly exclude
    * non-deterministic (i.e., stateful) condition expressions in canEvaluateInLeft or
    * canEvaluateInRight to prevent pushing these predicates on either side of the join.
@@ -59,10 +58,10 @@ object PushExtraPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHel
     // For the predicates in `commonCondition`, it is still possible to find sub-predicates which
     // are able to be pushed down.
     val leftExtraCondition =
-      commonCondition.flatMap(convertibleFilter(_, left.outputSet))
+      commonCondition.flatMap(extractPredicatesWithinOutputSet(_, left.outputSet))
 
     val rightExtraCondition =
-      commonCondition.flatMap(convertibleFilter(_, right.outputSet))
+      commonCondition.flatMap(extractPredicatesWithinOutputSet(_, right.outputSet))
 
     // To avoid expanding the join condition into conjunctive normal form and making the size
     // of codegen much larger, `commonCondition` will be kept as original form in the new join
@@ -74,21 +73,20 @@ object PushExtraPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHel
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case j @ Join(left, right, joinType, Some(joinCondition), hint)
         if canPushThrough(joinType) =>
-      val filtersOfBothSide = splitConjunctivePredicates(joinCondition).filter { f =>
-        f.deterministic && f.references.nonEmpty &&
-          !f.references.subsetOf(left.outputSet) && !f.references.subsetOf(right.outputSet)
-      }
-      val leftExtraCondition =
-      filtersOfBothSide.flatMap(convertibleFilter(_, left.outputSet))
-
-      val rightExtraCondition =
-        filtersOfBothSide.flatMap(convertibleFilter(_, right.outputSet))
-
       val alreadyProcessed = j.getTagValue(processedJoinConditionTag).exists { condition =>
         condition.semanticEquals(joinCondition)
       }
 
-      if ((leftExtraCondition.isEmpty && rightExtraCondition.isEmpty) || alreadyProcessed) {
+      lazy val filtersOfBothSide = splitConjunctivePredicates(joinCondition).filter { f =>
+        f.deterministic && f.references.nonEmpty &&
+          !f.references.subsetOf(left.outputSet) && !f.references.subsetOf(right.outputSet)
+      }
+      lazy val leftExtraCondition =
+        filtersOfBothSide.flatMap(extractPredicatesWithinOutputSet(_, left.outputSet))
+      lazy val rightExtraCondition =
+        filtersOfBothSide.flatMap(extractPredicatesWithinOutputSet(_, right.outputSet))
+
+      if (alreadyProcessed || (leftExtraCondition.isEmpty && rightExtraCondition.isEmpty)) {
         j
       } else {
         lazy val newLeft =

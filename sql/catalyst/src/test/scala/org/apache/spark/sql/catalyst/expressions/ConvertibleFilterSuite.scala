@@ -34,10 +34,10 @@ class ConvertibleFilterSuite extends SparkFunSuite with PredicateHelper with Pla
   private val i = AttributeReference("I", BooleanType)(exprId = ExprId(9))
 
   private def checkCondition(
-    input: Expression,
-    convertibleAttributes: Seq[Attribute],
-    expected: Option[Expression]): Unit = {
-    val result = convertibleFilter(input, AttributeSet(convertibleAttributes))
+      input: Expression,
+      convertibleAttributes: Seq[Attribute],
+      expected: Option[Expression]): Unit = {
+    val result = extractPredicatesWithinOutputSet(input, AttributeSet(convertibleAttributes))
     if (expected.isEmpty) {
       assert(result.isEmpty)
     } else {

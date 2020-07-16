@@ -206,12 +206,12 @@ trait PredicateHelper extends Logging {
    * constraints from `condition`. This is used for predicate pushdown.
    * When there is no such convertible filter, `None` is returned.
    */
-  protected def convertibleFilter(
+  protected def extractPredicatesWithinOutputSet(
     condition: Expression,
     outputSet: AttributeSet): Option[Expression] = condition match {
     case And(left, right) =>
-      val leftResultOptional = convertibleFilter(left, outputSet)
-      val rightResultOptional = convertibleFilter(right, outputSet)
+      val leftResultOptional = extractPredicatesWithinOutputSet(left, outputSet)
+      val rightResultOptional = extractPredicatesWithinOutputSet(right, outputSet)
       (leftResultOptional, rightResultOptional) match {
         case (Some(leftResult), Some(rightResult)) => Some(And(leftResult, rightResult))
         case (Some(leftResult), None) => Some(leftResult)
@@ -225,15 +225,16 @@ trait PredicateHelper extends Logging {
     //
     // Here is an example used to explain the reason.
     // Let's say we have
-    // (a1 AND a2) OR (b1 AND b2),
+    // condition: (a1 AND a2) OR (b1 AND b2),
+    // outputSet: AttributeSet(a1, b1)
     // a1 and b1 is convertible, while a2 and b2 is not.
     // The predicate can be converted as
     // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
     // As per the logical in And predicate, we can push down (a1 OR b1).
     case Or(left, right) =>
       for {
-        lhs <- convertibleFilter(left, outputSet)
-        rhs <- convertibleFilter(right, outputSet)
+        lhs <- extractPredicatesWithinOutputSet(left, outputSet)
+        rhs <- extractPredicatesWithinOutputSet(right, outputSet)
       } yield Or(lhs, rhs)
 
     // Here we assume all the `Not` operators is already below all the `And` and `Or` operators
