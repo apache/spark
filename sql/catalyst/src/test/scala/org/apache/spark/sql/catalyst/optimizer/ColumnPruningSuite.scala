@@ -127,7 +127,7 @@ class ColumnPruningSuite extends PlanTest {
 
         val optimized = Optimize.execute(query)
 
-        val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized)
+        val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized).toSeq
 
         val selectedFields = UnresolvedAttribute("a") +: aliasedExprs(aliases)
         val finalSelectedExprs = Seq(UnresolvedAttribute("a"), $"${aliases(0)}".as("c.d")) ++

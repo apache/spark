@@ -109,11 +109,11 @@ object IntervalBenchmark extends SqlBasedBenchmark {
     // The first 2 cases are used to show the overhead of preparing the interval string.
     addCase(benchmark, cardinality, "prepare string w/ interval", buildString(true, timeUnits))
     addCase(benchmark, cardinality, "prepare string w/o interval", buildString(false, timeUnits))
-    addCase(benchmark, cardinality, intervalToTest) // Only years
+    addCase(benchmark, cardinality, intervalToTest.toSeq) // Only years
 
     for (unit <- timeUnits) {
       intervalToTest.append(unit)
-      addCase(benchmark, cardinality, intervalToTest)
+      addCase(benchmark, cardinality, intervalToTest.toSeq)
     }
 
     benchmark.run()

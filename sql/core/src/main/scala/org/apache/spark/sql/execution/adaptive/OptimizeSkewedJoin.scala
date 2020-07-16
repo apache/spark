@@ -241,8 +241,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
       logDebug(s"number of skewed partitions: left $numSkewedLeft, right $numSkewedRight")
       if (numSkewedLeft > 0 || numSkewedRight > 0) {
-        val newLeft = CustomShuffleReaderExec(left.shuffleStage, leftSidePartitions)
-        val newRight = CustomShuffleReaderExec(right.shuffleStage, rightSidePartitions)
+        val newLeft = CustomShuffleReaderExec(left.shuffleStage, leftSidePartitions.toSeq)
+        val newRight = CustomShuffleReaderExec(right.shuffleStage, rightSidePartitions.toSeq)
         smj.copy(
           left = s1.copy(child = newLeft), right = s2.copy(child = newRight), isSkewJoin = true)
       } else {
