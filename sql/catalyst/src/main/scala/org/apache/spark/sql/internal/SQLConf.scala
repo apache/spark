@@ -1723,9 +1723,9 @@ object SQLConf {
   val SESSION_LOCAL_TIMEZONE = buildConf("spark.sql.session.timeZone")
     .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
       "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
-      "Zone offsets must be in the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. " +
-      "Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other short names are not " +
-      "recommended to use because they can be ambiguous.")
+      "Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm' or '(+|-)HH:mm:ss', e.g '-08', " +
+      "'+01:00' or '-13:33:33'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other " +
+      "short names are not recommended to use because they can be ambiguous.")
     .version("2.2.0")
     .stringConf
     .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
@@ -2105,6 +2105,15 @@ object SQLConf {
       .version("2.4.1")
       .booleanConf
       .createWithDefault(true)
+
+  val DISABLE_HINTS =
+    buildConf("spark.sql.optimizer.disableHints")
+      .internal()
+      .doc("When true, the optimizer will disable user-specified hints that are additional " +
+        "directives for better planning of a query.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST =
     buildConf("spark.sql.optimizer.nestedPredicatePushdown.supportedFileSources")

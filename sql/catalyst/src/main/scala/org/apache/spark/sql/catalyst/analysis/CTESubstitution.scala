@@ -72,10 +72,10 @@ object CTESubstitution extends Rule[LogicalPlan] {
             }
             // CTE relation is defined as `SubqueryAlias`. Here we skip it and check the child
             // directly, so that `startOfQuery` is set correctly.
-            assertNoNameConflictsInCTE(relation.child, newNames)
+            assertNoNameConflictsInCTE(relation.child, newNames.toSeq)
             newNames += name
         }
-        assertNoNameConflictsInCTE(child, newNames, startOfQuery = false)
+        assertNoNameConflictsInCTE(child, newNames.toSeq, startOfQuery = false)
 
       case other =>
         other.subqueries.foreach(assertNoNameConflictsInCTE(_, outerCTERelationNames))
@@ -162,9 +162,9 @@ object CTESubstitution extends Rule[LogicalPlan] {
         traverseAndSubstituteCTE(relation)
       }
       // CTE definition can reference a previous one
-      resolvedCTERelations += (name -> substituteCTE(innerCTEResolved, resolvedCTERelations))
+      resolvedCTERelations += (name -> substituteCTE(innerCTEResolved, resolvedCTERelations.toSeq))
     }
-    resolvedCTERelations
+    resolvedCTERelations.toSeq
   }
 
   private def substituteCTE(

@@ -146,7 +146,7 @@ case class CustomShuffleReaderExec private(
       partitionDataSizeMetrics.set(dataSizes.sum)
     }
 
-    SQLMetrics.postDriverMetricsUpdatedByValue(sparkContext, executionId, driverAccumUpdates)
+    SQLMetrics.postDriverMetricsUpdatedByValue(sparkContext, executionId, driverAccumUpdates.toSeq)
   }
 
   @transient override lazy val metrics: Map[String, SQLMetric] = {

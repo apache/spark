@@ -61,6 +61,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   import HiveExternalCatalog._
   import CatalogTableType._
 
+  // SPARK-32256: Make sure `VersionInfo` is initialized before touching the isolated classloader.
+  // This is to ensure Hive can get the Hadoop version when using the isolated classloader.
+  org.apache.hadoop.util.VersionInfo.getVersion()
+
   /**
    * A Hive client used to interact with the metastore.
    */
@@ -829,8 +833,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       updateLocationInStorageProps(table, newPath = None).copy(
         locationUri = tableLocation.map(CatalogUtils.stringToURI(_)))
     }
-    val storageWithoutHiveGeneratedProperties = storageWithLocation.copy(
-      properties = storageWithLocation.properties.filterKeys(!HIVE_GENERATED_STORAGE_PROPERTIES(_)))
+    val storageWithoutHiveGeneratedProperties = storageWithLocation.copy(properties =
+      storageWithLocation.properties.filterKeys(!HIVE_GENERATED_STORAGE_PROPERTIES(_)).toMap)
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
     val schemaFromTableProps = getSchemaFromTableProperties(table)
@@ -844,7 +848,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       partitionColumnNames = partColumnNames,
       bucketSpec = getBucketSpecFromTableProperties(table),
       tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG),
-      properties = table.properties.filterKeys(!HIVE_GENERATED_TABLE_PROPERTIES(_)))
+      properties = table.properties.filterKeys(!HIVE_GENERATED_TABLE_PROPERTIES(_)).toMap)
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
@@ -1121,7 +1125,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val colStats = new mutable.HashMap[String, CatalogColumnStat]
       val colStatsProps = properties.filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX)).map {
         case (k, v) => k.drop(STATISTICS_COL_STATS_PREFIX.length) -> v
-      }
+      }.toMap
 
       // Find all the column names by matching the KEY_VERSION properties for them.
       colStatsProps.keys.filter {

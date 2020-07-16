@@ -123,7 +123,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
         val jobOption = outputStream.generateJob(time)
         jobOption.foreach(_.setCallSite(outputStream.creationSite))
         jobOption
-      }
+      }.toSeq
     }
     logDebug("Generated " + jobs.length + " jobs for time " + time)
     jobs

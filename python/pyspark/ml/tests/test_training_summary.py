@@ -18,11 +18,9 @@
 import sys
 import unittest
 
-if sys.version > '3':
-    basestring = str
-
-from pyspark.ml.classification import BinaryLogisticRegressionSummary, LinearSVC, \
-    LinearSVCSummary, BinaryRandomForestClassificationSummary, LogisticRegression, \
+from pyspark.ml.classification import BinaryLogisticRegressionSummary, FMClassifier, \
+    FMClassificationSummary, LinearSVC, LinearSVCSummary,  \
+    BinaryRandomForestClassificationSummary, LogisticRegression, \
     LogisticRegressionSummary, RandomForestClassificationSummary, \
     RandomForestClassifier
 from pyspark.ml.clustering import BisectingKMeans, GaussianMixture, KMeans
@@ -101,7 +99,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.residualDegreeOfFreedom, 1)
         self.assertEqual(s.residualDegreeOfFreedomNull, 2)
         self.assertEqual(s.rank, 1)
-        self.assertTrue(isinstance(s.solver, basestring))
+        self.assertTrue(isinstance(s.solver, str))
         self.assertTrue(isinstance(s.aic, float))
         self.assertTrue(isinstance(s.deviance, float))
         self.assertTrue(isinstance(s.nullDeviance, float))
@@ -311,6 +309,50 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(sameSummary, RandomForestClassificationSummary))
         self.assertFalse(isinstance(sameSummary, BinaryRandomForestClassificationSummary))
         self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
+
+    def test_fm_classification_summary(self):
+        df = self.spark.createDataFrame([(1.0, Vectors.dense(2.0)),
+                                         (0.0, Vectors.dense(2.0)),
+                                         (0.0, Vectors.dense(6.0)),
+                                         (1.0, Vectors.dense(3.0))
+                                         ],
+                                        ["label", "features"])
+        fm = FMClassifier(maxIter=5)
+        model = fm.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary()
+        # test that api is callable and returns expected types
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.scoreCol, "probability")
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.predictionCol, "prediction")
+        objHist = s.objectiveHistory
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.labels, list))
+        self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.precisionByLabel, list))
+        self.assertTrue(isinstance(s.recallByLabel, list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(), list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
+        self.assertTrue(isinstance(s.roc, DataFrame))
+        self.assertAlmostEqual(s.areaUnderROC, 0.625, 2)
+        self.assertTrue(isinstance(s.pr, DataFrame))
+        self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
+        self.assertAlmostEqual(s.weightedTruePositiveRate, 0.75, 2)
+        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.25, 2)
+        self.assertAlmostEqual(s.weightedRecall, 0.75, 2)
+        self.assertAlmostEqual(s.weightedPrecision, 0.8333333333333333, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(), 0.7333333333333334, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(1.0), 0.7333333333333334, 2)
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertTrue(isinstance(sameSummary, FMClassificationSummary))
+        self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
     def test_gaussian_mixture_summary(self):
         data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),

@@ -356,7 +356,7 @@ private[sql] object CatalogV2Util {
     }
     if (containsNullType(dt)) {
       throw new AnalysisException(
-        "Cannot create tables with unknown type.")
+        s"Cannot create tables with ${NullType.simpleString} type.")
     }
   }
 

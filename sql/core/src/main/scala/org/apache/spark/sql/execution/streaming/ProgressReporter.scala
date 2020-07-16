@@ -127,8 +127,8 @@ trait ProgressReporter extends Logging {
    * `committedOffsets` in `StreamExecution` to make sure that the correct range is recorded.
    */
   protected def recordTriggerOffsets(from: StreamProgress, to: StreamProgress): Unit = {
-    currentTriggerStartOffsets = from.mapValues(_.json)
-    currentTriggerEndOffsets = to.mapValues(_.json)
+    currentTriggerStartOffsets = from.mapValues(_.json).toMap
+    currentTriggerEndOffsets = to.mapValues(_.json).toMap
   }
 
   private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -192,7 +192,8 @@ trait ProgressReporter extends Logging {
       timestamp = formatTimestamp(currentTriggerStartTimestamp),
       batchId = currentBatchId,
       batchDuration = processingTimeMills,
-      durationMs = new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).asJava),
+      durationMs =
+        new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).toMap.asJava),
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
@@ -255,14 +256,14 @@ trait ProgressReporter extends Logging {
           "avg" -> stats.avg.toLong).mapValues(formatTimestamp)
     }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
-    ExecutionStats(numInputRows, stateOperators, eventTimeStats)
+    ExecutionStats(numInputRows, stateOperators, eventTimeStats.toMap)
   }
 
   /** Extract number of input sources for each streaming source in plan */
   private def extractSourceToNumInputRows(): Map[SparkDataStream, Long] = {
 
     def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
-      tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
+      tuples.groupBy(_._1).mapValues(_.map(_._2).sum).toMap // sum up rows for each source
     }
 
     val onlyDataSourceV2Sources = {

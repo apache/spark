@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import org.apache.spark.executor.ExecutorExitCode
 
 /**
- * Represents an explanation for an executor or whole slave failing or exiting.
+ * Represents an explanation for an executor or whole process failing or exiting.
  */
 private[spark]
 class ExecutorLossReason(val message: String) extends Serializable {
@@ -56,7 +56,7 @@ private [spark] object LossReasonPending extends ExecutorLossReason("Pending los
  * @param workerLost whether the worker is confirmed lost too (i.e. including shuffle service)
  */
 private[spark]
-case class SlaveLost(_message: String = "Slave lost", workerLost: Boolean = false)
+case class ExecutorProcessLost(_message: String = "Worker lost", workerLost: Boolean = false)
   extends ExecutorLossReason(_message)
 
 /**
