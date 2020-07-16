@@ -68,17 +68,17 @@ trait HashJoin extends BaseJoinExec {
     }
   }
 
-  private lazy val (buildOutput, streamedOutput) = {
+  @transient private lazy val (buildOutput, streamedOutput) = {
     buildSide match {
       case BuildLeft => (left.output, right.output)
       case BuildRight => (right.output, left.output)
     }
   }
 
-  protected lazy val buildBoundKeys =
+  @transient protected lazy val buildBoundKeys =
     bindReferences(HashJoin.rewriteKeyExpr(buildKeys), buildOutput)
 
-  protected lazy val streamedBoundKeys =
+  @transient protected lazy val streamedBoundKeys =
     bindReferences(HashJoin.rewriteKeyExpr(streamedKeys), streamedOutput)
 
   protected def buildSideKeyGenerator(): Projection =

@@ -461,7 +461,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         // Validate the data with broadcast join off.
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
           val df = join1.join(t3, join1("i2") === t3("i3") && join1("j2") === t3("j3"))
-          QueryTest.sameRows(join2.collect().toSeq, df.collect().toSeq)
+          checkAnswer(join2, df)
         }
       }
     }
@@ -508,10 +508,10 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       assert(collect(plan3) { case b: BroadcastHashJoinExec => b }.size == 1)
       assert(collect(plan3) { case e: ShuffleExchangeExec => e }.size == 3)
 
-      // Validate the data with boradcast join off.
+      // Validate the data with broadcast join off.
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         val df = join2.join(t4, join2("i3") === t4("i4"))
-        QueryTest.sameRows(join3.collect().toSeq, df.collect().toSeq)
+        checkAnswer(join3, df)
       }
     }
   }

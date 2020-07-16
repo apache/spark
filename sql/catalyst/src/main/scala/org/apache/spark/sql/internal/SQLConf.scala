@@ -2668,10 +2668,11 @@ object SQLConf {
   val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
     buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
       .doc("The maximum number of partitionings that a HashPartitioning can be expanded to. " +
-        "This configuration is applicable only for inner joins.")
+        "This configuration is applicable only for inner joins and can be set to '0' to disable " +
+        "this feature.")
       .version("3.1.0")
       .intConf
-      .checkValue(_ > 0, "The value must be positive.")
+      .checkValue(_ >= 0, "The value must be non-negative.")
       .createWithDefault(8)
 
   /**
@@ -2983,6 +2984,9 @@ class SQLConf extends Serializable with Logging {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
+
+  def broadcastHashJoinOutputPartitioningExpandLimit: Int =
+    getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

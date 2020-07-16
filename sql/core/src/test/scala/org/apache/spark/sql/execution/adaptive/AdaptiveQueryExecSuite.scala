@@ -557,7 +557,8 @@ class AdaptiveQueryExecSuite
 
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT.key -> "0") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData " +
           "join testData2 t2 ON key = t2.a " +
@@ -565,7 +566,7 @@ class AdaptiveQueryExecSuite
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 2)
       val smj2 = findTopLevelSortMergeJoin(adaptivePlan)
-      assert(smj2.size == 1, origPlan.toString)
+      assert(smj2.size == 2, origPlan.toString)
     }
   }
 

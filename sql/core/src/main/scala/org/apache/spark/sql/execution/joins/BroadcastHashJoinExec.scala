@@ -65,7 +65,7 @@ case class BroadcastHashJoinExec(
 
   override lazy val outputPartitioning: Partitioning = {
     joinType match {
-      case Inner =>
+      case Inner if sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
         streamedPlan.outputPartitioning match {
           case h: HashPartitioning => expandOutputPartitioning(h)
           case c: PartitioningCollection => expandOutputPartitioning(c)
@@ -106,30 +106,22 @@ case class BroadcastHashJoinExec(
   // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
   // The expanded expressions are returned as PartitioningCollection.
   private def expandOutputPartitioning(partitioning: HashPartitioning): PartitioningCollection = {
-    val maxNumCombinations = sqlContext.conf.getConf(
-      SQLConf.BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
+    val maxNumCombinations = sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit
     var currentNumCombinations = 0
 
     def generateExprCombinations(
         current: Seq[Expression],
         accumulated: Seq[Expression]): Seq[Seq[Expression]] = {
-      if (currentNumCombinations > maxNumCombinations) {
+      if (currentNumCombinations >= maxNumCombinations) {
         Nil
       } else if (current.isEmpty) {
         currentNumCombinations += 1
         Seq(accumulated)
       } else {
-        val buildKeys = streamedKeyToBuildKeyMapping.get(current.head.canonicalized)
+        val buildKeysOpt = streamedKeyToBuildKeyMapping.get(current.head.canonicalized)
         generateExprCombinations(current.tail, accumulated :+ current.head) ++
-          buildKeys.map { bKeys =>
-            bKeys.flatMap { bKey =>
-              if (currentNumCombinations < maxNumCombinations) {
-                generateExprCombinations(current.tail, accumulated :+ bKey)
-              } else {
-                Nil
-              }
-            }
-          }.getOrElse(Nil)
+          buildKeysOpt.map(_.flatMap(b => generateExprCombinations(current.tail, accumulated :+ b)))
+            .getOrElse(Nil)
       }
     }
 
