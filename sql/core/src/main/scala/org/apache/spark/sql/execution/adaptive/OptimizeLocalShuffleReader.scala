@@ -144,12 +144,12 @@ object OptimizeLocalShuffleReader {
       s.shuffle.canChangeNumPartitions
     // This CustomShuffleReaderExec used in skew side, its numPartitions increased.
     case CustomShuffleReaderExec(_, partitionSpecs)
-      if partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec]) => false
+        if partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec]) => false
     // This CustomShuffleReaderExec used in non-skew side, its numPartitions equals to
     // the skew side CustomShuffleReaderExec.
-    case CustomShuffleReaderExec(_, partitionSpecs)
-      if partitionSpecs.forall(_.isInstanceOf[CoalescedPartitionSpec]) &&
-        partitionSpecs.toSet.size == partitionSpecs.size => false
+    case CustomShuffleReaderExec(_, partitionSpecs) if partitionSpecs.size > 1 &&
+        partitionSpecs.forall(_.isInstanceOf[CoalescedPartitionSpec]) &&
+        partitionSpecs.toSet.size != partitionSpecs.size => false
     case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
       s.shuffle.canChangeNumPartitions && partitionSpecs.nonEmpty
     case _ => false
