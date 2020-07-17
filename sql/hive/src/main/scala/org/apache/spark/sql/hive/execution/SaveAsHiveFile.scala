@@ -118,10 +118,10 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     val path = new Path(mrScratchDir, "-mr-10000")
     val scheme = Option(path.toUri.getScheme).getOrElse("")
     if (scheme.equals("file")) {
-      logWarning(s"Temporary data will be written into a local file system " +
-        s"(scheme: '$scheme', path: '$mrScratchDir'). If your Spark is not in local mode, " +
-        s"you might need to configure 'hive.exec.scratchdir' " +
-        s"to use accessible file system (e.g. HDFS path) from any executors in the cluster.")
+      logWarning("Temporary data will be written into a local file system " +
+        "(scheme: '$scheme', path: '$mrScratchDir'). If your Spark is not in local mode, " +
+        "you might need to configure 'hive.exec.scratchdir' " +
+        "to use accessible file system (e.g. HDFS path) from any executors in the cluster.")
     }
     path
   }
@@ -139,6 +139,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       hadoopConf: Configuration,
       path: Path): Path = {
     import org.apache.spark.sql.hive.client.hive._
+
     // Before Hive 1.1, when inserting into a table, Hive will create the staging directory under
     // a common scratch directory. After the writing is finished, Hive will simply empty the table
     // directory and move the staging directory to it.
