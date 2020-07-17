@@ -3407,6 +3407,24 @@ object functions {
   }
 
   /**
+   * Returns an array containing all the elements in `x` from index `start` (or starting from the
+   * end if `start` is negative) with the specified `length`.
+   *
+   * @param x the array column to be sliced
+   * @param start the starting index
+   * @param length the length of the slice
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def slice(x: Column, start: Any, length: Any): Column = (start, length) match {
+    case (i: Int, n: Int) => slice(x, i, n)
+    case _ => withExpr {
+      Slice(x.expr, lit(start).expr, lit(length).expr)
+    }
+  }
+
+  /**
    * Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
    * `nullReplacement`.
    * @group collection_funcs
