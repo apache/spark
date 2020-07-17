@@ -96,26 +96,28 @@ case class AvroPartitionReaderFactory(
 
       val fileReader = new PartitionReader[InternalRow] {
         private[this] var completed = false
+        private[this] var nextRow: Option[InternalRow] = None
 
         override def next(): Boolean = {
-          if (completed) {
-            false
-          } else {
+          do {
             val r = reader.hasNext && !reader.pastSync(stop)
             if (!r) {
               reader.close()
               completed = true
+              nextRow = None
+            } else {
+              val record = reader.next()
+              nextRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
             }
-            r
-          }
+          } while (!completed && nextRow.isEmpty)
+
+          nextRow.isDefined
         }
 
         override def get(): InternalRow = {
-          if (!next) {
+          nextRow.getOrElse {
             throw new NoSuchElementException("next on empty iterator")
           }
-          val record = reader.next()
-          deserializer.deserialize(record).asInstanceOf[InternalRow]
         }
 
         override def close(): Unit = reader.close()

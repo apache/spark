@@ -293,7 +293,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     def checkDeserialization(data: GenericData.Record, expected: Any): Unit = {
       assert(checkResult(
         expected,
-        deserializer.deserialize(data),
+        deserializer.deserialize(data).get,
         dataType, exprNullable = false
       ))
     }

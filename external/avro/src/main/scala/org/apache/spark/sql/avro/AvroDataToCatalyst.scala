@@ -98,7 +98,7 @@ case class AvroDataToCatalyst(
     try {
       decoder = DecoderFactory.get().binaryDecoder(binary, 0, binary.length, decoder)
       result = reader.read(result, decoder)
-      deserializer.deserialize(result)
+      deserializer.deserialize(result).get
     } catch {
       // There could be multiple possible exceptions here, e.g. java.io.IOException,
       // AvroRuntimeException, ArrayIndexOutOfBoundsException, etc.

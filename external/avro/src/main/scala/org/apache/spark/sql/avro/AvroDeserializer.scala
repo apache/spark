@@ -61,10 +61,10 @@ class AvroDeserializer(
   private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
     datetimeRebaseMode, "Avro")
 
-  private val converter: Any => Any = rootCatalystType match {
+  private val converter: Any => Option[Any] = rootCatalystType match {
     // A shortcut for empty schema.
     case st: StructType if st.isEmpty =>
-      (data: Any) => InternalRow.empty
+      (data: Any) => Some(InternalRow.empty)
 
     case st: StructType =>
       val resultRow = new SpecificInternalRow(st.map(_.dataType))
@@ -72,8 +72,8 @@ class AvroDeserializer(
       val writer = getRecordWriter(rootAvroType, st, Nil)
       (data: Any) => {
         val record = data.asInstanceOf[GenericRecord]
-        writer(fieldUpdater, record)
-        resultRow
+        val skipRow = writer(fieldUpdater, record)
+        if (skipRow) None else Some(resultRow)
       }
 
     case _ =>
@@ -82,11 +82,11 @@ class AvroDeserializer(
       val writer = newWriter(rootAvroType, rootCatalystType, Nil)
       (data: Any) => {
         writer(fieldUpdater, 0, data)
-        tmpRow.get(0, rootCatalystType)
+        Some(tmpRow.get(0, rootCatalystType))
       }
   }
 
-  def deserialize(data: Any): Any = converter(data)
+  def deserialize(data: Any): Option[Any] = converter(data)
 
   /**
    * Creates a writer to write avro values to Catalyst values at the given ordinal with the given
@@ -315,7 +315,7 @@ class AvroDeserializer(
   private def getRecordWriter(
       avroType: Schema,
       sqlType: StructType,
-      path: List[String]): (CatalystDataUpdater, GenericRecord) => Unit = {
+      path: List[String]): (CatalystDataUpdater, GenericRecord) => Boolean = {
     val validFieldIndexes = ArrayBuffer.empty[Int]
     val fieldWriters = ArrayBuffer.empty[(CatalystDataUpdater, Any) => Unit]
 
@@ -354,6 +354,7 @@ class AvroDeserializer(
         fieldWriters(i)(fieldUpdater, record.get(validFieldIndexes(i)))
         i += 1
       }
+      false
     }
   }
 

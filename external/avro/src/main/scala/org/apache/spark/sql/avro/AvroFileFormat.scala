@@ -133,26 +133,28 @@ private[sql] class AvroFileFormat extends FileFormat
 
         new Iterator[InternalRow] {
           private[this] var completed = false
+          private[this] var nextRow: Option[InternalRow] = None
 
           override def hasNext: Boolean = {
-            if (completed) {
-              false
-            } else {
+            do {
               val r = reader.hasNext && !reader.pastSync(stop)
               if (!r) {
                 reader.close()
                 completed = true
+                nextRow = None
+              } else {
+                val record = reader.next()
+                nextRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
               }
-              r
-            }
+            } while (!completed && nextRow.isEmpty)
+
+            nextRow.isDefined
           }
 
           override def next(): InternalRow = {
-            if (!hasNext) {
+            nextRow.getOrElse {
               throw new NoSuchElementException("next on empty iterator")
             }
-            val record = reader.next()
-            deserializer.deserialize(record).asInstanceOf[InternalRow]
           }
         }
       } else {
