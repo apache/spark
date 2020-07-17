@@ -17,11 +17,14 @@
 package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
+import java.time.Instant
 
 import scala.util.Random
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -36,6 +39,8 @@ import org.apache.spark.sql.types._
  * }}}
  */
 object AvroReadBenchmark extends SqlBasedBenchmark {
+  import spark.implicits._
+
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
@@ -186,6 +191,51 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def filtersPushdownBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark("Filters pushdown", rowsNum, output = output)
+    val colsNum = 100
+    val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", TimestampType))
+    val schema = StructType(StructField("key", IntegerType) +: fields)
+    def columns(): Seq[Column] = {
+      val ts = Seq.tabulate(colsNum) { i =>
+        lit(Instant.ofEpochSecond(i * 12345678)).as(s"col$i")
+      }
+      ($"id" % 1000).as("key") +: ts
+    }
+    withTempPath { path =>
+      spark.range(rowsNum).select(columns(): _*)
+        .write
+        .format("avro")
+        .save(path.getAbsolutePath)
+      def readback = {
+        spark.read
+          .schema(schema)
+          .format("avro")
+          .load(path.getAbsolutePath)
+      }
+
+      benchmark.addCase("w/o filters", numIters) { _ =>
+        readback.noop()
+      }
+
+      def withFilter(configEnabled: Boolean): Unit = {
+        withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
+          readback.filter($"key" === 0).noop()
+        }
+      }
+
+      benchmark.addCase("pushdown disabled", numIters) { _ =>
+        withFilter(configEnabled = false)
+      }
+
+      benchmark.addCase("w/ filters", numIters) { _ =>
+        withFilter(configEnabled = true)
+      }
+
+      benchmark.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
       Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dataType =>
@@ -211,5 +261,8 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
       columnsBenchmark(1024 * 1024 * 1, 200)
       columnsBenchmark(1024 * 1024 * 1, 300)
     }
+    // Benchmark pushdown filters that refer to top-level columns.
+    // TODO (SPARK-XXXXX): Add benchmarks for filters with nested column attributes.
+    filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters = 3)
   }
 }
