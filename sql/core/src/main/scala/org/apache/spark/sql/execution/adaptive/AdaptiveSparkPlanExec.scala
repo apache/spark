@@ -58,7 +58,7 @@ import org.apache.spark.util.ThreadUtils
  * the rest of the plan.
  */
 case class AdaptiveSparkPlanExec(
-    initialPlan: SparkPlan,
+    inputPlan: SparkPlan,
     @transient context: AdaptiveExecutionContext,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient isSubquery: Boolean)
@@ -108,7 +108,9 @@ case class AdaptiveSparkPlanExec(
   @transient private val costEvaluator = SimpleCostEvaluator
 
   @volatile private var currentPhysicalPlan =
-    applyPhysicalRules(initialPlan, queryStagePreparationRules)
+    applyPhysicalRules(inputPlan, queryStagePreparationRules)
+
+  private val initialPlan = currentPhysicalPlan
 
   private var isFinalPlan = false
 
@@ -129,9 +131,9 @@ case class AdaptiveSparkPlanExec(
 
   override def conf: SQLConf = context.session.sessionState.conf
 
-  override def output: Seq[Attribute] = initialPlan.output
+  override def output: Seq[Attribute] = inputPlan.output
 
-  override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
+  override def doCanonicalize(): SparkPlan = inputPlan.canonicalized
 
   override def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
@@ -280,6 +282,7 @@ case class AdaptiveSparkPlanExec(
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean): Unit = {
+    val plans = Seq(("CurrentPlan", currentPhysicalPlan), ("InitialPlan", initialPlan))
     super.generateTreeString(depth,
       lastChildren,
       append,
@@ -288,25 +291,59 @@ case class AdaptiveSparkPlanExec(
       addSuffix,
       maxFields,
       printNodeId)
-    currentPhysicalPlan.generateTreeString(
+    plans.zipWithIndex.foreach { case ((name, plan), i) =>
+      generateTreeStringWithName(
+        name,
+        plan,
+        depth + 1,
+        lastChildren :+ (i == plans.size - 1),
+        append,
+        verbose,
+        "",
+        addSuffix = false,
+        maxFields,
+        printNodeId)
+    }
+  }
+
+  private def generateTreeStringWithName(
+      name: String,
+      plan: SparkPlan,
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      prefix: String = "",
+      addSuffix: Boolean = false,
+      maxFields: Int,
+      printNodeId: Boolean): Unit = {
+    if (depth > 0) {
+      lastChildren.init.foreach { isLast =>
+        append(if (isLast) "   " else ":  ")
+      }
+      append(if (lastChildren.last) "+- " else ":- ")
+    }
+    append(name)
+    append("\n")
+    plan.generateTreeString(
       depth + 1,
       lastChildren :+ true,
       append,
       verbose,
-      "",
-      addSuffix = false,
+      prefix,
+      addSuffix,
       maxFields,
       printNodeId)
   }
 
-  override def hashCode(): Int = initialPlan.hashCode()
+  override def hashCode(): Int = inputPlan.hashCode()
 
   override def equals(obj: Any): Boolean = {
     if (!obj.isInstanceOf[AdaptiveSparkPlanExec]) {
       return false
     }
 
-    this.initialPlan == obj.asInstanceOf[AdaptiveSparkPlanExec].initialPlan
+    this.inputPlan == obj.asInstanceOf[AdaptiveSparkPlanExec].inputPlan
   }
 
   /**
