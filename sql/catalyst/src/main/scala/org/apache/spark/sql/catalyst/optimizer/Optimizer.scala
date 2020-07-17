@@ -977,7 +977,8 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  *    RepartitionByExpression (with deterministic expressions) operators only and the Join condition
  *    is deterministic
  * 5) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
- *    operators only and the aggregate function is order irrelevant
+ *    RepartitionByExpression (with deterministic expressions) operators only and the aggregate
+ *    function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
