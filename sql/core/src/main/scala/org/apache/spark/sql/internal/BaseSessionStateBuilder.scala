@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.internal
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
@@ -82,6 +84,16 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
+    * Extract entries from `HiveConf` and put them in the `SQLConf`
+    */
+  protected def mergeHiveConf(sqlConf: SQLConf, hiveConf: Configuration): Unit = {
+    import scala.collection.JavaConverters._
+    hiveConf.asScala.foreach { entry =>
+      sqlConf.setConfString(entry.getKey, entry.getValue)
+    }
+  }
+
+  /**
    * SQL-specific key-value configurations.
    *
    * These either get cloned from a pre-existing instance or newly created. The conf is merged
@@ -97,6 +109,7 @@ abstract class BaseSessionStateBuilder(
     }.getOrElse {
       val conf = new SQLConf
       mergeSparkConf(conf, session.sparkContext.conf)
+      mergeHiveConf(conf, SharedState.loadHiveConf().get)
       conf
     }
   }

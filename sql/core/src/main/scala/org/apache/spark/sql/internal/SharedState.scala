@@ -229,14 +229,9 @@ object SharedState extends Logging {
       sparkConf: SparkConf,
       hadoopConf: Configuration): Unit = {
     val hiveWarehouseKey = "hive.metastore.warehouse.dir"
-    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
-    if (configFile != null) {
-      logInfo(s"loading hive config file: $configFile")
-      val hadoopConfTemp = new Configuration()
-      hadoopConfTemp.addResource(configFile)
-      hadoopConfTemp.asScala.foreach { entry =>
-        hadoopConf.setIfUnset(entry.getKey, entry.getValue)
-      }
+    val hiveConf = loadHiveConf()
+    hiveConf.get.asScala.foreach { entry =>
+      hadoopConf.setIfUnset(entry.getKey, entry.getValue)
     }
     // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkConf.remove(hiveWarehouseKey)
@@ -261,5 +256,17 @@ object SharedState extends Logging {
       sparkWarehouseDir
     }
     logInfo(s"Warehouse path is '$warehousePath'.")
+  }
+
+  def loadHiveConf(): Option[Configuration] = {
+    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    if (configFile != null) {
+      logInfo(s"loading hive config file: $configFile")
+      val hiveConf = new Configuration()
+      hiveConf.addResource(configFile)
+      Option(hiveConf)
+    } else {
+      None
+    }
   }
 }
