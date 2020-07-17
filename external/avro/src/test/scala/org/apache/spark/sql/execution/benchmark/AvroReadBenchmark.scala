@@ -195,7 +195,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark("Filters pushdown", rowsNum, output = output)
     val colsNum = 100
     val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", TimestampType))
-    val schema = StructType(StructField("key", IntegerType) +: fields)
+    val schema = StructType(StructField("key", LongType) +: fields)
     def columns(): Seq[Column] = {
       val ts = Seq.tabulate(colsNum) { i =>
         lit(Instant.ofEpochSecond(i * 12345678)).as(s"col$i")
@@ -263,6 +263,6 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
     }
     // Benchmark pushdown filters that refer to top-level columns.
     // TODO (SPARK-XXXXX): Add benchmarks for filters with nested column attributes.
-    filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters = 3)
+    filtersPushdownBenchmark(rowsNum = 1000 * 1000, numIters = 3)
   }
 }
