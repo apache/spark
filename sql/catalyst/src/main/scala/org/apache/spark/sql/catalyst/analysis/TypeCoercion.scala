@@ -1099,8 +1099,6 @@ object TypeCoercion {
         DateSub(l, Literal(days))
     }
   }
-
-
 }
 
 trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
