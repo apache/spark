@@ -573,4 +573,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     // the date formatter for `java.sql.LocalDate` must output negative years with sign.
     runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
   }
+
+  test("SPARK-15118 Spark SQLConf should support loading hive properties in hive-site.xml") {
+    runCliWithin(1.minute)("SET hive.in.test;" -> "true")
+  }
 }
