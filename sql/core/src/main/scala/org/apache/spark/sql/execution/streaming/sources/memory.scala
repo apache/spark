@@ -80,7 +80,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
 
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {
-    batches.flatMap(_.data)
+    batches.flatMap(_.data).toSeq
   }
 
   def latestBatchId: Option[Long] = synchronized {
@@ -92,7 +92,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
   }
 
   def dataSinceBatch(sinceBatchId: Long): Seq[Row] = synchronized {
-    batches.filter(_.batchId > sinceBatchId).flatMap(_.data)
+    batches.filter(_.batchId > sinceBatchId).flatMap(_.data).toSeq
   }
 
   def toDebugString: String = synchronized {
@@ -183,7 +183,7 @@ class MemoryDataWriter(partition: Int, schema: StructType)
   }
 
   override def commit(): MemoryWriterCommitMessage = {
-    val msg = MemoryWriterCommitMessage(partition, data.clone())
+    val msg = MemoryWriterCommitMessage(partition, data.clone().toSeq)
     data.clear()
     msg
   }

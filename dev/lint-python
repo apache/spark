@@ -168,7 +168,15 @@ function sphinx_test {
 
     # Check that the documentation builds acceptably, skip check if sphinx is not installed.
     if ! hash "$SPHINX_BUILD" 2> /dev/null; then
-        echo "The $SPHINX_BUILD command was not found. Skipping pydoc checks for now."
+        echo "The $SPHINX_BUILD command was not found. Skipping Sphinx build for now."
+        echo
+        return
+    fi
+
+    # TODO(SPARK-32279): Install Sphinx in Python 3 of Jenkins machines
+    PYTHON_HAS_SPHINX=$("$PYTHON_EXECUTABLE" -c 'import importlib.util; print(importlib.util.find_spec("sphinx") is not None)')
+    if [[ "$PYTHON_HAS_SPHINX" == "False" ]]; then
+        echo "$PYTHON_EXECUTABLE does not have Sphinx installed. Skipping Sphinx build for now."
         echo
         return
     fi
