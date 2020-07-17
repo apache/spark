@@ -707,13 +707,13 @@ Location [not included in comparison]/{warehouse_dir}/explain_temp1]
 ReadSchema: struct<key:int,val:int>
 
 (2) Project
-Output [3]: [val#x AS _gen_attr_324#x, cast(key#x as bigint) AS _gen_attr_326#xL, if ((val#x > 1)) key#x else null AS _gen_attr_328#x]
+Output [3]: [val#x AS _gen_attr_0#x, cast(key#x as bigint) AS _gen_attr_1#xL, if ((val#x > 1)) key#x else null AS _gen_attr_2#x]
 Input [2]: [key#x, val#x]
 
 (3) HashAggregate
-Input [3]: [_gen_attr_324#x, _gen_attr_326#xL, _gen_attr_328#x]
+Input [3]: [_gen_attr_0#x, _gen_attr_1#xL, _gen_attr_2#x]
 Keys: []
-Functions [3]: [partial_count(_gen_attr_324#x), partial_sum(_gen_attr_326#xL), partial_count(_gen_attr_328#x) FILTER (WHERE isnotnull(_gen_attr_328#x))]
+Functions [3]: [partial_count(_gen_attr_0#x), partial_sum(_gen_attr_1#xL), partial_count(_gen_attr_2#x) FILTER (WHERE isnotnull(_gen_attr_2#x))]
 Aggregate Attributes [3]: [count#xL, sum#xL, count#xL]
 Results [3]: [count#xL, sum#xL, count#xL]
 
@@ -724,9 +724,9 @@ Arguments: SinglePartition, true, [id=#x]
 (5) HashAggregate
 Input [3]: [count#xL, sum#xL, count#xL]
 Keys: []
-Functions [3]: [count(_gen_attr_324#x), sum(_gen_attr_326#xL), count(_gen_attr_328#x)]
-Aggregate Attributes [3]: [count(_gen_attr_324#x)#xL, sum(_gen_attr_326#xL)#xL, count(_gen_attr_328#x)#xL]
-Results [2]: [(count(_gen_attr_324#x)#xL + sum(_gen_attr_326#xL)#xL) AS TOTAL#xL, count(_gen_attr_328#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
+Functions [3]: [count(_gen_attr_0#x), sum(_gen_attr_1#xL), count(_gen_attr_2#x)]
+Aggregate Attributes [3]: [count(_gen_attr_0#x)#xL, sum(_gen_attr_1#xL)#xL, count(_gen_attr_2#x)#xL]
+Results [2]: [(count(_gen_attr_0#x)#xL + sum(_gen_attr_1#xL)#xL) AS TOTAL#xL, count(_gen_attr_2#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
 
 (6) AdaptiveSparkPlan
 Output [2]: [TOTAL#xL, count(key) FILTER (WHERE (val > 1))#xL]
