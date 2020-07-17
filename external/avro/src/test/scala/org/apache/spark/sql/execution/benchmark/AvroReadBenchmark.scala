@@ -198,15 +198,17 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
     val schema = StructType(StructField("key", LongType) +: fields)
     def columns(): Seq[Column] = {
       val ts = Seq.tabulate(colsNum) { i =>
-        lit(Instant.ofEpochSecond(i * 12345678)).as(s"col$i")
+        lit(Instant.ofEpochSecond(-30610224000L + i * 123456)).as(s"col$i")
       }
       ($"id" % 1000).as("key") +: ts
     }
     withTempPath { path =>
-      spark.range(rowsNum).select(columns(): _*)
-        .write
-        .format("avro")
-        .save(path.getAbsolutePath)
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
+        spark.range(rowsNum).select(columns(): _*)
+          .write
+          .format("avro")
+          .save(path.getAbsolutePath)
+      }
       def readback = {
         spark.read
           .schema(schema)
@@ -215,17 +217,23 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase("w/o filters", numIters) { _ =>
-        readback.noop()
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
+          readback.noop()
+        }
       }
 
       def withFilter(configEnabled: Boolean): Unit = {
-        withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
+        withSQLConf(
+          SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY",
+          SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
           readback.filter($"key" === 0).noop()
         }
       }
 
       benchmark.addCase("pushdown disabled", numIters) { _ =>
-        withFilter(configEnabled = false)
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
+          withFilter(configEnabled = false)
+        }
       }
 
       benchmark.addCase("w/ filters", numIters) { _ =>
