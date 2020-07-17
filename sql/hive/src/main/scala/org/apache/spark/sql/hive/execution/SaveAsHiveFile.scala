@@ -119,7 +119,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     val scheme = Option(path.toUri.getScheme).getOrElse("")
     if (scheme.equals("file")) {
       logWarning("Temporary data will be written into a local file system " +
-        "(scheme: '$scheme', path: '$mrScratchDir'). If your Spark is not in local mode, " +
+        s"(scheme: '$scheme', path: '$mrScratchDir'). If your Spark is not in local mode, " +
         "you might need to configure 'hive.exec.scratchdir' " +
         "to use accessible file system (e.g. HDFS path) from any executors in the cluster.")
     }
