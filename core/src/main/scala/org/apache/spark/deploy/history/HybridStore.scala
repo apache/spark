@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
+import com.google.common.collect.Lists;
+
 import org.apache.spark.util.kvstore._
 
 /**
@@ -144,10 +146,9 @@ private[history] class HybridStore extends KVStore {
     backgroundThread = new Thread(() => {
       try {
         for (klass <- klassMap.keys().asScala) {
-          val it = inMemoryStore.view(klass).closeableIterator()
-          while (it.hasNext()) {
-            levelDB.write(it.next())
-          }
+          val values = Lists.newArrayList(
+              inMemoryStore.view(klass).closeableIterator())
+          levelDB.writeAll(values)
         }
         listener.onSwitchToLevelDBSuccess()
         shouldUseInMemoryStore.set(false)
