@@ -84,12 +84,14 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
-    * Extract entries from `HiveConf` and put them in the `SQLConf`
-    */
+   * Extract entries from `SparkConf` and put them in the `SQLConf`
+   */
   protected def mergeHiveConf(sqlConf: SQLConf, hiveConf: Configuration): Unit = {
     import scala.collection.JavaConverters._
     hiveConf.asScala.foreach { entry =>
-      sqlConf.setConfString(entry.getKey, entry.getValue)
+      if (!sqlConf.contains(entry.getKey)) {
+        sqlConf.setConfString(entry.getKey, entry.getValue)
+      }
     }
   }
 
