@@ -15,18 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.continuous.shuffle
+package org.apache.spark.sql.catalyst.json
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.{StructFilters, StructFiltersSuite}
+import org.apache.spark.sql.sources
+import org.apache.spark.sql.types.StructType
 
-/**
- * Trait for reading from a continuous processing shuffle.
- */
-trait ContinuousShuffleReader {
-  /**
-   * Returns an iterator over the incoming rows in an epoch. Implementations should block waiting
-   * for new rows to arrive, and end the iterator once they've received epoch markers from all
-   * shuffle writers.
-   */
-  def read(): Iterator[UnsafeRow]
+class JsonFiltersSuite extends StructFiltersSuite {
+  override def createFilters(filters: Seq[sources.Filter], schema: StructType): StructFilters = {
+    new JsonFilters(filters, schema)
+  }
 }

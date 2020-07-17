@@ -444,10 +444,10 @@ object SparkBuild extends PomBuild {
 object SparkParallelTestGrouping {
   // Settings for parallelizing tests. The basic strategy here is to run the slowest suites (or
   // collections of suites) in their own forked JVMs, allowing us to gain parallelism within a
-  // SBT project. Here, we take a whitelisting approach where the default behavior is to run all
+  // SBT project. Here, we take an opt-in approach where the default behavior is to run all
   // tests sequentially in a single JVM, requiring us to manually opt-in to the extra parallelism.
   //
-  // There are a reasons why such a whitelist approach is good:
+  // There are a reasons why such an opt-in approach is good:
   //
   //    1. Launching one JVM per suite adds significant overhead for short-running suites. In
   //       addition to JVM startup time and JIT warmup, it appears that initialization of Derby

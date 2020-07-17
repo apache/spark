@@ -157,7 +157,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    # TODO(SPARK-32278): install PyPy3 in Jenkins to test
     python_execs = [x for x in ["python3.6", "python3.8", "pypy3"] if which(x)]
 
     if "python3.6" not in python_execs:
@@ -269,7 +268,7 @@ def main():
             [python_exec, "--version"], stderr=subprocess.STDOUT, universal_newlines=True).strip())
         if should_test_modules:
             for module in modules_to_test:
-                if python_implementation not in module.blacklisted_python_implementations:
+                if python_implementation not in module.excluded_python_implementations:
                     for test_goal in module.python_test_goals:
                         heavy_tests = ['pyspark.streaming.tests', 'pyspark.mllib.tests',
                                        'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests']

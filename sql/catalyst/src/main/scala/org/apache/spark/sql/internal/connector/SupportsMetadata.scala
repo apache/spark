@@ -14,14 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package org.apache.spark.sql.execution.streaming.continuous.shuffle
-
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+package org.apache.spark.sql.internal.connector
 
 /**
- * Trait for writing to a continuous processing shuffle.
+ * A mix-in interface for {@link FileScan}. This can be used to report metadata
+ * for a file based scan operator. This is currently used for supporting formatted
+ * explain.
  */
-trait ContinuousShuffleWriter {
-  def write(epoch: Iterator[UnsafeRow]): Unit
+trait SupportsMetadata {
+  def getMetaData(): Map[String, String]
 }

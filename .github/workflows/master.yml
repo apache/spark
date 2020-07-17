@@ -117,38 +117,42 @@ jobs:
         java-version: ${{ matrix.java }}
     # PySpark
     - name: Install PyPy3
-      # SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
       # Note that order of Python installations here matters because default python3 is
       # overridden by pypy3.
       uses: actions/setup-python@v2
-      if: contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
+      if: contains(matrix.modules, 'pyspark')
       with:
         python-version: pypy3
         architecture: x64
-    - name: Install Python 2.7
-      uses: actions/setup-python@v2
-      if: contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
-      with:
-        python-version: 2.7
-        architecture: x64
     - name: Install Python 3.6
       uses: actions/setup-python@v2
-      # Yarn has a Python specific test too, for example, YarnClusterSuite.
-      if: contains(matrix.modules, 'yarn') || contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
+      if: contains(matrix.modules, 'pyspark')
       with:
         python-version: 3.6
         architecture: x64
-    - name: Install Python packages
-      if: contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
+    - name: Install Python 3.8
+      uses: actions/setup-python@v2
+      # We should install one Python that is higher then 3+ for SQL and Yarn because:
+      # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
+      # - Yarn has a Python specific test too, for example, YarnClusterSuite.
+      if: contains(matrix.modules, 'yarn') || contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
+      with:
+        python-version: 3.8
+        architecture: x64
+    - name: Install Python packages (Python 3.6 and PyPy3)
+      if: contains(matrix.modules, 'pyspark')
       # PyArrow is not supported in PyPy yet, see ARROW-2651.
       # TODO(SPARK-32247): scipy installation with PyPy fails for an unknown reason.
       run: |
-        python3 -m pip install numpy pyarrow pandas scipy
-        python3 -m pip list
-        python2 -m pip install numpy pyarrow pandas scipy
-        python2 -m pip list
+        python3.6 -m pip install numpy pyarrow pandas scipy
+        python3.6 -m pip list
         pypy3 -m pip install numpy pandas
         pypy3 -m pip list
+    - name: Install Python packages (Python 3.8)
+      if: contains(matrix.modules, 'pyspark') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
+      run: |
+        python3.8 -m pip install numpy pyarrow pandas scipy
+        python3.8 -m pip list
     # SparkR
     - name: Install R 3.6
       uses: r-lib/actions/setup-r@v1
