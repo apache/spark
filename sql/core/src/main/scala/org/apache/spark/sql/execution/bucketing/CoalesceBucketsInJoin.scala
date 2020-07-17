@@ -40,25 +40,30 @@ import org.apache.spark.sql.internal.SQLConf
  *     COALESCE_BUCKETS_IN_SHUFFLED_HASH_JOIN_MAX_BUCKET_RATIO (`ShuffledHashJoin`).
  */
 case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
+  private def updateNumCoalescedBucketsInScan(
+      plan: SparkPlan,
+      numCoalescedBuckets: Int): SparkPlan = {
+    plan transformUp {
+      case f: FileSourceScanExec =>
+        f.copy(optionalNumCoalescedBuckets = Some(numCoalescedBuckets))
+    }
+  }
+
   private def updateNumCoalescedBuckets(
       join: BaseJoinExec,
       numLeftBuckets: Int,
       numRightBucket: Int,
       numCoalescedBuckets: Int): BaseJoinExec = {
     if (numCoalescedBuckets != numLeftBuckets) {
-      val leftCoalescedChild = join.left transformUp {
-        case f: FileSourceScanExec =>
-          f.copy(optionalNumCoalescedBuckets = Some(numCoalescedBuckets))
-      }
+      val leftCoalescedChild =
+        updateNumCoalescedBucketsInScan(join.left, numCoalescedBuckets)
       join match {
         case j: SortMergeJoinExec => j.copy(left = leftCoalescedChild)
         case j: ShuffledHashJoinExec => j.copy(left = leftCoalescedChild)
       }
     } else {
-      val rightCoalescedChild = join.right transformUp {
-        case f: FileSourceScanExec =>
-          f.copy(optionalNumCoalescedBuckets = Some(numCoalescedBuckets))
-      }
+      val rightCoalescedChild =
+        updateNumCoalescedBucketsInScan(join.right, numCoalescedBuckets)
       join match {
         case j: SortMergeJoinExec => j.copy(right = rightCoalescedChild)
         case j: ShuffledHashJoinExec => j.copy(right = rightCoalescedChild)
@@ -160,12 +165,12 @@ object ExtractJoinWithBuckets {
 
   def unapply(plan: SparkPlan): Option[(BaseJoinExec, Int, Int)] = {
     plan match {
-      case s: BaseJoinExec if isApplicable(s) =>
-        val leftBucket = getBucketSpec(s.left)
-        val rightBucket = getBucketSpec(s.right)
+      case j: BaseJoinExec if isApplicable(j) =>
+        val leftBucket = getBucketSpec(j.left)
+        val rightBucket = getBucketSpec(j.right)
         if (leftBucket.isDefined && rightBucket.isDefined &&
             isDivisible(leftBucket.get.numBuckets, rightBucket.get.numBuckets)) {
-          Some(s, leftBucket.get.numBuckets, rightBucket.get.numBuckets)
+          Some(j, leftBucket.get.numBuckets, rightBucket.get.numBuckets)
         } else {
           None
         }
