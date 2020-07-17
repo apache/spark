@@ -28,7 +28,6 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, UnsafeProjection}
@@ -137,7 +136,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
       case StringType => (data: String) => converter(data)
-      case ByteType => (data: String) => converter(JavaUtils.stringToBytes(data))
+      case ByteType => (data: String) => converter(data.toByte)
       case IntegerType => (data: String) => converter(data.toInt)
       case ShortType => (data: String) => converter(data.toShort)
       case LongType => (data: String) => converter(data.toLong)
