@@ -87,6 +87,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
      * Subquery
      
   * **PIVOT**
+
      `PIVOT` clause is used for data perspective, we can get the aggregated values based on specific column value.
 
  * **LATERAL VIEW**

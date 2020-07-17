@@ -26,7 +26,7 @@ license: |
 ### Syntax
 
 ```sql
-LATERAL VIEW [ OUTER ] { generator_function ( expression [ , ... ] ) [ table_alias ] AS column_alias [ , ... ] } [ ... ]
+LATERAL VIEW [ OUTER ] generator_function ( expression [ , ... ] ) [ table_alias ] AS column_alias [ , ... ]
 ```
 
 ### Parameters

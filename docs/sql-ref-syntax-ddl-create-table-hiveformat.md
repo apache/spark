@@ -181,7 +181,7 @@ CREATE EXTERNAL TABLE family(
     STORED AS TEXTFILE
     LOCATION '/tmp/family/';
 
---Use predefined custom serde
+--Use predefined custom SerDe
 CREATE TABLE avroExample
     ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
     STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
@@ -195,7 +195,7 @@ CREATE TABLE avroExample
             ] }');
 
 --Use personalized custom serde(we may need to `ADD JAR xxx.jar` first to ensure we can find the serde_class, or you may run into `CLASSNOTFOUND` exception)
-ADD JAR /usr/lib/hive_serde/lib/hive_serde_example.jar;
+ADD JAR /tmp/hive_serde_example.jar;
 CREATE EXTERNAL TABLE family (id INT, name STRING)
     ROW FORMAT SERDE 'com.ly.spark.serde.SerDeExample'
     STORED AS INPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleInputFormat'

@@ -26,18 +26,18 @@ license: |
 ### Syntax
 
 ```sql
-PIVOT ( { group_expression [ AS group_expression_alias ] } [ , ... ] FOR column_list IN ( expression_list ) )
+PIVOT ( { aggregate_expression [ AS aggregate_expression_alias ] } [ , ... ] FOR column_list IN ( expression_list ) )
 ```
 
 ### Parameters
     
-* **group_expression**
+* **aggregate_expression**
 
-    We will get specific aggregated results by the `aggregate_expression`, such as `SUM(a)` or `COUNT(DISTINCT b)`.
+    Specifies an aggregate expression (SUM(a), COUNT(DISTINCT b), etc.).
     
-* **group_expression_alias**
+* **aggregate_expression_alias**
 
-    It is the alias for `group_expression`, which is optional, we can use it in `SELECT` clause.
+    Specifies an alias for aggregate expression.
      
 * **column_list**
 

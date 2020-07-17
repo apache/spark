@@ -38,8 +38,6 @@ GROUP BY GROUPING SETS (grouping_set [ , ...])
 While aggregate functions are defined as
 ```sql
 aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_expression ) ]
-
-[ FIRST | LAST ] ( expression [ IGNORE NULLS ] ) [ FILTER ( WHERE boolean_expression ) ]
 ```
 
 ### Parameters
@@ -83,6 +81,8 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 * **aggregate_name**
 
     Specifies an aggregate function name (MIN, MAX, COUNT, SUM, AVG, etc.).
+    Some aggregate function like `FIRST` and `LAST` have special usage as the following:
+    **Syntax:** `[ FIRST | LAST ] ( [ distinct ] expression [ IGNORE NULLS ] ) [ FILTER ( WHERE boolean_expression ) ]`
 
 * **DISTINCT**
 
