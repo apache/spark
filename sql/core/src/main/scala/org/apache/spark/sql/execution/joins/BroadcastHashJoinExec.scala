@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioning, Partitioning, PartitioningCollection, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, LongType}
 
 /**
@@ -65,7 +64,7 @@ case class BroadcastHashJoinExec(
 
   override lazy val outputPartitioning: Partitioning = {
     joinType match {
-      case Inner if sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
+      case _: InnerLike if sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
         streamedPlan.outputPartitioning match {
           case h: HashPartitioning => expandOutputPartitioning(h)
           case c: PartitioningCollection => expandOutputPartitioning(c)
