@@ -871,7 +871,7 @@ private[spark] class AppStatusListener(
     event.executorUpdates.foreach { case (key, peakUpdates) =>
       liveExecutors.get(event.execId).foreach { exec =>
         if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(peakUpdates)) {
-          maybeUpdate(exec, now)
+          update(exec, now)
         }
       }
 
