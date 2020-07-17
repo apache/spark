@@ -2669,8 +2669,8 @@ object SQLConf {
     buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
       .internal()
       .doc("The maximum number of partitionings that a HashPartitioning can be expanded to. " +
-        "This configuration is applicable only for inner joins and can be set to '0' to disable " +
-        "this feature.")
+        "This configuration is applicable only for BroadcastHashJoin inner joins and can be " +
+        "set to '0' to disable this feature.")
       .version("3.1.0")
       .intConf
       .checkValue(_ >= 0, "The value must be non-negative.")
