@@ -24,9 +24,9 @@
     "sparkUser" : "tgraves",
     "completed" : true,
     "appSparkVersion" : "3.0.0-SNAPSHOT",
-    "lastUpdatedEpoch" : 0,
     "endTimeEpoch" : 1578764802615,
-    "startTimeEpoch" : 1578764662851
+    "startTimeEpoch" : 1578764662851,
+    "lastUpdatedEpoch" : 0
   } ]
 }, {
   "id" : "application_1555004656427_0144",
@@ -39,8 +39,8 @@
     "sparkUser" : "tgraves",
     "completed" : true,
     "appSparkVersion" : "3.0.0-SNAPSHOT",
+    "startTimeEpoch" : 1562101337180,
     "lastUpdatedEpoch" : 0,
-    "endTimeEpoch" : 1562101355974,
-    "startTimeEpoch" : 1562101337180
+    "endTimeEpoch" : 1562101355974
   } ]
 } ]
