@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
+import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -249,6 +250,7 @@ class Analyzer(
       ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
+      ResolveUnion ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
@@ -3674,5 +3676,65 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
             s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases))
       }
     }
+  }
+}
+
+/**
+ * Resolves different children of Union to a common set of columns. Note that this must be
+ * run before `TypeCoercion`, because `TypeCoercion` should be run on correctly resolved
+ * column by name.
+ */
+object ResolveUnion extends Rule[LogicalPlan] {
+  private def unionTwoSides(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      allowMissingCol: Boolean): LogicalPlan = {
+    val resolver = SQLConf.get.resolver
+    val leftOutputAttrs = left.output
+    val rightOutputAttrs = right.output
+
+    // Builds a project list for `right` based on `left` output names
+    val rightProjectList = leftOutputAttrs.map { lattr =>
+      rightOutputAttrs.find { rattr => resolver(lattr.name, rattr.name) }.getOrElse {
+        if (allowMissingCol) {
+          Alias(Literal(null, lattr.dataType), lattr.name)()
+        } else {
+          throw new AnalysisException(
+            s"""Cannot resolve column name "${lattr.name}" among """ +
+              s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
+        }
+      }
+    }
+
+    // Delegates failure checks to `CheckAnalysis`
+    val notFoundAttrs = rightOutputAttrs.diff(rightProjectList)
+    val rightChild = Project(rightProjectList ++ notFoundAttrs, right)
+
+    // Builds a project for `logicalPlan` based on `right` output names, if allowing
+    // missing columns.
+    val leftChild = if (allowMissingCol) {
+      val missingAttrs = notFoundAttrs.map { attr =>
+        Alias(Literal(null, attr.dataType), attr.name)()
+      }
+      if (missingAttrs.nonEmpty) {
+        Project(leftOutputAttrs ++ missingAttrs, left)
+      } else {
+        left
+      }
+    } else {
+      left
+    }
+    Union(leftChild, rightChild)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+    case e if !e.childrenResolved => e
+
+    case Union(children, byName, allowMissingCol)
+      if byName =>
+      val union = children.reduceLeft { (left: LogicalPlan, right: LogicalPlan) =>
+        unionTwoSides(left, right, allowMissingCol)
+      }
+      CombineUnions(union)
   }
 }
