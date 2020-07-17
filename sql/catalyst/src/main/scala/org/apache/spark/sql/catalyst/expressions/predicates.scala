@@ -201,7 +201,7 @@ trait PredicateHelper extends Logging {
     case e => e.children.forall(canEvaluateWithinJoin)
   }
 
-  /*
+  /**
    * Returns a filter that its reference is a subset of `outputSet` and it contains the maximum
    * constraints from `condition`. This is used for predicate pushdown.
    * When there is no such filter, `None` is returned.
