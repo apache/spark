@@ -68,6 +68,7 @@ class ResourceProfileInfo private[spark](
     val taskResources: Map[String, TaskResourceRequest])
 
 class ExecutorStageSummary private[spark](
+    val hostPort: String,
     val taskTime : Long,
     val failedTasks : Int,
     val succeededTasks : Int,
@@ -82,6 +83,7 @@ class ExecutorStageSummary private[spark](
     val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
     val diskBytesSpilled : Long,
+    val executorLogs: Map[String, String],
     val isBlacklistedForStage: Boolean)
 
 class ExecutorSummary private[spark](

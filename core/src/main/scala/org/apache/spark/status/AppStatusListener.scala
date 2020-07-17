@@ -667,6 +667,10 @@ private[spark] class AppStatusListener(
       if (metricsDelta != null) {
         esummary.metrics = LiveEntityHelpers.addMetrics(esummary.metrics, metricsDelta)
       }
+      liveExecutors.get(event.taskInfo.executorId).foreach(e => {
+        esummary.hostPort = e.hostPort
+        esummary.executorLogs = e.executorLogs
+      })
 
       val isLastTask = stage.activeTasksPerExecutor(event.taskInfo.executorId) == 0
 

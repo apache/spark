@@ -383,129 +383,106 @@ $(document).ready(function () {
                 });
             }
 
-            // prepare data for executor summary table
+            var executorSummaryTable = [];
             var stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
-            $.getJSON(createRESTEndPointForExecutorsPage(appId),
-              function(executorSummaryResponse, status, jqXHR) {
-                var executorDetailsMap = {};
-                executorSummaryResponse.forEach(function (executorDetail) {
-                    executorDetailsMap[executorDetail.id] = executorDetail;
-                });
-
-                var executorSummaryTable = [];
-                stageExecutorSummaryInfoKeys.forEach(function (columnKeyIndex) {
-                    var executorSummary = responseBody.executorSummary[columnKeyIndex];
-                    var executorDetail = executorDetailsMap[columnKeyIndex.toString()];
-                    executorSummary.id = columnKeyIndex;
-                    executorSummary.executorLogs = {};
-                    executorSummary.hostPort = "CANNOT FIND ADDRESS";
-
-                    if (executorDetail) {
-                        if (executorDetail["executorLogs"]) {
-                            responseBody.executorSummary[columnKeyIndex].executorLogs =
-                                executorDetail["executorLogs"];
-                            }
-                        if (executorDetail["hostPort"]) {
-                            responseBody.executorSummary[columnKeyIndex].hostPort =
-                                executorDetail["hostPort"];
+            stageExecutorSummaryInfoKeys.forEach(function (columnKeyIndex) {
+                var executorSummary = responseBody.executorSummary[columnKeyIndex];
+                executorSummary.id = columnKeyIndex;
+                executorSummaryTable.push(executorSummary);
+            })
+            // building task aggregated metrics by executor table
+            var executorSummaryConf = {
+                "data": executorSummaryTable,
+                "columns": [
+                    {data : "id"},
+                    {data : "executorLogs", render: formatLogsCells},
+                    {data : "hostPort"},
+                    {
+                        data : function (row, type) {
+                            return type === 'display' ? formatDuration(row.taskTime) : row.taskTime;
+                        }
+                    },
+                    {
+                        data : function (row, type) {
+                            var totaltasks = row.succeededTasks + row.failedTasks + row.killedTasks;
+                            return type === 'display' ? totaltasks : totaltasks.toString();
+                        }
+                    },
+                    {data : "failedTasks"},
+                    {data : "killedTasks"},
+                    {data : "succeededTasks"},
+                    {data : "isBlacklistedForStage"},
+                    {
+                        data : function (row, type) {
+                            return row.inputRecords != 0 ? formatBytes(row.inputBytes, type) + " / " + row.inputRecords : "";
+                        }
+                    },
+                    {
+                        data : function (row, type) {
+                            return row.outputRecords != 0 ? formatBytes(row.outputBytes, type) + " / " + row.outputRecords : "";
+                        }
+                    },
+                    {
+                        data : function (row, type) {
+                            return row.shuffleReadRecords != 0 ? formatBytes(row.shuffleRead, type) + " / " + row.shuffleReadRecords : "";
+                        }
+                    },
+                    {
+                        data : function (row, type) {
+                            return row.shuffleWriteRecords != 0 ? formatBytes(row.shuffleWrite, type) + " / " + row.shuffleWriteRecords : "";
+                        }
+                    },
+                    {
+                        data : function (row, type) {
+                            return typeof row.memoryBytesSpilled != 'undefined' ? formatBytes(row.memoryBytesSpilled, type) : "";
+                        }
+                    },
+                    {
+                        data : function (row, type) {
+                            return typeof row.diskBytesSpilled != 'undefined' ? formatBytes(row.diskBytesSpilled, type) : "";
                         }
                     }
-                    executorSummaryTable.push(responseBody.executorSummary[columnKeyIndex]);
-                });
-                // building task aggregated metrics by executor table
-                var executorSummaryConf = {
-                    "data": executorSummaryTable,
-                    "columns": [
-                        {data : "id"},
-                        {data : "executorLogs", render: formatLogsCells},
-                        {data : "hostPort"},
-                        {
-                            data : function (row, type) {
-                                return type === 'display' ? formatDuration(row.taskTime) : row.taskTime;
-                            }
-                        },
-                        {
-                            data : function (row, type) {
-                                var totaltasks = row.succeededTasks + row.failedTasks + row.killedTasks;
-                                return type === 'display' ? totaltasks : totaltasks.toString();
-                            }
-                        },
-                        {data : "failedTasks"},
-                        {data : "killedTasks"},
-                        {data : "succeededTasks"},
-                        {data : "isBlacklistedForStage"},
-                        {
-                            data : function (row, type) {
-                                return row.inputRecords != 0 ? formatBytes(row.inputBytes, type) + " / " + row.inputRecords : "";
-                            }
-                        },
-                        {
-                            data : function (row, type) {
-                                return row.outputRecords != 0 ? formatBytes(row.outputBytes, type) + " / " + row.outputRecords : "";
-                            }
-                        },
-                        {
-                            data : function (row, type) {
-                                return row.shuffleReadRecords != 0 ? formatBytes(row.shuffleRead, type) + " / " + row.shuffleReadRecords : "";
-                            }
-                        },
-                        {
-                            data : function (row, type) {
-                                return row.shuffleWriteRecords != 0 ? formatBytes(row.shuffleWrite, type) + " / " + row.shuffleWriteRecords : "";
-                            }
-                        },
-                        {
-                            data : function (row, type) {
-                                return typeof row.memoryBytesSpilled != 'undefined' ? formatBytes(row.memoryBytesSpilled, type) : "";
-                            }
-                        },
-                        {
-                            data : function (row, type) {
-                                return typeof row.diskBytesSpilled != 'undefined' ? formatBytes(row.diskBytesSpilled, type) : "";
-                            }
-                        }
-                    ],
-                    "order": [[0, "asc"]],
-                    "bAutoWidth": false,
-                    "oLanguage": {
-                        "sEmptyTable": "No data to show yet"
-                    }
-                };
-                var executorSummaryTableSelector =
-                    $("#summary-executor-table").DataTable(executorSummaryConf);
-                $('#parent-container [data-toggle="tooltip"]').tooltip();
+                ],
+                "order": [[0, "asc"]],
+                "bAutoWidth": false,
+                "oLanguage": {
+                    "sEmptyTable": "No data to show yet"
+                }
+            };
+            var executorSummaryTableSelector =
+                $("#summary-executor-table").DataTable(executorSummaryConf);
+            $('#parent-container [data-toggle="tooltip"]').tooltip();
 
-                executorSummaryTableSelector.column(9).visible(dataToShow.showInputData);
-                if (dataToShow.showInputData) {
-                    $('#executor-summary-input').attr("data-toggle", "tooltip")
-                        .attr("data-placement", "top")
-                        .attr("title", "Bytes and records read from Hadoop or from Spark storage.");
-                    $('#executor-summary-input').tooltip(true);
-                }
-                executorSummaryTableSelector.column(10).visible(dataToShow.showOutputData);
-                if (dataToShow.showOutputData) {
-                    $('#executor-summary-output').attr("data-toggle", "tooltip")
-                        .attr("data-placement", "top")
-                        .attr("title", "Bytes and records written to Hadoop.");
-                    $('#executor-summary-output').tooltip(true);
-                }
-                executorSummaryTableSelector.column(11).visible(dataToShow.showShuffleReadData);
-                if (dataToShow.showShuffleReadData) {
-                    $('#executor-summary-shuffle-read').attr("data-toggle", "tooltip")
-                        .attr("data-placement", "top")
-                        .attr("title", "Total shuffle bytes and records read (includes both data read locally and data read from remote executors).");
-                    $('#executor-summary-shuffle-read').tooltip(true);
-                }
-                executorSummaryTableSelector.column(12).visible(dataToShow.showShuffleWriteData);
-                if (dataToShow.showShuffleWriteData) {
-                    $('#executor-summary-shuffle-write').attr("data-toggle", "tooltip")
-                        .attr("data-placement", "top")
-                        .attr("title", "Bytes and records written to disk in order to be read by a shuffle in a future stage.");
-                    $('#executor-summary-shuffle-write').tooltip(true);
-                }
-                executorSummaryTableSelector.column(13).visible(dataToShow.showBytesSpilledData);
-                executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);
-            });
+            executorSummaryTableSelector.column(9).visible(dataToShow.showInputData);
+            if (dataToShow.showInputData) {
+                $('#executor-summary-input').attr("data-toggle", "tooltip")
+                    .attr("data-placement", "top")
+                    .attr("title", "Bytes and records read from Hadoop or from Spark storage.");
+                $('#executor-summary-input').tooltip(true);
+            }
+            executorSummaryTableSelector.column(10).visible(dataToShow.showOutputData);
+            if (dataToShow.showOutputData) {
+                $('#executor-summary-output').attr("data-toggle", "tooltip")
+                    .attr("data-placement", "top")
+                    .attr("title", "Bytes and records written to Hadoop.");
+                $('#executor-summary-output').tooltip(true);
+            }
+            executorSummaryTableSelector.column(11).visible(dataToShow.showShuffleReadData);
+            if (dataToShow.showShuffleReadData) {
+                $('#executor-summary-shuffle-read').attr("data-toggle", "tooltip")
+                    .attr("data-placement", "top")
+                    .attr("title", "Total shuffle bytes and records read (includes both data read locally and data read from remote executors).");
+                $('#executor-summary-shuffle-read').tooltip(true);
+            }
+            executorSummaryTableSelector.column(12).visible(dataToShow.showShuffleWriteData);
+            if (dataToShow.showShuffleWriteData) {
+                $('#executor-summary-shuffle-write').attr("data-toggle", "tooltip")
+                    .attr("data-placement", "top")
+                    .attr("title", "Bytes and records written to disk in order to be read by a shuffle in a future stage.");
+                $('#executor-summary-shuffle-write').tooltip(true);
+            }
+            executorSummaryTableSelector.column(13).visible(dataToShow.showBytesSpilledData);
+            executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);
 
             // prepare data for accumulatorUpdates
             var accumulatorTable = responseBody.accumulatorUpdates.filter(accumUpdate =>

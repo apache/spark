@@ -683,6 +683,7 @@
   },
   "executorSummary" : {
     "0" : {
+      "hostPort" : "172.30.65.138:64290",
       "taskTime" : 589,
       "failedTasks" : 2,
       "succeededTasks" : 0,
@@ -697,9 +698,14 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
+      "executorLogs" : {
+        "stdout" : "http://172.30.65.138:64279/logPage/?appId=app-20180109111548-0000&executorId=0&logType=stdout",
+        "stderr" : "http://172.30.65.138:64279/logPage/?appId=app-20180109111548-0000&executorId=0&logType=stderr"
+      },
       "isBlacklistedForStage" : true
     },
     "1" : {
+      "hostPort" : "172.30.65.138:64291",
       "taskTime" : 708,
       "failedTasks" : 0,
       "succeededTasks" : 10,
@@ -714,6 +720,10 @@
       "shuffleWriteRecords" : 10,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
+      "executorLogs" : {
+        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
+        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
+      },
       "isBlacklistedForStage" : false
     }
   },

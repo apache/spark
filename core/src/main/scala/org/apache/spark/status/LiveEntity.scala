@@ -362,11 +362,14 @@ private class LiveExecutorStageSummary(
   var failedTasks = 0
   var killedTasks = 0
   var isBlacklisted = false
+  var hostPort = "Unknown"
+  var executorLogs: Map[String, String] = Map.empty
 
   var metrics = createMetrics(default = 0L)
 
   override protected def doUpdate(): Any = {
     val info = new v1.ExecutorStageSummary(
+      hostPort,
       taskTime,
       failedTasks,
       succeededTasks,
@@ -381,6 +384,7 @@ private class LiveExecutorStageSummary(
       metrics.shuffleWriteMetrics.recordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
+      executorLogs,
       isBlacklisted)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }

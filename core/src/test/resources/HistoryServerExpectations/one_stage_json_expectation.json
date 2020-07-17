@@ -445,6 +445,7 @@
   },
   "executorSummary" : {
     "driver" : {
+      "hostPort" : "localhost:57971",
       "taskTime" : 3624,
       "failedTasks" : 0,
       "succeededTasks" : 8,
@@ -459,6 +460,7 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
+      "executorLogs" : { },
       "isBlacklistedForStage" : false
     }
   },
