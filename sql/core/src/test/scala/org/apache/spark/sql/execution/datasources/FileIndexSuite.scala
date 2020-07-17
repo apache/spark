@@ -491,9 +491,10 @@ class FileIndexSuite extends SharedSparkSession {
   }
 
   test("expire FileStatusCache if TTL is configured") {
-    val previousValue = SQLConf.get.getConf(StaticSQLConf.METADATA_CACHE_TTL)
+    val previousValue = SQLConf.get.getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
     try {
-      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL, 1L)
+      // using 'SQLConf.get.setConf' instead of 'withSQLConf' to set a static config at runtime
+      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
 
       val path = new Path("/dummy_tmp", "abc")
       val files = (1 to 3).map(_ => new FileStatus())
@@ -510,7 +511,7 @@ class FileIndexSuite extends SharedSparkSession {
         assert(fileStatusCache.getLeafFiles(path).isEmpty === true)
       }
     } finally {
-      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL, previousValue)
+      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, previousValue)
     }
   }
 }

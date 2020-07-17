@@ -228,7 +228,7 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(100)
 
-  val METADATA_CACHE_TTL = buildStaticConf("spark.sql.metadataCacheTTL")
+  val METADATA_CACHE_TTL_SECONDS = buildStaticConf("spark.sql.metadataCacheTTLSeconds")
     .doc("Time-to-live (TTL) value for the metadata caches: partition file metadata cache and " +
       "session catalog cache. This configuration only has an effect when this value having " +
       "a positive value (> 0). It also requires setting " +

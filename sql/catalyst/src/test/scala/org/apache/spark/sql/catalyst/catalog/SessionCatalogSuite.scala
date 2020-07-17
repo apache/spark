@@ -1660,7 +1660,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     case class TestCommand() extends Command
 
     val conf = new SQLConf()
-    conf.setConf(StaticSQLConf.METADATA_CACHE_TTL, 1L)
+    conf.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
 
     withConfAndEmptyCatalog(conf) { catalog =>
       val table = QualifiedTableName(catalog.getCurrentDatabase, "test")
