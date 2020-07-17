@@ -259,6 +259,31 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           if (canBuildLeft(joinType)) BuildLeft else BuildRight
         }
 
+        /**
+         * See. [SPARK-32290]
+         * Not in Subquery will almost certainly be planned as a Broadcast Nested Loop join,
+         * which is very time consuming because it's an O(M*N) calculation.
+         * But if it's a single column NotInSubquery, and buildSide data is small enough,
+         * O(M*N) calculation could be optimized into O(M) using hash lookup instead of loop lookup.
+         */
+        def createBroadcastNullAwareHashJoin() = {
+          if (conf.notInSubqueryHashJoinEnabled &&
+            joinType == LeftAnti &&
+            canBroadcastBySize(right, conf) &&
+            right.output.length == 1) {
+            val (matched, _, _) =
+              joins.NotInSubqueryConditionPattern.singleColumnPatternMatch(condition)
+            if (matched) {
+              Some(Seq(joins.BroadcastNullAwareHashJoinExec(
+                planLater(left), planLater(right), BuildRight, LeftAnti, condition)))
+            } else {
+              None
+            }
+          } else {
+            None
+          }
+        }
+
         def createBroadcastNLJoin(buildLeft: Boolean, buildRight: Boolean) = {
           val maybeBuildSide = if (buildLeft && buildRight) {
             Some(desiredBuildSide)
@@ -294,9 +319,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
+        createBroadcastNullAwareHashJoin().orElse {
+          createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+        }.getOrElse(createJoinWithoutHint())
 
 
       // --- Cases where this strategy does not apply ---------------------------------------------

@@ -49,8 +49,6 @@ case class BroadcastHashJoinExec(
     right: SparkPlan)
   extends HashJoin with CodegenSupport {
 
-  var singleColumnNullAware: Boolean = false
-
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
@@ -455,75 +453,29 @@ case class BroadcastHashJoinExec(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val (buildSideNullExists, buildSideEmpty) = if (singleColumnNullAware) {
-      val singleColumnNullRow: UnsafeRow = new UnsafeRow(1)
-      singleColumnNullRow.setNullAt(0)
-      (broadcastRelation.value.get(singleColumnNullRow) != null,
-        broadcastRelation.value.keys().isEmpty)
-    } else {
-      // should not be reach if singleColumnNullAware = false
-      (false, false)
-    }
 
     if (uniqueKeyCodePath) {
       val found = ctx.freshName("found")
-      if (singleColumnNullAware) {
-        assert(checkCondition == "")
-        if (buildSideEmpty) {
-          s"""
-             |// singleColumnNullAware buildSideEmpty(true) accept all
-             |$numOutput.add(1);
-             |${consume(ctx, input)}
-           """.stripMargin
-        } else if (buildSideNullExists) {
-          s"""
-             |// singleColumnNullAware buildSideEmpty(false) buildSideNullExists(true) reject all
-           """.stripMargin
-        } else {
-          s"""
-             |// singleColumnNullAware buildSideEmpty(false) buildSideNullExists(false)
-             |boolean $found = false;
-             |// generate join key for stream side
-             |${keyEv.code}
-             |// Check if the key has nulls.
-             |if (!($anyNull)) {
-             |  // Check if the HashedRelation exists.
-             |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-             |  if ($matched != null) {
-             |    $found = true;
-             |  }
-             |} else {
-             |  $found = true;
-             |}
-             |
-             |if (!$found) {
-             |  $numOutput.add(1);
-             |  ${consume(ctx, input)}
-             |}
-           """.stripMargin
-        }
-      } else {
-        s"""
-           |boolean $found = false;
-           |// generate join key for stream side
-           |${keyEv.code}
-           |// Check if the key has nulls.
-           |if (!($anyNull)) {
-           |  // Check if the HashedRelation exists.
-           |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-           |  if ($matched != null) {
-           |    // Evaluate the condition.
-           |    $checkCondition {
-           |      $found = true;
-           |    }
-           |  }
-           |}
-           |if (!$found) {
-           |  $numOutput.add(1);
-           |  ${consume(ctx, input)}
-           |}
-         """.stripMargin
-      }
+      s"""
+         |boolean $found = false;
+         |// generate join key for stream side
+         |${keyEv.code}
+         |// Check if the key has nulls.
+         |if (!($anyNull)) {
+         |  // Check if the HashedRelation exists.
+         |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+         |  if ($matched != null) {
+         |    // Evaluate the condition.
+         |    $checkCondition {
+         |      $found = true;
+         |    }
+         |  }
+         |}
+         |if (!$found) {
+         |  $numOutput.add(1);
+         |  ${consume(ctx, input)}
+         |}
+       """.stripMargin
     } else {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
