@@ -30,7 +30,7 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
@@ -69,7 +69,8 @@ class AvroDeserializer(
     case st: StructType =>
       val resultRow = new SpecificInternalRow(st.map(_.dataType))
       val fieldUpdater = new RowUpdater(resultRow)
-      val writer = getRecordWriter(rootAvroType, st, Nil)
+      val applyFilters = new NoopFilters().skipRow(resultRow, _)
+      val writer = getRecordWriter(rootAvroType, st, Nil, applyFilters)
       (data: Any) => {
         val record = data.asInstanceOf[GenericRecord]
         val skipRow = writer(fieldUpdater, record)
@@ -178,7 +179,7 @@ class AvroDeserializer(
         updater.setDecimal(ordinal, decimal)
 
       case (RECORD, st: StructType) =>
-        val writeRecord = getRecordWriter(avroType, st, path)
+        val writeRecord = getRecordWriter(avroType, st, path, applyFilters = _ => false)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[GenericRecord])
@@ -315,7 +316,8 @@ class AvroDeserializer(
   private def getRecordWriter(
       avroType: Schema,
       sqlType: StructType,
-      path: List[String]): (CatalystDataUpdater, GenericRecord) => Boolean = {
+      path: List[String],
+      applyFilters: Int => Boolean): (CatalystDataUpdater, GenericRecord) => Boolean = {
     val validFieldIndexes = ArrayBuffer.empty[Int]
     val fieldWriters = ArrayBuffer.empty[(CatalystDataUpdater, Any) => Unit]
 
@@ -350,11 +352,13 @@ class AvroDeserializer(
 
     (fieldUpdater, record) => {
       var i = 0
-      while (i < validFieldIndexes.length) {
+      var skipRow = false
+      while (i < validFieldIndexes.length && !skipRow) {
         fieldWriters(i)(fieldUpdater, record.get(validFieldIndexes(i)))
+        skipRow = applyFilters(i)
         i += 1
       }
-      false
+      skipRow
     }
   }
 
