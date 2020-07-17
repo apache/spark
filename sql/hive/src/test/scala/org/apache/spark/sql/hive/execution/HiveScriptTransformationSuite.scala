@@ -21,20 +21,35 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.{ScriptTransformationIOSchema, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.StringType
 
-class HiveScriptTransformationSuite extends BaseScriptTransformationSuite {
-  override def scriptType: String = "HIVE"
+class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with TestHiveSingleton {
+  import testImplicits._
+  import ScriptTransformationIOSchema._
 
   override def isHive23OrSpark: Boolean = HiveUtils.isHive23
 
-  import spark.implicits._
+  override def createScriptTransformationExec(
+      input: Seq[Expression],
+      script: String,
+      output: Seq[Attribute],
+      child: SparkPlan,
+      ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
+    HiveScriptTransformationExec(
+      input = input,
+      script = script,
+      output = output,
+      child = child,
+      ioschema = ioschema
+    )
+  }
 
   private val serdeIOSchema: ScriptTransformationIOSchema = {
-    noSerdeIOSchema.copy(
+    defaultIOSchema.copy(
       inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
       outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
     )
