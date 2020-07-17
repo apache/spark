@@ -96,7 +96,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
 
   protected def onError(): PartialFunction[Throwable, Unit] = {
     case e: Throwable =>
-      logError(s"Error executing get catalogs operation with $statementId", e)
+      logError(s"Error operating $getType with $statementId", e)
       super.setState(OperationState.ERROR)
       HiveThriftServer2.eventManager.onStatementError(
         statementId, e.getMessage, Utils.exceptionString(e))
