@@ -18,9 +18,6 @@
 package org.apache.spark.sql.execution
 
 import java.io._
-import java.nio.charset.StandardCharsets
-
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
@@ -68,39 +65,8 @@ case class SparkScriptTransformationExec(
       hadoopConf
     )
 
-    val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
-    val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] {
-      var curLine: String = null
-
-      override def hasNext: Boolean = {
-        try {
-          if (curLine == null) {
-            curLine = reader.readLine()
-            if (curLine == null) {
-              checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
-              return false
-            }
-          }
-          true
-        } catch {
-          case NonFatal(e) =>
-            // If this exception is due to abrupt / unclean termination of `proc`,
-            // then detect it and propagate a better exception message for end users
-            checkFailureAndPropagate(writerThread, e, proc, stderrBuffer)
-
-            throw e
-        }
-      }
-
-      override def next(): InternalRow = {
-        if (!hasNext) {
-          throw new NoSuchElementException
-        }
-        val prevLine = curLine
-        curLine = reader.readLine()
-        processOutputWithoutSerde(prevLine, reader)
-      }
-    }
+    val outputIterator = createOutputIteratorWithoutSerde(
+      writerThread, inputStream, proc, stderrBuffer)
 
     writerThread.start()
 
