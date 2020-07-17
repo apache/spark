@@ -32,6 +32,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -44,7 +45,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   def script: String
   def output: Seq[Attribute]
   def child: SparkPlan
-  def ioschema: BaseScriptTransformIOSchema
+  def ioschema: ScriptTransformationIOSchema
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
 
@@ -65,7 +66,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     }
   }
 
-  def initProc(name: String): (OutputStream, Process, InputStream, CircularBuffer) = {
+  protected def initProc: (OutputStream, Process, InputStream, CircularBuffer) = {
     val cmd = List("/bin/bash", "-c", script)
     val builder = new ProcessBuilder(cmd.asJava)
 
@@ -82,15 +83,15 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     new RedirectThread(
       errorStream,
       stderrBuffer,
-      s"Thread-$name-STDERR-Consumer").start()
+      s"Thread-${this.getClass.getSimpleName}-STDERR-Consumer").start()
     (outputStream, proc, inputStream, stderrBuffer)
   }
 
-  def processIterator(
+  protected def processIterator(
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow]
 
-  def processOutputWithoutSerde(prevLine: String, reader: BufferedReader): InternalRow = {
+  protected def processOutputWithoutSerde(prevLine: String, reader: BufferedReader): InternalRow = {
     if (!ioschema.schemaLess) {
       new GenericInternalRow(
         prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
@@ -174,7 +175,7 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
 
   def iter: Iterator[InternalRow]
   def inputSchema: Seq[DataType]
-  def ioSchema: BaseScriptTransformIOSchema
+  def ioSchema: ScriptTransformationIOSchema
   def outputStream: OutputStream
   def proc: Process
   def stderrBuffer: CircularBuffer
@@ -251,26 +252,38 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
 /**
  * The wrapper class of input and output schema properties
  */
-abstract class BaseScriptTransformIOSchema extends Serializable {
-  import ScriptIOSchema._
-
-  def inputRowFormat: Seq[(String, String)]
-  def outputRowFormat: Seq[(String, String)]
-  def inputSerdeClass: Option[String]
-  def outputSerdeClass: Option[String]
-  def inputSerdeProps: Seq[(String, String)]
-  def outputSerdeProps: Seq[(String, String)]
-  def recordReaderClass: Option[String]
-  def recordWriterClass: Option[String]
-  def schemaLess: Boolean
+case class ScriptTransformationIOSchema(
+    inputRowFormat: Seq[(String, String)],
+    outputRowFormat: Seq[(String, String)],
+    inputSerdeClass: Option[String],
+    outputSerdeClass: Option[String],
+    inputSerdeProps: Seq[(String, String)],
+    outputSerdeProps: Seq[(String, String)],
+    recordReaderClass: Option[String],
+    recordWriterClass: Option[String],
+    schemaLess: Boolean) extends Serializable {
+  import ScriptTransformationIOSchema._
 
   val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
   val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 }
 
-object ScriptIOSchema {
+object ScriptTransformationIOSchema {
   val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\t"),
     ("TOK_TABLEROWFORMATLINES", "\n")
   )
+
+  def apply(input: ScriptInputOutputSchema): ScriptTransformationIOSchema = {
+    ScriptTransformationIOSchema(
+      input.inputRowFormat,
+      input.outputRowFormat,
+      input.inputSerdeClass,
+      input.outputSerdeClass,
+      input.inputSerdeProps,
+      input.outputSerdeProps,
+      input.recordReaderClass,
+      input.recordWriterClass,
+      input.schemaLess)
+  }
 }

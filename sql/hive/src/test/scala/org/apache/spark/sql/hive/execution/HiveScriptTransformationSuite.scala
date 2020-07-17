@@ -22,15 +22,18 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.{BaseScriptTransformIOSchema, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution.{ScriptTransformationIOSchema, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.types.StringType
 
 class HiveScriptTransformationSuite extends BaseScriptTransformationSuite {
   override def scriptType: String = "HIVE"
 
+  override def isHive23OrSpark: Boolean = HiveUtils.isHive23
+
   import spark.implicits._
 
-  noSerdeIOSchema = HiveScriptIOSchema(
+  noSerdeIOSchema = ScriptTransformationIOSchema(
     inputRowFormat = Seq.empty,
     outputRowFormat = Seq.empty,
     inputSerdeClass = None,
@@ -42,8 +45,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite {
     schemaLess = false
   )
 
-  private val serdeIOSchema: BaseScriptTransformIOSchema = {
-    noSerdeIOSchema.asInstanceOf[HiveScriptIOSchema].copy(
+  private val serdeIOSchema: ScriptTransformationIOSchema = {
+    noSerdeIOSchema.copy(
       inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
       outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
     )

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.io._
 import java.nio.charset.StandardCharsets
 
-import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -28,9 +27,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CircularBuffer, RedirectThread}
+import org.apache.spark.util.CircularBuffer
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -44,14 +42,14 @@ case class SparkScriptTransformationExec(
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
-    ioschema: SparkScriptIOSchema)
+    ioschema: ScriptTransformationIOSchema)
   extends BaseScriptTransformationExec {
 
   override def processIterator(
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow] = {
 
-    val (outputStream, proc, inputStream, stderrBuffer) = initProc(this.getClass.getSimpleName)
+    val (outputStream, proc, inputStream, stderrBuffer) = initProc
 
     val finalInput = input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
 
@@ -113,7 +111,7 @@ case class SparkScriptTransformationExec(
 case class SparkScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
-    ioSchema: SparkScriptIOSchema,
+    ioSchema: ScriptTransformationIOSchema,
     outputStream: OutputStream,
     proc: Process,
     stderrBuffer: CircularBuffer,
@@ -121,38 +119,7 @@ case class SparkScriptTransformationWriterThread(
     conf: Configuration)
   extends BaseScriptTransformationWriterThread {
 
-  setDaemon(true)
-
   override def processRows(): Unit = {
     processRowsWithoutSerde()
   }
 }
-
-object SparkScriptIOSchema {
-  def apply(input: ScriptInputOutputSchema): SparkScriptIOSchema = {
-    SparkScriptIOSchema(
-      input.inputRowFormat,
-      input.outputRowFormat,
-      input.inputSerdeClass,
-      input.outputSerdeClass,
-      input.inputSerdeProps,
-      input.outputSerdeProps,
-      input.recordReaderClass,
-      input.recordWriterClass,
-      input.schemaLess)
-  }
-}
-
-/**
- * The wrapper class of Spark script transformation input and output schema properties
- */
-case class SparkScriptIOSchema (
-     inputRowFormat: Seq[(String, String)],
-     outputRowFormat: Seq[(String, String)],
-     inputSerdeClass: Option[String],
-     outputSerdeClass: Option[String],
-     inputSerdeProps: Seq[(String, String)],
-     outputSerdeProps: Seq[(String, String)],
-     recordReaderClass: Option[String],
-     recordWriterClass: Option[String],
-     schemaLess: Boolean) extends BaseScriptTransformIOSchema

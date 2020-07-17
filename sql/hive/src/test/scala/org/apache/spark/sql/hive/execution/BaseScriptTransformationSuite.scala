@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 import java.util.Locale
 
 import org.scalatest.Assertions._
@@ -26,24 +26,25 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestUtils
   with TestHiveSingleton with BeforeAndAfterEach {
 
   def scriptType: String
 
+  def isHive23OrSpark: Boolean = true
+
   import spark.implicits._
 
-  var noSerdeIOSchema: BaseScriptTransformIOSchema = _
+  var noSerdeIOSchema: ScriptTransformationIOSchema = _
 
   private var defaultUncaughtExceptionHandler: Thread.UncaughtExceptionHandler = _
 
@@ -70,21 +71,21 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       script: String,
       output: Seq[Attribute],
       child: SparkPlan,
-      ioschema: BaseScriptTransformIOSchema): BaseScriptTransformationExec = {
+      ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
     scriptType.toUpperCase(Locale.ROOT) match {
       case "SPARK" => new SparkScriptTransformationExec(
         input = input,
         script = script,
         output = output,
         child = child,
-        ioschema = ioschema.asInstanceOf[SparkScriptIOSchema]
+        ioschema = ioschema
       )
       case "HIVE" => new HiveScriptTransformationExec(
         input = input,
         script = script,
         output = output,
         child = child,
-        ioschema = ioschema.asInstanceOf[HiveScriptIOSchema]
+        ioschema = ioschema
       )
       case _ => throw new TestFailedException(
         "Test class implement from BaseScriptTransformationSuite" +
@@ -133,63 +134,36 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   test("SPARK-25990: TRANSFORM should handle different data types correctly") {
     assume(TestUtils.testCommandAvailable("python"))
     val scriptFilePath = getTestResourcePath("test_script.py")
-    case class Struct(d: Int, str: String)
+
     withTempView("v") {
       val df = Seq(
-        (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1),
-          new Date(2020, 7, 1), new CalendarInterval(7, 1, 1000), Array(0, 1, 2),
-          Map("a" -> 1)),
-        (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2),
-          new Date(2020, 7, 2), new CalendarInterval(7, 2, 2000), Array(3, 4, 5),
-          Map("b" -> 2)),
-        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3),
-          new Date(2020, 7, 3), new CalendarInterval(7, 3, 3000), Array(6, 7, 8),
-          Map("c" -> 3))
-      ).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i")
-          .select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, struct('a, 'b).as("j"))
-      // Note column d's data type is Decimal(38, 18)
+        (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
+        (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
-      assert(spark.table("v").schema ==
-        StructType(Seq(StructField("a", IntegerType, false),
-          StructField("b", StringType, true),
-          StructField("c", DoubleType, false),
-          StructField("d", DecimalType(38, 18), true),
-          StructField("e", TimestampType, true),
-          StructField("f", DateType, true),
-          StructField("g", CalendarIntervalType, true),
-          StructField("h", ArrayType(IntegerType, false), true),
-          StructField("i", MapType(StringType, IntegerType, false), true),
-          StructField("j", StructType(
-            Seq(StructField("a", IntegerType, false),
-              StructField("b", StringType, true))), false))))
-
-      // Can't support convert script output data to ArrayType/MapType/StructType now,
-      // return these column still as string
       val query = sql(
         s"""
            |SELECT
-           |TRANSFORM(a, b, c, d, e, f, g, h, i, j)
-           |USING 'python $scriptFilePath'
-           |AS (
-           |  a int,
-           |  b string,
-           |  c double,
-           |  d decimal(1, 0),
-           |  e timestamp,
-           |  f date,
-           |  g interval,
-           |  h string,
-           |  i string,
-           |  j string)
+           |TRANSFORM(a, b, c, d, e)
+           |USING 'python $scriptFilePath' AS (a, b, c, d, e)
            |FROM v
         """.stripMargin)
 
+      // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
+      // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
+      val decimalToString: Column => Column = if (isHive23OrSpark) {
+        c => c.cast("string")
+      } else {
+        c => c.cast("decimal(1, 0)").cast("string")
+      }
       checkAnswer(query, identity, df.select(
-        'a, 'b, 'c, 'd, 'e, 'f, 'g,
-        'h.cast("string"),
-        'i.cast("string"),
-        'j.cast("string")).collect())
+        'a.cast("string"),
+        'b.cast("string"),
+        'c.cast("string"),
+        decimalToString('d),
+        'e.cast("string")).collect())
     }
   }
 

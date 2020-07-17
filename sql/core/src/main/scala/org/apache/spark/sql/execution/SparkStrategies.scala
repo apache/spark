@@ -541,7 +541,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           script,
           output,
           planLater(child),
-          SparkScriptIOSchema(ioschema)
+          ScriptTransformationIOSchema(ioschema)
         ) :: Nil
       case _ => Nil
     }
