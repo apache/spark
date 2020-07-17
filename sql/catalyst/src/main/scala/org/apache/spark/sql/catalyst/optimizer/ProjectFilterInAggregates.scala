@@ -147,14 +147,17 @@ object ProjectFilterInAggregates extends Rule[LogicalPlan] {
       val unfoldableChildren = af.children.filter(!_.foldable)
       // Expand projection
       val projectionMap = unfoldableChildren.map {
-        case e if filter.isDefined =>
-          val ife = If(filter.get, e, Literal.create(null, e.dataType))
-          e -> Alias(ife, s"_gen_attr_$currentExprId")()
-        // For convenience and unification, we always alias the column, even if
-        // there is no filter.
-        case e => e -> Alias(e, s"_gen_attr_$currentExprId")()
+        case e =>
+          currentExprId += 1
+          val ne = if (filter.isDefined) {
+            If(filter.get, e, Literal.create(null, e.dataType))
+          } else {
+            e
+          }
+          // For convenience and unification, we always alias the column, even if
+          // there is no filter.
+          e -> Alias(ne, s"_gen_attr_$currentExprId")()
       }
-      currentExprId += 1
       val projection = projectionMap.map(_._2)
       val exprAttrs = projectionMap.map { kv =>
         (kv._1, kv._2.toAttribute)
