@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.{ScriptTransformationIOSchema, SparkPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -31,18 +31,6 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite {
   import spark.implicits._
 
   override def scriptType: String = "SPARK"
-
-  noSerdeIOSchema = ScriptTransformationIOSchema(
-    inputRowFormat = Seq.empty,
-    outputRowFormat = Seq.empty,
-    inputSerdeClass = None,
-    outputSerdeClass = None,
-    inputSerdeProps = Seq.empty,
-    outputSerdeProps = Seq.empty,
-    recordReaderClass = None,
-    recordWriterClass = None,
-    schemaLess = false
-  )
 
   test("SPARK-32106: SparkScriptTransformExec should handle different data types correctly") {
     assume(TestUtils.testCommandAvailable("python"))

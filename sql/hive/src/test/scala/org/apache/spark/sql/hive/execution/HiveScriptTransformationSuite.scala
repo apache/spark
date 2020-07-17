@@ -33,18 +33,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite {
 
   import spark.implicits._
 
-  noSerdeIOSchema = ScriptTransformationIOSchema(
-    inputRowFormat = Seq.empty,
-    outputRowFormat = Seq.empty,
-    inputSerdeClass = None,
-    outputSerdeClass = None,
-    inputSerdeProps = Seq.empty,
-    outputSerdeProps = Seq.empty,
-    recordReaderClass = None,
-    recordWriterClass = None,
-    schemaLess = false
-  )
-
   private val serdeIOSchema: ScriptTransformationIOSchema = {
     noSerdeIOSchema.copy(
       inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),

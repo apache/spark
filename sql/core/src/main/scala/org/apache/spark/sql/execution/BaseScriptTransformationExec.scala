@@ -91,17 +91,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       hadoopConf: Configuration): Iterator[InternalRow]
 
   protected def processOutputWithoutSerde(prevLine: String, reader: BufferedReader): InternalRow = {
-    if (!ioschema.schemaLess) {
-      new GenericInternalRow(
-        prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-          .zip(fieldWriters)
-          .map { case (data, writer) => writer(data) })
-    } else {
-      new GenericInternalRow(
-        prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
-          .zip(fieldWriters)
-          .map { case (data, writer) => writer(data) })
-    }
+    val limit = if (ioschema.schemaLess) 2 else 0
+    new GenericInternalRow(
+      prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), limit)
+        .zip(fieldWriters)
+        .map { case (data, writer) => writer(data) })
   }
 
   protected def checkFailureAndPropagate(
@@ -271,6 +265,18 @@ object ScriptTransformationIOSchema {
   val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\t"),
     ("TOK_TABLEROWFORMATLINES", "\n")
+  )
+
+  val defaultIOSchema = ScriptTransformationIOSchema(
+    inputRowFormat = Seq.empty,
+    outputRowFormat = Seq.empty,
+    inputSerdeClass = None,
+    outputSerdeClass = None,
+    inputSerdeProps = Seq.empty,
+    outputSerdeProps = Seq.empty,
+    recordReaderClass = None,
+    recordWriterClass = None,
+    schemaLess = false
   )
 
   def apply(input: ScriptInputOutputSchema): ScriptTransformationIOSchema = {

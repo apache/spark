@@ -44,7 +44,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   import spark.implicits._
 
-  var noSerdeIOSchema: ScriptTransformationIOSchema = _
+  var noSerdeIOSchema: ScriptTransformationIOSchema = ScriptTransformationIOSchema.defaultIOSchema
 
   private var defaultUncaughtExceptionHandler: Thread.UncaughtExceptionHandler = _
 
