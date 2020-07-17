@@ -1920,6 +1920,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
            |Format: avro
            |Location: InMemoryFileIndex\\[.*\\]
            |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
+           |PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
            |ReadSchema: struct\\<value:bigint\\>
            |""".stripMargin.trim
       spark.range(10)
@@ -1933,7 +1934,8 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
         .format("avro")
         .load(basePath).where($"id" > 1 && $"value" > 2)
       val normalizedOutput = getNormalizedExplain(df, FormattedMode)
-      assert(expected_plan_fragment.r.findAllMatchIn(normalizedOutput).length == 1)
+      assert(expected_plan_fragment.r.findAllMatchIn(normalizedOutput).length == 1,
+        normalizedOutput)
     }
   }
 }

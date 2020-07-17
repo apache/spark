@@ -30,7 +30,7 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
 
-import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
@@ -45,12 +45,15 @@ import org.apache.spark.unsafe.types.UTF8String
 class AvroDeserializer(
     rootAvroType: Schema,
     rootCatalystType: DataType,
-    datetimeRebaseMode: LegacyBehaviorPolicy.Value) {
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
+    filters: StructFilters) {
 
   def this(rootAvroType: Schema, rootCatalystType: DataType) {
-    this(rootAvroType, rootCatalystType,
-      LegacyBehaviorPolicy.withName(
-        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ)))
+    this(
+      rootAvroType,
+      rootCatalystType,
+      LegacyBehaviorPolicy.withName(SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ)),
+      new NoopFilters)
   }
 
   private lazy val decimalConversions = new DecimalConversion()
@@ -69,7 +72,7 @@ class AvroDeserializer(
     case st: StructType =>
       val resultRow = new SpecificInternalRow(st.map(_.dataType))
       val fieldUpdater = new RowUpdater(resultRow)
-      val applyFilters = new NoopFilters().skipRow(resultRow, _)
+      val applyFilters = filters.skipRow(resultRow, _)
       val writer = getRecordWriter(rootAvroType, st, Nil, applyFilters)
       (data: Any) => {
         val record = data.asInstanceOf[GenericRecord]

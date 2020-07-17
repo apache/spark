@@ -31,10 +31,12 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.csv.CSVFilters
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.{EmptyPartitionReader, FilePartitionReaderFactory, PartitionReaderWithPartitionValues}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -54,7 +56,8 @@ case class AvroPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    parsedOptions: AvroOptions) extends FilePartitionReaderFactory with Logging {
+    parsedOptions: AvroOptions,
+    filters: Seq[Filter]) extends FilePartitionReaderFactory with Logging {
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
@@ -92,7 +95,10 @@ case class AvroPartitionReaderFactory(
         reader.asInstanceOf[DataFileReader[_]].getMetaString,
         SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
       val deserializer = new AvroDeserializer(
-        userProvidedSchema.getOrElse(reader.getSchema), readDataSchema, datetimeRebaseMode)
+        userProvidedSchema.getOrElse(reader.getSchema),
+        readDataSchema,
+        datetimeRebaseMode,
+        new CSVFilters(filters, readDataSchema))
 
       val fileReader = new PartitionReader[InternalRow] {
         private[this] var completed = false
