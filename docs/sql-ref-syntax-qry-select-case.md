@@ -33,22 +33,6 @@ END
 
 ### Parameters
     
-* **WHEN**
-
-    Specific a boolean condition ,under which to return the `THEN` result, `WHEN` must exist in `CASE` clause.
-    
-* **THEN**
-
-    Specific a result base the `WHEN` condition, `THEN` must exist in `CASE` clause.
-    
-* **ELSE**
-
-    Specific a default result for the `CASE` rules, it is optional, if user don't use else then the `CASE` will not have default result.
-    
-* **END**
-
-    Key words to finish a case clause, `END` must exist in `CASE` clause.
-    
 * **boolean_expression**
 
     Specific specified condition, it should be boolean type.

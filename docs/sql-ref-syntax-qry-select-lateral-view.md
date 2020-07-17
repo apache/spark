@@ -26,31 +26,31 @@ license: |
 ### Syntax
 
 ```sql
-LATERAL VIEW [ OUTER ] { generating_function (generating_function_expression) [ table_function_alias ] AS column_alias [ , ... ] } [ ... ]
+LATERAL VIEW [ OUTER ] { generator_function ( expression [ , ... ] ) [ table_alias ] AS column_alias [ , ... ] } [ ... ]
 ```
 
 ### Parameters
 
 * **OUTER**
 
-    If `LATERAL VIEW` is used without `OUTER`, and `generating_function` returns empty, then no results will be output in `SELECT` clause.
-    If `LATERAL VIEW` is used with `OUTER`, and `generating_function` returns empty, then results will be output normally with `NULL` as `generating_function` output.  .
+    If `LATERAL VIEW` is used without `OUTER`, and `generator_function` returns empty, then no results will be output in `SELECT` clause.
+    If `LATERAL VIEW` is used with `OUTER`, and `generator_function` returns empty, then results will be output normally with `NULL` as `generator_function` output.  .
     
-* **generating_function**
+* **generator_function**
 
     This expression will output a virtual table with single input row.
 
-* **generating_function_expression**
+* **expression**
 
     Paramters for  generating_function.
     
-* **table_Alias**
+* **table_alias**
 
-    It is the alias for `generating_function`, which is optional.
+    It is the alias for `generator_function`, which is optional.
      
 * **column_alias**
 
-    It lists the column aliases of `generating_function`, which may be used in output rows, we may have multiple alias if `generating_function` have multiple output columns.
+    It lists the column aliases of `generator_function`, which may be used in output rows, we may have multiple alias if `generator_function` have multiple output columns.
          
 ### Examples
 

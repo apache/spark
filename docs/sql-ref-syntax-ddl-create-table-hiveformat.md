@@ -38,12 +38,12 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ AS select_statement ]
 
 row_format:    
-   : SERDE serde_class [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...) ]
-   | DELIMITED [ FIELDS TERMINATED BY fields_termiated_char [ ESCAPED BY escaped_char] ] 
-               [ COLLECTION ITEMS TERMINATED BY collection_items_termiated_char ] 
-               [ MAP KEYS TERMINATED BY map_key_termiated_char ]
-               [ LINES TERMINATED BY row_termiated_char ]
-               [ NULL DEFINED AS null_char ]
+    : SERDE serde_class [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...) ]
+    | DELIMITED [ FIELDS TERMINATED BY fields_termiated_char [ ESCAPED BY escaped_char] ] 
+        [ COLLECTION ITEMS TERMINATED BY collection_items_termiated_char ] 
+        [ MAP KEYS TERMINATED BY map_key_termiated_char ]
+        [ LINES TERMINATED BY row_termiated_char ]
+        [ NULL DEFINED AS null_char ]
 ```
 
 Note that, the clauses between the columns definition clause and the AS SELECT clause can come in
@@ -181,7 +181,7 @@ CREATE EXTERNAL TABLE family(
     STORED AS TEXTFILE
     LOCATION '/tmp/family/';
 
---Use native serde
+--Use predefined custom serde
 CREATE TABLE avroExample
     ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
     STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
@@ -194,7 +194,8 @@ CREATE TABLE avroExample
                 { "name":"string2", "type":"string" }
             ] }');
 
---Use custom serde(need load the class first)
+--Use personalized custom serde(we may need to `ADD JAR xxx.jar` first to ensure we can find the serde_class, or you may run into `CLASSNOTFOUND` exception)
+ADD JAR /usr/lib/hive_serde/lib/hive_serde_example.jar;
 CREATE EXTERNAL TABLE family (id INT, name STRING)
     ROW FORMAT SERDE 'com.ly.spark.serde.SerDeExample'
     STORED AS INPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleInputFormat'

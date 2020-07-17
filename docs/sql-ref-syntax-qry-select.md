@@ -50,16 +50,6 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
     [ HAVING boolean_expression ]
 ```
 
-While `PIVOT clause` is defined as
-```
-PIVOT ( { group_expression [ AS group_expression_alias ] } [ , ... ] FOR column_list IN ( expression_list ) )
-```
-
-While `LATERAL VIEW clause` is defined as
-```
-LATERAL VIEW [ OUTER ] { generating_function (generating_function_expression) [ table_function_alias ] AS column_alias [ , ... ] } [ ... ]
-```
-
 ### Parameters
 
 * **with_query**
@@ -86,10 +76,6 @@ LATERAL VIEW [ OUTER ] { generating_function (generating_function_expression) [ 
     An expression with an assigned name. In general, it denotes a column expression.
 
     **Syntax:** `expression [AS] [alias]`
-    
- * **FROM**
-
-     Specific the data set to be selected.
 
  * **from_item**
 
