@@ -230,7 +230,7 @@ object SharedState extends Logging {
       hadoopConf: Configuration): Unit = {
     val hiveWarehouseKey = "hive.metastore.warehouse.dir"
     val hiveConf = loadHiveConf()
-    hiveConf.get.asScala.foreach { entry =>
+    hiveConf.asScala.foreach { entry =>
       hadoopConf.setIfUnset(entry.getKey, entry.getValue)
     }
     // hive.metastore.warehouse.dir only stay in hadoopConf
@@ -258,15 +258,13 @@ object SharedState extends Logging {
     logInfo(s"Warehouse path is '$warehousePath'.")
   }
 
-  def loadHiveConf(): Option[Configuration] = {
+  def loadHiveConf(): Configuration = {
+    val hiveConf = new Configuration()
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
       logInfo(s"loading hive config file: $configFile")
-      val hiveConf = new Configuration()
       hiveConf.addResource(configFile)
-      Option(hiveConf)
-    } else {
-      None
     }
+    hiveConf
   }
 }

@@ -111,7 +111,7 @@ abstract class BaseSessionStateBuilder(
     }.getOrElse {
       val conf = new SQLConf
       mergeSparkConf(conf, session.sparkContext.conf)
-      mergeHiveConf(conf, SharedState.loadHiveConf().get)
+      mergeHiveConf(conf, SharedState.loadHiveConf())
       conf
     }
   }
