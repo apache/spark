@@ -284,6 +284,8 @@ class ChiSqSelector(object):
     By default, the selection method is `numTopFeatures`, with the default number of top features
     set to 50.
 
+    >>> from pyspark.mllib.linalg import SparseVector, DenseVector
+    >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = sc.parallelize([
     ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
     ...     LabeledPoint(1.0, SparseVector(3, {1: 9.0, 2: 6.0})),
