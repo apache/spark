@@ -3415,13 +3415,10 @@ object functions {
    * @param length the length of the slice
    *
    * @group collection_funcs
-   * @since 2.4.0
+   * @since 3.1.0
    */
-  def slice(x: Column, start: Any, length: Any): Column = (start, length) match {
-    case (i: Int, n: Int) => slice(x, i, n)
-    case _ => withExpr {
-      Slice(x.expr, lit(start).expr, lit(length).expr)
-    }
+  def slice(x: Column, start: Column, length: Column): Column = withExpr {
+    Slice(x.expr, start.expr, length.expr)
   }
 
   /**
