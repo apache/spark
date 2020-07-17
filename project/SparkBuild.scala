@@ -1027,10 +1027,12 @@ object TestSettings {
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
-    // Show only the failed test cases in github action to make the log more readable.
+    // Show only the failed test cases with full stack traces in github action to make the log more
+    // readable.
+    // Check https://www.scalatest.org/user_guide/using_the_runner for the details of options .
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
       sys.env.get("GITHUB_ACTIONS").map { _ =>
-        Seq("-eNCXEHLOPQMDSF")
+        Seq("-eNCXEHLOPQMDF")
       }.getOrElse(Nil): _*),
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Required to detect Junit tests for each project, see also https://github.com/sbt/junit-interface/issues/35
