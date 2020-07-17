@@ -2667,6 +2667,7 @@ object SQLConf {
 
   val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
     buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
+      .internal()
       .doc("The maximum number of partitionings that a HashPartitioning can be expanded to. " +
         "This configuration is applicable only for inner joins and can be set to '0' to disable " +
         "this feature.")
