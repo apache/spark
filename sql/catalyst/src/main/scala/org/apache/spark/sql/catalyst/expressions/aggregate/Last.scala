@@ -55,7 +55,7 @@ case class Last(child: Expression, ignoreNulls: Boolean)
   def this(child: Expression) = this(child, false)
 
   def this(child: Expression, ignoreNullsExpr: Expression) = {
-    this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr))
+    this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr, "last"))
   }
 
   override def children: Seq[Expression] = child :: Nil

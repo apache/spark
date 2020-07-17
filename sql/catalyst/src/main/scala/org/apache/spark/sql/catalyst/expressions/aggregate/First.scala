@@ -56,7 +56,7 @@ case class First(child: Expression, ignoreNulls: Boolean)
   def this(child: Expression) = this(child, false)
 
   def this(child: Expression, ignoreNullsExpr: Expression) = {
-    this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr))
+    this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr, "first"))
   }
 
   override def children: Seq[Expression] = child :: Nil
@@ -122,8 +122,9 @@ case class First(child: Expression, ignoreNulls: Boolean)
 }
 
 object FirstLast {
-  def validateIgnoreNullExpr(exp: Expression): Boolean = exp match {
+  def validateIgnoreNullExpr(exp: Expression, funcName: String): Boolean = exp match {
     case Literal(b: Boolean, BooleanType) => b
-    case _ => throw new AnalysisException("The second argument should be a boolean literal.")
+    case _ => throw new AnalysisException(
+      s"The second argument in $funcName should be a boolean literal.")
   }
 }
