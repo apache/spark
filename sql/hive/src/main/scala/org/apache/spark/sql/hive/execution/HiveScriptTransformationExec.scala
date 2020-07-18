@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io._
-import java.nio.charset.StandardCharsets
 import java.util.Properties
 import javax.annotation.Nullable
 
@@ -129,6 +128,90 @@ case class HiveScriptTransformationExec(
     }
   }
 
+  private def createOtputIteratorWithSerde(
+      writerThread: BaseScriptTransformationWriterThread,
+      inputStream: InputStream,
+      proc: Process,
+      stderrBuffer: CircularBuffer,
+      outputSerde: AbstractSerDe,
+      outputSoi: StructObjectInspector,
+      hadoopConf: Configuration): Iterator[InternalRow] = {
+    new Iterator[InternalRow] with HiveInspectors {
+      var curLine: String = null
+      val scriptOutputStream = new DataInputStream(inputStream)
+
+      @Nullable val scriptOutputReader = recordReader(scriptOutputStream, hadoopConf).orNull
+
+      var scriptOutputWritable: Writable = null
+      val reusedWritableObject = outputSerde.getSerializedClass.getConstructor().newInstance()
+      val mutableRow = new SpecificInternalRow(output.map(_.dataType))
+
+      @transient
+      lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
+
+      override def hasNext: Boolean = {
+        try {
+          if (scriptOutputWritable == null) {
+            scriptOutputWritable = reusedWritableObject
+
+            if (scriptOutputReader != null) {
+              if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
+                checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
+                return false
+              }
+            } else {
+              try {
+                scriptOutputWritable.readFields(scriptOutputStream)
+              } catch {
+                case _: EOFException =>
+                  // This means that the stdout of `proc` (ie. TRANSFORM process) has exhausted.
+                  // Ideally the proc should *not* be alive at this point but
+                  // there can be a lag between EOF being written out and the process
+                  // being terminated. So explicitly waiting for the process to be done.
+                  checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
+                  return false
+              }
+            }
+          }
+
+          true
+        } catch {
+          case NonFatal(e) =>
+            // If this exception is due to abrupt / unclean termination of `proc`,
+            // then detect it and propagate a better exception message for end users
+            checkFailureAndPropagate(writerThread, e, proc, stderrBuffer)
+
+            throw e
+        }
+      }
+
+      override def next(): InternalRow = {
+        if (!hasNext) {
+          throw new NoSuchElementException
+        }
+        nextRow()
+      }
+
+      val nextRow: () => InternalRow = {
+        () => {
+          val raw = outputSerde.deserialize(scriptOutputWritable)
+          scriptOutputWritable = null
+          val dataList = outputSoi.getStructFieldsDataAsList(raw)
+          var i = 0
+          while (i < dataList.size()) {
+            if (dataList.get(i) == null) {
+              mutableRow.setNullAt(i)
+            } else {
+              unwrappers(i)(dataList.get(i), mutableRow, i)
+            }
+            i += 1
+          }
+          mutableRow
+        }
+      }
+    }
+  }
+
   override def processIterator(
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow] = {
@@ -171,98 +254,11 @@ case class HiveScriptTransformationExec(
       initOutputSerDe(output).getOrElse((null, null))
     }
 
-    val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
-    val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
-      var curLine: String = null
-      val scriptOutputStream = new DataInputStream(inputStream)
-
-      @Nullable val scriptOutputReader = recordReader(scriptOutputStream, hadoopConf).orNull
-
-      var scriptOutputWritable: Writable = null
-      val reusedWritableObject: Writable = if (null != outputSerde) {
-        outputSerde.getSerializedClass().getConstructor().newInstance()
-      } else {
-        null
-      }
-      val mutableRow = new SpecificInternalRow(output.map(_.dataType))
-
-      @transient
-      lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
-
-      override def hasNext: Boolean = {
-        try {
-          if (outputSerde == null) {
-            if (curLine == null) {
-              curLine = reader.readLine()
-              if (curLine == null) {
-                checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
-                return false
-              }
-            }
-          } else if (scriptOutputWritable == null) {
-            scriptOutputWritable = reusedWritableObject
-
-            if (scriptOutputReader != null) {
-              if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
-                checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
-                return false
-              }
-            } else {
-              try {
-                scriptOutputWritable.readFields(scriptOutputStream)
-              } catch {
-                case _: EOFException =>
-                  // This means that the stdout of `proc` (ie. TRANSFORM process) has exhausted.
-                  // Ideally the proc should *not* be alive at this point but
-                  // there can be a lag between EOF being written out and the process
-                  // being terminated. So explicitly waiting for the process to be done.
-                  checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
-                  return false
-              }
-            }
-          }
-
-          true
-        } catch {
-          case NonFatal(e) =>
-            // If this exception is due to abrupt / unclean termination of `proc`,
-            // then detect it and propagate a better exception message for end users
-            checkFailureAndPropagate(writerThread, e, proc, stderrBuffer)
-
-            throw e
-        }
-      }
-
-      override def next(): InternalRow = {
-        if (!hasNext) {
-          throw new NoSuchElementException
-        }
-        nextRow()
-      }
-
-      val nextRow: () => InternalRow = if (outputSerde == null) {
-        () => {
-          val prevLine = curLine
-          curLine = reader.readLine()
-          processOutputWithoutSerde(prevLine, reader)
-        }
-      } else {
-        () => {
-          val raw = outputSerde.deserialize(scriptOutputWritable)
-          scriptOutputWritable = null
-          val dataList = outputSoi.getStructFieldsDataAsList(raw)
-          var i = 0
-          while (i < dataList.size()) {
-            if (dataList.get(i) == null) {
-              mutableRow.setNullAt(i)
-            } else {
-              unwrappers(i)(dataList.get(i), mutableRow, i)
-            }
-            i += 1
-          }
-          mutableRow
-        }
-      }
+    val outputIterator = if (outputSerde == null) {
+      createOutputIteratorWithoutSerde(writerThread, inputStream, proc, stderrBuffer)
+    } else {
+      createOtputIteratorWithSerde(
+        writerThread, inputStream, proc, stderrBuffer, outputSerde, outputSoi, hadoopConf)
     }
 
     writerThread.start()

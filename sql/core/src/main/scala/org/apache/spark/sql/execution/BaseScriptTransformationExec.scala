@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{BufferedReader, InputStream, OutputStream}
+import java.io.{BufferedReader, InputStream, InputStreamReader, OutputStream}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
@@ -96,6 +96,46 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), limit)
         .zip(fieldWriters)
         .map { case (data, writer) => writer(data) })
+  }
+
+  protected def createOutputIteratorWithoutSerde(
+      writerThread: BaseScriptTransformationWriterThread,
+      inputStream: InputStream,
+      proc: Process,
+      stderrBuffer: CircularBuffer): Iterator[InternalRow] = {
+    new Iterator[InternalRow] {
+      var curLine: String = null
+      val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+
+      override def hasNext: Boolean = {
+        try {
+          if (curLine == null) {
+            curLine = reader.readLine()
+            if (curLine == null) {
+              checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
+              return false
+            }
+          }
+          true
+        } catch {
+          case NonFatal(e) =>
+            // If this exception is due to abrupt / unclean termination of `proc`,
+            // then detect it and propagate a better exception message for end users
+            checkFailureAndPropagate(writerThread, e, proc, stderrBuffer)
+
+            throw e
+        }
+      }
+
+      override def next(): InternalRow = {
+        if (!hasNext) {
+          throw new NoSuchElementException
+        }
+        val prevLine = curLine
+        curLine = reader.readLine()
+        processOutputWithoutSerde(prevLine, reader)
+      }
+    }
   }
 
   protected def checkFailureAndPropagate(

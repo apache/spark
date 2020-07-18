@@ -15,22 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.sql.execution
 
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.TestUtils
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.functions.struct
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class SparkScriptTransformationSuite extends BaseScriptTransformationSuite {
+class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with SharedSparkSession {
+  import testImplicits._
+  import ScriptTransformationIOSchema._
 
-  import spark.implicits._
+  override def isHive23OrSpark: Boolean = true
 
-  override def scriptType: String = "SPARK"
+  override def createScriptTransformationExec(
+      input: Seq[Expression],
+      script: String,
+      output: Seq[Attribute],
+      child: SparkPlan,
+      ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
+    SparkScriptTransformationExec(
+      input = input,
+      script = script,
+      output = output,
+      child = child,
+      ioschema = ioschema
+    )
+  }
 
   test("SPARK-32106: SparkScriptTransformExec should handle different data types correctly") {
     assume(TestUtils.testCommandAvailable("python"))
@@ -97,7 +112,7 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite {
             AttributeReference("j", StringType)(),
             AttributeReference("k", StringType)()),
           child = child,
-          ioschema = noSerdeIOSchema
+          ioschema = defaultIOSchema
         ),
         df.select(
           'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h,

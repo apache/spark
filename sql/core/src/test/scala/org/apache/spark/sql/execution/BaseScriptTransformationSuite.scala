@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.sql.execution
 
 import java.sql.Timestamp
-import java.util.Locale
 
 import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfterEach
@@ -30,25 +29,17 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestUtils
-  with TestHiveSingleton with BeforeAndAfterEach {
-
-  def scriptType: String
-
-  def isHive23OrSpark: Boolean = true
-
-  import spark.implicits._
-
-  var noSerdeIOSchema: ScriptTransformationIOSchema = ScriptTransformationIOSchema.defaultIOSchema
-
-  private var defaultUncaughtExceptionHandler: Thread.UncaughtExceptionHandler = _
+  with BeforeAndAfterEach {
+  import testImplicits._
+  import ScriptTransformationIOSchema._
 
   protected val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
+
+  private var defaultUncaughtExceptionHandler: Thread.UncaughtExceptionHandler = _
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -66,32 +57,14 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     uncaughtExceptionHandler.cleanStatus()
   }
 
+  def isHive23OrSpark: Boolean
+
   def createScriptTransformationExec(
       input: Seq[Expression],
       script: String,
       output: Seq[Attribute],
       child: SparkPlan,
-      ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
-    scriptType.toUpperCase(Locale.ROOT) match {
-      case "SPARK" => new SparkScriptTransformationExec(
-        input = input,
-        script = script,
-        output = output,
-        child = child,
-        ioschema = ioschema
-      )
-      case "HIVE" => new HiveScriptTransformationExec(
-        input = input,
-        script = script,
-        output = output,
-        child = child,
-        ioschema = ioschema
-      )
-      case _ => throw new TestFailedException(
-        "Test class implement from BaseScriptTransformationSuite" +
-          " should override method `scriptType` to Spark or Hive", 0)
-    }
-  }
+      ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec
 
   test("cat without SerDe") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
@@ -104,7 +77,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
-        ioschema = noSerdeIOSchema
+        ioschema = defaultIOSchema
       ),
       rowsDf.collect())
     assert(uncaughtExceptionHandler.exception.isEmpty)
@@ -122,7 +95,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
-          ioschema = noSerdeIOSchema
+          ioschema = defaultIOSchema
         ),
         rowsDf.collect())
     }
@@ -178,8 +151,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
-          ioschema = noSerdeIOSchema)
-      SparkPlanTest.executePlan(plan, hiveContext)
+          ioschema = defaultIOSchema)
+      SparkPlanTest.executePlan(plan, spark.sqlContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
     assert(uncaughtExceptionHandler.exception.isEmpty)
