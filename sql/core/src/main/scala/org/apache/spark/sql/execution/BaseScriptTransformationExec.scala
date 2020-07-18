@@ -182,21 +182,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case FloatType => (data: String) => converter(data.toFloat)
       case DoubleType => (data: String) => converter(data.toDouble)
       case decimal: DecimalType => (data: String) => converter(BigDecimal(data))
-      case DateType if conf.datetimeJava8ApiEnabled => (data: String) =>
-        converter(DateTimeUtils.stringToDate(
-          UTF8String.fromString(data),
-          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-          .map(DateTimeUtils.daysToLocalDate).orNull)
       case DateType => (data: String) =>
         converter(DateTimeUtils.stringToDate(
           UTF8String.fromString(data),
           DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
           .map(DateTimeUtils.toJavaDate).orNull)
-      case TimestampType if conf.datetimeJava8ApiEnabled => (data: String) =>
-        converter(DateTimeUtils.stringToTimestamp(
-          UTF8String.fromString(data),
-          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-          .map(DateTimeUtils.microsToInstant).orNull)
       case TimestampType => (data: String) =>
         converter(DateTimeUtils.stringToTimestamp(
           UTF8String.fromString(data),
