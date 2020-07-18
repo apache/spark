@@ -174,29 +174,39 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   private lazy val fieldWriters: Seq[String => Any] = output.map { attr =>
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
-      case StringType => (data: String) => converter(data)
-      case ByteType => (data: String) => converter(data.toByte)
-      case IntegerType => (data: String) => converter(data.toInt)
-      case ShortType => (data: String) => converter(data.toShort)
-      case LongType => (data: String) => converter(data.toLong)
-      case FloatType => (data: String) => converter(data.toFloat)
-      case DoubleType => (data: String) => converter(data.toDouble)
-      case decimal: DecimalType => (data: String) => converter(BigDecimal(data))
-      case DateType => (data: String) =>
-        converter(DateTimeUtils.stringToDate(
-          UTF8String.fromString(data),
-          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-          .map(DateTimeUtils.toJavaDate).orNull)
-      case TimestampType => (data: String) =>
-        converter(DateTimeUtils.stringToTimestamp(
-          UTF8String.fromString(data),
-          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-          .map(DateTimeUtils.toJavaTimestamp).orNull)
-      case CalendarIntervalType => (data: String) =>
-        converter(IntervalUtils.stringToInterval(UTF8String.fromString(data)))
-      case dataType: DataType => (data: String) => converter(data)
+      case StringType => wrapperConvertException(data => data, converter)
+      case ByteType => wrapperConvertException(data => data.toByte, converter)
+      case IntegerType => wrapperConvertException(data => data.toInt, converter)
+      case ShortType => wrapperConvertException(data => data.toShort, converter)
+      case LongType => wrapperConvertException(data => data.toLong, converter)
+      case FloatType => wrapperConvertException(data => data.toFloat, converter)
+      case DoubleType => wrapperConvertException(data => data.toDouble, converter)
+      case _: DecimalType => wrapperConvertException(data => BigDecimal(data), converter)
+      case DateType => wrapperConvertException(data => DateTimeUtils.stringToDate(
+        UTF8String.fromString(data),
+        DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+        .map(DateTimeUtils.toJavaDate).orNull, converter)
+      case TimestampType => wrapperConvertException(data => DateTimeUtils.stringToTimestamp(
+        UTF8String.fromString(data),
+        DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+        .map(DateTimeUtils.toJavaTimestamp).orNull, converter)
+      case CalendarIntervalType => wrapperConvertException(
+        data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
+        converter)
+      case _: DataType => wrapperConvertException(data => data, converter)
     }
   }
+
+  // Keep consistent with Hive `LazySimpleSerde`, when there is a type case error, return null
+  val wrapperConvertException: (String => Any, Any => Any) => String => Any =
+    (f: String => Any, converter: Any => Any) =>
+      (data: String) => converter {
+        try {
+          f(data)
+        } catch {
+          case _: Exception => null
+        }
+      }
 }
 
 abstract class BaseScriptTransformationWriterThread extends Thread with Logging {

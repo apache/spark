@@ -25,7 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Column
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -278,6 +278,23 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           'j.cast("string"),
           'k.cast("string")).collect())
     }
+  }
+
+  test("SPARK-32106: TRANSFORM shoud return null when return string incompatible(no serde)") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT TRANSFORM(a, b, c)
+          |USING 'cat' as (a int, b int , c int)
+          |FROM (
+          |SELECT
+          |1 AS a,
+          |"a" AS b,
+          |CAST(2000 AS timestamp) AS c
+          |) tmp
+        """.stripMargin),
+      identity,
+      Row(1, null, null) :: Nil)
   }
 }
 
