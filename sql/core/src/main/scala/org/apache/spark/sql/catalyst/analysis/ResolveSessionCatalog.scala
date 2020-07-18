@@ -529,6 +529,9 @@ class ResolveSessionCatalog(
         partitionSpec)
 
     case AlterViewAsStatement(name, originalText, query) =>
+      if (query.resolved) {
+        assertNoNullTypeInSchema(query.schema)
+      }
       val viewName = parseTempViewOrV1Table(name, "ALTER VIEW QUERY")
       AlterViewAsCommand(
         viewName.asTableIdentifier,
@@ -538,7 +541,9 @@ class ResolveSessionCatalog(
     case CreateViewStatement(
       tbl, userSpecifiedColumns, comment, properties,
       originalText, child, allowExisting, replace, viewType) =>
-
+      if (child.resolved) {
+        assertNoNullTypeInSchema(child.schema)
+      }
       val v1TableName = if (viewType != PersistedView) {
         // temp view doesn't belong to any catalog and we shouldn't resolve catalog in the name.
         tbl

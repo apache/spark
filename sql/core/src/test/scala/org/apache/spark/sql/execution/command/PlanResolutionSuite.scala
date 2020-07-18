@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, NullType, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -1555,6 +1555,17 @@ class PlanResolutionSuite extends AnalysisTest {
     checkFailure("v1Table", v1Format)
     checkFailure("v2Table", v2Format)
     checkFailure("testcat.tab", "foo")
+  }
+
+  test("SPARK-32356: forbid null type in create view") {
+    val sql1 = "create view v as select null as c"
+    val sql2 = "alter view v as select null as c"
+    Seq(sql1, sql2).foreach { sql =>
+      val msg = intercept[AnalysisException] {
+        parseAndResolve(sql)
+      }.getMessage
+      assert(msg.contains(s"Cannot create tables with ${NullType.simpleString} type."))
+    }
   }
 
   // TODO: add tests for more commands.
