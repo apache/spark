@@ -2391,7 +2391,7 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
 
 
 class _FactorizationMachinesParams(_PredictorParams, HasMaxIter, HasStepSize, HasTol,
-                                   HasSolver, HasSeed, HasFitIntercept, HasRegParam):
+                                   HasSolver, HasSeed, HasFitIntercept, HasRegParam, HasWeightCol):
     """
     Params for :py:class:`FMRegressor`, :py:class:`FMRegressionModel`, :py:class:`FMClassifier`
     and :py:class:`FMClassifierModel`.
