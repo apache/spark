@@ -97,8 +97,21 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       stderrBuffer: CircularBuffer): Iterator[InternalRow] = {
     new Iterator[InternalRow] {
       var curLine: String = null
-      val splitLimit = if (ioschema.schemaLess) 2 else 0
       val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+
+      val processRowWithoutSerde = if (!ioschema.schemaLess) {
+        prevLine: String =>
+          new GenericInternalRow(
+            prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+              .zip(fieldWriters)
+              .map { case (data, writer) => writer(data) })
+      } else {
+        prevLine: String =>
+          new GenericInternalRow(
+            prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
+              .map(CatalystTypeConverters.convertToCatalyst))
+      }
+
 
       override def hasNext: Boolean = {
         try {
@@ -126,10 +139,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         }
         val prevLine = curLine
         curLine = reader.readLine()
-        new GenericInternalRow(
-          prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), splitLimit)
-            .zip(fieldWriters)
-            .map { case (data, writer) => writer(data) })
+        processRowWithoutSerde(prevLine)
       }
     }
   }
