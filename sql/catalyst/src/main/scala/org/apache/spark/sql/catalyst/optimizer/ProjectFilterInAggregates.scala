@@ -70,7 +70,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  *     Project(
  *        projectionList = ['key,
  *                          'cat1,
- *                         if ('id > 1) 'cat2 else null,
+ *                          if ('id > 1) 'cat2 else null,
  *                          cast('value as bigint),
  *                          if ('key = "a") cast('value as bigint) else null]
  *        output = ['key, '_gen_attr_1, '_gen_attr_2, '_gen_attr_3, '_gen_attr_4])
