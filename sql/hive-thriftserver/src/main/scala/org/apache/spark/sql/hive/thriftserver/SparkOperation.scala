@@ -37,7 +37,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
 
   protected var statementId = getHandle().getHandleIdentifier().getPublicId().toString()
 
-  protected def cleanup(): Unit = Unit // noop by default
+  protected def cleanup(): Unit = () // noop by default
 
   abstract override def run(): Unit = {
     withLocalProperties {
