@@ -33,8 +33,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.csv.CSVFilters
+import org.apache.spark.sql.catalyst.{InternalRow, OrderedFilters}
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
@@ -133,7 +132,7 @@ private[sql] class AvroFileFormat extends FileFormat
           userProvidedSchema.getOrElse(reader.getSchema),
           requiredSchema,
           datetimeRebaseMode,
-          new CSVFilters(filters, requiredSchema))
+          new OrderedFilters(filters, requiredSchema))
 
         new Iterator[InternalRow] {
           private[this] var completed = false

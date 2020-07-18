@@ -26,8 +26,7 @@ import org.apache.avro.message.{BinaryMessageDecoder, BinaryMessageEncoder}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, StructFilters}
-import org.apache.spark.sql.catalyst.csv.CSVFilters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
@@ -353,19 +352,19 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
         avroSchema,
         data,
         expectedRow,
-        new CSVFilters(Seq(EqualTo("Age", 39)), sqlSchema))
+        new OrderedFilters(Seq(EqualTo("Age", 39)), sqlSchema))
       checkDeserialization(
         avroSchema,
         data,
         None,
-        new CSVFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
+        new OrderedFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
     }
     withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> "false") {
       checkDeserialization(
         avroSchema,
         data,
         expectedRow,
-        new CSVFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
+        new OrderedFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
     }
   }
 }

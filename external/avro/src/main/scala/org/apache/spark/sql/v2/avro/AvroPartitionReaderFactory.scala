@@ -30,8 +30,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.csv.CSVFilters
+import org.apache.spark.sql.catalyst.{InternalRow, OrderedFilters}
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.{EmptyPartitionReader, FilePartitionReaderFactory, PartitionReaderWithPartitionValues}
@@ -98,7 +97,7 @@ case class AvroPartitionReaderFactory(
         userProvidedSchema.getOrElse(reader.getSchema),
         readDataSchema,
         datetimeRebaseMode,
-        new CSVFilters(filters, readDataSchema))
+        new OrderedFilters(filters, readDataSchema))
 
       val fileReader = new PartitionReader[InternalRow] {
         private[this] var completed = false
