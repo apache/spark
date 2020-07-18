@@ -95,11 +95,11 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 * **FIRST**
 
-    `FIRST` select a first expression value from the data set, we can specific `IGNORE NULLS` to ignore NULLS, it is optional. 
+    `FIRST` selects a first expression value from the data set. We can specify an optional `IGNORE NULL` clause to ignore NULL values.
     
 * **LAST**
 
-    `LAST` select a last expression value from the data set, we can specific `IGNORE NULLS` to ignore NULLS, it is optional. 
+    `LAST` select a last expression value from the data set, we can specify `IGNORE NULLS` to ignore NULLS, it is optional. 
     
 * **IGNORE NULLS**
    

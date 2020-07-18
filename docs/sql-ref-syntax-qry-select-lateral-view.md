@@ -34,7 +34,7 @@ LATERAL VIEW [ OUTER ] generator_function ( expression [ , ... ] ) [ table_alias
 * **OUTER**
 
     If `LATERAL VIEW` is used without `OUTER`, and `generator_function` returns empty, then no results will be output in `SELECT` clause.
-    If `LATERAL VIEW` is used with `OUTER`, and `generator_function` returns empty, then results will be output normally with `NULL` as `generator_function` output.  .
+    If `LATERAL VIEW` is used with `OUTER`, and `generator_function` returns empty, then results will be output normally with `NULL` as `generator_function` output.
     
 * **generator_function**
 

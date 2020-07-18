@@ -35,15 +35,15 @@ END
     
 * **boolean_expression**
 
-    Specific specified condition, it should be boolean type.
+    Specifies an expression with a return type of boolean.
     
 * **then_expression**
 
-    Specific the then expression based on the `boolean_expression` condition, `then_expression` and `else_expression` should all be same type or coercible to a common type.
+    Specifies the then expression based on the `boolean_expression` condition, `then_expression` and `else_expression` should all be same type or coercible to a common type.
     
 * **else_expression**
 
-    Specific the default expression, `then_expression` and `else_expression` should all be same type or coercible to a common type.
+    Specifies the default expression, `then_expression` and `else_expression` should all be same type or coercible to a common type.
     
 ### Examples
 
