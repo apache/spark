@@ -193,6 +193,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case CalendarIntervalType => wrapperConvertException(
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
+      case udt: UserDefinedType[_] =>
+        wrapperConvertException(data => udt.deserialize(data), converter)
       case _: DataType => wrapperConvertException(data => data, converter)
     }
   }

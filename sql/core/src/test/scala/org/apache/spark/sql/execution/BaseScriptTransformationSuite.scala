@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution
 
 import java.sql.{Date, Timestamp}
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.exceptions.TestFailedException
@@ -27,7 +30,7 @@ import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestUtils
@@ -212,20 +215,21 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       val df = Seq(
         (1, "1", 1.0, 11.toByte, BigDecimal(1.0), new Timestamp(1),
           new Date(2020, 7, 1), new CalendarInterval(7, 1, 1000), Array(0, 1, 2),
-          Map("a" -> 1)),
+          Map("a" -> 1), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L)),
         (2, "2", 2.0, 22.toByte, BigDecimal(2.0), new Timestamp(2),
           new Date(2020, 7, 2), new CalendarInterval(7, 2, 2000), Array(3, 4, 5),
-          Map("b" -> 2)),
+          Map("b" -> 2), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L)),
         (3, "3", 3.0, 33.toByte, BigDecimal(3.0), new Timestamp(3),
           new Date(2020, 7, 3), new CalendarInterval(7, 3, 3000), Array(6, 7, 8),
-          Map("c" -> 3))
-      ).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
-        .select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, struct('a, 'b).as("k"))
+          Map("c" -> 3), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L))
+      ).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l")
+        .select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l, struct('a, 'b).as("m"))
       // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
       assert(spark.table("v").schema ==
-        StructType(Seq(StructField("a", IntegerType, false),
+        StructType(Seq(
+          StructField("a", IntegerType, false),
           StructField("b", StringType, true),
           StructField("c", DoubleType, false),
           StructField("d", ByteType, false),
@@ -235,12 +239,17 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           StructField("h", CalendarIntervalType, true),
           StructField("i", ArrayType(IntegerType, false), true),
           StructField("j", MapType(StringType, IntegerType, false), true),
-          StructField("k", StructType(
+          StructField("k", new TestUDT.MyDenseVectorUDT, true),
+          StructField("l", new SimpleTupleUDT, true),
+          StructField("m", StructType(
             Seq(StructField("a", IntegerType, false),
               StructField("b", StringType, true))), false))))
 
       // Can't support convert script output data to ArrayType/MapType/StructType now,
-      // return these column still as string
+      // return these column still as string.
+      // For UserDefinedType, if user defined deserialize method to support convert string
+      // to UserType like [[SimpleTupleUDT]], we can support convert to this UDT, else we
+      // will return null value as column.
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
@@ -255,7 +264,9 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             df.col("h").expr,
             df.col("i").expr,
             df.col("j").expr,
-            df.col("k").expr),
+            df.col("k").expr,
+            df.col("l").expr,
+            df.col("m").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", IntegerType)(),
@@ -268,7 +279,9 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             AttributeReference("h", CalendarIntervalType)(),
             AttributeReference("i", StringType)(),
             AttributeReference("j", StringType)(),
-            AttributeReference("k", StringType)()),
+            AttributeReference("k", StringType)(),
+            AttributeReference("l", new SimpleTupleUDT)(),
+            AttributeReference("m", StringType)()),
           child = child,
           ioschema = defaultIOSchema
         ),
@@ -276,7 +289,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h,
           'i.cast("string"),
           'j.cast("string"),
-          'k.cast("string")).collect())
+          'k.cast("string"),
+          'l, 'm.cast("string")).collect())
     }
   }
 
@@ -311,3 +325,58 @@ case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
+
+@SQLUserDefinedType(udt = classOf[SimpleTupleUDT])
+private class SimpleTuple(val id: Int, val size: Long) extends Serializable {
+
+  override def hashCode(): Int = getClass.hashCode()
+
+  override def equals(other: Any): Boolean = other match {
+    case v: SimpleTuple => this.id == v.id && this.size == v.size
+    case _ => false
+  }
+
+  override def toString: String =
+    compact(render(
+      ("id" -> id) ~
+        ("size" -> size)
+    ))
+}
+
+private class SimpleTupleUDT extends UserDefinedType[SimpleTuple] {
+
+  override def sqlType: DataType = StructType(
+    StructField("id", IntegerType, false) ::
+      StructField("size", LongType, false) ::
+      Nil)
+
+  override def serialize(sql: SimpleTuple): Any = {
+    val row = new GenericInternalRow(2)
+    row.setInt(0, sql.id)
+    row.setLong(1, sql.size)
+    row
+  }
+
+  override def deserialize(datum: Any): SimpleTuple = {
+    datum match {
+      case str: String =>
+        implicit val format = DefaultFormats
+        val json = parse(str)
+        new SimpleTuple((json \ "id").extract[Int], (json \ "size").extract[Long])
+      case data: InternalRow if data.numFields == 2 =>
+        new SimpleTuple(data.getInt(0), data.getLong(1))
+      case _ => null
+    }
+  }
+
+  override def userClass: Class[SimpleTuple] = classOf[SimpleTuple]
+
+  override def asNullable: SimpleTupleUDT = this
+
+  override def hashCode(): Int = getClass.hashCode()
+
+  override def equals(other: Any): Boolean = {
+    other.isInstanceOf[SimpleTupleUDT]
+  }
+}
+
