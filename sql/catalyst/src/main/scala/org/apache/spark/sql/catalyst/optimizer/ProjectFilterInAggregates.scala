@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  *     COUNT(DISTINCT cat1) AS cat1_cnt,
  *     COUNT(DISTINCT cat2) FILTER (WHERE id > 1) AS cat2_cnt,
  *     SUM(value) AS total,
-  *    SUM(value) FILTER (WHERE key = "a") AS total2
+ *     SUM(value) FILTER (WHERE key = "a") AS total2
  *  FROM
  *    data
  *  GROUP BY
@@ -51,9 +51,9 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * Aggregate(
  *    key = ['key]
  *    functions = [COUNT(DISTINCT 'cat1),
-  *                COUNT(DISTINCT 'cat2) with FILTER('id > 1),
+ *                 COUNT(DISTINCT 'cat2) with FILTER('id > 1),
  *                 SUM('value),
-  *                SUM('value) with FILTER('key = "a")]
+ *                 SUM('value) with FILTER('key = "a")]
  *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total, 'total2])
  *   LocalTableScan [...]
  * }}}
@@ -62,15 +62,15 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * {{{
  *   Aggregate(
  *      key = ['key]
- *      functions = [count('_gen_attr_1),
-  *                  count('_gen_attr_2) with FILTER('_gen_attr_2 is not null),
- *                   sum('_gen_attr_3),
-  *                  sum('_gen_attr_4) with FILTER('_gen_attr_4 is not null)]
+ *      functions = [COUNT(DISTINCT '_gen_attr_1),
+ *                   COUNT(DISTINCT '_gen_attr_2) with FILTER('_gen_attr_2 is not null),
+ *                   SUM('_gen_attr_3),
+ *                   SUM('_gen_attr_4) with FILTER('_gen_attr_4 is not null)]
  *      output = ['key, 'cat1_cnt, 'cat2_cnt, 'total, 'total2])
  *     Project(
  *        projectionList = ['key,
  *                          'cat1,
-  *                         if ('id > 1) 'cat2 else null,
+ *                         if ('id > 1) 'cat2 else null,
  *                          cast('value as bigint),
  *                          if ('key = "a") cast('value as bigint) else null]
  *        output = ['key, '_gen_attr_1, '_gen_attr_2, '_gen_attr_3, '_gen_attr_4])
