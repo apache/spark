@@ -90,14 +90,6 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow]
 
-  protected def processOutputWithoutSerde(prevLine: String, reader: BufferedReader): InternalRow = {
-    val limit = if (ioschema.schemaLess) 2 else 0
-    new GenericInternalRow(
-      prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), limit)
-        .zip(fieldWriters)
-        .map { case (data, writer) => writer(data) })
-  }
-
   protected def createOutputIteratorWithoutSerde(
       writerThread: BaseScriptTransformationWriterThread,
       inputStream: InputStream,
@@ -105,6 +97,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       stderrBuffer: CircularBuffer): Iterator[InternalRow] = {
     new Iterator[InternalRow] {
       var curLine: String = null
+      val splitLimit = if (ioschema.schemaLess) 2 else 0
       val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
 
       override def hasNext: Boolean = {
@@ -133,7 +126,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         }
         val prevLine = curLine
         curLine = reader.readLine()
-        processOutputWithoutSerde(prevLine, reader)
+        new GenericInternalRow(
+          prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), splitLimit)
+            .zip(fieldWriters)
+            .map { case (data, writer) => writer(data) })
       }
     }
   }
@@ -176,7 +172,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case LongType => (data: String) => converter(data.toLong)
       case FloatType => (data: String) => converter(data.toFloat)
       case DoubleType => (data: String) => converter(data.toDouble)
-      case dt: DecimalType => (data: String) => converter(BigDecimal(data))
+      case decimal: DecimalType => (data: String) => converter(BigDecimal(data))
       case DateType if conf.datetimeJava8ApiEnabled => (data: String) =>
         converter(DateTimeUtils.stringToDate(
           UTF8String.fromString(data),

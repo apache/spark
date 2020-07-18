@@ -55,7 +55,8 @@ case class HiveScriptTransformationExec(
     ioschema: ScriptTransformationIOSchema)
   extends BaseScriptTransformationExec with HiveInspectors {
 
-  def initInputSerDe(input: Seq[Expression]): Option[(AbstractSerDe, StructObjectInspector)] = {
+  private def initInputSerDe(
+      input: Seq[Expression]): Option[(AbstractSerDe, StructObjectInspector)] = {
     ioschema.inputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(input)
       val serde = initSerDe(serdeClass, columns, columnTypes, ioschema.inputSerdeProps)
@@ -66,7 +67,8 @@ case class HiveScriptTransformationExec(
     }
   }
 
-  def initOutputSerDe(output: Seq[Attribute]): Option[(AbstractSerDe, StructObjectInspector)] = {
+  private def initOutputSerDe(
+      output: Seq[Attribute]): Option[(AbstractSerDe, StructObjectInspector)] = {
     ioschema.outputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(output)
       val serde = initSerDe(serdeClass, columns, columnTypes, ioschema.outputSerdeProps)
@@ -104,7 +106,7 @@ case class HiveScriptTransformationExec(
     serde
   }
 
-  def recordReader(
+  private def recordReader(
       inputStream: InputStream,
       conf: Configuration): Option[RecordReader] = {
     ioschema.recordReaderClass.map { klass =>
@@ -119,7 +121,9 @@ case class HiveScriptTransformationExec(
     }
   }
 
-  def recordWriter(outputStream: OutputStream, conf: Configuration): Option[RecordWriter] = {
+  private def recordWriter(
+      outputStream: OutputStream,
+      conf: Configuration): Option[RecordWriter] = {
     ioschema.recordWriterClass.map { klass =>
       val instance = Utils.classForName[RecordWriter](klass).getConstructor().
         newInstance()
@@ -128,7 +132,7 @@ case class HiveScriptTransformationExec(
     }
   }
 
-  private def createOtputIteratorWithSerde(
+  private def createOutputIteratorWithSerde(
       writerThread: BaseScriptTransformationWriterThread,
       inputStream: InputStream,
       proc: Process,
@@ -189,25 +193,19 @@ case class HiveScriptTransformationExec(
         if (!hasNext) {
           throw new NoSuchElementException
         }
-        nextRow()
-      }
-
-      val nextRow: () => InternalRow = {
-        () => {
-          val raw = outputSerde.deserialize(scriptOutputWritable)
-          scriptOutputWritable = null
-          val dataList = outputSoi.getStructFieldsDataAsList(raw)
-          var i = 0
-          while (i < dataList.size()) {
-            if (dataList.get(i) == null) {
-              mutableRow.setNullAt(i)
-            } else {
-              unwrappers(i)(dataList.get(i), mutableRow, i)
-            }
-            i += 1
+        val raw = outputSerde.deserialize(scriptOutputWritable)
+        scriptOutputWritable = null
+        val dataList = outputSoi.getStructFieldsDataAsList(raw)
+        var i = 0
+        while (i < dataList.size()) {
+          if (dataList.get(i) == null) {
+            mutableRow.setNullAt(i)
+          } else {
+            unwrappers(i)(dataList.get(i), mutableRow, i)
           }
-          mutableRow
+          i += 1
         }
+        mutableRow
       }
     }
   }
@@ -257,7 +255,7 @@ case class HiveScriptTransformationExec(
     val outputIterator = if (outputSerde == null) {
       createOutputIteratorWithoutSerde(writerThread, inputStream, proc, stderrBuffer)
     } else {
-      createOtputIteratorWithSerde(
+      createOutputIteratorWithSerde(
         writerThread, inputStream, proc, stderrBuffer, outputSerde, outputSoi, hadoopConf)
     }
 

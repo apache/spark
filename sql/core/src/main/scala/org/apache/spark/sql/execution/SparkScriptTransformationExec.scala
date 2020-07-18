@@ -65,8 +65,8 @@ case class SparkScriptTransformationExec(
       hadoopConf
     )
 
-    val outputIterator = createOutputIteratorWithoutSerde(
-      writerThread, inputStream, proc, stderrBuffer)
+    val outputIterator =
+      createOutputIteratorWithoutSerde(writerThread, inputStream, proc, stderrBuffer)
 
     writerThread.start()
 
