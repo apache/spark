@@ -270,7 +270,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
       columnsBenchmark(1024 * 1024 * 1, 300)
     }
     // Benchmark pushdown filters that refer to top-level columns.
-    // TODO (SPARK-XXXXX): Add benchmarks for filters with nested column attributes.
+    // TODO (SPARK-32328): Add benchmarks for filters with nested column attributes.
     filtersPushdownBenchmark(rowsNum = 1000 * 1000, numIters = 3)
   }
 }
