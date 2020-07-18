@@ -142,6 +142,7 @@ abstract class CentralMomentAgg(child: Expression)
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
        0.816496580927726
   """,
+  group = "agg_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit
 case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
@@ -164,6 +165,7 @@ case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
        1.0
   """,
+  group = "agg_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit
 case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
@@ -187,6 +189,7 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
        0.6666666666666666
   """,
+  group = "agg_funcs",
   since = "1.6.0")
 case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
@@ -207,6 +210,7 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
        1.0
   """,
+  group = "agg_funcs",
   since = "1.6.0")
 case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
@@ -229,6 +233,7 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
       > SELECT _FUNC_(col) FROM VALUES (-1000), (-100), (10), (20) AS tab(col);
        -1.1135657469022011
   """,
+  group = "agg_funcs",
   since = "1.6.0")
 case class Skewness(child: Expression) extends CentralMomentAgg(child) {
 
@@ -251,6 +256,7 @@ case class Skewness(child: Expression) extends CentralMomentAgg(child) {
       > SELECT _FUNC_(col) FROM VALUES (1), (10), (100), (10), (1) as tab(col);
        0.19432323191699075
   """,
+  group = "agg_funcs",
   since = "1.6.0")
 case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 

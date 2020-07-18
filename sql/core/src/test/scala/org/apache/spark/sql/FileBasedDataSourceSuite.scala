@@ -18,12 +18,14 @@
 package org.apache.spark.sql
 
 import java.io.{File, FileNotFoundException}
+import java.net.URI
 import java.nio.file.{Files, StandardOpenOption}
 import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
@@ -843,6 +845,22 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  test("SPARK-31935: Hadoop file system config should be effective in data source options") {
+    Seq("parquet", "").foreach { format =>
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> format,
+        "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+        withTempDir { dir =>
+          val path = "file:" + dir.getCanonicalPath.stripPrefix("file:")
+          spark.range(10).write.option("ds_option", "value").mode("overwrite").parquet(path)
+          checkAnswer(
+            spark.read.option("ds_option", "value").parquet(path), spark.range(10).toDF())
+        }
+      }
+    }
+  }
+
   test("SPARK-31116: Select nested schema with case insensitive mode") {
     // This test case failed at only Parquet. ORC is added for test coverage parity.
     Seq("orc", "parquet").foreach { format =>
@@ -910,5 +928,12 @@ object TestingUDT {
     override def deserialize(datum: Any): NullData =
       throw new UnsupportedOperationException("Not implemented")
     override def userClass: Class[NullData] = classOf[NullData]
+  }
+}
+
+class FakeFileSystemRequiringDSOption extends LocalFileSystem {
+  override def initialize(name: URI, conf: Configuration): Unit = {
+    super.initialize(name, conf)
+    require(conf.get("ds_option", "") == "value")
   }
 }

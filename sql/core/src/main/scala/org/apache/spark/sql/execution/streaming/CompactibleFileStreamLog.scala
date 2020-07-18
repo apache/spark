@@ -28,6 +28,7 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.{SizeEstimator, Utils}
 
 /**
  * An abstract class for compactible metadata logs. It will write one log file for each batch.
@@ -177,23 +178,42 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    * corresponding `batchId` file. It will delete expired files as well if enabled.
    */
   private def compact(batchId: Long, logs: Array[T]): Boolean = {
-    val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
-    val allLogs = validBatches.flatMap { id =>
-      super.get(id).getOrElse {
-        throw new IllegalStateException(
-          s"${batchIdToPath(id)} doesn't exist when compacting batch $batchId " +
-            s"(compactInterval: $compactInterval)")
-      }
-    } ++ logs
+    val (allLogs, loadElapsedMs) = Utils.timeTakenMs {
+      val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
+      validBatches.flatMap { id =>
+        super.get(id).getOrElse {
+          throw new IllegalStateException(
+            s"${batchIdToPath(id)} doesn't exist when compacting batch $batchId " +
+              s"(compactInterval: $compactInterval)")
+        }
+      } ++ logs
+    }
+    val compactedLogs = compactLogs(allLogs)
+
     // Return false as there is another writer.
-    super.add(batchId, compactLogs(allLogs).toArray)
+    val (writeSucceed, writeElapsedMs) = Utils.timeTakenMs {
+      super.add(batchId, compactedLogs.toArray)
+    }
+
+    val elapsedMs = loadElapsedMs + writeElapsedMs
+    if (elapsedMs >= COMPACT_LATENCY_WARN_THRESHOLD_MS) {
+      logWarning(s"Compacting took $elapsedMs ms (load: $loadElapsedMs ms," +
+        s" write: $writeElapsedMs ms) for compact batch $batchId")
+      logWarning(s"Loaded ${allLogs.size} entries (estimated ${SizeEstimator.estimate(allLogs)} " +
+        s"bytes in memory), and wrote ${compactedLogs.size} entries for compact batch $batchId")
+    } else {
+      logDebug(s"Compacting took $elapsedMs ms (load: $loadElapsedMs ms," +
+        s" write: $writeElapsedMs ms) for compact batch $batchId")
+    }
+
+    writeSucceed
   }
 
   /**
    * Returns all files except the deleted ones.
    */
   def allFiles(): Array[T] = {
-    var latestId = getLatest().map(_._1).getOrElse(-1L)
+    var latestId = getLatestBatchId().getOrElse(-1L)
     // There is a race condition when `FileStreamSink` is deleting old files and `StreamFileIndex`
     // is calling this method. This loop will retry the reading to deal with the
     // race condition.
@@ -268,6 +288,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
 object CompactibleFileStreamLog {
   val COMPACT_FILE_SUFFIX = ".compact"
+  val COMPACT_LATENCY_WARN_THRESHOLD_MS = 2000
 
   def getBatchIdFromFileName(fileName: String): Long = {
     fileName.stripSuffix(COMPACT_FILE_SUFFIX).toLong
@@ -326,7 +347,7 @@ object CompactibleFileStreamLog {
     } else if (defaultInterval < (latestCompactBatchId + 1) / 2) {
       // Find the first divisor >= default compact interval
       def properDivisors(min: Int, n: Int) =
-        (min to n/2).view.filter(i => n % i == 0) :+ n
+        (min to n/2).view.filter(i => n % i == 0).toSeq :+ n
 
       properDivisors(defaultInterval, latestCompactBatchId + 1).head
     } else {

@@ -1203,14 +1203,24 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("alter table: recover partitions (sequential)") {
-    withSQLConf(RDD_PARALLEL_LISTING_THRESHOLD.key -> "10") {
+    val oldRddParallelListingThreshold = spark.sparkContext.conf.get(
+      RDD_PARALLEL_LISTING_THRESHOLD)
+    try {
+      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD.key, "10")
       testRecoverPartitions()
+    } finally {
+      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD, oldRddParallelListingThreshold)
     }
   }
 
   test("alter table: recover partition (parallel)") {
-    withSQLConf(RDD_PARALLEL_LISTING_THRESHOLD.key -> "0") {
+    val oldRddParallelListingThreshold = spark.sparkContext.conf.get(
+      RDD_PARALLEL_LISTING_THRESHOLD)
+    try {
+      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD.key, "0")
       testRecoverPartitions()
+    } finally {
+      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD, oldRddParallelListingThreshold)
     }
   }
 

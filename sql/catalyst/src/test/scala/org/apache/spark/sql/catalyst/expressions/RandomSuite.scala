@@ -34,4 +34,11 @@ class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Rand(5419823303878592871L), 0.7145363364564755)
     checkEvaluation(Randn(5419823303878592871L), 0.7816815274533012)
   }
+
+  test("SPARK-31594: Do not display the seed of rand/randn with no argument in output schema") {
+    assert(Rand(Literal(1L), true).sql === "rand()")
+    assert(Randn(Literal(1L), true).sql === "randn()")
+    assert(Rand(Literal(1L), false).sql === "rand(1L)")
+    assert(Randn(Literal(1L), false).sql === "randn(1L)")
+  }
 }

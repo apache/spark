@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.sql.Timestamp
 import java.util.{Locale, UUID}
 
 import scala.util.Random
@@ -87,11 +88,12 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
     val input2 = MemoryStream[Int]
 
     val df1 = input1.toDF
-      .select('value as "key", 'value.cast("timestamp") as "timestamp", ('value * 2) as "leftValue")
+      .select('value as "key", timestamp_seconds($"value") as "timestamp",
+        ('value * 2) as "leftValue")
       .select('key, window('timestamp, "10 second"), 'leftValue)
 
     val df2 = input2.toDF
-      .select('value as "key", 'value.cast("timestamp") as "timestamp",
+      .select('value as "key", timestamp_seconds($"value") as "timestamp",
         ('value * 3) as "rightValue")
       .select('key, window('timestamp, "10 second"), 'rightValue)
 
@@ -127,12 +129,13 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
     val input2 = MemoryStream[Int]
 
     val df1 = input1.toDF
-      .select('value as "key", 'value.cast("timestamp") as "timestamp", ('value * 2) as "leftValue")
+      .select('value as "key", timestamp_seconds($"value") as "timestamp",
+        ('value * 2) as "leftValue")
       .withWatermark("timestamp", "10 seconds")
       .select('key, window('timestamp, "10 second"), 'leftValue)
 
     val df2 = input2.toDF
-      .select('value as "key", 'value.cast("timestamp") as "timestamp",
+      .select('value as "key", timestamp_seconds($"value") as "timestamp",
         ('value * 3) as "rightValue")
       .select('key, window('timestamp, "10 second"), 'rightValue)
 
@@ -166,7 +169,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
 
       AddData(input1, 5),
       CheckNewAnswer(),                             // Same reason as above
-      assertNumStateRows(total = 2, updated = 0)
+      assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1)
     )
   }
 
@@ -177,11 +180,12 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
     val rightInput = MemoryStream[(Int, Int)]
 
     val df1 = leftInput.toDF.toDF("leftKey", "time")
-      .select('leftKey, 'time.cast("timestamp") as "leftTime", ('leftKey * 2) as "leftValue")
+      .select('leftKey, timestamp_seconds($"time") as "leftTime", ('leftKey * 2) as "leftValue")
       .withWatermark("leftTime", "10 seconds")
 
     val df2 = rightInput.toDF.toDF("rightKey", "time")
-      .select('rightKey, 'time.cast("timestamp") as "rightTime", ('rightKey * 3) as "rightValue")
+      .select('rightKey, timestamp_seconds($"time") as "rightTime",
+        ('rightKey * 3) as "rightValue")
       .withWatermark("rightTime", "10 seconds")
 
     val joined =
@@ -219,12 +223,12 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       // (1, 28) ==> passed filter, matched with left (1, 3) and (1, 5), added to state
       AddData(rightInput, (1, 20), (1, 21), (1, 28)),
       CheckNewAnswer((1, 3, 21), (1, 5, 21), (1, 3, 28), (1, 5, 28)),
-      assertNumStateRows(total = 5, updated = 1),
+      assertNumStateRows(total = 5, updated = 1, droppedByWatermark = 1),
 
       // New data to left input with leftTime <= 20 should be filtered due to event time watermark
       AddData(leftInput, (1, 20), (1, 21)),
       CheckNewAnswer((1, 21, 28)),
-      assertNumStateRows(total = 6, updated = 1)
+      assertNumStateRows(total = 6, updated = 1, droppedByWatermark = 1)
     )
   }
 
@@ -235,11 +239,12 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
     val rightInput = MemoryStream[(Int, Int)]
 
     val df1 = leftInput.toDF.toDF("leftKey", "time")
-      .select('leftKey, 'time.cast("timestamp") as "leftTime", ('leftKey * 2) as "leftValue")
+      .select('leftKey, timestamp_seconds($"time") as "leftTime", ('leftKey * 2) as "leftValue")
       .withWatermark("leftTime", "20 seconds")
 
     val df2 = rightInput.toDF.toDF("rightKey", "time")
-      .select('rightKey, 'time.cast("timestamp") as "rightTime", ('rightKey * 3) as "rightValue")
+      .select('rightKey, timestamp_seconds($"time") as "rightTime",
+        ('rightKey * 3) as "rightValue")
       .withWatermark("rightTime", "30 seconds")
 
     val condition = expr(
@@ -293,7 +298,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
 
       AddData(leftInput, (1, 30), (1, 31)),     // 30 should not be processed or added to state
       CheckNewAnswer((1, 31, 26), (1, 31, 30), (1, 31, 31)),
-      assertNumStateRows(total = 11, updated = 1),  // only 31 added
+      assertNumStateRows(total = 11, updated = 1, droppedByWatermark = 1),  // only 31 added
 
       // Advance the watermark
       AddData(rightInput, (1, 80)),
@@ -307,7 +312,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
 
       AddData(rightInput, (1, 46), (1, 50)),     // 46 should not be processed or added to state
       CheckNewAnswer((1, 49, 50), (1, 50, 50)),
-      assertNumStateRows(total = 7, updated = 1)   // 50 added
+      assertNumStateRows(total = 7, updated = 1, droppedByWatermark = 1)   // 50 added
     )
   }
 
@@ -425,7 +430,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
   test("SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
     val df = inputStream.toDS()
-      .select(col("_1").as("value"), col("_2").cast("timestamp").as("timestamp"))
+      .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
 
     val leftStream = df.select(col("value").as("leftId"), col("timestamp").as("leftTime"))
 
@@ -500,7 +505,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     val df = input.toDF
       .select(
         'value as "key",
-        'value.cast("timestamp") as s"${prefix}Time",
+        timestamp_seconds($"value")  as s"${prefix}Time",
         ('value * multiplier) as s"${prefix}Value")
       .withWatermark(s"${prefix}Time", "10 seconds")
 
@@ -682,11 +687,12 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       val rightInput = MemoryStream[(Int, Int)]
 
       val df1 = leftInput.toDF.toDF("leftKey", "time")
-        .select('leftKey, 'time.cast("timestamp") as "leftTime", ('leftKey * 2) as "leftValue")
+        .select('leftKey, timestamp_seconds($"time") as "leftTime", ('leftKey * 2) as "leftValue")
         .withWatermark("leftTime", "10 seconds")
 
       val df2 = rightInput.toDF.toDF("rightKey", "time")
-        .select('rightKey, 'time.cast("timestamp") as "rightTime", ('rightKey * 3) as "rightValue")
+        .select('rightKey, timestamp_seconds($"time") as "rightTime",
+          ('rightKey * 3) as "rightValue")
         .withWatermark("rightTime", "10 seconds")
 
       val joined =
@@ -777,7 +783,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     val inputStream = MemoryStream[(Int, Long)]
 
     val df = inputStream.toDS()
-      .select(col("_1").as("value"), col("_2").cast("timestamp").as("timestamp"))
+      .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
 
     val leftStream = df.select(col("value").as("leftId"), col("timestamp").as("leftTime"))
 
@@ -840,7 +846,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     val inputStream = MemoryStream[(Int, Long)]
 
     val df = inputStream.toDS()
-      .select(col("_1").as("value"), col("_2").cast("timestamp").as("timestamp"))
+      .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
 
     // we're just flipping "left" and "right" from left outer join and apply right outer join
 
@@ -883,7 +889,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
   test("SPARK-26187 restore the stream-stream outer join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
     val df = inputStream.toDS()
-      .select(col("_1").as("value"), col("_2").cast("timestamp").as("timestamp"))
+      .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
 
     val leftStream = df.select(col("value").as("leftId"), col("timestamp").as("leftTime"))
 
@@ -990,5 +996,48 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
           Row(24, 48, 72), Row(25, 50, 75))
       )
     }
+  }
+
+  test("SPARK-32148 stream-stream join regression on Spark 3.0.0") {
+    val input1 = MemoryStream[(Timestamp, String, String)]
+    val df1 = input1.toDF
+      .selectExpr("_1 as eventTime", "_2 as id", "_3 as comment")
+      .withWatermark(s"eventTime", "2 minutes")
+
+    val input2 = MemoryStream[(Timestamp, String, String)]
+    val df2 = input2.toDF
+      .selectExpr("_1 as eventTime", "_2 as id", "_3 as name")
+      .withWatermark(s"eventTime", "4 minutes")
+
+    val joined = df1.as("left")
+      .join(df2.as("right"),
+        expr("""
+               |left.id = right.id AND left.eventTime BETWEEN
+               |  right.eventTime - INTERVAL 30 seconds AND
+               |  right.eventTime + INTERVAL 30 seconds
+             """.stripMargin),
+        joinType = "leftOuter")
+
+    val inputDataForInput1 = Seq(
+      (Timestamp.valueOf("2020-01-01 00:00:00"), "abc", "has no join partner"),
+      (Timestamp.valueOf("2020-01-02 00:00:00"), "abc", "joined with A"),
+      (Timestamp.valueOf("2020-01-02 01:00:00"), "abc", "joined with B"))
+
+    val inputDataForInput2 = Seq(
+      (Timestamp.valueOf("2020-01-02 00:00:10"), "abc", "A"),
+      (Timestamp.valueOf("2020-01-02 00:59:59"), "abc", "B"),
+      (Timestamp.valueOf("2020-01-02 02:00:00"), "abc", "C"))
+
+    val expectedOutput = Seq(
+      (Timestamp.valueOf("2020-01-01 00:00:00"), "abc", "has no join partner", null, null, null),
+      (Timestamp.valueOf("2020-01-02 00:00:00"), "abc", "joined with A",
+        Timestamp.valueOf("2020-01-02 00:00:10"), "abc", "A"),
+      (Timestamp.valueOf("2020-01-02 01:00:00"), "abc", "joined with B",
+        Timestamp.valueOf("2020-01-02 00:59:59"), "abc", "B"))
+
+    testStream(joined)(
+      MultiAddData((input1, inputDataForInput1), (input2, inputDataForInput2)),
+      CheckNewAnswer(expectedOutput.head, expectedOutput.tail: _*)
+    )
   }
 }

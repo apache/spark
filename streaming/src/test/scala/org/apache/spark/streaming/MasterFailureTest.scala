@@ -284,7 +284,7 @@ object MasterFailureTest extends Logging {
         })
       }
     }
-    mergedOutput
+    mergedOutput.toSeq
   }
 
   /**

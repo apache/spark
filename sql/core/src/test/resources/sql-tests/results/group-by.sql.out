@@ -87,7 +87,7 @@ struct<foo:string,approx_count_distinct(a):bigint>
 -- !query
 SELECT 'foo', MAX(STRUCT(a)) FROM testData WHERE a = 0 GROUP BY 1
 -- !query schema
-struct<foo:string,max(named_struct(a, a)):struct<a:int>>
+struct<foo:string,max(struct(a)):struct<a:int>>
 -- !query output
 
 

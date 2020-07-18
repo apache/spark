@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -21,11 +21,6 @@ import os
 import sys
 from setuptools import setup
 from shutil import copyfile, copytree, rmtree
-
-if sys.version_info < (3, 6):
-    print("Python versions prior to 3.6 are not supported for pip installed PySpark.",
-          file=sys.stderr)
-    sys.exit(-1)
 
 try:
     exec(open('pyspark/version.py').read())
@@ -166,6 +161,7 @@ try:
         author_email='dev@spark.apache.org',
         url='https://github.com/apache/spark/tree/master/python',
         packages=['pyspark',
+                  'pyspark.cloudpickle',
                   'pyspark.mllib',
                   'pyspark.mllib.linalg',
                   'pyspark.mllib.stat',
@@ -183,6 +179,7 @@ try:
                   'pyspark.python.lib',
                   'pyspark.data',
                   'pyspark.licenses',
+                  'pyspark.resource',
                   'pyspark.examples.src.main.python'],
         include_package_data=True,
         package_dir={
@@ -215,13 +212,10 @@ try:
                 'pyarrow>=%s' % _minimum_pyarrow_version,
             ]
         },
+        python_requires='>=3.6',
         classifiers=[
             'Development Status :: 5 - Production/Stable',
             'License :: OSI Approved :: Apache Software License',
-            'Programming Language :: Python :: 2.7',
-            'Programming Language :: Python :: 3',
-            'Programming Language :: Python :: 3.4',
-            'Programming Language :: Python :: 3.5',
             'Programming Language :: Python :: 3.6',
             'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8',

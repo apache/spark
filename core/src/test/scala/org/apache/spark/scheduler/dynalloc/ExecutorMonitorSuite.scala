@@ -43,7 +43,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   private val conf = new SparkConf()
     .set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "60s")
     .set(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT.key, "120s")
-    .set(DYN_ALLOCATION_SHUFFLE_TIMEOUT.key, "240s")
+    .set(DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT.key, "240s")
     .set(SHUFFLE_SERVICE_ENABLED, true)
 
   private var monitor: ExecutorMonitor = _
@@ -291,7 +291,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
 
   test("shuffle block tracking") {
     val bus = mockListenerBus()
-    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING, true).set(SHUFFLE_SERVICE_ENABLED, false)
+    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true).set(SHUFFLE_SERVICE_ENABLED, false)
     monitor = new ExecutorMonitor(conf, client, bus, clock)
 
     // 3 jobs: 2 and 3 share a shuffle, 1 has a separate shuffle.
@@ -359,7 +359,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
 
   test("SPARK-28839: Avoids NPE in context cleaner when shuffle service is on") {
     val bus = mockListenerBus()
-    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING, true).set(SHUFFLE_SERVICE_ENABLED, true)
+    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true).set(SHUFFLE_SERVICE_ENABLED, true)
     monitor = new ExecutorMonitor(conf, client, bus, clock) {
       override def onOtherEvent(event: SparkListenerEvent): Unit = {
         throw new IllegalStateException("No event should be sent.")
@@ -371,7 +371,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
 
   test("shuffle tracking with multiple executors and concurrent jobs") {
     val bus = mockListenerBus()
-    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING, true).set(SHUFFLE_SERVICE_ENABLED, false)
+    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true).set(SHUFFLE_SERVICE_ENABLED, false)
     monitor = new ExecutorMonitor(conf, client, bus, clock)
 
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
@@ -414,8 +414,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
 
   test("SPARK-28455: avoid overflow in timeout calculation") {
     conf
-      .set(DYN_ALLOCATION_SHUFFLE_TIMEOUT, Long.MaxValue)
-      .set(DYN_ALLOCATION_SHUFFLE_TRACKING, true)
+      .set(DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT, Long.MaxValue)
+      .set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true)
       .set(SHUFFLE_SERVICE_ENABLED, false)
     monitor = new ExecutorMonitor(conf, client, null, clock)
 

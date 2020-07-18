@@ -19,16 +19,19 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
+import java.time.{Instant, LocalDate, ZoneId}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
+
+import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -41,7 +44,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val JST_OPT = Option(JST.getId)
 
   def toMillis(timestamp: String): Long = {
-    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC)
+    val tf = TimestampFormatter("yyyy-MM-dd HH:mm:ss", UTC, isParsing = true)
     DateTimeUtils.microsToMillis(tf.parse(timestamp))
   }
   val date = "2015-04-08 13:10:15"
@@ -267,7 +270,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         // Test escaping of format
         GenerateUnsafeProjection.generate(
-          DateFormatClass(Literal(ts), Literal("\"quote"), JST_OPT) :: Nil)
+          DateFormatClass(Literal(ts), Literal("\""), JST_OPT) :: Nil)
 
         // SPARK-28072 The codegen path should work
         checkEvaluation(
@@ -359,6 +362,40 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, IntegerType)
   }
 
+  test("date add interval") {
+    val d = Date.valueOf("2016-02-28")
+    Seq("true", "false") foreach { flag =>
+      withSQLConf((SQLConf.ANSI_ENABLED.key, flag)) {
+        checkEvaluation(
+          DateAddInterval(Literal(d), Literal(new CalendarInterval(0, 1, 0))),
+          DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
+        checkEvaluation(
+          DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 0))),
+          DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-29")))
+        checkEvaluation(DateAddInterval(Literal(d), Literal.create(null, CalendarIntervalType)),
+          null)
+        checkEvaluation(DateAddInterval(Literal.create(null, DateType),
+          Literal(new CalendarInterval(1, 1, 0))),
+          null)
+      }
+    }
+
+    withSQLConf((SQLConf.ANSI_ENABLED.key, "true")) {
+      checkExceptionInExpression[IllegalArgumentException](
+        DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
+        "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
+    }
+
+    withSQLConf((SQLConf.ANSI_ENABLED.key, "false")) {
+      checkEvaluation(
+        DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25))),
+        DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-29")))
+      checkEvaluation(
+        DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
+        DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-30")))
+    }
+  }
+
   test("date_sub") {
     checkEvaluation(
       DateSub(Literal(Date.valueOf("2015-01-01")), Literal(1.toByte)),
@@ -431,54 +468,54 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       sdf.setTimeZone(TimeZone.getTimeZone(zid))
 
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
-          Literal(new CalendarInterval(1, 0, 0)),
+          UnaryMinus(Literal(new CalendarInterval(1, 0, 0))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-29 10:00:00.000").getTime)))
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
-          Literal(new CalendarInterval(1, 1, 0)),
+          UnaryMinus(Literal(new CalendarInterval(1, 1, 0))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 10:00:00.000").getTime)))
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
-          Literal(new CalendarInterval(1, 0, 2000000.toLong)),
+          UnaryMinus(Literal(new CalendarInterval(1, 0, 2000000.toLong))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 23:59:59.000").getTime)))
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
-          Literal(new CalendarInterval(1, 1, 2000000.toLong)),
+          UnaryMinus(Literal(new CalendarInterval(1, 1, 2000000.toLong))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-27 23:59:59.000").getTime)))
 
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal.create(null, TimestampType),
-          Literal(new CalendarInterval(1, 2, 123000L)),
+          UnaryMinus(Literal(new CalendarInterval(1, 2, 123000L))),
           timeZoneId),
         null)
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal.create(null, CalendarIntervalType),
+          UnaryMinus(Literal.create(null, CalendarIntervalType)),
           timeZoneId),
         null)
       checkEvaluation(
-        TimeSub(
+        TimeAdd(
           Literal.create(null, TimestampType),
-          Literal.create(null, CalendarIntervalType),
+          UnaryMinus(Literal.create(null, CalendarIntervalType)),
           timeZoneId),
         null)
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (start: Expression, interval: Expression) => TimeSub(start, interval, timeZoneId),
+      checkConsistencyBetweenInterpretedAndCodegen((start: Expression, interval: Expression) =>
+        TimeAdd(start, UnaryMinus(interval), timeZoneId),
         TimestampType, CalendarIntervalType)
     }
   }
@@ -611,105 +648,102 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal("\"quote")) :: Nil)
   }
 
+  private def testTruncDate(input: Date, fmt: String, expected: Date): Unit = {
+    checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
+      expected)
+    checkEvaluation(
+      TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
+      expected)
+  }
+
   test("TruncDate") {
-    def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
-      checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
-        expected)
-      checkEvaluation(
-        TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
-        expected)
-    }
     val date = Date.valueOf("2015-07-22")
     Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
-      testTrunc(date, fmt, Date.valueOf("2015-01-01"))
+      testTruncDate(date, fmt, Date.valueOf("2015-01-01"))
     }
     Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
-      testTrunc(date, fmt, Date.valueOf("2015-07-01"))
+      testTruncDate(date, fmt, Date.valueOf("2015-07-01"))
     }
-    testTrunc(date, "DD", null)
-    testTrunc(date, "SECOND", null)
-    testTrunc(date, "HOUR", null)
-    testTrunc(date, null, null)
-    testTrunc(null, "MON", null)
-    testTrunc(null, null, null)
+    testTruncDate(date, "DD", null)
+    testTruncDate(date, "SECOND", null)
+    testTruncDate(date, "HOUR", null)
+    testTruncDate(null, "MON", null)
     // Test escaping of format
     GenerateUnsafeProjection.generate(TruncDate(Literal(0, DateType), Literal("\"quote")) :: Nil)
+  }
 
-    testTrunc(Date.valueOf("2000-03-08"), "decade", Date.valueOf("2000-01-01"))
-    testTrunc(Date.valueOf("2000-03-08"), "century", Date.valueOf("1901-01-01"))
+  private def testTruncTimestamp(input: Timestamp, fmt: String, expected: Timestamp): Unit = {
+    checkEvaluation(
+      TruncTimestamp(Literal.create(fmt, StringType), Literal.create(input, TimestampType)),
+      expected)
+    checkEvaluation(
+      TruncTimestamp(
+        NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
+      expected)
   }
 
   test("TruncTimestamp") {
-    def testTrunc(input: Timestamp, fmt: String, expected: Timestamp): Unit = {
-      checkEvaluation(
-        TruncTimestamp(Literal.create(fmt, StringType), Literal.create(input, TimestampType)),
-        expected)
-      checkEvaluation(
-        TruncTimestamp(
-          NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
-        expected)
-    }
-
     withDefaultTimeZone(UTC) {
       val inputDate = Timestamp.valueOf("2015-07-22 05:30:06")
 
       Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-01-01 00:00:00"))
       }
 
       Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-01 00:00:00"))
       }
 
       Seq("DAY", "day", "DD", "dd").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-22 00:00:00"))
       }
 
       Seq("HOUR", "hour").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-22 05:00:00"))
       }
 
       Seq("MINUTE", "minute").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-22 05:30:00"))
       }
 
       Seq("SECOND", "second").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-22 05:30:06"))
       }
 
       Seq("WEEK", "week").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-20 00:00:00"))
       }
 
       Seq("QUARTER", "quarter").foreach { fmt =>
-        testTrunc(
+        testTruncTimestamp(
           inputDate, fmt,
           Timestamp.valueOf("2015-07-01 00:00:00"))
       }
 
-      testTrunc(inputDate, "INVALID", null)
-      testTrunc(inputDate, null, null)
-      testTrunc(null, "MON", null)
-      testTrunc(null, null, null)
+      testTruncTimestamp(null, "MON", null)
+    }
+  }
 
-      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "decade",
-        Timestamp.valueOf("2000-01-01 00:00:00"))
-      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "century",
-        Timestamp.valueOf("1901-01-01 00:00:00"))
+  test("unsupported fmt fields for trunc/date_trunc results null") {
+    Seq("INVALID", "decade", "century", "millennium", "whatever", null).foreach { field =>
+      testTruncDate(Date.valueOf("2000-03-08"), field, null)
+      testTruncDate(null, field, null)
+      testTruncTimestamp(Timestamp.valueOf("2000-03-08 11:12:13"), field, null)
+      testTruncTimestamp(null, field, null)
     }
   }
 
@@ -746,8 +780,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           checkEvaluation(
             FromUnixTime(Literal(1000L), Literal.create(null, StringType), timeZoneId),
             null)
-          checkEvaluation(
-            FromUnixTime(Literal(0L), Literal("not a valid format"), timeZoneId), null)
 
           // SPARK-28072 The codegen path for non-literal input should also work
           checkEvaluation(
@@ -761,7 +793,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
     // Test escaping of format
-    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(FromUnixTime(Literal(0L), Literal("\""), UTC_OPT) :: Nil)
   }
 
   test("unix_timestamp") {
@@ -772,7 +804,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
+        sdf3.setTimeZone(TimeZoneUTC)
 
         withDefaultTimeZone(UTC) {
           for (zid <- outstandingZoneIds) {
@@ -823,15 +855,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               UnixTimestamp(Literal(date1), Literal.create(null, StringType), timeZoneId),
               MICROSECONDS.toSeconds(
                 DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
-            checkEvaluation(
-              UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
           }
         }
       }
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      UnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
+      UnixTimestamp(Literal("2015-07-24"), Literal("\""), UTC_OPT) :: Nil)
   }
 
   test("to_unix_timestamp") {
@@ -843,7 +873,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val sdf2 = new SimpleDateFormat(fmt2, Locale.US)
         val fmt3 = "yy-MM-dd"
         val sdf3 = new SimpleDateFormat(fmt3, Locale.US)
-        sdf3.setTimeZone(TimeZone.getTimeZone(UTC))
+        sdf3.setTimeZone(TimeZoneUTC)
 
         withDefaultTimeZone(UTC) {
           for (zid <- outstandingZoneIds) {
@@ -889,10 +919,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(date1), Literal.create(null, StringType), timeZoneId),
               MICROSECONDS.toSeconds(
                 DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), zid)))
-            checkEvaluation(
-              ToUnixTimestamp(
-                Literal("2015-07-24"),
-                Literal("not a valid format"), timeZoneId), null)
 
             // SPARK-28072 The codegen path for non-literal input should also work
             checkEvaluation(
@@ -909,7 +935,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     // Test escaping of format
     GenerateUnsafeProjection.generate(
-      ToUnixTimestamp(Literal("2015-07-24"), Literal("\"quote")) :: Nil)
+      ToUnixTimestamp(Literal("2015-07-24"), Literal("\""), UTC_OPT) :: Nil)
   }
 
   test("datediff") {
@@ -1032,94 +1058,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
   }
 
-  test("millennium") {
-    val date = MakeDate(Literal(2019), Literal(1), Literal(1))
-    checkEvaluation(Millennium(date), 3)
-    checkEvaluation(Millennium(date.copy(year = Literal(2001))), 3)
-    checkEvaluation(Millennium(date.copy(year = Literal(2000))), 2)
-    checkEvaluation(Millennium(date.copy(year = Literal(1001), day = Literal(28))), 2)
-    checkEvaluation(Millennium(date.copy(year = Literal(1))), 1)
-    checkEvaluation(Millennium(date.copy(year = Literal(-1))), -1)
-    checkEvaluation(Millennium(date.copy(year = Literal(-100), month = Literal(12))), -1)
-    checkEvaluation(Millennium(date.copy(year = Literal(-2019))), -3)
-  }
-
-  test("century") {
-    val date = MakeDate(Literal(2019), Literal(1), Literal(1))
-    checkEvaluation(Century(date), 21)
-    checkEvaluation(Century(date.copy(year = Literal(2001))), 21)
-    checkEvaluation(Century(date.copy(year = Literal(2000))), 20)
-    checkEvaluation(Century(date.copy(year = Literal(1001), day = Literal(28))), 11)
-    checkEvaluation(Century(date.copy(year = Literal(1))), 1)
-    checkEvaluation(Century(date.copy(year = Literal(-1))), -1)
-    checkEvaluation(Century(date.copy(year = Literal(-100), month = Literal(12))), -2)
-    checkEvaluation(Century(date.copy(year = Literal(-2019))), -21)
-  }
-
-  test("decade") {
-    val date = MakeDate(Literal(2019), Literal(8), Literal(8))
-    checkEvaluation(Decade(date), 201)
-    checkEvaluation(Decade(date.copy(year = Literal(2011))), 201)
-    checkEvaluation(Decade(date.copy(year = Literal(2010))), 201)
-    checkEvaluation(Decade(date.copy(year = Literal(2009))), 200)
-    checkEvaluation(Decade(date.copy(year = Literal(10))), 1)
-    checkEvaluation(Decade(date.copy(year = Literal(1))), 0)
-    checkEvaluation(Decade(date.copy(year = Literal(-1))), -1)
-    checkEvaluation(Decade(date.copy(year = Literal(-10))), -1)
-    checkEvaluation(Decade(date.copy(year = Literal(-11))), -2)
-    checkEvaluation(Decade(date.copy(year = Literal(-2019))), -202)
-  }
-
-  test("milliseconds and microseconds") {
-    outstandingTimezonesIds.foreach { timezone =>
-      var timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
-        Literal(0), Literal(0), Literal(Decimal(BigDecimal(10.123456789), 8, 6)),
-        Some(Literal(timezone)), Some(timezone))
-      def millis(ts: MakeTimestamp): Milliseconds = Milliseconds(timestamp, Some(timezone))
-      def micros(ts: MakeTimestamp): Microseconds = Microseconds(timestamp, Some(timezone))
-
-      checkEvaluation(millis(timestamp), Decimal(BigDecimal(10123.457), 8, 3))
-      checkEvaluation(
-        millis(timestamp.copy(year = Literal(10))),
-        Decimal(BigDecimal(10123.457), 8, 3))
-
-      checkEvaluation(micros(timestamp), 10123457)
-      checkEvaluation(
-        micros(timestamp.copy(year = Literal(10))),
-        10123457)
-
-      timestamp = timestamp.copy(sec = Literal(Decimal(0.0, 8, 6)))
-      checkEvaluation(millis(timestamp), Decimal(0, 8, 3))
-      checkEvaluation(micros(timestamp), 0)
-
-      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(59.999999), 8, 6)))
-      checkEvaluation(millis(timestamp), Decimal(BigDecimal(59999.999), 8, 3))
-      checkEvaluation(micros(timestamp), 59999999)
-
-      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(60.0), 8, 6)))
-      checkEvaluation(millis(timestamp), Decimal(0, 8, 3))
-      checkEvaluation(micros(timestamp), 0)
-    }
-  }
-
-  test("epoch") {
-    val zoneId = ZoneId.systemDefault()
-    val nanos = 123456000
-    val timestamp = Epoch(MakeTimestamp(
-      Literal(2019), Literal(8), Literal(9), Literal(0), Literal(0),
-      Literal(Decimal(nanos / NANOS_PER_SECOND.toDouble, 8, 6)),
-      Some(Literal(zoneId.getId))))
-    val instant = LocalDateTime.of(2019, 8, 9, 0, 0, 0, nanos)
-      .atZone(zoneId).toInstant
-    val expected = Decimal(BigDecimal(nanos) / NANOS_PER_SECOND +
-      instant.getEpochSecond +
-      zoneId.getRules.getOffset(instant).getTotalSeconds)
-    checkEvaluation(timestamp, expected)
-  }
-
   test("ISO 8601 week-numbering year") {
-    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
-    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
+    checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
+    checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
   }
 
   test("extract the seconds part with fraction from timestamps") {
@@ -1199,5 +1140,150 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal("2020-01-27T20:06:11.847-0800"),
           Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), "Fail to parse")
     }
+  }
+
+  test("Consistent error handling for datetime formatting and parsing functions") {
+
+    def checkException[T <: Exception : ClassTag](c: String): Unit = {
+      checkExceptionInExpression[T](new ParseToTimestamp(Literal("1"), Literal(c)).child, c)
+      checkExceptionInExpression[T](new ParseToDate(Literal("1"), Literal(c)).child, c)
+      checkExceptionInExpression[T](ToUnixTimestamp(Literal("1"), Literal(c)), c)
+      checkExceptionInExpression[T](UnixTimestamp(Literal("1"), Literal(c)), c)
+      if (!Set("E", "F", "q", "Q").contains(c)) {
+        checkExceptionInExpression[T](DateFormatClass(CurrentTimestamp(), Literal(c)), c)
+        checkExceptionInExpression[T](FromUnixTime(Literal(0L), Literal(c)), c)
+      }
+    }
+
+    Seq('Y', 'W', 'w', 'E', 'u', 'F').foreach { l =>
+      checkException[SparkUpgradeException](l.toString)
+    }
+
+    Seq('q', 'Q', 'e', 'c', 'A', 'n', 'N', 'p').foreach { l =>
+      checkException[IllegalArgumentException](l.toString)
+    }
+  }
+
+  test("SPARK-31896: Handle am-pm timestamp parsing when hour is missing") {
+    checkEvaluation(
+      new ParseToTimestamp(Literal("PM"), Literal("a")).child,
+      Timestamp.valueOf("1970-01-01 12:00:00.0"))
+    checkEvaluation(
+      new ParseToTimestamp(Literal("11:11 PM"), Literal("mm:ss a")).child,
+      Timestamp.valueOf("1970-01-01 12:11:11.0"))
+  }
+
+  def testIntegralInput(testFunc: Number => Unit): Unit = {
+    def checkResult(input: Long): Unit = {
+      if (input.toByte == input) {
+        testFunc(input.toByte)
+      } else if (input.toShort == input) {
+        testFunc(input.toShort)
+      } else if (input.toInt == input) {
+        testFunc(input.toInt)
+      } else {
+        testFunc(input)
+      }
+    }
+    checkResult(0)
+    checkResult(Byte.MaxValue)
+    checkResult(Byte.MinValue)
+    checkResult(Short.MaxValue)
+    checkResult(Short.MinValue)
+    checkResult(Int.MaxValue)
+    checkResult(Int.MinValue)
+    checkResult(Int.MaxValue.toLong + 100)
+    checkResult(Int.MinValue.toLong - 100)
+  }
+
+  test("TIMESTAMP_SECONDS") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        SecondsToTimestamp(Literal(value)),
+        Instant.ofEpochSecond(value.longValue()))
+    }
+
+    // test null input
+    checkEvaluation(
+      SecondsToTimestamp(Literal(null, IntegerType)),
+      null)
+
+    // test integral input
+    testIntegralInput(testIntegralFunc)
+    // test overflow
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(Long.MaxValue, LongType)), EmptyRow, "long overflow")
+
+    def testFractionalInput(input: String): Unit = {
+      Seq(input.toFloat, input.toDouble, Decimal(input)).foreach { value =>
+        checkEvaluation(
+          SecondsToTimestamp(Literal(value)),
+          (input.toDouble * MICROS_PER_SECOND).toLong)
+      }
+    }
+
+    testFractionalInput("1.0")
+    testFractionalInput("-1.0")
+    testFractionalInput("1.234567")
+    testFractionalInput("-1.234567")
+
+    // test overflow for decimal input
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(Decimal("9" * 38))), "Overflow"
+    )
+    // test truncation error for decimal input
+    checkExceptionInExpression[ArithmeticException](
+      SecondsToTimestamp(Literal(Decimal("0.1234567"))), "Rounding necessary"
+    )
+
+    // test NaN
+    checkEvaluation(
+      SecondsToTimestamp(Literal(Double.NaN)),
+      null)
+    checkEvaluation(
+      SecondsToTimestamp(Literal(Float.NaN)),
+      null)
+    // double input can truncate
+    checkEvaluation(
+      SecondsToTimestamp(Literal(123.456789123)),
+      Instant.ofEpochSecond(123, 456789000))
+  }
+
+  test("TIMESTAMP_MILLIS") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        MillisToTimestamp(Literal(value)),
+        Instant.ofEpochMilli(value.longValue()))
+    }
+
+    // test null input
+    checkEvaluation(
+      MillisToTimestamp(Literal(null, IntegerType)),
+      null)
+
+    // test integral input
+    testIntegralInput(testIntegralFunc)
+    // test overflow
+    checkExceptionInExpression[ArithmeticException](
+      MillisToTimestamp(Literal(Long.MaxValue, LongType)), EmptyRow, "long overflow")
+  }
+
+  test("TIMESTAMP_MICROS") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        MicrosToTimestamp(Literal(value)),
+        value.longValue())
+    }
+
+    // test null input
+    checkEvaluation(
+      MicrosToTimestamp(Literal(null, IntegerType)),
+      null)
+
+    // test integral input
+    testIntegralInput(testIntegralFunc)
+    // test max/min input
+    testIntegralFunc(Long.MaxValue)
+    testIntegralFunc(Long.MinValue)
   }
 }

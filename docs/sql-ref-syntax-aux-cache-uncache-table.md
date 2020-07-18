@@ -26,32 +26,27 @@ underlying entries should already have been brought to cache by previous `CACHE 
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 UNCACHE TABLE [ IF EXISTS ] table_identifier
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies the table or view name to be uncached. The table or view name may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
+
+    Specifies the table or view name to be uncached. The table or view name may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 UNCACHE TABLE t1;
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
- * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
- * [REFRESH TABLE](sql-ref-syntax-aux-refresh-table.html)
- * [REFRESH](sql-ref-syntax-aux-cache-refresh.html)
+* [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+* [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
+* [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
+* [REFRESH](sql-ref-syntax-aux-cache-refresh.html)

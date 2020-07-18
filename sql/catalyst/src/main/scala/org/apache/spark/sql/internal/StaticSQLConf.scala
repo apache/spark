@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.util.Utils
 
@@ -47,6 +48,9 @@ object StaticSQLConf {
     .internal()
     .version("2.1.0")
     .stringConf
+    // System preserved database should not exists in metastore. However it's hard to guarantee it
+    // for every session, because case-sensitivity differs. Here we always lowercase it to make our
+    // life easier.
     .transform(_.toLowerCase(Locale.ROOT))
     .createWithDefault("global_temp")
 
@@ -223,4 +227,16 @@ object StaticSQLConf {
       .version("3.0.0")
       .intConf
       .createWithDefault(100)
+
+  val METADATA_CACHE_TTL_SECONDS = buildStaticConf("spark.sql.metadataCacheTTLSeconds")
+    .doc("Time-to-live (TTL) value for the metadata caches: partition file metadata cache and " +
+      "session catalog cache. This configuration only has an effect when this value having " +
+      "a positive value (> 0). It also requires setting " +
+      s"${StaticSQLConf.CATALOG_IMPLEMENTATION} to `hive`, setting " +
+      s"${SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE} > 0 and setting " +
+      s"${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS} to `true` " +
+      "to be applied to the partition file metadata cache.")
+    .version("3.1.0")
+    .timeConf(TimeUnit.SECONDS)
+    .createWithDefault(-1)
 }

@@ -61,7 +61,7 @@ function planVizContainer() { return d3.select("#plan-viz-graph"); }
  * node, it will display the details of this SparkPlan node in the right.
  */
 function setupTooltipForSparkPlanNode(nodeId) {
-  var nodeTooltip = d3.select("#plan-meta-data-" + nodeId).text()
+  var nodeTooltip = d3.select("#plan-meta-data-" + nodeId).text();
   d3.select("svg g .node_" + nodeId)
     .each(function(d) {
       var domNode = d3.select(this).node();
@@ -122,10 +122,8 @@ function preprocessGraphLayout(g) {
  */
 function resizeSvg(svg) {
   var allClusters = svg.selectAll("g rect")[0];
-  console.log(allClusters);
   var startX = -PlanVizConstants.svgMarginX +
     toFloat(d3.min(allClusters, function(e) {
-      console.log(e);
       return getAbsolutePosition(d3.select(e)).x;
     }));
   var startY = -PlanVizConstants.svgMarginY +
@@ -178,7 +176,7 @@ function getAbsolutePosition(d3selection) {
     // Climb upwards to find how our parents are translated
     obj = d3.select(obj.node().parentNode);
     // Stop when we've reached the graph container itself
-    if (obj.node() == planVizContainer().node()) {
+    if (obj.node() === planVizContainer().node()) {
       break;
     }
   }
@@ -210,8 +208,8 @@ function postprocessForAdditionalMetrics() {
   checkboxNode.click(function() {
       onClickAdditionalMetricsCheckbox($(this));
   });
-  var isChecked = window.localStorage.getItem("stageId-and-taskId-checked") == "true";
-  $("#stageId-and-taskId-checkbox").prop("checked", isChecked);
+  var isChecked = window.localStorage.getItem("stageId-and-taskId-checked") === "true";
+  checkboxNode.prop("checked", isChecked);
   onClickAdditionalMetricsCheckbox(checkboxNode);
 }
 

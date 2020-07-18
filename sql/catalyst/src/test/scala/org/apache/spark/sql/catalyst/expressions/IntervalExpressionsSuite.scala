@@ -68,6 +68,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Years and months must not be taken into account
     checkEvaluation(ExtractIntervalDays("100 year 10 months 5 days"), 5)
     checkEvaluation(ExtractIntervalDays(largeInterval), 31)
+    checkEvaluation(ExtractIntervalDays("25 hours"), 1)
   }
 
   test("hours") {
@@ -81,6 +82,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Minutes should be taken into account
     checkEvaluation(ExtractIntervalHours("10 hours 100 minutes"), 11L)
     checkEvaluation(ExtractIntervalHours(largeInterval), 11L)
+    checkEvaluation(ExtractIntervalHours("25 hours"), 1L)
+
   }
 
   test("minutes") {
@@ -187,7 +190,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         micros: Int = 0): Unit = {
       val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
       val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
-        Literal(days), Literal(hours), Literal(minutes), Literal(Decimal(secFrac, 8, 6)))
+        Literal(days), Literal(hours), Literal(minutes),
+        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
       val totalMonths = years * MONTHS_PER_YEAR + months
       val totalDays = weeks * DAYS_PER_WEEK + days
       val totalMicros = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR
@@ -203,5 +207,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(years = 10000, micros = -1)
     check(-9999, -11, 0, -31, -23, -59, -59, -999, -999)
     check(years = -10000, micros = 1)
+    check(
+      hours = Int.MaxValue,
+      minutes = Int.MaxValue,
+      seconds = Int.MaxValue,
+      millis = Int.MaxValue,
+      micros = Int.MaxValue)
   }
 }

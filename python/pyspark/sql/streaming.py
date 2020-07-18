@@ -18,13 +18,9 @@
 import sys
 import json
 
-if sys.version >= '3':
-    basestring = str
-
 from py4j.java_gateway import java_import
 
 from pyspark import since, keyword_only
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
@@ -204,7 +200,6 @@ class StreamingQueryManager(object):
         self._jsqm = jsqm
 
     @property
-    @ignore_unicode_prefix
     @since(2.0)
     def active(self):
         """Returns a list of active queries associated with this SQLContext
@@ -213,12 +208,11 @@ class StreamingQueryManager(object):
         >>> sqm = spark.streams
         >>> # get the list of active streaming queries
         >>> [q.name for q in sqm.active]
-        [u'this_query']
+        ['this_query']
         >>> sq.stop()
         """
         return [StreamingQuery(jsq) for jsq in self._jsqm.active()]
 
-    @ignore_unicode_prefix
     @since(2.0)
     def get(self, id):
         """Returns an active query from this SQLContext or throws exception if an active query
@@ -226,7 +220,7 @@ class StreamingQueryManager(object):
 
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.name
-        u'this_query'
+        'this_query'
         >>> sq = spark.streams.get(sq.id)
         >>> sq.isActive
         True
@@ -328,7 +322,7 @@ class DataStreamReader(OptionUtils):
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
-        elif isinstance(schema, basestring):
+        elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
         else:
             raise TypeError("schema should be StructType or string")
@@ -461,15 +455,15 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
                   When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
                   field in an output schema.
-                *  ``DROPMALFORMED`` : ignores the whole corrupted records.
-                *  ``FAILFAST`` : throws an exception when it meets corrupted records.
+                *  ``DROPMALFORMED``: ignores the whole corrupted records.
+                *  ``FAILFAST``: throws an exception when it meets corrupted records.
 
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
@@ -527,7 +521,7 @@ class DataStreamReader(OptionUtils):
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
             dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
             pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.json(path))
         else:
             raise TypeError("path can be only a single string")
@@ -555,7 +549,7 @@ class DataStreamReader(OptionUtils):
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
                        recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.orc(path))
         else:
             raise TypeError("path can be only a single string")
@@ -585,12 +579,11 @@ class DataStreamReader(OptionUtils):
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
                        recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.parquet(path))
         else:
             raise TypeError("path can be only a single string")
 
-    @ignore_unicode_prefix
     @since(2.0)
     def text(self, path, wholetext=False, lineSep=None, pathGlobFilter=None,
              recursiveFileLookup=None):
@@ -623,7 +616,7 @@ class DataStreamReader(OptionUtils):
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.text(path))
         else:
             raise TypeError("path can be only a single string")
@@ -707,7 +700,7 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
@@ -716,8 +709,8 @@ class DataStreamReader(OptionUtils):
                   When it meets a record having fewer tokens than the length of the schema, \
                   sets ``null`` to extra fields. When the record has more tokens than the \
                   length of the schema, it drops extra tokens.
-                * ``DROPMALFORMED`` : ignores the whole corrupted records.
-                * ``FAILFAST`` : throws an exception when it meets corrupted records.
+                * ``DROPMALFORMED``: ignores the whole corrupted records.
+                * ``FAILFAST``: throws an exception when it meets corrupted records.
 
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
@@ -762,7 +755,7 @@ class DataStreamReader(OptionUtils):
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
             emptyValue=emptyValue, locale=locale, lineSep=lineSep,
             pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.csv(path))
         else:
             raise TypeError("path can be only a single string")
@@ -795,11 +788,11 @@ class DataStreamWriter(object):
 
         Options include:
 
-        * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to
+        * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to
            the sink
-        * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
+        * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the sink
            every time these is some updates
-        * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+        * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
 
@@ -1153,7 +1146,6 @@ class DataStreamWriter(object):
         ensure_callback_server_started(gw)
         return self
 
-    @ignore_unicode_prefix
     @since(2.0)
     def start(self, path=None, format=None, outputMode=None, partitionBy=None, queryName=None,
               **options):
@@ -1170,11 +1162,11 @@ class DataStreamWriter(object):
         :param outputMode: specifies how data of a streaming DataFrame/Dataset is written to a
                            streaming sink.
 
-            * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to the
+            * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
-            * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
-               every time these is some updates
-            * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+            * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
+              sink every time these is some updates
+            * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
         :param partitionBy: names of partitioning columns
@@ -1186,14 +1178,14 @@ class DataStreamWriter(object):
         >>> sq.isActive
         True
         >>> sq.name
-        u'this_query'
+        'this_query'
         >>> sq.stop()
         >>> sq.isActive
         False
         >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').start(
         ...     queryName='that_query', outputMode="append", format='memory')
         >>> sq.name
-        u'that_query'
+        'that_query'
         >>> sq.isActive
         True
         >>> sq.stop()

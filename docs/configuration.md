@@ -1890,7 +1890,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Default timeout for all network interactions. This config will be used in place of
     <code>spark.core.connection.ack.wait.timeout</code>,
-    <code>spark.storage.blockManagerSlaveTimeoutMs</code>,
+    <code>spark.storage.blockManagerHeartbeatTimeoutMs</code>,
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
   </td>
@@ -2562,7 +2562,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.dynamicAllocation.shuffleTimeout</code></td>
+  <td><code>spark.dynamicAllocation.shuffleTracking.timeout</code></td>
   <td><code>infinity</code></td>
   <td>
     When shuffle tracking is enabled, controls the timeout for executors that are holding shuffle
@@ -2622,11 +2622,33 @@ Please refer to the [Security](security.html) page for available options on how 
 Spark subsystems.
 
 
-{% for static_file in site.static_files %}
-    {% if static_file.name == 'sql-configs.html' %}
 ### Spark SQL
 
-        {% include_relative sql-configs.html %}
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'generated-runtime-sql-config-table.html' %}
+
+#### Runtime SQL Configuration
+
+Runtime SQL configurations are per-session, mutable Spark SQL configurations. They can be set with initial values by the config file
+and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
+Also, they can be set and queried by SET commands and rest to their initial values by RESET command,
+or by `SparkSession.conf`'s setter and getter methods in runtime.
+
+{% include_relative generated-runtime-sql-config-table.html %}
+        {% break %}
+    {% endif %}
+{% endfor %}
+
+{% for static_file in site.static_files %}
+    {% if static_file.name == 'generated-static-sql-config-table.html' %}
+
+#### Static SQL Configuration
+
+Static SQL configurations are cross-session, immutable Spark SQL configurations. They can be set with final values by the config file
+and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
+External users can query the static sql config values via `SparkSession.conf` or via set command, e.g. `SET spark.sql.extensions;`, but cannot set/unset them.
+
+{% include_relative generated-static-sql-config-table.html %}
         {% break %}
     {% endif %}
 {% endfor %}
@@ -2895,7 +2917,7 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python2.7</code> if available, otherwise <code>python</code>).
+    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python3</code> if available, otherwise <code>python</code>).
     Property <code>spark.pyspark.python</code> take precedence if it is set</td>
   </tr>
   <tr>
@@ -2932,6 +2954,12 @@ Note: When running Spark on YARN in `cluster` mode, environment variables need t
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
 `log4j.properties` file in the `conf` directory. One way to start is to copy the existing
 `log4j.properties.template` located there.
+
+By default, Spark adds 1 record to the MDC (Mapped Diagnostic Context): `mdc.taskName`, which shows something
+like `task 1.0 in stage 0.0`. You can add `%X{mdc.taskName}` to your patternLayout in
+order to print it in the logs.
+Moreover, you can use `spark.sparkContext.setLocalProperty(s"mdc.$name", "value")` to add user specific data into MDC.
+The key in MDC will be the string of "mdc.$name".
 
 # Overriding configuration directory
 

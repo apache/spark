@@ -1008,6 +1008,47 @@ object SparseMatrix {
 @Since("2.0.0")
 object Matrices {
 
+  private[ml] def fromVectors(vectors: Seq[Vector]): Matrix = {
+    val numRows = vectors.length
+    val numCols = vectors.head.size
+    val denseSize = Matrices.getDenseSize(numCols, numRows)
+    val nnz = vectors.iterator.map(_.numNonzeros).sum
+    val sparseSize = Matrices.getSparseSize(nnz, numRows + 1)
+    if (denseSize < sparseSize) {
+      val values = Array.ofDim[Double](numRows * numCols)
+      var offset = 0
+      var j = 0
+      while (j < numRows) {
+        vectors(j).foreachNonZero { (i, v) =>
+          values(offset + i) = v
+        }
+        offset += numCols
+        j += 1
+      }
+      new DenseMatrix(numRows, numCols, values, true)
+    } else {
+      val colIndices = MArrayBuilder.make[Int]
+      val values = MArrayBuilder.make[Double]
+      val rowPtrs = MArrayBuilder.make[Int]
+      var rowPtr = 0
+      rowPtrs += 0
+      var j = 0
+      while (j < numRows) {
+        var nnz = 0
+        vectors(j).foreachNonZero { (i, v) =>
+          colIndices += i
+          values += v
+          nnz += 1
+        }
+        rowPtr += nnz
+        rowPtrs += rowPtr
+        j += 1
+      }
+      new SparseMatrix(numRows, numCols, rowPtrs.result(),
+        colIndices.result(), values.result(), true)
+    }
+  }
+
   /**
    * Creates a column-major dense matrix.
    *

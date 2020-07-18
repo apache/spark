@@ -37,12 +37,6 @@ import org.apache.spark.util.collection.OpenHashMap
 @Since("3.1.0")
 object ANOVATest {
 
-  /** Used to construct output schema of tests */
-  private case class ANOVAResult(
-      pValues: Vector,
-      degreesOfFreedom: Array[Long],
-      fValues: Vector)
-
   /**
    * @param dataset  DataFrame of categorical labels and continuous features.
    * @param featuresCol  Name of features column in dataset, of type `Vector` (`VectorUDT`)
@@ -56,25 +50,53 @@ object ANOVATest {
    */
   @Since("3.1.0")
   def test(dataset: DataFrame, featuresCol: String, labelCol: String): DataFrame = {
-    val spark = dataset.sparkSession
-    val testResults = testClassification(dataset, featuresCol, labelCol)
-    val pValues = Vectors.dense(testResults.map(_.pValue))
-    val degreesOfFreedom = testResults.map(_.degreesOfFreedom)
-    val fValues = Vectors.dense(testResults.map(_.statistic))
-    spark.createDataFrame(Seq(ANOVAResult(pValues, degreesOfFreedom, fValues)))
+    test(dataset, featuresCol, labelCol, false)
   }
 
   /**
    * @param dataset  DataFrame of categorical labels and continuous features.
    * @param featuresCol  Name of features column in dataset, of type `Vector` (`VectorUDT`)
    * @param labelCol  Name of label column in dataset, of any numerical type
-   * @return Array containing the ANOVATestResult for every feature against the
-   *         label.
+   * @param flatten  If false, the returned DataFrame contains only a single Row, otherwise, one
+   *                 row per feature.
+   */
+  @Since("3.1.0")
+  def test(
+      dataset: DataFrame,
+      featuresCol: String,
+      labelCol: String,
+      flatten: Boolean): DataFrame = {
+    val spark = dataset.sparkSession
+    import spark.implicits._
+
+    val resultDF = testClassification(dataset, featuresCol, labelCol)
+      .toDF("featureIndex", "pValue", "degreesOfFreedom", "fValue")
+
+    if (flatten) {
+      resultDF
+    } else {
+      resultDF.groupBy()
+        .agg(collect_list(struct("*")))
+        .as[Seq[(Int, Double, Long, Double)]]
+        .map { seq =>
+          val results = seq.toArray.sortBy(_._1)
+          val pValues = Vectors.dense(results.map(_._2))
+          val degreesOfFreedom = results.map(_._3)
+          val fValues = Vectors.dense(results.map(_._4))
+          (pValues, degreesOfFreedom, fValues)
+        }.toDF("pValues", "degreesOfFreedom", "fValues")
+    }
+  }
+
+  /**
+   * @param dataset  DataFrame of categorical labels and continuous features.
+   * @param featuresCol  Name of features column in dataset, of type `Vector` (`VectorUDT`)
+   * @param labelCol  Name of label column in dataset, of any numerical type
    */
   private[ml] def testClassification(
       dataset: Dataset[_],
       featuresCol: String,
-      labelCol: String): Array[SelectionTestResult] = {
+      labelCol: String): RDD[(Int, Double, Long, Double)] = {
     val spark = dataset.sparkSession
     import spark.implicits._
 
@@ -94,7 +116,7 @@ object ANOVATest {
 
   private def testClassificationDenseFeatures(
       points: RDD[(Double, Vector)],
-      numFeatures: Int): Array[SelectionTestResult] = {
+      numFeatures: Int): RDD[(Int, Double, Long, Double)] = {
     points.flatMap { case (label, features) =>
       require(features.size == numFeatures,
         s"Number of features must be $numFeatures but got ${features.size}")
@@ -115,17 +137,16 @@ object ANOVATest {
           counts2.foreach { case (v, w) => counts1.changeValue(v, w, _ + w) }
           (sum1 + sum2, sumOfSq1 + sumOfSq2, sums1, counts1)
       }
-    ).mapValues { case (sum, sumOfSq, sums, counts) =>
-      computeANOVA(sum, sumOfSq, sums.toMap, counts.toMap)
-    }.collect().sortBy(_._1).map {
-      case (_, (pValue, degreesOfFreedom, fValue)) =>
-        new ANOVATestResult(pValue, degreesOfFreedom, fValue)
+    ).map { case (col, (sum, sumOfSq, sums, counts)) =>
+      val (pValue, degreesOfFreedom, fValue) =
+        computeANOVA(sum, sumOfSq, sums.toMap, counts.toMap)
+      (col, pValue, degreesOfFreedom, fValue)
     }
   }
 
   private def testClassificationSparseFeatures(
       points: RDD[(Double, Vector)],
-      numFeatures: Int): Array[SelectionTestResult] = {
+      numFeatures: Int): RDD[(Int, Double, Long, Double)] = {
     val counts = points.map(_._1).countByValue().toMap
 
     val numParts = points.getNumPartitions
@@ -136,9 +157,7 @@ object ANOVATest {
         features.nonZeroIterator.map { case (col, value) => (col, (label, value)) }
       } ++ {
         // append this to make sure that all columns are taken into account
-        Iterator.range(0, numFeatures)
-          .filter(_ % numParts == pid)
-          .map(col => (col, null))
+        Iterator.range(pid, numFeatures, numParts).map(col => (col, null))
       }
     }.aggregateByKey[(Double, Double, OpenHashMap[Double, Double])](
       (0.0, 0.0, new OpenHashMap[Double, Double]))(
@@ -158,15 +177,14 @@ object ANOVATest {
           sums2.foreach { case (v, w) => sums1.changeValue(v, w, _ + w) }
           (sum1 + sum2, sumOfSq1 + sumOfSq2, sums1)
       }
-    ).mapValues { case (sum, sumOfSq, sums) =>
+    ).map { case (col, (sum, sumOfSq, sums)) =>
       counts.keysIterator.foreach { label =>
         // adjust sums if all related feature values are 0 for some label
         if (!sums.contains(label)) sums.update(label, 0.0)
       }
-      computeANOVA(sum, sumOfSq, sums.toMap, counts)
-    }.collect().sortBy(_._1).map {
-      case (_, (pValue, degreesOfFreedom, fValue)) =>
-        new ANOVATestResult(pValue, degreesOfFreedom, fValue)
+      val (pValue, degreesOfFreedom, fValue) =
+        computeANOVA(sum, sumOfSq, sums.toMap, counts)
+      (col, pValue, degreesOfFreedom, fValue)
     }
   }
 

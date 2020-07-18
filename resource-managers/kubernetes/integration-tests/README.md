@@ -17,6 +17,10 @@ To run tests with Java 11 instead of Java 8, use `--java-image-tag` to specify t
 
     ./dev/dev-run-integration-tests.sh --java-image-tag 11-jre-slim
 
+To run tests with Hadoop 3.2 instead of Hadoop 2.7, use `--hadoop-profile`.
+
+    ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-3.2
+
 The minimum tested version of Minikube is 0.23.0. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
 

@@ -61,26 +61,28 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("rank functions in unspecific window") {
-    val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        $"key",
-        max("key").over(Window.partitionBy("value").orderBy("key")),
-        min("key").over(Window.partitionBy("value").orderBy("key")),
-        mean("key").over(Window.partitionBy("value").orderBy("key")),
-        count("key").over(Window.partitionBy("value").orderBy("key")),
-        sum("key").over(Window.partitionBy("value").orderBy("key")),
-        ntile(2).over(Window.partitionBy("value").orderBy("key")),
-        row_number().over(Window.partitionBy("value").orderBy("key")),
-        dense_rank().over(Window.partitionBy("value").orderBy("key")),
-        rank().over(Window.partitionBy("value").orderBy("key")),
-        cume_dist().over(Window.partitionBy("value").orderBy("key")),
-        percent_rank().over(Window.partitionBy("value").orderBy("key"))),
-      Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d) ::
-        Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
-        Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
-        Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
+    withTempView("window_table") {
+      val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      checkAnswer(
+        df.select(
+          $"key",
+          max("key").over(Window.partitionBy("value").orderBy("key")),
+          min("key").over(Window.partitionBy("value").orderBy("key")),
+          mean("key").over(Window.partitionBy("value").orderBy("key")),
+          count("key").over(Window.partitionBy("value").orderBy("key")),
+          sum("key").over(Window.partitionBy("value").orderBy("key")),
+          ntile(2).over(Window.partitionBy("value").orderBy("key")),
+          row_number().over(Window.partitionBy("value").orderBy("key")),
+          dense_rank().over(Window.partitionBy("value").orderBy("key")),
+          rank().over(Window.partitionBy("value").orderBy("key")),
+          cume_dist().over(Window.partitionBy("value").orderBy("key")),
+          percent_rank().over(Window.partitionBy("value").orderBy("key"))),
+        Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d) ::
+          Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
+          Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
+          Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
+    }
   }
 
   test("window function should fail if order by clause is not specified") {
@@ -348,15 +350,17 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("SPARK-16195 empty over spec") {
-    val df = Seq(("a", 1), ("a", 1), ("a", 2), ("b", 2)).
-      toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select($"key", $"value", sum($"value").over(), avg($"value").over()),
-      Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
-    checkAnswer(
-      sql("select key, value, sum(value) over(), avg(value) over() from window_table"),
-      Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+    withTempView("window_table") {
+      val df = Seq(("a", 1), ("a", 1), ("a", 2), ("b", 2)).
+        toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      checkAnswer(
+        df.select($"key", $"value", sum($"value").over(), avg($"value").over()),
+        Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+      checkAnswer(
+        sql("select key, value, sum(value) over(), avg(value) over() from window_table"),
+        Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+    }
   }
 
   test("window function with udaf") {
@@ -548,37 +552,41 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("aggregation and rows between with unbounded + predicate pushdown") {
-    val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    val selectList = Seq($"key", $"value",
-      last("key").over(
-        Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
-      last("key").over(
-        Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
-      last("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1)))
+    withTempView("window_table") {
+      val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      val selectList = Seq($"key", $"value",
+        last("key").over(
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
+        last("key").over(
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
+        last("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1)))
 
-    checkAnswer(
-      df.select(selectList: _*).where($"value" < "3"),
-      Seq(Row(1, "1", 1, 1, 1), Row(2, "2", 3, 2, 3), Row(3, "2", 3, 3, 3)))
+      checkAnswer(
+        df.select(selectList: _*).where($"value" < "3"),
+        Seq(Row(1, "1", 1, 1, 1), Row(2, "2", 3, 2, 3), Row(3, "2", 3, 3, 3)))
+    }
   }
 
   test("aggregation and range between with unbounded + predicate pushdown") {
-    val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    val selectList = Seq($"key", $"value",
-      last("value").over(
-        Window.partitionBy($"value").orderBy($"key").rangeBetween(-2, -1)).equalTo("2")
-        .as("last_v"),
-      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))
-        .as("avg_key1"),
-      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, Long.MaxValue))
-        .as("avg_key2"),
-      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 1))
-        .as("avg_key3"))
+    withTempView("window_table") {
+      val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      val selectList = Seq($"key", $"value",
+        last("value").over(
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(-2, -1)).equalTo("2")
+          .as("last_v"),
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))
+          .as("avg_key1"),
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, Long.MaxValue))
+          .as("avg_key2"),
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 1))
+          .as("avg_key3"))
 
-    checkAnswer(
-      df.select(selectList: _*).where($"value" < 2),
-      Seq(Row(3, "1", null, 3.0, 4.0, 3.0), Row(5, "1", false, 4.0, 5.0, 5.0)))
+      checkAnswer(
+        df.select(selectList: _*).where($"value" < 2),
+        Seq(Row(3, "1", null, 3.0, 4.0, 3.0), Row(5, "1", false, 4.0, 5.0, 5.0)))
+    }
   }
 
   test("Window spill with less than the inMemoryThreshold") {
@@ -665,40 +673,46 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("SPARK-24575: Window functions inside WHERE and HAVING clauses") {
-    def checkAnalysisError(df: => DataFrame): Unit = {
+    def checkAnalysisError(df: => DataFrame, clause: String): Unit = {
       val thrownException = the[AnalysisException] thrownBy {
         df.queryExecution.analyzed
       }
-      assert(thrownException.message.contains("window functions inside WHERE and HAVING clauses"))
+      assert(thrownException.message.contains(s"window functions inside $clause clause"))
     }
 
-    checkAnalysisError(testData2.select("a").where(rank().over(Window.orderBy($"b")) === 1))
-    checkAnalysisError(testData2.where($"b" === 2 && rank().over(Window.orderBy($"b")) === 1))
+    checkAnalysisError(
+      testData2.select("a").where(rank().over(Window.orderBy($"b")) === 1), "WHERE")
+    checkAnalysisError(
+      testData2.where($"b" === 2 && rank().over(Window.orderBy($"b")) === 1), "WHERE")
     checkAnalysisError(
       testData2.groupBy($"a")
         .agg(avg($"b").as("avgb"))
-        .where($"a" > $"avgb" && rank().over(Window.orderBy($"a")) === 1))
+        .where($"a" > $"avgb" && rank().over(Window.orderBy($"a")) === 1), "WHERE")
     checkAnalysisError(
       testData2.groupBy($"a")
         .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
-        .where(rank().over(Window.orderBy($"a")) === 1))
+        .where(rank().over(Window.orderBy($"a")) === 1), "WHERE")
     checkAnalysisError(
       testData2.groupBy($"a")
         .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
-        .where($"sumb" === 5 && rank().over(Window.orderBy($"a")) === 1))
+        .where($"sumb" === 5 && rank().over(Window.orderBy($"a")) === 1), "WHERE")
 
-    checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"))
-    checkAnalysisError(sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"))
+    checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"), "WHERE")
     checkAnalysisError(
-      sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"))
+      sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"), "WHERE")
     checkAnalysisError(
-      sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"))
+      sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"),
+      "HAVING")
+    checkAnalysisError(
+      sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"),
+      "HAVING")
     checkAnalysisError(
       sql(
         s"""SELECT a, MAX(b)
            |FROM testData2
            |GROUP BY a
-           |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin))
+           |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin),
+      "HAVING")
   }
 
   test("window functions in multiple selects") {

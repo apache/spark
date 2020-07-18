@@ -25,19 +25,19 @@ license: |
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 CLEAR CACHE
-{% endhighlight %}
+```
 
 ### Examples
 
-{% highlight sql %}
+```sql
 CLEAR CACHE;
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
- * [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
- * [REFRESH TABLE](sql-ref-syntax-aux-refresh-table.html)
- * [REFRESH](sql-ref-syntax-aux-cache-refresh.html)
+* [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+* [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
+* [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
+* [REFRESH](sql-ref-syntax-aux-cache-refresh.html)

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.time.{Instant, LocalDate}
+
 import org.apache.orc.storage.common.`type`.HiveDecimal
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
@@ -24,6 +26,7 @@ import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -162,6 +165,10 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       value.asInstanceOf[Number].doubleValue()
     case _: DecimalType =>
       new HiveDecimalWritable(HiveDecimal.create(value.asInstanceOf[java.math.BigDecimal]))
+    case _: DateType if value.isInstanceOf[LocalDate] =>
+      toJavaDate(localDateToDays(value.asInstanceOf[LocalDate]))
+    case _: TimestampType if value.isInstanceOf[Instant] =>
+      toJavaTimestamp(instantToMicros(value.asInstanceOf[Instant]))
     case _ => value
   }
 

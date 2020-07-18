@@ -39,7 +39,7 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
     val allMetrics = Set(
       "openBlockRequestLatencyMillis", "registerExecutorRequestLatencyMillis",
       "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections",
-      "numRegisteredConnections", "numCaughtExceptions")
+      "numCaughtExceptions")
 
     metrics.getMetrics.keySet().asScala should be (allMetrics)
   }

@@ -21,6 +21,7 @@ import java.io.{File, FileNotFoundException}
 import java.net.URI
 
 import scala.collection.mutable
+import scala.concurrent.duration._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem, RemoteIterator}
@@ -33,7 +34,7 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.KnownSizeEstimation
@@ -487,6 +488,31 @@ class FileIndexSuite extends SharedSparkSession {
     })
     val fileIndex = new TestInMemoryFileIndex(spark, path)
     assert(fileIndex.leafFileStatuses.toSeq == statuses)
+  }
+
+  test("expire FileStatusCache if TTL is configured") {
+    val previousValue = SQLConf.get.getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
+    try {
+      // using 'SQLConf.get.setConf' instead of 'withSQLConf' to set a static config at runtime
+      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
+
+      val path = new Path("/dummy_tmp", "abc")
+      val files = (1 to 3).map(_ => new FileStatus())
+
+      FileStatusCache.resetForTesting()
+      val fileStatusCache = FileStatusCache.getOrCreate(spark)
+      fileStatusCache.putLeafFiles(path, files.toArray)
+
+      // Exactly 3 files are cached.
+      assert(fileStatusCache.getLeafFiles(path).get.length === 3)
+      // Wait until the cache expiration.
+      eventually(timeout(3.seconds)) {
+        // And the cache is gone.
+        assert(fileStatusCache.getLeafFiles(path).isEmpty === true)
+      }
+    } finally {
+      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, previousValue)
+    }
   }
 }
 

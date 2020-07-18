@@ -176,6 +176,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   public synchronized void start() {
     super.start();
     if (!isStarted && !isEmbedded) {
+      initializeServer();
       new Thread(this).start();
       isStarted = true;
     }
@@ -565,7 +566,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       if (opException != null) {
         resp.setSqlState(opException.getSQLState());
         resp.setErrorCode(opException.getErrorCode());
-        resp.setErrorMessage(opException.getMessage());
+        resp.setErrorMessage(org.apache.hadoop.util.StringUtils
+            .stringifyException(opException));
       }
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {
@@ -669,6 +671,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     }
     return resp;
   }
+
+  protected abstract void initializeServer();
 
   @Override
   public abstract void run();

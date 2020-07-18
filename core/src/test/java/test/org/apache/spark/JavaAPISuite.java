@@ -73,6 +73,10 @@ import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.rdd.RDD;
+import org.apache.spark.resource.ExecutorResourceRequests;
+import org.apache.spark.resource.ResourceProfile;
+import org.apache.spark.resource.ResourceProfileBuilder;
+import org.apache.spark.resource.TaskResourceRequests;
 import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.LongAccumulator;
@@ -245,6 +249,34 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(new Tuple2<>(0, 5), new Tuple2<>(0, 8), new Tuple2<>(2, 6)));
     assertEquals(partitions.get(1),
         Arrays.asList(new Tuple2<>(1, 3), new Tuple2<>(3, 8), new Tuple2<>(3, 8)));
+  }
+
+  @Test
+  public void filterByRange() {
+    List<Tuple2<Integer, Integer>> pairs = new ArrayList<>();
+    pairs.add(new Tuple2<>(0, 5));
+    pairs.add(new Tuple2<>(1, 8));
+    pairs.add(new Tuple2<>(2, 6));
+    pairs.add(new Tuple2<>(3, 8));
+    pairs.add(new Tuple2<>(4, 8));
+
+    JavaPairRDD<Integer, Integer> rdd = sc.parallelizePairs(pairs).sortByKey();
+
+    // Default comparator
+    JavaPairRDD<Integer, Integer> filteredRDD = rdd.filterByRange(3, 11);
+    List<Tuple2<Integer, Integer>> filteredPairs = filteredRDD.collect();
+    assertEquals(filteredPairs.size(), 2);
+    assertEquals(filteredPairs.get(0), new Tuple2<>(3, 8));
+    assertEquals(filteredPairs.get(1), new Tuple2<>(4, 8));
+
+    // Custom comparator
+    filteredRDD = rdd.filterByRange(Collections.reverseOrder(), 3, -2);
+    filteredPairs = filteredRDD.collect();
+    assertEquals(filteredPairs.size(), 4);
+    assertEquals(filteredPairs.get(0), new Tuple2<>(0, 5));
+    assertEquals(filteredPairs.get(1), new Tuple2<>(1, 8));
+    assertEquals(filteredPairs.get(2), new Tuple2<>(2, 6));
+    assertEquals(filteredPairs.get(3), new Tuple2<>(3, 8));
   }
 
   @Test
@@ -895,6 +927,16 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     rdd = rdd.persist(StorageLevel.DISK_ONLY());
     assertEquals(1, rdd.first().intValue());
+  }
+
+  @Test
+  public void withResources() {
+    ExecutorResourceRequests ereqs = new ExecutorResourceRequests().cores(4);
+    TaskResourceRequests treqs = new TaskResourceRequests().cpus(1);
+    ResourceProfile rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build();
+    JavaRDD<Integer> in1 = sc.parallelize(Arrays.asList(1, 2, 3, 4));
+    in1.withResources(rp1);
+    assertEquals(rp1, in1.getResourceProfile());
   }
 
   @Test

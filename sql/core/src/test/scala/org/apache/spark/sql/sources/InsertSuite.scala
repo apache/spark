@@ -524,15 +524,17 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("new partitions should be added to catalog after writing to catalog table") {
     val table = "partitioned_catalog_table"
+    val tempTable = "partitioned_catalog_temp_table"
     val numParts = 210
     withTable(table) {
-      val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
-      val tempTable = "partitioned_catalog_temp_table"
-      df.createOrReplaceTempView(tempTable)
-      sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
-      sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
-      val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
-      assert(partitions.size == numParts)
+      withTempView(tempTable) {
+        val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
+        df.createOrReplaceTempView(tempTable)
+        sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
+        sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
+        val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
+        assert(partitions.size == numParts)
+      }
     }
   }
 
@@ -621,12 +623,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[AnalysisException] {
           sql("insert into t select 1L, 2")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
 
         msg = intercept[AnalysisException] {
           sql("insert into t select 1, 2.0")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'd': DecimalType(2,1) to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'd': decimal(2,1) to double"))
 
         msg = intercept[AnalysisException] {
           sql("insert into t select 1, 2.0D, 3")
@@ -658,18 +660,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[AnalysisException] {
           sql("insert into t values('a', 'b')")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': string to int") &&
+          msg.contains("Cannot safely cast 'd': string to double"))
         msg = intercept[AnalysisException] {
           sql("insert into t values(now(), now())")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': TimestampType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': TimestampType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': timestamp to int") &&
+          msg.contains("Cannot safely cast 'd': timestamp to double"))
         msg = intercept[AnalysisException] {
           sql("insert into t values(true, false)")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
+          msg.contains("Cannot safely cast 'd': boolean to double"))
       }
     }
   }
