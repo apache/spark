@@ -112,7 +112,6 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
               .map(CatalystTypeConverters.convertToCatalyst))
       }
 
-
       override def hasNext: Boolean = {
         try {
           if (curLine == null) {

@@ -205,7 +205,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-32106: TRANSFORM should handle different data types correctly") {
+  test("SPARK-32106: TRANSFORM should support more data types (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
     case class Struct(d: Int, str: String)
     withTempView("v") {
