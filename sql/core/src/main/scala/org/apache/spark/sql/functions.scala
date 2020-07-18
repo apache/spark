@@ -3402,9 +3402,8 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    */
-  def slice(x: Column, start: Int, length: Int): Column = withExpr {
-    Slice(x.expr, Literal(start), Literal(length))
-  }
+  def slice(x: Column, start: Int, length: Int): Column =
+    slice(x, lit(start), lit(length))
 
   /**
    * Returns an array containing all the elements in `x` from index `start` (or starting from the
