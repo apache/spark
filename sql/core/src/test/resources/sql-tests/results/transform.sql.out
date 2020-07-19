@@ -61,7 +61,7 @@ Subprocess exited with status 2. Error: python: can't open file 'some_non_existe
 -- !query
 SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j FROM (
     SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j)
-    USING 'CAT' AS (a string, b boolean, c binary, d tinyint, e long, f float, g double, h decimal(38, 18), i timestamp, j date)
+    USING 'cat' AS (a string, b boolean, c binary, d tinyint, e long, f float, g double, h decimal(38, 18), i timestamp, j date)
     FROM t2
 ) tmp
 -- !query schema
@@ -74,7 +74,7 @@ struct<a:string,b:boolean,decode(c, UTF-8):string,d:tinyint,e:bigint,f:float,g:d
 
 -- !query
 SELECT TRANSFORM(a, b)
-USING 'CAT'
+USING 'cat'
 FROM t2
 -- !query schema
 struct<key:string,value:string>

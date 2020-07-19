@@ -28,14 +28,14 @@ FROM t1;
 -- support different data type
 SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j FROM (
     SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j)
-    USING 'CAT' AS (a string, b boolean, c binary, d tinyint, e long, f float, g double, h decimal(38, 18), i timestamp, j date)
+    USING 'cat' AS (a string, b boolean, c binary, d tinyint, e long, f float, g double, h decimal(38, 18), i timestamp, j date)
     FROM t2
 ) tmp;
 
 
 -- handle schema less
 SELECT TRANSFORM(a, b)
-USING 'CAT'
+USING 'cat'
 FROM t2;
 
 -- return null when return string incompatible(no serde)
