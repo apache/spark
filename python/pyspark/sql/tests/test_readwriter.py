@@ -19,6 +19,8 @@ import os
 import shutil
 import tempfile
 
+from pyspark.sql.functions import col
+from pyspark.sql.readwriter import DataFrameWriterV2
 from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -165,9 +167,6 @@ class ReadwriterTests(ReusedSQLTestCase):
 
 class ReadwriterV2Tests(ReusedSQLTestCase):
     def test_api(self):
-        from pyspark.sql.readwriter import DataFrameWriterV2
-        from pyspark.sql.functions import col
-
         df = self.df
         writer = df.writeTo("testcat.t")
         self.assertIsInstance(writer, DataFrameWriterV2)
@@ -179,11 +178,10 @@ class ReadwriterV2Tests(ReusedSQLTestCase):
 
     def test_partitioning_functions(self):
         import datetime
-        from pyspark.sql.readwriter import DataFrameWriterV2
-        from pyspark.sql.functions import col, years, months, days, hours, bucket
+        from pyspark.sql.functions import years, months, days, hours, bucket
 
         df = self.spark.createDataFrame(
-            [(1, datetime.datetime.now(), "foo")],
+            [(1, datetime.datetime(2000, 1, 1), "foo")],
             ("id", "ts", "value")
         )
 
