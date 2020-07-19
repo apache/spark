@@ -2644,13 +2644,15 @@ object SQLConf {
         "the side with a bigger number of buckets will be coalesced to have the same number " +
         "of buckets as the other side. Bigger number of buckets is divisible by the smaller " +
         "number of buckets. Bucket coalescing is applied to sort-merge joins and " +
+        "shuffled hash join. Note: Coalescing bucketed table can avoid unnecessary shuffling " +
+        "in join, but it also reduces parallelism and could possibly cause OOM for " +
         "shuffled hash join.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 
-  val COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO =
-    buildConf("spark.sql.bucketing.coalesceBucketsInSortMergeJoin.maxBucketRatio")
+  val COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO =
+    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.maxBucketRatio")
       .doc("The ratio of the number of two buckets being coalesced should be less than or " +
         "equal to this value for bucket coalescing to be applied. This configuration only " +
         s"has an effect when '${COALESCE_BUCKETS_IN_JOIN_ENABLED.key}' is set to true.")
@@ -2681,7 +2683,7 @@ object SQLConf {
       .intConf
       .checkValue(_ >= 0, "The value must be non-negative.")
       .createWithDefault(8)
-
+  
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3284,11 +3286,8 @@ class SQLConf extends Serializable with Logging {
 
   def coalesceBucketsInJoinEnabled: Boolean = getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED)
 
-  def coalesceBucketsInSortMergeJoinMaxBucketRatio: Int =
-    getConf(SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_MAX_BUCKET_RATIO)
-
-  def coalesceBucketsInShuffledHashJoinMaxBucketRatio: Int =
-    getConf(SQLConf.COALESCE_BUCKETS_IN_SHUFFLED_HASH_JOIN_MAX_BUCKET_RATIO)
+  def coalesceBucketsInJoinMaxBucketRatio: Int =
+    getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
 
   /** ********************** SQLConf functionality methods ************ */
 
