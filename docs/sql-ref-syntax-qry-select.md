@@ -31,10 +31,10 @@ of a query along with examples.
 ```sql
 [ WITH with_query [ , ... ] ]
 select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_statement, ... ]
-    [ ORDER BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
-    [ SORT BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ...] } ]
-    [ CLUSTER BY { expression [ , ...] } ]
-    [ DISTRIBUTE BY { expression [, ...] } ]
+    [ ORDER BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ... ] } ]
+    [ SORT BY { expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ... ] } ]
+    [ CLUSTER BY { expression [ , ... ] } ]
+    [ DISTRIBUTE BY { expression [, ... ] } ]
     [ WINDOW { named_window [ , WINDOW named_window, ... ] } ]
     [ LIMIT { ALL | expression } ]
 ```
@@ -42,11 +42,11 @@ select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_stat
 While `select_statement` is defined as
 ```sql
 SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
-    FROM { from_item [ , ...] }
+    FROM { from_item [ , ... ] }
     [ PIVOT clause ]
     [ LATERAL VIEW clause ] [ ... ] 
     [ WHERE boolean_expression ]
-    [ GROUP BY expression [ , ...] ]
+    [ GROUP BY expression [ , ... ] ]
     [ HAVING boolean_expression ]
 ```
 
@@ -88,11 +88,11 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
      
   * **PIVOT**
 
-     `PIVOT` clause is used for data perspective, we can get the aggregated values based on specific column value.
+     The `PIVOT` clause is used for data perspective; We can get the aggregated values based on specific column value.
 
  * **LATERAL VIEW**
      
-     `LATERAL VIEW` clause is used in conjunction with generator functions such as explode(), which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
+     The `LATERAL VIEW` clause is used in conjunction with generator functions such as explode(), which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
  
  * **WHERE**
 
@@ -146,8 +146,8 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
 
  * **named_window**
 
-      Specifies aliases for one or more source window specifications. The source window specifications can
-      be referenced in the widow definitions in the query.
+     Specifies aliases for one or more source window specifications. The source window specifications can
+     be referenced in the widow definitions in the query.
 
 ### Related Statements
 

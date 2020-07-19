@@ -38,7 +38,7 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ AS select_statement ]
 
 row_format:    
-    : SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ...) ]
+    : SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ]
     | DELIMITED [ FIELDS TERMINATED BY fields_termiated_char [ ESCAPED BY escaped_char ] ] 
         [ COLLECTION ITEMS TERMINATED BY collection_items_termiated_char ] 
         [ MAP KEYS TERMINATED BY map_key_termiated_char ]
@@ -67,47 +67,47 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     
 * **row_format**    
 
-    Use the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character, and so on.
+    Use the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
     
 * **SERDE**
 
-    `SERDE` clause can be used to specify a custom `SerDe` for one table.
+    Specifies a custom SerDe for one table.
     
 * **serde_class**
 
-    Specify a fully-qualified class name of a custom SerDe.
+    Specifies a fully-qualified class name of a custom SerDe.
 
 * **SERDEPROPERTIES**
 
-    A list of key-value pairs that is used to tag the serde definition.
+    A list of key-value pairs that is used to tag the SerDe definition.
     
 * **DELIMITED**
 
-    `DELIMITED` clause can be used to specify the native `SerDe` and state the delimiter, escape character, null character, and so on.
+    The `DELIMITED` clause can be used to specify the native SerDe and state the delimiter, escape character, null character and so on.
     
 * **FIELDS TERMINATED BY**
 
-    It is used to define a column separator.
+    Used to define a column separator.
     
 * **COLLECTION ITEMS TERMINATED BY**
 
-    It is used to define a collection item separator.
+    Used to define a collection item separator.
    
 * **MAP KEYS TERMINATED BY**
 
-    It is used to define a map key separator.
+    Used to define a map key separator.
     
 * **LINES TERMINATED BY**
 
-    It is used to define a row separator.
+    Used to define a row separator.
     
 * **NULL DEFINED AS**
 
-    It is used to define the specific value for NULL.
+    Used to define the specific value for NULL.
     
 * **ESCAPED BY**
 
-    It is used for escape mechanism.
+    Used for escape mechanism.
 
 * **STORED AS**
 
@@ -194,7 +194,7 @@ CREATE TABLE avroExample
                 { "name":"string2", "type":"string" }
             ] }');
 
---Use personalized custom serde(we may need to `ADD JAR xxx.jar` first to ensure we can find the serde_class, or you may run into `CLASSNOTFOUND` exception)
+--Use personalized custom SerDe(we may need to `ADD JAR xxx.jar` first to ensure we can find the serde_class, or you may run into `CLASSNOTFOUND` exception)
 ADD JAR /tmp/hive_serde_example.jar;
 CREATE EXTERNAL TABLE family (id INT, name STRING)
     ROW FORMAT SERDE 'com.ly.spark.serde.SerDeExample'

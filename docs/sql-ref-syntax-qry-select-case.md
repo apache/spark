@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-`CASE` clause uses a rule to return specific result based on the specified condition, similar to if/else statements in other programming languages.
+`CASE` clause uses a rule to return a specific result based on the specified condition, similar to if/else statements in other programming languages.
 
 ### Syntax
 
@@ -39,11 +39,11 @@ END
     
 * **then_expression**
 
-    Specifies the then expression based on the `boolean_expression` condition, `then_expression` and `else_expression` should all be same type or coercible to a common type.
+    Specifies the then expression based on the `boolean_expression` condition; `then_expression` and `else_expression` should all be same type or coercible to a common type.
     
 * **else_expression**
 
-    Specifies the default expression, `then_expression` and `else_expression` should all be same type or coercible to a common type.
+    Specifies the default expression; `then_expression` and `else_expression` should all be same type or coercible to a common type.
     
 ### Examples
 
