@@ -47,33 +47,31 @@ class OrderedFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
   private val predicates: Array[BasePredicate] = {
     val len = requiredSchema.fields.length
     val groupedPredicates = Array.fill[BasePredicate](len)(null)
-    if (SQLConf.get.csvFilterPushDown) {
-      val groupedFilters = Array.fill(len)(Seq.empty[sources.Filter])
-      for (filter <- filters) {
-        val refs = filter.references
-        val index = if (refs.isEmpty) {
-          // For example, `AlwaysTrue` and `AlwaysFalse` doesn't have any references
-          // Filters w/o refs always return the same result. Taking into account
-          // that predicates are combined via `And`, we can apply such filters only
-          // once at the position 0.
-          0
-        } else {
-          // readSchema must contain attributes of all filters.
-          // Accordingly, `fieldIndex()` returns a valid index always.
-          refs.map(requiredSchema.fieldIndex).max
-        }
-        groupedFilters(index) :+= filter
+    val groupedFilters = Array.fill(len)(Seq.empty[sources.Filter])
+    for (filter <- filters) {
+      val refs = filter.references
+      val index = if (refs.isEmpty) {
+        // For example, `AlwaysTrue` and `AlwaysFalse` doesn't have any references
+        // Filters w/o refs always return the same result. Taking into account
+        // that predicates are combined via `And`, we can apply such filters only
+        // once at the position 0.
+        0
+      } else {
+        // readSchema must contain attributes of all filters.
+        // Accordingly, `fieldIndex()` returns a valid index always.
+        refs.map(requiredSchema.fieldIndex).max
       }
-      if (len > 0 && !groupedFilters(0).isEmpty) {
-        // We assume that filters w/o refs like `AlwaysTrue` and `AlwaysFalse`
-        // can be evaluated faster that others. We put them in front of others.
-        val (literals, others) = groupedFilters(0).partition(_.references.isEmpty)
-        groupedFilters(0) = literals ++ others
-      }
-      for (i <- 0 until len) {
-        if (!groupedFilters(i).isEmpty) {
-          groupedPredicates(i) = toPredicate(groupedFilters(i))
-        }
+      groupedFilters(index) :+= filter
+    }
+    if (len > 0 && !groupedFilters(0).isEmpty) {
+      // We assume that filters w/o refs like `AlwaysTrue` and `AlwaysFalse`
+      // can be evaluated faster that others. We put them in front of others.
+      val (literals, others) = groupedFilters(0).partition(_.references.isEmpty)
+      groupedFilters(0) = literals ++ others
+    }
+    for (i <- 0 until len) {
+      if (!groupedFilters(i).isEmpty) {
+        groupedPredicates(i) = toPredicate(groupedFilters(i))
       }
     }
     groupedPredicates
