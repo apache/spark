@@ -2559,10 +2559,11 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-32347: cte hint regression") {
+  test("SPARK-32347: cte hint should be resolved in Hints batch rule") {
     withTempView("t") {
       sql("create temporary view t as select 1 as id")
       sql("with cte as (select /*+ BROADCAST(id) */ id from t) select id from cte")
+      sql("with cte as (select /*+ COALESCE(3) */ id from t) select id from cte")
     }
   }
 }
