@@ -223,7 +223,9 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           new Date(2020, 7, 3), new CalendarInterval(7, 3, 3000), Array(6, 7, 8),
           Map("c" -> 3), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L))
       ).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l")
-        .select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l, struct('a, 'b).as("m"))
+        .select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l,
+          struct('a, 'b).as("m"), unhex('a).as("n"), lit(true).as("o")
+        )
       // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
@@ -243,7 +245,9 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           StructField("l", new SimpleTupleUDT, true),
           StructField("m", StructType(
             Seq(StructField("a", IntegerType, false),
-              StructField("b", StringType, true))), false))))
+              StructField("b", StringType, true))), false),
+          StructField("n", BinaryType, true),
+          StructField("o", BooleanType, false))))
 
       // Can't support convert script output data to ArrayType/MapType/StructType now,
       // return these column still as string.
@@ -266,7 +270,9 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             df.col("j").expr,
             df.col("k").expr,
             df.col("l").expr,
-            df.col("m").expr),
+            df.col("m").expr,
+            df.col("n").expr,
+            df.col("o").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", IntegerType)(),
@@ -281,7 +287,9 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             AttributeReference("j", StringType)(),
             AttributeReference("k", StringType)(),
             AttributeReference("l", new SimpleTupleUDT)(),
-            AttributeReference("m", StringType)()),
+            AttributeReference("m", StringType)(),
+            AttributeReference("n", BinaryType)(),
+            AttributeReference("o", BooleanType)()),
           child = child,
           ioschema = defaultIOSchema
         ),
@@ -290,7 +298,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           'i.cast("string"),
           'j.cast("string"),
           'k.cast("string"),
-          'l, 'm.cast("string")).collect())
+          'l, 'm.cast("string"), 'n, 'o).collect())
     }
   }
 

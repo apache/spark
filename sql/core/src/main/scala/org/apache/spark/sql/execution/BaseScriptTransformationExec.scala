@@ -175,7 +175,9 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
       case StringType => wrapperConvertException(data => data, converter)
+      case BooleanType => wrapperConvertException(data => data.toBoolean, converter)
       case ByteType => wrapperConvertException(data => data.toByte, converter)
+      case BinaryType => wrapperConvertException(data => data.getBytes, converter)
       case IntegerType => wrapperConvertException(data => data.toInt, converter)
       case ShortType => wrapperConvertException(data => data.toShort, converter)
       case LongType => wrapperConvertException(data => data.toLong, converter)
