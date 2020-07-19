@@ -154,19 +154,7 @@ public class LevelDB implements KVStore {
     try (WriteBatch batch = db().createWriteBatch()) {
       byte[] data = serializer.serialize(value);
       synchronized (ti) {
-        Object existing;
-        try {
-          existing = get(ti.naturalIndex().entityKey(null, value), value.getClass());
-        } catch (NoSuchElementException e) {
-          existing = null;
-        }
-
-        PrefixCache cache = new PrefixCache(value);
-        byte[] naturalKey = ti.naturalIndex().toKey(ti.naturalIndex().getValue(value));
-        for (LevelDBTypeInfo.Index idx : ti.indices()) {
-          byte[] prefix = cache.getPrefix(idx);
-          idx.add(batch, value, existing, data, naturalKey, prefix);
-        }
+        updateBatch(batch, value, data, value.getClass(), ti.naturalIndex(), ti.indices());
         db().write(batch);
       }
     }
@@ -201,26 +189,34 @@ public class LevelDB implements KVStore {
 
         try (WriteBatch batch = db().createWriteBatch()) {
           while (valueIter.hasNext()) {
-            final Object value = valueIter.next();
-            final byte[] serializedValue = serializedValueIter.next();
-
-            Object existing;
-            try {
-              existing = get(naturalIndex.entityKey(null, value), klass);
-            } catch (NoSuchElementException e) {
-              existing = null;
-            }
-
-            PrefixCache cache = new PrefixCache(value);
-            byte[] naturalKey = naturalIndex.toKey(naturalIndex.getValue(value));
-            for (LevelDBTypeInfo.Index idx : indices) {
-              byte[] prefix = cache.getPrefix(idx);
-              idx.add(batch, value, existing, serializedValue, naturalKey, prefix);
-            }
+            updateBatch(batch, valueIter.next(), serializedValueIter.next(), klass,
+              naturalIndex, indices);
           }
           db().write(batch);
         }
       }
+    }
+  }
+
+  private void updateBatch(
+      WriteBatch batch,
+      Object value,
+      byte[] data,
+      Class<?> klass,
+      LevelDBTypeInfo.Index naturalIndex,
+      Collection<LevelDBTypeInfo.Index> indices) throws Exception {
+    Object existing;
+    try {
+      existing = get(naturalIndex.entityKey(null, value), klass);
+    } catch (NoSuchElementException e) {
+      existing = null;
+    }
+
+    PrefixCache cache = new PrefixCache(value);
+    byte[] naturalKey = naturalIndex.toKey(naturalIndex.getValue(value));
+    for (LevelDBTypeInfo.Index idx : indices) {
+      byte[] prefix = cache.getPrefix(idx);
+      idx.add(batch, value, existing, data, naturalKey, prefix);
     }
   }
 
