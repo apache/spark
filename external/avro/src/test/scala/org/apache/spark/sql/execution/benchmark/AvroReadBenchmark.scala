@@ -225,7 +225,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
       def withFilter(configEnabled: Boolean): Unit = {
         withSQLConf(
           SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY",
-          SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
+          SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
           readback.filter($"key" === 0).noop()
         }
       }

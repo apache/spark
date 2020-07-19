@@ -33,7 +33,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{InternalRow, OrderedFilters}
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
@@ -128,11 +128,17 @@ private[sql] class AvroFileFormat extends FileFormat
           reader.asInstanceOf[DataFileReader[_]].getMetaString,
           SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
 
+        val avroFilters = if (SQLConf.get.avroFilterPushDown) {
+          new OrderedFilters(filters, requiredSchema)
+        } else {
+          new NoopFilters
+        }
+
         val deserializer = new AvroDeserializer(
           userProvidedSchema.getOrElse(reader.getSchema),
           requiredSchema,
           datetimeRebaseMode,
-          new OrderedFilters(filters, requiredSchema))
+          avroFilters)
 
         new Iterator[InternalRow] {
           private[this] var completed = false

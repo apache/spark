@@ -347,24 +347,15 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     val expectedRow = Some(InternalRow(39, UTF8String.fromString("Maxim")))
 
     checkDeserialization(avroSchema, data, expectedRow)
-    withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      checkDeserialization(
-        avroSchema,
-        data,
-        expectedRow,
-        new OrderedFilters(Seq(EqualTo("Age", 39)), sqlSchema))
-      checkDeserialization(
-        avroSchema,
-        data,
-        None,
-        new OrderedFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
-    }
-    withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> "false") {
-      checkDeserialization(
-        avroSchema,
-        data,
-        expectedRow,
-        new OrderedFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
-    }
+    checkDeserialization(
+      avroSchema,
+      data,
+      expectedRow,
+      new OrderedFilters(Seq(EqualTo("Age", 39)), sqlSchema))
+    checkDeserialization(
+      avroSchema,
+      data,
+      None,
+      new OrderedFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
   }
 }

@@ -47,7 +47,7 @@ class AvroScanBuilder (
   private var _pushedFilters: Array[Filter] = Array.empty
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    if (sparkSession.sessionState.conf.csvFilterPushDown) {
+    if (sparkSession.sessionState.conf.avroFilterPushDown) {
       _pushedFilters = StructFilters.pushedFilters(filters, dataSchema)
     }
     filters
