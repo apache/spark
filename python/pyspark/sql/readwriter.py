@@ -1115,6 +1115,14 @@ class DataFrameWriterV2(object):
         return self
 
     @since(3.1)
+    def tableProperty(self, property, value):
+        """
+        Add table property.
+        """
+        self._jwriter.tableProperty(property, value)
+        return self
+
+    @since(3.1)
     def partitionedBy(self, col, *cols):
         """
         Partition the output table created by `create`, `createOrReplace`, or `replace` using

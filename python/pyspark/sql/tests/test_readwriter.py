@@ -175,6 +175,7 @@ class ReadwriterV2Tests(ReusedSQLTestCase):
         self.assertIsInstance(writer.using("source"), DataFrameWriterV2)
         self.assertIsInstance(writer.partitionedBy("id"), DataFrameWriterV2)
         self.assertIsInstance(writer.partitionedBy(col("id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.tableProperty("foo", "bar"), DataFrameWriterV2)
 
     def test_partitioning_functions(self):
         import datetime
