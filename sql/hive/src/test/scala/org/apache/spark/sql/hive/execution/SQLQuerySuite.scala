@@ -2558,6 +2558,13 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-32347: cte hint regression") {
+    withTempView("t") {
+      sql("create temporary view t as select 1 as id")
+      sql("with cte as (select /*+ BROADCAST(id) */ id from t) select id from cte")
+    }
+  }
 }
 
 @SlowHiveTest

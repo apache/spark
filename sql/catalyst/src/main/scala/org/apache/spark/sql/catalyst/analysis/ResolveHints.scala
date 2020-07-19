@@ -20,9 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -165,6 +164,24 @@ object ResolveHints {
           hintErrorHandler.hintRelationsNotFound(h.name, h.parameters, unmatchedIdents)
           applied
         }
+      case With(child, relations) => resolveCTEHint(child,
+        relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
+        case (resolved, (name, relation)) =>
+          resolved :+ name -> apply(resolveCTEHint(relation, resolved))
+      })
+    }
+
+    def resolveCTEHint(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
+      plan resolveOperatorsDown {
+        case u: UnresolvedRelation =>
+          cteRelations.find(x => resolver(x._1, u.tableName)).map(_._2).getOrElse(u)
+        case other =>
+          // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
+          other transformExpressions {
+            case e: SubqueryExpression =>
+              e.withNewPlan(resolveCTEHint(e.plan, cteRelations))
+          }
+      }
     }
   }
 
