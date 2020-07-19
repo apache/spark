@@ -2252,7 +2252,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.writeTo("catalog.db.table").append()  # doctest: +SKIP
         >>> df.writeTo(                              # doctest: +SKIP
         ...     "catalog.db.table"
-        ... ).partitionedBy($"col").createOrReplace()
+        ... ).partitionedBy("col").createOrReplace()
         """
         return DataFrameWriterV2(self, table)
 
