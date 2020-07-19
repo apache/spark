@@ -1132,6 +1132,15 @@ class DataFrameWriterV2(object):
         It provides a coarse-grained index for skipping unnecessary data reads when queries have
         predicates on the partitioned columns. In order for partitioning to work well, the number
         of distinct values in each column should typically be less than tens of thousands.
+
+        `col` and `cols` support only the following functions:
+
+        * :py:func:`pyspark.sql.functions.years`
+        * :py:func:`pyspark.sql.functions.months`
+        * :py:func:`pyspark.sql.functions.days`
+        * :py:func:`pyspark.sql.functions.hours`
+        * :py:func:`pyspark.sql.functions.bucket`
+
         """
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
