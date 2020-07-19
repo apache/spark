@@ -326,7 +326,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     validateDeserialization(util.Arrays.asList(1, null, 3))
   }
 
-  test("filter pushdown to Avro deserializer") {
+  test("SPARK-32346: filter pushdown to Avro deserializer") {
     val schema =
       """
         |{
