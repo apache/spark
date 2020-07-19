@@ -3333,6 +3333,12 @@ def years(col):
     >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
     ...     years("ts")
     ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.years(_to_java_column(col)))
@@ -3347,6 +3353,12 @@ def months(col):
     >>> df.writeTo("catalog.db.table").partitionedBy(
     ...     months("ts")
     ... ).createOrReplace()  # doctest: +SKIP
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.months(_to_java_column(col)))
@@ -3361,6 +3373,12 @@ def days(col):
     >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
     ...     days("ts")
     ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.days(_to_java_column(col)))
@@ -3375,6 +3393,12 @@ def hours(col):
     >>> df.writeTo("catalog.db.table").partitionedBy(   # doctest: +SKIP
     ...     hours("ts")
     ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.hours(_to_java_column(col)))
@@ -3389,6 +3413,12 @@ def bucket(numBuckets, col):
     >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
     ...     bucket(42, "ts")
     ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
     """
     if not isinstance(numBuckets, (int, Column)):
         raise TypeError(
