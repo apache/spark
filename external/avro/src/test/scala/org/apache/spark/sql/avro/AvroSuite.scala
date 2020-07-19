@@ -1938,4 +1938,34 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
         normalizedOutput)
     }
   }
+
+  test("SPARK-32346: filters pushdown to Avro datasource v2") {
+    Seq(true, false).foreach { filtersPushdown =>
+      withSQLConf(SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> filtersPushdown.toString) {
+        withTempPath { dir =>
+          Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
+            .toDF("value", "p1", "p2")
+            .write
+            .format("avro")
+            .save(dir.getCanonicalPath)
+          val df = spark
+            .read
+            .format("avro")
+            .load(dir.getCanonicalPath)
+            .where("value = 'a'")
+
+          val fileScan = df.queryExecution.executedPlan collectFirst {
+            case BatchScanExec(_, f: AvroScan) => f
+          }
+          assert(fileScan.nonEmpty)
+          if (filtersPushdown) {
+            assert(fileScan.get.pushedFilters.nonEmpty)
+          } else {
+            assert(fileScan.get.pushedFilters.isEmpty)
+          }
+          checkAnswer(df, Row("a", 1, 2))
+        }
+      }
+    }
+  }
 }
