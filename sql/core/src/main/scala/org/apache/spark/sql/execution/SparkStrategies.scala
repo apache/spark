@@ -232,15 +232,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
           .getOrElse(createJoinWithoutHint())
 
-      case j @ ExtractSingleColumnNotInSubquery(leftKeys, rightKeys) =>
-        Seq(joins.BroadcastNullAwareHashJoinExec(leftKeys, rightKeys,
-          planLater(j.left), planLater(j.right), BuildRight, LeftAnti, j.condition))
-
-        // for BHJ Prototype
-//        val bhj = joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
-//          None, planLater(j.left), planLater(j.right))
-//        bhj.nullAwareJoin = true
-//        Seq(bhj)
+      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
+        if (SQLConf.get.nullAwareAntiJoinOptimizeUseBHJ) {
+          // for BHJ Prototype
+          Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+            None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
+        } else {
+          Seq(joins.BroadcastNullAwareHashJoinExec(leftKeys, rightKeys,
+            planLater(j.left), planLater(j.right), BuildRight, LeftAnti, None))
+        }
 
       // If it is not an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast nested loop join. If both sides have the broadcast

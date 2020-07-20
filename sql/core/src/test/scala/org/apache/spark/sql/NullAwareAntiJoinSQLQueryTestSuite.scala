@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * End-to-end test cases for subquery SQL queries coverage with
- * NOT_IN_SUBQUERY_HASH_JOIN_ENABLED = true.
+ * NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED = true.
  *
  * Each case is loaded from a file in
  * "spark/sql/core/src/test/resources/sql-tests/inputs/subquery".
@@ -33,24 +33,24 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * To run the entire test suite:
  * {{{
- *   build/sbt "sql/test-only *NotInSubqueryHashJoinTestSuite"
+ *   build/sbt "sql/test-only *NullAwareAntiJoinSQLQueryTestSuite"
  * }}}
  *
  */
-class NotInSubqueryHashJoinTestSuite extends SQLQueryTestSuite {
+class NullAwareAntiJoinSQLQueryTestSuite extends SQLQueryTestSuite {
 
   protected override def sparkConf: SparkConf = super.sparkConf
     // Fewer shuffle partitions to speed up testing.
-    // enable NOT_IN_SUBQUERY_HASH_JOIN_ENABLED for subquery case coverage.
+    // enable NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED for subquery case coverage.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
-    .set(SQLConf.NOT_IN_SUBQUERY_HASH_JOIN_ENABLED, true)
+    .set(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED, true)
 
   override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName =
-        s"notInSubqueryHashJoin@" +
+        s"NAAJ@" +
           s"${absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)}"
 
       if (file.getAbsolutePath.startsWith(

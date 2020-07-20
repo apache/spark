@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,13 +29,6 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
-private case class NotInSubqueryHashJoinParams(
-    buildSideRelation: HashedRelation,
-    buildSideIsNullExists: Boolean,
-    buildSideIsEmpty: Boolean,
-    streamedSideKey: Attribute,
-    streamedSideKeyIndex: Int)
-
 case class BroadcastNullAwareHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
@@ -46,7 +38,7 @@ case class BroadcastNullAwareHashJoinExec(
     joinType: JoinType,
     condition: Option[Expression]) extends BaseJoinExec with CodegenSupport {
 
-  // TODO support multi column not in subquery in future.
+  // TODO support multi column NULL-aware anti join in future.
   // See. http://www.vldb.org/pvldb/vol2/vldb09-423.pdf Section 6
   // multi-column null aware anti join is much more complicated than single column ones.
   require(leftKeys.length == 1, "leftKeys length should be 1")
@@ -54,8 +46,8 @@ case class BroadcastNullAwareHashJoinExec(
   require(right.output.length == 1, "not in subquery hash join optimize only single column.")
   require(joinType == LeftAnti, "joinType must be LeftAnti.")
   require(buildSide == BuildRight, "buildSide must be BuildRight.")
-  require(SQLConf.get.notInSubqueryHashJoinEnabled,
-    "notInSubqueryHashJoinEnabled must turn on for BroadcastNullAwareHashJoinExec.")
+  require(SQLConf.get.nullAwareAntiJoinOptimizeEnabled,
+    "nullAwareAntiJoinOptimizeEnabled must turn on for BroadcastNullAwareHashJoinExec.")
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -79,47 +71,31 @@ case class BroadcastNullAwareHashJoinExec(
     left.output
   }
 
-  private def buildParams(buildSideRows: Array[InternalRow]): NotInSubqueryHashJoinParams = {
-    val leftAttr = leftKeys.head.asInstanceOf[AttributeReference]
-    val rightAttr = rightKeys.head.asInstanceOf[AttributeReference]
-
-    val leftNotInKeyFound = left.output.exists(_.semanticEquals(leftAttr))
-    val (streamedKey, streamedKeyIndex) = if (leftNotInKeyFound) {
-      (leftAttr, AttributeSeq(left.output).indexOf(leftAttr.exprId))
-    } else {
-      (rightAttr, AttributeSeq(left.output).indexOf(rightAttr.exprId))
-    }
-
-    NotInSubqueryHashJoinParams(
-      HashedRelation(buildSideRows.iterator,
-        BindReferences.bindReferences[Expression](
-          Seq(right.output.head), AttributeSeq(right.output)),
-        buildSideRows.length),
-      buildSideRows.exists(row => row.isNullAt(0)),
-      buildSideRows.isEmpty,
-      streamedKey,
-      streamedKeyIndex
-    )
+  private def prepareBroadcastHashedRelation = {
+    val buildSideRows = broadcast.executeBroadcast[Array[InternalRow]]().value
+    HashedRelation(buildSideRows.iterator,
+      BindReferences.bindReferences[Expression](
+        Seq(right.output.head), AttributeSeq(right.output)),
+      buildSideRows.length)
   }
 
-  private def leftAntiNullAwareJoin(
-      relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
-    val params = buildParams(relation.value)
+  private def nullAwareLeftAntiJoin(
+      relation: HashedRelation): RDD[InternalRow] = {
     streamed.execute().mapPartitionsInternal { streamedIter =>
-      if (params.buildSideIsEmpty) {
+      if (relation.inputEmpty) {
         streamedIter
-      } else if (params.buildSideIsNullExists) {
+      } else if (relation.anyNullKeyExists) {
         Iterator.empty
       } else {
         val keyGenerator = UnsafeProjection.create(
           BindReferences.bindReferences[Expression](
-            Seq(params.streamedSideKey),
+            leftKeys,
             AttributeSeq(left.output))
         )
         streamedIter.filter(row => {
-          val streamedRowIsNull = row.isNullAt(params.streamedSideKeyIndex)
           val lookupKey: UnsafeRow = keyGenerator(row)
-          val notInKeyEqual = params.buildSideRelation.get(lookupKey) != null
+          val streamedRowIsNull = lookupKey.isNullAt(0)
+          val notInKeyEqual = relation.get(lookupKey) != null
           !streamedRowIsNull && !notInKeyEqual
         })
       }
@@ -127,11 +103,10 @@ case class BroadcastNullAwareHashJoinExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val broadcastRelation = broadcast.executeBroadcast[Array[InternalRow]]()
-
+    val relation: HashedRelation = prepareBroadcastHashedRelation
     val resultRdd = (joinType, buildSide) match {
       case (LeftAnti, BuildRight) =>
-        leftAntiNullAwareJoin(broadcastRelation)
+        nullAwareLeftAntiJoin(relation)
       case _ =>
         throw new IllegalArgumentException(
           s"BroadcastNullAwareHashJoinExec only supports (LeftAnti + BuildRight) for now.")
@@ -177,36 +152,35 @@ case class BroadcastNullAwareHashJoinExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val broadcastRelation = broadcast.executeBroadcast[Array[InternalRow]]()
-    val params = buildParams(broadcastRelation.value)
-    val broadcastRef = ctx.addReferenceObj("broadcast", params.buildSideRelation)
-    val clsName = params.buildSideRelation.getClass.getName
+    val relation: HashedRelation = prepareBroadcastHashedRelation
+    val broadcastRef = ctx.addReferenceObj("broadcast", relation)
+    val clsName = relation.getClass.getName
 
     // Inline mutable state since not many join operations in a task
     val relationTerm = ctx.addMutableState(clsName, "relation",
       v => s"""
               | $v = (($clsName) $broadcastRef).asReadOnlyCopy();
               | incPeakExecutionMemory($v.estimatedSize());
-       """.stripMargin, forceInline = true)
+            """.stripMargin, forceInline = true)
 
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
     val numOutput = metricTerm(ctx, "numOutputRows")
     val found = ctx.freshName("found")
 
-    if (params.buildSideIsEmpty) {
+    if (relation.inputEmpty) {
       s"""
-         |// singleColumnNullAware buildSideIsEmpty(true) accept all
+         |// singleColumn NAAJ inputEmpty(true) accept all
          |$numOutput.add(1);
          |${consume(ctx, input)}
        """.stripMargin
-    } else if (params.buildSideIsNullExists) {
+    } else if (relation.anyNullKeyExists) {
       s"""
-         |// singleColumnNullAware buildSideIsEmpty(false) buildSideIsNullExists(true) reject all
+         |// singleColumn NAAJ inputEmpty(false) anyNullKeyExists(true) reject all
        """.stripMargin
     } else {
       s"""
-         |// singleColumnNullAware buildSideIsEmpty(false) buildSideIsNullExists(false)
+         |// singleColumn NAAJ inputEmpty(false) anyNullKeyExists(false)
          |boolean $found = false;
          |// generate join key for stream side
          |${keyEv.code}

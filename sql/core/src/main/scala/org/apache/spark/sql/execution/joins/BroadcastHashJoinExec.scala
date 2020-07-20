@@ -47,10 +47,8 @@ case class BroadcastHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan)
+    right: SparkPlan, isNullAwareAntiJoin: Boolean = false)
   extends HashJoin with CodegenSupport {
-
-  var nullAwareJoin: Boolean = false
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -136,10 +134,32 @@ case class BroadcastHashJoinExec(
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
-    streamedPlan.execute().mapPartitions { streamedIter =>
-      val hashed = broadcastRelation.value.asReadOnlyCopy()
-      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-      join(streamedIter, hashed, numOutputRows)
+    if (isNullAwareAntiJoin) {
+      streamedPlan.execute().mapPartitionsInternal { streamedIter =>
+        if (broadcastRelation.value.inputEmpty) {
+          streamedIter
+        } else if (broadcastRelation.value.anyNullKeyExists) {
+          Iterator.empty
+        } else {
+          val keyGenerator = UnsafeProjection.create(
+            BindReferences.bindReferences[Expression](
+              leftKeys,
+              AttributeSeq(left.output))
+          )
+          streamedIter.filter(row => {
+            val lookupKey: UnsafeRow = keyGenerator(row)
+            val streamedRowIsNull = lookupKey.isNullAt(0)
+            val notInKeyEqual = broadcastRelation.value.get(lookupKey) != null
+            !streamedRowIsNull && !notInKeyEqual
+          })
+        }
+      }
+    } else {
+      streamedPlan.execute().mapPartitions { streamedIter =>
+        val hashed = broadcastRelation.value.asReadOnlyCopy()
+        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
+        join(streamedIter, hashed, numOutputRows)
+      }
     }
   }
 
@@ -457,30 +477,30 @@ case class BroadcastHashJoinExec(
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    if (nullAwareJoin) {
+    if (isNullAwareAntiJoin) {
       require(leftKeys.length == 1, "leftKeys length should be 1")
       require(rightKeys.length == 1, "rightKeys length should be 1")
       require(right.output.length == 1, "not in subquery hash join optimize only single column.")
       require(joinType == LeftAnti, "joinType must be LeftAnti.")
       require(buildSide == BuildRight, "buildSide must be BuildRight.")
-      require(SQLConf.get.notInSubqueryHashJoinEnabled,
-        "notInSubqueryHashJoinEnabled must turn on for BroadcastNullAwareHashJoinExec.")
+      require(SQLConf.get.nullAwareAntiJoinOptimizeEnabled,
+        "nullAwareAntiJoinOptimizeEnabled must turn on for BroadcastNullAwareHashJoinExec.")
       require(checkCondition == "", "not in subquery hash join optimize empty condition.")
 
-      if (broadcastRelation.value.inputIsEmpty) {
+      if (broadcastRelation.value.inputEmpty) {
         s"""
-           |// singleColumnNullAware buildSideIsEmpty(true) accept all
+           |// singleColumn NAAJ inputEmpty(true) accept all
            |$numOutput.add(1);
            |${consume(ctx, input)}
          """.stripMargin
       } else if (broadcastRelation.value.anyNullKeyExists) {
         s"""
-           |// singleColumnNullAware buildSideIsEmpty(false) buildSideIsNullExists(true) reject all
+           |// singleColumn NAAJ inputEmpty(false) anyNullKeyExists(true) reject all
          """.stripMargin
       } else {
         val found = ctx.freshName("found")
         s"""
-           |// singleColumnNullAware buildSideIsEmpty(false) buildSideIsNullExists(false)
+           |// singleColumn NAAJ inputEmpty(false) anyNullKeyExists(false)
            |boolean $found = false;
            |// generate join key for stream side
            |${keyEv.code}

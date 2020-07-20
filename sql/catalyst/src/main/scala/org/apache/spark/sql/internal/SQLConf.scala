@@ -2672,14 +2672,22 @@ object SQLConf {
       .checkValue(_ >= 0, "The value must be non-negative.")
       .createWithDefault(8)
 
-  val NOT_IN_SUBQUERY_HASH_JOIN_ENABLED =
-    buildConf("spark.sql.notInSubquery.hashJoin.enabled")
+  val NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED =
+    buildConf("spark.sql.nullAware.antiJoin.optimize.enabled")
       .internal()
-      .doc("When true, not in subquery execution will be planed into " +
+      .doc("When true, NULL-aware anti join execution will be planed into " +
         "BroadcastNullAwareHashJoinExec, " +
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup." +
-        "Only support for singleColumn not in subquery for now.")
+        "Only support for singleColumn NAAJ for now.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val NULL_AWARE_ANTI_JOIN_OPTIMIZE_USE_BHJ =
+    buildConf("spark.sql.nullAware.antiJoin.optimize.use.bhj")
+      .internal()
+      .doc("When true, NULL-aware anti join execution will be planed into " +
+        "BroadcastHashJoinExec with special execution.")
       .booleanConf
       .createWithDefault(false)
 
@@ -3288,8 +3296,11 @@ class SQLConf extends Serializable with Logging {
   def coalesceBucketsInJoinMaxBucketRatio: Int =
     getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
 
-  def notInSubqueryHashJoinEnabled: Boolean =
-    getConf(SQLConf.NOT_IN_SUBQUERY_HASH_JOIN_ENABLED)
+  def nullAwareAntiJoinOptimizeEnabled: Boolean =
+    getConf(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED)
+
+  def nullAwareAntiJoinOptimizeUseBHJ: Boolean =
+    getConf(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_USE_BHJ)
 
   /** ********************** SQLConf functionality methods ************ */
 

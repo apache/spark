@@ -1149,11 +1149,15 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("SPARK-32290: NotInSubquery SingleColumn Optimize positive") {
-    withSQLConf(SQLConf.NOT_IN_SUBQUERY_HASH_JOIN_ENABLED.key -> "true",
+  test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize positive") {
+    withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       assertJoin((
         "select * from testData where key not in (select a from testData2)",
+        classOf[BroadcastNullAwareHashJoinExec]))
+      // testData3.b nullable is true
+      assertJoin((
+        "select * from testData left anti join testData3 ON key = b or isnull(key = b)",
         classOf[BroadcastNullAwareHashJoinExec]))
       // multi column not supported
       assertJoin((
@@ -1162,11 +1166,15 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("SPARK-32290: NotInSubquery SingleColumn Optimize negative") {
-    withSQLConf(SQLConf.NOT_IN_SUBQUERY_HASH_JOIN_ENABLED.key -> "true",
+  test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize negative") {
+    withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       assertJoin((
         "select * from testData where key not in (select a from testData2)",
+        classOf[BroadcastNestedLoopJoinExec]))
+      // testData3.b nullable is true
+      assertJoin((
+        "select * from testData left anti join testData3 ON key = b or isnull(key = b)",
         classOf[BroadcastNestedLoopJoinExec]))
       // multi column not supported
       assertJoin((

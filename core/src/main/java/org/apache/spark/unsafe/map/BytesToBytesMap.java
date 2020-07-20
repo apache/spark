@@ -171,17 +171,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private volatile MapIterator destructiveIterator = null;
   private LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
-  private boolean inputIsEmpty = false;
+  private boolean inputEmpty = false;
   private boolean anyNullKeyExists = false;
 
-  public boolean isInputIsEmpty()
+  public boolean isInputEmpty()
   {
-    return inputIsEmpty;
+    return inputEmpty;
   }
 
-  public void setInputIsEmpty(boolean inputIsEmpty)
+  public void setInputEmpty(boolean inputEmpty)
   {
-    this.inputIsEmpty = inputIsEmpty;
+    this.inputEmpty = inputEmpty;
   }
 
   public boolean isAnyNullKeyExists()

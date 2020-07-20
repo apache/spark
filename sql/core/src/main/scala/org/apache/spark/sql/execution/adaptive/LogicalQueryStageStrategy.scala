@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNotInSubquery}
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.execution.{joins, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Strategy for plans containing [[LogicalQueryStage]] nodes:
@@ -49,9 +50,16 @@ object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
       Seq(BroadcastHashJoinExec(
         leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
-    case j @ ExtractSingleColumnNotInSubquery(leftKeys, rightKeys) =>
-      Seq(joins.BroadcastNullAwareHashJoinExec(leftKeys, rightKeys,
-        planLater(j.left), planLater(j.right), BuildRight, LeftAnti, j.condition))
+    case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
+        if isBroadcastStage(j.right) =>
+      if (SQLConf.get.nullAwareAntiJoinOptimizeUseBHJ) {
+        // for BHJ Prototype
+        Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+          None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
+      } else {
+        Seq(joins.BroadcastNullAwareHashJoinExec(leftKeys, rightKeys,
+          planLater(j.left), planLater(j.right), BuildRight, LeftAnti, None))
+      }
 
     case j @ Join(left, right, joinType, condition, _)
         if isBroadcastStage(left) || isBroadcastStage(right) =>

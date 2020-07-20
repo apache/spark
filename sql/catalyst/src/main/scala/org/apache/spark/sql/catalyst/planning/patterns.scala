@@ -391,9 +391,9 @@ object PhysicalWindow {
   }
 }
 
-object ExtractSingleColumnNotInSubquery extends JoinSelectionHelper {
+object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper {
 
-  // SingleColumnNotInSubquery
+  // SingleColumn NullAwareAntiJoin
   // streamedSideKeys, buildSideKeys
   // currently these two return Seq[Expression] should have only one element
   private type ReturnType =
@@ -401,16 +401,17 @@ object ExtractSingleColumnNotInSubquery extends JoinSelectionHelper {
 
   /**
    * See. [SPARK-32290]
-   * Not in Subquery will almost certainly be planned as a Broadcast Nested Loop join,
+   * LeftAnti(condition: Or(EqualTo(a=b), IsNull(EqualTo(a=b)))
+   * will almost certainly be planned as a Broadcast Nested Loop join,
    * which is very time consuming because it's an O(M*N) calculation.
-   * But if it's a single column NotInSubquery, and buildSide data is small enough,
+   * But if it's a single column case, and buildSide data is small enough,
    * O(M*N) calculation could be optimized into O(M) using hash lookup instead of loop lookup.
    */
   def unapply(join: Join): Option[ReturnType] = join match {
     case Join(left, right, LeftAnti,
       Some(Or(EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
         IsNull(EqualTo(tmpLeft: AttributeReference, tmpRight: AttributeReference)))), _)
-        if SQLConf.get.notInSubqueryHashJoinEnabled &&
+        if SQLConf.get.nullAwareAntiJoinOptimizeEnabled &&
           leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) &&
           canBroadcastBySize(right, SQLConf.get) &&
           right.output.length == 1 =>

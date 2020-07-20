@@ -74,7 +74,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   /**
    * is input: Iterator[InternalRow] empty
    */
-  def inputIsEmpty: Boolean
+  def inputEmpty: Boolean
 
   /**
    * anyNull key exists in input
@@ -213,17 +213,20 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    write(out.writeInt, out.writeLong, out.write)
+    write(out.writeBoolean, out.writeInt, out.writeLong, out.write)
   }
 
   override def write(kryo: Kryo, out: Output): Unit = Utils.tryOrIOException {
-    write(out.writeInt, out.writeLong, out.write)
+    write(out.writeBoolean, out.writeInt, out.writeLong, out.write)
   }
 
   private def write(
+      writeBoolean: (Boolean) => Unit,
       writeInt: (Int) => Unit,
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
+    writeBoolean(inputEmpty)
+    writeBoolean(anyNullKeyExists)
     writeInt(numFields)
     // TODO: move these into BytesToBytesMap
     writeLong(binaryMap.numKeys())
@@ -250,13 +253,16 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    read(() => in.readInt(), () => in.readLong(), in.readFully)
+    read(() => in.readBoolean(), () => in.readInt(), () => in.readLong(), in.readFully)
   }
 
   private def read(
+      readBoolean: () => Boolean,
       readInt: () => Int,
       readLong: () => Long,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
+    val inputEmpty = readBoolean()
+    val anyNullKeyExists = readBoolean()
     numFields = readInt()
     resultRow = new UnsafeRow(numFields)
     val nKeys = readLong()
@@ -282,6 +288,9 @@ private[joins] class UnsafeHashedRelation(
       taskMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
       pageSizeBytes)
+
+    binaryMap.setInputEmpty(inputEmpty)
+    binaryMap.setAnyNullKeyExists(anyNullKeyExists)
 
     var i = 0
     var keyBuffer = new Array[Byte](1024)
@@ -310,10 +319,10 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
-    read(() => in.readInt(), () => in.readLong(), in.readBytes)
+    read(() => in.readBoolean(), () => in.readInt(), () => in.readLong(), in.readBytes)
   }
 
-  override def inputIsEmpty: Boolean = binaryMap.isInputIsEmpty
+  override def inputEmpty: Boolean = binaryMap.isInputEmpty
 
   override def anyNullKeyExists: Boolean = binaryMap.isAnyNullKeyExists
 }
@@ -337,7 +346,7 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
-    binaryMap.setInputIsEmpty(input.isEmpty)
+    binaryMap.setInputEmpty(input.isEmpty)
     while (input.hasNext) {
       val row = input.next().asInstanceOf[UnsafeRow]
       numFields = row.numFields()
@@ -399,7 +408,7 @@ private[joins] object UnsafeHashedRelation {
 private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, capacity: Int)
   extends MemoryConsumer(mm) with Externalizable with KryoSerializable {
 
-  var inputIsEmpty = false
+  var inputEmpty = false
   var anyNullKeyExists = false
 
   // Whether the keys are stored in dense mode or not.
@@ -780,6 +789,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       writeBoolean: (Boolean) => Unit,
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
+    writeBoolean(inputEmpty)
+    writeBoolean(anyNullKeyExists)
     writeBoolean(isDense)
     writeLong(minKey)
     writeLong(maxKey)
@@ -821,6 +832,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       readBoolean: () => Boolean,
       readLong: () => Long,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
+    inputEmpty = readBoolean()
+    anyNullKeyExists = readBoolean()
     isDense = readBoolean()
     minKey = readLong()
     maxKey = readLong()
@@ -900,7 +913,7 @@ class LongHashedRelation(
    */
   override def keys(): Iterator[InternalRow] = map.keys()
 
-  override def inputIsEmpty: Boolean = map.inputIsEmpty
+  override def inputEmpty: Boolean = map.inputEmpty
 
   override def anyNullKeyExists: Boolean = map.anyNullKeyExists
 }
@@ -920,7 +933,7 @@ private[joins] object LongHashedRelation {
 
     // Create a mapping of key -> rows
     var numFields = 0
-    map.inputIsEmpty = input.isEmpty
+    map.inputEmpty = input.isEmpty
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
       numFields = unsafeRow.numFields()
