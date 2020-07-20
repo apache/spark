@@ -428,6 +428,14 @@ object RegExpExtract {
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
+  arguments = """
+    Arguments:
+      * str - a string expression.
+      * regexp - a string expression. a string representing a regular expression. The regex string should be a
+ |        Java regular expression.
+      * idx - a int expression that representing the group index. The group index should be 0 or positive.
+          If `idx` is not specified, the default group index value is 1.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
