@@ -215,7 +215,7 @@ trait HashJoin extends BaseJoinExec {
         existenceJoin(streamedIter, hashed)
       case x =>
         throw new IllegalArgumentException(
-          s"BroadcastHashJoin should not take $x as the JoinType")
+          s"HashJoin should not take $x as the JoinType")
     }
 
     val resultProj = createResultProjection
