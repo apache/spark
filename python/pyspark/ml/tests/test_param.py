@@ -358,25 +358,22 @@ class DefaultValuesTests(PySparkTestCase):
         import pyspark.ml.recommendation
         import pyspark.ml.regression
 
-        modules = [pyspark.ml.classification]
+        modules = [pyspark.ml.feature, pyspark.ml.classification, pyspark.ml.clustering,
+                   pyspark.ml.evaluation, pyspark.ml.pipeline, pyspark.ml.recommendation,
+                   pyspark.ml.regression]
         for module in modules:
             for name, cls in inspect.getmembers(module, inspect.isclass):
-                if name.startswith('DecisionTreeClassifier'):
-                    print(name)
-                    print(cls)
+                if not name.endswith('Model') and not name.endswith('Params') \
+                        and issubclass(cls, JavaParams) and not inspect.isabstract(cls) \
+                        and not name.startswith('Java') and name != '_LSH':
                     check_params(self, cls(), check_params_exist=True)
-                # if not name.endswith('Model') and not name.endswith('Params') \
-                #        and issubclass(cls, JavaParams) and not inspect.isabstract(cls) \
-                #        and not name.startswith('Java') and name != '_LSH' \
-                #        and name.startswith('DecisionTreeClassifier'):
-                #    check_params(self, cls(), check_params_exist=True)
 
         # Additional classes that need explicit construction
         from pyspark.ml.feature import CountVectorizerModel, StringIndexerModel
         check_params(self, CountVectorizerModel.from_vocabulary(['a'], 'input'),
-                     check_params_exist=False)
+                     check_params_exist=True)
         check_params(self, StringIndexerModel.from_labels(['a', 'b'], 'input'),
-                     check_params_exist=False)
+                     check_params_exist=True)
 
 
 if __name__ == "__main__":
