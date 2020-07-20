@@ -115,7 +115,7 @@ class DataFrameAggregateSuite extends QueryTest
 
     checkAnswer(
       df.groupBy(regexp_extract($"key", "([a-z]+)\\[", 1)).count(),
-      Row("some", 1) :: Nil
+      Row("some", 2) :: Nil
     )
   }
 
@@ -160,7 +160,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       courseSales.cube("course", "year")
         .agg(grouping("course"), grouping("year"), grouping_id("course", "year")),
-      Row("Java", 2012, 0, 0, 0) ::
+      Row("Java", 2012, 0, 0, 1) ::
         Row("Java", 2013, 0, 0, 0) ::
         Row("Java", null, 0, 1, 1) ::
         Row("dotNET", 2012, 0, 0, 0) ::

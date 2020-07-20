@@ -78,7 +78,7 @@ class DataFrameSuite extends QueryTest
 
     checkAnswer(
       df.groupBy("_1").agg(sum("_2._1")).toDF("key", "total"),
-      Row(1, 1) :: Nil)
+      Row(2, 1) :: Nil)
   }
 
   test("access complex data") {
@@ -146,7 +146,7 @@ class DataFrameSuite extends QueryTest
       sort("a").first() == Row(1, Seq(1, 1)))
 
     // CreateStruct and CreateArray in project list (unresolved alias)
-    assert(structDf.select(struct($"record.*")).first() == Row(Row(1, 1)))
+    assert(structDf.select(struct($"record.*")).first() == Row(Row(2, 1)))
     assert(structDf.select(array($"record.*")).first().getAs[Seq[Int]](0) === Seq(1, 1))
 
     // CreateStruct and CreateArray in project list (alias)
