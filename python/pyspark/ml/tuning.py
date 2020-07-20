@@ -200,6 +200,10 @@ class _CrossValidatorParams(_ValidatorParams):
     numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
                      typeConverter=TypeConverters.toInt)
 
+    def __init__(self, *args):
+        super(_CrossValidatorParams, self).__init__(*args)
+        self._setDefault(numFolds=3)
+
     @since("1.4.0")
     def getNumFolds(self):
         """
@@ -249,6 +253,8 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     [0.5, ...
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
+    >>> evaluator.evaluate(cvModelRead.transform(dataset))
+    0.8333...
 
     .. versionadded:: 1.4.0
     """
@@ -261,7 +267,7 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
                  seed=None, parallelism=1, collectSubModels=False)
         """
         super(CrossValidator, self).__init__()
-        self._setDefault(numFolds=3, parallelism=1)
+        self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -545,6 +551,10 @@ class _TrainValidationSplitParams(_ValidatorParams):
     trainRatio = Param(Params._dummy(), "trainRatio", "Param for ratio between train and\
      validation data. Must be between 0 and 1.", typeConverter=TypeConverters.toFloat)
 
+    def __init__(self, *args):
+        super(_TrainValidationSplitParams, self).__init__(*args)
+        self._setDefault(trainRatio=0.75)
+
     @since("2.0.0")
     def getTrainRatio(self):
         """
@@ -590,6 +600,8 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     [0.5, ...
     >>> evaluator.evaluate(tvsModel.transform(dataset))
     0.833...
+    >>> evaluator.evaluate(tvsModelRead.transform(dataset))
+    0.833...
 
     .. versionadded:: 2.0.0
     """
@@ -602,7 +614,7 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
                  parallelism=1, collectSubModels=False, seed=None)
         """
         super(TrainValidationSplit, self).__init__()
-        self._setDefault(trainRatio=0.75, parallelism=1)
+        self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 

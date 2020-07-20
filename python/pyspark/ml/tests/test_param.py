@@ -358,16 +358,18 @@ class DefaultValuesTests(PySparkTestCase):
         import pyspark.ml.recommendation
         import pyspark.ml.regression
 
-        modules = [pyspark.ml.feature, pyspark.ml.classification, pyspark.ml.clustering,
-                   pyspark.ml.evaluation, pyspark.ml.pipeline, pyspark.ml.recommendation,
-                   pyspark.ml.regression]
+        modules = [pyspark.ml.classification]
         for module in modules:
             for name, cls in inspect.getmembers(module, inspect.isclass):
-                if not name.endswith('Model') and not name.endswith('Params') \
-                        and issubclass(cls, JavaParams) and not inspect.isabstract(cls) \
-                        and not name.startswith('Java') and name != '_LSH':
-                    # NOTE: disable check_params_exist until there is parity with Scala API
-                    check_params(self, cls(), check_params_exist=False)
+                if name.startswith('DecisionTreeClassifier'):
+                    print(name)
+                    print(cls)
+                    check_params(self, cls(), check_params_exist=True)
+                # if not name.endswith('Model') and not name.endswith('Params') \
+                #        and issubclass(cls, JavaParams) and not inspect.isabstract(cls) \
+                #        and not name.startswith('Java') and name != '_LSH' \
+                #        and name.startswith('DecisionTreeClassifier'):
+                #    check_params(self, cls(), check_params_exist=True)
 
         # Additional classes that need explicit construction
         from pyspark.ml.feature import CountVectorizerModel, StringIndexerModel

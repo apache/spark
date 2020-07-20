@@ -56,6 +56,11 @@ class _FPGrowthParams(HasPredictionCol):
         "but will affect the association rules generation.",
         typeConverter=TypeConverters.toFloat)
 
+    def __init__(self, *args):
+        super(_FPGrowthParams, self).__init__(*args)
+        self._setDefault(minSupport=0.3, minConfidence=0.8,
+                         itemsCol="items", predictionCol="prediction")
+
     def getItemsCol(self):
         """
         Gets the value of itemsCol or its default value.
@@ -194,6 +199,11 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().newPrediction)
     [u'x', u'y', u'z']
+    >>> model_path = temp_path + "/fpm_model"
+    >>> fpm.save(model_path)
+    >>> model2 = FPGrowthModel.load(model_path)
+    >>> fpm.transform(data).take(1) == model2.transform(data).take(1)
+    True
 
     .. versionadded:: 2.2.0
     """
@@ -206,8 +216,6 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
         """
         super(FPGrowth, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.FPGrowth", self.uid)
-        self._setDefault(minSupport=0.3, minConfidence=0.8,
-                         itemsCol="items", predictionCol="prediction")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 

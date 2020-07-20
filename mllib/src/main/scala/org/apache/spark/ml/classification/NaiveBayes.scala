@@ -63,6 +63,8 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
+
+  setDefault(smoothing -> 1.0, modelType -> NaiveBayes.Multinomial)
 }
 
 // scalastyle:off line.size.limit
@@ -106,7 +108,6 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("1.5.0")
   def setSmoothing(value: Double): this.type = set(smoothing, value)
-  setDefault(smoothing -> 1.0)
 
   /**
    * Set the model type using a string (case-sensitive).
@@ -116,7 +117,6 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("1.5.0")
   def setModelType(value: String): this.type = set(modelType, value)
-  setDefault(modelType -> Multinomial)
 
   /**
    * Sets the value of param [[weightCol]].

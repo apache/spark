@@ -59,6 +59,8 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   @Since("2.0.0")
   def getK: Int = $(k)
 
+  setDefault(k -> 2, maxIter -> 100, tol -> 0.01)
+
   /**
    * Validates and transforms the input schema.
    *
@@ -322,11 +324,6 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
 class GaussianMixture @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
   extends Estimator[GaussianMixtureModel] with GaussianMixtureParams with DefaultParamsWritable {
-
-  setDefault(
-    k -> 2,
-    maxIter -> 100,
-    tol -> 0.01)
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixture = defaultCopy(extra)
