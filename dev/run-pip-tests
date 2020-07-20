@@ -103,6 +103,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     # Delete the egg info file if it exists, this can cache the setup file.
     rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
     # Also delete .local in case it was already installed via --user.
+    pip show pyspark
     rm -rf "$(python3 -m site --user-site)/pyspark*" || echo "No existing PySpark installation at user site-packages."
     python3 setup.py sdist
 
