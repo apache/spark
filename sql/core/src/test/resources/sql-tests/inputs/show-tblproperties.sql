@@ -17,10 +17,13 @@ SHOW TBLPROPERTIES view("p3");
 
 DROP VIEW view;
 
--- create a temporary view with properties
+-- create a temporary view with properties, which is not allowed
 CREATE TEMPORARY VIEW tv TBLPROPERTIES('p1'='v1') AS SELECT 1 AS c1;
 
--- Properties for a temporary view should be empty
+-- create a temporary view
+CREATE TEMPORARY VIEW tv AS SELECT 1 AS c1;
+
+--- Properties for a temporary view should be empty
 SHOW TBLPROPERTIES tv;
 
 DROP VIEW tv;

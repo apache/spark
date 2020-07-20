@@ -3515,6 +3515,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       }
     }
 
+    val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
+      .getOrElse(Map.empty)
+    if (ctx.TEMPORARY != null && !properties.isEmpty) {
+      operationNotAllowed(
+        "CREATE TEMPORARY VIEW ... TBLPROPERTIES (property_name = property_value, ...)", ctx)
+    }
+
     val viewType = if (ctx.TEMPORARY == null) {
       PersistedView
     } else if (ctx.GLOBAL != null) {
@@ -3526,8 +3533,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       visitMultipartIdentifier(ctx.multipartIdentifier),
       userSpecifiedColumns,
       visitCommentSpecList(ctx.commentSpec()),
-      ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
-        .getOrElse(Map.empty),
+      properties,
       Option(source(ctx.query)),
       plan(ctx.query),
       ctx.EXISTS != null,
