@@ -70,7 +70,7 @@ case class InMemoryTableScanExec(
   override val supportsColumnar: Boolean = {
     conf.cacheVectorizedReaderEnabled  &&
         !WholeStageCodegenExec.isTooManyFields(conf, relation.schema) &&
-        relation.cacheBuilder.serializer.supportsColumnar(relation.schema)
+        relation.cacheBuilder.serializer.supportsColumnarOutput(relation.schema)
   }
 
   private lazy val columnarInputRDD: RDD[ColumnarBatch] = {

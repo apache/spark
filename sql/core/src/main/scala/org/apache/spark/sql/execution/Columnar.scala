@@ -479,7 +479,10 @@ case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
  * Apply any user defined [[ColumnarRule]]s and find the correct place to insert transitions
  * to/from columnar formatted data.
  */
-case class ApplyColumnarRulesAndInsertTransitions(conf: SQLConf, columnarRules: Seq[ColumnarRule])
+case class ApplyColumnarRulesAndInsertTransitions(
+    conf: SQLConf,
+    columnarRules: Seq[ColumnarRule],
+    allowColumnarOutput: Boolean)
   extends Rule[SparkPlan] {
 
   /**
@@ -508,11 +511,27 @@ case class ApplyColumnarRulesAndInsertTransitions(conf: SQLConf, columnarRules: 
     }
   }
 
+  /**
+   * Leave the output of the plan unchanged (columnar or row),
+   * but insert any transitions that are needed for the plan to run correctly.
+   */
+  private def insertRequiredTransitions(plan: SparkPlan): SparkPlan = {
+    if (plan.supportsColumnar) {
+      insertRowToColumnar(plan)
+    } else {
+      insertTransitions(plan)
+    }
+  }
+
   def apply(plan: SparkPlan): SparkPlan = {
     var preInsertPlan: SparkPlan = plan
     columnarRules.foreach((r : ColumnarRule) =>
       preInsertPlan = r.preColumnarTransitions(preInsertPlan))
-    var postInsertPlan = insertTransitions(preInsertPlan)
+    var postInsertPlan = if (allowColumnarOutput) {
+      insertRequiredTransitions(preInsertPlan)
+    } else {
+      insertTransitions(preInsertPlan)
+    }
     columnarRules.reverse.foreach((r : ColumnarRule) =>
       postInsertPlan = r.postColumnarTransitions(postInsertPlan))
     postInsertPlan

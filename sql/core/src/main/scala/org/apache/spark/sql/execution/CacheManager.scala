@@ -85,9 +85,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         val qe = sessionWithAqeOff.sessionState.executePlan(planToCache)
         InMemoryRelation(
           storageLevel,
-          qe.executedPlan,
-          tableName,
-          optimizedPlan = qe.optimizedPlan)
+          qe,
+          tableName)
       }
 
       this.synchronized {
@@ -193,9 +192,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       val sessionWithAqeOff = getOrCloneSessionWithAqeOff(spark)
       val newCache = sessionWithAqeOff.withActive {
         val qe = sessionWithAqeOff.sessionState.executePlan(cd.plan)
-        InMemoryRelation(
-          cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
-          optimizedPlan = qe.optimizedPlan)
+        InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       this.synchronized {

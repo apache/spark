@@ -22,22 +22,29 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.columnar.CachedBatch
-import org.apache.spark.sql.execution.{ColumnarToRowExec, FilterExec, InputAdapter, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, FilterExec, InputAdapter, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel._
 
 class TestCachedBatchSerializer(
     useCompression: Boolean,
     batchSize: Int) extends DefaultCachedBatchSerializer {
-  override def convertForCache(cachedPlan: SparkPlan): RDD[CachedBatch] =
-    convertForCacheInternal(cachedPlan, batchSize, useCompression)
+
+  override def convertForCache(input: RDD[InternalRow],
+      schema: Seq[Attribute],
+      storageLevel: StorageLevel,
+      conf: SQLConf): RDD[CachedBatch] = {
+    convertForCacheInternal(input, schema, batchSize, useCompression)
+  }
 }
 
 class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {

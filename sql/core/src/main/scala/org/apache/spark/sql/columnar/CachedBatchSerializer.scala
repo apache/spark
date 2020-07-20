@@ -23,11 +23,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BindReferences, EqualNullSafe, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, Length, LessThan, LessThanOrEqual, Literal, Or, Predicate, StartsWith}
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.columnar.{ColumnStatisticsSchema, PartitionStatistics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, BinaryType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Basic interface that all cached batches of data must support. This is primarily to allow
@@ -48,11 +48,43 @@ trait CachedBatch {
 @Since("3.1.0")
 trait CachedBatchSerializer extends Serializable {
   /**
-   * Run the given plan and convert its output to a implementation of [[CachedBatch]].
-   * @param cachedPlan the plan to run.
-   * @return the RDD containing the batches of data to cache.
+   * Can `convertForCacheColumnar()` be called instead of `convertForCache()` for this given
+   * schema? True if it can and false if it cannot. Columnar input is only supported if the
+   * plan could produce columnar output. Currently this is mostly supported by input formats
+   * like parquet and orc, but more operations are likely to be supported soon.
+   *
+   * @param schema the schema of the data being stored.
+   * @return True if columnar input can be supported, else false.
    */
-  def convertForCache(cachedPlan: SparkPlan): RDD[CachedBatch]
+  def supportsColumnarInput(schema: Seq[Attribute]): Boolean
+
+  /**
+   * Convert an `RDD[InternalRow]` into an `RDD[CachedBatch]` in preparation for caching the data.
+   * @param input the input `RDD` to be converted.
+   * @param schema the schema of the data being stored.
+   * @param storageLevel where the data will be stored.
+   * @param conf the config for the query.
+   * @return The data converted into a format more suitable for caching.
+   */
+  def convertForCache(input: RDD[InternalRow],
+      schema: Seq[Attribute],
+      storageLevel: StorageLevel,
+      conf: SQLConf): RDD[CachedBatch]
+
+  /**
+   * Convert an `RDD[ColumnarBatch]` into an `RDD[CachedBatch]` in preparation for caching the data.
+   * This will only be called if `supportsColumnarInput()` returned true for the given schema and
+   * the plan up to this point would could produce columnar output without modifying it.
+   * @param input the input `RDD` to be converted.
+   * @param schema the schema of the data being stored.
+   * @param storageLevel where the data will be stored.
+   * @param conf the config for the query.
+   * @return The data converted into a format more suitable for caching.
+   */
+  def convertForCacheColumnar(input: RDD[ColumnarBatch],
+      schema: Seq[Attribute],
+      storageLevel: StorageLevel,
+      conf: SQLConf): RDD[CachedBatch]
 
   /**
    * Builds a function that can be used to filter batches prior to being decompressed.
@@ -78,17 +110,17 @@ trait CachedBatchSerializer extends Serializable {
    * @param schema the schema of the data being checked.
    * @return true if columnar output should be used for this schema, else false.
    */
-  def supportsColumnar(schema: StructType): Boolean
+  def supportsColumnarOutput(schema: StructType): Boolean
 
   /**
    * Decompress the cached data into a ColumnarBatch. This currently is only used if
    * `supportsColumnar()` returned true for the associated schema, but there are other checks
    * that can force row based output. One of the main advantages of doing columnar output over row
-   * based output is the code generation is more standard and can be combined with code generation
-   * for downstream operations.
+   * based output is that the code generation is more standard and can be combined with code
+   * generation for downstream operations.
    * @param input the cached batches that should be decompressed.
    * @param cacheAttributes the attributes of the data in the batch.
-   * @param selectedAttributes the fields that should be loaded from the data, and the order they
+   * @param selectedAttributes the fields that should be loaded from the data and the order they
    *                           should appear in the output batch.
    * @param conf the configuration for the job.
    * @return an RDD of the input cached batches transformed into the ColumnarBatch format.
@@ -104,8 +136,8 @@ trait CachedBatchSerializer extends Serializable {
    * generation is advised.
    * @param input the cached batches that should be decompressed.
    * @param cacheAttributes the attributes of the data in the batch.
-   * @param selectedAttributes the field that should be loaded from the data, and the order they
-   *                           should appear in the output batch.
+   * @param selectedAttributes the field that should be loaded from the data and the order they
+   *                           should appear in the output rows.
    * @param conf the configuration for the job.
    * @return RDD of the rows that were stored in the cached batches.
    */
