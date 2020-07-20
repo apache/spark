@@ -325,9 +325,9 @@ class EliminateSortsSuite extends PlanTest {
     Seq(MaxBy(Symbol("a"), Symbol("b")), MinBy(Symbol("a"), Symbol("b"))).foreach { agg =>
       val projectPlan = testRelation.select(Symbol("a"), Symbol("b"))
       val unnecessaryOrderByPlan = projectPlan.orderBy(Symbol("a").asc)
-      val groupByPlan = unnecessaryOrderByPlan.groupBy(Symbol("a"))(agg)
+      val groupByPlan = unnecessaryOrderByPlan.groupBy(Symbol("a"), Symbol("b"))(agg)
       val optimized = Optimize.execute(groupByPlan.analyze)
-      val correctAnswer = projectPlan.groupBy(Symbol("a"))(agg).analyze
+      val correctAnswer = projectPlan.groupBy(Symbol("a"), Symbol("b"))(agg).analyze
       comparePlans(optimized, correctAnswer)
     }
   }
