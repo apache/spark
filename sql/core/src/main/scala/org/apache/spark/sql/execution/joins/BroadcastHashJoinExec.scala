@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable
+
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -26,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioning, Partitioning, PartitioningCollection, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.{BooleanType, LongType}
@@ -51,13 +53,80 @@ case class BroadcastHashJoinExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = HashedRelationBroadcastMode(buildKeys)
+    val mode = HashedRelationBroadcastMode(buildBoundKeys)
     buildSide match {
       case BuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
       case BuildRight =>
         UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
     }
+  }
+
+  override lazy val outputPartitioning: Partitioning = {
+    joinType match {
+      case _: InnerLike if sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
+        streamedPlan.outputPartitioning match {
+          case h: HashPartitioning => expandOutputPartitioning(h)
+          case c: PartitioningCollection => expandOutputPartitioning(c)
+          case other => other
+        }
+      case _ => streamedPlan.outputPartitioning
+    }
+  }
+
+  // An one-to-many mapping from a streamed key to build keys.
+  private lazy val streamedKeyToBuildKeyMapping = {
+    val mapping = mutable.Map.empty[Expression, Seq[Expression]]
+    streamedKeys.zip(buildKeys).foreach {
+      case (streamedKey, buildKey) =>
+        val key = streamedKey.canonicalized
+        mapping.get(key) match {
+          case Some(v) => mapping.put(key, v :+ buildKey)
+          case None => mapping.put(key, Seq(buildKey))
+        }
+    }
+    mapping.toMap
+  }
+
+  // Expands the given partitioning collection recursively.
+  private def expandOutputPartitioning(
+      partitioning: PartitioningCollection): PartitioningCollection = {
+    PartitioningCollection(partitioning.partitionings.flatMap {
+      case h: HashPartitioning => expandOutputPartitioning(h).partitionings
+      case c: PartitioningCollection => Seq(expandOutputPartitioning(c))
+      case other => Seq(other)
+    })
+  }
+
+  // Expands the given hash partitioning by substituting streamed keys with build keys.
+  // For example, if the expressions for the given partitioning are Seq("a", "b", "c")
+  // where the streamed keys are Seq("b", "c") and the build keys are Seq("x", "y"),
+  // the expanded partitioning will have the following expressions:
+  // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
+  // The expanded expressions are returned as PartitioningCollection.
+  private def expandOutputPartitioning(partitioning: HashPartitioning): PartitioningCollection = {
+    val maxNumCombinations = sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit
+    var currentNumCombinations = 0
+
+    def generateExprCombinations(
+        current: Seq[Expression],
+        accumulated: Seq[Expression]): Seq[Seq[Expression]] = {
+      if (currentNumCombinations >= maxNumCombinations) {
+        Nil
+      } else if (current.isEmpty) {
+        currentNumCombinations += 1
+        Seq(accumulated)
+      } else {
+        val buildKeysOpt = streamedKeyToBuildKeyMapping.get(current.head.canonicalized)
+        generateExprCombinations(current.tail, accumulated :+ current.head) ++
+          buildKeysOpt.map(_.flatMap(b => generateExprCombinations(current.tail, accumulated :+ b)))
+            .getOrElse(Nil)
+      }
+    }
+
+    PartitioningCollection(
+      generateExprCombinations(partitioning.expressions, Nil)
+        .map(HashPartitioning(_, partitioning.numPartitions)))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -135,13 +204,13 @@ case class BroadcastHashJoinExec(
       ctx: CodegenContext,
       input: Seq[ExprCode]): (ExprCode, String) = {
     ctx.currentVars = input
-    if (streamedKeys.length == 1 && streamedKeys.head.dataType == LongType) {
+    if (streamedBoundKeys.length == 1 && streamedBoundKeys.head.dataType == LongType) {
       // generate the join key as Long
-      val ev = streamedKeys.head.genCode(ctx)
+      val ev = streamedBoundKeys.head.genCode(ctx)
       (ev, ev.isNull)
     } else {
       // generate the join key as UnsafeRow
-      val ev = GenerateUnsafeProjection.createCode(ctx, streamedKeys)
+      val ev = GenerateUnsafeProjection.createCode(ctx, streamedBoundKeys)
       (ev, s"${ev.value}.anyNull()")
     }
   }
