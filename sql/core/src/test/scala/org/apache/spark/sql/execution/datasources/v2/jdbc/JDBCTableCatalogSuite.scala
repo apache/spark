@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.sql.DriverManager
+import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.spark.SparkConf
@@ -25,7 +25,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
 class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
-  val url = "jdbc:h2:mem:testdb0"
+
+  val tempDir = Utils.createTempDir()
+  val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   var conn: java.sql.Connection = null
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -33,25 +35,28 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     .set("spark.sql.catalog.h2.url", url)
     .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
 
+  private def withConnection[T](f: Connection => T): T = {
+    val conn = DriverManager.getConnection(url, new Properties())
+    try {
+      f(conn)
+    } finally {
+      conn.close()
+    }
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     Utils.classForName("org.h2.Driver")
-
-    // Extra properties that will be specified for our database. We need these to test
-    // usage of parameters from OPTIONS clause in queries.
-    val properties = new Properties()
-    properties.setProperty("user", "testUser")
-    properties.setProperty("password", "testPass")
-    properties.setProperty("rowId", "false")
-
-    conn = DriverManager.getConnection(url, properties)
-    conn.prepareStatement("create schema test").executeUpdate()
-    conn.prepareStatement(
-      "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
+    withConnection { conn =>
+      conn.prepareStatement("""CREATE SCHEMA "test"""").executeUpdate()
+      conn.prepareStatement(
+        """CREATE TABLE "test"."people" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)""")
+        .executeUpdate()
+    }
   }
 
   override def afterAll(): Unit = {
-    conn.close()
+    Utils.deleteRecursively(tempDir)
     super.afterAll()
   }
 

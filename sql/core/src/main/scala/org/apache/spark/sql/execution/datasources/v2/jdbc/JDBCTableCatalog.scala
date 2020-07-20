@@ -16,13 +16,15 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.util
+import java.sql.Connection
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -51,16 +53,22 @@ class JDBCTableCatalog extends TableCatalog {
   }
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
-    // scalastyle:off throwerror
-    throw new NotImplementedError()
-    // scalastyle:on throwerror
+    checkNamespace(namespace)
+    val schemaPattern = if (namespace.length == 1) namespace.head else null
+    withConnection { conn =>
+      val rs = conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"));
+      new Iterator[Identifier] {
+        def hasNext = rs.next()
+        def next = Identifier.of(namespace, rs.getString("TABLE_NAME"))
+      }.toArray
+    }
   }
 
   override def createTable(
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+      properties: java.util.Map[String, String]): Table = {
     // scalastyle:off throwerror
     throw new NotImplementedError()
     // scalastyle:on throwerror
@@ -88,5 +96,21 @@ class JDBCTableCatalog extends TableCatalog {
     // scalastyle:off throwerror
     throw new NotImplementedError()
     // scalastyle:on throwerror
+  }
+
+  private def checkNamespace(namespace: Array[String]): Unit = {
+    // In JDBC there is no nested database/schema
+    if (namespace.length > 1) {
+      throw new NoSuchNamespaceException(namespace)
+    }
+  }
+
+  private def withConnection[T](f: Connection => T): T = {
+    val conn = JdbcUtils.createConnectionFactory(options)()
+    try {
+      f(conn)
+    } finally {
+      conn.close()
+    }
   }
 }
