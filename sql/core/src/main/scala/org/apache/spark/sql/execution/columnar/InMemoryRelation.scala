@@ -60,6 +60,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
   def convertForCacheInternal(cachedPlan: SparkPlan,
       batchSize: Int,
       useCompression: Boolean): RDD[CachedBatch] = {
+    // Most of this code originally came from `CachedRDDBuilder.buildBuffers()`
     val output = cachedPlan.output
     cachedPlan.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[DefaultCachedBatch] {
@@ -107,6 +108,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
   }
 
   override def supportsColumnar(schema: StructType): Boolean = schema.fields.forall(f =>
+      // This code originally came from `InMemoryTableScanExec.supportsColumnar`
     f.dataType match {
         // More types can be supported, but this is to match the original implementation that
         // only supported primitive types "for ease of review"
@@ -120,6 +122,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[ColumnarBatch] = {
+    // Most of this code originally came from `InMemoryTableScanExec.createAndDecompressColumn`
     val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
     val outputSchema = StructType.fromAttributes(selectedAttributes)
     val columnIndices =

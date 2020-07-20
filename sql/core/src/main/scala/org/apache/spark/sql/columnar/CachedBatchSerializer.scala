@@ -82,7 +82,7 @@ trait CachedBatchSerializer extends Serializable {
 
   /**
    * Decompress the cached data into a ColumnarBatch. This currently is only used if
-   * `supportsColumnar()`` returned true for the associated schema, but there are other checks
+   * `supportsColumnar()` returned true for the associated schema, but there are other checks
    * that can force row based output. One of the main advantages of doing columnar output over row
    * based output is the code generation is more standard and can be combined with code generation
    * for downstream operations.
@@ -163,6 +163,8 @@ private object ExtractableLiteral {
 abstract class SimpleMetricsCachedBatchSerializer extends CachedBatchSerializer with Logging {
   override def buildFilter(predicates: Seq[Expression],
       cachedAttributes: Seq[Attribute]): (Int, Iterator[CachedBatch]) => Iterator[CachedBatch] = {
+    // Most of this code originally came from `InMemoryTableScanExec.filteredCachedBatches()` and
+    // `InMemoryTableScanExec.buildFilter`
     val stats = new PartitionStatistics(cachedAttributes)
     val statsSchema = stats.schema
 
