@@ -68,9 +68,7 @@ class AdaptiveQueryExecSuite
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = sql(query)
-      QueryTest.sameRows(result.toSeq, df.collect().toSeq).foreach {
-        error => fail(error)
-      }
+      checkAnswer(df, result)
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
