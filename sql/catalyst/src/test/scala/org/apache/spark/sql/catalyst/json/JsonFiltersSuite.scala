@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.continuous.shuffle
+package org.apache.spark.sql.catalyst.json
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.{StructFilters, StructFiltersSuite}
+import org.apache.spark.sql.sources
+import org.apache.spark.sql.types.StructType
 
-/**
- * Trait for writing to a continuous processing shuffle.
- */
-trait ContinuousShuffleWriter {
-  def write(epoch: Iterator[UnsafeRow]): Unit
+class JsonFiltersSuite extends StructFiltersSuite {
+  override def createFilters(filters: Seq[sources.Filter], schema: StructType): StructFilters = {
+    new JsonFilters(filters, schema)
+  }
 }

@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.TimeZone
+
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
 import org.apache.log4j.Level
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
@@ -382,5 +385,30 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/shanghai")
     }
     assert(e.getMessage === "Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)")
+  }
+
+  test("set time zone") {
+    TimeZone.getAvailableIDs().foreach { zid =>
+      sql(s"set time zone '$zid'")
+      assert(spark.conf.get(SQLConf.SESSION_LOCAL_TIMEZONE) === zid)
+    }
+    sql("set time zone local")
+    assert(spark.conf.get(SQLConf.SESSION_LOCAL_TIMEZONE) === TimeZone.getDefault.getID)
+
+    val e1 = intercept[IllegalArgumentException](sql("set time zone 'invalid'"))
+    assert(e1.getMessage === "Cannot resolve the given timezone with" +
+      " ZoneId.of(_, ZoneId.SHORT_IDS)")
+
+    (-18 to 18).map(v => (v, s"interval '$v' hours")).foreach { case (i, interval) =>
+      sql(s"set time zone $interval")
+      val zone = spark.conf.get(SQLConf.SESSION_LOCAL_TIMEZONE)
+      if (i == 0) {
+        assert(zone === "Z")
+      } else {
+        assert(zone === String.format("%+03d:00", new Integer(i)))
+      }
+    }
+    val e2 = intercept[ParseException](sql("set time zone interval 19 hours"))
+    assert(e2.getMessage contains "The interval value must be in the range of [-18, +18] hours")
   }
 }

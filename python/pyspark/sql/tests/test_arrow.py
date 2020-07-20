@@ -447,6 +447,13 @@ class ArrowTests(ReusedSQLTestCase):
             self.spark.createDataFrame(
                 pd.DataFrame({'a': [1, 2, 3]}, index=[2., 3., 4.])).distinct().count(), 3)
 
+    def test_no_partition_toPandas(self):
+        # SPARK-32301: toPandas should work from a Spark DataFrame with no partitions
+        # Forward-ported from SPARK-32300.
+        pdf = self.spark.sparkContext.emptyRDD().toDF("col1 int").toPandas()
+        self.assertEqual(len(pdf), 0)
+        self.assertEqual(list(pdf.columns), ["col1"])
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,

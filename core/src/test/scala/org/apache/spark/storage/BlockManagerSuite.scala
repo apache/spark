@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.File
 import java.nio.ByteBuffer
+import java.nio.file.Files
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -50,10 +51,11 @@ import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, Transpo
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExecutorDiskUtils, ExternalBlockStoreClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
-import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerBlockUpdated}
+import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, SparkListenerBlockUpdated}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
+import org.apache.spark.shuffle.{ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
@@ -61,7 +63,7 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with LocalSparkContext with ResetSystemProperties
-  with EncryptionFunSuite with TimeLimits {
+  with EncryptionFunSuite with TimeLimits with BeforeAndAfterAll {
 
   import BlockManagerSuite._
 
@@ -70,6 +72,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   var conf: SparkConf = null
   val allStores = ArrayBuffer[BlockManager]()
+  val sortShuffleManagers = ArrayBuffer[SortShuffleManager]()
   var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
   var liveListenerBus: LiveListenerBus = null
@@ -97,12 +100,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(Network.RPC_ASK_TIMEOUT, "5s")
   }
 
+  private def makeSortShuffleManager(): SortShuffleManager = {
+    val newMgr = new SortShuffleManager(new SparkConf(false))
+    sortShuffleManagers += newMgr
+    newMgr
+  }
+
   private def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER,
       master: BlockManagerMaster = this.master,
       transferService: Option[BlockTransferService] = Option.empty,
-      testConf: Option[SparkConf] = None): BlockManager = {
+      testConf: Option[SparkConf] = None,
+      shuffleManager: ShuffleManager = shuffleManager): BlockManager = {
     val bmConf = testConf.map(_.setAll(conf.getAll)).getOrElse(conf)
     bmConf.set(TEST_MEMORY, maxMem)
     bmConf.set(MEMORY_OFFHEAP_SIZE, maxMem)
@@ -153,7 +163,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     liveListenerBus = spy(new LiveListenerBus(conf))
     master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        liveListenerBus, None, blockManagerInfo)),
+        liveListenerBus, None, blockManagerInfo, mapOutputTracker)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
 
@@ -166,6 +176,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       conf = null
       allStores.foreach(_.stop())
       allStores.clear()
+      sortShuffleManagers.foreach(_.stop())
+      sortShuffleManagers.clear()
       rpcEnv.shutdown()
       rpcEnv.awaitTermination()
       rpcEnv = null
@@ -173,6 +185,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       liveListenerBus = null
     } finally {
       super.afterEach()
+    }
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      // Cleanup the reused items.
+      Option(bcastManager).foreach(_.stop())
+      Option(mapOutputTracker).foreach(_.stop())
+      Option(shuffleManager).foreach(_.stop())
+    } finally {
+      super.afterAll()
     }
   }
 
@@ -1815,6 +1838,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     verify(liveListenerBus, never()).post(SparkListenerBlockUpdated(BlockUpdatedInfo(updateInfo)))
   }
 
+  test("we reject putting blocks when we have the wrong shuffle resolver") {
+    val badShuffleManager = mock(classOf[ShuffleManager])
+    val badShuffleResolver = mock(classOf[ShuffleBlockResolver])
+    when(badShuffleManager.shuffleBlockResolver).thenReturn(badShuffleResolver)
+    val shuffleBlockId = ShuffleDataBlockId(0, 0, 0)
+    val bm = makeBlockManager(100, "exec1", shuffleManager = badShuffleManager)
+    val message = "message"
+    val exception = intercept[SparkException] {
+      bm.putBlockDataAsStream(shuffleBlockId, StorageLevel.DISK_ONLY, ClassTag(message.getClass))
+    }
+    assert(exception.getMessage.contains("unsupported shuffle resolver"))
+  }
+
   test("test decommission block manager should not be part of peers") {
     val exec1 = "exec1"
     val exec2 = "exec2"
@@ -1846,7 +1882,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockId).size === 2)
     assert(master.getLocations(blockId).contains(store1.blockManagerId))
 
-    store1.decommissionRddCacheBlocks()
+    val decomManager = new BlockManagerDecommissioner(conf, store1)
+    decomManager.decommissionRddCacheBlocks()
     assert(master.getLocations(blockId).size === 2)
     assert(master.getLocations(blockId).toSet === Set(store2.blockManagerId,
       store3.blockManagerId))
@@ -1866,11 +1903,55 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
     assert(master.getLocations(blockIdSmall) === Seq(store1.blockManagerId))
 
-    store1.decommissionRddCacheBlocks()
+    val decomManager = new BlockManagerDecommissioner(conf, store1)
+    decomManager.decommissionRddCacheBlocks()
     // Smaller block offloaded to store2
     assert(master.getLocations(blockIdSmall) === Seq(store2.blockManagerId))
     // Larger block still present in store1 as it can't be offloaded
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
+  }
+
+  test("test migration of shuffle blocks during decommissioning") {
+    val shuffleManager1 = makeSortShuffleManager()
+    val bm1 = makeBlockManager(3500, "exec1", shuffleManager = shuffleManager1)
+    shuffleManager1.shuffleBlockResolver._blockManager = bm1
+
+    val shuffleManager2 = makeSortShuffleManager()
+    val bm2 = makeBlockManager(3500, "exec2", shuffleManager = shuffleManager2)
+    shuffleManager2.shuffleBlockResolver._blockManager = bm2
+
+    val blockSize = 5
+    val shuffleDataBlockContent = Array[Byte](0, 1, 2, 3, 4)
+    val shuffleData = ShuffleDataBlockId(0, 0, 0)
+    Files.write(bm1.diskBlockManager.getFile(shuffleData).toPath(), shuffleDataBlockContent)
+    val shuffleIndexBlockContent = Array[Byte](5, 6, 7, 8, 9)
+    val shuffleIndex = ShuffleIndexBlockId(0, 0, 0)
+    Files.write(bm1.diskBlockManager.getFile(shuffleIndex).toPath(), shuffleIndexBlockContent)
+
+    mapOutputTracker.registerShuffle(0, 1)
+    val decomManager = new BlockManagerDecommissioner(conf, bm1)
+    try {
+      mapOutputTracker.registerMapOutput(0, 0, MapStatus(bm1.blockManagerId, Array(blockSize), 0))
+      assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm1.blockManagerId)
+
+      val env = mock(classOf[SparkEnv])
+      when(env.conf).thenReturn(conf)
+      SparkEnv.set(env)
+
+      decomManager.refreshOffloadingShuffleBlocks()
+
+      eventually(timeout(1.second), interval(10.milliseconds)) {
+        assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm2.blockManagerId)
+      }
+      assert(Files.readAllBytes(bm2.diskBlockManager.getFile(shuffleData).toPath())
+        === shuffleDataBlockContent)
+      assert(Files.readAllBytes(bm2.diskBlockManager.getFile(shuffleIndex).toPath())
+        === shuffleIndexBlockContent)
+    } finally {
+      mapOutputTracker.unregisterShuffle(0)
+      // Avoid thread leak
+      decomManager.stopOffloadingShuffleBlocks()
+    }
   }
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {

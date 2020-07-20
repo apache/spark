@@ -15,18 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.continuous.shuffle
+package org.apache.spark.storage
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-
-/**
- * Trait for reading from a continuous processing shuffle.
- */
-trait ContinuousShuffleReader {
-  /**
-   * Returns an iterator over the incoming rows in an epoch. Implementations should block waiting
-   * for new rows to arrive, and end the iterator once they've received epoch markers from all
-   * shuffle writers.
-   */
-  def read(): Iterator[UnsafeRow]
-}
+class BlockSavedOnDecommissionedBlockManagerException(blockId: BlockId)
+  extends Exception(s"Block $blockId cannot be saved on decommissioned executor")

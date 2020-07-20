@@ -383,13 +383,13 @@ private[spark] class MesosClusterScheduler(
     taskId.split(s"${RETRY_SEP}").head
   }
 
-  private def adjust[A, B](m: collection.Map[A, B], k: A, default: B)(f: B => B) = {
+  private def adjust[A, B](m: Map[A, B], k: A, default: B)(f: B => B) = {
     m.updated(k, f(m.getOrElse(k, default)))
   }
 
   private def getDriverEnvironment(desc: MesosDriverDescription): Environment = {
     // TODO(mgummelt): Don't do this here.  This should be passed as a --conf
-    val commandEnv = adjust(desc.command.environment, "SPARK_SUBMIT_OPTS", "")(
+    val commandEnv = adjust(desc.command.environment.toMap, "SPARK_SUBMIT_OPTS", "")(
       v => s"$v -D${config.DRIVER_FRAMEWORK_ID.key}=${getDriverFrameworkID(desc)}"
     )
 
@@ -539,14 +539,14 @@ private[spark] class MesosClusterScheduler(
     options ++= Seq("--py-files", formattedFiles)
 
     // --conf
-    val replicatedOptionsBlacklist = Set(
+    val replicatedOptionsExcludeList = Set(
       JARS.key, // Avoids duplicate classes in classpath
       SUBMIT_DEPLOY_MODE.key, // this would be set to `cluster`, but we need client
       "spark.master" // this contains the address of the dispatcher, not master
     )
     val defaultConf = conf.getAllWithPrefix(config.DISPATCHER_DRIVER_DEFAULT_PREFIX).toMap
     val driverConf = desc.conf.getAll
-      .filter { case (key, _) => !replicatedOptionsBlacklist.contains(key) }
+      .filter { case (key, _) => !replicatedOptionsExcludeList.contains(key) }
       .toMap
     (defaultConf ++ driverConf).foreach { case (key, value) =>
       options ++= Seq("--conf", s"${key}=${value}") }
@@ -686,14 +686,14 @@ private[spark] class MesosClusterScheduler(
       }
 
       scheduleTasks(
-        copyBuffer(driversToRetry),
+        copyBuffer(driversToRetry).toSeq,
         removeFromPendingRetryDrivers,
         currentOffers,
         tasks)
 
       // Then we walk through the queued drivers and try to schedule them.
       scheduleTasks(
-        copyBuffer(queuedDrivers),
+        copyBuffer(queuedDrivers).toSeq,
         removeFromQueuedDrivers,
         currentOffers,
         tasks)

@@ -911,7 +911,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
    */
   private def getStatsProperties(tableName: String): Map[String, String] = {
     val hTable = hiveClient.getTable(spark.sessionState.catalog.getCurrentDatabase, tableName)
-    hTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
+    hTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX)).toMap
   }
 
   test("change stats after insert command for hive table") {
