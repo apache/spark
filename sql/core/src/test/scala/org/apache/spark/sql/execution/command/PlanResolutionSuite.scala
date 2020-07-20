@@ -1564,7 +1564,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val msg = intercept[AnalysisException] {
         parseAndResolve(sql)
       }.getMessage
-      assert(msg.contains(s"Cannot create tables with ${NullType.simpleString} type."))
+      assert(msg.contains(s"Cannot create tables/views with ${NullType.simpleString} type."))
     }
   }
 

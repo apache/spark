@@ -356,7 +356,7 @@ private[sql] object CatalogV2Util {
     }
     if (containsNullType(dt)) {
       throw new AnalysisException(
-        s"Cannot create tables with ${NullType.simpleString} type.")
+        s"Cannot create tables/views with ${NullType.simpleString} type.")
     }
   }
 
