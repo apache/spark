@@ -118,8 +118,8 @@ case class BroadcastNullAwareHashJoinExec(
         )
         streamedIter.filter(row => {
           val streamedRowIsNull = row.isNullAt(params.streamedSideKeyIndex)
-          val lookupRow: UnsafeRow = keyGenerator(row)
-          val notInKeyEqual = params.buildSideRelation.get(lookupRow) != null
+          val lookupKey: UnsafeRow = keyGenerator(row)
+          val notInKeyEqual = params.buildSideRelation.get(lookupKey) != null
           !streamedRowIsNull && !notInKeyEqual
         })
       }
