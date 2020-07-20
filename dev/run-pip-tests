@@ -63,7 +63,7 @@ fi
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
-PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
+PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall --ignore-installed"
 # Test both regular user and edit/dev install modes.
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
 	      "pip install $PIP_OPTIONS -e python/")
@@ -102,9 +102,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     cd "$FWDIR"/python
     # Delete the egg info file if it exists, this can cache the setup file.
     rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
-    # Also delete .local in case it was already installed via --user.
-    pip show pyspark
-    rm -rf "$(python3 -m site --user-site)/pyspark*" || echo "No existing PySpark installation at user site-packages."
     python3 setup.py sdist
 
 
