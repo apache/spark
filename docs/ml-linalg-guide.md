@@ -25,7 +25,7 @@ This guide provides necessary information to enable accelerated linear algebra p
 
 Spark MLlib defines Vector and Matrix as basic data types for machine learning algorithms. On top of them, [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) and [LAPACK](https://en.wikipedia.org/wiki/LAPACK) operations are implemented and supported by [netlib-java](https://github.com/fommil/netlib-Java) [^1]. `netlib-java` can use optimized native linear algebra libraries (refered to as "native libraries" or "BLAS libraries" hereafter) for faster numerical processing. [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) and [OpenBLAS](http://www.openblas.net) are two most popular ones.
 
-However due to license restrictions, the official released Spark binaries by default doesn't contain native libraries support for `netlib-java`.
+However due to license difference, the official released Spark binaries by default doesn't contain native libraries support for `netlib-java`.
 
 The following sections describe how to enable `netlib-java` with native libraries support for Spark MLlib and how to install native libraries and configure them properly.
 
