@@ -17,18 +17,23 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.sql.Timestamp
+
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with TestHiveSingleton {
   import testImplicits._
+
   import ScriptTransformationIOSchema._
 
   override def isHive23OrSpark: Boolean = HiveUtils.isHive23
@@ -148,6 +153,99 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
     assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-25990: TRANSFORM should handle schema less correctly (with hive serde)") {
+    assume(TestUtils.testCommandAvailable("python"))
+    val scriptFilePath = getTestResourcePath("test_script.py")
+
+    withTempView("v") {
+      val df = Seq(
+        (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
+        (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
+      df.createTempView("v")
+
+      val query = sql(
+        s"""
+           |SELECT TRANSFORM(a, b, c, d, e)
+           |USING 'python ${scriptFilePath}'
+           |FROM v
+        """.stripMargin)
+
+      // In hive default serde mode, if we don't define output schema, it will choose first
+      // two column as output schema (key: String, value: String)
+      checkAnswer(
+        query,
+        identity,
+        df.select(
+          'a.cast("string").as("key"),
+          'b.cast("string").as("value")).collect())
+    }
+  }
+
+  test("SPARK-32106: TRANSFORM support complex data types as input and ouput type (hive serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq(
+        (1, "1", Array(0, 1, 2), Map("a" -> 1)),
+        (2, "2", Array(3, 4, 5), Map("b" -> 2)))
+        .toDF("a", "b", "c", "d")
+          .select('a, 'b, 'c, 'd, struct('a, 'b).as("e"))
+      df.createTempView("v")
+
+      // Hive serde support ArrayType/MapType/StructType as input and output data type
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("c").expr,
+            df.col("d").expr,
+            df.col("e").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("c", ArrayType(IntegerType))(),
+            AttributeReference("d", MapType(StringType, IntegerType))(),
+            AttributeReference("e", StructType(
+              Seq(
+                StructField("col1", IntegerType, false),
+                StructField("col2", StringType, true))))()),
+          child = child,
+          ioschema = serdeIOSchema
+        ),
+        df.select('c, 'd, 'e).collect())
+    }
+  }
+
+  test("SPARK-32106: TRANSFORM don't support CalenderIntervalType/UserDefinedType (hive serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq(
+        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3))),
+        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3))))
+        .toDF("a", "b", "c")
+      df.createTempView("v")
+
+     val e1 = intercept[Exception] {
+        sql(
+          """
+            |SELECT TRANSFORM(a, b) USING 'cat' AS (a, b)
+            |FROM v
+          """.stripMargin).collect()
+      }
+      assert(e1.getMessage.contains("scala.MatchError: CalendarIntervalType"))
+
+      val e2 = intercept[Exception] {
+        sql(
+          """
+            |SELECT TRANSFORM(a, c) USING 'cat' AS (a, c)
+            |FROM v
+          """.stripMargin).collect()
+      }
+      assert(e2.getMessage.contains(
+        "scala.MatchError: org.apache.spark.sql.types.TestUDT$MyDenseVectorUDT"))
+    }
   }
 }
 

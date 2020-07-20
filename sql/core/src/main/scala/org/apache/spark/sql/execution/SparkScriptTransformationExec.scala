@@ -48,15 +48,13 @@ case class SparkScriptTransformationExec(
 
     val (outputStream, proc, inputStream, stderrBuffer) = initProc
 
-    val finalInput = input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
-
-    val outputProjection = new InterpretedProjection(finalInput, child.output)
+    val outputProjection = new InterpretedProjection(inputExpressionsWithoutSerde, child.output)
 
     // This new thread will consume the ScriptTransformation's input rows and write them to the
     // external process. That process's output will be read by this current thread.
     val writerThread = SparkScriptTransformationWriterThread(
       inputIterator.map(outputProjection),
-      finalInput.map(_.dataType),
+      inputExpressionsWithoutSerde.map(_.dataType),
       ioschema,
       outputStream,
       proc,

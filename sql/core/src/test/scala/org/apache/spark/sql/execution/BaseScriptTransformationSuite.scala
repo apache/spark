@@ -210,7 +210,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-32106: TRANSFORM should support more data types (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
-    case class Struct(d: Int, str: String)
     withTempView("v") {
       val df = Seq(
         (1, "1", 1.0, 11.toByte, BigDecimal(1.0), new Timestamp(1),
@@ -225,29 +224,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       ).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l")
         .select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l,
           struct('a, 'b).as("m"), unhex('a).as("n"), lit(true).as("o")
-        )
-      // Note column d's data type is Decimal(38, 18)
-      df.createTempView("v")
-
-      assert(spark.table("v").schema ==
-        StructType(Seq(
-          StructField("a", IntegerType, false),
-          StructField("b", StringType, true),
-          StructField("c", DoubleType, false),
-          StructField("d", ByteType, false),
-          StructField("e", DecimalType(38, 18), true),
-          StructField("f", TimestampType, true),
-          StructField("g", DateType, true),
-          StructField("h", CalendarIntervalType, true),
-          StructField("i", ArrayType(IntegerType, false), true),
-          StructField("j", MapType(StringType, IntegerType, false), true),
-          StructField("k", new TestUDT.MyDenseVectorUDT, true),
-          StructField("l", new SimpleTupleUDT, true),
-          StructField("m", StructType(
-            Seq(StructField("a", IntegerType, false),
-              StructField("b", StringType, true))), false),
-          StructField("n", BinaryType, true),
-          StructField("o", BooleanType, false))))
+        ) // Note column d's data type is Decimal(38, 18)
 
       // Can't support convert script output data to ArrayType/MapType/StructType now,
       // return these column still as string.
@@ -302,7 +279,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-32106: TRANSFORM shoud return null when return string incompatible(no serde)") {
+  test("SPARK-32106: TRANSFORM should return null when return string incompatible(no serde)") {
     checkAnswer(
       sql(
         """

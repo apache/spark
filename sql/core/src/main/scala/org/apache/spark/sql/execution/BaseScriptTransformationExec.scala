@@ -30,7 +30,7 @@ import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
@@ -45,6 +45,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   def output: Seq[Attribute]
   def child: SparkPlan
   def ioschema: ScriptTransformationIOSchema
+
+  protected lazy val inputExpressionsWithoutSerde: Seq[Expression] = {
+    input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
+  }
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
 
@@ -99,16 +103,17 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       var curLine: String = null
       val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
 
+      val outputRowFormat = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
       val processRowWithoutSerde = if (!ioschema.schemaLess) {
         prevLine: String =>
           new GenericInternalRow(
-            prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+            prevLine.split(outputRowFormat)
               .zip(fieldWriters)
               .map { case (data, writer) => writer(data) })
       } else {
         prevLine: String =>
           new GenericInternalRow(
-            prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
+            prevLine.split(outputRowFormat, 2)
               .map(CatalystTypeConverters.convertToCatalyst))
       }
 
@@ -197,12 +202,12 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         converter)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
-      case _: DataType => wrapperConvertException(data => data, converter)
+      case _ => wrapperConvertException(data => data, converter)
     }
   }
 
   // Keep consistent with Hive `LazySimpleSerde`, when there is a type case error, return null
-  val wrapperConvertException: (String => Any, Any => Any) => String => Any =
+  private val wrapperConvertException: (String => Any, Any => Any) => String => Any =
     (f: String => Any, converter: Any => Any) =>
       (data: String) => converter {
         try {

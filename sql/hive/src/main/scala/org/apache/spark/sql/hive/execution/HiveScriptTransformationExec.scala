@@ -223,7 +223,7 @@ case class HiveScriptTransformationExec(
     // For HiveScriptTransformationExec, if inputSerde == null, but outputSerde != null
     // We will use StringBuffer to pass data, in this case, we should cast data as string too.
     val finalInput = if (inputSerde == null) {
-      input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
+      inputExpressionsWithoutSerde
     } else {
       input
     }
