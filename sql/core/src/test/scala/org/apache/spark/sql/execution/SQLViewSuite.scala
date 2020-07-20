@@ -266,6 +266,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("error handling: disallow setting properties for CREATE TEMPORARY VIEW") {
+    withTempView("myabcdview") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt")
+      }
+      assert(e.message.contains(
+        "Operation not allowed: CREATE TEMPORARY VIEW ... " +
+          "TBLPROPERTIES (property_name = property_value, ...)"))
+    }
+  }
+
   test("correctly parse CREATE VIEW statement") {
     withView("testView") {
       sql(
@@ -301,7 +312,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       sql(
         """CREATE TEMPORARY VIEW
           |testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
-          |TBLPROPERTIES ('a' = 'b')
           |AS SELECT * FROM jt
           |""".stripMargin)
       checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
