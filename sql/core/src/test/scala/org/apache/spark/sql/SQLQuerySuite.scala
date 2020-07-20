@@ -3571,6 +3571,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         """.stripMargin),
         Row(1) :: Nil)
     }
+
+  test("SPARK-32372: ResolveReferences.dedupRight should only rewrite attributes for ancestor " +
+    "nodes") {
+    sql("SELECT name, avg(age) as avg_age FROM person GROUP BY name")
+      .createOrReplaceTempView("person_a")
+    sql("SELECT p1.name, p2.avg_age FROM person p1 JOIN person_a p2 ON p1.name = p2.name")
+      .createOrReplaceTempView("person_b")
+    sql("SELECT * FROM person_a UNION SELECT * FROM person_b")
+      .createOrReplaceTempView("person_c")
+    checkAnswer(
+      sql("SELECT p1.name, p2.avg_age FROM person_c p1 JOIN person_c p2 ON p1.name = p2.name"),
+      Row("jim", 20.0) :: Row("mike", 30.0) :: Nil)
   }
 }
 
