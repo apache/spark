@@ -35,8 +35,10 @@ END
     
 * **boolean_expression**
 
-    Specifies an expression with a return type of boolean.
-    
+    Specifies any expression that evaluates to a result type `boolean`. Two or
+    more expressions may be combined together using the logical
+    operators ( `AND`, `OR` ).
+
 * **then_expression**
 
     Specifies the then expression based on the `boolean_expression` condition; `then_expression` and `else_expression` should all be same type or coercible to a common type.

@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-The `PIVOT` clause is used for data perspective. We can get the aggregated values based on specific column values, which will be turned to multiple columns used in `SELECT  Clause`. The `PIVOT` clause can be specified after the table name or subquery.
+The `PIVOT` clause is used for data perspective. We can get the aggregated values based on specific column values, which will be turned to multiple columns used in `SELECT` clause. The `PIVOT` clause can be specified after the table name or subquery.
 
 ### Syntax
 
@@ -42,11 +42,11 @@ PIVOT ( { aggregate_expression [ AS aggregate_expression_alias ] } [ , ... ]
      
 * **column_list**
 
-    Contains columns in the `FROM` clause, which specifies the columns we want to replace with new columns. We can use brackets to surround the columns, such as `( c1, c2 )`.
+    Contains columns in the `FROM` clause, which specifies the columns we want to replace with new columns. We can use brackets to surround the columns, such as `(c1, c2)`.
       
 * **expression_list**
 
-    Specifies new columns, which are used to match values in `column_List` as the aggregating condition. We can also add aliases for them.
+    Specifies new columns, which are used to match values in `column_list` as the aggregating condition. We can also add aliases for them.
     
 ### Examples
 

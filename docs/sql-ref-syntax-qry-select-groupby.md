@@ -81,7 +81,8 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 * **aggregate_name**
 
     Specifies an aggregate function name (MIN, MAX, COUNT, SUM, AVG, etc.).
-    Some aggregate function like `FIRST` and `LAST` have special usage as the following:
+    Note that `FIRST` and `LAST` have an optional `IGNORE NULLS` clause; when the option specified,
+    it will returns the first or last value that is not null (or null if all values are null). 
     **Syntax:** `[ FIRST | LAST ] ( [ distinct ] expression [ IGNORE NULLS ] ) [ FILTER ( WHERE boolean_expression ) ]`
 
 * **DISTINCT**
@@ -92,18 +93,6 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
     Filters the input rows for which the `boolean_expression` in the `WHERE` clause evaluates
     to true are passed to the aggregate function; other rows are discarded.
-
-* **FIRST**
-
-    `FIRST` selects a first expression value from the data set. We can specify an optional `IGNORE NULL` clause to ignore NULL values.
-    
-* **LAST**
-
-    `LAST` selects a last expression value from the data set. We can specify an optional `IGNORE NULLS` clause to ignore NULL values. 
-    
-* **IGNORE NULLS**
-   
-   `IGNORE NULLS` is used to ignore null values, which are used in `FIRST` and `LAST` 
 
 ### Examples
 

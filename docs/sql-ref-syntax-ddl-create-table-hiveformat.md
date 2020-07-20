@@ -194,8 +194,10 @@ CREATE TABLE avroExample
                 { "name":"string2", "type":"string" }
             ] }');
 
---Use personalized custom SerDe(we may need to `ADD JAR xxx.jar` first to ensure we can find the serde_class, or you may run into `CLASSNOTFOUND` exception)
+--Use personalized custom SerDe(we may need to `ADD JAR xxx.jar` first to ensure we can find the serde_class,
+--or you may run into `CLASSNOTFOUND` exception)
 ADD JAR /tmp/hive_serde_example.jar;
+
 CREATE EXTERNAL TABLE family (id INT, name STRING)
     ROW FORMAT SERDE 'com.ly.spark.serde.SerDeExample'
     STORED AS INPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleInputFormat'

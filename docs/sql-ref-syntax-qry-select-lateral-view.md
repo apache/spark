@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-The `LATERAL VIEW` clause is used in conjunction with generator functions such as explode(), which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
+The `LATERAL VIEW` clause is used in conjunction with generator functions such as `EXPLODE`, which will generate a virtual table containing one or more rows. `LATERAL VIEW` will apply the rows to each original output row.
 
 ### Syntax
 
@@ -33,16 +33,11 @@ LATERAL VIEW [ OUTER ] generator_function ( expression [ , ... ] ) [ table_alias
 
 * **OUTER**
 
-    If `LATERAL VIEW` is used without `OUTER`, and `generator_function` returns empty, then no results will be output in `SELECT` clause.
-    If `LATERAL VIEW` is used with `OUTER`, and `generator_function` returns empty, then results will be output normally with `NULL` as `generator_function` output.
+    If `OUTER` specified, returns null if an input array/map is empty or null. 
     
 * **generator_function**
 
-    This expression will output a virtual table with a single input row.
-
-* **expression**
-
-    Parameters for generating_function.
+    Specifies a generator function (EXPLODE, INLINE, etc.).
     
 * **table_alias**
 
