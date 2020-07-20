@@ -469,6 +469,7 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogSuite",
     "org.apache.spark.sql.hive.StatisticsSuite",
+    "org.apache.spark.sql.hive.execution.HiveCompatibilitySuite",
     "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.client.HiveClientVersions",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
@@ -489,7 +490,7 @@ object SparkParallelTestGrouping {
 
   private def testNameToTestGroup(name: String): String = name match {
     case _ if testsWhichShouldRunInTheirOwnDedicatedJvm.contains(name) => name
-    case _ if name.contains("org.apache.spark.sql.hive.execution") => HIVE_EXECUTION_TEST_GROUP
+    case _ if name.contains("org.apache.spark.sql.hive.execution") => DEFAULT_TEST_GROUP
     case _ => DEFAULT_TEST_GROUP
   }
 
