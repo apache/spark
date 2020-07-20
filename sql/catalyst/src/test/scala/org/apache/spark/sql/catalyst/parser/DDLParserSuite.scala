@@ -2002,7 +2002,7 @@ class DDLParserSuite extends AnalysisTest {
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
   }
 
-  test("create temporary view with properties not allowed") {
+  test("SPARK-32374: create temporary view with properties not allowed") {
     assertUnsupported(
       sql = """
         |CREATE OR REPLACE TEMPORARY VIEW a.b.c

@@ -266,7 +266,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("error handling: disallow setting properties for CREATE TEMPORARY VIEW") {
+  test("SPARK-32374: error handling: disallow setting properties for CREATE TEMPORARY VIEW") {
     withTempView("myabcdview") {
       val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt")
