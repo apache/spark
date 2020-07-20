@@ -64,7 +64,7 @@ The primary Machine Learning API for Spark is now the [DataFrame](sql-programmin
 
 MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/) and [netlib-java](https://github.com/fommil/netlib-java) for optimised numerical processing[^1]. Those packages may call native acceleration libraries such as [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) or [OpenBLAS](http://www.openblas.net) if they are available as system libraries or in runtime library paths. 
 
-Due to licensing issues with runtime proprietary binaries, we do not include `netlib-java`'s native proxies by default. See [MLlib Linear Algebra Acceleration Guide](ml-linalg-guide.md) for how to enable accelerated linear algebra processing. If accelerated native libraries are not enabled, you will see a warning message below and a pure JVM implementation will be used instead:
+Due to differing OSS licenses, `netlib-java`'s native proxies can't be distributed with Spark. See [MLlib Linear Algebra Acceleration Guide](ml-linalg-guide.md) for how to enable accelerated linear algebra processing. If accelerated native libraries are not enabled, you will see a warning message below and a pure JVM implementation will be used instead:
 ```
 WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeSystemBLAS
 WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeRefBLAS

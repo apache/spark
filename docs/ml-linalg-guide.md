@@ -1,10 +1,29 @@
-# Spark MLlib Linear Algebra Acceleration Guide
+---
+layout: global
+title: MLlib Linear Algebra Acceleration Guide
+displayTitle: MLlib Linear Algebra Acceleration Guide
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+     http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+---
+
+# MLlib Linear Algebra Acceleration Guide
 
 ## Introduction
 
 This guide provides necessary information to enable accelerated linear algebra processing for Spark MLlib.
 
-Spark MLlib defines Vector and Matrix as basic data types for machine learning algorithms. On top of them, [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) and [LAPACK](https://en.wikipedia.org/wiki/LAPACK) operations are implemented and supported by [netlib-java](https://github.com/fommil/netlib-Java).[^1] `netlib-java` can use optimized native linear algebra libraries (refered to as "native libraries" or "BLAS libraries" hereafter) for faster numerical processing. [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) and [OpenBLAS](http://www.openblas.net) are two most popular ones.
+Spark MLlib defines Vector and Matrix as basic data types for machine learning algorithms. On top of them, [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) and [LAPACK](https://en.wikipedia.org/wiki/LAPACK) operations are implemented and supported by [netlib-java](https://github.com/fommil/netlib-Java) [^1]. `netlib-java` can use optimized native linear algebra libraries (refered to as "native libraries" or "BLAS libraries" hereafter) for faster numerical processing. [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) and [OpenBLAS](http://www.openblas.net) are two most popular ones.
 
 However due to license restrictions, the official released Spark binaries by default doesn't contain native libraries support for `netlib-java`.
 
@@ -14,7 +33,7 @@ The following sections describe how to enable `netlib-java` with native librarie
 
 ## Enable `netlib-java` with native library proxies 
 
-`netlib-java` native libraries has a dependency on `libgfortran`. It requires GFORTRAN 1.4 or above. This can be obtained by installing `libgfortran` package. After installation, the following command can be used to verify if it is installed properly.
+`netlib-java` depends on `libgfortran`. It requires GFORTRAN 1.4 or above. This can be obtained by installing `libgfortran` package. After installation, the following command can be used to verify if it is installed properly.
 ```
 strings /path/to/libgfortran.so.3.0.0 | grep GFORTRAN_1.4
 ```
@@ -26,14 +45,14 @@ $SPARK_SOURCE_HOME/build/mvn -Pnetlib-lgpl -DskipTests -Pyarn -Phadoop-2.7 clean
 
 If you only want to enable it in your project, include `com.github.fommil.netlib:all:1.1.2` as a dependency of your project.
 
-## Install Native Linear Algebra Libraries
+## Install native linear algebra libraries
 
-Intel MKL and OpenBLAS are two most popular native linear algebra libraries, you can choose one of them based on your preference. We described basic instructions as below. You can refer to [netlib-java documentation](https://github.com/fommil/netlib-java) for more advanced installation instructions.
+Intel MKL and OpenBLAS are two most popular native linear algebra libraries. You can choose one of them based on your preference. We provide basic instructions as below. You can refer to [netlib-java documentation](https://github.com/fommil/netlib-java) for more advanced installation instructions.
 
 ### Intel MKL
 
-- Download and install Intel MKL. The installation should be done on all nodes of the cluster. We assume the installation location is $MKLROOT.
-- Make sure `/usr/local/lib` is in system library search path and run the following commands:
+- Download and install Intel MKL. The installation should be done on all nodes of the cluster. We assume the installation location is $MKLROOT (Eg. /opt/intel/mkl).
+- Create soft links to `libmkl_rt.so` with specific names in system library search paths. For instance, make sure `/usr/local/lib` is in system library search paths and run the following commands:
 ```
 $ ln -sf $MKLROOT/lib/intel64/libmkl_rt.so /usr/local/lib/libblas.so.3
 $ ln -sf $MKLROOT/lib/intel64/libmkl_rt.so /usr/local/lib/liblapack.so.3
@@ -67,19 +86,22 @@ WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeSys
 WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeRefBLAS
 ```
 
-If native libraries are not properly configured in the system, Java BLAS implementation(f2jBLAS) will be used as fallback option.
+If native libraries are not properly configured in the system, Java BLAS implementation (f2jBLAS) will be used as fallback option.
 
 ## Spark Configuration
 
-The use of multiple-threading in either Intel MKL or OpenBLAS can conflict with Spark's execution model.[^2]
+The default behavior of multi-threading in either Intel MKL or OpenBLAS may not be optimal with Spark's execution model [^2].
 
 Therefore configuring these native libraries to use a single thread for operations may actually improve performance (see [SPARK-21305](https://issues.apache.org/jira/browse/SPARK-21305)). It is usually optimal to match this to the number of `spark.task.cpus`, which is `1` by default and typically left at `1`.
 
-You can use the options in `config/spark-env.sh` to disable multi-threading by setting thread number to 1.
+You can use the options in `config/spark-env.sh` to set thread number for Intel MKL or OpenBLAS:
+* For Intel MKL:
 ```
-# You might get better performance to enable these options if using native BLAS (see SPARK-21305).
-# - MKL_NUM_THREADS=1        Disable multi-threading of Intel MKL
-# - OPENBLAS_NUM_THREADS=1   Disable multi-threading of OpenBLAS
+MKL_NUM_THREADS=1
+```
+* For OpenBLAS:
+```
+OPENBLAS_NUM_THREADS=1
 ```
 
 [^2]: Please refer to the following resources to understand how to configure the number of threads for these BLAS implementations: [Intel MKL](https://software.intel.com/en-us/articles/recommended-settings-for-calling-intel-mkl-routines-from-multi-threaded-applications) or [Intel oneMKL](https://software.intel.com/en-us/onemkl-linux-developer-guide-improving-performance-with-threading) and [OpenBLAS](https://github.com/xianyi/OpenBLAS/wiki/faq#multi-threaded).
