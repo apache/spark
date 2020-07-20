@@ -431,10 +431,10 @@ object RegExpExtract {
   arguments = """
     Arguments:
       * str - a string expression.
-      * regexp - a string expression. a string representing a regular expression. The regex string should be a
- |        Java regular expression.
-      * idx - a int expression that representing the group index. The group index should be 0 or positive.
-          If `idx` is not specified, the default group index value is 1.
+      * regexp - a string expression. a string representing a regular expression.
+          The regex string should be a Java regular expression.
+      * idx - a int expression that representing the group index. The group index should be
+          0 or positive. If `idx` is not specified, the default group index value is 1.
   """,
   examples = """
     Examples:
