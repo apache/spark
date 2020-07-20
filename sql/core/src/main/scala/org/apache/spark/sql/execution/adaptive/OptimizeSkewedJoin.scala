@@ -133,29 +133,22 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def canSplitLeftSide(joinType: JoinType, plan: SparkPlan) = {
     (joinType == Inner || joinType == Cross || joinType == LeftSemi ||
-      joinType == LeftAnti || joinType == LeftOuter) && canBypass(plan)
+      joinType == LeftAnti || joinType == LeftOuter) && allUnspecifiedDistribution(plan)
   }
 
   private def canSplitRightSide(joinType: JoinType, plan: SparkPlan) = {
     (joinType == Inner || joinType == Cross ||
-      joinType == RightOuter) && canBypass(plan)
+      joinType == RightOuter) && allUnspecifiedDistribution(plan)
   }
 
-  // Bypass the node which its requiredChildDistribution contains [[UnspecifiedDistribution]]
-  private def canBypass(plan: SparkPlan) = {
-    val nodesCanBypass = plan.find {
-      case p: SparkPlan if p.requiredChildDistribution.exists {
-        case UnspecifiedDistribution => true
-        case _ => false
-      } => false // false means we bypass this node
-      case _ @ BypassTerminator() => true // terminate traverse
-      case _ => true // get the node which cannot bypass
+  // Check if there is a node in the tree that the requiredChildDistribution is specified,
+  // other than UnspecifiedDistribution.
+  private def allUnspecifiedDistribution(plan: SparkPlan): Boolean = plan.find { p =>
+    p.requiredChildDistribution.exists {
+      case UnspecifiedDistribution => false
+      case _ => true
     }
-    nodesCanBypass.exists {
-      case _ @ BypassTerminator() => true
-      case _ => false
-    }
-  }
+  }.isEmpty
 
   private object BypassTerminator {
     def unapply(plan: SparkPlan): Boolean = plan match {
@@ -325,10 +318,21 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       //     ..
       //       Shuffle
       val optimizePlan = optimizeSkewJoin(plan)
-      val numShuffles = ensureRequirements.apply(optimizePlan).collect {
-        case e: ShuffleExchangeExec => e
-      }.length
 
+      def countAdditionalShuffleInAncestorsOfSkewJoin(optimizePlan: SparkPlan): Int = {
+        val newPlan = ensureRequirements.apply(optimizePlan)
+        val totalAdditionalShuffles = newPlan.collect { case e: ShuffleExchangeExec => e }.size
+        val numShufflesFromDescendants =
+          newPlan.collectFirst { case j: SortMergeJoinExec if j.isSkewJoin => j }.map { smj =>
+            smj.collect { case e: ShuffleExchangeExec => e }.size
+          }.getOrElse(0)
+        totalAdditionalShuffles - numShufflesFromDescendants
+      }
+
+      // Check if we introduced new shuffles in the ancestors of the skewed join operator.
+      // And we don't care if new shuffles are introduced in the descendants of the join operator,
+      // since they will not actually be executed in the current adaptive execution framework.
+      val numShuffles = countAdditionalShuffleInAncestorsOfSkewJoin(optimizePlan)
       if (numShuffles > 0) {
         logDebug("OptimizeSkewedJoin rule is not applied due" +
           " to additional shuffles will be introduced.")
@@ -369,23 +373,6 @@ private object ShuffleStage {
           s"Expect CoalescedPartitionSpec but got $other")
       }
       Some(ShuffleStageInfo(s, mapStats, partitions))
-
-    case _: LeafExecNode => None
-
-    case _ @ UnaryExecNode((_, ShuffleStage(ss: ShuffleStageInfo))) =>
-      Some(ss)
-
-    case b: BinaryExecNode =>
-      b.left match {
-        case _ @ ShuffleStage(ss: ShuffleStageInfo) =>
-          Some(ss)
-        case _ =>
-          b.right match {
-            case _ @ ShuffleStage(ss: ShuffleStageInfo) =>
-              Some(ss)
-            case _ => None
-          }
-      }
 
     case _ => None
   }

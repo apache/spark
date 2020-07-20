@@ -68,7 +68,9 @@ class AdaptiveQueryExecSuite
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = sql(query)
-      QueryTest.sameRows(result.toSeq, df.collect().toSeq)
+      QueryTest.sameRows(result.toSeq, df.collect().toSeq).foreach {
+        error => fail(error)
+      }
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
@@ -660,9 +662,9 @@ class AdaptiveQueryExecSuite
 
         checkSkewJoin(
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2", true)
-        // After patched SPARK-32201, this query won't introduce additional shuffle anymore.
+        // Additional shuffle introduced, so disable the "OptimizeSkewedJoin" optimization
         checkSkewJoin(
-          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1", true)
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1", false)
       }
     }
   }
@@ -804,10 +806,10 @@ class AdaptiveQueryExecSuite
         // SMJ
         //   Sort
         //     BroadcastHashJoin <-- SMJ change to BCJ
-        //       CustomShuffleReader(coalesced and skew)
+        //       CustomShuffleReader(coalesced)
         //         Shuffle
         //   Sort
-        //     CustomShuffleReader(coalesced)
+        //     CustomShuffleReader(coalesced and skew)
         //       Shuffle
         spark
           .range(0, 100, 1, 10)
@@ -832,7 +834,7 @@ class AdaptiveQueryExecSuite
             |""".stripMargin
         val (_, adaptivePlan2) = runAdaptiveAndVerifyResult(sqlText2)
         val innerSmj2 = findTopLevelSortMergeJoin(adaptivePlan2)
-        checkSkewJoin(innerSmj2, 2, 1)
+        checkSkewJoin(innerSmj2, 0, 1)
       }
     }
   }
