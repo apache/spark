@@ -174,6 +174,10 @@ jobs:
         mkdir -p ~/.m2
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
         rm -rf ~/.m2/repository/org/apache/spark
+    - name: "Failed tests"
+      if: ${{ failure() }}
+      run: |
+        ./dev/get-failed-test-github-actions --modules "$MODULES_TO_TEST"
 
   # Static analysis, and documentation build
   lint:
