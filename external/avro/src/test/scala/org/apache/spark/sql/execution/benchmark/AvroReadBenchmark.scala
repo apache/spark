@@ -203,6 +203,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
       ($"id" % 1000).as("key") +: ts
     }
     withTempPath { path =>
+      // Write and read timestamp in the LEGACY mode to make timestamp conversions more expensive
       withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
         spark.range(rowsNum).select(columns(): _*)
           .write
