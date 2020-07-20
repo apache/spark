@@ -2540,17 +2540,6 @@ class DataFrameSuite extends QueryTest
       assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
     }
   }
-
-  test("SPARK-32356: forbid null type in create view") {
-    val msg = intercept[AnalysisException] {
-      sql("select null as c").createTempView("null_type_view")
-    }.getMessage
-    assert(msg.contains(s"Cannot create tables/views with ${NullType.simpleString} type."))
-    val msg2 = intercept[AnalysisException] {
-      sql("select null as c").createGlobalTempView("null_type_view")
-    }.getMessage
-    assert(msg2.contains(s"Cannot create tables/views with ${NullType.simpleString} type."))
-  }
 }
 
 case class GroupByKey(a: Int, b: Int)
