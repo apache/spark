@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeRefer
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.columnar.{ColumnStatisticsSchema, PartitionStatistics}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, BinaryType}
+import org.apache.spark.sql.types.{AtomicType, BinaryType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -55,9 +55,9 @@ trait CachedBatchSerializer extends Serializable {
   def convertForCache(cachedPlan: SparkPlan): RDD[CachedBatch]
 
   /**
-   * Builds a function that can be used to filter which batches are loaded.
+   * Builds a function that can be used to filter batches prior to being decompressed.
    * In most cases extending [[SimpleMetricsCachedBatchSerializer]] will provide the filter logic
-   * necessary.  You will need to provide metrics for this to work. [[SimpleMetricsCachedBatch]]
+   * necessary. You will need to provide metrics for this to work. [[SimpleMetricsCachedBatch]]
    * provides the APIs to hold those metrics and explains the metrics used, really just min and max.
    * Note that this is intended to skip batches that are not needed, and the actual filtering of
    * individual rows is handled later.
@@ -65,18 +65,30 @@ trait CachedBatchSerializer extends Serializable {
    * @param cachedAttributes the schema/attributes of the data that is cached. This can be helpful
    *                         if you don't store it with the data.
    * @return a function that takes the partition id and the iterator of batches in the partition.
-   *         It returns an iterator of batches that should be loaded.
+   *         It returns an iterator of batches that should be decompressed.
    */
   def buildFilter(predicates: Seq[Expression],
       cachedAttributes: Seq[Attribute]): (Int, Iterator[CachedBatch]) => Iterator[CachedBatch]
 
   /**
-   * Decompress the cached data into a ColumnarBatch. This currently is only used for basic types
-   * BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType
-   * That may change in the future.
+   * Can [[decompressColumnar()]] be called instead of [[decompressToRows()]] for this given
+   * schema? True if it can and false if it cannot. Columnar output is typically preferred
+   * because it is more efficient. Note that [[decompressToRows()]] must always be supported
+   * as there are other checks that can force row based output.
+   * @param schema the schema of the data being checked.
+   * @return true if columnar output should be used for this schema, else false.
+   */
+  def supportsColumnar(schema: StructType): Boolean
+
+  /**
+   * Decompress the cached data into a ColumnarBatch. This currently is only used if
+   * [[supportsColumnar()]] returned true for the associated schema, but there are other checks
+   * that can force row based output. One of the main advantages of doing columnar output over row
+   * based output is the code generation is more standard and can be combined with code generation
+   * for downstream operations.
    * @param input the cached batches that should be decompressed.
    * @param cacheAttributes the attributes of the data in the batch.
-   * @param selectedAttributes the field that should be loaded from the data, and the order they
+   * @param selectedAttributes the fields that should be loaded from the data, and the order they
    *                           should appear in the output batch.
    * @param conf the configuration for the job.
    * @return an RDD of the input cached batches transformed into the ColumnarBatch format.
@@ -88,7 +100,7 @@ trait CachedBatchSerializer extends Serializable {
       conf: SQLConf): RDD[ColumnarBatch]
 
   /**
-   * Decompress the cached batch into [[InternalRow]]. If you want this to be performant, code
+   * Decompress the cached batch into `InternalRow`. If you want this to be performant, code
    * generation is advised.
    * @param input the cached batches that should be decompressed.
    * @param cacheAttributes the attributes of the data in the batch.

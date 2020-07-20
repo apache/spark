@@ -32,7 +32,7 @@ import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer, Simple
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{StructType, UserDefinedType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructType, UserDefinedType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -105,6 +105,15 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       }
     }
   }
+
+  override def supportsColumnar(schema: StructType): Boolean = schema.fields.forall(f =>
+    f.dataType match {
+        // More types can be supported, but this is to match the original implementation that
+        // only supported primitive types "for ease of review"
+      case BooleanType | ByteType | ShortType | IntegerType | LongType |
+           FloatType | DoubleType => true
+      case _ => false
+    })
 
   override def decompressColumnar(
       input: RDD[CachedBatch],
@@ -222,16 +231,12 @@ case class CachedRDDBuilder(
 object InMemoryRelation {
 
   private[this] var ser: Option[CachedBatchSerializer] = None
-  private[this] def getSerializer(sqlConf: SQLConf): CachedBatchSerializer = {
+  private[this] def getSerializer(sqlConf: SQLConf): CachedBatchSerializer = synchronized {
     if (ser.isEmpty) {
-      synchronized {
-        if (ser.isEmpty) {
-          val serName = sqlConf.getConf(StaticSQLConf.SPARK_CACHE_SERIALIZER)
-          val serClass = Utils.classForName(serName)
-          val instance = serClass.getConstructor().newInstance().asInstanceOf[CachedBatchSerializer]
-          ser = Some(instance)
-        }
-      }
+      val serName = sqlConf.getConf(StaticSQLConf.SPARK_CACHE_SERIALIZER)
+      val serClass = Utils.classForName(serName)
+      val instance = serClass.getConstructor().newInstance().asInstanceOf[CachedBatchSerializer]
+      ser = Some(instance)
     }
     ser.get
   }

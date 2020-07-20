@@ -50,8 +50,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
     val storageLevel = MEMORY_ONLY
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
     val inMemoryRelation = InMemoryRelation(new TestCachedBatchSerializer(useCompression = true, 5),
-      storageLevel, plan, None,
-      data.logicalPlan)
+      storageLevel, plan, None, data.logicalPlan)
 
     assert(inMemoryRelation.cacheBuilder.cachedColumnBuffers.getStorageLevel == storageLevel)
     inMemoryRelation.cacheBuilder.cachedColumnBuffers.collect().head match {

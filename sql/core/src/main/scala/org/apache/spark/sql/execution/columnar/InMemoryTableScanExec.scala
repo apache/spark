@@ -26,7 +26,6 @@ import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.vectorized._
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 
@@ -69,13 +68,9 @@ case class InMemoryTableScanExec(
    * If false, get data from UnsafeRow build from CachedBatch
    */
   override val supportsColumnar: Boolean = {
-    // In the initial implementation, for ease of review
-    // support only primitive data types and # of fields is less than wholeStageMaxNumFields
-    conf.cacheVectorizedReaderEnabled && relation.schema.fields.forall(f => f.dataType match {
-      case BooleanType | ByteType | ShortType | IntegerType | LongType |
-           FloatType | DoubleType => true
-      case _ => false
-    }) && !WholeStageCodegenExec.isTooManyFields(conf, relation.schema)
+    conf.cacheVectorizedReaderEnabled  &&
+        !WholeStageCodegenExec.isTooManyFields(conf, relation.schema) &&
+        relation.cacheBuilder.serializer.supportsColumnar(relation.schema)
   }
 
   private lazy val columnarInputRDD: RDD[ColumnarBatch] = {
@@ -112,7 +107,7 @@ case class InMemoryTableScanExec(
       numOutputRows += batch.numRows
       batch
     }
-    val ret = serializer.decompressToRows(withMetrics, relOutput, attributes, conf)
+    val decompressedRows = serializer.decompressToRows(withMetrics, relOutput, attributes, conf)
     if (enableAccumulatorsForTest) {
       def incParts(index: Int, iter: Iterator[InternalRow]): Iterator[InternalRow] = {
         if (iter.hasNext) {
@@ -120,9 +115,9 @@ case class InMemoryTableScanExec(
         }
         iter
       }
-      ret.mapPartitionsWithIndexInternal(incParts)
+      decompressedRows.mapPartitionsWithIndexInternal(incParts)
     } else {
-      ret
+      decompressedRows
     }
   }
 
