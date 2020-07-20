@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, Exchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -149,15 +149,6 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       case _ => true
     }
   }.isEmpty
-
-  private object BypassTerminator {
-    def unapply(plan: SparkPlan): Boolean = plan match {
-      case _: ShuffleQueryStageExec => true
-      case _: CustomShuffleReaderExec => true
-      case _: Exchange => true
-      case _ => false
-    }
-  }
 
   private def getSizeInfo(medianSize: Long, sizes: Seq[Long]): String = {
     s"median size: $medianSize, max size: ${sizes.max}, min size: ${sizes.min}, avg size: " +
