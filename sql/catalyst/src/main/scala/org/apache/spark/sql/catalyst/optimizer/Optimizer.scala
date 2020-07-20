@@ -116,7 +116,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         operatorOptimizationRuleSet.filterNot(_ == InferFiltersFromConstraints)
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
         rulesWithoutInferFiltersFromConstraints: _*) ::
-      Batch("Infer Filters", Once,
+      Batch("Infer Filters", fixedPoint,
+        PushDownPredicates,
         InferFiltersFromConstraints) ::
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
         rulesWithoutInferFiltersFromConstraints: _*) ::
