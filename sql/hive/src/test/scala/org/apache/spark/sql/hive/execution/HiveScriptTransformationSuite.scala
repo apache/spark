@@ -155,7 +155,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-25990: TRANSFORM should handle schema less correctly (with hive serde)") {
+  test("SPARK-25990: TRANSFORM should handle schema less correctly (hive serde)") {
     assume(TestUtils.testCommandAvailable("python"))
     val scriptFilePath = getTestResourcePath("test_script.py")
 

@@ -145,7 +145,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-25990: TRANSFORM should handle schema less correctly") {
+  test("SPARK-25990: TRANSFORM should handle schema less correctly (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
     val scriptFilePath = getTestResourcePath("test_script.py")
 
@@ -208,7 +208,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-32106: TRANSFORM should support more data types (no serde)") {
+  test("SPARK-32106: TRANSFORM should support all data types as input (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
     withTempView("v") {
       val df = Seq(
@@ -279,7 +279,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-32106: TRANSFORM should return null when return string incompatible(no serde)") {
+  test("SPARK-32106: TRANSFORM should return null when return string incompatible") {
     checkAnswer(
       sql(
         """
