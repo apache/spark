@@ -23,31 +23,32 @@ import os.path
 import xml.etree.ElementTree as ET
 
 modules_target = {
-  "core": "core/target/test-reports/",
-  "unsafe": "common/unsafe/target/test-reports/",
-  "kvstore": "common/kvstore/target/test-reports/",
-  "avro": "external/avro/target/test-reports/",
-  "network-common": "common/network-common/target/test-reports/",
-  "network-shuffle": "common/network-shuffle/target/test-reports/",
-  "repl": "repl/target/test-reports/",
-  "launcher": "launcher/target/test-reports/",
-  "examples": "examples/target/test-reports/",
-  "sketch": "common/sketch/target/test-reports/",
-  "graphx": "graphx/target/test-reports/",
-  "catalyst": "sql/catalyst/target/test-reports/",
-  "hive-thriftserver": "sql/hive-thriftserver/target/test-reports/",
-  "streaming": "streaming/target/test-reports/",
-  "sql-kafka-0-10": "external/kafka-0-10-sql//target/test-reports/",
-  "mllib-local": "mllib-local/target/test-reports/",
-  "mllib": "mllib/target/test-reports/",
-  "yarn": "resource-managers/yarn/target/test-reports/",
-  "mesos": "resource-managers/target/test-reports/",
-  "kubernetes": "resource-managers/kubernetes/target/test-reports/",
-  "hadoop-cloud": "hadoop-cloud/target/test-reports/",
-  "spark-ganglia-lgpl": "external//target/test-reports/",
-  "hive": "sql/hive/target/test-reports/",
-  "sql": "sql/core/target/test-reports/"
+    "core": "core/target/test-reports/",
+    "unsafe": "common/unsafe/target/test-reports/",
+    "kvstore": "common/kvstore/target/test-reports/",
+    "avro": "external/avro/target/test-reports/",
+    "network-common": "common/network-common/target/test-reports/",
+    "network-shuffle": "common/network-shuffle/target/test-reports/",
+    "repl": "repl/target/test-reports/",
+    "launcher": "launcher/target/test-reports/",
+    "examples": "examples/target/test-reports/",
+    "sketch": "common/sketch/target/test-reports/",
+    "graphx": "graphx/target/test-reports/",
+    "catalyst": "sql/catalyst/target/test-reports/",
+    "hive-thriftserver": "sql/hive-thriftserver/target/test-reports/",
+    "streaming": "streaming/target/test-reports/",
+    "sql-kafka-0-10": "external/kafka-0-10-sql//target/test-reports/",
+    "mllib-local": "mllib-local/target/test-reports/",
+    "mllib": "mllib/target/test-reports/",
+    "yarn": "resource-managers/yarn/target/test-reports/",
+    "mesos": "resource-managers/target/test-reports/",
+    "kubernetes": "resource-managers/kubernetes/target/test-reports/",
+    "hadoop-cloud": "hadoop-cloud/target/test-reports/",
+    "spark-ganglia-lgpl": "external//target/test-reports/",
+    "hive": "sql/hive/target/test-reports/",
+    "sql": "sql/core/target/test-reports/"
 }
+
 
 def parse_opts():
     parser = ArgumentParser(
@@ -66,6 +67,7 @@ def parse_opts():
         parser.error("modules must be specified.")
     return args
 
+
 def parse_test_report(file):
     root = ET.parse(file).getroot()
     has_no_failure_yet = True
@@ -80,12 +82,13 @@ def parse_test_report(file):
             stacktrace = failure.text
 
             if has_no_failure_yet:
-               print("Failed test suite: " + testcase_testsuite)
-               has_no_failure_yet = False
+                print("Failed test suite: " + testcase_testsuite)
+                has_no_failure_yet = False
 
             print("Failed test name: " + testcase_testname)
             print("Error Message: " + failure_message)
             print("Stacktrace: " + stacktrace)
+
 
 def parse_failed_testcases_from_module(module):
     if module in modules_target:
@@ -101,12 +104,14 @@ def parse_failed_testcases_from_module(module):
     else:
         print("[error] Cannot get the test report path for module", module)
 
+
 def main():
     opts = parse_opts()
 
     str_test_modules = [m.strip() for m in opts.modules.split(",")]
     for module in str_test_modules:
         parse_failed_testcases_from_module(module)
+
 
 if __name__ == "__main__":
     main()
