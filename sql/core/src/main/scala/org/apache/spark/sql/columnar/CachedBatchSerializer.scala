@@ -71,9 +71,9 @@ trait CachedBatchSerializer extends Serializable {
       cachedAttributes: Seq[Attribute]): (Int, Iterator[CachedBatch]) => Iterator[CachedBatch]
 
   /**
-   * Can [[decompressColumnar()]] be called instead of [[decompressToRows()]] for this given
+   * Can `decompressColumnar()` be called instead of `decompressToRows()` for this given
    * schema? True if it can and false if it cannot. Columnar output is typically preferred
-   * because it is more efficient. Note that [[decompressToRows()]] must always be supported
+   * because it is more efficient. Note that `decompressToRows()` must always be supported
    * as there are other checks that can force row based output.
    * @param schema the schema of the data being checked.
    * @return true if columnar output should be used for this schema, else false.
@@ -82,7 +82,7 @@ trait CachedBatchSerializer extends Serializable {
 
   /**
    * Decompress the cached data into a ColumnarBatch. This currently is only used if
-   * [[supportsColumnar()]] returned true for the associated schema, but there are other checks
+   * `supportsColumnar()`` returned true for the associated schema, but there are other checks
    * that can force row based output. One of the main advantages of doing columnar output over row
    * based output is the code generation is more standard and can be combined with code generation
    * for downstream operations.
