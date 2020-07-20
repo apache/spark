@@ -16,10 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
@@ -54,9 +53,9 @@ class JDBCTableCatalog extends TableCatalog {
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     checkNamespace(namespace)
-    val schemaPattern = if (namespace.length == 1) namespace.head else null
     withConnection { conn =>
-      val rs = conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"));
+      val rs = conn.getMetaData
+        .getTables(null, schemaPattern(namespace), "%", Array("TABLE"));
       new Iterator[Identifier] {
         def hasNext = rs.next()
         def next = Identifier.of(namespace, rs.getString("TABLE_NAME"))
@@ -64,17 +63,33 @@ class JDBCTableCatalog extends TableCatalog {
     }
   }
 
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: java.util.Map[String, String]): Table = {
-    // scalastyle:off throwerror
-    throw new NotImplementedError()
-    // scalastyle:on throwerror
+  override def tableExists(ident: Identifier): Boolean = {
+    val ns = ident.namespace()
+    checkNamespace(ns)
+    withConnection { conn =>
+      conn.getMetaData
+        .getTables(null, schemaPattern(ns), ident.name(), Array("TABLE"))
+        .next()
+    }
   }
 
   override def dropTable(ident: Identifier): Boolean = {
+    checkNamespace(ident.namespace())
+    withConnection { conn =>
+      try {
+        JdbcUtils.dropTable(conn, getTableName(ident), options)
+        true
+      } catch {
+        case _: SQLException => false
+      }
+    }
+  }
+
+  override def createTable(
+    ident: Identifier,
+    schema: StructType,
+    partitions: Array[Transform],
+    properties: java.util.Map[String, String]): Table = {
     // scalastyle:off throwerror
     throw new NotImplementedError()
     // scalastyle:on throwerror
@@ -112,5 +127,13 @@ class JDBCTableCatalog extends TableCatalog {
     } finally {
       conn.close()
     }
+  }
+
+  private def getTableName(ident: Identifier): String = {
+    (ident.namespace() :+ ident.name()).map(dialect.quoteIdentifier).mkString(".")
+  }
+
+  private def schemaPattern(namespaces: Array[String]): String = {
+    if (namespaces.length == 1) namespaces.head else null
   }
 }

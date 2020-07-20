@@ -63,4 +63,13 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
   }
+
+  test("drop a table and test whether the table exists") {
+    withConnection { conn =>
+      conn.prepareStatement("""CREATE TABLE "test"."to_drop" (id INTEGER)""").executeUpdate()
+    }
+    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "to_drop"), Row("test", "people")))
+    sql("DROP TABLE h2.test.to_drop")
+    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
+  }
 }
