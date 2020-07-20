@@ -189,10 +189,20 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case FloatType => wrapperConvertException(data => data.toFloat, converter)
       case DoubleType => wrapperConvertException(data => data.toDouble, converter)
       case _: DecimalType => wrapperConvertException(data => BigDecimal(data), converter)
+      case DateType if conf.datetimeJava8ApiEnabled =>
+        wrapperConvertException(data => DateTimeUtils.stringToDate(
+          UTF8String.fromString(data),
+          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+          .map(DateTimeUtils.daysToLocalDate).orNull, converter)
       case DateType => wrapperConvertException(data => DateTimeUtils.stringToDate(
         UTF8String.fromString(data),
         DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
         .map(DateTimeUtils.toJavaDate).orNull, converter)
+      case TimestampType if conf.datetimeJava8ApiEnabled =>
+         wrapperConvertException(data => DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString(data),
+          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+          .map(DateTimeUtils.microsToInstant).orNull, converter)
       case TimestampType => wrapperConvertException(data => DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(data),
         DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
