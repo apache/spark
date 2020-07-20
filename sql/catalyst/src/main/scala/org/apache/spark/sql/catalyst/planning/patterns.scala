@@ -21,8 +21,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 
 trait OperationHelper {
   type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
@@ -385,6 +387,39 @@ object PhysicalWindow {
 
       Some((windowFunctionType, windowExpressions, partitionSpec, orderSpec, child))
 
+    case _ => None
+  }
+}
+
+object ExtractSingleColumnNotInSubquery extends JoinSelectionHelper {
+
+  // SingleColumnNotInSubquery
+  // streamedSideKeys, buildSideKeys
+  // currently these two return Seq[Expression] should have only one element
+  private type ReturnType =
+    (Seq[Expression], Seq[Expression])
+
+  /**
+   * See. [SPARK-32290]
+   * Not in Subquery will almost certainly be planned as a Broadcast Nested Loop join,
+   * which is very time consuming because it's an O(M*N) calculation.
+   * But if it's a single column NotInSubquery, and buildSide data is small enough,
+   * O(M*N) calculation could be optimized into O(M) using hash lookup instead of loop lookup.
+   */
+  def unapply(join: Join): Option[ReturnType] = join match {
+    case Join(left, right, LeftAnti,
+      Some(Or(EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
+        IsNull(EqualTo(tmpLeft: AttributeReference, tmpRight: AttributeReference)))), _)
+        if SQLConf.get.notInSubqueryHashJoinEnabled &&
+          leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) &&
+          canBroadcastBySize(right, SQLConf.get) &&
+          right.output.length == 1 =>
+      val leftNotInKeyFound = left.output.exists(_.semanticEquals(leftAttr))
+      if (leftNotInKeyFound) {
+        Some(Seq(leftAttr), Seq(rightAttr))
+      } else {
+        Some(Seq(rightAttr), Seq(leftAttr))
+      }
     case _ => None
   }
 }

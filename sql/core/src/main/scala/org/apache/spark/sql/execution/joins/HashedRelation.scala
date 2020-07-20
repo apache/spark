@@ -72,6 +72,16 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def keyIsUnique: Boolean
 
   /**
+   * is input: Iterator[InternalRow] empty
+   */
+  def inputIsEmpty: Boolean
+
+  /**
+   * anyNull key exists in input
+   */
+  def anyNullKeyExists: Boolean
+
+  /**
    * Returns an iterator for keys of InternalRow type.
    */
   def keys(): Iterator[InternalRow]
@@ -302,6 +312,10 @@ private[joins] class UnsafeHashedRelation(
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
     read(() => in.readInt(), () => in.readLong(), in.readBytes)
   }
+
+  override def inputIsEmpty: Boolean = binaryMap.isInputIsEmpty
+
+  override def anyNullKeyExists: Boolean = binaryMap.isAnyNullKeyExists
 }
 
 private[joins] object UnsafeHashedRelation {
@@ -323,6 +337,7 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
+    binaryMap.setInputIsEmpty(input.isEmpty)
     while (input.hasNext) {
       val row = input.next().asInstanceOf[UnsafeRow]
       numFields = row.numFields()
@@ -338,6 +353,8 @@ private[joins] object UnsafeHashedRelation {
           throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
           // scalastyle:on throwerror
         }
+      } else {
+        binaryMap.setAnyNullKeyExists(true)
       }
     }
 
@@ -381,6 +398,9 @@ private[joins] object UnsafeHashedRelation {
  */
 private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, capacity: Int)
   extends MemoryConsumer(mm) with Externalizable with KryoSerializable {
+
+  var inputIsEmpty = false
+  var anyNullKeyExists = false
 
   // Whether the keys are stored in dense mode or not.
   private var isDense = false
@@ -879,6 +899,10 @@ class LongHashedRelation(
    * Returns an iterator for keys of InternalRow type.
    */
   override def keys(): Iterator[InternalRow] = map.keys()
+
+  override def inputIsEmpty: Boolean = map.inputIsEmpty
+
+  override def anyNullKeyExists: Boolean = map.anyNullKeyExists
 }
 
 /**
@@ -896,6 +920,7 @@ private[joins] object LongHashedRelation {
 
     // Create a mapping of key -> rows
     var numFields = 0
+    map.inputIsEmpty = input.isEmpty
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
       numFields = unsafeRow.numFields()
@@ -903,6 +928,8 @@ private[joins] object LongHashedRelation {
       if (!rowKey.isNullAt(0)) {
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
+      } else {
+        map.anyNullKeyExists = true
       }
     }
     map.optimize()

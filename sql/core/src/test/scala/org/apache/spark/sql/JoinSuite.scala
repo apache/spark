@@ -82,6 +82,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       case j: ShuffledHashJoinExec => j
       case j: CartesianProductExec => j
       case j: BroadcastNestedLoopJoinExec => j
+      case j: BroadcastNullAwareHashJoinExec => j
       case j: SortMergeJoinExec => j
     }
 
@@ -1145,6 +1146,32 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         // No extra sort before last sort merge join
         assert(plan.collect { case _: SortExec => true }.size === 3)
       })
+    }
+  }
+
+  test("SPARK-32290: NotInSubquery SingleColumn Optimize positive") {
+    withSQLConf(SQLConf.NOT_IN_SUBQUERY_HASH_JOIN_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      assertJoin((
+        "select * from testData where key not in (select a from testData2)",
+        classOf[BroadcastNullAwareHashJoinExec]))
+      // multi column not supported
+      assertJoin((
+        "select * from testData where (key, key + 1) not in (select * from testData2)",
+        classOf[BroadcastNestedLoopJoinExec]))
+    }
+  }
+
+  test("SPARK-32290: NotInSubquery SingleColumn Optimize negative") {
+    withSQLConf(SQLConf.NOT_IN_SUBQUERY_HASH_JOIN_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      assertJoin((
+        "select * from testData where key not in (select a from testData2)",
+        classOf[BroadcastNestedLoopJoinExec]))
+      // multi column not supported
+      assertJoin((
+        "select * from testData where (key, key + 1) not in (select * from testData2)",
+        classOf[BroadcastNestedLoopJoinExec]))
     }
   }
 }

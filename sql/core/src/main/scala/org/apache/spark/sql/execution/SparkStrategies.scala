@@ -232,6 +232,16 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
           .getOrElse(createJoinWithoutHint())
 
+      case j @ ExtractSingleColumnNotInSubquery(leftKeys, rightKeys) =>
+        Seq(joins.BroadcastNullAwareHashJoinExec(leftKeys, rightKeys,
+          planLater(j.left), planLater(j.right), BuildRight, LeftAnti, j.condition))
+
+        // for BHJ Prototype
+//        val bhj = joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+//          None, planLater(j.left), planLater(j.right))
+//        bhj.nullAwareJoin = true
+//        Seq(bhj)
+
       // If it is not an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast nested loop join. If both sides have the broadcast
       //      hints, choose the smaller side (based on stats) to broadcast for inner and full joins,
@@ -257,31 +267,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           // TODO: revisit it. If left side is much smaller than the right side, it may be better
           // to broadcast the left side even if it's a left join.
           if (canBuildLeft(joinType)) BuildLeft else BuildRight
-        }
-
-        /**
-         * See. [SPARK-32290]
-         * Not in Subquery will almost certainly be planned as a Broadcast Nested Loop join,
-         * which is very time consuming because it's an O(M*N) calculation.
-         * But if it's a single column NotInSubquery, and buildSide data is small enough,
-         * O(M*N) calculation could be optimized into O(M) using hash lookup instead of loop lookup.
-         */
-        def createBroadcastNullAwareHashJoin() = {
-          if (conf.notInSubqueryHashJoinEnabled &&
-            joinType == LeftAnti &&
-            canBroadcastBySize(right, conf) &&
-            right.output.length == 1) {
-            val (matched, _, _) =
-              joins.NotInSubqueryConditionPattern.singleColumnPatternMatch(condition)
-            if (matched) {
-              Some(Seq(joins.BroadcastNullAwareHashJoinExec(
-                planLater(left), planLater(right), BuildRight, LeftAnti, condition)))
-            } else {
-              None
-            }
-          } else {
-            None
-          }
         }
 
         def createBroadcastNLJoin(buildLeft: Boolean, buildRight: Boolean) = {
@@ -319,10 +304,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastNullAwareHashJoin().orElse {
-          createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
-            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-        }.getOrElse(createJoinWithoutHint())
+        createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+          .getOrElse(createJoinWithoutHint())
 
 
       // --- Cases where this strategy does not apply ---------------------------------------------

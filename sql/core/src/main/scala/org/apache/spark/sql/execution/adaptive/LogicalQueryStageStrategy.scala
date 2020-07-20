@@ -20,12 +20,11 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNotInSubquery}
 import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.execution.{joins, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Strategy for plans containing [[LogicalQueryStage]] nodes:
@@ -50,36 +49,15 @@ object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
       Seq(BroadcastHashJoinExec(
         leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
+    case j @ ExtractSingleColumnNotInSubquery(leftKeys, rightKeys) =>
+      Seq(joins.BroadcastNullAwareHashJoinExec(leftKeys, rightKeys,
+        planLater(j.left), planLater(j.right), BuildRight, LeftAnti, j.condition))
+
     case j @ Join(left, right, joinType, condition, _)
         if isBroadcastStage(left) || isBroadcastStage(right) =>
-      def createBroadcastNLJoin() = {
-        val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
-        BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
-      }
-
-      /**
-       * See. [SPARK-32290]
-       * Not in Subquery will almost certainly be planned as a Broadcast Nested Loop join,
-       * which is very time consuming because it's an O(M*N) calculation.
-       * But if it's a single column NotInSubquery, and buildSide data is small enough,
-       * O(M*N) calculation could be optimized into O(M) using hash lookup instead of loop lookup.
-       */
-      if (SQLConf.get.notInSubqueryHashJoinEnabled &&
-        joinType == LeftAnti &&
-        isBroadcastStage(right) &&
-        right.output.length == 1) {
-        val (matched, _, _) =
-          joins.NotInSubqueryConditionPattern.singleColumnPatternMatch(condition)
-        if (matched) {
-          Seq(joins.BroadcastNullAwareHashJoinExec(
-            planLater(left), planLater(right), BuildRight, LeftAnti, condition))
-        } else {
-          createBroadcastNLJoin()
-        }
-      } else {
-        createBroadcastNLJoin()
-      }
+      val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
+      BroadcastNestedLoopJoinExec(
+        planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
     case q: LogicalQueryStage =>
       q.physicalPlan :: Nil
