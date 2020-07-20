@@ -1560,7 +1560,9 @@ class PlanResolutionSuite extends AnalysisTest {
   test("SPARK-32356: forbid null type in create view") {
     val sql1 = "create view v as select null as c"
     val sql2 = "alter view v as select null as c"
-    Seq(sql1, sql2).foreach { sql =>
+    val sql3 = "create temporary view v as select null as c"
+    val sql4 = "create global temporary view v as select null as c"
+    Seq(sql1, sql2, sql3, sql4).foreach { sql =>
       val msg = intercept[AnalysisException] {
         parseAndResolve(sql)
       }.getMessage
