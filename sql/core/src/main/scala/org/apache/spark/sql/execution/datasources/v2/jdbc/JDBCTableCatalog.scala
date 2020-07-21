@@ -82,6 +82,13 @@ class JDBCTableCatalog extends TableCatalog {
     }
   }
 
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
+    checkNamespace(oldIdent.namespace())
+    withConnection { conn =>
+      JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
+    }
+  }
+
   override def createTable(
     ident: Identifier,
     schema: StructType,
@@ -99,12 +106,6 @@ class JDBCTableCatalog extends TableCatalog {
   }
 
   override def loadTable(ident: Identifier): Table = {
-    // scalastyle:off throwerror
-    throw new NotImplementedError()
-    // scalastyle:on throwerror
-  }
-
-  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     // scalastyle:off throwerror
     throw new NotImplementedError()
     // scalastyle:on throwerror

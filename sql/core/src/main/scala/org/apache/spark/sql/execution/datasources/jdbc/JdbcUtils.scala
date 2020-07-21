@@ -884,4 +884,22 @@ object JdbcUtils extends Logging {
       statement.close()
     }
   }
+
+  /**
+   * Rename a table from the JDBC database.
+   */
+  def renameTable(
+      conn: Connection,
+      oldTable: String,
+      newTable: String,
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      statement.executeUpdate(dialect.renameTable(oldTable, newTable))
+    } finally {
+      statement.close()
+    }
+  }
 }

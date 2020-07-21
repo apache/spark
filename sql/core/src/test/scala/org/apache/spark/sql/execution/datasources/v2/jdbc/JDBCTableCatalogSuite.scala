@@ -81,7 +81,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
         Seq(Row("test", "src_table"), Row("test", "people")))
-      sql("ALTER TABLE h2.test.src_table RENAME TO h2.test.dst_table")
+      sql("ALTER TABLE h2.test.src_table RENAME TO test.dst_table")
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
         Seq(Row("test", "dst_table"), Row("test", "people")))
