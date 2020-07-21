@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -64,13 +64,10 @@ class JDBCTableCatalog extends TableCatalog {
   }
 
   override def tableExists(ident: Identifier): Boolean = {
-    val ns = ident.namespace()
-    checkNamespace(ns)
-    withConnection { conn =>
-      conn.getMetaData
-        .getTables(null, schemaPattern(ns), ident.name(), Array("TABLE"))
-        .next()
-    }
+    checkNamespace(ident.namespace())
+    val writeOptions = new JdbcOptionsInWrite(
+      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
+    withConnection(JdbcUtils.tableExists(_, writeOptions))
   }
 
   override def dropTable(ident: Identifier): Boolean = {
