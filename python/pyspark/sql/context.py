@@ -154,7 +154,7 @@ class SQLContext(object):
         """
         return self.sparkSession.conf.get(key, defaultValue)
 
-    @property
+    @property  # type: ignore
     @since("1.3.1")
     def udf(self):
         """Returns a :class:`UDFRegistration` for UDF registration.
@@ -431,7 +431,7 @@ class SQLContext(object):
         """Removes all cached tables from the in-memory cache. """
         self._ssql_ctx.clearCache()
 
-    @property
+    @property  # type: ignore
     @since(1.4)
     def read(self):
         """
@@ -442,7 +442,7 @@ class SQLContext(object):
         """
         return DataFrameReader(self)
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def readStream(self):
         """
@@ -459,7 +459,7 @@ class SQLContext(object):
         """
         return DataStreamReader(self)
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def streams(self):
         """Returns a :class:`StreamingQueryManager` that allows managing all the

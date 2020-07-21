@@ -17,6 +17,7 @@
 #
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
+MYPY_BUILD="mypy"
 MINIMUM_FLAKE8="3.5.0"
 
 PYCODESTYLE_BUILD="pycodestyle"
@@ -122,6 +123,31 @@ function pycodestyle_test {
     fi
 }
 
+function mypy_test {
+    local MYPY_REPORT=
+    local MYPY_STATUS=
+
+    if ! hash "$MYPY_BUILD" 2> /dev/null; then
+        echo "The mypy command was not found."
+        echo "mypy checks failed."
+        exit 1
+    fi
+
+    echo "starting $MYPY_BUILD test..."
+    MYPY_REPORT=$( ($MYPY_BUILD --ignore-missing-imports --config-file python/mypy.ini python/) 2>&1)
+    MYPY_STATUS=$?
+
+    if [ "$MYPY_STATUS" -ne 0 ]; then
+        echo "mypy checks failed:"
+        echo "$MYPY_REPORT"
+        echo "$MYPY_STATUS"
+        exit "$MYPY_STATUS"
+    else
+        echo "flake8 checks passed."
+        echo
+    fi
+}
+
 function flake8_test {
     local FLAKE8_VERSION=
     local EXPECTED_FLAKE8=
@@ -215,6 +241,7 @@ PYTHON_SOURCE="$(find . -name "*.py")"
 compile_python_test "$PYTHON_SOURCE"
 pycodestyle_test "$PYTHON_SOURCE"
 flake8_test
+mypy_test
 sphinx_test
 
 echo

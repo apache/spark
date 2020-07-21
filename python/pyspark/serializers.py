@@ -59,6 +59,8 @@ import collections
 import zlib
 import itertools
 import pickle
+from typing import Dict
+
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
@@ -342,7 +344,7 @@ class NoOpSerializer(FramedSerializer):
 
 # Hack namedtuple, make it picklable
 
-__cls = {}
+__cls: Dict = {}
 
 
 def _restore(name, fields, value):

@@ -66,7 +66,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
         java_model = java_class(df._jdf)
         super(BinaryClassificationMetrics, self).__init__(java_model)
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def areaUnderROC(self):
         """
@@ -75,7 +75,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
         """
         return self.call("areaUnderROC")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def areaUnderPR(self):
         """
@@ -133,7 +133,7 @@ class RegressionMetrics(JavaModelWrapper):
         java_model = java_class(df._jdf)
         super(RegressionMetrics, self).__init__(java_model)
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def explainedVariance(self):
         r"""
@@ -142,7 +142,7 @@ class RegressionMetrics(JavaModelWrapper):
         """
         return self.call("explainedVariance")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def meanAbsoluteError(self):
         """
@@ -151,7 +151,7 @@ class RegressionMetrics(JavaModelWrapper):
         """
         return self.call("meanAbsoluteError")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def meanSquaredError(self):
         """
@@ -160,7 +160,7 @@ class RegressionMetrics(JavaModelWrapper):
         """
         return self.call("meanSquaredError")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def rootMeanSquaredError(self):
         """
@@ -169,7 +169,7 @@ class RegressionMetrics(JavaModelWrapper):
         """
         return self.call("rootMeanSquaredError")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def r2(self):
         """
@@ -312,7 +312,7 @@ class MulticlassMetrics(JavaModelWrapper):
         else:
             return self.call("fMeasure", label, beta)
 
-    @property
+    @property  # type: ignore
     @since('2.0.0')
     def accuracy(self):
         """
@@ -321,7 +321,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         return self.call("accuracy")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def weightedTruePositiveRate(self):
         """
@@ -330,7 +330,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         return self.call("weightedTruePositiveRate")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def weightedFalsePositiveRate(self):
         """
@@ -338,7 +338,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         return self.call("weightedFalsePositiveRate")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def weightedRecall(self):
         """
@@ -347,7 +347,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         return self.call("weightedRecall")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def weightedPrecision(self):
         """
@@ -433,7 +433,7 @@ class RankingMetrics(JavaModelWrapper):
         """
         return self.call("precisionAt", int(k))
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def meanAveragePrecision(self):
         """
@@ -559,7 +559,7 @@ class MultilabelMetrics(JavaModelWrapper):
         else:
             return self.call("f1Measure", float(label))
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def microPrecision(self):
         """
@@ -568,7 +568,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         return self.call("microPrecision")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def microRecall(self):
         """
@@ -577,7 +577,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         return self.call("microRecall")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def microF1Measure(self):
         """
@@ -586,7 +586,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         return self.call("microF1Measure")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def hammingLoss(self):
         """
@@ -594,7 +594,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         return self.call("hammingLoss")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def subsetAccuracy(self):
         """
@@ -603,7 +603,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         return self.call("subsetAccuracy")
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def accuracy(self):
         """

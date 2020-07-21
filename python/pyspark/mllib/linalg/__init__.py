@@ -469,8 +469,9 @@ class DenseVector(Vector):
     def __neg__(self):
         return DenseVector(-self.array)
 
-    def _delegate(op):
-        def func(self, other):
+    @staticmethod
+    def _delegate(op: str):
+        def func(self, other) -> DenseVector:
             if isinstance(other, DenseVector):
                 other = other.array
             return DenseVector(getattr(self.array, op)(other))
@@ -1336,7 +1337,7 @@ class QRDecomposition(object):
         self._Q = Q
         self._R = R
 
-    @property
+    @property  # type: ignore
     @since('2.0.0')
     def Q(self):
         """
@@ -1345,7 +1346,7 @@ class QRDecomposition(object):
         """
         return self._Q
 
-    @property
+    @property  # type: ignore
     @since('2.0.0')
     def R(self):
         """

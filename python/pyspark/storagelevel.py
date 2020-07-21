@@ -19,6 +19,13 @@ __all__ = ["StorageLevel"]
 
 
 class StorageLevel(object):
+    DISK_ONLY: 'StorageLevel'
+    DISK_ONLY_2: 'StorageLevel'
+    MEMORY_ONLY: 'StorageLevel'
+    MEMORY_ONLY_2: 'StorageLevel'
+    MEMORY_AND_DISK: 'StorageLevel'
+    MEMORY_AND_DISK_2: 'StorageLevel'
+    OFF_HEAP: 'StorageLevel'
 
     """
     Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
@@ -48,6 +55,7 @@ class StorageLevel(object):
         result += "Deserialized " if self.deserialized else "Serialized "
         result += "%sx Replicated" % self.replication
         return result
+
 
 StorageLevel.DISK_ONLY = StorageLevel(True, False, False, False)
 StorageLevel.DISK_ONLY_2 = StorageLevel(True, False, False, False, 2)

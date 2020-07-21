@@ -561,7 +561,7 @@ class HasTrainingSummary(object):
     .. versionadded:: 3.0.0
     """
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def hasSummary(self):
         """
@@ -570,7 +570,7 @@ class HasTrainingSummary(object):
         """
         return self._call_java("hasSummary")
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def summary(self):
         """

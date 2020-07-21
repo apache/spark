@@ -26,7 +26,7 @@ from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams
-from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
+from pyspark.sql.functions import col, lit, rand, UserDefinedFunction  # type: ignore
 from pyspark.sql.types import BooleanType
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',

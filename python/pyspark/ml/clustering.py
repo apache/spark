@@ -39,7 +39,7 @@ class ClusteringSummary(JavaWrapper):
     .. versionadded:: 2.1.0
     """
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def predictionCol(self):
         """
@@ -47,7 +47,7 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("predictionCol")
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def predictions(self):
         """
@@ -55,7 +55,7 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("predictions")
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def featuresCol(self):
         """
@@ -63,7 +63,7 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("featuresCol")
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def k(self):
         """
@@ -71,7 +71,7 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("k")
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def cluster(self):
         """
@@ -79,7 +79,7 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("cluster")
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def clusterSizes(self):
         """
@@ -87,7 +87,7 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("clusterSizes")
 
-    @property
+    @property  # type: ignore
     @since("2.4.0")
     def numIter(self):
         """
@@ -150,7 +150,7 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
         """
         return self._set(probabilityCol=value)
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def weights(self):
         """
@@ -160,7 +160,7 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
         """
         return self._call_java("weights")
 
-    @property
+    @property  # type: ignore
     @since("3.0.0")
     def gaussians(self):
         """
@@ -173,7 +173,7 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
             MultivariateGaussian(_java2py(sc, jgaussian.mean()), _java2py(sc, jgaussian.cov()))
             for jgaussian in jgaussians]
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def gaussiansDF(self):
         """
@@ -183,7 +183,7 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
         """
         return self._call_java("gaussiansDF")
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def summary(self):
         """
@@ -442,7 +442,7 @@ class GaussianMixtureSummary(ClusteringSummary):
     .. versionadded:: 2.1.0
     """
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def probabilityCol(self):
         """
@@ -450,7 +450,7 @@ class GaussianMixtureSummary(ClusteringSummary):
         """
         return self._call_java("probabilityCol")
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def probability(self):
         """
@@ -458,7 +458,7 @@ class GaussianMixtureSummary(ClusteringSummary):
         """
         return self._call_java("probability")
 
-    @property
+    @property  # type: ignore
     @since("2.2.0")
     def logLikelihood(self):
         """
@@ -474,7 +474,7 @@ class KMeansSummary(ClusteringSummary):
     .. versionadded:: 2.1.0
     """
 
-    @property
+    @property  # type: ignore
     @since("2.4.0")
     def trainingCost(self):
         """
@@ -557,7 +557,7 @@ class KMeansModel(JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadabl
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return [c.toArray() for c in self._call_java("clusterCenters")]
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def summary(self):
         """
@@ -821,7 +821,7 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
                       "dataset in the summary.", DeprecationWarning)
         return self._call_java("computeCost", dataset)
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def summary(self):
         """
@@ -1014,7 +1014,7 @@ class BisectingKMeansSummary(ClusteringSummary):
     .. versionadded:: 2.1.0
     """
 
-    @property
+    @property  # type: ignore
     @since("3.0.0")
     def trainingCost(self):
         """

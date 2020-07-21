@@ -76,7 +76,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         # by __repr__ and _repr_html_ while eager evaluation opened.
         self._support_repr_html = False
 
-    @property
+    @property  # type: ignore
     @since(1.3)
     def rdd(self):
         """Returns the content as an :class:`pyspark.RDD` of :class:`Row`.
@@ -86,14 +86,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
         return self._lazy_rdd
 
-    @property
+    @property  # type: ignore
     @since("1.3.1")
     def na(self):
         """Returns a :class:`DataFrameNaFunctions` for handling missing values.
         """
         return DataFrameNaFunctions(self)
 
-    @property
+    @property  # type: ignore
     @since(1.4)
     def stat(self):
         """Returns a :class:`DataFrameStatFunctions` for statistic functions.
@@ -209,7 +209,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         self._jdf.createOrReplaceGlobalTempView(name)
 
-    @property
+    @property  # type: ignore
     @since(1.4)
     def write(self):
         """
@@ -220,7 +220,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameWriter(self)
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def writeStream(self):
         """
@@ -233,7 +233,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataStreamWriter(self)
 
-    @property
+    @property  # type: ignore
     @since(1.3)
     def schema(self):
         """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
@@ -377,7 +377,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self._jdf.isLocal()
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def isStreaming(self):
         """Returns ``True`` if this :class:`Dataset` contains one or more sources that continuously
@@ -691,7 +691,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         self._jdf.persist(javaStorageLevel)
         return self
 
-    @property
+    @property  # type: ignore
     @since(2.1)
     def storageLevel(self):
         """Get the :class:`DataFrame`'s current storage level.
@@ -999,7 +999,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         rdd_array = self._jdf.randomSplit(_to_list(self.sql_ctx._sc, weights), int(seed))
         return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
 
-    @property
+    @property  # type: ignore
     @since(1.3)
     def dtypes(self):
         """Returns all column names and their data types as a list.
@@ -1009,7 +1009,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
 
-    @property
+    @property  # type: ignore
     @since(1.3)
     def columns(self):
         """Returns all column names as a list.

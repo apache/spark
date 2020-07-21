@@ -55,7 +55,7 @@ class LinearClassificationModel(LinearModel):
         """
         self._threshold = value
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def threshold(self):
         """
@@ -174,7 +174,7 @@ class LogisticRegressionModel(LinearClassificationModel):
             self._weightsMatrix = self._coeff.toArray().reshape(self._numClasses - 1,
                                                                 self._dataWithBiasSize)
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def numFeatures(self):
         """
@@ -182,7 +182,7 @@ class LogisticRegressionModel(LinearClassificationModel):
         """
         return self._numFeatures
 
-    @property
+    @property  # type: ignore
     @since('1.4.0')
     def numClasses(self):
         """

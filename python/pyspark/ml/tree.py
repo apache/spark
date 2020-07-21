@@ -29,19 +29,19 @@ class _DecisionTreeModel(JavaPredictionModel):
     .. versionadded:: 1.5.0
     """
 
-    @property
+    @property  # type: ignore
     @since("1.5.0")
     def numNodes(self):
         """Return number of nodes of the decision tree."""
         return self._call_java("numNodes")
 
-    @property
+    @property  # type: ignore
     @since("1.5.0")
     def depth(self):
         """Return depth of the decision tree."""
         return self._call_java("depth")
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def toDebugString(self):
         """Full description of model."""
@@ -166,31 +166,31 @@ class _TreeEnsembleModel(JavaPredictionModel):
     Represents a tree ensemble model.
     """
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def trees(self):
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [_DecisionTreeModel(m) for m in list(self._call_java("trees"))]
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def getNumTrees(self):
         """Number of trees in ensemble."""
         return self._call_java("getNumTrees")
 
-    @property
+    @property  # type: ignore
     @since("1.5.0")
     def treeWeights(self):
         """Return the weights for each tree"""
         return list(self._call_java("javaTreeWeights"))
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def totalNumNodes(self):
         """Total number of nodes, summed over all trees in the ensemble."""
         return self._call_java("totalNumNodes")
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def toDebugString(self):
         """Full description of model."""

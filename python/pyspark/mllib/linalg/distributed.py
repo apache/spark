@@ -397,7 +397,7 @@ class SingularValueDecomposition(JavaModelWrapper):
     .. versionadded:: 2.2.0
     """
 
-    @property
+    @property  # type: ignore
     @since('2.2.0')
     def U(self):
         """
@@ -414,7 +414,7 @@ class SingularValueDecomposition(JavaModelWrapper):
             else:
                 raise TypeError("Expected RowMatrix/IndexedRowMatrix got %s" % mat_name)
 
-    @property
+    @property  # type: ignore
     @since('2.2.0')
     def s(self):
         """
@@ -422,7 +422,7 @@ class SingularValueDecomposition(JavaModelWrapper):
         """
         return self.call("s")
 
-    @property
+    @property  # type: ignore
     @since('2.2.0')
     def V(self):
         """

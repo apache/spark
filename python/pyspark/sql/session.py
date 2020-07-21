@@ -19,6 +19,7 @@ import sys
 import warnings
 from functools import reduce
 from threading import RLock
+from typing import Dict
 
 from pyspark import since
 from pyspark.rdd import RDD
@@ -76,7 +77,7 @@ class SparkSession(SparkConversionMixin):
         """
 
         _lock = RLock()
-        _options = {}
+        _options: Dict = {}
         _sc = None
 
         @since(2.0)
@@ -277,19 +278,19 @@ class SparkSession(SparkConversionMixin):
             else:
                 return None
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def sparkContext(self):
         """Returns the underlying :class:`SparkContext`."""
         return self._sc
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def version(self):
         """The version of Spark on which this application is running."""
         return self._jsparkSession.version()
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def conf(self):
         """Runtime configuration interface for Spark.
@@ -302,7 +303,7 @@ class SparkSession(SparkConversionMixin):
             self._conf = RuntimeConfig(self._jsparkSession.conf())
         return self._conf
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def catalog(self):
         """Interface through which the user may create, drop, alter or query underlying
@@ -315,7 +316,7 @@ class SparkSession(SparkConversionMixin):
             self._catalog = Catalog(self)
         return self._catalog
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def udf(self):
         """Returns a :class:`UDFRegistration` for UDF registration.
@@ -644,7 +645,7 @@ class SparkSession(SparkConversionMixin):
         """
         return DataFrame(self._jsparkSession.table(tableName), self._wrapped)
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def read(self):
         """
@@ -655,7 +656,7 @@ class SparkSession(SparkConversionMixin):
         """
         return DataFrameReader(self._wrapped)
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def readStream(self):
         """
@@ -668,7 +669,7 @@ class SparkSession(SparkConversionMixin):
         """
         return DataStreamReader(self._wrapped)
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def streams(self):
         """Returns a :class:`StreamingQueryManager` that allows managing all the

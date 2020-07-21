@@ -308,7 +308,8 @@ class PredictionModel(Model, _PredictorParams):
         """
         return self._set(predictionCol=value)
 
-    @abstractproperty
+    @property  # type: ignore
+    @abstractmethod
     @since("2.1.0")
     def numFeatures(self):
         """

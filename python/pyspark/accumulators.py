@@ -91,6 +91,8 @@ import select
 import struct
 import socketserver as SocketServer
 import threading
+from typing import Dict
+
 from pyspark.serializers import read_int, PickleSerializer
 
 
@@ -101,7 +103,7 @@ pickleSer = PickleSerializer()
 
 # Holds accumulators registered on the current machine, keyed by ID. This is then used to send
 # the local accumulator updates back to the driver program at the end of a task.
-_accumulatorRegistry = {}
+_accumulatorRegistry: Dict = {}
 
 
 def _deserialize_accumulator(aid, zero_value, accum_param):

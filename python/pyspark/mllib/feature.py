@@ -158,7 +158,7 @@ class StandardScalerModel(JavaVectorTransformer):
         self.call("setWithStd", withStd)
         return self
 
-    @property
+    @property  # type: ignore
     @since('2.0.0')
     def withStd(self):
         """
@@ -166,7 +166,7 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         return self.call("withStd")
 
-    @property
+    @property  # type: ignore
     @since('2.0.0')
     def withMean(self):
         """
@@ -174,7 +174,7 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         return self.call("withMean")
 
-    @property
+    @property  # type: ignore
     @since('2.0.0')
     def std(self):
         """
@@ -182,7 +182,7 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         return self.call("std")
 
-    @property
+    @property  # type: ignore
     @since('2.0.0')
     def mean(self):
         """

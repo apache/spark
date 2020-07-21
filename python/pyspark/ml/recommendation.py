@@ -496,13 +496,13 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._set(blockSize=value)
 
-    @property
+    @property  # type: ignore
     @since("1.4.0")
     def rank(self):
         """rank of the matrix factorization model"""
         return self._call_java("rank")
 
-    @property
+    @property  # type: ignore
     @since("1.4.0")
     def userFactors(self):
         """
@@ -511,7 +511,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("userFactors")
 
-    @property
+    @property  # type: ignore
     @since("1.4.0")
     def itemFactors(self):
         """

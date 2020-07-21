@@ -21,6 +21,7 @@ import sys
 from tempfile import NamedTemporaryFile
 import threading
 import pickle
+from typing import Dict
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import ChunkedStream, pickle_protocol
@@ -31,7 +32,7 @@ __all__ = ['Broadcast']
 
 
 # Holds broadcasted data received from Java, keyed by its id.
-_broadcastRegistry = {}
+_broadcastRegistry: Dict = {}
 
 
 def _from_id(bid):

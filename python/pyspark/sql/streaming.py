@@ -42,7 +42,7 @@ class StreamingQuery(object):
     def __init__(self, jsq):
         self._jsq = jsq
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def id(self):
         """Returns the unique id of this query that persists across restarts from checkpoint data.
@@ -53,7 +53,7 @@ class StreamingQuery(object):
         """
         return self._jsq.id().toString()
 
-    @property
+    @property  # type: ignore
     @since(2.1)
     def runId(self):
         """Returns the unique id of this query that does not persist across restarts. That is, every
@@ -61,7 +61,7 @@ class StreamingQuery(object):
         """
         return self._jsq.runId().toString()
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def name(self):
         """Returns the user-specified name of the query, or null if not specified.
@@ -71,7 +71,7 @@ class StreamingQuery(object):
         """
         return self._jsq.name()
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def isActive(self):
         """Whether this streaming query is currently active or not.
@@ -98,7 +98,7 @@ class StreamingQuery(object):
         else:
             return self._jsq.awaitTermination()
 
-    @property
+    @property  # type: ignore
     @since(2.1)
     def status(self):
         """
@@ -106,7 +106,7 @@ class StreamingQuery(object):
         """
         return json.loads(self._jsq.status().json())
 
-    @property
+    @property  # type: ignore
     @since(2.1)
     def recentProgress(self):
         """Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
@@ -115,7 +115,7 @@ class StreamingQuery(object):
         """
         return [json.loads(p.json()) for p in self._jsq.recentProgress()]
 
-    @property
+    @property  # type: ignore
     @since(2.1)
     def lastProgress(self):
         """
@@ -199,7 +199,7 @@ class StreamingQueryManager(object):
     def __init__(self, jsqm):
         self._jsqm = jsqm
 
-    @property
+    @property  # type: ignore
     @since(2.0)
     def active(self):
         """Returns a list of active queries associated with this SQLContext

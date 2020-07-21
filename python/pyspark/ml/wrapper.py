@@ -388,7 +388,7 @@ class JavaPredictionModel(PredictionModel, JavaModel, _PredictorParams):
     (Private) Java Model for prediction tasks (regression and classification).
     """
 
-    @property
+    @property  # type: ignore
     @since("2.1.0")
     def numFeatures(self):
         """

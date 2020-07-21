@@ -28,7 +28,8 @@ except IOError:
     print("Failed to load PySpark version file for packaging. You must be in Spark's python dir.",
           file=sys.stderr)
     sys.exit(-1)
-VERSION = __version__  # noqa
+
+VERSION = __version__  # type: ignore  # noqa
 # A temporary path so we can access above the Python project root and fetch scripts and jars we need
 TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")
@@ -48,11 +49,12 @@ run sdist.
 # Figure out where the jars are we need to package with PySpark.
 JARS_PATH = glob.glob(os.path.join(SPARK_HOME, "assembly/target/scala-*/jars/"))
 
+JAR_PATH = ''
 if len(JARS_PATH) == 1:
-    JARS_PATH = JARS_PATH[0]
+    JAR_PATH = JARS_PATH[0]
 elif (os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1):
     # Release mode puts the jars in a jars directory
-    JARS_PATH = os.path.join(SPARK_HOME, "jars")
+    JAR_PATH = os.path.join(SPARK_HOME, "jars")
 elif len(JARS_PATH) > 1:
     print("Assembly jars exist for multiple scalas ({0}), please cleanup assembly/target".format(
         JARS_PATH), file=sys.stderr)
@@ -117,7 +119,7 @@ try:
         # Construct the symlink farm - this is necessary since we can't refer to the path above the
         # package root and we need to copy the jars and scripts which are up above the python root.
         if _supports_symlinks():
-            os.symlink(JARS_PATH, JARS_TARGET)
+            os.symlink(JAR_PATH, JARS_TARGET)
             os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
             os.symlink(USER_SCRIPTS_PATH, USER_SCRIPTS_TARGET)
             os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
@@ -125,7 +127,7 @@ try:
             os.symlink(LICENSES_PATH, LICENSES_TARGET)
         else:
             # For windows fall back to the slower copytree
-            copytree(JARS_PATH, JARS_TARGET)
+            copytree(JAR_PATH, JARS_TARGET)
             copytree(SCRIPTS_PATH, SCRIPTS_TARGET)
             copytree(USER_SCRIPTS_PATH, USER_SCRIPTS_TARGET)
             copytree(EXAMPLES_PATH, EXAMPLES_TARGET)

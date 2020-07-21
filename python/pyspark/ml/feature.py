@@ -867,7 +867,7 @@ class CountVectorizerModel(JavaModel, _CountVectorizerParams, JavaMLReadable, Ja
         model._set(vocabSize=len(vocabulary))
         return model
 
-    @property
+    @property  # type: ignore
     @since("1.6.0")
     def vocabulary(self):
         """
@@ -1403,7 +1403,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def idf(self):
         """
@@ -1411,7 +1411,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
         """
         return self._call_java("idf")
 
-    @property
+    @property  # type: ignore
     @since("3.0.0")
     def docFreq(self):
         """
@@ -1419,7 +1419,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
         """
         return self._call_java("docFreq")
 
-    @property
+    @property  # type: ignore
     @since("3.0.0")
     def numDocs(self):
         """
@@ -1686,7 +1686,7 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @property
+    @property  # type: ignore
     @since("2.2.0")
     def surrogateDF(self):
         """
@@ -1873,7 +1873,7 @@ class MaxAbsScalerModel(JavaModel, _MaxAbsScalerParams, JavaMLReadable, JavaMLWr
         """
         return self._set(outputCol=value)
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def maxAbs(self):
         """
@@ -2155,7 +2155,7 @@ class MinMaxScalerModel(JavaModel, _MinMaxScalerParams, JavaMLReadable, JavaMLWr
         """
         return self._set(max=value)
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def originalMin(self):
         """
@@ -2163,7 +2163,7 @@ class MinMaxScalerModel(JavaModel, _MinMaxScalerParams, JavaMLReadable, JavaMLWr
         """
         return self._call_java("originalMin")
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def originalMax(self):
         """
@@ -2547,7 +2547,7 @@ class OneHotEncoderModel(JavaModel, _OneHotEncoderParams, JavaMLReadable, JavaML
         """
         return self._set(handleInvalid=value)
 
-    @property
+    @property  # type: ignore
     @since("2.3.0")
     def categorySizes(self):
         """
@@ -3058,7 +3058,7 @@ class RobustScalerModel(JavaModel, _RobustScalerParams, JavaMLReadable, JavaMLWr
         """
         return self._set(outputCol=value)
 
-    @property
+    @property  # type: ignore
     @since("3.0.0")
     def median(self):
         """
@@ -3066,7 +3066,7 @@ class RobustScalerModel(JavaModel, _RobustScalerParams, JavaMLReadable, JavaMLWr
         """
         return self._call_java("median")
 
-    @property
+    @property  # type: ignore
     @since("3.0.0")
     def range(self):
         """
@@ -3422,7 +3422,7 @@ class StandardScalerModel(JavaModel, _StandardScalerParams, JavaMLReadable, Java
         """
         return self._set(outputCol=value)
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def std(self):
         """
@@ -3430,7 +3430,7 @@ class StandardScalerModel(JavaModel, _StandardScalerParams, JavaMLReadable, Java
         """
         return self._call_java("std")
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def mean(self):
         """
@@ -3699,7 +3699,7 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
             model.setHandleInvalid(handleInvalid)
         return model
 
-    @property
+    @property  # type: ignore
     @since("1.5.0")
     def labels(self):
         """
@@ -4283,7 +4283,7 @@ class VectorIndexerModel(JavaModel, _VectorIndexerParams, JavaMLReadable, JavaML
         """
         return self._set(outputCol=value)
 
-    @property
+    @property  # type: ignore
     @since("1.4.0")
     def numFeatures(self):
         """
@@ -4291,7 +4291,7 @@ class VectorIndexerModel(JavaModel, _VectorIndexerParams, JavaMLReadable, JavaML
         """
         return self._call_java("numFeatures")
 
-    @property
+    @property  # type: ignore
     @since("1.4.0")
     def categoryMaps(self):
         """
@@ -4798,7 +4798,7 @@ class PCAModel(JavaModel, _PCAParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def pc(self):
         """
@@ -4807,7 +4807,7 @@ class PCAModel(JavaModel, _PCAParams, JavaMLReadable, JavaMLWritable):
         """
         return self._call_java("pc")
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def explainedVariance(self):
         """
@@ -5191,7 +5191,7 @@ class _SelectorModel(JavaModel, _SelectorParams):
         """
         return self._set(outputCol=value)
 
-    @property
+    @property  # type: ignore
     @since("2.0.0")
     def selectedFeatures(self):
         """
@@ -5725,7 +5725,7 @@ class VarianceThresholdSelectorModel(JavaModel, _VarianceThresholdSelectorParams
         """
         return self._set(outputCol=value)
 
-    @property
+    @property  # type: ignore
     @since("3.1.0")
     def selectedFeatures(self):
         """

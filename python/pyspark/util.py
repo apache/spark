@@ -19,8 +19,9 @@
 import re
 import sys
 import traceback
+from typing import List
 
-__all__ = []
+__all__: List[str] = []
 
 
 def print_exec(stream):

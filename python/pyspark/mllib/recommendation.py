@@ -197,7 +197,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         return self.call("wrappedRecommendUsersForProducts", num)
 
-    @property
+    @property  # type: ignore
     @since("1.4.0")
     def rank(self):
         """Rank for the features in this model"""
