@@ -66,7 +66,8 @@ trait CachedBatchSerializer extends Serializable {
    * @param conf the config for the query.
    * @return The data converted into a format more suitable for caching.
    */
-  def convertForCache(input: RDD[InternalRow],
+  def convertForCache(
+      input: RDD[InternalRow],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch]
@@ -81,7 +82,8 @@ trait CachedBatchSerializer extends Serializable {
    * @param conf the config for the query.
    * @return The data converted into a format more suitable for caching.
    */
-  def convertForCacheColumnar(input: RDD[ColumnarBatch],
+  def convertForCacheColumnar(
+      input: RDD[ColumnarBatch],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch]
@@ -99,7 +101,8 @@ trait CachedBatchSerializer extends Serializable {
    * @return a function that takes the partition id and the iterator of batches in the partition.
    *         It returns an iterator of batches that should be decompressed.
    */
-  def buildFilter(predicates: Seq[Expression],
+  def buildFilter(
+      predicates: Seq[Expression],
       cachedAttributes: Seq[Attribute]): (Int, Iterator[CachedBatch]) => Iterator[CachedBatch]
 
   /**
