@@ -267,7 +267,9 @@ case class RefreshFunctionCommand(
       catalog.registerFunction(func, true)
     } else {
       // clear cached function, if not exists throw exception
-      catalog.unregisterFunction(identifier)
+      if (!catalog.unregisterFunction(identifier)) {
+        throw new NoSuchFunctionException(identifier.database.get, identifier.funcName)
+      }
     }
 
     Seq.empty[Row]
