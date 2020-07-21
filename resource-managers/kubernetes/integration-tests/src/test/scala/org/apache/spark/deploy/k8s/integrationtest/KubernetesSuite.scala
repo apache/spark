@@ -382,7 +382,6 @@ class KubernetesSuite extends SparkFunSuite
     Eventually.eventually(TIMEOUT, patienceInterval) {
       execPods.values.nonEmpty should be (true)
     }
-    execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
     Eventually.eventually(patienceTimeout, patienceInterval) {
       expectedLogOnCompletion.foreach { e =>
@@ -394,6 +393,7 @@ class KubernetesSuite extends SparkFunSuite
           s"The application did not complete, did not find str ${e}")
       }
     }
+    execWatcher.close()
   }
 
   protected def doBasicDriverPodCheck(driverPod: Pod): Unit = {
