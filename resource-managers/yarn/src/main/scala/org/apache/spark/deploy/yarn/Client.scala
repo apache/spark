@@ -397,7 +397,11 @@ private[spark] class Client(
       logInfo(s"Uploading resource $srcPath -> $destPath")
       FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
       destFs.setReplication(destPath, replication)
-      destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
+      if (destFs.getFileStatus(destPath).isDirectory) {
+        destFs.setPermission(destPath, new FsPermission(APP_DIRECTORY_PERMISSION))
+      } else {
+        destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
+      }
     } else {
       logInfo(s"Source and destination file systems are the same. Not copying $srcPath")
     }
@@ -1238,6 +1242,10 @@ private object Client extends Logging {
   // App files are world-wide readable and owner writable -> rw-r--r--
   val APP_FILE_PERMISSION: FsPermission =
     FsPermission.createImmutable(Integer.parseInt("644", 8).toShort)
+
+  // App Directorys are world-wide readable and owner writable -> rwxr--r--
+  val APP_DIRECTORY_PERMISSION: FsPermission =
+    FsPermission.createImmutable(Integer.parseInt("744", 8).toShort)
 
   // Distribution-defined classpath to add to processes
   val ENV_DIST_CLASSPATH = "SPARK_DIST_CLASSPATH"
