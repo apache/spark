@@ -408,17 +408,16 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
    */
   def unapply(join: Join): Option[ReturnType] = join match {
     case Join(left, right, LeftAnti,
-      Some(Or(equalTo @ EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
+      Some(Or(EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
         IsNull(EqualTo(tmpLeft: AttributeReference, tmpRight: AttributeReference)))), _)
         if SQLConf.get.nullAwareAntiJoinOptimizeEnabled &&
-          leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) &&
-          canBroadcastBySize(right, SQLConf.get) &&
-          right.output.length == 1 =>
-      equalTo match {
-        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) =>
-          Some(Seq(l), Seq(r))
-        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
-          Some(Seq(r), Seq(l))
+          leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) =>
+      if (canEvaluate(leftAttr, left) && canEvaluate(rightAttr, right)) {
+        Some(Seq(leftAttr), Seq(rightAttr))
+      } else if (canEvaluate(leftAttr, right) && canEvaluate(rightAttr, left)) {
+        Some(Seq(rightAttr), Seq(leftAttr))
+      } else {
+        None
       }
     case _ => None
   }

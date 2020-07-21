@@ -1149,36 +1149,38 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize positive") {
+  test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize") {
     withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      // positive not in subquery case
       assertJoin((
         "select * from testData where key not in (select a from testData2)",
         classOf[BroadcastNullAwareHashJoinExec]))
-      // testData3.b nullable is true
-      assertJoin((
-        "select * from testData left anti join testData3 ON key = b or isnull(key = b)",
-        classOf[BroadcastNullAwareHashJoinExec]))
-      // multi column not supported
-      assertJoin((
-        "select * from testData where (key, key + 1) not in (select * from testData2)",
-        classOf[BroadcastNestedLoopJoinExec]))
-    }
-  }
 
-  test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize negative") {
-    withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-      assertJoin((
-        "select * from testData where key not in (select a from testData2)",
-        classOf[BroadcastNestedLoopJoinExec]))
-      // testData3.b nullable is true
-      assertJoin((
-        "select * from testData left anti join testData3 ON key = b or isnull(key = b)",
-        classOf[BroadcastNestedLoopJoinExec]))
-      // multi column not supported
+      // negative not in subquery case since multi-column is not supported
       assertJoin((
         "select * from testData where (key, key + 1) not in (select * from testData2)",
+        classOf[BroadcastNestedLoopJoinExec]))
+
+      // positive hand-written left anti join
+      // testData.key nullable false
+      // testData3.b nullable true
+      assertJoin((
+        "select * from testData left anti join testData3 ON key = b or isnull(key = b)",
+        classOf[BroadcastNullAwareHashJoinExec]))
+
+      // negative hand-written left anti join
+      // testData.key nullable false
+      // testData2.a nullable false
+      assertJoin((
+        "select * from testData left anti join testData2 ON key = a or isnull(key = a)",
+        classOf[BroadcastHashJoinExec]))
+
+      // negative hand-written left anti join
+      // not match pattern Or(EqualTo(a=b), IsNull(EqualTo(a=b))
+      assertJoin((
+        "select * from testData2 left anti join testData3 ON testData2.a = testData3.b or " +
+          "isnull(testData2.b = testData3.b)",
         classOf[BroadcastNestedLoopJoinExec]))
     }
   }
