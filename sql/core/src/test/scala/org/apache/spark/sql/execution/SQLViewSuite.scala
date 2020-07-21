@@ -272,8 +272,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt")
       }
       assert(e.message.contains(
-        "Operation not allowed: CREATE TEMPORARY VIEW ... " +
-          "TBLPROPERTIES (property_name = property_value, ...)"))
+        "Operation not allowed: TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
     }
   }
 
