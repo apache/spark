@@ -184,6 +184,8 @@ abstract class JdbcDialect extends Serializable {
   /**
    * Rename an existing table.
    *
+   * TODO (SPARK-32382): Override this method in the dialects that don't support such syntax.
+   *
    * @param oldTable The existing table.
    * @param newTable New name of the table.
    * @return The SQL statement to use for renaming the table.
