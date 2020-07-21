@@ -4,13 +4,10 @@
 
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
-('1', true, unhex('537061726B2053514C'), tinyint(1), smallint(100), array_position(array(3, 2, 1), 1),
- float(1.0), 1.0, Decimal(1.0), timestamp('1997-01-02'), date('2000-04-01'), array(1, 2, 3), map(1, '1'), struct(1, '1')),
-('2', false, unhex('537061726B2053514C'), tinyint(2), smallint(200), array_position(array(3, 2, 1), 2),
- float(2.0), 2.0, Decimal(2.0), timestamp('1997-01-02 03:04:05'), date('2000-04-02'), array(2, 3, 4), map(1, '1'), struct(1, '1')),
-('3', true, unhex('537061726B2053514C'), tinyint(3), smallint(300), array_position(array(3, 2, 1), 1),
- float(3.0), 3.0, Decimal(3.0), timestamp('1997-02-10 17:32:01-08'), date('2000-04-03'), array(3, 4, 5), map(1, '1'), struct(1, '1'))
-as t1(a, b, c, d, e, f, g, h, i, j, k, l, m, n)
+('1', true, unhex('537061726B2053514C'), tinyint(1), smallint(100), array_position(array(3, 2, 1), 1), float(1.0), 1.0, Decimal(1.0), timestamp('1997-01-02'), date('2000-04-01')),
+('2', false, unhex('537061726B2053514C'), tinyint(2), smallint(200), array_position(array(3, 2, 1), 2), float(2.0), 2.0, Decimal(2.0), timestamp('1997-01-02 03:04:05'), date('2000-04-02')),
+('3', true, unhex('537061726B2053514C'), tinyint(3), smallint(300), array_position(array(3, 2, 1), 1), float(3.0), 3.0, Decimal(3.0), timestamp('1997-02-10 17:32:01-08'), date('2000-04-03'))
+as t1(a, b, c, d, e, f, g, h, i, j, k)
 -- !query schema
 struct<>
 -- !query output
@@ -52,8 +49,8 @@ Subprocess exited with status 2. Error: python: can't open file 'some_non_existe
 
 
 -- !query
-SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l, m, n FROM (
-    SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l, m, n)
+SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k FROM (
+    SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k)
     USING 'cat' AS (
         a string,
         b boolean,
@@ -65,18 +62,15 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l, m, n FROM (
         h double,
         i decimal(38, 18),
         j timestamp,
-        k date,
-        l array<int>,
-        m map<int, string>,
-        n struct<col1:int, col2:string>)
+        k date)
     FROM t1
 ) tmp
 -- !query schema
-struct<a:string,b:boolean,decode(c, UTF-8):string,d:tinyint,e:smallint,f:bigint,g:float,h:double,i:decimal(38,18),j:timestamp,k:date,l:array<int>,m:map<int,string>,n:struct<col1:int,col2:string>>
+struct<a:string,b:boolean,decode(c, UTF-8):string,d:tinyint,e:smallint,f:bigint,g:float,h:double,i:decimal(38,18),j:timestamp,k:date>
 -- !query output
-1	true	Spark SQL	1	100	3	1.0	1.0	1.000000000000000000	1997-01-02 00:00:00	2000-04-01	[1,2,3]	{1:"1"}	{"col1":1,"col2":"1"}
-2	false	Spark SQL	2	200	2	2.0	2.0	2.000000000000000000	1997-01-02 03:04:05	2000-04-02	[2,3,4]	{1:"1"}	{"col1":1,"col2":"1"}
-3	true	Spark SQL	3	300	3	3.0	3.0	3.000000000000000000	1997-02-10 17:32:01	2000-04-03	[3,4,5]	{1:"1"}	{"col1":1,"col2":"1"}
+1	true	Spark SQL	1	100	3	1.0	1.0	1.000000000000000000	1997-01-02 00:00:00	2000-04-01
+2	false	Spark SQL	2	200	2	2.0	2.0	2.000000000000000000	1997-01-02 03:04:05	2000-04-02
+3	true	Spark SQL	3	300	3	3.0	3.0	3.000000000000000000	1997-02-10 17:32:01	2000-04-03
 
 
 -- !query

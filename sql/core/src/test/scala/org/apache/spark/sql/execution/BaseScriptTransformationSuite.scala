@@ -260,20 +260,22 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             AttributeReference("f", TimestampType)(),
             AttributeReference("g", DateType)(),
             AttributeReference("h", CalendarIntervalType)(),
-            AttributeReference("i", ArrayType(IntegerType))(),
-            AttributeReference("j", MapType(StringType, IntegerType))(),
+            AttributeReference("i", StringType)(),
+            AttributeReference("j", StringType)(),
             AttributeReference("k", StringType)(),
             AttributeReference("l", new SimpleTupleUDT)(),
-            AttributeReference("m", StructType(
-              Seq(StructField("col1", IntegerType),
-                StructField("col2", StringType))))(),
+            AttributeReference("m", StringType)(),
             AttributeReference("n", BinaryType)(),
             AttributeReference("o", BooleanType)()),
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h,
-          'i, 'j, 'k.cast("string"), 'l, 'm, 'n, 'o).collect())
+        df.select(
+          'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h,
+          'i.cast("string"),
+          'j.cast("string"),
+          'k.cast("string"),
+          'l, 'm.cast("string"), 'n, 'o).collect())
     }
   }
 
