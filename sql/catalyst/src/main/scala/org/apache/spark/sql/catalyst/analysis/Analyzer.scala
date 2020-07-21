@@ -1279,7 +1279,8 @@ class Analyzer(
             .exists(_._2.map(_._2.exprId).distinct.length > 1),
             "Found duplicate rewrite attributes")
           val attributeRewrites = AttributeMap(attrMapping)
-          // rewrite the attributes of parent node
+          // Using attrMapping from the children plans to rewrite their parent node.
+          // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
           newPlan.transformExpressions {
             case a: Attribute =>
               dedupAttr(a, attributeRewrites)
