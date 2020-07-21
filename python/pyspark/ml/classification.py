@@ -1019,6 +1019,7 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
     >>> blorModel.intercept == model2.intercept
     True
     >>> model2
+    LogisticRegressionModel: uid=..., numClasses=2, numFeatures=2
     >>> blorModel.transform(test0).take(1) == model2.transform(test0).take(1)
     True
 

@@ -657,6 +657,7 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     0.833...
     >>> evaluator.evaluate(tvsModelRead.transform(dataset))
     0.833...
+
     .. versionadded:: 2.0.0
 
     """

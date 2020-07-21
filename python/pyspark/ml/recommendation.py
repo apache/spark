@@ -307,6 +307,7 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         """
         super(ALS, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
