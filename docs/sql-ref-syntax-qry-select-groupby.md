@@ -81,9 +81,6 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 * **aggregate_name**
 
     Specifies an aggregate function name (MIN, MAX, COUNT, SUM, AVG, etc.).
-    Note that `FIRST` and `LAST` have an optional `IGNORE NULLS` clause; when the option specified,
-    it will returns the first or last value that is not null (or null if all values are null). 
-    **Syntax:** `[ FIRST | LAST ] ( [ distinct ] expression [ IGNORE NULLS ] ) [ FILTER ( WHERE boolean_expression ) ]`
 
 * **DISTINCT**
 
