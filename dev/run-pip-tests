@@ -108,6 +108,8 @@ for python in "${PYTHON_EXECS[@]}"; do
     fi
     # Do the actual installation
     cd "$FWDIR"
+    echo `python3 -m site --user-site`
+    ls -al `python3 -m site --user-site`
     $install_command
 
     cd /
