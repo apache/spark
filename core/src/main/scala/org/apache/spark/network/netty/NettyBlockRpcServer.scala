@@ -116,6 +116,7 @@ class NettyBlockRpcServer(
 
       case getLocalDirs: GetLocalDirsForExecutors =>
         assert(getLocalDirs.appId == appId)
+        assert(getLocalDirs.execIds.length == 1)
         val execId = getLocalDirs.execIds.head
         val dirs = blockManager.getLocalDiskDirs
         responseContext
