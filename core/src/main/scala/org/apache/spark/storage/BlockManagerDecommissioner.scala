@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -40,6 +41,13 @@ private[storage] class BlockManagerDecommissioner(
 
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
+
+  // Used for tracking if our migrations are complete.
+  @volatile private var lastRDDMigrationTime: Long = 0
+  @volatile private var lastShuffleMigrationTime: Long = 0
+  @volatile private var rddBlocksLeft: Boolean = true
+  @volatile private var shuffleBlocksLeft: Boolean = true
+
 
   /**
    * This runnable consumes any shuffle blocks in the queue for migration. This part of a
@@ -91,10 +99,12 @@ private[storage] class BlockManagerDecommissioner(
                     null)// class tag, we don't need for shuffle
                   logDebug(s"Migrated sub block ${blockId}")
                 }
-                logInfo(s"Migrated ${shuffleBlockInfo} to ${peer}")
+                logDebug(s"Migrated ${shuffleBlockInfo} to ${peer}")
               } else {
                 logError(s"Skipping block ${shuffleBlockInfo} because it has failed ${retryCount}")
               }
+              logInfo(s"Migrated ${shuffleBlockInfo}")
+              numMigratedShuffles.incrementAndGet()
           }
         }
         // This catch is intentionally outside of the while running block.
@@ -115,12 +125,21 @@ private[storage] class BlockManagerDecommissioner(
   // Shuffles which are either in queue for migrations or migrated
   private val migratingShuffles = mutable.HashSet[ShuffleBlockInfo]()
 
+  // Shuffles which have migrated. This used to know when we are "done", being done can change
+  // if a new shuffle file is created by a running task.
+  private val numMigratedShuffles = new AtomicInteger(0)
+
+
+
   // Shuffles which are queued for migration & number of retries so far.
+  // Visible in storage for testing.
   private[storage] val shufflesToMigrate =
     new java.util.concurrent.ConcurrentLinkedQueue[(ShuffleBlockInfo, Int)]()
 
   // Set if we encounter an error attempting to migrate and stop.
   @volatile private var stopped = false
+  @volatile private var stoppedRDD = false
+  @volatile private var stoppedShuffle = false
 
   private val migrationPeers =
     mutable.HashMap[BlockManagerId, ShuffleMigrationRunnable]()
@@ -133,22 +152,24 @@ private[storage] class BlockManagerDecommissioner(
 
     override def run(): Unit = {
       assert(conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED))
-      while (!stopped && !Thread.interrupted()) {
+      while (!stopped && !stoppedRDD && !Thread.interrupted()) {
         logInfo("Iterating on migrating from the block manager.")
         try {
+          val startTime = System.nanoTime()
           logDebug("Attempting to replicate all cached RDD blocks")
-          decommissionRddCacheBlocks()
+          rddBlocksLeft = decommissionRddCacheBlocks()
+          lastRDDMigrationTime = startTime
           logInfo("Attempt to replicate all cached blocks done")
           logInfo(s"Waiting for ${sleepInterval} before refreshing migrations.")
           Thread.sleep(sleepInterval)
         } catch {
           case e: InterruptedException =>
-            logInfo("Interrupted during migration, will not refresh migrations.")
-            stopped = true
+            logInfo("Interrupted during RDD migration, stopping")
+            stoppedRDD = true
           case NonFatal(e) =>
-            logError("Error occurred while trying to replicate for block manager decommissioning.",
+            logError("Error occurred replicating RDD for block manager decommissioning.",
               e)
-            stopped = true
+            stoppedRDD = true
         }
       }
     }
@@ -162,20 +183,22 @@ private[storage] class BlockManagerDecommissioner(
 
     override def run() {
       assert(conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))
-      while (!stopped && !Thread.interrupted()) {
+      while (!stopped && !stoppedShuffle && !Thread.interrupted()) {
         try {
           logDebug("Attempting to replicate all shuffle blocks")
-          refreshOffloadingShuffleBlocks()
+          val startTime = System.nanoTime()
+          shuffleBlocksLeft = refreshOffloadingShuffleBlocks()
+          lastShuffleMigrationTime = startTime
           logInfo("Done starting workers to migrate shuffle blocks")
           Thread.sleep(sleepInterval)
         } catch {
           case e: InterruptedException =>
             logInfo("Interrupted during migration, will not refresh migrations.")
-            stopped = true
+            stoppedShuffle = true
           case NonFatal(e) =>
             logError("Error occurred while trying to replicate for block manager decommissioning.",
               e)
-            stopped = true
+            stoppedShuffle = true
         }
       }
     }
@@ -191,8 +214,9 @@ private[storage] class BlockManagerDecommissioner(
    * but rather shadows them.
    * Requires an Indexed based shuffle resolver.
    * Note: if called in testing please call stopOffloadingShuffleBlocks to avoid thread leakage.
+   * Returns true if we are not done migrating shuffle blocks.
    */
-  private[storage] def refreshOffloadingShuffleBlocks(): Unit = {
+  private[storage] def refreshOffloadingShuffleBlocks(): Boolean = {
     // Update the queue of shuffles to be migrated
     logInfo("Offloading shuffle blocks")
     val localShuffles = bm.migratableResolver.getStoredShuffles().toSet
@@ -215,6 +239,8 @@ private[storage] class BlockManagerDecommissioner(
     deadPeers.foreach { peer =>
         migrationPeers.get(peer).foreach(_.running = false)
     }
+    // If we found any new shuffles to migrate or otherwise have not migrated everything.
+    newShufflesToMigrate.nonEmpty || migratingShuffles.size < numMigratedShuffles.get()
   }
 
   /**
@@ -231,8 +257,9 @@ private[storage] class BlockManagerDecommissioner(
   /**
    * Tries to offload all cached RDD blocks from this BlockManager to peer BlockManagers
    * Visible for testing
+   * Returns true if we have not migrated all of our RDD blocks.
    */
-  private[storage] def decommissionRddCacheBlocks(): Unit = {
+  private[storage] def decommissionRddCacheBlocks(): Boolean = {
     val replicateBlocksInfo = bm.getMigratableRDDBlocks()
 
     if (replicateBlocksInfo.nonEmpty) {
@@ -240,7 +267,7 @@ private[storage] class BlockManagerDecommissioner(
         "for block manager decommissioning")
     } else {
       logWarning(s"Asked to decommission RDD cache blocks, but no blocks to migrate")
-      return
+      return false
     }
 
     // TODO: We can sort these blocks based on some policy (LRU/blockSize etc)
@@ -252,7 +279,9 @@ private[storage] class BlockManagerDecommissioner(
     if (blocksFailedReplication.nonEmpty) {
       logWarning("Blocks failed replication in cache decommissioning " +
         s"process: ${blocksFailedReplication.mkString(",")}")
+      return true
     }
+    return false
   }
 
   private def migrateBlock(blockToReplicate: ReplicateBlock): Boolean = {
@@ -275,9 +304,13 @@ private[storage] class BlockManagerDecommissioner(
     logInfo("Starting block migration thread")
     if (conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)) {
       rddBlockMigrationExecutor.submit(rddBlockMigrationRunnable)
+    } else {
+      stoppedRDD = true
     }
     if (conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
       shuffleBlockMigrationRefreshExecutor.submit(shuffleBlockMigrationRefreshRunnable)
+    } else {
+      stoppedShuffle = true
     }
     if (!conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED) &&
       !conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)) {
@@ -326,5 +359,29 @@ private[storage] class BlockManagerDecommissioner(
         logError(s"Error during shutdown", e)
     }
     logInfo("Stopped storage decommissioner")
+  }
+
+  /*
+   *  Returns the last migration time and a boolean for if all blocks have been migrated.
+   *  If there are any tasks running since that time the boolean may be incorrect.
+   */
+  private[storage] def lastMigrationInfo(): (Long, Boolean) = {
+    if (stopped || (stoppedRDD && stoppedShuffle)) {
+      (System.nanoTime(), true)
+    } else {
+
+      val lastMigrationTime = if (
+        conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED) &&
+        conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)) {
+        Math.min(lastRDDMigrationTime, lastShuffleMigrationTime)
+      } else if (conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
+        lastShuffleMigrationTime
+      } else {
+        lastRDDMigrationTime
+      }
+
+      val blocksMigrated = (!shuffleBlocksLeft || stoppedShuffle) && (!rddBlocksLeft || stoppedRDD)
+      (lastMigrationTime, blocksMigrated)
+    }
   }
 }
