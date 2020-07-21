@@ -72,4 +72,19 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     sql("DROP TABLE h2.test.to_drop")
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
   }
+
+  test("rename a table") {
+    withTable("h2.test.dst_table") {
+      withConnection { conn =>
+        conn.prepareStatement("""CREATE TABLE "test"."src_table" (id INTEGER)""").executeUpdate()
+      }
+      checkAnswer(
+        sql("SHOW TABLES IN h2.test"),
+        Seq(Row("test", "src_table"), Row("test", "people")))
+      sql("ALTER TABLE h2.test.src_table RENAME TO h2.test.dst_table")
+      checkAnswer(
+        sql("SHOW TABLES IN h2.test"),
+        Seq(Row("test", "dst_table"), Row("test", "people")))
+    }
+  }
 }
