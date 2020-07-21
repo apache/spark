@@ -70,6 +70,8 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   public static final String EXECUTOR_EXTRA_JAVA_OPTIONS = "spark.executor.extraJavaOptions";
   /** Configuration key for the executor native library path. */
   public static final String EXECUTOR_EXTRA_LIBRARY_PATH = "spark.executor.extraLibraryPath";
+  /** Configuration key for the number of executor instances. */
+  public static final String EXECUTOR_INSTANCES = "spark.executor.instances";
   /** Configuration key for the number of executor CPU cores. */
   public static final String EXECUTOR_CORES = "spark.executor.cores";
 
