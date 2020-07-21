@@ -1255,16 +1255,15 @@ class Analyzer(
     }
 
     private def rewritePlan(plan: LogicalPlan, conflictPlanMap: Map[LogicalPlan, LogicalPlan])
-      : (LogicalPlan, mutable.ArrayBuffer[(Attribute, Attribute)]) = {
-      val attrMapping = new mutable.ArrayBuffer[(Attribute, Attribute)]()
+      : (LogicalPlan, Seq[(Attribute, Attribute)]) = {
       if (conflictPlanMap.contains(plan)) {
         // If the plan is the one that conflict the with left one, we'd
         // just replace it with the new plan and collect the rewrite
         // attributes for the parent node.
         val newRelation = conflictPlanMap(plan)
-        attrMapping ++= plan.output.zip(newRelation.output)
-        newRelation -> attrMapping
+        newRelation -> plan.output.zip(newRelation.output)
       } else {
+        val attrMapping = new mutable.ArrayBuffer[(Attribute, Attribute)]()
         val newPlan = plan.mapChildren { child =>
           // If not, we'd rewrite child plan recursively until we find the
           // conflict node or reach the leaf node.
