@@ -224,11 +224,14 @@ object Union {
  * @param byName          Whether resolves columns in the children by column names.
  * @param allowMissingCol Allows missing columns in children query plans. If it is true,
  *                        this function allows different set of column names between two Datasets.
+ *                        This can be set to true only if `byName` is true.
  */
 case class Union(
     children: Seq[LogicalPlan],
     byName: Boolean = false,
     allowMissingCol: Boolean = false) extends LogicalPlan {
+  assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
+
   override def maxRows: Option[Long] = {
     if (children.exists(_.maxRows.isEmpty)) {
       None

@@ -37,6 +37,9 @@ class ResolveUnionSuite extends AnalysisTest {
       AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("d", DoubleType)(),
       AttributeReference("i", IntegerType)())
+    val table4 = LocalRelation(
+      AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
+      AttributeReference("i", IntegerType)())
 
     val rules = Seq(ResolveUnion)
     val analyzer = new RuleExecutor[LogicalPlan] {
@@ -54,16 +57,19 @@ class ResolveUnionSuite extends AnalysisTest {
     // Allow missing column
     val union2 = Union(table1 :: table3 :: Nil, true, true)
     val analyzed2 = analyzer.execute(union2)
-    val nullAttr = Alias(Literal(null, ByteType), "b")()
+    val nullAttr1 = Alias(Literal(null, ByteType), "b")()
     val projected2 =
-      Project(Seq(table2.output(3), table2.output(0), nullAttr, table2.output(2)), table3)
+      Project(Seq(table2.output(3), table2.output(0), nullAttr1, table2.output(2)), table3)
     val expected2 = Union(table1 :: projected2 :: Nil)
     comparePlans(analyzed2, expected2)
 
-    // By name + Allow missing column
-    val union3 = Union(union1 :: union2 :: Nil)
+    // Allow missing column + Allow missing column
+    val union3 = Union(union2 :: table4 :: Nil, true, true)
     val analyzed3 = analyzer.execute(union3)
-    val expected3 = Union(expected1 :: expected2 :: Nil)
+    val nullAttr2 = Alias(Literal(null, DoubleType), "d")()
+    val projected3 =
+      Project(Seq(table2.output(3), table2.output(0), nullAttr1, nullAttr2), table4)
+    val expected3 = Union(table1 :: projected2 :: projected3 :: Nil)
     comparePlans(analyzed3, expected3)
   }
 }

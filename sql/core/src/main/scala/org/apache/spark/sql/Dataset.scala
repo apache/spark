@@ -2071,19 +2071,6 @@ class Dataset[T] private[sql](
    * @since 3.1.0
    */
   def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T] = withSetOperator {
-    // Check column name duplication
-    val leftOutputAttrs = logicalPlan.output
-    val rightOutputAttrs = other.logicalPlan.output
-
-    SchemaUtils.checkColumnNameDuplication(
-      leftOutputAttrs.map(_.name),
-      "in the left attributes",
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
-    SchemaUtils.checkColumnNameDuplication(
-      rightOutputAttrs.map(_.name),
-      "in the right attributes",
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
     CombineUnions(Union(logicalPlan :: other.logicalPlan :: Nil, true, allowMissingColumns))

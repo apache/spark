@@ -342,9 +342,10 @@ object TypeCoercion {
         Intersect(newChildren.head, newChildren.last, isAll)
 
       case s: Union if s.childrenResolved &&
-          s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
+          s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved &&
+          !s.byName =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
-        Union(newChildren, s.byName, s.allowMissingCol)
+        s.copy(children = newChildren)
     }
 
     /** Build new children with the widest types for each attribute among all the children */

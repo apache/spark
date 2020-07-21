@@ -497,8 +497,8 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Note: right now Union means UNION ALL, which does not de-duplicate rows, so it is safe to
     // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
     // pushdown Limit.
-    case LocalLimit(exp, Union(children, byName, allowMissingCol)) =>
-      LocalLimit(exp, Union(children.map(maybePushLocalLimit(exp, _)), byName, allowMissingCol))
+    case LocalLimit(exp, u @ Union(children, _, _)) =>
+      LocalLimit(exp, u.copy(children = children.map(maybePushLocalLimit(exp, _))))
     // Add extra limits below OUTER JOIN. For LEFT OUTER and RIGHT OUTER JOIN we push limits to
     // the left and right sides, respectively. It's not safe to push limits below FULL OUTER
     // JOIN in the general case without a more invasive rewrite.
@@ -556,7 +556,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
     // Push down deterministic projection through UNION ALL
-    case p @ Project(projectList, Union(children, byName, allowMissingCol)) =>
+    case p @ Project(projectList, u @ Union(children, _, _)) =>
       assert(children.nonEmpty)
       if (projectList.forall(_.deterministic)) {
         val newFirstChild = Project(projectList, children.head)
@@ -564,7 +564,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
           val rewrites = buildRewrites(children.head, child)
           Project(projectList.map(pushToRight(_, rewrites)), child)
         }
-        Union(newFirstChild +: newOtherChildren, byName, allowMissingCol)
+        u.copy(children = newFirstChild +: newOtherChildren)
       } else {
         p
       }
@@ -949,7 +949,7 @@ object CombineUnions extends Rule[LogicalPlan] {
           flattened += child
       }
     }
-    Union(flattened, topByName, topAllowMissingCol)
+    union.copy(children = flattened)
   }
 }
 

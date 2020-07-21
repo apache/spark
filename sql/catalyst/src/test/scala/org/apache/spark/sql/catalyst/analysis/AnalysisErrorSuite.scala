@@ -695,6 +695,10 @@ class AnalysisErrorSuite extends AnalysisTest {
     }
     testError(Union(testRelation :: testRelation :: Nil, true, false))
     testError(Union(testRelation :: testRelation :: Nil, true, true))
-    testError(Union(testRelation :: testRelation :: Nil, false, true))
+
+    val e = intercept[java.lang.AssertionError] {
+      Union(testRelation :: testRelation :: Nil, false, true)
+    }
+    assert(e.getMessage.contains("`allowMissingCol` can be true only if `byName` is true."))
   }
 }
