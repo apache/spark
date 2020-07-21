@@ -882,13 +882,6 @@ private[spark] class ExecutorAllocationManager(
       attempts.filter(attempt => unschedulableTaskSets.contains(attempt)).size
     }
 
-    def hasPendingUnschedulableTasks: Boolean = {
-      val attemptSets = resourceProfileIdToStageAttempt.values
-      attemptSets.exists { attempts =>
-        attempts.exists(unschedulableTaskSets.contains(_))
-      }
-    }
-
     def hasPendingTasks: Boolean = {
       hasPendingSpeculativeTasks || hasPendingRegularTasks
     }

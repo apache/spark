@@ -1041,8 +1041,8 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler] def handleUnschedulableTaskSetRemoved(
-    stageId: Int,
-    stageAttemptId: Int): Unit = {
+      stageId: Int,
+      stageAttemptId: Int): Unit = {
     listenerBus.post(SparkListenerUnschedulableTaskSetRemoved(stageId, stageAttemptId))
   }
 
