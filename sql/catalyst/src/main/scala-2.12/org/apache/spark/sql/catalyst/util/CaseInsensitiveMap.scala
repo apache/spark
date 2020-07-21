@@ -40,7 +40,7 @@ class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Ma
     keyLowerCasedMap.contains(k.toLowerCase(Locale.ROOT))
 
   override def +[B1 >: T](kv: (String, B1)): Map[String, B1] = {
-    new CaseInsensitiveMap(originalMap + kv)
+    new CaseInsensitiveMap(originalMap.filter(!_._1.equalsIgnoreCase(kv._1)) + kv)
   }
 
   override def iterator: Iterator[(String, T)] = keyLowerCasedMap.iterator

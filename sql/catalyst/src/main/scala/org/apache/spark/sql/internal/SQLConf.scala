@@ -545,19 +545,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val MAX_CNF_NODE_COUNT =
-    buildConf("spark.sql.optimizer.maxCNFNodeCount")
-      .internal()
-      .doc("Specifies the maximum allowable number of conjuncts in the result of CNF " +
-        "conversion. If the conversion exceeds the threshold, an empty sequence is returned. " +
-        "For example, CNF conversion of (a && b) || (c && d) generates " +
-        "four conjuncts (a || c) && (a || d) && (b || c) && (b || d).")
-      .version("3.1.0")
-      .intConf
-      .checkValue(_ >= 0,
-        "The depth of the maximum rewriting conjunction normal form must be positive.")
-      .createWithDefault(128)
-
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -1723,9 +1710,9 @@ object SQLConf {
   val SESSION_LOCAL_TIMEZONE = buildConf("spark.sql.session.timeZone")
     .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
       "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
-      "Zone offsets must be in the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. " +
-      "Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other short names are not " +
-      "recommended to use because they can be ambiguous.")
+      "Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm' or '(+|-)HH:mm:ss', e.g '-08', " +
+      "'+01:00' or '-13:33:33'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other " +
+      "short names are not recommended to use because they can be ambiguous.")
     .version("2.2.0")
     .stringConf
     .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
@@ -2543,6 +2530,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val JSON_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.json.filterPushdown.enabled")
+    .doc("When true, enable filter pushdown to JSON datasource.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val ADD_PARTITION_BATCH_SIZE =
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
@@ -2664,6 +2657,17 @@ object SQLConf {
       .intConf
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
+
+  val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
+    buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
+      .internal()
+      .doc("The maximum number of partitionings that a HashPartitioning can be expanded to. " +
+        "This configuration is applicable only for BroadcastHashJoin inner joins and can be " +
+        "set to '0' to disable this feature.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0, "The value must be non-negative.")
+      .createWithDefault(8)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -2948,8 +2952,6 @@ class SQLConf extends Serializable with Logging {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
-  def maxCnfNodeCount: Int = getConf(MAX_CNF_NODE_COUNT)
-
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
@@ -2974,6 +2976,9 @@ class SQLConf extends Serializable with Logging {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
+
+  def broadcastHashJoinOutputPartitioningExpandLimit: Int =
+    getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -3255,10 +3260,14 @@ class SQLConf extends Serializable with Logging {
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
+  def jsonFilterPushDown: Boolean = getConf(JSON_FILTER_PUSHDOWN_ENABLED)
+
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
+
+  def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
 
   /** ********************** SQLConf functionality methods ************ */
 
