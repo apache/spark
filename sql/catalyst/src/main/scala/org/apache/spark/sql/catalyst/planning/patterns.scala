@@ -391,7 +391,7 @@ object PhysicalWindow {
   }
 }
 
-object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper {
+object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with PredicateHelper {
 
   // SingleColumn NullAwareAntiJoin
   // streamedSideKeys, buildSideKeys
@@ -408,17 +408,17 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper {
    */
   def unapply(join: Join): Option[ReturnType] = join match {
     case Join(left, right, LeftAnti,
-      Some(Or(EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
+      Some(Or(equalTo @ EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
         IsNull(EqualTo(tmpLeft: AttributeReference, tmpRight: AttributeReference)))), _)
         if SQLConf.get.nullAwareAntiJoinOptimizeEnabled &&
           leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) &&
           canBroadcastBySize(right, SQLConf.get) &&
           right.output.length == 1 =>
-      val leftNotInKeyFound = left.output.exists(_.semanticEquals(leftAttr))
-      if (leftNotInKeyFound) {
-        Some(Seq(leftAttr), Seq(rightAttr))
-      } else {
-        Some(Seq(rightAttr), Seq(leftAttr))
+      equalTo match {
+        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) =>
+          Some(Seq(l), Seq(r))
+        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
+          Some(Seq(r), Seq(l))
       }
     case _ => None
   }

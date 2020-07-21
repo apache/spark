@@ -72,12 +72,14 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def keyIsUnique: Boolean
 
   /**
-   * is input: Iterator[InternalRow] empty
+   * Note that, the hashed relation can be empty despite the Iterator[InternalRow] being not empty,
+   * since the hashed relation skips over null keys.
    */
   def inputEmpty: Boolean
 
   /**
-   * anyNull key exists in input
+   * It's only used in null aware anti join since the hashed relation skips over null keys.
+   * If buildSide include null key row, all streamedSide row will be dropped in NAAJ.
    */
   def anyNullKeyExists: Boolean
 
@@ -405,7 +407,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   extends MemoryConsumer(mm) with Externalizable with KryoSerializable {
 
   var anyNullKeyExists = false
-  def inputEmpty: Boolean = (numKeys == 0) && !anyNullKeyExists
+  def inputEmpty: Boolean = numKeys == 0 && !anyNullKeyExists
 
   // Whether the keys are stored in dense mode or not.
   private var isDense = false

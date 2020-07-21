@@ -175,7 +175,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   public boolean inputEmpty()
   {
-    return ((numKeys == 0) && !anyNullKeyExists);
+    return numKeys == 0 && !anyNullKeyExists;
   }
 
   public boolean isAnyNullKeyExists()
