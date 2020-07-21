@@ -1205,6 +1205,7 @@ class Analyzer(
           Seq((oldVersion, oldVersion.copy(
             aggregateExpressions = newAliases(aggregateExpressions))))
 
+        // We don't search the child plan recursively for the same reason as the above Project.
         case _ @ Aggregate(_, aggregateExpressions, _)
           if findAliases(aggregateExpressions).size == aggregateExpressions.size =>
           Nil
