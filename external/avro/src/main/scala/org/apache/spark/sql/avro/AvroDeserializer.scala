@@ -182,6 +182,8 @@ class AvroDeserializer(
         updater.setDecimal(ordinal, decimal)
 
       case (RECORD, st: StructType) =>
+        // Avro datasource doesn't accept filters with nested attributes. See SPARK-32328.
+        // We can always return `false` from `applyFilters` for nested records.
         val writeRecord = getRecordWriter(avroType, st, path, applyFilters = _ => false)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
