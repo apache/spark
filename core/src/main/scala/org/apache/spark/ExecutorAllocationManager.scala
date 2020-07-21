@@ -545,7 +545,9 @@ private[spark] class ExecutorAllocationManager(
         // get the running total as we remove or initialize it to the count - pendingRemoval
         val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
           (executorMonitor.executorCountWithResourceProfile(rpId) -
-            executorMonitor.pendingRemovalCountPerResourceProfileId(rpId)))
+            executorMonitor.pendingRemovalCountPerResourceProfileId(rpId) -
+            executorMonitor.pendingDecommissioningPerResourceProfileId(rpId)
+          ))
         if (newExecutorTotal - 1 < minNumExecutors) {
           logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
             s"are only $newExecutorTotal executor(s) left (minimum number of executor limit " +
@@ -574,7 +576,7 @@ private[spark] class ExecutorAllocationManager(
       if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
         val executorIdsWithoutHostLoss = executorIdsToBeRemoved.toSeq.map(
           id => (id, ExecutorDecommissionInfo("spark scale down", false)))
-        client.decommissionExecutors(executorIdsWithoutHostLoss)
+        client.decommissionExecutors(executorIdsWithoutHostLoss, adjustTargetNumExecutors = false)
       } else {
         client.killExecutors(executorIdsToBeRemoved.toSeq, adjustTargetNumExecutors = false,
           countFailures = false, force = false)
@@ -590,7 +592,11 @@ private[spark] class ExecutorAllocationManager(
 
     // reset the newExecutorTotal to the existing number of executors
     if (testing || executorsRemoved.nonEmpty) {
-      executorMonitor.executorsKilled(executorsRemoved.toSeq)
+      if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
+        executorMonitor.executorsDecommissioned(executorsRemoved)
+      } else {
+        executorMonitor.executorsKilled(executorsRemoved.toSeq)
+      }
       logInfo(s"Executors ${executorsRemoved.mkString(",")} removed due to idle timeout.")
       executorsRemoved.toSeq
     } else {

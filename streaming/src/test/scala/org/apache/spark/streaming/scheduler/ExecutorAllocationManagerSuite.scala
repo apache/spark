@@ -27,6 +27,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.internal.config.Streaming._
+import org.apache.spark.internal.config.Worker.WORKER_DECOMMISSION_ENABLED
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
@@ -55,9 +56,12 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
   def basicTest(decommissioning: Boolean): Unit = {
     // Test that adding batch processing time info to allocation manager
     // causes executors to be requested and killed accordingly
+    conf.set(WORKER_DECOMMISSION_ENABLED, decommissioning)
 
     // There is 1 receiver, and exec 1 has been allocated to it
-    withAllocationManager(numReceivers = 1) { case (receiverTracker, allocationManager) =>
+    withAllocationManager(numReceivers = 1, conf = conf) {
+      case (receiverTracker, allocationManager) =>
+
       when(receiverTracker.allocatedExecutors).thenReturn(Map(1 -> Some("1")))
 
       /** Add data point for batch processing time and verify executor allocation */
@@ -99,13 +103,14 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
             val expectedWithInfo = expectedKilledExec.map{ exec =>
               (exec, ExecutorDecommissionInfo("spark scale down", false))
             }
-            verify(allocationClient, times(1)).decommissionExecutors(meq(expectedWithInfo.toSeq))
+            verify(allocationClient, times(1)).decommissionExecutors(
+              meq(expectedWithInfo.toSeq), meq(false))
           } else {
             verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))
           }
         } else {
           if (decommissioning) {
-            verify(allocationClient, never).decommissionExecutors(null)
+            verify(allocationClient, never).decommissionExecutors(null, false)
           } else {
             verify(allocationClient, never).killExecutor(null)
           }

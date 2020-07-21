@@ -88,9 +88,36 @@ private[spark] trait ExecutorAllocationClient {
    * if it supports graceful decommissioning.
    *
    * @param executors identifiers of executors & decom info.
+   * @param adjustTargetNumExecutors whether the target number of executors will be adjusted down
+   *                                 after these executors have been decommissioned.
    * @return the ids of the executors acknowledged by the cluster manager to be removed.
    */
-  def decommissionExecutors(executors: Seq[(String, ExecutorDecommissionInfo)]): Seq[String]
+  def decommissionExecutors(
+    executors: Seq[(String, ExecutorDecommissionInfo)],
+    adjustTargetNumExecutors: Boolean): Seq[String] = {
+    killExecutors(executors.map(_._1),
+      adjustTargetNumExecutors,
+      countFailures = false)
+  }
+
+
+  /**
+   * Request that the cluster manager decommission the specified executor.
+   * Default implementation delegates to kill, scheduler can override
+   * if it supports graceful decommissioning.
+   *
+   * @param executorId identifiers of executor to decommission
+   * @param decommissionInfo information about the decommission (reason, host loss)
+   * @return whether the request is acknowledged by the cluster manager.
+   */
+  def decommissionExecutor(executorId: String,
+      decommissionInfo: ExecutorDecommissionInfo): Boolean = {
+    val decommissionedExecutors = decommissionExecutors(
+      Seq((executorId, decommissionInfo)),
+      adjustTargetNumExecutors = true)
+    decommissionedExecutors.nonEmpty && decommissionedExecutors(0).equals(executorId)
+  }
+
 
   /**
    * Request that the cluster manager kill every executor on the specified host.
