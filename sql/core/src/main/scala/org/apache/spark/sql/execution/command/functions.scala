@@ -266,10 +266,9 @@ case class RefreshFunctionCommand(
       val func = catalog.getFunctionMetadata(identifier)
       catalog.registerFunction(func, true)
     } else {
-      // clear cached function, if not exists throw exception
-      if (!catalog.unregisterFunction(identifier)) {
-        throw new NoSuchFunctionException(identifier.database.get, identifier.funcName)
-      }
+      // clear cached function and throw exception
+      catalog.unregisterFunction(identifier)
+      throw new NoSuchFunctionException(identifier.database.get, identifier.funcName)
     }
 
     Seq.empty[Row]
