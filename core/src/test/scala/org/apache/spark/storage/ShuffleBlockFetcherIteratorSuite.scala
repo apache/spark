@@ -1149,10 +1149,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
             })
           }
         })
+    val metaSem = new Semaphore(0)     
     when(transfer.getMergedBlocksMeta(any(), any(), any(), any()))
         .thenAnswer((invocation: InvocationOnMock) => {
           val metaListener = invocation.getArguments()(3).asInstanceOf[MergedBlocksMetaListener]
           Future {
+            metaSem.acquire()
             metaListener.onSuccess(Array(mergedBlockId.toString), Array(2))
           }
         })
@@ -1163,10 +1165,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(id1 === ShuffleBlockId(0, 0, 0))
     val (id2, _) = iterator.next()
     assert(id2 === ShuffleBlockId(0, 0, 1))
+    metaSem.release()
     val (id3, _) = iterator.next()
-    blocksSem.acquire(2)
+    blocksSem.acquire()
     assert(id3 === ShuffleBlockChunkId(0, 2, 0))
     val (id4, _) = iterator.next()
+    blocksSem.acquire()
     assert(id4 === ShuffleBlockChunkId(0, 2, 1))
     assert(!iterator.hasNext)
   }
