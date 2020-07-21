@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.benchmark
 
 /**
  * Benchmark to measure Avro data sources write performance.
- * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar>,

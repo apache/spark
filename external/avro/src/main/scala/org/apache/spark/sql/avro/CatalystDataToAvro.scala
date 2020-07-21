@@ -20,7 +20,6 @@ package org.apache.spark.sql.avro
 import java.io.ByteArrayOutputStream
 
 import org.apache.avro.Schema
-import org.apache.avro.generic.GenericDatumWriter
 import org.apache.avro.io.{BinaryEncoder, EncoderFactory}
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
@@ -38,11 +37,8 @@ case class CatalystDataToAvro(
       .map(new Schema.Parser().parse)
       .getOrElse(SchemaConverters.toAvroType(child.dataType, child.nullable))
 
-  @transient private lazy val serializer =
-    new AvroSerializer(child.dataType, avroType, child.nullable)
-
   @transient private lazy val writer =
-    new GenericDatumWriter[Any](avroType)
+    new SparkAvroDatumWriter[Any](avroType, child.dataType, child.nullable)
 
   @transient private var encoder: BinaryEncoder = _
 
@@ -51,8 +47,7 @@ case class CatalystDataToAvro(
   override def nullSafeEval(input: Any): Any = {
     out.reset()
     encoder = EncoderFactory.get().directBinaryEncoder(out, encoder)
-    val avroData = serializer.serialize(input)
-    writer.write(avroData, encoder)
+    writer.write(input, encoder)
     encoder.flush()
     out.toByteArray
   }

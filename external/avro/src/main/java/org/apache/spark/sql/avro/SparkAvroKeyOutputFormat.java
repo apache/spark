@@ -25,35 +25,40 @@ import org.apache.avro.Schema;
 import org.apache.avro.file.CodecFactory;
 import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.generic.GenericData;
-import org.apache.avro.generic.GenericRecord;
+import org.apache.avro.io.DatumWriter;
 import org.apache.avro.mapred.AvroKey;
 import org.apache.avro.mapreduce.AvroKeyOutputFormat;
 import org.apache.avro.mapreduce.Syncable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.StructType;
 
 // A variant of `AvroKeyOutputFormat`, which is used to inject the custom `RecordWriterFactory` so
 // that we can set avro file metadata.
-public class SparkAvroKeyOutputFormat extends AvroKeyOutputFormat<GenericRecord> {
-  public SparkAvroKeyOutputFormat(Map<String, String> metadata) {
-    super(new SparkRecordWriterFactory(metadata));
+public class SparkAvroKeyOutputFormat extends AvroKeyOutputFormat<InternalRow> {
+
+  public SparkAvroKeyOutputFormat(Map<String, String> metadata, StructType dataSchema) {
+    super(new SparkRecordWriterFactory(metadata, dataSchema));
   }
 
-  static class SparkRecordWriterFactory extends RecordWriterFactory<GenericRecord> {
+  static class SparkRecordWriterFactory extends RecordWriterFactory<InternalRow> {
     private final Map<String, String> metadata;
-    SparkRecordWriterFactory(Map<String, String> metadata) {
+    private final StructType dataSchema;
+    SparkRecordWriterFactory(Map<String, String> metadata, StructType dataSchema) {
       this.metadata = metadata;
+      this.dataSchema = dataSchema;
     }
 
-    protected RecordWriter<AvroKey<GenericRecord>, NullWritable> create(
+    protected RecordWriter<AvroKey<InternalRow>, NullWritable> create(
         Schema writerSchema,
-        GenericData dataModel,
+        GenericData dataModel_Ignored,
         CodecFactory compressionCodec,
         OutputStream outputStream,
         int syncInterval) throws IOException {
       return new SparkAvroKeyRecordWriter(
-        writerSchema, dataModel, compressionCodec, outputStream, syncInterval, metadata);
+        writerSchema, dataSchema, compressionCodec, outputStream, syncInterval, metadata);
     }
   }
 }
@@ -66,12 +71,13 @@ class SparkAvroKeyRecordWriter<T> extends RecordWriter<AvroKey<T>, NullWritable>
 
   SparkAvroKeyRecordWriter(
       Schema writerSchema,
-      GenericData dataModel,
+      StructType dataSchema,
       CodecFactory compressionCodec,
       OutputStream outputStream,
       int syncInterval,
       Map<String, String> metadata) throws IOException {
-    this.mAvroFileWriter = new DataFileWriter(dataModel.createDatumWriter(writerSchema));
+    DatumWriter datumWriter = new SparkAvroDatumWriter(writerSchema, dataSchema);
+    this.mAvroFileWriter = new DataFileWriter(datumWriter);
     for (Map.Entry<String, String> entry : metadata.entrySet()) {
       this.mAvroFileWriter.setMeta(entry.getKey(), entry.getValue());
     }

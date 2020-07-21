@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.avro
 
+import java.io.ByteArrayOutputStream
 import java.util
 import java.util.Collections
 
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericRecordBuilder}
+import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord, GenericRecordBuilder}
+import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 import org.apache.avro.message.{BinaryMessageDecoder, BinaryMessageEncoder}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -281,12 +283,22 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       expected: Option[Any],
       filters: StructFilters = new NoopFilters): Unit = {
     val dataType = SchemaConverters.toSqlType(schema).dataType
-    val deserializer = new AvroDeserializer(
-      schema,
-      dataType,
-      SQLConf.LegacyBehaviorPolicy.CORRECTED,
-      filters)
-    val deserialized = deserializer.deserialize(data)
+    val reader = new SparkAvroDatumReader[InternalRow](schema, dataType, filters)
+
+    val outputStream = new ByteArrayOutputStream()
+    val encoderFactory = EncoderFactory.get()
+    val encoder = encoderFactory.validatingEncoder(schema,
+      encoderFactory.binaryEncoder(outputStream, null))
+    val genericDatumWriter = new GenericDatumWriter[GenericRecord](schema)
+
+    genericDatumWriter.write(data, encoder)
+    encoder.flush()
+
+    val decoderFactory = DecoderFactory.get()
+    val decoder = decoderFactory.validatingDecoder(schema,
+      decoderFactory.binaryDecoder(outputStream.toByteArray, null))
+
+    val deserialized = reader.read(null, decoder)
     expected match {
       case None => assert(deserialized == None)
       case Some(d) =>

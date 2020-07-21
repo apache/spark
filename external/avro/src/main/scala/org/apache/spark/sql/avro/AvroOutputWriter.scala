@@ -47,15 +47,11 @@ private[avro] class AvroOutputWriter(
   private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
     SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE))
 
-  // The input rows will never be null.
-  private lazy val serializer =
-    new AvroSerializer(schema, avroSchema, nullable = false, datetimeRebaseMode)
-
   /**
    * Overrides the couple of methods responsible for generating the output streams / files so
    * that the data can be correctly partitioned
    */
-  private val recordWriter: RecordWriter[AvroKey[GenericRecord], NullWritable] = {
+  private val recordWriter: RecordWriter[AvroKey[InternalRow], NullWritable] = {
     val fileMeta = Map(SPARK_VERSION_METADATA_KEY -> SPARK_VERSION_SHORT) ++ {
       if (datetimeRebaseMode == LegacyBehaviorPolicy.LEGACY) {
         Some(SPARK_LEGACY_DATETIME -> "")
@@ -64,7 +60,7 @@ private[avro] class AvroOutputWriter(
       }
     }
 
-    new SparkAvroKeyOutputFormat(fileMeta.asJava) {
+    new SparkAvroKeyOutputFormat(fileMeta.asJava, schema) {
 
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         new Path(path)
@@ -79,7 +75,7 @@ private[avro] class AvroOutputWriter(
   }
 
   override def write(row: InternalRow): Unit = {
-    val key = new AvroKey(serializer.serialize(row).asInstanceOf[GenericRecord])
+    val key = new AvroKey(row)
     recordWriter.write(key, NullWritable.get())
   }
 

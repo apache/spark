@@ -20,7 +20,6 @@ package org.apache.spark.sql.avro
 import scala.util.control.NonFatal
 
 import org.apache.avro.Schema
-import org.apache.avro.generic.GenericDatumReader
 import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
 
 import org.apache.spark.SparkException
@@ -59,13 +58,10 @@ case class AvroDataToCatalyst(
     .map(expectedSchema => new Schema.Parser().parse(expectedSchema))
     .getOrElse(actualSchema)
 
-  @transient private lazy val reader = new GenericDatumReader[Any](actualSchema, expectedSchema)
-
-  @transient private lazy val deserializer = new AvroDeserializer(expectedSchema, dataType)
+  @transient private lazy val reader =
+    new SparkAvroDatumReader[Any](actualSchema, expectedSchema, dataType)
 
   @transient private var decoder: BinaryDecoder = _
-
-  @transient private var result: Any = _
 
   @transient private lazy val parseMode: ParseMode = {
     val mode = avroOptions.parseMode
@@ -97,11 +93,10 @@ case class AvroDataToCatalyst(
     val binary = input.asInstanceOf[Array[Byte]]
     try {
       decoder = DecoderFactory.get().binaryDecoder(binary, 0, binary.length, decoder)
-      result = reader.read(result, decoder)
-      val deserialized = deserializer.deserialize(result)
-      assert(deserialized.isDefined,
-        "Avro deserializer cannot return an empty result because filters are not pushed down")
-      deserialized.get
+      val result = reader.read(null, decoder)
+      assert(result.isDefined,
+        "Avro reader cannot return an empty result because filters are not pushed down")
+      result.get
     } catch {
       // There could be multiple possible exceptions here, e.g. java.io.IOException,
       // AvroRuntimeException, ArrayIndexOutOfBoundsException, etc.

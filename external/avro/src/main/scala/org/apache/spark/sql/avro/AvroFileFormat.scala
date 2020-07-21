@@ -24,7 +24,6 @@ import scala.util.control.NonFatal
 
 import org.apache.avro.Schema
 import org.apache.avro.file.DataFileReader
-import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -97,14 +96,22 @@ private[sql] class AvroFileFormat extends FileFormat
       // input files but stress the scheduler. We should probably add a more general input file
       // filtering mechanism for `FileFormat` data sources. See SPARK-16317.
       if (parsedOptions.ignoreExtension || file.filePath.endsWith(".avro")) {
-        val reader = {
+        val (reader, datumReader) = {
           val in = new FsInput(new Path(new URI(file.filePath)), conf)
           try {
-            val datumReader = userProvidedSchema match {
-              case Some(userSchema) => new GenericDatumReader[GenericRecord](userSchema)
-              case _ => new GenericDatumReader[GenericRecord]()
+            val avroFilters = if (SQLConf.get.avroFilterPushDown) {
+              new OrderedFilters(filters, requiredSchema)
+            } else {
+              new NoopFilters
             }
-            DataFileReader.openReader(in, datumReader)
+
+            val datumReader = userProvidedSchema match {
+              case Some(userSchema) =>
+                new SparkAvroDatumReader[InternalRow](userSchema, requiredSchema, avroFilters)
+              case _ => new SparkAvroDatumReader[InternalRow](requiredSchema, avroFilters)
+            }
+            val reader = DataFileReader.openReader(in, datumReader)
+            (reader, datumReader)
           } catch {
             case NonFatal(e) =>
               logError("Exception while opening DataFileReader", e)
@@ -123,23 +130,12 @@ private[sql] class AvroFileFormat extends FileFormat
 
         reader.sync(file.start)
 
-        val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+        datumReader.setDatetimeRebaseMode(DataSourceUtils.datetimeRebaseMode(
           reader.asInstanceOf[DataFileReader[_]].getMetaString,
-          SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
-
-        val avroFilters = if (SQLConf.get.avroFilterPushDown) {
-          new OrderedFilters(filters, requiredSchema)
-        } else {
-          new NoopFilters
-        }
+          SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ)))
 
         new Iterator[InternalRow] with AvroUtils.RowReader {
           override val fileReader = reader
-          override val deserializer = new AvroDeserializer(
-            userProvidedSchema.getOrElse(reader.getSchema),
-            requiredSchema,
-            datetimeRebaseMode,
-            avroFilters)
           override val stopPosition = file.start + file.length
 
           override def hasNext: Boolean = hasNextRow

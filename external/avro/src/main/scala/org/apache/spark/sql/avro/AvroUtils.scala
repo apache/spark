@@ -166,12 +166,10 @@ object AvroUtils extends Logging {
   // The trait provides iterator-like interface for reading records from an Avro file,
   // deserializing and returning them as internal rows.
   trait RowReader {
-    protected val fileReader: FileReader[GenericRecord]
-    protected val deserializer: AvroDeserializer
+    protected val fileReader: FileReader[Option[InternalRow]]
     protected val stopPosition: Long
 
     private[this] var completed = false
-    private[this] var record: GenericRecord = _
     private[this] var currentRow: Option[InternalRow] = None
 
     def hasNextRow: Boolean = {
@@ -182,8 +180,7 @@ object AvroUtils extends Logging {
           completed = true
           currentRow = None
         } else {
-          record = fileReader.next(record)
-          currentRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
+          currentRow = fileReader.next()
         }
       } while (!completed && currentRow.isEmpty)
 

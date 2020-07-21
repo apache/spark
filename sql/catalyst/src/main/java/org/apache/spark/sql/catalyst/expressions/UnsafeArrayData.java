@@ -356,6 +356,17 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     buffer.position(pos + sizeInBytes);
   }
 
+  public void copyTo(UnsafeArrayData toArray) {
+    // Copy header
+    Platform.copyMemory(this.baseObject, this.baseOffset + 8,
+      toArray.baseObject, toArray.baseOffset + 8,
+      Math.min(this.elementOffset - this.baseOffset, toArray.elementOffset - toArray.baseOffset));
+    // Copy values
+    Platform.copyMemory(this.baseObject, this.elementOffset,
+      toArray.baseObject, toArray.elementOffset,
+      Math.min(this.sizeInBytes - this.elementOffset, toArray.sizeInBytes - toArray.elementOffset));
+  }
+
   @Override
   public UnsafeArrayData copy() {
     UnsafeArrayData arrayCopy = new UnsafeArrayData();

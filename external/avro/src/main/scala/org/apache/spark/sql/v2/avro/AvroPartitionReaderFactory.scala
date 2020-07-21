@@ -22,14 +22,13 @@ import scala.util.control.NonFatal
 
 import org.apache.avro.Schema
 import org.apache.avro.file.DataFileReader
-import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroUtils}
+import org.apache.spark.sql.avro.{AvroOptions, AvroUtils, SparkAvroDatumReader}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile}
@@ -63,14 +62,22 @@ case class AvroPartitionReaderFactory(
     val userProvidedSchema = parsedOptions.schema.map(new Schema.Parser().parse)
 
     if (parsedOptions.ignoreExtension || partitionedFile.filePath.endsWith(".avro")) {
-      val reader = {
+      val (reader, datumReader) = {
         val in = new FsInput(new Path(new URI(partitionedFile.filePath)), conf)
         try {
-          val datumReader = userProvidedSchema match {
-            case Some(userSchema) => new GenericDatumReader[GenericRecord](userSchema)
-            case _ => new GenericDatumReader[GenericRecord]()
+          val avroFilters = if (SQLConf.get.avroFilterPushDown) {
+            new OrderedFilters(filters, readDataSchema)
+          } else {
+            new NoopFilters
           }
-          DataFileReader.openReader(in, datumReader)
+
+          val datumReader = userProvidedSchema match {
+            case Some(userSchema) =>
+              new SparkAvroDatumReader[InternalRow](userSchema, readDataSchema, avroFilters)
+            case _ => new SparkAvroDatumReader[InternalRow](readDataSchema, avroFilters)
+          }
+          val reader = DataFileReader.openReader(in, datumReader)
+          (reader, datumReader)
         } catch {
           case NonFatal(e) =>
             logError("Exception while opening DataFileReader", e)
@@ -89,23 +96,12 @@ case class AvroPartitionReaderFactory(
 
       reader.sync(partitionedFile.start)
 
-      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+      datumReader.setDatetimeRebaseMode(DataSourceUtils.datetimeRebaseMode(
         reader.asInstanceOf[DataFileReader[_]].getMetaString,
-        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
-
-      val avroFilters = if (SQLConf.get.avroFilterPushDown) {
-        new OrderedFilters(filters, readDataSchema)
-      } else {
-        new NoopFilters
-      }
+        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ)))
 
       val fileReader = new PartitionReader[InternalRow] with AvroUtils.RowReader {
         override val fileReader = reader
-        override val deserializer = new AvroDeserializer(
-          userProvidedSchema.getOrElse(reader.getSchema),
-          readDataSchema,
-          datetimeRebaseMode,
-          avroFilters)
         override val stopPosition = partitionedFile.start + partitionedFile.length
 
         override def next(): Boolean = hasNextRow
