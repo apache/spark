@@ -517,7 +517,9 @@ case class BroadcastHashJoinExec(
          |      $found = true;
          |    }
          |  }
-         |} ${ if (isNullAwareAntiJoin) s"else { $found = true; }" else ""}
+         |}
+         |// special case for NullAwareAntiJoin, if anyNull in streamedRow, row should be dropped.
+         |${ if (isNullAwareAntiJoin) s"else { $found = true; }" else ""}
          |if (!$found) {
          |  $numOutput.add(1);
          |  ${consume(ctx, input)}
@@ -544,7 +546,9 @@ case class BroadcastHashJoinExec(
          |      }
          |    }
          |  }
-         |} ${ if (isNullAwareAntiJoin) s"else { $found = true; }" else ""}
+         |}
+         |// special case for NullAwareAntiJoin, if anyNull in streamedRow, row should be dropped.
+         |${ if (isNullAwareAntiJoin) s"else { $found = true; }" else ""}
          |if (!$found) {
          |  $numOutput.add(1);
          |  ${consume(ctx, input)}
