@@ -129,15 +129,10 @@ class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
 
     withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
       run(JoinSetting(
-        RelationSetting(4, None), RelationSetting(8, None), joinOperator = BROADCAST_HASH_JOIN))
-      run(JoinSetting(
         RelationSetting(4, None), RelationSetting(8, None), joinOperator = SORT_MERGE_JOIN))
       run(JoinSetting(
         RelationSetting(4, None), RelationSetting(8, None), joinOperator = SHUFFLED_HASH_JOIN,
         shjBuildSide = Some(BuildLeft)))
-      run(JoinSetting(
-        RelationSetting(4, None), RelationSetting(8, None), joinOperator = SHUFFLED_HASH_JOIN,
-        shjBuildSide = Some(BuildRight)))
     }
   }
 

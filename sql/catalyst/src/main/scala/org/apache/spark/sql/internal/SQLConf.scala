@@ -2661,18 +2661,6 @@ object SQLConf {
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
 
-  val COALESCE_BUCKETS_IN_SHUFFLED_HASH_JOIN_MAX_BUCKET_RATIO =
-    buildConf("spark.sql.bucketing.coalesceBucketsInShuffledHashJoin.maxBucketRatio")
-      .doc("The ratio of the number of two buckets being coalesced should be less than or " +
-        "equal to this value for bucket coalescing to be applied. This configuration only " +
-        s"has an effect when '${COALESCE_BUCKETS_IN_JOIN_ENABLED.key}' is set to true. " +
-        "Note as coalescing reduces parallelism, there might be a higher risk for " +
-        "out of memory error at shuffled hash join build side.")
-      .version("3.1.0")
-      .intConf
-      .checkValue(_ > 0, "The difference must be positive.")
-      .createWithDefault(2)
-
   val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
     buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
       .internal()
@@ -2683,7 +2671,7 @@ object SQLConf {
       .intConf
       .checkValue(_ >= 0, "The value must be non-negative.")
       .createWithDefault(8)
-  
+
   /**
    * Holds information about keys that have been deprecated.
    *
