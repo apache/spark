@@ -67,8 +67,6 @@ private[spark] class NettyBlockTransferService(
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
-  private[this] var clientFactory: TransportClientFactory = _
-  private[this] var appId: String = _
 
   override def init(blockDataManager: BlockDataManager): Unit = {
     val rpcHandler = new NettyBlockRpcServer(conf.getAppId, serializer, blockDataManager)
@@ -82,7 +80,7 @@ private[spark] class NettyBlockTransferService(
     clientFactory = transportContext.createClientFactory(clientBootstrap.toSeq.asJava)
     server = createServer(serverBootstrap.toList)
     appId = conf.getAppId
-    logInfo(s"Server created on ${hostName}:${server.getPort}")
+    logger.info(s"Server created on ${hostName}:${server.getPort}")
   }
 
   /** Creates and binds the TransportServer, possibly trying multiple ports. */
@@ -115,7 +113,7 @@ private[spark] class NettyBlockTransferService(
       blockIds: Array[String],
       listener: BlockFetchingListener,
       tempFileManager: DownloadFileManager): Unit = {
-    logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
+    logger.trace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
       val maxRetries = transportConf.maxIORetries()
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
@@ -148,7 +146,7 @@ private[spark] class NettyBlockTransferService(
       }
     } catch {
       case e: Exception =>
-        logError("Exception while beginning fetchBlocks", e)
+        logger.error("Exception while beginning fetchBlocks", e)
         blockIds.foreach(listener.onBlockFetchFailure(_, e))
     }
   }
@@ -176,12 +174,12 @@ private[spark] class NettyBlockTransferService(
       blockId.isShuffle)
     val callback = new RpcResponseCallback {
       override def onSuccess(response: ByteBuffer): Unit = {
-        logTrace(s"Successfully uploaded block $blockId${if (asStream) " as stream" else ""}")
+        logger.trace(s"Successfully uploaded block $blockId${if (asStream) " as stream" else ""}")
         result.success((): Unit)
       }
 
       override def onFailure(e: Throwable): Unit = {
-        logError(s"Error while uploading $blockId${if (asStream) " as stream" else ""}", e)
+        logger.error(s"Error while uploading $blockId${if (asStream) " as stream" else ""}", e)
         result.failure(e)
       }
     }
@@ -197,45 +195,6 @@ private[spark] class NettyBlockTransferService(
     }
 
     result.future
-  }
-
-  override def getHostLocalDirs(
-      host: String,
-      port: Int,
-      execIds: Array[String],
-      hostLocalDirsCompletable: CompletableFuture[util.Map[String, Array[String]]]): Unit = {
-    val getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds)
-    try {
-      val client = clientFactory.createClient(host, port)
-      client.sendRpc(getLocalDirsMessage.toByteBuffer, new RpcResponseCallback() {
-        override def onSuccess(response: ByteBuffer): Unit = {
-          try {
-            val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response)
-            hostLocalDirsCompletable.complete(
-              msgObj.asInstanceOf[LocalDirsForExecutors].getLocalDirsByExec)
-          } catch {
-            case t: Throwable =>
-              logWarning(s"Error trying to get the host local dirs for executor ${execIds.head}",
-                t.getCause)
-              hostLocalDirsCompletable.completeExceptionally(t)
-          } finally {
-            client.close()
-          }
-        }
-
-        override def onFailure(t: Throwable): Unit = {
-          logWarning(s"Error trying to get the host local dirs for executor ${execIds.head}",
-            t.getCause)
-          hostLocalDirsCompletable.completeExceptionally(t)
-          client.close()
-        }
-      })
-    } catch {
-      case e: IOException =>
-        hostLocalDirsCompletable.completeExceptionally(e)
-      case e: InterruptedException =>
-        hostLocalDirsCompletable.completeExceptionally(e)
-    }
   }
 
   override def close(): Unit = {
