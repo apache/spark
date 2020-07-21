@@ -545,19 +545,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val MAX_CNF_NODE_COUNT =
-    buildConf("spark.sql.optimizer.maxCNFNodeCount")
-      .internal()
-      .doc("Specifies the maximum allowable number of conjuncts in the result of CNF " +
-        "conversion. If the conversion exceeds the threshold, an empty sequence is returned. " +
-        "For example, CNF conversion of (a && b) || (c && d) generates " +
-        "four conjuncts (a || c) && (a || d) && (b || c) && (b || d).")
-      .version("3.1.0")
-      .intConf
-      .checkValue(_ >= 0,
-        "The depth of the maximum rewriting conjunction normal form must be positive.")
-      .createWithDefault(128)
-
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -2671,6 +2658,17 @@ object SQLConf {
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
 
+  val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
+    buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
+      .internal()
+      .doc("The maximum number of partitionings that a HashPartitioning can be expanded to. " +
+        "This configuration is applicable only for BroadcastHashJoin inner joins and can be " +
+        "set to '0' to disable this feature.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0, "The value must be non-negative.")
+      .createWithDefault(8)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2954,8 +2952,6 @@ class SQLConf extends Serializable with Logging {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
-  def maxCnfNodeCount: Int = getConf(MAX_CNF_NODE_COUNT)
-
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
@@ -2980,6 +2976,9 @@ class SQLConf extends Serializable with Logging {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
+
+  def broadcastHashJoinOutputPartitioningExpandLimit: Int =
+    getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
