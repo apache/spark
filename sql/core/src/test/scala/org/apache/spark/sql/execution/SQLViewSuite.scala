@@ -738,6 +738,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-32356: forbid null type in create view") {
+    // test sql
+    val sql1 = "create view v as select null as c"
+    val sql2 = "alter view v as select null as c"
+    val sql3 = "create temporary view v as select null as c"
+    val sql4 = "create global temporary view v as select null as c"
+    Seq(sql1, sql2, sql3, sql4).foreach { input =>
+      val msg = intercept[AnalysisException] {
+        sql(input)
+      }.getMessage
+      assert(msg.contains(s"Cannot create tables/views with ${NullType.simpleString} type."))
+    }
+  }
+
+  test("SPARK-32356: forbid null type in create view") {
+    // test df.createTempView
     val msg = intercept[AnalysisException] {
       sql("select null as c").createTempView("null_type_view")
     }.getMessage
