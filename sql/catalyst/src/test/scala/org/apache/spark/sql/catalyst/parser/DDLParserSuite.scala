@@ -2010,7 +2010,7 @@ class DDLParserSuite extends AnalysisTest {
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |AS SELECT * FROM tab1
       """.stripMargin,
-      containsThesePhrases = Seq("TBLPROPERTIES (property_name = property_value, ...)"))
+      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
   }
 
   test("SHOW TBLPROPERTIES table") {
