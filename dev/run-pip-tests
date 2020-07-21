@@ -68,6 +68,10 @@ PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall "
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
 	      "pip install $PIP_OPTIONS -e python/")
 
+# Jenkins has PySpark installed under user sitepackages shared for some reasons.
+# In this test, explicitly exclude user sitepackages to prevent side effects
+export PYTHONNOUSERSITE=1
+
 for python in "${PYTHON_EXECS[@]}"; do
   for install_command in "${PIP_COMMANDS[@]}"; do
     echo "Testing pip installation with python $python"
