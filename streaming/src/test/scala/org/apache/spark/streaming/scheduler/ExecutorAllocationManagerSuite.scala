@@ -105,12 +105,15 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
             }
             verify(allocationClient, times(1)).decommissionExecutors(
               meq(expectedWithInfo.toSeq), meq(false))
+            verify(allocationClient, never).killExecutor(meq(expectedKilledExec.get))
           } else {
             verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))
+            verify(allocationClient, never).decommissionExecutor(meq(expectedKilledExec.get))
           }
         } else {
           if (decommissioning) {
             verify(allocationClient, never).decommissionExecutors(null, false)
+            verify(allocationClient, never).decommissionExecutor(null)
           } else {
             verify(allocationClient, never).killExecutor(null)
           }
