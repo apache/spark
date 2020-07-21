@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
-import org.apache.spark.storage.RDDBlockId
+import org.apache.spark.storage.{RDDBlockId, ShuffleDataBlockId}
 import org.apache.spark.util.Clock
 
 /**
@@ -135,6 +135,7 @@ private[spark] class ExecutorMonitor(
 
   /**
    * Mark the given executors as pending to be removed. Should only be called in the EAM thread.
+   * This covers both kills and decommissions.
    */
   def executorsKilled(ids: Seq[String]): Unit = {
     ids.foreach { id =>
@@ -298,6 +299,7 @@ private[spark] class ExecutorMonitor(
       //
       // This means that an executor may be marked as having shuffle data, and thus prevented
       // from being removed, even though the data may not be used.
+      // TODO: Only track used files (SPARK-31974)
       if (shuffleTrackingEnabled && event.reason == Success) {
         stageToShuffleID.get(event.stageId).foreach { shuffleId =>
           exec.addShuffle(shuffleId)
@@ -333,11 +335,26 @@ private[spark] class ExecutorMonitor(
   }
 
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
-    if (!event.blockUpdatedInfo.blockId.isInstanceOf[RDDBlockId]) {
-      return
-    }
     val exec = ensureExecutorIsTracked(event.blockUpdatedInfo.blockManagerId.executorId,
       UNKNOWN_RESOURCE_PROFILE_ID)
+
+    // Check if it is a shuffle file, or RDD to pick the correct codepath for update
+    if (event.blockUpdatedInfo.blockId.isInstanceOf[ShuffleDataBlockId] && shuffleTrackingEnabled) {
+      /**
+       * The executor monitor keeps track of locations of cache and shuffle blocks and this can be
+       * used to decide which executor(s) Spark should shutdown first. Since we move shuffle blocks
+       * around now this wires it up so that it keeps track of it. We only do this for data blocks
+       * as index and other blocks blocks do not necessarily mean the entire block has been
+       * committed.
+       */
+      event.blockUpdatedInfo.blockId match {
+        case ShuffleDataBlockId(shuffleId, _, _) => exec.addShuffle(shuffleId)
+        case _ => // For now we only update on data blocks
+      }
+      return
+    } else if (!event.blockUpdatedInfo.blockId.isInstanceOf[RDDBlockId]) {
+      return
+    }
     val storageLevel = event.blockUpdatedInfo.storageLevel
     val blockId = event.blockUpdatedInfo.blockId.asInstanceOf[RDDBlockId]
 

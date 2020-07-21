@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
 /**
  * A client that communicates with the cluster manager to request or kill executors.
  * This is currently supported only in YARN mode.
@@ -80,6 +81,16 @@ private[spark] trait ExecutorAllocationClient {
     adjustTargetNumExecutors: Boolean,
     countFailures: Boolean,
     force: Boolean = false): Seq[String]
+
+  /**
+   * Request that the cluster manager decommission the specified executors.
+   * Default implementation delegates to kill, scheduler must override
+   * if it supports graceful decommissioning.
+   *
+   * @param executors identifiers of executors & decom info.
+   * @return the ids of the executors acknowledged by the cluster manager to be removed.
+   */
+  def decommissionExecutors(executors: Seq[(String, ExecutorDecommissionInfo)]): Seq[String]
 
   /**
    * Request that the cluster manager kill every executor on the specified host.
