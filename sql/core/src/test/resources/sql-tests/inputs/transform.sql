@@ -1,9 +1,12 @@
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
-('1', true, unhex('537061726B2053514C'), tinyint(1), smallint(100), array_position(array(3, 2, 1), 1), float(1.0), 1.0, Decimal(1.0), timestamp('1997-01-02'), date('2000-04-01')),
-('2', false, unhex('537061726B2053514C'), tinyint(2), smallint(200), array_position(array(3, 2, 1), 2), float(2.0), 2.0, Decimal(2.0), timestamp('1997-01-02 03:04:05'), date('2000-04-02')),
-('3', true, unhex('537061726B2053514C'), tinyint(3), smallint(300), array_position(array(3, 2, 1), 1), float(3.0), 3.0, Decimal(3.0), timestamp('1997-02-10 17:32:01-08'), date('2000-04-03'))
-as t1(a, b, c, d, e, f, g, h, i, j, k);
+('1', true, unhex('537061726B2053514C'), tinyint(1), smallint(100), array_position(array(3, 2, 1), 1),
+ float(1.0), 1.0, Decimal(1.0), timestamp('1997-01-02'), date('2000-04-01'), array(1, 2, 3), map(1, '1'), struct(1, '1')),
+('2', false, unhex('537061726B2053514C'), tinyint(2), smallint(200), array_position(array(3, 2, 1), 2),
+ float(2.0), 2.0, Decimal(2.0), timestamp('1997-01-02 03:04:05'), date('2000-04-02'), array(2, 3, 4), map(1, '1'), struct(1, '1')),
+('3', true, unhex('537061726B2053514C'), tinyint(3), smallint(300), array_position(array(3, 2, 1), 1),
+ float(3.0), 3.0, Decimal(3.0), timestamp('1997-02-10 17:32:01-08'), date('2000-04-03'), array(3, 4, 5), map(1, '1'), struct(1, '1'))
+as t1(a, b, c, d, e, f, g, h, i, j, k, l, m, n);
 
 SELECT TRANSFORM(a)
 USING 'cat' AS (a)
@@ -22,8 +25,8 @@ FROM t1;
 
 
 -- support different data type
-SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k FROM (
-    SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k)
+SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l, m, n FROM (
+    SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l, m, n)
     USING 'cat' AS (
         a string,
         b boolean,
@@ -35,7 +38,10 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k FROM (
         h double,
         i decimal(38, 18),
         j timestamp,
-        k date)
+        k date,
+        l array<int>,
+        m map<int, string>,
+        n struct<col1:int, col2:string>)
     FROM t1
 ) tmp;
 
