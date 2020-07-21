@@ -737,7 +737,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-32356: forbid null type in create view") {
+  test("SPARK-32356: Forbid create view with null type in sql side") {
     // test sql
     val sql1 = "create view v as select null as c"
     val sql2 = "alter view v as select null as c"
@@ -751,7 +751,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-32356: forbid null type in create view") {
+  test("SPARK-32356: Forbid create view with null type in dataset side") {
     // test df.createTempView
     val msg = intercept[AnalysisException] {
       sql("select null as c").createTempView("null_type_view")
