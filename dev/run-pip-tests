@@ -63,7 +63,7 @@ fi
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
-PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
+PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall --ignore-installed"
 # Test both regular user and edit/dev install modes.
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST")
 
@@ -117,6 +117,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     echo "Run basic sanity check with import based"
     python3 "$FWDIR"/dev/pip-sanity-check.py
     echo "Run the tests for context.py"
+    python3 -c "import pyspark; print(pyspark.__version__); print(pyspark.__file__)"
     python3 "$FWDIR"/python/pyspark/context.py
 
     cd "$FWDIR"
