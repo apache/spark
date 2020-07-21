@@ -193,7 +193,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case DecommissionExecutor(executorId, decommissionInfo) =>
         logError(s"Received decommission executor message ${executorId}: $decommissionInfo")
-        decommissionExecutor(executorId, decommissionInfo)
+        decommissionExecutors(Seq(executorId, decommissionInfo),
+          adjustTargetNumExecutors = false)
 
       case RemoveWorker(workerId, host, message) =>
         removeWorker(workerId, host, message)
@@ -274,7 +275,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case DecommissionExecutor(executorId, decommissionInfo) =>
         logError(s"Received decommission executor message ${executorId}: ${decommissionInfo}.")
-        decommissionExecutor(executorId, decommissionInfo)
+        decommissionExecutors(Seq(executorId, decommissionInfo),
+          adjustTargetNumExecutors = false))
         context.reply(true)
 
       case RetrieveSparkAppConfig(resourceProfileId) =>
