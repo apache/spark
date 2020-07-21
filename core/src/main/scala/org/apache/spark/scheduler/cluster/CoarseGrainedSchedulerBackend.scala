@@ -442,6 +442,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           case e: Exception =>
             logError(s"Unexpected error during decommissioning ${e.toString}", e)
         }
+        // Send decommission message to the executor (it could have originated on the executor
+        // but not necessarily.
+        executorDataMap.get(executorId) match {
+          case Some(executorInfo) =>
+            executorInfo.executorEndpoint.send(DecommissionSelf)
+          case None =>
+            // Ignoring the executor since it is not registered.
+            logWarning(s"Attempted to decommission unknown executor $executorId.")
+        }
         logInfo(s"Finished decommissioning executor $executorId.")
 
         if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {

@@ -59,7 +59,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, shuffle)
       // Just replicate blocks as fast as we can during testing, there isn't another
       // workload we need to worry about.
-      .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 1L)
+      .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 10L)
 
     sc = new SparkContext(master, "test", conf)
 
@@ -213,10 +213,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       assert(execIdToBlocksMapping.values.flatMap(_.keys).count(_.isRDD) === numParts)
     }
 
-    // Make the executor we decommissioned exit
-    sched.client.killExecutors(List(execToDecommission))
-
-    // Wait for the executor to be removed
+    // Wait for the executor to be removed automatically after migration.
     executorRemovedSem.acquire(1)
 
     // Since the RDD is cached or shuffled so further usage of same RDD should use the
