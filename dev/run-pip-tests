@@ -63,9 +63,12 @@ fi
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
-PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall --ignore-installed"
+PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
 # Test both regular user and edit/dev install modes.
-PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST")
+PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
+	      "pip install $PIP_OPTIONS -e python/")
+
+export PYTHONNOUSERSITE=1
 
 for python in "${PYTHON_EXECS[@]}"; do
   for install_command in "${PIP_COMMANDS[@]}"; do
@@ -80,7 +83,6 @@ for python in "${PYTHON_EXECS[@]}"; do
         source "$CONDA_PREFIX/etc/profile.d/conda.sh"
       fi
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
-      conda env list
       source activate "$VIRTUALENV_PATH" || (echo "Falling back to 'conda activate'" && conda activate "$VIRTUALENV_PATH")
     else
       mkdir -p "$VIRTUALENV_PATH"
@@ -92,7 +94,6 @@ for python in "${PYTHON_EXECS[@]}"; do
       pip install --upgrade pip wheel numpy
     fi
 
-    conda env list
     echo "Creating pip installable source dist"
     cd "$FWDIR"/python
     # Delete the egg info file if it exists, this can cache the setup file.
@@ -110,8 +111,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     fi
     # Do the actual installation
     cd "$FWDIR"
-    echo `python3 -m site --user-site`
-    ls -al `python3 -m site --user-site`
     $install_command
 
     cd /
@@ -121,8 +120,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     echo "Run basic sanity check with import based"
     python3 "$FWDIR"/dev/pip-sanity-check.py
     echo "Run the tests for context.py"
-    python3 -c "import pyspark; print(pyspark.__version__); print(pyspark.__file__)"
-    echo $CONDA_DEFAULT_ENV
     python3 "$FWDIR"/python/pyspark/context.py
 
     cd "$FWDIR"
