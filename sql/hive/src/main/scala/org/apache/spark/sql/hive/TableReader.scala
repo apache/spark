@@ -299,7 +299,9 @@ class HadoopTableReader(
    */
   private def createHadoopRDD(localTableDesc: TableDesc, inputPathStr: String): RDD[Writable] = {
     val inputFormatClazz = localTableDesc.getInputFileFormatClass
-    if (classOf[newInputClass[_, _]].isAssignableFrom(inputFormatClazz)) {
+    if (!inputFormatClazz.getName.
+      equalsIgnoreCase("org.apache.hadoop.hive.hbase.HiveHBaseTableInputFormat")
+      && classOf[newInputClass[_, _]].isAssignableFrom(inputFormatClazz)) {
       createNewHadoopRDD(localTableDesc, inputPathStr)
     } else {
       createOldHadoopRDD(localTableDesc, inputPathStr)
