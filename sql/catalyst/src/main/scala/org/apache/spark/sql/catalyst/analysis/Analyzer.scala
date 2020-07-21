@@ -1264,7 +1264,7 @@ class Analyzer(
         attrMapping ++= plan.output.zip(newRelation.output)
         newRelation -> attrMapping
       } else {
-        var newPlan = plan.mapChildren { child =>
+        val newPlan = plan.mapChildren { child =>
           // If not, we'd rewrite child plan recursively until we find the
           // conflict node or reach the leaf node.
           val (newChild, childAttrMapping) = rewritePlan(child, conflictPlanMap)
@@ -1280,13 +1280,12 @@ class Analyzer(
             "Found duplicate rewrite attributes")
           val attributeRewrites = AttributeMap(attrMapping)
           // rewrite the attributes of parent node
-          newPlan = newPlan.transformExpressions {
+          newPlan.transformExpressions {
             case a: Attribute =>
               dedupAttr(a, attributeRewrites)
             case s: SubqueryExpression =>
               s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
-          }
-          newPlan -> attrMapping
+          } -> attrMapping
         }
       }
     }
