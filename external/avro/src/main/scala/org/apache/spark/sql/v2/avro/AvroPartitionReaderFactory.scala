@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions}
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroUtils}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile}
@@ -88,7 +88,6 @@ case class AvroPartitionReaderFactory(
       }
 
       reader.sync(partitionedFile.start)
-      val stop = partitionedFile.start + partitionedFile.length
 
       val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
         reader.asInstanceOf[DataFileReader[_]].getMetaString,
@@ -100,38 +99,17 @@ case class AvroPartitionReaderFactory(
         new NoopFilters
       }
 
-      val deserializer = new AvroDeserializer(
-        userProvidedSchema.getOrElse(reader.getSchema),
-        readDataSchema,
-        datetimeRebaseMode,
-        avroFilters)
+      val fileReader = new PartitionReader[InternalRow] with AvroUtils.RowReader {
+        override val fileReader = reader
+        override val deserializer = new AvroDeserializer(
+          userProvidedSchema.getOrElse(reader.getSchema),
+          readDataSchema,
+          datetimeRebaseMode,
+          avroFilters)
+        override val stopPosition = partitionedFile.start + partitionedFile.length
 
-      val fileReader = new PartitionReader[InternalRow] {
-        private[this] var completed = false
-        private[this] var nextRow: Option[InternalRow] = None
-
-        override def next(): Boolean = {
-          do {
-            val r = reader.hasNext && !reader.pastSync(stop)
-            if (!r) {
-              reader.close()
-              completed = true
-              nextRow = None
-            } else {
-              val record = reader.next()
-              nextRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
-            }
-          } while (!completed && nextRow.isEmpty)
-
-          nextRow.isDefined
-        }
-
-        override def get(): InternalRow = {
-          nextRow.getOrElse {
-            throw new NoSuchElementException("next on empty iterator")
-          }
-        }
-
+        override def next(): Boolean = hasNextRow
+        override def get(): InternalRow = nextRow
         override def close(): Unit = reader.close()
       }
       new PartitionReaderWithPartitionValues(fileReader, readDataSchema,

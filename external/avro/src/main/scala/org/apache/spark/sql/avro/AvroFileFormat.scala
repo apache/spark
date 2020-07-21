@@ -122,7 +122,6 @@ private[sql] class AvroFileFormat extends FileFormat
         }
 
         reader.sync(file.start)
-        val stop = file.start + file.length
 
         val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
           reader.asInstanceOf[DataFileReader[_]].getMetaString,
@@ -134,37 +133,17 @@ private[sql] class AvroFileFormat extends FileFormat
           new NoopFilters
         }
 
-        val deserializer = new AvroDeserializer(
-          userProvidedSchema.getOrElse(reader.getSchema),
-          requiredSchema,
-          datetimeRebaseMode,
-          avroFilters)
+        new Iterator[InternalRow] with AvroUtils.RowReader {
+          override val fileReader = reader
+          override val deserializer = new AvroDeserializer(
+            userProvidedSchema.getOrElse(reader.getSchema),
+            requiredSchema,
+            datetimeRebaseMode,
+            avroFilters)
+          override val stopPosition = file.start + file.length
 
-        new Iterator[InternalRow] {
-          private[this] var completed = false
-          private[this] var nextRow: Option[InternalRow] = None
-
-          override def hasNext: Boolean = {
-            do {
-              val r = reader.hasNext && !reader.pastSync(stop)
-              if (!r) {
-                reader.close()
-                completed = true
-                nextRow = None
-              } else {
-                val record = reader.next()
-                nextRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
-              }
-            } while (!completed && nextRow.isEmpty)
-
-            nextRow.isDefined
-          }
-
-          override def next(): InternalRow = {
-            nextRow.getOrElse {
-              throw new NoSuchElementException("next on empty iterator")
-            }
-          }
+          override def hasNext: Boolean = hasNextRow
+          override def next(): InternalRow = nextRow
         }
       } else {
         Iterator.empty
