@@ -27,7 +27,9 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.internal.config.Streaming._
+import org.apache.spark.internal.config.Worker.WORKER_DECOMMISSION_ENABLED
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -44,11 +46,22 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
   }
 
   test("basic functionality") {
+    basicTest(decommissioning = false)
+  }
+
+  test("basic decommissioning") {
+    basicTest(decommissioning = true)
+  }
+
+  def basicTest(decommissioning: Boolean): Unit = {
     // Test that adding batch processing time info to allocation manager
     // causes executors to be requested and killed accordingly
+    conf.set(WORKER_DECOMMISSION_ENABLED, decommissioning)
 
     // There is 1 receiver, and exec 1 has been allocated to it
-    withAllocationManager(numReceivers = 1) { case (receiverTracker, allocationManager) =>
+    withAllocationManager(numReceivers = 1, conf = conf) {
+      case (receiverTracker, allocationManager) =>
+
       when(receiverTracker.allocatedExecutors).thenReturn(Map(1 -> Some("1")))
 
       /** Add data point for batch processing time and verify executor allocation */
@@ -83,12 +96,26 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
             Map.empty)}
       }
 
-      /** Verify that a particular executor was killed */
+      /** Verify that a particular executor was scaled down. */
       def verifyKilledExec(expectedKilledExec: Option[String]): Unit = {
         if (expectedKilledExec.nonEmpty) {
-          verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))
+          val decomInfo = ExecutorDecommissionInfo("spark scale down", false)
+          if (decommissioning) {
+            verify(allocationClient, times(1)).decommissionExecutor(
+              meq(expectedKilledExec.get), meq(decomInfo), meq(true))
+            verify(allocationClient, never).killExecutor(meq(expectedKilledExec.get))
+          } else {
+            verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))
+            verify(allocationClient, never).decommissionExecutor(
+              meq(expectedKilledExec.get), meq(decomInfo), meq(true))
+          }
         } else {
-          verify(allocationClient, never).killExecutor(null)
+          if (decommissioning) {
+            verify(allocationClient, never).decommissionExecutor(null, null, false)
+            verify(allocationClient, never).decommissionExecutor(null, null, true)
+          } else {
+            verify(allocationClient, never).killExecutor(null)
+          }
         }
       }
 

@@ -190,7 +190,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     logInfo(s"Decommissioning executor ${execToDecommission}")
     sched.decommissionExecutor(
       execToDecommission,
-      ExecutorDecommissionInfo("", isHostDecommissioned = false))
+      ExecutorDecommissionInfo("", isHostDecommissioned = false),
+      adjustTargetNumExecutors = true)
     val decomTime = new SystemClock().getTimeMillis()
 
     // Wait for job to finish.
@@ -276,6 +277,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
 
     // Wait for the executor to be removed automatically after migration.
+    // This is set to a high value since github actions is sometimes high latency
+    // but I've never seen this go for more than a minute.
     assert(executorRemovedSem.tryAcquire(1, 5L, TimeUnit.MINUTES))
 
     // Since the RDD is cached or shuffled so further usage of same RDD should use the
