@@ -80,6 +80,7 @@ for python in "${PYTHON_EXECS[@]}"; do
         source "$CONDA_PREFIX/etc/profile.d/conda.sh"
       fi
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
+      conda env list
       source activate "$VIRTUALENV_PATH" || (echo "Falling back to 'conda activate'" && conda activate "$VIRTUALENV_PATH")
     else
       mkdir -p "$VIRTUALENV_PATH"
@@ -91,6 +92,7 @@ for python in "${PYTHON_EXECS[@]}"; do
       pip install --upgrade pip wheel numpy
     fi
 
+    conda env list
     echo "Creating pip installable source dist"
     cd "$FWDIR"/python
     # Delete the egg info file if it exists, this can cache the setup file.
@@ -121,7 +123,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     echo "Run the tests for context.py"
     python3 -c "import pyspark; print(pyspark.__version__); print(pyspark.__file__)"
     echo $CONDA_DEFAULT_ENV
-    conda env list
     python3 "$FWDIR"/python/pyspark/context.py
 
     cd "$FWDIR"
