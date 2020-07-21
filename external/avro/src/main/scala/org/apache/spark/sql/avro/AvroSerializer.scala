@@ -34,7 +34,7 @@ import org.apache.avro.util.Utf8
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, MapData}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -69,10 +69,10 @@ class AvroSerializer(
     val actualAvroType = resolveNullableType(rootAvroType, nullable)
     val baseConverter = rootCatalystType match {
       case st: StructType =>
-        newStructConverter(st, actualAvroType).asInstanceOf[Any => Any]
+        newStructConverter(st, actualAvroType, true).asInstanceOf[Any => Any]
       case _ =>
         val tmpRow = new SpecificInternalRow(Seq(rootCatalystType))
-        val converter = newConverter(rootCatalystType, actualAvroType)
+        val converter = newConverter(rootCatalystType, actualAvroType, true)
         (data: Any) =>
           tmpRow.update(0, data)
           converter.apply(tmpRow, 0)
@@ -93,7 +93,8 @@ class AvroSerializer(
 
   private lazy val decimalConversions = new DecimalConversion()
 
-  private def newConverter(catalystType: DataType, avroType: Schema): Converter = {
+  private def newConverter(
+      catalystType: DataType, avroType: Schema, reuseObj: Boolean): Converter = {
     (catalystType, avroType.getType) match {
       case (NullType, NULL) =>
         (getter, ordinal) => null
@@ -170,7 +171,7 @@ class AvroSerializer(
 
       case (ArrayType(et, containsNull), ARRAY) =>
         val elementConverter = newConverter(
-          et, resolveNullableType(avroType.getElementType, containsNull))
+          et, resolveNullableType(avroType.getElementType, containsNull), false)
         (getter, ordinal) => {
           val arrayData = getter.getArray(ordinal)
           val len = arrayData.numElements()
@@ -190,30 +191,47 @@ class AvroSerializer(
         }
 
       case (st: StructType, RECORD) =>
-        val structConverter = newStructConverter(st, avroType)
+        val structConverter = newStructConverter(st, avroType, reuseObj)
         val numFields = st.length
         (getter, ordinal) => structConverter(getter.getStruct(ordinal, numFields))
 
       case (MapType(kt, vt, valueContainsNull), MAP) if kt == StringType =>
         val valueConverter = newConverter(
-          vt, resolveNullableType(avroType.getValueType, valueContainsNull))
-        (getter, ordinal) =>
-          val mapData = getter.getMap(ordinal)
-          val len = mapData.numElements()
-          val result = new java.util.HashMap[String, Any](len)
-          val keyArray = mapData.keyArray()
-          val valueArray = mapData.valueArray()
-          var i = 0
-          while (i < len) {
-            val key = keyArray.getUTF8String(i).toString
-            if (valueContainsNull && valueArray.isNullAt(i)) {
-              result.put(key, null)
-            } else {
-              result.put(key, valueConverter(valueArray, i))
+          vt, resolveNullableType(avroType.getValueType, valueContainsNull), false)
+        val baseConverter: (MapData, java.util.HashMap[String, Any], Int) => Any = {
+          (mapData, result, len) => {
+            val keyArray = mapData.keyArray()
+            val valueArray = mapData.valueArray()
+            var i = 0
+            while (i < len) {
+              val key = keyArray.getUTF8String(i).toString
+              if (valueContainsNull && valueArray.isNullAt(i)) {
+                result.put(key, null)
+              } else {
+                result.put(key, valueConverter(valueArray, i))
+              }
+              i += 1
             }
-            i += 1
+            result
           }
-          result
+        }
+
+        if (reuseObj) {
+          val result = new java.util.HashMap[String, Any]()
+          (getter, ordinal) => {
+            val mapData = getter.getMap(ordinal)
+            val len = mapData.numElements()
+            result.clear()
+            baseConverter(mapData, result, len)
+          }
+        } else {
+          (getter, ordinal) => {
+            val mapData = getter.getMap(ordinal)
+            val len = mapData.numElements()
+            val result = new java.util.HashMap[String, Any](len)
+            baseConverter(mapData, result, len)
+          }
+        }
 
       case other =>
         throw new IncompatibleSchemaException(s"Cannot convert Catalyst type $catalystType to " +
@@ -222,7 +240,7 @@ class AvroSerializer(
   }
 
   private def newStructConverter(
-      catalystStruct: StructType, avroStruct: Schema): InternalRow => Record = {
+      catalystStruct: StructType, avroStruct: Schema, reuseObj: Boolean): InternalRow => Record = {
     if (avroStruct.getType != RECORD || avroStruct.getFields.size() != catalystStruct.length) {
       throw new IncompatibleSchemaException(s"Cannot convert Catalyst type $catalystStruct to " +
         s"Avro type $avroStruct.")
@@ -236,13 +254,12 @@ class AvroSerializer(
             s"Cannot convert Catalyst type $catalystStruct to Avro type $avroStruct.")
         }
         val converter = newConverter(catalystField.dataType, resolveNullableType(
-          avroField.schema(), catalystField.nullable))
+          avroField.schema(), catalystField.nullable), reuseObj)
         (avroField.pos(), converter)
       }.toArray.unzip
 
     val numFields = catalystStruct.length
-    row: InternalRow =>
-      val result = new Record(avroStruct)
+    val baseConverter: (Record, InternalRow) => Record = (result, row) => {
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
@@ -253,6 +270,17 @@ class AvroSerializer(
         i += 1
       }
       result
+    }
+
+    if (reuseObj) {
+      val result = new Record(avroStruct)
+      row => baseConverter(result, row)
+    } else {
+      row => {
+        val result = new Record(avroStruct)
+        baseConverter(result, row)
+      }
+    }
   }
 
   private def resolveNullableType(avroType: Schema, nullable: Boolean): Schema = {

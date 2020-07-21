@@ -40,7 +40,8 @@ import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 /**
- * A deserializer to deserialize data in avro format to data in catalyst format.
+ * A deserializer to deserialize data in avro format to data in catalyst format. Multiple calls
+ * return the same [[InternalRow]] object. If needed, caller should copy before making a new call.
  */
 class AvroDeserializer(
     rootAvroType: Schema,
@@ -73,7 +74,7 @@ class AvroDeserializer(
       val resultRow = new SpecificInternalRow(st.map(_.dataType))
       val fieldUpdater = new RowUpdater(resultRow)
       val applyFilters = filters.skipRow(resultRow, _)
-      val writer = getRecordWriter(rootAvroType, st, Nil, applyFilters)
+      val writer = getRecordWriter(rootAvroType, st, Nil, applyFilters, true)
       (data: Any) => {
         val record = data.asInstanceOf[GenericRecord]
         val skipRow = writer(fieldUpdater, record)
@@ -83,7 +84,7 @@ class AvroDeserializer(
     case _ =>
       val tmpRow = new SpecificInternalRow(Seq(rootCatalystType))
       val fieldUpdater = new RowUpdater(tmpRow)
-      val writer = newWriter(rootAvroType, rootCatalystType, Nil)
+      val writer = newWriter(rootAvroType, rootCatalystType, Nil, true)
       (data: Any) => {
         writer(fieldUpdater, 0, data)
         Some(tmpRow.get(0, rootCatalystType))
@@ -99,7 +100,8 @@ class AvroDeserializer(
   private def newWriter(
       avroType: Schema,
       catalystType: DataType,
-      path: List[String]): (CatalystDataUpdater, Int, Any) => Unit =
+      path: List[String],
+      reuseObj: Boolean): (CatalystDataUpdater, Int, Any) => Unit =
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>
         updater.setNullAt(ordinal)
@@ -184,14 +186,24 @@ class AvroDeserializer(
       case (RECORD, st: StructType) =>
         // Avro datasource doesn't accept filters with nested attributes. See SPARK-32328.
         // We can always return `false` from `applyFilters` for nested records.
-        val writeRecord = getRecordWriter(avroType, st, path, applyFilters = _ => false)
-        (updater, ordinal, value) =>
+        val writeRecord = getRecordWriter(avroType, st, path, applyFilters = _ => false, reuseObj)
+        val baseWriter: (InternalRow, CatalystDataUpdater, Int, Any) => Unit =
+          (result, updater, ordinal, value) => {
+            writeRecord(new RowUpdater(result), value.asInstanceOf[GenericRecord])
+            updater.set(ordinal, result)
+          }
+
+        if (reuseObj) {
           val row = new SpecificInternalRow(st)
-          writeRecord(new RowUpdater(row), value.asInstanceOf[GenericRecord])
-          updater.set(ordinal, row)
+          (updater, ordinal, value) =>
+            baseWriter(row, updater, ordinal, value)
+        } else (updater, ordinal, value) => {
+          val row = new SpecificInternalRow(st)
+          baseWriter(row, updater, ordinal, value)
+        }
 
       case (ARRAY, ArrayType(elementType, containsNull)) =>
-        val elementWriter = newWriter(avroType.getElementType, elementType, path)
+        val elementWriter = newWriter(avroType.getElementType, elementType, path, false)
         (updater, ordinal, value) =>
           val collection = value.asInstanceOf[java.util.Collection[Any]]
           val result = createArrayData(elementType, collection.size())
@@ -217,8 +229,8 @@ class AvroDeserializer(
           updater.set(ordinal, result)
 
       case (MAP, MapType(keyType, valueType, valueContainsNull)) if keyType == StringType =>
-        val keyWriter = newWriter(SchemaBuilder.builder().stringType(), StringType, path)
-        val valueWriter = newWriter(avroType.getValueType, valueType, path)
+        val keyWriter = newWriter(SchemaBuilder.builder().stringType(), StringType, path, false)
+        val valueWriter = newWriter(avroType.getValueType, valueType, path, false)
         (updater, ordinal, value) =>
           val map = value.asInstanceOf[java.util.Map[AnyRef, AnyRef]]
           val keyArray = createArrayData(keyType, map.size())
@@ -254,7 +266,7 @@ class AvroDeserializer(
         val nonNullAvroType = Schema.createUnion(nonNullTypes.asJava)
         if (nonNullTypes.nonEmpty) {
           if (nonNullTypes.length == 1) {
-            newWriter(nonNullTypes.head, catalystType, path)
+            newWriter(nonNullTypes.head, catalystType, path, reuseObj)
           } else {
             nonNullTypes.map(_.getType) match {
               case Seq(a, b) if Set(a, b) == Set(INT, LONG) && catalystType == LongType =>
@@ -275,7 +287,8 @@ class AvroDeserializer(
                 catalystType match {
                   case st: StructType if st.length == nonNullTypes.size =>
                     val fieldWriters = nonNullTypes.zip(st.fields).map {
-                      case (schema, field) => newWriter(schema, field.dataType, path :+ field.name)
+                      case (schema, field) =>
+                        newWriter(schema, field.dataType, path :+ field.name, reuseObj)
                     }.toArray
                     (updater, ordinal, value) => {
                       val row = new SpecificInternalRow(st)
@@ -322,7 +335,8 @@ class AvroDeserializer(
       avroType: Schema,
       sqlType: StructType,
       path: List[String],
-      applyFilters: Int => Boolean): (CatalystDataUpdater, GenericRecord) => Boolean = {
+      applyFilters: Int => Boolean,
+      reuseObj: Boolean): (CatalystDataUpdater, GenericRecord) => Boolean = {
     val validFieldIndexes = ArrayBuffer.empty[Int]
     val fieldWriters = ArrayBuffer.empty[(CatalystDataUpdater, Any) => Unit]
 
@@ -334,7 +348,8 @@ class AvroDeserializer(
       if (avroField != null) {
         validFieldIndexes += avroField.pos()
 
-        val baseWriter = newWriter(avroField.schema(), sqlField.dataType, path :+ sqlField.name)
+        val baseWriter =
+          newWriter(avroField.schema(), sqlField.dataType, path :+ sqlField.name, reuseObj)
         val ordinal = i
         val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
           if (value == null) {
@@ -368,13 +383,13 @@ class AvroDeserializer(
   }
 
   private def createArrayData(elementType: DataType, length: Int): ArrayData = elementType match {
-    case BooleanType => UnsafeArrayData.fromPrimitiveArray(new Array[Boolean](length))
-    case ByteType => UnsafeArrayData.fromPrimitiveArray(new Array[Byte](length))
-    case ShortType => UnsafeArrayData.fromPrimitiveArray(new Array[Short](length))
-    case IntegerType => UnsafeArrayData.fromPrimitiveArray(new Array[Int](length))
-    case LongType => UnsafeArrayData.fromPrimitiveArray(new Array[Long](length))
-    case FloatType => UnsafeArrayData.fromPrimitiveArray(new Array[Float](length))
-    case DoubleType => UnsafeArrayData.fromPrimitiveArray(new Array[Double](length))
+    case BooleanType => UnsafeArrayData.createFreshArray(length, 1)
+    case ByteType => UnsafeArrayData.createFreshArray(length, 1)
+    case ShortType => UnsafeArrayData.createFreshArray(length, 2)
+    case IntegerType => UnsafeArrayData.createFreshArray(length, 4)
+    case LongType => UnsafeArrayData.createFreshArray(length, 8)
+    case FloatType => UnsafeArrayData.createFreshArray(length, 4)
+    case DoubleType => UnsafeArrayData.createFreshArray(length, 8)
     case _ => new GenericArrayData(new Array[Any](length))
   }
 

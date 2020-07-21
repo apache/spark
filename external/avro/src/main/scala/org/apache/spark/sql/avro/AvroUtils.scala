@@ -171,6 +171,7 @@ object AvroUtils extends Logging {
     protected val stopPosition: Long
 
     private[this] var completed = false
+    private[this] var record: GenericRecord = _
     private[this] var currentRow: Option[InternalRow] = None
 
     def hasNextRow: Boolean = {
@@ -181,7 +182,7 @@ object AvroUtils extends Logging {
           completed = true
           currentRow = None
         } else {
-          val record = fileReader.next()
+          record = fileReader.next(record)
           currentRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
         }
       } while (!completed && currentRow.isEmpty)
