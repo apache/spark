@@ -92,6 +92,8 @@ class Binarizer(JavaTransformer, HasThreshold, HasThresholds, HasInputCol, HasOu
     >>> loadedBinarizer = Binarizer.load(binarizerPath)
     >>> loadedBinarizer.getThreshold() == binarizer.getThreshold()
     True
+    >>> loadedBinarizer.transform(df).take(1) == binarizer.transform(df).take(1)
+    True
     >>> df2 = spark.createDataFrame([(0.5, 0.3)], ["values1", "values2"])
     >>> binarizer2 = Binarizer(thresholds=[0.0, 1.0])
     >>> binarizer2.setInputCols(["values1", "values2"]).setOutputCols(["output1", "output2"])
@@ -480,6 +482,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     >>> loadedBucketizer = Bucketizer.load(bucketizerPath)
     >>> loadedBucketizer.getSplits() == bucketizer.getSplits()
     True
+    >>> loadedBucketizer.transform(df).take(1) == bucketizer.transform(df).take(1)
+    True
     >>> bucketed = bucketizer.setHandleInvalid("skip").transform(df).collect()
     >>> len(bucketed)
     4
@@ -736,6 +740,8 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
     >>> loadedModel = CountVectorizerModel.load(modelPath)
     >>> loadedModel.vocabulary == model.vocabulary
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
     >>> fromVocabModel = CountVectorizerModel.from_vocabulary(["a", "b", "c"],
     ...     inputCol="raw", outputCol="vectors")
     >>> fromVocabModel.transform(df).show(truncate=False)
@@ -923,6 +929,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
     >>> dctPath = temp_path + "/dct"
     >>> dct.save(dctPath)
     >>> loadedDtc = DCT.load(dctPath)
+    >>> loadedDtc.transform(df1).take(1) == dct.transform(df1).take(1)
+    True
     >>> loadedDtc.getInverse()
     False
 
@@ -1005,6 +1013,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
     >>> ep.save(elementwiseProductPath)
     >>> loadedEp = ElementwiseProduct.load(elementwiseProductPath)
     >>> loadedEp.getScalingVec() == ep.getScalingVec()
+    True
+    >>> loadedEp.transform(df).take(1) == ep.transform(df).take(1)
     True
 
     .. versionadded:: 1.5.0
@@ -1203,6 +1213,8 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     >>> hashingTF.save(hashingTFPath)
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
     >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
+    True
+    >>> loadedHashingTF.transform(df).take(1) == hashingTF.transform(df).take(1)
     True
     >>> hashingTF.indexOf("b")
     5
@@ -1820,6 +1832,8 @@ class MaxAbsScaler(JavaEstimator, _MaxAbsScalerParams, JavaMLReadable, JavaMLWri
     >>> loadedModel = MaxAbsScalerModel.load(modelPath)
     >>> loadedModel.maxAbs == model.maxAbs
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 2.0.0
     """
@@ -2077,6 +2091,8 @@ class MinMaxScaler(JavaEstimator, _MinMaxScalerParams, JavaMLReadable, JavaMLWri
     True
     >>> loadedModel.originalMax == model.originalMax
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 1.6.0
     """
@@ -2220,6 +2236,8 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
     >>> loadedNGram = NGram.load(ngramPath)
     >>> loadedNGram.getN() == ngram.getN()
     True
+    >>> loadedNGram.transform(df).take(1) == ngram.transform(df).take(1)
+    True
 
     .. versionadded:: 1.5.0
     """
@@ -2299,6 +2317,8 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> normalizer.save(normalizerPath)
     >>> loadedNormalizer = Normalizer.load(normalizerPath)
     >>> loadedNormalizer.getP() == normalizer.getP()
+    True
+    >>> loadedNormalizer.transform(df).take(1) == normalizer.transform(df).take(1)
     True
 
     .. versionadded:: 1.4.0
@@ -2436,6 +2456,8 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
     >>> model.save(modelPath)
     >>> loadedModel = OneHotEncoderModel.load(modelPath)
     >>> loadedModel.categorySizes == model.categorySizes
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
     True
 
     .. versionadded:: 2.3.0
@@ -2596,6 +2618,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
     >>> px.save(polyExpansionPath)
     >>> loadedPx = PolynomialExpansion.load(polyExpansionPath)
     >>> loadedPx.getDegree() == px.getDegree()
+    True
+    >>> loadedPx.transform(df).take(1) == px.transform(df).take(1)
     True
 
     .. versionadded:: 1.4.0
@@ -2973,6 +2997,8 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
     True
     >>> loadedModel.range == model.range
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 3.0.0
     """
@@ -3130,6 +3156,8 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
     True
     >>> loadedReTokenizer.getGaps() == reTokenizer.getGaps()
     True
+    >>> loadedReTokenizer.transform(df).take(1) == reTokenizer.transform(df).take(1)
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -3254,6 +3282,8 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
     >>> loadedSqlTrans = SQLTransformer.load(sqlTransformerPath)
     >>> loadedSqlTrans.getStatement() == sqlTrans.getStatement()
     True
+    >>> loadedSqlTrans.transform(df).take(1) == sqlTrans.transform(df).take(1)
+    True
 
     .. versionadded:: 1.6.0
     """
@@ -3368,6 +3398,8 @@ class StandardScaler(JavaEstimator, _StandardScalerParams, JavaMLReadable, JavaM
     >>> loadedModel.std == model.std
     True
     >>> loadedModel.mean == model.mean
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
     True
 
     .. versionadded:: 1.4.0
@@ -3532,6 +3564,8 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     >>> inverter.save(indexToStringPath)
     >>> loadedInverter = IndexToString.load(indexToStringPath)
     >>> loadedInverter.getLabels() == inverter.getLabels()
+    True
+    >>> loadedModel.transform(stringIndDf).take(1) == model.transform(stringIndDf).take(1)
     True
     >>> stringIndexer.getStringOrderType()
     'frequencyDesc'
@@ -3817,6 +3851,8 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols,
     >>> loadedRemover.getStopWords() == remover.getStopWords()
     True
     >>> loadedRemover.getCaseSensitive() == remover.getCaseSensitive()
+    True
+    >>> loadedRemover.transform(df).take(1) == remover.transform(df).take(1)
     True
     >>> df2 = spark.createDataFrame([(["a", "b", "c"], ["a", "b"])], ["text1", "text2"])
     >>> remover2 = StopWordsRemover(stopWords=["b"])
@@ -4213,6 +4249,8 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
     True
     >>> loadedModel.categoryMaps == model.categoryMaps
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
     >>> dfWithInvalid = spark.createDataFrame([(Vectors.dense([3.0, 1.0]),)], ["a"])
     >>> indexer.getHandleInvalid()
     'error'
@@ -4354,6 +4392,8 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
     >>> loadedVs.getIndices() == vs.getIndices()
     True
     >>> loadedVs.getNames() == vs.getNames()
+    True
+    >>> loadedVs.transform(df).take(1) == vs.transform(df).take(1)
     True
 
     .. versionadded:: 1.6.0
@@ -4551,6 +4591,8 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     >>> loadedModel.getVectors().first().word == model.getVectors().first().word
     True
     >>> loadedModel.getVectors().first().vector == model.getVectors().first().vector
+    True
+    >>> loadedModel.transform(doc).take(1) == model.transform(doc).take(1)
     True
 
     .. versionadded:: 1.4.0
@@ -4755,6 +4797,8 @@ class PCA(JavaEstimator, _PCAParams, JavaMLReadable, JavaMLWritable):
     >>> loadedModel.pc == model.pc
     True
     >>> loadedModel.explainedVariance == model.explainedVariance
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
     True
 
     .. versionadded:: 1.5.0
@@ -5291,6 +5335,8 @@ class ANOVASelector(_Selector, JavaMLReadable, JavaMLWritable):
     >>> loadedModel = ANOVASelectorModel.load(modelPath)
     >>> loadedModel.selectedFeatures == model.selectedFeatures
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 3.1.0
     """
@@ -5387,6 +5433,8 @@ class ChiSqSelector(_Selector, JavaMLReadable, JavaMLWritable):
     >>> model.save(modelPath)
     >>> loadedModel = ChiSqSelectorModel.load(modelPath)
     >>> loadedModel.selectedFeatures == model.selectedFeatures
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
     True
 
     .. versionadded:: 2.0.0
@@ -5488,6 +5536,8 @@ class FValueSelector(_Selector, JavaMLReadable, JavaMLWritable):
     >>> model.save(modelPath)
     >>> loadedModel = FValueSelectorModel.load(modelPath)
     >>> loadedModel.selectedFeatures == model.selectedFeatures
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
     True
 
     .. versionadded:: 3.1.0
@@ -5679,6 +5729,8 @@ class VarianceThresholdSelector(JavaEstimator, _VarianceThresholdSelectorParams,
     >>> model.save(modelPath)
     >>> loadedModel = VarianceThresholdSelectorModel.load(modelPath)
     >>> loadedModel.selectedFeatures == model.selectedFeatures
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
     True
 
     .. versionadded:: 3.1.0
