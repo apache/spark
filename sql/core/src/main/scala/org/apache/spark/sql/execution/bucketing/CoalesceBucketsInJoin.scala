@@ -115,9 +115,9 @@ case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
  */
 object ExtractJoinWithBuckets {
   @tailrec
-  private def isScanOperation(plan: SparkPlan): Boolean = plan match {
-    case f: FilterExec => isScanOperation(f.child)
-    case p: ProjectExec => isScanOperation(p.child)
+  private def hasScanOperation(plan: SparkPlan): Boolean = plan match {
+    case f: FilterExec => hasScanOperation(f.child)
+    case p: ProjectExec => hasScanOperation(p.child)
     case _: FileSourceScanExec => true
     case _ => false
   }
@@ -147,8 +147,8 @@ object ExtractJoinWithBuckets {
   private def isApplicable(j: BaseJoinExec): Boolean = {
     (j.isInstanceOf[SortMergeJoinExec] ||
       j.isInstanceOf[ShuffledHashJoinExec]) &&
-      isScanOperation(j.left) &&
-      isScanOperation(j.right) &&
+      hasScanOperation(j.left) &&
+      hasScanOperation(j.right) &&
       satisfiesOutputPartitioning(j.leftKeys, j.left.outputPartitioning) &&
       satisfiesOutputPartitioning(j.rightKeys, j.right.outputPartitioning)
   }
