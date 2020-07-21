@@ -396,8 +396,7 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper {
   // SingleColumn NullAwareAntiJoin
   // streamedSideKeys, buildSideKeys
   // currently these two return Seq[Expression] should have only one element
-  private type ReturnType =
-    (Seq[Expression], Seq[Expression])
+  private type ReturnType = (Seq[Expression], Seq[Expression])
 
   /**
    * See. [SPARK-32290]

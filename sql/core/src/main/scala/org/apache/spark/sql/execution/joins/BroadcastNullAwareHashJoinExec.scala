@@ -43,11 +43,11 @@ case class BroadcastNullAwareHashJoinExec(
   // multi-column null aware anti join is much more complicated than single column ones.
   require(leftKeys.length == 1, "leftKeys length should be 1")
   require(rightKeys.length == 1, "rightKeys length should be 1")
-  require(right.output.length == 1, "not in subquery hash join optimize only single column.")
+  require(right.output.length == 1, "null aware anti join only supports single column.")
   require(joinType == LeftAnti, "joinType must be LeftAnti.")
   require(buildSide == BuildRight, "buildSide must be BuildRight.")
   require(SQLConf.get.nullAwareAntiJoinOptimizeEnabled,
-    "nullAwareAntiJoinOptimizeEnabled must turn on for BroadcastNullAwareHashJoinExec.")
+    "nullAwareAntiJoinOptimizeEnabled must be on for null aware anti join optimize.")
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))

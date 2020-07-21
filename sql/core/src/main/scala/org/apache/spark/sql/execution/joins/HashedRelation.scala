@@ -225,7 +225,6 @@ private[joins] class UnsafeHashedRelation(
       writeInt: (Int) => Unit,
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
-    writeBoolean(inputEmpty)
     writeBoolean(anyNullKeyExists)
     writeInt(numFields)
     // TODO: move these into BytesToBytesMap
@@ -261,7 +260,6 @@ private[joins] class UnsafeHashedRelation(
       readInt: () => Int,
       readLong: () => Long,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
-    val inputEmpty = readBoolean()
     val anyNullKeyExists = readBoolean()
     numFields = readInt()
     resultRow = new UnsafeRow(numFields)
@@ -289,7 +287,6 @@ private[joins] class UnsafeHashedRelation(
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
       pageSizeBytes)
 
-    binaryMap.setInputEmpty(inputEmpty)
     binaryMap.setAnyNullKeyExists(anyNullKeyExists)
 
     var i = 0
@@ -322,7 +319,7 @@ private[joins] class UnsafeHashedRelation(
     read(() => in.readBoolean(), () => in.readInt(), () => in.readLong(), in.readBytes)
   }
 
-  override def inputEmpty: Boolean = binaryMap.isInputEmpty
+  override def inputEmpty: Boolean = binaryMap.inputEmpty
 
   override def anyNullKeyExists: Boolean = binaryMap.isAnyNullKeyExists
 }
@@ -346,7 +343,6 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
-    binaryMap.setInputEmpty(input.isEmpty)
     while (input.hasNext) {
       val row = input.next().asInstanceOf[UnsafeRow]
       numFields = row.numFields()
@@ -408,8 +404,8 @@ private[joins] object UnsafeHashedRelation {
 private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, capacity: Int)
   extends MemoryConsumer(mm) with Externalizable with KryoSerializable {
 
-  var inputEmpty = false
   var anyNullKeyExists = false
+  def inputEmpty: Boolean = (numKeys == 0) && !anyNullKeyExists
 
   // Whether the keys are stored in dense mode or not.
   private var isDense = false
@@ -789,7 +785,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       writeBoolean: (Boolean) => Unit,
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
-    writeBoolean(inputEmpty)
     writeBoolean(anyNullKeyExists)
     writeBoolean(isDense)
     writeLong(minKey)
@@ -832,7 +827,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       readBoolean: () => Boolean,
       readLong: () => Long,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
-    inputEmpty = readBoolean()
     anyNullKeyExists = readBoolean()
     isDense = readBoolean()
     minKey = readLong()
@@ -933,7 +927,6 @@ private[joins] object LongHashedRelation {
 
     // Create a mapping of key -> rows
     var numFields = 0
-    map.inputEmpty = input.isEmpty
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
       numFields = unsafeRow.numFields()

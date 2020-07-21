@@ -47,7 +47,8 @@ case class BroadcastHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan, isNullAwareAntiJoin: Boolean = false)
+    right: SparkPlan,
+    isNullAwareAntiJoin: Boolean = false)
   extends HashJoin with CodegenSupport {
 
   override lazy val metrics = Map(
@@ -480,98 +481,75 @@ case class BroadcastHashJoinExec(
     if (isNullAwareAntiJoin) {
       require(leftKeys.length == 1, "leftKeys length should be 1")
       require(rightKeys.length == 1, "rightKeys length should be 1")
-      require(right.output.length == 1, "not in subquery hash join optimize only single column.")
+      require(right.output.length == 1, "null aware anti join only supports single column.")
       require(joinType == LeftAnti, "joinType must be LeftAnti.")
       require(buildSide == BuildRight, "buildSide must be BuildRight.")
       require(SQLConf.get.nullAwareAntiJoinOptimizeEnabled,
-        "nullAwareAntiJoinOptimizeEnabled must turn on for BroadcastNullAwareHashJoinExec.")
-      require(checkCondition == "", "not in subquery hash join optimize empty condition.")
+        "nullAwareAntiJoinOptimizeEnabled must be on for null aware anti join optimize.")
+      require(checkCondition == "", "null aware anti join optimize condition should be empty.")
 
       if (broadcastRelation.value.inputEmpty) {
-        s"""
+        return s"""
            |// singleColumn NAAJ inputEmpty(true) accept all
            |$numOutput.add(1);
            |${consume(ctx, input)}
          """.stripMargin
       } else if (broadcastRelation.value.anyNullKeyExists) {
-        s"""
+        return s"""
            |// singleColumn NAAJ inputEmpty(false) anyNullKeyExists(true) reject all
          """.stripMargin
-      } else {
-        val found = ctx.freshName("found")
-        s"""
-           |// singleColumn NAAJ inputEmpty(false) anyNullKeyExists(false)
-           |boolean $found = false;
-           |// generate join key for stream side
-           |${keyEv.code}
-           |// Check if the key has nulls.
-           |if (!($anyNull)) {
-           |  // Check if the HashedRelation exists.
-           |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-           |  if ($matched != null) {
-           |    $found = true;
-           |  }
-           |} else {
-           |  $found = true;
-           |}
-           |
-           |if (!$found) {
-           |  $numOutput.add(1);
-           |  ${consume(ctx, input)}
-           |}
-        """.stripMargin
       }
+    }
+
+    if (uniqueKeyCodePath) {
+      val found = ctx.freshName("found")
+      s"""
+         |boolean $found = false;
+         |// generate join key for stream side
+         |${keyEv.code}
+         |// Check if the key has nulls.
+         |if (!($anyNull)) {
+         |  // Check if the HashedRelation exists.
+         |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+         |  if ($matched != null) {
+         |    // Evaluate the condition.
+         |    $checkCondition {
+         |      $found = true;
+         |    }
+         |  }
+         |} ${ if (isNullAwareAntiJoin) s"else { $found = true; }" else ""}
+         |if (!$found) {
+         |  $numOutput.add(1);
+         |  ${consume(ctx, input)}
+         |}
+       """.stripMargin
     } else {
-      if (uniqueKeyCodePath) {
-        val found = ctx.freshName("found")
-        s"""
-           |boolean $found = false;
-           |// generate join key for stream side
-           |${keyEv.code}
-           |// Check if the key has nulls.
-           |if (!($anyNull)) {
-           |  // Check if the HashedRelation exists.
-           |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-           |  if ($matched != null) {
-           |    // Evaluate the condition.
-           |    $checkCondition {
-           |      $found = true;
-           |    }
-           |  }
-           |}
-           |if (!$found) {
-           |  $numOutput.add(1);
-           |  ${consume(ctx, input)}
-           |}
-         """.stripMargin
-      } else {
-        val matches = ctx.freshName("matches")
-        val iteratorCls = classOf[Iterator[UnsafeRow]].getName
-        val found = ctx.freshName("found")
-        s"""
-           |boolean $found = false;
-           |// generate join key for stream side
-           |${keyEv.code}
-           |// Check if the key has nulls.
-           |if (!($anyNull)) {
-           |  // Check if the HashedRelation exists.
-           |  $iteratorCls $matches = ($iteratorCls)$relationTerm.get(${keyEv.value});
-           |  if ($matches != null) {
-           |    // Evaluate the condition.
-           |    while (!$found && $matches.hasNext()) {
-           |      UnsafeRow $matched = (UnsafeRow) $matches.next();
-           |      $checkCondition {
-           |        $found = true;
-           |      }
-           |    }
-           |  }
-           |}
-           |if (!$found) {
-           |  $numOutput.add(1);
-           |  ${consume(ctx, input)}
-           |}
-         """.stripMargin
-      }
+      val matches = ctx.freshName("matches")
+      val iteratorCls = classOf[Iterator[UnsafeRow]].getName
+      val found = ctx.freshName("found")
+      s"""
+         |boolean $found = false;
+         |// generate join key for stream side
+         |${keyEv.code}
+         |// Check if the key has nulls.
+         |if (!($anyNull)) {
+         |  // Check if the HashedRelation exists.
+         |  $iteratorCls $matches = ($iteratorCls)$relationTerm.get(${keyEv.value});
+         |  if ($matches != null) {
+         |    // Evaluate the condition.
+         |    while (!$found && $matches.hasNext()) {
+         |      UnsafeRow $matched = (UnsafeRow) $matches.next();
+         |      $checkCondition {
+         |        $found = true;
+         |      }
+         |    }
+         |  }
+         |} ${ if (isNullAwareAntiJoin) s"else { $found = true; }" else ""}
+         |if (!$found) {
+         |  $numOutput.add(1);
+         |  ${consume(ctx, input)}
+         |}
+       """.stripMargin
     }
   }
 
