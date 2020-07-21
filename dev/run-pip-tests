@@ -118,6 +118,8 @@ for python in "${PYTHON_EXECS[@]}"; do
     python3 "$FWDIR"/dev/pip-sanity-check.py
     echo "Run the tests for context.py"
     python3 -c "import pyspark; print(pyspark.__version__); print(pyspark.__file__)"
+    echo $CONDA_DEFAULT_ENV
+    conda env list
     python3 "$FWDIR"/python/pyspark/context.py
 
     cd "$FWDIR"
