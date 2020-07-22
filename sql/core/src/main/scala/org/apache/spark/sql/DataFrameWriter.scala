@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchT
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, CreateTableAsSelectStatement, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelectStatement}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
@@ -124,7 +125,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter[T] = {
-    this.extraOptions += (key -> value)
+    this.extraOptions ++= Map(key -> value)
     this
   }
 
@@ -265,7 +266,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def save(path: String): Unit = {
-    this.extraOptions += ("path" -> path)
+    this.extraOptions ++= Map("path" -> path)
     save()
   }
 
@@ -383,7 +384,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def saveToV1Source(): Unit = {
     partitioningColumns.foreach { columns =>
-      extraOptions += (DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
+      extraOptions ++= Map(DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
         DataSourceUtils.encodePartitioningColumns(columns))
     }
 
@@ -768,7 +769,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     // connectionProperties should override settings in extraOptions.
     this.extraOptions ++= connectionProperties.asScala
     // explicit url and dbtable should override all
-    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    this.extraOptions ++= Map("url" -> url, "dbtable" -> table)
     format("jdbc").save()
   }
 
@@ -960,7 +961,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
 
-  private val extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 
   private var partitioningColumns: Option[Seq[String]] = None
 

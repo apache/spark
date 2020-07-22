@@ -43,6 +43,10 @@ class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Ma
     new CaseInsensitiveMap[B1](originalMap.filter(!_._1.equalsIgnoreCase(key)) + (key -> value))
   }
 
+  def ++(xs: IterableOnce[(String, T)]): CaseInsensitiveMap[T] = {
+    xs.iterator.foldLeft(this) { (m, kv) => (m + kv).asInstanceOf[CaseInsensitiveMap[T]] }
+  }
+
   override def iterator: Iterator[(String, T)] = keyLowerCasedMap.iterator
 
   override def removed(key: String): Map[String, T] = {
