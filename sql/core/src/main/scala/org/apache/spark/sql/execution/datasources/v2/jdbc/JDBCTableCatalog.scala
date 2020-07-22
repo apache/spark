@@ -20,10 +20,10 @@ import java.sql.{Connection, SQLException}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -89,6 +89,18 @@ class JDBCTableCatalog extends TableCatalog {
     }
   }
 
+  override def loadTable(ident: Identifier): Table = {
+    checkNamespace(ident.namespace())
+    val optionsWithTableName = new JDBCOptions(
+      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
+    try {
+      val schema = JDBCRDD.resolveTable(optionsWithTableName)
+      JDBCTable(ident, schema, optionsWithTableName)
+    } catch {
+      case _: SQLException => throw new NoSuchTableException(ident)
+    }
+  }
+
   override def createTable(
     ident: Identifier,
     schema: StructType,
@@ -100,12 +112,6 @@ class JDBCTableCatalog extends TableCatalog {
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    // scalastyle:off throwerror
-    throw new NotImplementedError()
-    // scalastyle:on throwerror
-  }
-
-  override def loadTable(ident: Identifier): Table = {
     // scalastyle:off throwerror
     throw new NotImplementedError()
     // scalastyle:on throwerror

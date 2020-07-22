@@ -22,6 +22,7 @@ import java.util.Properties
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.util.Utils
 
 class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
@@ -86,5 +87,13 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql("SHOW TABLES IN h2.test"),
         Seq(Row("test", "dst_table"), Row("test", "people")))
     }
+  }
+
+  test("load a table") {
+    val t = spark.table("h2.test.people")
+    val expectedSchema = new StructType()
+      .add("NAME", StringType)
+      .add("ID", IntegerType)
+    assert(t.schema === expectedSchema)
   }
 }
