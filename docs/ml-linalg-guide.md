@@ -58,7 +58,7 @@ $ ln -sf $MKLROOT/lib/intel64/libmkl_rt.so /usr/local/lib/liblapack.so.3
 
 ### OpenBLAS
 
-The installation should be done on all nodes of the cluster. Generic version of OpenBLAS are available with most distributions. You can install it with a distribution package manager `apt` or `yum`.
+The installation should be done on all nodes of the cluster. Generic version of OpenBLAS are available with most distributions. You can install it with a distribution package manager like `apt` or `yum`.
 
 For Debian / Ubuntu:
 ```
