@@ -734,12 +734,6 @@ object CollapseProject extends Rule[LogicalPlan] {
     }
   }
 
-  private def numberOfLeafExpressions(projectList: Seq[Expression]): Long = {
-    projectList
-      .map(expr => if (expr.children.nonEmpty) numberOfLeafExpressions(expr.children) else 1)
-      .sum
-  }
-
   private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
     AttributeMap(projectList.collect {
       case a: Alias => a.toAttribute -> a
