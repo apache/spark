@@ -86,6 +86,8 @@ class OrderedFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
    *         otherwise `false` if at least one of the filters returns `false`.
    */
   def skipRow(row: InternalRow, index: Int): Boolean = {
+    assert(0 <= index && index < requiredSchema.fields.length,
+      "Index is out of the valid range: it must point out to a field of the required schema.")
     val predicate = predicates(index)
     predicate != null && !predicate.eval(row)
   }
