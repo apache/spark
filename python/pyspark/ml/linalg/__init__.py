@@ -48,6 +48,14 @@ except:
     _have_scipy = False
 
 
+def _delegate(op: str):
+    def func(self, other) -> DenseVector:
+        if isinstance(other, DenseVector):
+            other = other.array
+        return DenseVector(getattr(self.array, op)(other))
+    return func
+
+
 def _convert_to_vector(l):
     if isinstance(l, Vector):
         return l
@@ -423,14 +431,6 @@ class DenseVector(Vector):
 
     def __neg__(self):
         return DenseVector(-self.array)
-
-    @staticmethod
-    def _delegate(op: str):
-        def func(self, other) -> DenseVector:
-            if isinstance(other, DenseVector):
-                other = other.array
-            return DenseVector(getattr(self.array, op)(other))
-        return func
 
     __add__ = _delegate("__add__")
     __sub__ = _delegate("__sub__")
