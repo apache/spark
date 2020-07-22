@@ -281,7 +281,7 @@ case class Union(
         child.output.zip(children.head.output).forall {
           case (l, r) => l.dataType.sameType(r.dataType)
         })
-    children.length > 1 && childrenResolved && allChildrenCompatible
+    children.length > 1 && childrenResolved && allChildrenCompatible && !(byName || allowMissingCol)
   }
 
   /**

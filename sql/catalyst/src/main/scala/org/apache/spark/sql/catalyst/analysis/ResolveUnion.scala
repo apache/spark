@@ -44,7 +44,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
           Alias(Literal(null, lattr.dataType), lattr.name)()
         } else {
           throw new AnalysisException(
-            s"""Cannot resolve column name `${lattr.name}` among """ +
+            s"""Cannot resolve column name "${lattr.name}" among """ +
               s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
         }
       }
