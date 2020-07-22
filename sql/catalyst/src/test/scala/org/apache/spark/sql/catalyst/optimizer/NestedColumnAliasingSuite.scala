@@ -510,7 +510,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
-  test("Nested field pruning for Filter with other operators") {
+  test("Nested field pruning for Filter with other supported operators") {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
     val query1 = contact.select($"name.first", winExpr.as('window))
