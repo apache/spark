@@ -216,6 +216,9 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         converter)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
+      case ArrayType(_, _) | MapType(_, _, _) | StructType(_) =>
+        throw new SparkException("TRANSFORM without serde don't support" +
+          " ArrayType/MapType/StructType as output data type")
       case _ => wrapperConvertException(data => data, converter)
     }
   }
