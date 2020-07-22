@@ -316,8 +316,8 @@ private[spark] class DAGScheduler(
    * dynamic allocation is enabled.
    */
   def unschedulableTaskSetAdded(
-       stageId: Int,
-       stageAttemptId: Int): Unit = {
+      stageId: Int,
+      stageAttemptId: Int): Unit = {
     eventProcessLoop.post(UnschedulableTaskSetAdded(stageId, stageAttemptId))
   }
 
@@ -326,8 +326,8 @@ private[spark] class DAGScheduler(
    * allocation is enabled.
    */
   def unschedulableTaskSetRemoved(
-    stageId: Int,
-    stageAttemptId: Int): Unit = {
+      stageId: Int,
+      stageAttemptId: Int): Unit = {
     eventProcessLoop.post(UnschedulableTaskSetRemoved(stageId, stageAttemptId))
   }
 
