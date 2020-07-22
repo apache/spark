@@ -185,6 +185,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
+  testBasicInputDataTypesWith(hiveIOSchema, "hive serde")
+
   test("SPARK-32106: TRANSFORM supports complex data types type (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
@@ -258,8 +260,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           child = df.queryExecution.sparkPlan,
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
-      }
-      assert(e1.getMessage.contains("scala.MatchError: CalendarIntervalType"))
+      }.getMessage
+      assert(e1.contains(
+        "TRANSFORM with hive serde does not support CalendarIntervalType as input data type"))
 
       val e2 = intercept[SparkException] {
         val plan = createScriptTransformationExec(
@@ -271,9 +274,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           child = df.queryExecution.sparkPlan,
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
-      }
-      assert(e2.getMessage.contains(
-        "scala.MatchError: org.apache.spark.sql.types.TestUDT$MyDenseVectorUDT"))
+      }.getMessage
+      assert(e2.contains(
+        "TRANSFORM with hive serde does not support MyDenseVectorUDT as input data type"))
     }
   }
 
@@ -293,8 +296,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             |SELECT TRANSFORM(a, b) USING 'cat' AS (a, b)
             |FROM v
           """.stripMargin).collect()
-      }
-      assert(e1.getMessage.contains("scala.MatchError: CalendarIntervalType"))
+      }.getMessage
+      assert(e1.contains(
+        "TRANSFORM with hive serde does not support CalendarIntervalType as input data type"))
 
       val e2 = intercept[SparkException] {
         sql(
@@ -302,9 +306,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             |SELECT TRANSFORM(a, c) USING 'cat' AS (a, c)
             |FROM v
           """.stripMargin).collect()
-      }
-      assert(e2.getMessage.contains(
-        "scala.MatchError: org.apache.spark.sql.types.TestUDT$MyDenseVectorUDT"))
+      }.getMessage
+      assert(e2.contains(
+        "TRANSFORM with hive serde does not support MyDenseVectorUDT as input data type"))
     }
   }
 }
