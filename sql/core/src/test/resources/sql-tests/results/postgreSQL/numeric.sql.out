@@ -4426,7 +4426,7 @@ struct<>
 -- !query
 SELECT width_bucket(5.0, 3.0, 4.0, 0)
 -- !query schema
-struct<widthbucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(0 AS BIGINT)):bigint>
+struct<width_bucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(0 AS BIGINT)):bigint>
 -- !query output
 NULL
 
@@ -4434,7 +4434,7 @@ NULL
 -- !query
 SELECT width_bucket(5.0, 3.0, 4.0, -5)
 -- !query schema
-struct<widthbucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(-5 AS BIGINT)):bigint>
+struct<width_bucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(-5 AS BIGINT)):bigint>
 -- !query output
 NULL
 
@@ -4442,7 +4442,7 @@ NULL
 -- !query
 SELECT width_bucket(3.5, 3.0, 3.0, 888)
 -- !query schema
-struct<widthbucket(CAST(3.5 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
+struct<width_bucket(CAST(3.5 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
 -- !query output
 NULL
 
@@ -4450,7 +4450,7 @@ NULL
 -- !query
 SELECT width_bucket(double(5.0), double(3.0), double(4.0), 0)
 -- !query schema
-struct<widthbucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(0 AS BIGINT)):bigint>
+struct<width_bucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(0 AS BIGINT)):bigint>
 -- !query output
 NULL
 
@@ -4458,7 +4458,7 @@ NULL
 -- !query
 SELECT width_bucket(double(5.0), double(3.0), double(4.0), -5)
 -- !query schema
-struct<widthbucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(-5 AS BIGINT)):bigint>
+struct<width_bucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(-5 AS BIGINT)):bigint>
 -- !query output
 NULL
 
@@ -4466,7 +4466,7 @@ NULL
 -- !query
 SELECT width_bucket(double(3.5), double(3.0), double(3.0), 888)
 -- !query schema
-struct<widthbucket(CAST(3.5 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
+struct<width_bucket(CAST(3.5 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
 -- !query output
 NULL
 
@@ -4474,7 +4474,7 @@ NULL
 -- !query
 SELECT width_bucket('NaN', 3.0, 4.0, 888)
 -- !query schema
-struct<widthbucket(CAST(NaN AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
+struct<width_bucket(CAST(NaN AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
 -- !query output
 NULL
 
@@ -4482,7 +4482,7 @@ NULL
 -- !query
 SELECT width_bucket(double(0), 'NaN', double(4.0), 888)
 -- !query schema
-struct<widthbucket(CAST(0 AS DOUBLE), CAST(NaN AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
+struct<width_bucket(CAST(0 AS DOUBLE), CAST(NaN AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
 -- !query output
 NULL
 
@@ -4564,7 +4564,7 @@ struct<operand_num:decimal(30,15),wb_1:bigint,wb_1f:bigint,wb_2:bigint,wb_2f:big
 -- !query
 SELECT width_bucket(double(0.0), double('Infinity'), 5, 10)
 -- !query schema
-struct<widthbucket(CAST(0.0 AS DOUBLE), CAST(Infinity AS DOUBLE), CAST(5 AS DOUBLE), CAST(10 AS BIGINT)):bigint>
+struct<width_bucket(CAST(0.0 AS DOUBLE), CAST(Infinity AS DOUBLE), CAST(5 AS DOUBLE), CAST(10 AS BIGINT)):bigint>
 -- !query output
 NULL
 
@@ -4572,7 +4572,7 @@ NULL
 -- !query
 SELECT width_bucket(double(0.0), 5, double('-Infinity'), 20)
 -- !query schema
-struct<widthbucket(CAST(0.0 AS DOUBLE), CAST(5 AS DOUBLE), CAST(-Infinity AS DOUBLE), CAST(20 AS BIGINT)):bigint>
+struct<width_bucket(CAST(0.0 AS DOUBLE), CAST(5 AS DOUBLE), CAST(-Infinity AS DOUBLE), CAST(20 AS BIGINT)):bigint>
 -- !query output
 NULL
 
@@ -4581,7 +4581,7 @@ NULL
 SELECT width_bucket(double('Infinity'), 1, 10, 10),
        width_bucket(double('-Infinity'), 1, 10, 10)
 -- !query schema
-struct<widthbucket(CAST(Infinity AS DOUBLE), CAST(1 AS DOUBLE), CAST(10 AS DOUBLE), CAST(10 AS BIGINT)):bigint,widthbucket(CAST(-Infinity AS DOUBLE), CAST(1 AS DOUBLE), CAST(10 AS DOUBLE), CAST(10 AS BIGINT)):bigint>
+struct<width_bucket(CAST(Infinity AS DOUBLE), CAST(1 AS DOUBLE), CAST(10 AS DOUBLE), CAST(10 AS BIGINT)):bigint,width_bucket(CAST(-Infinity AS DOUBLE), CAST(1 AS DOUBLE), CAST(10 AS DOUBLE), CAST(10 AS BIGINT)):bigint>
 -- !query output
 11	0
 

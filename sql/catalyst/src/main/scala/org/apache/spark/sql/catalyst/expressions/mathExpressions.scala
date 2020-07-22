@@ -1406,6 +1406,7 @@ case class WidthBucket(
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
+  override def prettyName: String = "width_bucket"
 
   override protected def nullSafeEval(input: Any, min: Any, max: Any, numBucket: Any): Any = {
     WidthBucket.computeBucketNumber(

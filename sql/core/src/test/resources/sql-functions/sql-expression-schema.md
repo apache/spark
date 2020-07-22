@@ -291,7 +291,7 @@
 | org.apache.spark.sql.catalyst.expressions.Uuid | uuid | SELECT uuid() | struct<uuid():string> |
 | org.apache.spark.sql.catalyst.expressions.WeekDay | weekday | SELECT weekday('2009-07-30') | struct<weekday(CAST(2009-07-30 AS DATE)):int> |
 | org.apache.spark.sql.catalyst.expressions.WeekOfYear | weekofyear | SELECT weekofyear('2008-02-20') | struct<weekofyear(CAST(2008-02-20 AS DATE)):int> |
-| org.apache.spark.sql.catalyst.expressions.WidthBucket | width_bucket | SELECT width_bucket(5.3, 0.2, 10.6, 5) | struct<widthbucket(CAST(5.3 AS DOUBLE), CAST(0.2 AS DOUBLE), CAST(10.6 AS DOUBLE), CAST(5 AS BIGINT)):bigint> |
+| org.apache.spark.sql.catalyst.expressions.WidthBucket | width_bucket | SELECT width_bucket(5.3, 0.2, 10.6, 5) | struct<width_bucket(CAST(5.3 AS DOUBLE), CAST(0.2 AS DOUBLE), CAST(10.6 AS DOUBLE), CAST(5 AS BIGINT)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.XxHash64 | xxhash64 | SELECT xxhash64('Spark', array(123), 2) | struct<xxhash64(Spark, array(123), 2):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Year | year | SELECT year('2016-07-30') | struct<year(CAST(2016-07-30 AS DATE)):int> |
 | org.apache.spark.sql.catalyst.expressions.ZipWith | zip_with | SELECT zip_with(array(1, 2, 3), array('a', 'b', 'c'), (x, y) -> (y, x)) | struct<zip_with(array(1, 2, 3), array(a, b, c), lambdafunction(named_struct(y, namedlambdavariable(), x, namedlambdavariable()), namedlambdavariable(), namedlambdavariable())):array<struct<y:string,x:int>>> |
