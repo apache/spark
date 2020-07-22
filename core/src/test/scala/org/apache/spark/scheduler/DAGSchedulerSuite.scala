@@ -25,6 +25,9 @@ import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.util.control.NonFatal
 
+import org.mockito.Mockito.spy
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
@@ -232,6 +235,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   var sparkListener: EventInfoRecordingListener = null
 
+  var blockManagerMaster: BlockManagerMaster = null
   var mapOutputTracker: MapOutputTrackerMaster = null
   var broadcastManager: BroadcastManager = null
   var securityMgr: SecurityManager = null
@@ -245,17 +249,18 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    */
   val cacheLocations = new HashMap[(Int, Int), Seq[BlockManagerId]]
   // stub out BlockManagerMaster.getLocations to use our cacheLocations
-  val blockManagerMaster = new BlockManagerMaster(null, null, conf, true) {
-      override def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
-        blockIds.map {
-          _.asRDDId.map(id => (id.rddId -> id.splitIndex)).flatMap(key => cacheLocations.get(key)).
-            getOrElse(Seq())
-        }.toIndexedSeq
-      }
-      override def removeExecutor(execId: String): Unit = {
-        // don't need to propagate to the driver, which we don't have
-      }
+  class MyBlockManagerMaster(conf: SparkConf) extends BlockManagerMaster(null, null, conf, true) {
+    override def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
+      blockIds.map {
+        _.asRDDId.map { id => (id.rddId -> id.splitIndex)
+        }.flatMap { key => cacheLocations.get(key)
+        }.getOrElse(Seq())
+      }.toIndexedSeq
     }
+    override def removeExecutor(execId: String): Unit = {
+      // don't need to propagate to the driver, which we don't have
+    }
+  }
 
   /** The list of results that DAGScheduler has collected. */
   val results = new HashMap[Int, Any]()
@@ -271,6 +276,16 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     var failure: Exception = null
     override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
     override def jobFailed(exception: Exception): Unit = { failure = exception }
+  }
+
+  class MyMapOutputTrackerMaster(
+      conf: SparkConf,
+      broadcastManager: BroadcastManager)
+    extends MapOutputTrackerMaster(conf, broadcastManager, true) {
+
+    override def sendTracker(message: Any): Unit = {
+      // no-op, just so we can stop this to avoid leaking threads
+    }
   }
 
   override def beforeEach(): Unit = {
@@ -290,11 +305,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     results.clear()
     securityMgr = new SecurityManager(conf)
     broadcastManager = new BroadcastManager(true, conf, securityMgr)
-    mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true) {
-      override def sendTracker(message: Any): Unit = {
-        // no-op, just so we can stop this to avoid leaking threads
-      }
-    }
+    mapOutputTracker = spy(new MyMapOutputTrackerMaster(conf, broadcastManager))
+    blockManagerMaster = spy(new MyBlockManagerMaster(conf))
     scheduler = new DAGScheduler(
       sc,
       taskScheduler,
@@ -537,6 +549,59 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mapStatus2(2).location.host === "hostB")
   }
 
+  test("SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure") {
+    // reset the test context with the right shuffle service config
+    afterEach()
+    val conf = new SparkConf()
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
+    init(conf)
+
+    val shuffleMapRdd = new MyRDD(sc, 3, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 3, List(shuffleDep), tracker = mapOutputTracker)
+
+    submit(reduceRdd, Array(0, 1, 2))
+    // Map stage completes successfully,
+    // two tasks are run on an executor on hostA and one on an executor on hostB
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 3)),
+      (Success, makeMapStatus("hostA", 3)),
+      (Success, makeMapStatus("hostB", 3))))
+    // Now the executor on hostA is lost
+    runEvent(ExecutorLost("exec-hostA", ExecutorExited(-100, false, "Container marked as failed")))
+    // Executor is removed but shuffle files are not unregistered
+    verify(blockManagerMaster, times(1)).removeExecutor("exec-hostA")
+    verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("exec-hostA")
+
+    // The MapOutputTracker has all the shuffle files
+    val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
+    assert(mapStatuses.count(_ != null) === 3)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "exec-hostA") === 2)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "exec-hostB") === 1)
+
+    // Now a fetch failure from the lost executor occurs
+    complete(taskSets(1), Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"), null)
+    ))
+    // blockManagerMaster.removeExecutor is not called again
+    // but shuffle files are unregistered
+    verify(blockManagerMaster, times(1)).removeExecutor("exec-hostA")
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("exec-hostA")
+
+    // Shuffle files for exec-hostA should be lost
+    assert(mapStatuses.count(_ != null) === 1)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "exec-hostA") === 0)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "exec-hostB") === 1)
+
+    // Additional fetch failure from the executor does not result in further call to
+    // mapOutputTracker.removeOutputsOnExecutor
+    complete(taskSets(1), Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 1, 0, "ignored"), null)
+    ))
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("exec-hostA")
+  }
+
   test("zero split job") {
     var numResults = 0
     var failureReason: Option[Exception] = None
@@ -762,8 +827,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     complete(taskSets(1), Seq(
       (Success, 42),
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"), null)))
-    // this will get called
-    // blockManagerMaster.removeExecutor("exec-hostA")
+    verify(blockManagerMaster, times(1)).removeExecutor("exec-hostA")
     // ask the scheduler to try it again
     scheduler.resubmitFailedStages()
     // have the 2nd attempt pass
@@ -806,11 +870,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
         (Success, makeMapStatus("hostA", 1)),
         (Success, makeMapStatus("hostB", 1))))
       runEvent(ExecutorLost("exec-hostA", event))
+      verify(blockManagerMaster, times(1)).removeExecutor("exec-hostA")
       if (expectFileLoss) {
+        verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("exec-hostA")
         intercept[MetadataFetchFailedException] {
           mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
         }
       } else {
+        verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("exec-hostA")
         assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
           HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
       }
