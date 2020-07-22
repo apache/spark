@@ -43,7 +43,6 @@ import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.random.RandomSampler
@@ -755,19 +754,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       outRowFormat: RowFormatContext,
       recordReader: Token,
       schemaLess: Boolean): ScriptInputOutputSchema = {
-    if (recordWriter != null || recordReader != null) {
-      // TODO: what does this message mean?
-      throw new ParseException(
-        "Unsupported operation: Used defined record reader/writer classes.", ctx)
-    }
-
     // Decode and input/output format.
     type Format = (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
 
-    def format(
-        fmt: RowFormatContext,
-        configKey: String,
-        defaultConfigValue: String): Format = fmt match {
+    def format(fmt: RowFormatContext): Format = fmt match {
       case c: RowFormatDelimitedContext =>
         // TODO we should use the visitRowFormatDelimited function here. However HiveScriptIOSchema
         // expects a seq of pairs in which the old parsers' token names are used as keys.
@@ -785,28 +775,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
         (entries, None, Seq.empty, None)
 
-      case c: RowFormatContext if !conf.getConf(CATALOG_IMPLEMENTATION).equals("hive") =>
-        throw new ParseException("TRANSFORM with serde is only supported in hive mode", ctx)
-
       case c: RowFormatSerdeContext =>
-        // Use a serde format.
-        val CatalogStorageFormat(None, None, None, Some(name), _, props) = visitRowFormatSerde(c)
-
-        // SPARK-10310: Special cases LazySimpleSerDe
-        val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {
-          Option(conf.getConfString(configKey, defaultConfigValue))
-        } else {
-          None
-        }
-        (Seq.empty, Option(name), props.toSeq, recordHandler)
-
-      case null if conf.getConf(CATALOG_IMPLEMENTATION).equals("hive") =>
-        // Use default (serde) format.
-        val name = conf.getConfString("hive.script.serde",
-          "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
-        val props = Seq("field.delim" -> "\t")
-        val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
-        (Nil, Option(name), props, recordHandler)
+        throw new ParseException("TRANSFORM with serde is only supported in hive mode", ctx)
 
       // SPARK-32106: When there is no definition about format, we return empty result
       // to use a built-in default Serde in SparkScriptTransformationExec.
@@ -814,14 +784,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         (Nil, None, Seq.empty, None)
     }
 
-    val (inFormat, inSerdeClass, inSerdeProps, reader) =
-      format(
-        inRowFormat, "hive.script.recordreader", "org.apache.hadoop.hive.ql.exec.TextRecordReader")
+    val (inFormat, inSerdeClass, inSerdeProps, reader) = format(inRowFormat)
 
-    val (outFormat, outSerdeClass, outSerdeProps, writer) =
-      format(
-        outRowFormat, "hive.script.recordwriter",
-        "org.apache.hadoop.hive.ql.exec.TextRecordWriter")
+    val (outFormat, outSerdeClass, outSerdeProps, writer) = format(outRowFormat)
 
     ScriptInputOutputSchema(
       inFormat, outFormat,
