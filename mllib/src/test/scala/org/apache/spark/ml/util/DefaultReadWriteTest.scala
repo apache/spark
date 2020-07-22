@@ -63,13 +63,11 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
           (instance.getOrDefault(p), newInstance.getOrDefault(p)) match {
             case (Array(values), Array(newValues)) =>
               assert(values === newValues, s"Values do not match on param ${p.name}.")
+            case (value: Double, newValue: Double) =>
+              assert(value.isNaN && newValue.isNaN || value == newValue,
+                s"Values do not match on param ${p.name}.")
             case (value, newValue) =>
-              if (value.isInstanceOf[Double] && value.asInstanceOf[Double].isNaN) {
-                assert(newValue.isInstanceOf[Double] && newValue.asInstanceOf[Double].isNaN,
-                  s"Values do not match on param ${p.name}.")
-              } else {
-                assert(value === newValue, s"Values do not match on param ${p.name}.")
-              }
+              assert(value === newValue, s"Values do not match on param ${p.name}.")
           }
         } else {
           assert(!newInstance.isDefined(p), s"Param ${p.name} shouldn't be defined.")
