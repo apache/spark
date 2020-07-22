@@ -26,6 +26,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.util.Utils
 
 class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
@@ -95,5 +96,14 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       .add("NAME", StringType)
       .add("ID", IntegerType)
     assert(t.schema === expectedSchema)
+  }
+
+  test("create a table from DataFrame") {
+    withTable("h2.test.new_table") {
+      Seq(1).toDF("id").writeTo("h2.test.new_table").create()
+      checkAnswer(
+        sql("SHOW TABLES IN h2.test"),
+        Seq(Row("test", "new_table"), Row("test", "people")))
+    }
   }
 }
