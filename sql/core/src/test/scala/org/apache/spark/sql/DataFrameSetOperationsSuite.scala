@@ -428,7 +428,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     errMsg = intercept[AnalysisException] {
       df1.unionByName(df2)
     }.getMessage
-    assert(errMsg.contains("""Cannot resolve column name "b" among (a, c, d)"""))
+    assert(errMsg.contains("""Cannot resolve column name `b` among (a, c, d)"""))
   }
 
   test("union by name - type coercion") {
@@ -462,7 +462,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       val errMsg2 = intercept[AnalysisException] {
         checkCaseSensitiveTest()
       }.getMessage
-      assert(errMsg2.contains("""Cannot resolve column name "ab" among (cd, ef, AB)"""))
+      assert(errMsg2.contains("""Cannot resolve column name `ab` among (cd, ef, AB)"""))
     }
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       checkCaseSensitiveTest()

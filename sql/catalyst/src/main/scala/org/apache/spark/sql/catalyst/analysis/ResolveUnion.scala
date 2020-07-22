@@ -44,7 +44,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
           Alias(Literal(null, lattr.dataType), lattr.name)()
         } else {
           throw new AnalysisException(
-            s"""Cannot resolve column name "${lattr.name}" among """ +
+            s"""Cannot resolve column name `${lattr.name}` among """ +
               s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
         }
       }
@@ -91,7 +91,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
     case e if !e.childrenResolved => e
 
     case Union(children, byName, allowMissingCol) if byName =>
-      val union = children.reduceLeft { (left: LogicalPlan, right: LogicalPlan) =>
+      val union = children.reduceLeft { (left, right) =>
         checkColumnNames(left, right)
         unionTwoSides(left, right, allowMissingCol)
       }
