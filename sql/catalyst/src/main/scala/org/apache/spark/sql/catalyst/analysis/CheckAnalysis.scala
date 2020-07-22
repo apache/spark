@@ -99,10 +99,10 @@ trait CheckAnalysis extends PredicateHelper {
       case u: UnresolvedTable =>
         u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
-      case u: UnresolvedTableOrView =>
+      case u: UnresolvedTableOrView if u.acceptTempView =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
-      case u: UnresolvedTableOrPermanentView =>
+      case u: UnresolvedTableOrView if !u.acceptTempView =>
         u.failAnalysis(s"Table or permanent view not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
