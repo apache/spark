@@ -232,9 +232,9 @@ object StaticSQLConf {
     .doc("Time-to-live (TTL) value for the metadata caches: partition file metadata cache and " +
       "session catalog cache. This configuration only has an effect when this value having " +
       "a positive value (> 0). It also requires setting " +
-      s"${StaticSQLConf.CATALOG_IMPLEMENTATION} to `hive`, setting " +
-      s"${SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE} > 0 and setting " +
-      s"${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS} to `true` " +
+      s"'${StaticSQLConf.CATALOG_IMPLEMENTATION.key}' to `hive`, setting " +
+      s"'${SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key}' > 0 and setting " +
+      s"'${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key}' to `true` " +
       "to be applied to the partition file metadata cache.")
     .version("3.1.0")
     .timeConf(TimeUnit.SECONDS)
