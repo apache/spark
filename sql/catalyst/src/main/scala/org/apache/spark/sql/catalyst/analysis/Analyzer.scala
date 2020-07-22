@@ -1886,11 +1886,17 @@ class Analyzer(
   }
 
   /**
+   * Replaces [[UnresolvedFunc]]s with concrete [[LogicalPlan]]s.
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      // Resolve functions with concrete relations from v2 catalog.
+      case UnresolvedFunc(multipartIdent) =>
+        val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent, "function lookup")
+        ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
+
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.

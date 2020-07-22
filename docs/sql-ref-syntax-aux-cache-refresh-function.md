@@ -1,7 +1,7 @@
 ---
 layout: global
-title: UNCACHE TABLE
-displayTitle: UNCACHE TABLE
+title: REFRESH FUNCTION
+displayTitle: REFRESH FUNCTION
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
-
+ 
      http://www.apache.org/licenses/LICENSE-2.0
-
+ 
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,33 +21,40 @@ license: |
 
 ### Description
 
-`UNCACHE TABLE` removes the entries and associated data from the in-memory and/or on-disk cache for a given table or view. The
-underlying entries should already have been brought to cache by previous `CACHE TABLE` operation. `UNCACHE TABLE` on a non-existent table throws an exception if `IF EXISTS` is not specified.
+`REFRESH FUNCTION` statement invalidates the cached function entry, which includes a class name
+and resource location of the given function. The invalidated cache is populated right away.
+Note that `REFRESH FUNCTION` only works for permanent functions. Refreshing native functions or temporary functions will cause an exception.
 
 ### Syntax
 
 ```sql
-UNCACHE TABLE [ IF EXISTS ] table_identifier
+REFRESH FUNCTION function_identifier
 ```
 
 ### Parameters
 
-* **table_identifier**
+* **function_identifier**
 
-    Specifies the table or view name to be uncached. The table or view name may be optionally qualified with a database name.
+    Specifies a function name, which is either a qualified or unqualified name. If no database identifier is provided, uses the current database.
 
-    **Syntax:** `[ database_name. ] table_name`
+    **Syntax:** `[ database_name. ] function_name`
 
 ### Examples
 
 ```sql
-UNCACHE TABLE t1;
+-- The cached entry of the function will be refreshed
+-- The function is resolved from the current database as the function name is unqualified.
+REFRESH FUNCTION func1;
+
+-- The cached entry of the function will be refreshed
+-- The function is resolved from tempDB database as the function name is qualified.
+REFRESH FUNCTION db1.func1;   
 ```
 
 ### Related Statements
 
 * [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
 * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
+* [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
 * [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
 * [REFRESH](sql-ref-syntax-aux-cache-refresh.html)
-* [REFRESH FUNCTION](sql-ref-syntax-aux-cache-refresh-function.html)
