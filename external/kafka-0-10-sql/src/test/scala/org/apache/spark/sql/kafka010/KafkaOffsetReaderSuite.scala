@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.util.UUID
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.clients.CommonClientConfigs
+import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.common.{IsolationLevel, TopicPartition}
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -55,15 +57,44 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
   private def createKafkaReader(topic: String, minPartitions: Option[Int]): KafkaOffsetReader = {
     new KafkaOffsetReader(
       SubscribeStrategy(Seq(topic)),
-      org.apache.spark.sql.kafka010.KafkaSourceProvider.kafkaParamsForDriver(
+      KafkaSourceProvider.kafkaParamsForDriver(
         Map(
         "bootstrap.servers" ->
          testUtils.brokerAddress
       )),
       CaseInsensitiveMap(
-        minPartitions.map(m => Map("minPartitions" -> m.toString)).getOrElse(Map.empty)),
-      UUID.randomUUID().toString
+        minPartitions.map(m => Map("minPartitions" -> m.toString)).getOrElse(Map.empty))
     )
+  }
+
+  test("isolationLevel must give back default isolation level when not set") {
+    testIsolationLevel(None,
+      IsolationLevel.valueOf(ConsumerConfig.DEFAULT_ISOLATION_LEVEL.toUpperCase(Locale.ROOT)))
+  }
+
+  test("isolationLevel must give back READ_UNCOMMITTED when set") {
+    testIsolationLevel(Some("read_uncommitted"), IsolationLevel.READ_UNCOMMITTED)
+  }
+
+  test("isolationLevel must give back READ_COMMITTED when set") {
+    testIsolationLevel(Some("read_committed"), IsolationLevel.READ_COMMITTED)
+  }
+
+  test("isolationLevel must throw exception when invalid isolation level set") {
+    intercept[IllegalArgumentException] {
+      testIsolationLevel(Some("intentionally_invalid"), IsolationLevel.READ_COMMITTED)
+    }
+  }
+
+  private def testIsolationLevel(kafkaParam: Option[String], isolationLevel: IsolationLevel) = {
+    var kafkaParams = Map(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress)
+    kafkaParam.foreach(p => kafkaParams ++= Map(ConsumerConfig.ISOLATION_LEVEL_CONFIG -> p))
+    val reader = new KafkaOffsetReader(
+      SubscribeStrategy(Seq()),
+      KafkaSourceProvider.kafkaParamsForDriver(kafkaParams),
+      CaseInsensitiveMap(Map.empty)
+    )
+    assert(reader.isolationLevel() === isolationLevel)
   }
 
   test("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - using specific offsets") {

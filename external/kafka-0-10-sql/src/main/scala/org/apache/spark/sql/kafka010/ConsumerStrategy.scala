@@ -20,12 +20,13 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
-import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
+import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.kafka010.KafkaConfigUpdater
+import org.apache.spark.internal.Logging
+import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
 
 /**
  * Subscribe allows you to subscribe to a fixed collection of topics.
@@ -36,31 +37,37 @@ import org.apache.spark.kafka010.KafkaConfigUpdater
  * All three strategies have overloaded constructors that allow you to specify
  * the starting offset for a particular partition.
  */
-private[kafka010] sealed trait ConsumerStrategy {
-  /** Create a [[KafkaConsumer]] and subscribe to topics according to a desired strategy */
-  def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]
-
-  /**
-   * Updates the parameters with security if needed.
-   * Added a function to hide internals and reduce code duplications because all strategy uses it.
-   */
-  protected def setAuthenticationConfigIfNeeded(kafkaParams: ju.Map[String, Object]) =
-    KafkaConfigUpdater("source", kafkaParams.asScala.toMap)
+private[kafka010] sealed trait ConsumerStrategy extends Logging {
+  /** Creates an [[org.apache.kafka.clients.admin.AdminClient]] */
+  def createAdmin(kafkaParams: ju.Map[String, Object]): Admin = {
+    val updatedKafkaParams = KafkaConfigUpdater("source", kafkaParams.asScala.toMap)
       .setAuthenticationConfigIfNeeded()
       .build()
+    logDebug(s"Admin params: ${KafkaRedactionUtil.redactParams(updatedKafkaParams.asScala.toSeq)}")
+    Admin.create(updatedKafkaParams)
+  }
+
+  /** Returns the assigned or subscribed [[TopicPartition]] */
+  def assignedTopicPartitions(admin: Admin): Set[TopicPartition]
 }
 
 /**
  * Specify a fixed collection of partitions.
  */
 private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
-    extends ConsumerStrategy {
-  override def createConsumer(
-      kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
-    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
-    consumer.assign(ju.Arrays.asList(partitions: _*))
-    consumer
+    extends ConsumerStrategy with Logging {
+  override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+    val topics = partitions.map(_.topic()).toSet
+    logDebug(s"Topics for assignment: $topics")
+    admin.describeTopics(topics.asJava).all().get().asScala.filterNot(_._2.isInternal)
+      .flatMap { topicDescription =>
+        topicDescription._2.partitions().asScala.map { topicPartitionInfo =>
+          val topic = topicDescription._1
+          val partition = topicPartitionInfo.partition()
+          logDebug(s"Partition added: $topic:$partition")
+          new TopicPartition(topic, partition)
+        }
+      }.filter(partitions.contains(_)).toSet
   }
 
   override def toString: String = s"Assign[${partitions.mkString(", ")}]"
@@ -69,13 +76,18 @@ private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
 /**
  * Subscribe to a fixed collection of topics.
  */
-private[kafka010] case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
-  override def createConsumer(
-      kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
-    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
-    consumer.subscribe(topics.asJava)
-    consumer
+private[kafka010] case class SubscribeStrategy(topics: Seq[String])
+    extends ConsumerStrategy with Logging {
+  override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+    admin.describeTopics(topics.asJava).all().get().asScala.filterNot(_._2.isInternal)
+      .flatMap { topicDescription =>
+        topicDescription._2.partitions().asScala.map { topicPartitionInfo =>
+          val topic = topicDescription._1
+          val partition = topicPartitionInfo.partition()
+          logDebug(s"Partition added: $topic:$partition")
+          new TopicPartition(topic, partition)
+        }
+      }.toSet
   }
 
   override def toString: String = s"Subscribe[${topics.mkString(", ")}]"
@@ -85,15 +97,28 @@ private[kafka010] case class SubscribeStrategy(topics: Seq[String]) extends Cons
  * Use a regex to specify topics of interest.
  */
 private[kafka010] case class SubscribePatternStrategy(topicPattern: String)
-    extends ConsumerStrategy {
-  override def createConsumer(
-      kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
-    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
-    consumer.subscribe(
-      ju.regex.Pattern.compile(topicPattern),
-      new NoOpConsumerRebalanceListener())
-    consumer
+    extends ConsumerStrategy with Logging {
+  private val topicRegex = topicPattern.r
+
+  override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
+    logDebug(s"Topic pattern: $topicPattern")
+    var topics = mutable.Seq.empty[String]
+    // listTopics is not listing internal topics by default so no filter needed
+    admin.listTopics().listings().get().asScala.foreach { topicListing =>
+      val name = topicListing.name()
+      if (topicRegex.findFirstIn(name).isDefined) {
+        logDebug(s"Topic matches pattern: $name")
+        topics :+= name
+      }
+    }
+    admin.describeTopics(topics.asJava).all().get().asScala.flatMap { topicDescription =>
+      topicDescription._2.partitions().asScala.map { topicPartitionInfo =>
+        val topic = topicDescription._1
+        val partition = topicPartitionInfo.partition()
+        logDebug(s"Partition added: $topic:$partition")
+        new TopicPartition(topic, partition)
+      }
+    }.toSet
   }
 
   override def toString: String = s"SubscribePattern[$topicPattern]"

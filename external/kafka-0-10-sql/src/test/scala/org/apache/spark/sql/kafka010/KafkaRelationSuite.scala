@@ -22,8 +22,6 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
-import scala.util.Random
 
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
@@ -463,41 +461,6 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     testBadOptions("assign" -> "")("no topicpartitions to assign")
     testBadOptions("subscribe" -> "")("no topics to subscribe")
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
-  }
-
-  test("allow group.id prefix") {
-    testGroupId("groupIdPrefix", (expected, actual) => {
-      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
-        "Valid consumer groups don't contain the expected group id - " +
-        s"Valid consumer groups: $actual / expected group id: $expected")
-    })
-  }
-
-  test("allow group.id override") {
-    testGroupId("kafka.group.id", (expected, actual) => {
-      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
-        s"contain the expected group id - Valid consumer groups: $actual / " +
-        s"expected group id: $expected")
-    })
-  }
-
-  private def testGroupId(groupIdKey: String,
-      validateGroupId: (String, Iterable[String]) => Unit): Unit = {
-    // Tests code path KafkaSourceProvider.createRelation(.)
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 3)
-    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
-    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
-    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
-
-    val customGroupId = "id-" + Random.nextInt()
-    val df = createDF(topic, withOptions = Map(groupIdKey -> customGroupId))
-    checkAnswer(df, (1 to 30).map(_.toString).toDF())
-
-    val consumerGroups = testUtils.listConsumerGroups()
-    val validGroups = consumerGroups.valid().get()
-    val validGroupsId = validGroups.asScala.map(_.groupId())
-    validateGroupId(customGroupId, validGroupsId)
   }
 
   test("read Kafka transactional messages: read_committed") {

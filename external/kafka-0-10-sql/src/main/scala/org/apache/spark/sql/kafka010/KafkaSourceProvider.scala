@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, SupportsTruncate, WriteBuilder}
@@ -96,8 +96,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val kafkaOffsetReader = new KafkaOffsetReader(
       strategy(caseInsensitiveParameters),
       kafkaParamsForDriver(specifiedKafkaParams),
-      caseInsensitiveParameters,
-      driverGroupIdPrefix = s"$uniqueGroupId-driver")
+      caseInsensitiveParameters)
 
     new KafkaSource(
       sqlContext,
@@ -463,8 +462,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       val kafkaOffsetReader = new KafkaOffsetReader(
         strategy(caseInsensitiveOptions),
         kafkaParamsForDriver(specifiedKafkaParams),
-        caseInsensitiveOptions,
-        driverGroupIdPrefix = s"$uniqueGroupId-driver")
+        caseInsensitiveOptions)
 
       new KafkaMicroBatchStream(
         kafkaOffsetReader,
@@ -492,8 +490,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       val kafkaOffsetReader = new KafkaOffsetReader(
         strategy(caseInsensitiveOptions),
         kafkaParamsForDriver(specifiedKafkaParams),
-        caseInsensitiveOptions,
-        driverGroupIdPrefix = s"$uniqueGroupId-driver")
+        caseInsensitiveOptions)
 
       new KafkaContinuousStream(
         kafkaOffsetReader,

@@ -53,8 +53,7 @@ private[kafka010] class KafkaBatch(
     val kafkaOffsetReader = new KafkaOffsetReader(
       strategy,
       KafkaSourceProvider.kafkaParamsForDriver(specifiedKafkaParams),
-      sourceOptions,
-      driverGroupIdPrefix = s"$uniqueGroupId-driver")
+      sourceOptions)
 
     // Leverage the KafkaReader to obtain the relevant partition offsets
     val offsetRanges: Seq[KafkaOffsetRange] = try {
