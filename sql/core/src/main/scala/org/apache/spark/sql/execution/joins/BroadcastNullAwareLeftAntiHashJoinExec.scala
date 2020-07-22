@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
-case class BroadcastNullAwareHashJoinExec(
+case class BroadcastNullAwareLeftAntiHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SparkPlan,
@@ -43,7 +43,6 @@ case class BroadcastNullAwareHashJoinExec(
   // multi-column null aware anti join is much more complicated than single column ones.
   require(leftKeys.length == 1, "leftKeys length should be 1")
   require(rightKeys.length == 1, "rightKeys length should be 1")
-  require(right.output.length == 1, "null aware anti join only supports single column.")
   require(joinType == LeftAnti, "joinType must be LeftAnti.")
   require(buildSide == BuildRight, "buildSide must be BuildRight.")
   require(SQLConf.get.nullAwareAntiJoinOptimizeEnabled,
@@ -60,7 +59,10 @@ case class BroadcastNullAwareHashJoinExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    UnspecifiedDistribution :: BroadcastDistribution(IdentityBroadcastMode) :: Nil
+    val mode = HashedRelationBroadcastMode(
+      BindReferences.bindReferences(HashJoin.rewriteKeyExpr(rightKeys), right.output)
+    )
+    UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
   }
 
   private[this] def genResultProjection: UnsafeProjection = {
@@ -69,14 +71,6 @@ case class BroadcastNullAwareHashJoinExec(
 
   override def output: Seq[Attribute] = {
     left.output
-  }
-
-  private def prepareBroadcastHashedRelation = {
-    val buildSideRows = broadcast.executeBroadcast[Array[InternalRow]]().value
-    HashedRelation(buildSideRows.iterator,
-      BindReferences.bindReferences[Expression](
-        Seq(right.output.head), AttributeSeq(right.output)),
-      buildSideRows.length)
   }
 
   private def nullAwareLeftAntiJoin(
@@ -103,13 +97,13 @@ case class BroadcastNullAwareHashJoinExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val relation: HashedRelation = prepareBroadcastHashedRelation
+    val relation: HashedRelation = broadcast.executeBroadcast[HashedRelation]().value
     val resultRdd = (joinType, buildSide) match {
       case (LeftAnti, BuildRight) =>
         nullAwareLeftAntiJoin(relation)
       case _ =>
         throw new IllegalArgumentException(
-          s"BroadcastNullAwareHashJoinExec only supports (LeftAnti + BuildRight) for now.")
+          s"BroadcastNullAwareLeftAntiHashJoinExec only supports (LeftAnti + BuildRight) for now.")
     }
 
     val numOutputRows = longMetric("numOutputRows")
@@ -152,7 +146,7 @@ case class BroadcastNullAwareHashJoinExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val relation: HashedRelation = prepareBroadcastHashedRelation
+    val relation: HashedRelation = broadcast.executeBroadcast[HashedRelation]().value
     val broadcastRef = ctx.addReferenceObj("broadcast", relation)
     val clsName = relation.getClass.getName
 

@@ -238,7 +238,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
             None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
         } else {
-          Seq(joins.BroadcastNullAwareHashJoinExec(leftKeys, rightKeys,
+          Seq(joins.BroadcastNullAwareLeftAntiHashJoinExec(leftKeys, rightKeys,
             planLater(j.left), planLater(j.right), BuildRight, LeftAnti, None))
         }
 

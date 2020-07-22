@@ -173,8 +173,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   private boolean anyNullKeyExists = false;
 
-  public boolean inputEmpty()
-  {
+  public boolean inputEmpty() {
     return numKeys == 0 && !anyNullKeyExists;
   }
 
@@ -183,8 +182,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     return anyNullKeyExists;
   }
 
-  public void setAnyNullKeyExists(boolean anyNullKeyExists)
-  {
+  public void setAnyNullKeyExists(boolean anyNullKeyExists) {
     this.anyNullKeyExists = anyNullKeyExists;
   }
 

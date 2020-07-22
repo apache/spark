@@ -2673,10 +2673,10 @@ object SQLConf {
       .createWithDefault(8)
 
   val NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED =
-    buildConf("spark.sql.nullAware.antiJoin.optimize.enabled")
+    buildConf("spark.sql.nullAwareAntiJoin.optimize.enabled")
       .internal()
       .doc("When true, NULL-aware anti join execution will be planed into " +
-        "BroadcastNullAwareHashJoinExec, " +
+        "BroadcastNullAwareLeftAntiHashJoinExec, " +
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup." +
         "Only support for singleColumn NAAJ for now.")
@@ -2684,7 +2684,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val NULL_AWARE_ANTI_JOIN_OPTIMIZE_USE_BHJ =
-    buildConf("spark.sql.nullAware.antiJoin.optimize.use.bhj")
+    buildConf("spark.sql.nullAwareAntiJoin.optimize.use.bhj")
       .internal()
       .doc("When true, NULL-aware anti join execution will be planed into " +
         "BroadcastHashJoinExec with special execution.")

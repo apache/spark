@@ -481,7 +481,6 @@ case class BroadcastHashJoinExec(
     if (isNullAwareAntiJoin) {
       require(leftKeys.length == 1, "leftKeys length should be 1")
       require(rightKeys.length == 1, "rightKeys length should be 1")
-      require(right.output.length == 1, "null aware anti join only supports single column.")
       require(joinType == LeftAnti, "joinType must be LeftAnti.")
       require(buildSide == BuildRight, "buildSide must be BuildRight.")
       require(SQLConf.get.nullAwareAntiJoinOptimizeEnabled,
