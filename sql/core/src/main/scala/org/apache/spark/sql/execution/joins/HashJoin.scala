@@ -54,6 +54,8 @@ trait HashJoin extends BaseJoinExec {
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
+  override def outputOrdering: Seq[SortOrder] = streamedPlan.outputOrdering
+
   protected lazy val (buildPlan, streamedPlan) = buildSide match {
     case BuildLeft => (left, right)
     case BuildRight => (right, left)
