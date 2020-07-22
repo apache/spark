@@ -50,6 +50,11 @@ class ColumnarRule {
 }
 
 /**
+ * A trait that is used as a tag to indicate a transition from columns to rows.
+ */
+trait ColumnarToRowTransition extends UnaryExecNode
+
+/**
  * Provides a common executor to translate an [[RDD]] of [[ColumnarBatch]] into an [[RDD]] of
  * [[InternalRow]]. This is inserted whenever such a transition is determined to be needed.
  *
@@ -57,7 +62,7 @@ class ColumnarRule {
  * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]] and
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
-case class ColumnarToRowExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
   assert(child.supportsColumnar)
 
   override def output: Seq[Attribute] = child.output
@@ -481,8 +486,7 @@ case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
  */
 case class ApplyColumnarRulesAndInsertTransitions(
     conf: SQLConf,
-    columnarRules: Seq[ColumnarRule],
-    allowColumnarOutput: Boolean)
+    columnarRules: Seq[ColumnarRule])
   extends Rule[SparkPlan] {
 
   /**
@@ -511,27 +515,11 @@ case class ApplyColumnarRulesAndInsertTransitions(
     }
   }
 
-  /**
-   * Leave the output of the plan unchanged (columnar or row),
-   * but insert any transitions that are needed for the plan to run correctly.
-   */
-  private def insertRequiredTransitions(plan: SparkPlan): SparkPlan = {
-    if (plan.supportsColumnar) {
-      insertRowToColumnar(plan)
-    } else {
-      insertTransitions(plan)
-    }
-  }
-
   def apply(plan: SparkPlan): SparkPlan = {
     var preInsertPlan: SparkPlan = plan
     columnarRules.foreach((r : ColumnarRule) =>
       preInsertPlan = r.preColumnarTransitions(preInsertPlan))
-    var postInsertPlan = if (allowColumnarOutput) {
-      insertRequiredTransitions(preInsertPlan)
-    } else {
-      insertTransitions(preInsertPlan)
-    }
+    var postInsertPlan = insertTransitions(preInsertPlan)
     columnarRules.reverse.foreach((r : ColumnarRule) =>
       postInsertPlan = r.postColumnarTransitions(postInsertPlan))
     postInsertPlan

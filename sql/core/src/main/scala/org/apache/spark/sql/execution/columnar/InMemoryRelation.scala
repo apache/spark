@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer, SimpleMetricsCachedBatch, SimpleMetricsCachedBatchSerializer}
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.{ColumnarToRowTransition, InputAdapter, QueryExecution, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructType, UserDefinedType}
@@ -266,6 +266,17 @@ object InMemoryRelation {
     ser.get
   }
 
+  def convertToColumnarIfPossible(plan: SparkPlan): SparkPlan = plan match {
+    case gen: WholeStageCodegenExec => gen.child match {
+      case c2r: ColumnarToRowTransition => c2r.child match {
+        case ia: InputAdapter => ia.child
+        case _ => plan
+      }
+      case _ => plan
+    }
+    case _ => plan
+  }
+
   def apply(
       storageLevel: StorageLevel,
       qe: QueryExecution,
@@ -273,7 +284,7 @@ object InMemoryRelation {
     val optimizedPlan = qe.optimizedPlan
     val serializer = getSerializer(optimizedPlan.conf)
     val child = if (serializer.supportsColumnarInput(optimizedPlan.output)) {
-      qe.maybeColumnarExecutedPlan
+      convertToColumnarIfPossible(qe.executedPlan)
     } else {
       qe.executedPlan
     }
@@ -301,7 +312,7 @@ object InMemoryRelation {
   def apply(cacheBuilder: CachedRDDBuilder, qe: QueryExecution): InMemoryRelation = {
     val optimizedPlan = qe.optimizedPlan
     val newBuilder = if (cacheBuilder.serializer.supportsColumnarInput(optimizedPlan.output)) {
-      cacheBuilder.copy(cachedPlan = qe.maybeColumnarExecutedPlan)
+      cacheBuilder.copy(cachedPlan = convertToColumnarIfPossible(qe.executedPlan))
     } else {
       cacheBuilder.copy(cachedPlan = qe.executedPlan)
     }

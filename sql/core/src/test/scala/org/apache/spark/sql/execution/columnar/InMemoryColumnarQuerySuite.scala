@@ -646,7 +646,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
       val data = spark.read.parquet(workDirPath)
       data.createOrReplaceTempView(s"testDataInt")
       val storageLevel = MEMORY_ONLY
-      val plan = spark.sessionState.executePlan(data.logicalPlan).maybeColumnarExecutedPlan
+      val plan = InMemoryRelation.convertToColumnarIfPossible(
+        spark.sessionState.executePlan(data.logicalPlan).executedPlan)
       val inMemoryRelation = InMemoryRelation(
         new TestSingleIntColumnarCachedBatchSerializer,
         storageLevel, plan, None, data.logicalPlan)

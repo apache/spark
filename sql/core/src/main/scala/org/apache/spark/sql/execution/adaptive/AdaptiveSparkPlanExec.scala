@@ -101,7 +101,7 @@ case class AdaptiveSparkPlanExec(
     // added by `CoalesceShufflePartitions`. So they must be executed after it.
     OptimizeSkewedJoin(conf),
     OptimizeLocalShuffleReader(conf),
-    ApplyColumnarRulesAndInsertTransitions(conf, context.session.sessionState.columnarRules, false),
+    ApplyColumnarRulesAndInsertTransitions(conf, context.session.sessionState.columnarRules),
     CollapseCodegenStages(conf)
   )
 

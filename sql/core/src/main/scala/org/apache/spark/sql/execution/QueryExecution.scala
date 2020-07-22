@@ -97,19 +97,6 @@ class QueryExecution(
     }
   }
 
-  // a plan like [[executedPlan]] but its output might or might not be columnar. [[executedPlan]]
-  // guarantees that the resulting plan produces rows.
-  lazy val maybeColumnarExecutedPlan: SparkPlan = {
-    // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
-    // that the optimization time is not counted as part of the planning phase.
-    assertOptimized()
-    executePhase(QueryPlanningTracker.PLANNING) {
-      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-      // optimizing and planning.
-      QueryExecution.prepareForExecution(maybeColumnarPreparations, sparkPlan.clone())
-    }
-  }
-
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
   lazy val executedPlan: SparkPlan = {
@@ -139,19 +126,9 @@ class QueryExecution(
   /** Get the metrics observed during the execution of the query plan. */
   def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
 
-  // Similar to [[preparations]] but can be used to produce a plan where might be columnar.
-  // [[preparations]] guarantees that the resulting plan will produce rows.
-  protected def maybeColumnarPreparations: Seq[Rule[SparkPlan]] = {
-    QueryExecution.preparations(sparkSession,
-      allowColumnar = true,
-      adaptiveExecutionRule =
-          Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))))
-  }
-
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
-      adaptiveExecutionRule =
-          Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))))
+      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))))
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
@@ -350,7 +327,6 @@ object QueryExecution {
    */
   private[execution] def preparations(
       sparkSession: SparkSession,
-      allowColumnar: Boolean = false,
       adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None): Seq[Rule[SparkPlan]] = {
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
@@ -361,8 +337,7 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       EnsureRequirements(sparkSession.sessionState.conf),
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
-        sparkSession.sessionState.columnarRules,
-        allowColumnar),
+        sparkSession.sessionState.columnarRules),
       CollapseCodegenStages(sparkSession.sessionState.conf),
       ReuseExchange(sparkSession.sessionState.conf),
       ReuseSubquery(sparkSession.sessionState.conf)
