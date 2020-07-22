@@ -1,14 +1,13 @@
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
-('1', true, unhex('537061726B2053514C'), tinyint(1), smallint(100), array_position(array(3, 2, 1), 1), float(1.0), 1.0, Decimal(1.0), timestamp('1997-01-02'), date('2000-04-01')),
-('2', false, unhex('537061726B2053514C'), tinyint(2), smallint(200), array_position(array(3, 2, 1), 2), float(2.0), 2.0, Decimal(2.0), timestamp('1997-01-02 03:04:05'), date('2000-04-02')),
-('3', true, unhex('537061726B2053514C'), tinyint(3), smallint(300), array_position(array(3, 2, 1), 1), float(3.0), 3.0, Decimal(3.0), timestamp('1997-02-10 17:32:01-08'), date('2000-04-03'))
-as t1(a, b, c, d, e, f, g, h, i, j, k);
+('1', true, unhex('537061726B2053514C'), tinyint(1), 1, smallint(100), bigint(1), float(1.0), 1.0, Decimal(1.0), timestamp('1997-01-02'), date('2000-04-01')),
+('2', false, unhex('537061726B2053514C'), tinyint(2), 2,  smallint(200), bigint(2), float(2.0), 2.0, Decimal(2.0), timestamp('1997-01-02 03:04:05'), date('2000-04-02')),
+('3', true, unhex('537061726B2053514C'), tinyint(3), 3, smallint(300), bigint(3), float(3.0), 3.0, Decimal(3.0), timestamp('1997-02-10 17:32:01-08'), date('2000-04-03'))
+as t1(a, b, c, d, e, f, g, h, i, j, k, l);
 
 SELECT TRANSFORM(a)
 USING 'cat' AS (a)
 FROM t1;
-
 
 -- with non-exist command
 SELECT TRANSFORM(a)
@@ -20,43 +19,45 @@ SELECT TRANSFORM(a)
 USING 'python some_non_existent_file' AS (a)
 FROM t1;
 
-
--- support different data type
-SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k FROM (
-    SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k)
+-- common supported data types between no serde and serde transform
+SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
+    SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)
     USING 'cat' AS (
         a string,
         b boolean,
         c binary,
         d tinyint,
-        e smallint,
-        f long,
-        g float,
-        h double,
-        i decimal(38, 18),
-        j timestamp,
-        k date)
+        e int,
+        f smallint,
+        g long,
+        h float,
+        i double,
+        j decimal(38, 18),
+        k timestamp,
+        l date)
     FROM t1
 ) tmp;
 
-
 -- handle schema less
+SELECT TRANSFORM(a)
+USING 'cat'
+FROM t1;
+
 SELECT TRANSFORM(a, b)
 USING 'cat'
 FROM t1;
 
--- return null when return string incompatible (no serde)
 SELECT TRANSFORM(a, b, c)
-USING 'cat' as (a int, b int , c int)
-FROM (
-    SELECT
-    1 AS a,
-    "a" AS b,
-    CAST(2000 AS timestamp) AS c
-) tmp;
+USING 'cat'
+FROM t1;
 
+-- return null when return string incompatible (no serde)
+SELECT TRANSFORM(a, b, c, d, e, f, g, h, i)
+USING 'cat' as (a int, b short, c long, d byte, e float, f double, g decimal(38, 18), h date, i timestamp)
+FROM VALUES
+('a','','1231a','a','213.21a','213.21a','0a.21d','2000-04-01123','1997-0102 00:00:') tmp(a, b, c, d, e, f, g, h, i);
 
--- transform can't run with aggregation
+-- SPARK-28227: transform can't run with aggregation
 SELECT TRANSFORM(b, max(a), sum(f))
 USING 'cat' AS (a, b)
 FROM t1
@@ -64,7 +65,6 @@ GROUP BY b;
 
 -- transform use MAP
 MAP a, b USING 'cat' AS (a, b) FROM t1;
-
 
 -- transform use REDUCE
 REDUCE a, b USING 'cat' AS (a, b) FROM t1;

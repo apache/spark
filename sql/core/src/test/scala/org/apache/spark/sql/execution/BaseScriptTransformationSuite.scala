@@ -278,23 +278,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           'l, 'm.cast("string"), 'n, 'o).collect())
     }
   }
-
-  test("SPARK-32106: TRANSFORM should return null when return string incompatible") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT TRANSFORM(a, b, c)
-          |USING 'cat' as (a int, b int , c int)
-          |FROM (
-          |SELECT
-          |1 AS a,
-          |"a" AS b,
-          |CAST(2000 AS timestamp) AS c
-          |) tmp
-        """.stripMargin),
-      identity,
-      Row(1, null, null) :: Nil)
-  }
 }
 
 case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {

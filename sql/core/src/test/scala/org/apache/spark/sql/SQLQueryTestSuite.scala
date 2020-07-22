@@ -258,6 +258,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
     }
 
+    // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
+    // here we need to check command available
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     val input = fileToString(new File(testCase.inputFile))
 
