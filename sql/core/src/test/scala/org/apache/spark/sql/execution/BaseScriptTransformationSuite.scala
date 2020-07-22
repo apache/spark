@@ -199,74 +199,95 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-32106: TRANSFORM should support all data types as input (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
+    withTempView("v") {
+      val df = Seq(
+        (1, "1", 1.0f, 1.0, 11.toByte, BigDecimal(1.0), new Timestamp(1),
+          new Date(2020, 7, 1), new CalendarInterval(7, 1, 1000), Array(0, 1, 2),
+          Map("a" -> 1), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L)),
+        (2, "2", 2.0f, 2.0, 22.toByte, BigDecimal(2.0), new Timestamp(2),
+          new Date(2020, 7, 2), new CalendarInterval(7, 2, 2000), Array(3, 4, 5),
+          Map("b" -> 2), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L)),
+        (3, "3", 3.0f, 3.0, 33.toByte, BigDecimal(3.0), new Timestamp(3),
+          new Date(2020, 7, 3), new CalendarInterval(7, 3, 3000), Array(6, 7, 8),
+          Map("c" -> 3), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L))
+      ).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m")
+        .select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l, 'm,
+          struct('a, 'b).as("n"), unhex('a).as("o"), lit(true).as("p")
+        ) // Note column d's data type is Decimal(38, 18)
+
+      // Can't support convert script output data to ArrayType/MapType/StructType now,
+      // return these column still as string.
+      // For UserDefinedType, if user defined deserialize method to support convert string
+      // to UserType like [[SimpleTupleUDT]], we can support convert to this UDT, else we
+      // will return null value as column.
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr,
+            df.col("c").expr,
+            df.col("d").expr,
+            df.col("e").expr,
+            df.col("f").expr,
+            df.col("g").expr,
+            df.col("h").expr,
+            df.col("i").expr,
+            df.col("j").expr,
+            df.col("k").expr,
+            df.col("l").expr,
+            df.col("m").expr,
+            df.col("n").expr,
+            df.col("o").expr,
+            df.col("p").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", IntegerType)(),
+            AttributeReference("b", StringType)(),
+            AttributeReference("c", FloatType)(),
+            AttributeReference("d", DoubleType)(),
+            AttributeReference("e", ByteType)(),
+            AttributeReference("f", DecimalType(38, 18))(),
+            AttributeReference("g", TimestampType)(),
+            AttributeReference("h", DateType)(),
+            AttributeReference("i", CalendarIntervalType)(),
+            AttributeReference("j", StringType)(),
+            AttributeReference("k", StringType)(),
+            AttributeReference("l", StringType)(),
+            AttributeReference("m", new SimpleTupleUDT)(),
+            AttributeReference("n", StringType)(),
+            AttributeReference("o", BinaryType)(),
+            AttributeReference("p", BooleanType)()),
+          child = child,
+          ioschema = defaultIOSchema
+        ),
+        df.select(
+          'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i,
+          'j.cast("string"), 'k.cast("string"),
+          'l.cast("string"), 'm, 'n.cast("string"), 'o, 'p).collect())
+    }
+  }
+
+
+  test("SPARK-32106: TRANSFORM should respect DATETIME_JAVA8API_ENABLED (no serde)") {
+    assume(TestUtils.testCommandAvailable("python"))
     Array(false, true).foreach { java8AapiEnable =>
       withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8AapiEnable.toString) {
         withTempView("v") {
           val df = Seq(
-            (1, "1", 1.0f, 1.0, 11.toByte, BigDecimal(1.0), new Timestamp(1),
-              new Date(2020, 7, 1), new CalendarInterval(7, 1, 1000), Array(0, 1, 2),
-              Map("a" -> 1), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L)),
-            (2, "2", 2.0f, 2.0, 22.toByte, BigDecimal(2.0), new Timestamp(2),
-              new Date(2020, 7, 2), new CalendarInterval(7, 2, 2000), Array(3, 4, 5),
-              Map("b" -> 2), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L)),
-            (3, "3", 3.0f, 3.0, 33.toByte, BigDecimal(3.0), new Timestamp(3),
-              new Date(2020, 7, 3), new CalendarInterval(7, 3, 3000), Array(6, 7, 8),
-              Map("c" -> 3), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L))
-          ).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m")
-            .select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l, 'm,
-              struct('a, 'b).as("n"), unhex('a).as("o"), lit(true).as("p")
-            ) // Note column d's data type is Decimal(38, 18)
+            (new Timestamp(1), new Date(2020, 7, 1)),
+            (new Timestamp(2), new Date(2020, 7, 2)),
+            (new Timestamp(3), new Date(2020, 7, 3))
+          ).toDF("a", "b")
+          df.createTempView("v")
 
-          // Can't support convert script output data to ArrayType/MapType/StructType now,
-          // return these column still as string.
-          // For UserDefinedType, if user defined deserialize method to support convert string
-          // to UserType like [[SimpleTupleUDT]], we can support convert to this UDT, else we
-          // will return null value as column.
-          checkAnswer(
-            df,
-            (child: SparkPlan) => createScriptTransformationExec(
-              input = Seq(
-                df.col("a").expr,
-                df.col("b").expr,
-                df.col("c").expr,
-                df.col("d").expr,
-                df.col("e").expr,
-                df.col("f").expr,
-                df.col("g").expr,
-                df.col("h").expr,
-                df.col("i").expr,
-                df.col("j").expr,
-                df.col("k").expr,
-                df.col("l").expr,
-                df.col("m").expr,
-                df.col("n").expr,
-                df.col("o").expr,
-                df.col("p").expr),
-              script = "cat",
-              output = Seq(
-                AttributeReference("a", IntegerType)(),
-                AttributeReference("b", StringType)(),
-                AttributeReference("c", FloatType)(),
-                AttributeReference("d", DoubleType)(),
-                AttributeReference("e", ByteType)(),
-                AttributeReference("f", DecimalType(38, 18))(),
-                AttributeReference("g", TimestampType)(),
-                AttributeReference("h", DateType)(),
-                AttributeReference("i", CalendarIntervalType)(),
-                AttributeReference("j", StringType)(),
-                AttributeReference("k", StringType)(),
-                AttributeReference("l", StringType)(),
-                AttributeReference("m", new SimpleTupleUDT)(),
-                AttributeReference("n", StringType)(),
-                AttributeReference("o", BinaryType)(),
-                AttributeReference("p", BooleanType)()),
-              child = child,
-              ioschema = defaultIOSchema
-            ),
-            df.select(
-              'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i,
-              'j.cast("string"), 'k.cast("string"),
-              'l.cast("string"), 'm, 'n.cast("string"), 'o, 'p).collect())
+          val query = sql(
+            """
+              |SELECT TRANSFORM (a, b)
+              |USING 'cat' AS (a timestamp, b date)
+              |FROM v
+            """.stripMargin)
+          checkAnswer(query, identity, df.select('a, 'b).collect())
         }
       }
     }
