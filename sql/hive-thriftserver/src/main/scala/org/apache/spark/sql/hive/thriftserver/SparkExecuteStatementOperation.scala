@@ -218,9 +218,7 @@ private[hive] class SparkExecuteStatementOperation(
                   execute()
                 }
               } catch {
-                case e: HiveSQLException =>
-                  setOperationException(e)
-                  log.error("Error running hive query: ", e)
+                case e: HiveSQLException => setOperationException(e)
               }
             }
           }
