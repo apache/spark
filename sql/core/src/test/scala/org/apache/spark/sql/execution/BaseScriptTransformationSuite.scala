@@ -182,11 +182,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         ),
         df.select(
           'a.cast("string").as("key"),
-          concat_ws("\t",
-            'b.cast("string"),
-            'c.cast("string"),
-            decimalToString('d),
-            'e.cast("string"))).collect())
+          'b.cast("string").as("value")).collect())
     }
   }
 
