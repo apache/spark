@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with SharedSparkSession {
+  import testImplicits._
 
   override def isHive23OrSpark: Boolean = true
 
@@ -37,5 +40,26 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
       child = child,
       ioschema = ioschema
     )
+  }
+
+  test("SPARK-32106: TRANSFORM with serde without hive should throw exception") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+      df.createTempView("v")
+
+      val e = intercept[ParseException] {
+        sql(
+          """
+            |SELECT TRANSFORM (a)
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+            |USING 'cat' AS (a)
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+            |FROM v
+          """.stripMargin)
+      }.getMessage
+      assert(e.contains("TRANSFORM with serde is only supported in hive mode"))
+    }
+
   }
 }

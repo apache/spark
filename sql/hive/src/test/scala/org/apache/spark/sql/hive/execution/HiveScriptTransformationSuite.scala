@@ -77,7 +77,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("script transformation should not swallow errors from upstream operators (with serde)") {
+  test("script transformation should not swallow errors from upstream operators (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
@@ -98,7 +98,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-14400 script transformation should fail for bad script command") {
+  test("SPARK-14400 script transformation should fail for bad script command (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
@@ -117,7 +117,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-24339 verify the result after pruning the unused columns") {
+  test("SPARK-24339 verify the result after pruning the unused columns (hive serde)") {
     val rowsDf = Seq(
       ("Bob", 16, 176),
       ("Alice", 32, 164),
@@ -137,7 +137,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-30973: TRANSFORM should wait for the termination of the script (with serde)") {
+  test("SPARK-30973: TRANSFORM should wait for the termination of the script (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
@@ -185,7 +185,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
-  test("SPARK-32106: TRANSFORM support complex data types as input and ouput type (hive serde)") {
+  test("SPARK-32106: TRANSFORM supports complex data types type (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
@@ -218,7 +218,28 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
-  test("SPARK-32106: TRANSFORM don't support CalenderIntervalType/UserDefinedType (hive serde)") {
+  test("SPARK-32106: TRANSFORM supports complex data types end to end (hive serde) ") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq(
+        (1, "1", Array(0, 1, 2), Map("a" -> 1)),
+        (2, "2", Array(3, 4, 5), Map("b" -> 2)))
+        .toDF("a", "b", "c", "d")
+        .select('a, 'b, 'c, 'd, struct('a, 'b).as("e"))
+      df.createTempView("v")
+
+      // Hive serde support ArrayType/MapType/StructType as input and output data type
+      val query = sql(
+        """
+          |SELECT TRANSFORM (c, d, e)
+          |USING 'cat' AS (c array<int>, d map<string, int>, e struct<col1:int, col2:string>)
+          |FROM v
+        """.stripMargin)
+      checkAnswer(query, identity, df.select('c, 'd, 'e).collect())
+    }
+  }
+
+  test("SPARK-32106: TRANSFORM doesn't support CalenderIntervalType/UserDefinedType (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
@@ -227,7 +248,46 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         .toDF("a", "b", "c")
       df.createTempView("v")
 
-     val e1 = intercept[Exception] {
+      val e1 = intercept[SparkException] {
+        val plan = createScriptTransformationExec(
+          input = Seq(df.col("a").expr, df.col("b").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", IntegerType)(),
+            AttributeReference("b", CalendarIntervalType)()),
+          child = df.queryExecution.sparkPlan,
+          ioschema = serdeIOSchema)
+        SparkPlanTest.executePlan(plan, hiveContext)
+      }
+      assert(e1.getMessage.contains("scala.MatchError: CalendarIntervalType"))
+
+      val e2 = intercept[SparkException] {
+        val plan = createScriptTransformationExec(
+          input = Seq(df.col("a").expr, df.col("c").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", IntegerType)(),
+            AttributeReference("c", new TestUDT.MyDenseVectorUDT)()),
+          child = df.queryExecution.sparkPlan,
+          ioschema = serdeIOSchema)
+        SparkPlanTest.executePlan(plan, hiveContext)
+      }
+      assert(e2.getMessage.contains(
+        "scala.MatchError: org.apache.spark.sql.types.TestUDT$MyDenseVectorUDT"))
+    }
+  }
+
+  test("SPARK-32106: TRANSFORM doesn't support" +
+    " CalenderIntervalType/UserDefinedType end to end (hive serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq(
+        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3))),
+        (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3))))
+        .toDF("a", "b", "c")
+      df.createTempView("v")
+
+     val e1 = intercept[SparkException] {
         sql(
           """
             |SELECT TRANSFORM(a, b) USING 'cat' AS (a, b)
@@ -236,7 +296,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       }
       assert(e1.getMessage.contains("scala.MatchError: CalendarIntervalType"))
 
-      val e2 = intercept[Exception] {
+      val e2 = intercept[SparkException] {
         sql(
           """
             |SELECT TRANSFORM(a, c) USING 'cat' AS (a, c)

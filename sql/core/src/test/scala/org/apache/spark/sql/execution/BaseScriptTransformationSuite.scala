@@ -203,18 +203,18 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8AapiEnable.toString) {
         withTempView("v") {
           val df = Seq(
-            (1, "1", 1.0, 11.toByte, BigDecimal(1.0), new Timestamp(1),
+            (1, "1", 1.0f, 1.0, 11.toByte, BigDecimal(1.0), new Timestamp(1),
               new Date(2020, 7, 1), new CalendarInterval(7, 1, 1000), Array(0, 1, 2),
               Map("a" -> 1), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L)),
-            (2, "2", 2.0, 22.toByte, BigDecimal(2.0), new Timestamp(2),
+            (2, "2", 2.0f, 2.0, 22.toByte, BigDecimal(2.0), new Timestamp(2),
               new Date(2020, 7, 2), new CalendarInterval(7, 2, 2000), Array(3, 4, 5),
               Map("b" -> 2), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L)),
-            (3, "3", 3.0, 33.toByte, BigDecimal(3.0), new Timestamp(3),
+            (3, "3", 3.0f, 3.0, 33.toByte, BigDecimal(3.0), new Timestamp(3),
               new Date(2020, 7, 3), new CalendarInterval(7, 3, 3000), Array(6, 7, 8),
               Map("c" -> 3), new TestUDT.MyDenseVector(Array(1, 2, 3)), new SimpleTuple(1, 1L))
-          ).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l")
-            .select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l,
-              struct('a, 'b).as("m"), unhex('a).as("n"), lit(true).as("o")
+          ).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m")
+            .select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l, 'm,
+              struct('a, 'b).as("n"), unhex('a).as("o"), lit(true).as("p")
             ) // Note column d's data type is Decimal(38, 18)
 
           // Can't support convert script output data to ArrayType/MapType/StructType now,
@@ -240,33 +240,33 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
                 df.col("l").expr,
                 df.col("m").expr,
                 df.col("n").expr,
-                df.col("o").expr),
+                df.col("o").expr,
+                df.col("p").expr),
               script = "cat",
               output = Seq(
                 AttributeReference("a", IntegerType)(),
                 AttributeReference("b", StringType)(),
-                AttributeReference("c", DoubleType)(),
-                AttributeReference("d", ByteType)(),
-                AttributeReference("e", DecimalType(38, 18))(),
-                AttributeReference("f", TimestampType)(),
-                AttributeReference("g", DateType)(),
-                AttributeReference("h", CalendarIntervalType)(),
-                AttributeReference("i", StringType)(),
+                AttributeReference("c", FloatType)(),
+                AttributeReference("d", DoubleType)(),
+                AttributeReference("e", ByteType)(),
+                AttributeReference("f", DecimalType(38, 18))(),
+                AttributeReference("g", TimestampType)(),
+                AttributeReference("h", DateType)(),
+                AttributeReference("i", CalendarIntervalType)(),
                 AttributeReference("j", StringType)(),
                 AttributeReference("k", StringType)(),
-                AttributeReference("l", new SimpleTupleUDT)(),
-                AttributeReference("m", StringType)(),
-                AttributeReference("n", BinaryType)(),
-                AttributeReference("o", BooleanType)()),
+                AttributeReference("l", StringType)(),
+                AttributeReference("m", new SimpleTupleUDT)(),
+                AttributeReference("n", StringType)(),
+                AttributeReference("o", BinaryType)(),
+                AttributeReference("p", BooleanType)()),
               child = child,
               ioschema = defaultIOSchema
             ),
             df.select(
-              'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h,
-              'i.cast("string"),
-              'j.cast("string"),
-              'k.cast("string"),
-              'l, 'm.cast("string"), 'n, 'o).collect())
+              'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i,
+              'j.cast("string"), 'k.cast("string"),
+              'l.cast("string"), 'm, 'n.cast("string"), 'o, 'p).collect())
         }
       }
     }

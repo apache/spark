@@ -114,10 +114,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         // In schema less mode, hive default serde will choose first two output column as output
         // if output column size less then 2, it will throw ArrayIndexOutOfBoundsException.
         // Here we change spark's behavior same as hive's default serde
+        val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
           new GenericInternalRow(
             prevLine.split(outputRowFormat).slice(0, 2)
-              .map(CatalystTypeConverters.createToCatalystConverter(StringType)))
+              .map(kvWriter))
       }
 
       override def hasNext: Boolean = {
@@ -226,7 +227,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         try {
           f(data)
         } catch {
-          case _: Exception => null
+          case NonFatal(_) => null
         }
       }
 }
