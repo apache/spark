@@ -80,6 +80,70 @@ class CrossValidatorSuite
     }
   }
 
+  test("k-fold cross validation with logistic regression") {
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 10))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(3)
+      .setMethod("kfold")
+    val cvModel = cv.fit(dataset)
+
+    MLTestingUtils.checkCopyAndUids(cv, cvModel)
+
+    val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(parent.getRegParam === 0.001)
+    assert(parent.getMaxIter === 10)
+    assert(cvModel.avgMetrics.length === lrParamMaps.length)
+
+    val result = cvModel.transform(dataset).select("prediction").as[Double].collect()
+    testTransformerByGlobalCheckFunc[(Double, Vector)](dataset.toDF(), cvModel, "prediction") {
+      rows =>
+        val result2 = rows.map(_.getDouble(0))
+        assert(result === result2)
+    }
+  }
+
+  test("k-fold cross validation should be deterministic") {
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 10))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(3)
+      .setMethod("kfold")
+    val cvModel1 = cv.fit(dataset)
+    val cvModel2 = cv.fit(dataset)
+
+    MLTestingUtils.checkCopyAndUids(cv, cvModel1)
+    MLTestingUtils.checkCopyAndUids(cv, cvModel2)
+
+    val parent = cvModel1.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(parent.getRegParam === 0.001)
+    assert(parent.getMaxIter === 10)
+    assert(cvModel1.avgMetrics.length === lrParamMaps.length)
+
+    val metrics1 = cvModel1.avgMetrics
+    val metrics2 = cvModel2.avgMetrics
+    assert(metrics1 === metrics2)
+
+    val parent1 = cvModel1.bestModel.parent.asInstanceOf[LogisticRegression]
+    val parent2 = cvModel2.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(parent1.getRegParam === parent2.getRegParam)
+    assert(parent1.getMaxIter === parent2.getMaxIter)
+  }
+
   test("cross validation with logistic regression with fold col") {
     val lr = new LogisticRegression
     val lrParamMaps = new ParamGridBuilder()
@@ -205,6 +269,34 @@ class CrossValidatorSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setNumFolds(2)
+      .setParallelism(1)
+    val cvSerialModel = cv.fit(dataset)
+    cv.setParallelism(2)
+    val cvParallelModel = cv.fit(dataset)
+
+    val serialMetrics = cvSerialModel.avgMetrics
+    val parallelMetrics = cvParallelModel.avgMetrics
+    assert(serialMetrics === parallelMetrics)
+
+    val parentSerial = cvSerialModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    val parentParallel = cvParallelModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(parentSerial.getRegParam === parentParallel.getRegParam)
+    assert(parentSerial.getMaxIter === parentParallel.getMaxIter)
+  }
+
+  test("k-fold cross validation with parallel evaluation") {
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 3))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(2)
+      .setMethod("kfold")
       .setParallelism(1)
     val cvSerialModel = cv.fit(dataset)
     cv.setParallelism(2)
