@@ -288,7 +288,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val provider = maybeV2Provider.get
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, df.sparkSession.sessionState.conf)
-      val options = sessionOptions ++ extraOptions
+      val options = sessionOptions ++ extraOptions.originalMap
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
       def getTable: Table = {
