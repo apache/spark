@@ -689,30 +689,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         recordReader,
         schemaLess)
     } else {
-
-      // Decode and input/output format.
-      type Format = (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
-
       def format(
           fmt: RowFormatContext,
           configKey: String,
           defaultConfigValue: String): Format = fmt match {
         case c: RowFormatDelimitedContext =>
-          // TODO we should use visitRowFormatDelimited function here. However HiveScriptIOSchema
-          // expects a seq of pairs in which the old parsers' token names are used as keys.
-          // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
-          // retrieving the key value pairs ourselves.
-          def entry(key: String, value: Token): Seq[(String, String)] = {
-            Option(value).map(t => key -> t.getText).toSeq
-          }
-
-          val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
-            entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
-            entry("TOK_TABLEROWFORMATMAPKEYS", c.keysTerminatedBy) ++
-            entry("TOK_TABLEROWFORMATLINES", c.linesSeparatedBy) ++
-            entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs)
-
-          (entries, None, Seq.empty, None)
+          getRowFormatDelimited(c)
 
         case c: RowFormatSerdeContext =>
           // Use a serde format.

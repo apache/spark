@@ -53,7 +53,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     )
   }
 
-  private val serdeIOSchema: ScriptTransformationIOSchema = {
+  private val hiveIOSchema: ScriptTransformationIOSchema = {
     defaultIOSchema.copy(
       inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
       outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
@@ -71,7 +71,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
-        ioschema = serdeIOSchema
+        ioschema = hiveIOSchema
       ),
       rowsDf.collect())
     assert(uncaughtExceptionHandler.exception.isEmpty)
@@ -89,7 +89,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
-          ioschema = serdeIOSchema
+          ioschema = hiveIOSchema
         ),
         rowsDf.collect())
     }
@@ -110,7 +110,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
-          ioschema = serdeIOSchema)
+          ioschema = hiveIOSchema)
       SparkPlanTest.executePlan(plan, hiveContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
@@ -131,7 +131,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         script = "cat",
         output = Seq(AttributeReference("name", StringType)()),
         child = child,
-        ioschema = serdeIOSchema
+        ioschema = hiveIOSchema
       ),
       rowsDf.select("name").collect())
     assert(uncaughtExceptionHandler.exception.isEmpty)
@@ -148,7 +148,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
-          ioschema = serdeIOSchema)
+          ioschema = hiveIOSchema)
       SparkPlanTest.executePlan(plan, hiveContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
@@ -212,7 +212,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
                 StructField("col1", IntegerType, false),
                 StructField("col2", StringType, true))))()),
           child = child,
-          ioschema = serdeIOSchema
+          ioschema = hiveIOSchema
         ),
         df.select('c, 'd, 'e).collect())
     }
@@ -256,7 +256,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             AttributeReference("a", IntegerType)(),
             AttributeReference("b", CalendarIntervalType)()),
           child = df.queryExecution.sparkPlan,
-          ioschema = serdeIOSchema)
+          ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }
       assert(e1.getMessage.contains("scala.MatchError: CalendarIntervalType"))
@@ -269,7 +269,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             AttributeReference("a", IntegerType)(),
             AttributeReference("c", new TestUDT.MyDenseVectorUDT)()),
           child = df.queryExecution.sparkPlan,
-          ioschema = serdeIOSchema)
+          ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }
       assert(e2.getMessage.contains(

@@ -57,7 +57,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
     FROM t
 ) tmp;
 
--- handle schema less
+-- SPARK-32388 handle schema less
 SELECT TRANSFORM(a)
 USING 'cat'
 FROM t;

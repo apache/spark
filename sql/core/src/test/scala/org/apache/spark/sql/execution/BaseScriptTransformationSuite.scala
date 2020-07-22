@@ -268,7 +268,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-
   test("SPARK-32106: TRANSFORM should respect DATETIME_JAVA8API_ENABLED (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
     Array(false, true).foreach { java8AapiEnable =>

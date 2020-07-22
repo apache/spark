@@ -108,7 +108,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         prevLine: String =>
           new GenericInternalRow(
             prevLine.split(outputRowFormat)
-              .zip(fieldWriters)
+              .zip(outputFieldWriters)
               .map { case (data, writer) => writer(data) })
       } else {
         // In schema less mode, hive default serde will choose first two output column as output
@@ -182,7 +182,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     }
   }
 
-  private lazy val fieldWriters: Seq[String => Any] = output.map { attr =>
+  private lazy val outputFieldWriters: Seq[String => Any] = output.map { attr =>
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
       case StringType => wrapperConvertException(data => data, converter)
@@ -218,10 +218,9 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         converter)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
-      case ArrayType(_, _) | MapType(_, _, _) | StructType(_) =>
-        throw new SparkException("TRANSFORM without serde don't support" +
-          " ArrayType/MapType/StructType as output data type")
-      case _ => wrapperConvertException(data => data, converter)
+      case dt =>
+        throw new SparkException("TRANSFORM without serde does not support " +
+          s"${dt.getClass.getSimpleName} as output data type")
     }
   }
 

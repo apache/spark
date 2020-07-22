@@ -62,7 +62,7 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
     }
   }
 
-  test("TRANSFORM don't support ArrayType/MapType/StructType as output data type (no serde)") {
+  test("TRANSFORM doesn't support ArrayType/MapType/StructType as output data type (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     // check for ArrayType
     val e1 = intercept[SparkException] {
@@ -73,8 +73,8 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
           |FROM VALUES (array(1, 1), map('1', 1), struct(1, 'a')) t(a, b, c)
         """.stripMargin).collect()
     }.getMessage
-    assert(e1.contains("TRANSFORM without serde don't support" +
-      " ArrayType/MapType/StructType as output data type"))
+    assert(e1.contains("TRANSFORM without serde does not support" +
+      " ArrayType as output data type"))
 
     // check for MapType
     val e2 = intercept[SparkException] {
@@ -85,8 +85,8 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
           |FROM VALUES (array(1, 1), map('1', 1), struct(1, 'a')) t(a, b, c)
         """.stripMargin).collect()
     }.getMessage
-    assert(e2.contains("TRANSFORM without serde don't support" +
-      " ArrayType/MapType/StructType as output data type"))
+    assert(e2.contains("TRANSFORM without serde does not support" +
+      " MapType as output data type"))
 
     // check for StructType
     val e3 = intercept[SparkException] {
@@ -97,7 +97,7 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
           |FROM VALUES (array(1, 1), map('1', 1), struct(1, 'a')) t(a, b, c)
         """.stripMargin).collect()
     }.getMessage
-    assert(e3.contains("TRANSFORM without serde don't support" +
-      " ArrayType/MapType/StructType as output data type"))
+    assert(e3.contains("TRANSFORM without serde does not support" +
+      " StructType as output data type"))
   }
 }
