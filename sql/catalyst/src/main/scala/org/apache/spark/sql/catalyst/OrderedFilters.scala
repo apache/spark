@@ -63,14 +63,14 @@ class OrderedFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
       }
       groupedFilters(index) :+= filter
     }
-    if (len > 0 && !groupedFilters(0).isEmpty) {
+    if (len > 0 && groupedFilters(0).nonEmpty) {
       // We assume that filters w/o refs like `AlwaysTrue` and `AlwaysFalse`
       // can be evaluated faster that others. We put them in front of others.
       val (literals, others) = groupedFilters(0).partition(_.references.isEmpty)
       groupedFilters(0) = literals ++ others
     }
     for (i <- 0 until len) {
-      if (!groupedFilters(i).isEmpty) {
+      if (groupedFilters(i).nonEmpty) {
         groupedPredicates(i) = toPredicate(groupedFilters(i))
       }
     }
