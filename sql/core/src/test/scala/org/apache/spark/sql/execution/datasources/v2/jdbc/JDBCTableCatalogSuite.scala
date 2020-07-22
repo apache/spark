@@ -98,7 +98,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     assert(t.schema === expectedSchema)
   }
 
-  test("create a table from DataFrame") {
+  ignore("create a table from DataFrame") {
     withTable("h2.test.new_table") {
       Seq(1).toDF("id").writeTo("h2.test.new_table").create()
       checkAnswer(
