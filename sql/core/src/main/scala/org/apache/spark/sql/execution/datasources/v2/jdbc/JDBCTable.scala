@@ -21,6 +21,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types.StructType
 
+// TODO (SPARK-32396): Implement the `SupportsRead` interface
 case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOptions)
   extends Table {
   assert(ident.namespace().length == 1)
