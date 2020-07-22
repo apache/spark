@@ -33,7 +33,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
+import org.apache.spark.util.{ThreadUtils, UninterruptibleThread, UninterruptibleThreadRunner}
 
 /**
  * This class uses Kafka's own [[KafkaConsumer]] API to read data offsets from Kafka.
@@ -51,19 +51,8 @@ private[kafka010] class KafkaOffsetReader(
     val driverKafkaParams: ju.Map[String, Object],
     readerOptions: CaseInsensitiveMap[String],
     driverGroupIdPrefix: String) extends Logging {
-  /**
-   * Used to ensure execute fetch operations execute in an UninterruptibleThread
-   */
-  val kafkaReaderThread = Executors.newSingleThreadExecutor((r: Runnable) => {
-    val t = new UninterruptibleThread("Kafka Offset Reader") {
-      override def run(): Unit = {
-        r.run()
-      }
-    }
-    t.setDaemon(true)
-    t
-  })
-  val execContext = ExecutionContext.fromExecutorService(kafkaReaderThread)
+
+  val uninterruptibleThreadRunner = new UninterruptibleThreadRunner("Kafka Offset Reader")
 
   /**
    * Place [[groupId]] and [[nextId]] here so that they are initialized before any consumer is
@@ -126,14 +115,14 @@ private[kafka010] class KafkaOffsetReader(
    * Closes the connection to Kafka, and cleans up state.
    */
   def close(): Unit = {
-    if (_consumer != null) runUninterruptibly { stopConsumer() }
-    kafkaReaderThread.shutdown()
+    if (_consumer != null) uninterruptibleThreadRunner.runUninterruptibly { stopConsumer() }
+    uninterruptibleThreadRunner.close()
   }
 
   /**
    * @return The Set of TopicPartitions for a given topic
    */
-  def fetchTopicPartitions(): Set[TopicPartition] = runUninterruptibly {
+  def fetchTopicPartitions(): Set[TopicPartition] = uninterruptibleThreadRunner.runUninterruptibly {
     assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
     // Poll to get the latest assigned partitions
     consumer.poll(0)
@@ -531,7 +520,7 @@ private[kafka010] class KafkaOffsetReader(
   private def partitionsAssignedToConsumer(
       body: ju.Set[TopicPartition] => Map[TopicPartition, Long],
       fetchingEarliestOffset: Boolean = false)
-    : Map[TopicPartition, Long] = runUninterruptibly {
+    : Map[TopicPartition, Long] = uninterruptibleThreadRunner.runUninterruptibly {
 
     withRetriesWithoutInterrupt {
       // Poll to get the latest assigned partitions
@@ -548,23 +537,6 @@ private[kafka010] class KafkaOffsetReader(
       consumer.pause(partitions)
       logDebug(s"Partitions assigned to consumer: $partitions.")
       body(partitions)
-    }
-  }
-
-  /**
-   * This method ensures that the closure is called in an [[UninterruptibleThread]].
-   * This is required when communicating with the [[KafkaConsumer]]. In the case
-   * of streaming queries, we are already running in an [[UninterruptibleThread]],
-   * however for batch mode this is not the case.
-   */
-  private def runUninterruptibly[T](body: => T): T = {
-    if (!Thread.currentThread.isInstanceOf[UninterruptibleThread]) {
-      val future = Future {
-        body
-      }(execContext)
-      ThreadUtils.awaitResult(future, Duration.Inf)
-    } else {
-      body
     }
   }
 
