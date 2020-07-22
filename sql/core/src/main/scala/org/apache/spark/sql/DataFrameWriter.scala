@@ -125,7 +125,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter[T] = {
-    this.extraOptions ++= Map(key -> value)
+    this.extraOptions += (key -> value)
     this
   }
 
@@ -266,7 +266,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def save(path: String): Unit = {
-    this.extraOptions ++= Map("path" -> path)
+    this.extraOptions += ("path" -> path)
     save()
   }
 
@@ -384,7 +384,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def saveToV1Source(): Unit = {
     partitioningColumns.foreach { columns =>
-      extraOptions ++= Map(DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
+      extraOptions += (DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
         DataSourceUtils.encodePartitioningColumns(columns))
     }
 
