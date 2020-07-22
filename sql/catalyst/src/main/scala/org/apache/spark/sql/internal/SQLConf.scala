@@ -245,6 +245,15 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val OPTIMIZER_COLLAPSE_PROJECT_EXPRESSION_THRESHOLD =
+    buildConf("spark.sql.optimizer.collapseProjectExpressionThreshold")
+      .internal()
+      .doc("Sets a threshold for the size of expressions when collpase project, if the current " +
+        "project has more expressions than the threshold then the project won't collapse. " +
+        "Set to -1 to disable.")
+      .intConf
+      .createWithDefault(1000)
+
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")
@@ -2779,6 +2788,9 @@ class SQLConf extends Serializable with Logging {
   def optimizerPlanChangeRules: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_RULES)
 
   def optimizerPlanChangeBatches: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_BATCHES)
+
+  def optimizerCollapseProjectExpressionThreshold: Int =
+    getConf(OPTIMIZER_COLLAPSE_PROJECT_EXPRESSION_THRESHOLD)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 

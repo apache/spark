@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 
 trait OperationHelper {
   type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
@@ -122,6 +123,14 @@ object ScanOperation extends OperationHelper with PredicateHelper {
     }.exists(!_.deterministic))
   }
 
+  private def hasTooManyExprs(exprs: Seq[Expression]): Boolean = {
+    if (SQLConf.get.optimizerCollapseProjectExpressionThreshold == -1) false else {
+      var numExprs = 0
+      exprs.foreach { _.foreach { _ => numExprs += 1 } }
+      numExprs > SQLConf.get.optimizerCollapseProjectExpressionThreshold
+    }
+  }
+
   private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {
     plan match {
       case Project(fields, child) =>
@@ -132,7 +141,9 @@ object ScanOperation extends OperationHelper with PredicateHelper {
             if (!hasCommonNonDeterministic(fields, aliases)) {
               val substitutedFields =
                 fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
-              Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
+              if (hasTooManyExprs(substitutedFields)) None else {
+                Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
+              }
             } else {
               None
             }

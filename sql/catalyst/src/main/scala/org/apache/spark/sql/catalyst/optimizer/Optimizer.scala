@@ -697,21 +697,17 @@ object ColumnPruning extends Rule[LogicalPlan] {
  *    `GlobalLimit(LocalLimit)` pattern is also considered.
  */
 object CollapseProject extends Rule[LogicalPlan] {
-  // If number of leaf expressions exceed MAX_LEAF_SIZE, do not collapse to prevent driver oom
-  // due to a single large project.
-  private val MAX_LEAF_SIZE = 1000
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, p2: Project) =>
       if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)
-        || numberOfLeafExpressions(p2.projectList) > MAX_LEAF_SIZE) {
+        || hasTooManyExprs(p2.projectList)) {
         p1
       } else {
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
       }
     case p @ Project(_, agg: Aggregate) =>
       if (haveCommonNonDeterministicOutput(p.projectList, agg.aggregateExpressions)
-        || numberOfLeafExpressions(agg.aggregateExpressions) > MAX_LEAF_SIZE) {
+        || hasTooManyExprs(agg.aggregateExpressions)) {
         p
       } else {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
@@ -728,6 +724,14 @@ object CollapseProject extends Rule[LogicalPlan] {
       r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
     case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
       s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
+  }
+
+  private def hasTooManyExprs(exprs: Seq[Expression]): Boolean = {
+    if (SQLConf.get.optimizerCollapseProjectExpressionThreshold == -1) false else {
+      var numExprs = 0
+      exprs.foreach { _.foreach { _ => numExprs += 1 } }
+      numExprs > SQLConf.get.optimizerCollapseProjectExpressionThreshold
+    }
   }
 
   private def numberOfLeafExpressions(projectList: Seq[Expression]): Long = {
