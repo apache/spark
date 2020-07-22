@@ -18,12 +18,9 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer, OffsetAndTimestamp}
@@ -33,7 +30,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.util.{ThreadUtils, UninterruptibleThread, UninterruptibleThreadRunner}
+import org.apache.spark.util.{UninterruptibleThread, UninterruptibleThreadRunner}
 
 /**
  * This class uses Kafka's own [[KafkaConsumer]] API to read data offsets from Kafka.
