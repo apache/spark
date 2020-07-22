@@ -1577,20 +1577,21 @@ private[spark] class DAGScheduler(
    * scheduler might need to talk to 1000s of shuffle services to finalize shuffle merge.
    */
   private[scheduler] def finalizeShuffleMerge(stage: ShuffleMapStage): Unit = {
+    logInfo("%s (%s) finalizing the shuffle merge".format(stage, stage.name))
     externalShuffleClient.foreach { shuffleClient =>
       val shuffleId = stage.shuffleDep.shuffleId
       val numMergers = stage.getMergerLocs.length
-      var numResponses = 0
+      val numResponses = new AtomicInteger()
       val results = (0 until numMergers).map(_ => SettableFuture.create[Boolean]())
       val timedOut = new AtomicBoolean()
 
       def increaseAndCheckResponseCount: Unit = {
-        numResponses = numResponses + 1
-        if (numResponses == numMergers) {
+        if (numResponses.incrementAndGet() == numMergers) {
           // Since this runs in the netty client thread and is outside of DAGScheduler
           // event loop, we only post ShuffleMergeFinalized event into the event queue.
           // The processing of this event should be done inside the event loop, so it
           // can safely modify scheduler's internal state.
+          logInfo("%s (%s) shuffle merge finalized".format(stage, stage.name))
           eventProcessLoop.post(ShuffleMergeFinalized(shuffleId))
         }
       }
@@ -2124,12 +2125,14 @@ private[spark] class DAGScheduler(
   /**
    * Schedules shuffle merge finalize.
    */
-  private[scheduler] def scheduleShuffleMergeFinalize(shuffleMapStage: ShuffleMapStage): Unit = {
+  private[scheduler] def scheduleShuffleMergeFinalize(stage: ShuffleMapStage): Unit = {
     // TODO Use the default single threaded scheduler or extend ThreadUtils to
     // TODO support the multi-threaded scheduler?
+    logInfo(("%s (%s) scheduled for finalizing" +
+        " shuffle merge in %s s").format(stage, stage.name, shuffleMergeFinalizeWaitSec))
     shuffleMergeFinalizeScheduler.schedule(
       new Runnable {
-        override def run(): Unit = finalizeShuffleMerge(shuffleMapStage)
+        override def run(): Unit = finalizeShuffleMerge(stage)
       },
       shuffleMergeFinalizeWaitSec,
       TimeUnit.SECONDS
