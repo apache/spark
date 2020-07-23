@@ -1064,8 +1064,8 @@ private[hive] trait HiveInspectors {
       case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
       case dt =>
-        throw new AnalysisException("TRANSFORM with hive serde does not support " +
-          s"${dt.getClass.getSimpleName.replace("$", "")} as input data type")
+        throw new AnalysisException("HiveInspectors does not support convert " +
+          s"${dt.getClass.getSimpleName.replace("$", "")} to Hive TypeInfo")
     }
   }
 }

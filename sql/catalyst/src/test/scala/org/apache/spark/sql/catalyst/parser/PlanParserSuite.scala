@@ -1032,7 +1032,7 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select a, b from db.c; ;;  ;", table("db", "c").select('a, 'b))
   }
 
-  test("SPARK-32106: TRANSFORM without serde") {
+  test("SPARK-32106: TRANSFORM plan") {
     // verify schema less
       assertEqual(
         """
@@ -1122,5 +1122,24 @@ class PlanParserSuite extends AnalysisTest {
             ("TOK_TABLEROWFORMATLINES", "'\\n'"),
             ("TOK_TABLEROWFORMATNULL", "'NULL'")), None, None,
           List.empty, List.empty, None, None, false)))
+
+    // verify ROW FORMAT SERDE
+    intercept(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+        |WITH SERDEPROPERTIES(
+        | "separatorChar" = "\t",
+        | "quoteChar" = "'",
+        | "escapeChar" = "\\")
+        |USING 'cat' AS (a, b, c)
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+        |WITH SERDEPROPERTIES(
+        | "separatorChar" = "\t",
+        | "quoteChar" = "'",
+        | "escapeChar" = "\\")
+        |FROM testData
+      """.stripMargin,
+      "TRANSFORM with serde is only supported in hive mode")
   }
 }

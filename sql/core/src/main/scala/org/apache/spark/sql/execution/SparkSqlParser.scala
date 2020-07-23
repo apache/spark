@@ -692,7 +692,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       def format(
           fmt: RowFormatContext,
           configKey: String,
-          defaultConfigValue: String): Format = fmt match {
+          defaultConfigValue: String): ScriptIOFormat = fmt match {
         case c: RowFormatDelimitedContext =>
           getRowFormatDelimited(c)
 

@@ -62,7 +62,8 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
     }
   }
 
-  test("TRANSFORM doesn't support ArrayType/MapType/StructType as output data type (no serde)") {
+  test("SPARK-32106: TRANSFORM doesn't support ArrayType/MapType/StructType " +
+    "as output data type (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     // check for ArrayType
     val e1 = intercept[SparkException] {

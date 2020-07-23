@@ -744,10 +744,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     selectClause.hints.asScala.foldRight(withWindow)(withHints)
   }
 
-  // Decode and input/output format.
-  type Format = (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
+  // Script Transform's input/output format.
+  type ScriptIOFormat =
+    (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
 
-  protected def getRowFormatDelimited(ctx: RowFormatDelimitedContext): Format = {
+  protected def getRowFormatDelimited(ctx: RowFormatDelimitedContext): ScriptIOFormat = {
     // TODO we should use the visitRowFormatDelimited function here. However HiveScriptIOSchema
     // expects a seq of pairs in which the old parsers' token names are used as keys.
     // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
@@ -776,7 +777,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       recordReader: Token,
       schemaLess: Boolean): ScriptInputOutputSchema = {
 
-    def format(fmt: RowFormatContext): Format = fmt match {
+    def format(fmt: RowFormatContext): ScriptIOFormat = fmt match {
       case c: RowFormatDelimitedContext =>
         getRowFormatDelimited(c)
 
