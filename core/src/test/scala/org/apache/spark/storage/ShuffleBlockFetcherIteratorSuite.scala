@@ -70,6 +70,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-local-host", 1)
     doReturn(localBmId).when(blockManager).blockManagerId
+    // By default, the mock BlockManager returns None for hostLocalDirManager. One could
+    // still use initHostLocalDirManager() to specify a custom hostLocalDirManager.
     doReturn(None).when(blockManager).hostLocalDirManager
     blockManager
   }
