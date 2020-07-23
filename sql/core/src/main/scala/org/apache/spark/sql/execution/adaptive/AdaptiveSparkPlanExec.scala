@@ -107,10 +107,9 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val costEvaluator = SimpleCostEvaluator
 
-  @volatile private var currentPhysicalPlan =
-    applyPhysicalRules(inputPlan, queryStagePreparationRules)
+  @transient private val initialPlan = applyPhysicalRules(inputPlan, queryStagePreparationRules)
 
-  private val initialPlan = currentPhysicalPlan
+  @volatile private var currentPhysicalPlan = initialPlan
 
   private var isFinalPlan = false
 
@@ -282,8 +281,24 @@ case class AdaptiveSparkPlanExec(
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean): Unit = {
-    val plans = Seq(("CurrentPlan", currentPhysicalPlan), ("InitialPlan", initialPlan))
-    super.generateTreeString(depth,
+
+    def generateTreeStringWithName(
+        plan: SparkPlan,
+        name: String,
+        depth: Int,
+        lastChildren: Seq[Boolean]): Unit = {
+      if (depth > 0) {
+        lastChildren.init.foreach { isLast =>
+          append(if (isLast) "   " else ":  ")
+        }
+        append(if (lastChildren.last) "+- " else ":- ")
+      }
+      append(s"$name ")
+      plan.generateTreeString(
+        depth, lastChildren, append, verbose, prefix, addSuffix, maxFields, printNodeId)
+    }
+    super.generateTreeString(
+      depth,
       lastChildren,
       append,
       verbose,
@@ -291,49 +306,16 @@ case class AdaptiveSparkPlanExec(
       addSuffix,
       maxFields,
       printNodeId)
-    plans.zipWithIndex.foreach { case ((name, plan), i) =>
-      generateTreeStringWithName(
-        name,
-        plan,
-        depth + 1,
-        lastChildren :+ (i == plans.size - 1),
-        append,
-        verbose,
-        "",
-        addSuffix = false,
-        maxFields,
-        printNodeId)
-    }
-  }
-
-  private def generateTreeStringWithName(
-      name: String,
-      plan: SparkPlan,
-      depth: Int,
-      lastChildren: Seq[Boolean],
-      append: String => Unit,
-      verbose: Boolean,
-      prefix: String = "",
-      addSuffix: Boolean = false,
-      maxFields: Int,
-      printNodeId: Boolean): Unit = {
-    if (depth > 0) {
-      lastChildren.init.foreach { isLast =>
-        append(if (isLast) "   " else ":  ")
-      }
-      append(if (lastChildren.last) "+- " else ":- ")
-    }
-    append(name)
-    append("\n")
-    plan.generateTreeString(
+    generateTreeStringWithName(
+      currentPhysicalPlan,
+      if (isFinalPlan) "FinalPlan" else "CurrentPlan",
       depth + 1,
-      lastChildren :+ true,
-      append,
-      verbose,
-      prefix,
-      addSuffix,
-      maxFields,
-      printNodeId)
+      lastChildren :+ true)
+    generateTreeStringWithName(
+      initialPlan,
+      "InitialPlan",
+      depth + 1,
+      lastChildren :+ true)
   }
 
   override def hashCode(): Int = inputPlan.hashCode()
