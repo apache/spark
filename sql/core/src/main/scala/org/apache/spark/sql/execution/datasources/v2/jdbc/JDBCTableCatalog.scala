@@ -20,15 +20,17 @@ import java.sql.{Connection, SQLException}
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class JDBCTableCatalog extends TableCatalog {
+class JDBCTableCatalog extends TableCatalog with Logging {
 
   private var catalogName: String = null
   private var options: JDBCOptions = _
@@ -102,13 +104,28 @@ class JDBCTableCatalog extends TableCatalog {
   }
 
   override def createTable(
-    ident: Identifier,
-    schema: StructType,
-    partitions: Array[Transform],
-    properties: java.util.Map[String, String]): Table = {
-    // scalastyle:off throwerror
-    throw new NotImplementedError()
-    // scalastyle:on throwerror
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+      checkNamespace(ident.namespace())
+    if (partitions.nonEmpty) {
+      throw new UnsupportedOperationException("Cannot create JDBC table with partition")
+    }
+    // TODO (SPARK-32405): Apply table options while creating tables in JDBC Table Catalog
+    if (!properties.isEmpty) {
+      logWarning("Cannot create JDBC table with properties, these properties will be " +
+        "ignored: " + properties.asScala.map { case (k, v) => s"$k=$v" }.mkString("[", ", ", "]"))
+    }
+
+    val writeOptions = new JdbcOptionsInWrite(
+      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
+    val caseSensitive = SQLConf.get.caseSensitiveAnalysis
+    withConnection { conn =>
+      JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
+    }
+
+    JDBCTable(ident, schema, writeOptions)
   }
 
   // TODO (SPARK-32402): Implement ALTER TABLE in JDBC Table Catalog
