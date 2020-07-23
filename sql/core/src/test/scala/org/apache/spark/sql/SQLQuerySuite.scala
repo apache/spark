@@ -3565,10 +3565,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTable("t") {
       sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS id")
       checkAnswer(
-        sql(
-          s"""
-             |WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM t)
-             |SELECT * FROM cte
+        sql(s"""
+          |WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM t)
+          |SELECT * FROM cte
         """.stripMargin),
         Row(1) :: Nil)
     }
