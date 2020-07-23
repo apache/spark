@@ -1962,7 +1962,6 @@ class DDLParserSuite extends AnalysisTest {
       """
         |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a.b.c
         |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
         |COMMENT 'BLABLA'
         |AS SELECT * FROM tab1
       """.stripMargin
@@ -1971,7 +1970,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq("a", "b", "c"),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
-      Map("prop1Key" -> "prop1Val"),
+      Map(),
       Some("SELECT * FROM tab1"),
       parsePlan("SELECT * FROM tab1"),
       false,
@@ -2001,6 +2000,17 @@ class DDLParserSuite extends AnalysisTest {
     val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
     intercept(sql1, "Found duplicate clauses: COMMENT")
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
+  }
+
+  test("SPARK-32374: create temporary view with properties not allowed") {
+    assertUnsupported(
+      sql = """
+        |CREATE OR REPLACE TEMPORARY VIEW a.b.c
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |AS SELECT * FROM tab1
+      """.stripMargin,
+      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
   }
 
   test("SHOW TBLPROPERTIES table") {
