@@ -39,20 +39,10 @@ import org.apache.spark.sql.types.StringType
 class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with TestHiveSingleton
   with BeforeAndAfterEach {
   import spark.implicits._
+  import ScriptTransformationIOSchema._
 
-  private val noSerdeIOSchema = ScriptTransformationIOSchema(
-    inputRowFormat = Seq.empty,
-    outputRowFormat = Seq.empty,
-    inputSerdeClass = None,
-    outputSerdeClass = None,
-    inputSerdeProps = Seq.empty,
-    outputSerdeProps = Seq.empty,
-    recordReaderClass = None,
-    recordWriterClass = None,
-    schemaLess = false
-  )
 
-  private val serdeIOSchema = noSerdeIOSchema.copy(
+  private val serdeIOSchema = defaultIOSchema.copy(
     inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
     outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
   )
@@ -88,7 +78,7 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
-        ioschema = noSerdeIOSchema
+        ioschema = defaultIOSchema
       ),
       rowsDf.collect())
     assert(uncaughtExceptionHandler.exception.isEmpty)
@@ -123,7 +113,7 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
-          ioschema = noSerdeIOSchema
+          ioschema = defaultIOSchema
         ),
         rowsDf.collect())
     }
@@ -239,7 +229,7 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
-          ioschema = noSerdeIOSchema)
+          ioschema = defaultIOSchema)
       SparkPlanTest.executePlan(plan, hiveContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
