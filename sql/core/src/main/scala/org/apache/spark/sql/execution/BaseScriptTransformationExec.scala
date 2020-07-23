@@ -220,7 +220,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
-        throw new SparkException("TRANSFORM without serde does not support " +
+        throw new SparkException(s"${nodeName} without serde does not support " +
           s"${dt.getClass.getSimpleName} as output data type")
     }
   }

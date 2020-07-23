@@ -1064,8 +1064,8 @@ private[hive] trait HiveInspectors {
       case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
       case dt =>
-        throw new AnalysisException("HiveInspectors does not support convert " +
-          s"${dt.getClass.getSimpleName.replace("$", "")} to Hive TypeInfo")
+        throw new AnalysisException(
+          s"${dt.getClass.getSimpleName.replace("$", "")} cannot be converted to Hive TypeInfo")
     }
   }
 }

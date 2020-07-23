@@ -74,7 +74,7 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
           |FROM VALUES (array(1, 1), map('1', 1), struct(1, 'a')) t(a, b, c)
         """.stripMargin).collect()
     }.getMessage
-    assert(e1.contains("TRANSFORM without serde does not support" +
+    assert(e1.contains("SparkScriptTransformation without serde does not support" +
       " ArrayType as output data type"))
 
     // check for MapType
@@ -86,7 +86,7 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
           |FROM VALUES (array(1, 1), map('1', 1), struct(1, 'a')) t(a, b, c)
         """.stripMargin).collect()
     }.getMessage
-    assert(e2.contains("TRANSFORM without serde does not support" +
+    assert(e2.contains("SparkScriptTransformation without serde does not support" +
       " MapType as output data type"))
 
     // check for StructType
@@ -98,7 +98,7 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
           |FROM VALUES (array(1, 1), map('1', 1), struct(1, 'a')) t(a, b, c)
         """.stripMargin).collect()
     }.getMessage
-    assert(e3.contains("TRANSFORM without serde does not support" +
+    assert(e3.contains("SparkScriptTransformation without serde does not support" +
       " StructType as output data type"))
   }
 }

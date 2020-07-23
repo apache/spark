@@ -262,7 +262,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
       assert(e1.contains(
-        "HiveInspectors does not support convert CalendarIntervalType to Hive TypeInfo"))
+        "CalendarIntervalType cannot be converted to Hive TypeInfo"))
 
       val e2 = intercept[SparkException] {
         val plan = createScriptTransformationExec(
@@ -276,7 +276,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
       assert(e2.contains(
-        "HiveInspectors does not support convert MyDenseVectorUDT to Hive TypeInfo"))
+        "MyDenseVectorUDT cannot be converted to Hive TypeInfo"))
     }
   }
 
@@ -298,7 +298,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           """.stripMargin).collect()
       }.getMessage
       assert(e1.contains(
-        "HiveInspectors does not support convert CalendarIntervalType to Hive TypeInfo"))
+        "CalendarIntervalType cannot be converted to Hive TypeInfo"))
 
       val e2 = intercept[SparkException] {
         sql(
@@ -308,7 +308,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           """.stripMargin).collect()
       }.getMessage
       assert(e2.contains(
-        "HiveInspectors does not support convert MyDenseVectorUDT to Hive TypeInfo"))
+        "MyDenseVectorUDT cannot be converted to Hive TypeInfo"))
     }
   }
 }
