@@ -111,6 +111,7 @@ class JDBCTableCatalog extends TableCatalog {
     // scalastyle:on throwerror
   }
 
+  // TODO (SPARK-32402): Implement ALTER TABLE in JDBC Table Catalog
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     // scalastyle:off throwerror
     throw new NotImplementedError()
