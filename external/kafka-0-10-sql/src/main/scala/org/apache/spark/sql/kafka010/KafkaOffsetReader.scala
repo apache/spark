@@ -49,6 +49,11 @@ private[kafka010] class KafkaOffsetReader(
     readerOptions: CaseInsensitiveMap[String],
     driverGroupIdPrefix: String) extends Logging {
 
+  /**
+   * [[UninterruptibleThreadRunner]] ensures that all [[KafkaConsumer]] communication called in an
+   * [[UninterruptibleThread]]. In the case of streaming queries, we are already running in an
+   * [[UninterruptibleThread]], however for batch mode this is not the case.
+   */
   val uninterruptibleThreadRunner = new UninterruptibleThreadRunner("Kafka Offset Reader")
 
   /**
@@ -113,7 +118,7 @@ private[kafka010] class KafkaOffsetReader(
    */
   def close(): Unit = {
     if (_consumer != null) uninterruptibleThreadRunner.runUninterruptibly { stopConsumer() }
-    uninterruptibleThreadRunner.close()
+    uninterruptibleThreadRunner.shutdown()
   }
 
   /**

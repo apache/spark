@@ -17,48 +17,48 @@
 
 package org.apache.spark.util
 
-import java.util.concurrent.{CountDownLatch, TimeUnit}
-
 import org.apache.spark.SparkFunSuite
 
 class UninterruptibleThreadRunnerSuite extends SparkFunSuite {
-  private var latch: CountDownLatch = null
   private var runner: UninterruptibleThreadRunner = null
 
   override def beforeEach(): Unit = {
-    latch = new CountDownLatch(1)
     runner = new UninterruptibleThreadRunner("ThreadName")
   }
 
   override def afterEach(): Unit = {
-    runner.close()
+    runner.shutdown()
   }
 
   test("runUninterruptibly should switch to UninterruptibleThread") {
     assert(!Thread.currentThread().isInstanceOf[UninterruptibleThread])
+    var isUninterruptibleThread = false
     runner.runUninterruptibly {
-      assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
-      latch.countDown()
+      isUninterruptibleThread = Thread.currentThread().isInstanceOf[UninterruptibleThread]
     }
-    assert(latch.await(10, TimeUnit.SECONDS), "await timeout")
+    assert(isUninterruptibleThread, "The runner task must run in UninterruptibleThread")
   }
 
   test("runUninterruptibly should not add new UninterruptibleThread") {
+    var isInitialUninterruptibleThread = false
+    var isRunnerUninterruptibleThread = false
     val t = new UninterruptibleThread("test") {
       override def run(): Unit = {
         runUninterruptibly {
           val initialThread = Thread.currentThread()
-          assert(initialThread.isInstanceOf[UninterruptibleThread])
+          isInitialUninterruptibleThread = initialThread.isInstanceOf[UninterruptibleThread]
           runner.runUninterruptibly {
             val runnerThread = Thread.currentThread()
-            assert(runnerThread.isInstanceOf[UninterruptibleThread])
-            assert(runnerThread == initialThread)
-            latch.countDown()
+            isRunnerUninterruptibleThread = runnerThread.isInstanceOf[UninterruptibleThread]
+            assert(runnerThread.eq(initialThread))
           }
         }
       }
     }
     t.start()
-    assert(latch.await(10, TimeUnit.SECONDS), "await timeout")
+    t.join()
+    assert(isInitialUninterruptibleThread,
+      "The initiator must already run in UninterruptibleThread")
+    assert(isRunnerUninterruptibleThread, "The runner task must run in UninterruptibleThread")
   }
 }

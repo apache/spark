@@ -22,6 +22,10 @@ import java.util.concurrent.Executors
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
+/**
+ * [[UninterruptibleThreadRunner]] ensures that all tasks are running in an
+ * [[UninterruptibleThread]]. A good example is Kafka consumer usage.
+ */
 private[spark] class UninterruptibleThreadRunner(threadName: String) {
   private val thread = Executors.newSingleThreadExecutor((r: Runnable) => {
     val t = new UninterruptibleThread(threadName) {
@@ -45,7 +49,7 @@ private[spark] class UninterruptibleThreadRunner(threadName: String) {
     }
   }
 
-  def close(): Unit = {
+  def shutdown(): Unit = {
     thread.shutdown()
   }
 }
