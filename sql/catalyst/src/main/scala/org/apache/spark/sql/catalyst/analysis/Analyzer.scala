@@ -1269,9 +1269,11 @@ class Analyzer(
           // conflict node or reach the leaf node.
           val (newChild, childAttrMapping) = rewritePlan(child, conflictPlanMap)
           attrMapping ++= childAttrMapping.filter { case (oldAttr, _) =>
-            // If an attribute from the child is not output or referenced by the parent plan,
-            // it's useless to propagate this attribute to the parent plan, as they are not
-            // going to use this attribute.
+            // `attrMapping` is not only used to replace the attributes of the current `plan`,
+            // but also to be propagated to the parent plans of the current `plan`. Therefore,
+            // the `oldAttr` must be part of either `plan.references` (so that it can be used to
+            // replace attributes of the current `plan`) or `plan.outputSet` (so that it can be
+            // used by those parent plans).
             (plan.outputSet ++ plan.references).contains(oldAttr)
           }
           newChild
