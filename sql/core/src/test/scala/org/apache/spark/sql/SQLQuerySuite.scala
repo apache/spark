@@ -3588,7 +3588,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-32280: Avoid duplicate rewrite attributes when there're multiple JOINs") {
     sql("SELECT 1 AS id").createOrReplaceTempView("A")
     sql("SELECT id, 'foo' AS kind FROM A").createOrReplaceTempView("B")
-    sql("SELECT l.id  FROM B AS l JOIN B AS r ON l.kind = r.kind")
+    sql("SELECT l.id as id FROM B AS l LEFT SEMI JOIN B AS r ON l.kind = r.kind")
       .createOrReplaceTempView("C")
     checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
       "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))

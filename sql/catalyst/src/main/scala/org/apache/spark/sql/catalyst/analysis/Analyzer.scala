@@ -1268,42 +1268,11 @@ class Analyzer(
           // If not, we'd rewrite child plan recursively until we find the
           // conflict node or reach the leaf node.
           val (newChild, childAttrMapping) = rewritePlan(child, conflictPlanMap)
-          // Only return rewrite attributes which could be used by the parent node.
-          // Otherwise, it could introduce duplicate rewrite attributes. For example,
-          // for the following plan, if we don't do filter for the `childAttrMapping`,
-          // the node `SubqueryAlias b` will return rewrite attribute of [kind#220 -> kind#228]
-          // (which is from the conflict plan `Project [id#218, foo AS kind#228]`), and the node
-          // `SubqueryAlias c` will return rewrite attribute of [kind#220 -> kind#229] (which
-          // is from the conflict plan `Project [id#227, foo AS kind#229]`). As a result, the top
-          // Join will have duplicated rewrite attribute.
-          //
-          // The problem is, the plan `Join Inner, (kind#229 = kind#223)` shouldn't keep returning
-          // rewrite attribute of [kind#220 -> kind#229] to its parent node `Project [id#227]` as
-          // it doesn't really need it.
-          //
-          // Join Inner, (id#218 = id#227)
-          // :- SubqueryAlias b
-          // :  +- Project [id#218, foo AS kind#228]
-          // :     +- SubqueryAlias a
-          // :        +- Project [1 AS id#218]
-          // :           +- OneRowRelation
-          // +- SubqueryAlias c
-          //    +- Project [id#227]
-          //       +- Join Inner, (kind#229 = kind#223)
-          //          :- SubqueryAlias l
-          //          :  +- SubqueryAlias b
-          //          :     +- Project [id#227, foo AS kind#229]
-          //          :        +- SubqueryAlias a
-          //          :           +- Project [1 AS id#227]
-          //          :              +- OneRowRelation
-          //          +- SubqueryAlias r
-          //             +- SubqueryAlias b
-          //                +- Project [id#224, foo AS kind#223]
-          //                   +- SubqueryAlias a
-          //                      +- Project [1 AS id#224]
-          //                         +- OneRowRelation
           attrMapping ++= childAttrMapping.filter { case (oldAttr, _) =>
-            (plan.references ++ plan.outputSet ++ plan.producedAttributes).contains(oldAttr)
+            // If an attribute from the child is not output or referenced by the parent plan,
+            // it's useless to propagate this attribute to the parent plan, as they are not
+            // going to use this attribute.
+            (plan.outputSet ++ plan.references).contains(oldAttr)
           }
           newChild
         }
