@@ -158,7 +158,7 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
         project_full_path, "target/**/%s*.jar" % sbt_jar_name_prefix), recursive=True)
     maven_build = glob.glob(os.path.join(
         project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
-    jar_paths = sbt_build + maven_build
+    jar_paths = set(sbt_build + maven_build)
     jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
 
     if not jars:
