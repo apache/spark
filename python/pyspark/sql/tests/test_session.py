@@ -326,9 +326,9 @@ class SparkExtensionsTest(unittest.TestCase):
 
         SPARK_HOME = _find_spark_home()
         filename_pattern = (
-            "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
+            "sql/core/target/**/test-classes/org/apache/spark/sql/"
             "SparkSessionExtensionSuite.class")
-        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
+        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern), recursive=True):
             raise unittest.SkipTest(
                 "'org.apache.spark.sql.SparkSessionExtensionSuite' is not "
                 "available. Will skip the related tests.")

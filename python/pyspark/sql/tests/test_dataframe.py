@@ -850,9 +850,10 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
 
         SPARK_HOME = _find_spark_home()
         filename_pattern = (
-            "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
+            "sql/core/target/**/test-classes/org/apache/spark/sql/"
             "TestQueryExecutionListener.class")
-        cls.has_listener = bool(glob.glob(os.path.join(SPARK_HOME, filename_pattern)))
+        cls.has_listener = bool(glob.glob(
+            os.path.join(SPARK_HOME, filename_pattern), recursive=True))
 
         if cls.has_listener:
             # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.

@@ -155,7 +155,7 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
     # Search jar in the project dir using the jar name_prefix for both sbt build and maven
     # build because the artifact jars are in different directories.
     sbt_build = glob.glob(os.path.join(
-        project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix))
+        project_full_path, "target/**/%s*.jar" % sbt_jar_name_prefix), recursive=True)
     maven_build = glob.glob(os.path.join(
         project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
     jar_paths = sbt_build + maven_build

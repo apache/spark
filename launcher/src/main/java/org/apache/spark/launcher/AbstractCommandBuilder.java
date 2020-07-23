@@ -181,9 +181,16 @@ abstract class AbstractCommandBuilder {
         }
       }
       if (isTesting) {
+        boolean isGitHubActionsBuild = System.getenv("GITHUB_ACTIONS") != null;
         for (String project : projects) {
-          addToClassPath(cp, String.format("%s/%s/target/scala-%s/test-classes", sparkHome,
-            project, scala));
+          if (isGitHubActionsBuild) {
+            // In GitHub Actions build, SBT option 'crossPaths' is disabled so the Scala version
+            // directory is not created, see SPARK-32408. This is a temporary workaround.
+            addToClassPath(cp, String.format("%s/%s/target/test-classes", sparkHome, project));
+          } else {
+            addToClassPath(cp, String.format("%s/%s/target/scala-%s/test-classes", sparkHome,
+              project, scala));
+          }
         }
       }
 
