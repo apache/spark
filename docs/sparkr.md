@@ -666,20 +666,15 @@ Apache Arrow is an in-memory columnar data format that is used in Spark to effic
 
 ## Ensure Arrow Installed
 
-Arrow R library is available on CRAN as of [ARROW-3204](https://issues.apache.org/jira/browse/ARROW-3204). It can be installed as below.
+Arrow R library is available on CRAN and it can be installed as below.
 
 ```bash
 Rscript -e 'install.packages("arrow", repos="https://cloud.r-project.org/")'
 ```
+Please refer [the official documentation of Apache Arrow](https://arrow.apache.org/docs/r/) for more detials.
 
-If you need to install old versions, it should be installed directly from Github. You can use `remotes::install_github` as below.
-
-```bash
-Rscript -e 'remotes::install_github("apache/arrow@apache-arrow-0.12.1", subdir = "r")'
-```
-
-`apache-arrow-0.12.1` is a version tag that can be checked in [Arrow at Github](https://github.com/apache/arrow/releases). You must ensure that Arrow R package is installed and available on all cluster nodes.
-The current supported minimum version is 0.12.1; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
+Note that you must ensure that Arrow R package is installed and available on all cluster nodes.
+The current supported minimum version is 0.15.1; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
 
 ## Enabling for Conversion to/from R DataFrame, `dapply` and `gapply`
 

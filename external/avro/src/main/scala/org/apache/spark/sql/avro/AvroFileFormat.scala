@@ -124,12 +124,12 @@ private[sql] class AvroFileFormat extends FileFormat
         reader.sync(file.start)
         val stop = file.start + file.length
 
-        val rebaseDateTime = DataSourceUtils.needRebaseDateTime(
-          reader.asInstanceOf[DataFileReader[_]].getMetaString).getOrElse {
-          SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ)
-        }
+        val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+          reader.asInstanceOf[DataFileReader[_]].getMetaString,
+          SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
+
         val deserializer = new AvroDeserializer(
-          userProvidedSchema.getOrElse(reader.getSchema), requiredSchema, rebaseDateTime)
+          userProvidedSchema.getOrElse(reader.getSchema), requiredSchema, datetimeRebaseMode)
 
         new Iterator[InternalRow] {
           private[this] var completed = false

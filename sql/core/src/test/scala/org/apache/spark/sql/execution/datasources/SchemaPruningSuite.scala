@@ -23,7 +23,9 @@ import org.scalactic.Equality
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
+import org.apache.spark.sql.catalyst.expressions.Concat
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
@@ -49,6 +51,11 @@ abstract class SchemaPruningSuite
     relatives: Map[String, FullName] = Map.empty,
     employer: Employer = null,
     relations: Map[FullName, String] = Map.empty)
+  case class Department(
+    depId: Int,
+    depName: String,
+    contactId: Int,
+    employer: Employer)
 
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
@@ -56,6 +63,7 @@ abstract class SchemaPruningSuite
 
   val employer = Employer(0, Company("abc", "123 Business Street"))
   val employerWithNullCompany = Employer(1, null)
+  val employerWithNullCompany2 = Employer(2, null)
 
   val contacts =
     Contact(0, janeDoe, "123 Main Street", 1, friends = Array(susanSmith),
@@ -63,6 +71,11 @@ abstract class SchemaPruningSuite
       relations = Map(johnDoe -> "brother")) ::
     Contact(1, johnDoe, "321 Wall Street", 3, relatives = Map("sister" -> janeDoe),
       employer = employerWithNullCompany, relations = Map(janeDoe -> "sister")) :: Nil
+
+  val departments =
+    Department(0, "Engineering", 0, employer) ::
+    Department(1, "Marketing", 1, employerWithNullCompany) ::
+    Department(2, "Operation", 4, employerWithNullCompany2) :: Nil
 
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
@@ -338,6 +351,172 @@ abstract class SchemaPruningSuite
     }
   }
 
+  testSchemaPruning("select one deep nested complex field after repartition") {
+    val query = sql("select * from contacts")
+      .repartition(100)
+      .where("employer.company.address is not null")
+      .selectExpr("employer.id as employer_id")
+    checkScan(query,
+      "struct<employer:struct<id:int,company:struct<address:string>>>")
+    checkAnswer(query, Row(0) :: Nil)
+  }
+
+  testSchemaPruning("select one deep nested complex field after repartition by expression") {
+    val query1 = sql("select * from contacts")
+      .repartition(100, col("id"))
+      .where("employer.company.address is not null")
+      .selectExpr("employer.id as employer_id")
+    checkScan(query1,
+      "struct<id:int,employer:struct<id:int,company:struct<address:string>>>")
+    checkAnswer(query1, Row(0) :: Nil)
+
+    val query2 = sql("select * from contacts")
+      .repartition(100, col("employer"))
+      .where("employer.company.address is not null")
+      .selectExpr("employer.id as employer_id")
+    checkScan(query2,
+      "struct<employer:struct<id:int,company:struct<name:string,address:string>>>")
+    checkAnswer(query2, Row(0) :: Nil)
+
+    val query3 = sql("select * from contacts")
+      .repartition(100, col("employer.company"))
+      .where("employer.company.address is not null")
+      .selectExpr("employer.company as employer_company")
+    checkScan(query3,
+      "struct<employer:struct<company:struct<name:string,address:string>>>")
+    checkAnswer(query3, Row(Row("abc", "123 Business Street")) :: Nil)
+
+    val query4 = sql("select * from contacts")
+      .repartition(100, col("employer.company.address"))
+      .where("employer.company.address is not null")
+      .selectExpr("employer.company.address as employer_company_addr")
+    checkScan(query4,
+      "struct<employer:struct<company:struct<address:string>>>")
+    checkAnswer(query4, Row("123 Business Street") :: Nil)
+  }
+
+  testSchemaPruning("select one deep nested complex field after join") {
+    val query1 = sql("select contacts.name.middle from contacts, departments where " +
+        "contacts.id = departments.contactId")
+    checkScan(query1,
+      "struct<id:int,name:struct<middle:string>>",
+    "struct<contactId:int>")
+    checkAnswer(query1, Row("X.") :: Row("Y.") :: Nil)
+
+    val query2 = sql("select contacts.name.middle from contacts, departments where " +
+      "contacts.employer = departments.employer")
+    checkScan(query2,
+      "struct<name:struct<middle:string>," +
+        "employer:struct<id:int,company:struct<name:string,address:string>>>",
+      "struct<employer:struct<id:int,company:struct<name:string,address:string>>>")
+    checkAnswer(query2, Row("X.") :: Row("Y.") :: Nil)
+
+    val query3 = sql("select contacts.employer.company.name from contacts, departments where " +
+      "contacts.employer = departments.employer")
+    checkScan(query3,
+      "struct<employer:struct<id:int,company:struct<name:string,address:string>>>",
+      "struct<employer:struct<id:int,company:struct<name:string,address:string>>>")
+    checkAnswer(query3, Row("abc") :: Row(null) :: Nil)
+  }
+
+  testSchemaPruning("select one deep nested complex field after outer join") {
+    val query1 = sql("select departments.contactId, contacts.name.middle from departments " +
+      "left outer join contacts on departments.contactId = contacts.id")
+    checkScan(query1,
+      "struct<contactId:int>",
+      "struct<id:int,name:struct<middle:string>>")
+    checkAnswer(query1, Row(0, "X.") :: Row(1, "Y.") :: Row(4, null) :: Nil)
+
+    val query2 = sql("select contacts.name.first, departments.employer.company.name " +
+      "from contacts right outer join departments on contacts.id = departments.contactId")
+    checkScan(query2,
+      "struct<id:int,name:struct<first:string>>",
+      "struct<contactId:int,employer:struct<company:struct<name:string>>>")
+    checkAnswer(query2,
+      Row("Jane", "abc") ::
+        Row("John", null) ::
+        Row(null, null) :: Nil)
+  }
+
+  testSchemaPruning("select nested field in aggregation function of Aggregate") {
+    val query1 = sql("select count(name.first) from contacts group by name.last")
+    checkScan(query1, "struct<name:struct<first:string,last:string>>")
+    checkAnswer(query1, Row(2) :: Row(2) :: Nil)
+
+    val query2 = sql("select count(name.first), sum(pets) from contacts group by id")
+    checkScan(query2, "struct<id:int,name:struct<first:string>,pets:int>")
+    checkAnswer(query2, Row(1, 1) :: Row(1, null) :: Row(1, 3) :: Row(1, null) :: Nil)
+
+    val query3 = sql("select count(name.first), first(name) from contacts group by id")
+    checkScan(query3, "struct<id:int,name:struct<first:string,middle:string,last:string>>")
+    checkAnswer(query3,
+      Row(1, Row("Jane", "X.", "Doe")) ::
+        Row(1, Row("Jim", null, "Jones")) ::
+        Row(1, Row("John", "Y.", "Doe")) ::
+        Row(1, Row("Janet", null, "Jones")) :: Nil)
+
+    val query4 = sql("select count(name.first), sum(pets) from contacts group by name.last")
+    checkScan(query4, "struct<name:struct<first:string,last:string>,pets:int>")
+    checkAnswer(query4, Row(2, null) :: Row(2, 4) :: Nil)
+  }
+
+  testSchemaPruning("select nested field in Expand") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+
+    val query1 = Expand(
+      Seq(
+        Seq($"name.first", $"name.last"),
+        Seq(Concat(Seq($"name.first", $"name.last")),
+          Concat(Seq($"name.last", $"name.first")))
+      ),
+      Seq('a.string, 'b.string),
+      sql("select * from contacts").logicalPlan
+    ).toDF()
+    checkScan(query1, "struct<name:struct<first:string,last:string>>")
+    checkAnswer(query1,
+      Row("Jane", "Doe") ::
+        Row("JaneDoe", "DoeJane") ::
+        Row("John", "Doe") ::
+        Row("JohnDoe", "DoeJohn") ::
+        Row("Jim", "Jones") ::
+        Row("JimJones", "JonesJim") ::
+        Row("Janet", "Jones") ::
+        Row("JanetJones", "JonesJanet") :: Nil)
+
+    val name = StructType.fromDDL("first string, middle string, last string")
+    val query2 = Expand(
+      Seq(Seq($"name", $"name.last")),
+      Seq('a.struct(name), 'b.string),
+      sql("select * from contacts").logicalPlan
+    ).toDF()
+    checkScan(query2, "struct<name:struct<first:string,middle:string,last:string>>")
+    checkAnswer(query2,
+      Row(Row("Jane", "X.", "Doe"), "Doe") ::
+        Row(Row("John", "Y.", "Doe"), "Doe") ::
+        Row(Row("Jim", null, "Jones"), "Jones") ::
+        Row(Row("Janet", null, "Jones"), "Jones") ::Nil)
+  }
+
+  testSchemaPruning("SPARK-32163: nested pruning should work even with cosmetic variations") {
+    withTempView("contact_alias") {
+      sql("select * from contacts")
+        .repartition(100, col("name.first"), col("name.last"))
+        .selectExpr("name").createOrReplaceTempView("contact_alias")
+
+      val query1 = sql("select name.first from contact_alias")
+      checkScan(query1, "struct<name:struct<first:string,last:string>>")
+      checkAnswer(query1, Row("Jane") :: Row("John") :: Row("Jim") :: Row("Janet") ::Nil)
+
+      sql("select * from contacts")
+        .select(explode(col("friends.first")), col("friends"))
+        .createOrReplaceTempView("contact_alias")
+
+      val query2 = sql("select friends.middle, col from contact_alias")
+      checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query2, Row(Array("Z."), "Susan") :: Nil)
+    }
+  }
+
   protected def testSchemaPruning(testName: String)(testThunk: => Unit): Unit = {
     test(s"Spark vectorized reader - without partition data column - $testName") {
       withSQLConf(vectorizedReaderEnabledKey -> "true") {
@@ -368,6 +547,7 @@ abstract class SchemaPruningSuite
 
       makeDataSourceFile(contacts, new File(path + "/contacts/p=1"))
       makeDataSourceFile(briefContacts, new File(path + "/contacts/p=2"))
+      makeDataSourceFile(departments, new File(path + "/departments"))
 
       // Providing user specified schema. Inferred schema from different data sources might
       // be different.
@@ -379,6 +559,11 @@ abstract class SchemaPruningSuite
         "`last`: STRING>,STRING>,`p` INT"
       spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
         .createOrReplaceTempView("contacts")
+
+      val departmentScahem = "`depId` INT,`depName` STRING,`contactId` INT, " +
+        "`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, `address`: STRING>>"
+      spark.read.format(dataSourceName).schema(departmentScahem).load(path + "/departments")
+        .createOrReplaceTempView("departments")
 
       testThunk
     }
@@ -390,6 +575,7 @@ abstract class SchemaPruningSuite
 
       makeDataSourceFile(contactsWithDataPartitionColumn, new File(path + "/contacts/p=1"))
       makeDataSourceFile(briefContactsWithDataPartitionColumn, new File(path + "/contacts/p=2"))
+      makeDataSourceFile(departments, new File(path + "/departments"))
 
       // Providing user specified schema. Inferred schema from different data sources might
       // be different.
@@ -401,6 +587,11 @@ abstract class SchemaPruningSuite
         "`last`: STRING>,STRING>,`p` INT"
       spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
         .createOrReplaceTempView("contacts")
+
+      val departmentScahem = "`depId` INT,`depName` STRING,`contactId` INT, " +
+        "`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, `address`: STRING>>"
+      spark.read.format(dataSourceName).schema(departmentScahem).load(path + "/departments")
+        .createOrReplaceTempView("departments")
 
       testThunk
     }

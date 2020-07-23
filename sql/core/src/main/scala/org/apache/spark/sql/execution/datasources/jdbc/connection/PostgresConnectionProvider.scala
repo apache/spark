@@ -23,14 +23,14 @@ import java.util.Properties
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 private[jdbc] class PostgresConnectionProvider(driver: Driver, options: JDBCOptions)
-    extends SecureConnectionProvider(driver, options) {
+  extends SecureConnectionProvider(driver, options) {
   override val appEntry: String = {
     val parseURL = driver.getClass.getMethod("parseURL", classOf[String], classOf[Properties])
     val properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]
     properties.getProperty("jaasApplicationName", "pgjdbc")
   }
 
-  override def setAuthenticationConfigIfNeeded(): Unit = {
+  override def setAuthenticationConfigIfNeeded(): Unit = SecurityConfigurationLock.synchronized {
     val (parent, configEntry) = getConfigWithAppEntry()
     if (configEntry == null || configEntry.isEmpty) {
       setAuthenticationConfig(parent)

@@ -29,21 +29,16 @@ Renames the existing view. If the new view name already exists in the source dat
 does not support moving the views across databases.
 
 #### Syntax
-{% highlight sql %}
+```sql
 ALTER VIEW view_identifier RENAME TO view_identifier
-{% endhighlight %}
+```
 
 #### Parameters
-<dl>
-  <dt><code><em>view_identifier</em></code></dt>
-  <dd>
-    Specifies a view name, which may be optionally qualified with a database name.<br><br>
-    <b> Syntax:</b>
-      <code>
-        [ database_name. ] view_name
-      </code>
-  </dd>
-</dl>
+* **view_identifier**
+
+    Specifies a view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] view_name`
 
 #### SET View Properties
 Set one or more properties of an existing view. The properties are the key value pairs. If the properties' keys exist, 
@@ -51,89 +46,70 @@ the values are replaced with the new values. If the properties' keys do not exis
 the properties.
 
 #### Syntax
-{% highlight sql %}
+```sql
 ALTER VIEW view_identifier SET TBLPROPERTIES ( property_key = property_val [ , ... ] )
-{% endhighlight %}
+```
 
 #### Parameters
-<dl>
-  <dt><code><em>view_identifier</em></code></dt>
-  <dd>
-    Specifies a view name, which may be optionally qualified with a database name.<br><br>
-    <b> Syntax:</b>
-      <code>
-        [ database_name. ] view_name
-      </code>
-  </dd>
-  <dt><code><em>property_key</em></code></dt>
-  <dd>
-    Specifies the property key. The key may consists of multiple parts separated by dot.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ key_part1 ] [ .key_part2 ] [ ... ]
-      </code>
-  </dd>
-</dl>
+* **view_identifier**
+
+    Specifies a view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] view_name`
+
+* **property_key**
+
+    Specifies the property key. The key may consists of multiple parts separated by dot.
+
+    **Syntax:** `[ key_part1 ] [ .key_part2 ] [ ... ]`
 
 #### UNSET View Properties
 Drop one or more properties of an existing view. If the specified keys do not exist, an exception is thrown. Use 
 `IF EXISTS` to avoid the exception. 
 
 #### Syntax
-{% highlight sql %}
+```sql
 ALTER VIEW view_identifier UNSET TBLPROPERTIES [ IF EXISTS ]  ( property_key [ , ... ] )
-{% endhighlight %}
+```
 
 #### Parameters
-<dl>
-  <dt><code><em>view_identifier</em></code></dt>
-  <dd>
-    Specifies a view name, which may be optionally qualified with a database name.<br><br>
-    <b> Syntax:</b>
-      <code>
-        [ database_name. ] view_name
-      </code>
-  </dd>
-  <dt><code><em>property_key</em></code></dt>
-  <dd>
-    Specifies the property key. The key may consists of multiple parts separated by dot.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ key_part1 ] [ .key_part2 ] [ ... ]
-      </code>
-  </dd>
-</dl>
+* **view_identifier**
+
+    Specifies a view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] view_name`
+
+* **property_key**
+
+    Specifies the property key. The key may consists of multiple parts separated by dot.
+
+    **Syntax:** `[ key_part1 ] [ .key_part2 ] [ ... ]`
 
 #### ALTER View AS SELECT
 `ALTER VIEW view_identifier AS SELECT` statement changes the definition of a view. The `SELECT` statement must be valid,
 and the `view_identifier` must exist.
 
 #### Syntax
-{% highlight sql %}
+```sql
 ALTER VIEW view_identifier AS select_statement
-{% endhighlight %}
+```
 
 Note that `ALTER VIEW` statement does not support `SET SERDE` or `SET SERDEPROPERTIES` properties.
 
 #### Parameters
-<dl>
-  <dt><code><em>view_identifier</em></code></dt>
-  <dd>
-    Specifies a view name, which may be optionally qualified with a database name.<br><br>
-    <b> Syntax:</b>
-      <code>
-        [ database_name. ] view_name
-      </code>
-  </dd>
-  <dt><code><em>select_statement</em></code></dt>
-  <dd>
-    Specifies the definition of the view. Check <a href="sql-ref-syntax-qry-select.html">select_statement</a> for details.
-  </dd>
-</dl>
+* **view_identifier**
+
+    Specifies a view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] view_name`
+
+* **select_statement**
+
+    Specifies the definition of the view. Check [select_statement](sql-ref-syntax-qry-select.html) for details.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Rename only changes the view name.
 -- The source and target databases of the view have to be the same.
 -- Use qualified or unqualified name for the source and target view.
@@ -218,11 +194,11 @@ DESC TABLE EXTENDED tempdb1.v2;
 |                   View Text|   select * from tempdb1.v1|       |
 |          View Original Text|   select * from tempdb1.v1|       |
 +----------------------------+---------------------------+-------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [describe-table](sql-ref-syntax-aux-describe-table.html)
- * [create-view](sql-ref-syntax-ddl-create-view.html)
- * [drop-view](sql-ref-syntax-ddl-drop-view.html)
- * [show-views](sql-ref-syntax-aux-show-views.html)
+* [describe-table](sql-ref-syntax-aux-describe-table.html)
+* [create-view](sql-ref-syntax-ddl-create-view.html)
+* [drop-view](sql-ref-syntax-ddl-drop-view.html)
+* [show-views](sql-ref-syntax-aux-show-views.html)

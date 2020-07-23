@@ -126,13 +126,15 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("default size avoids broadcast") {
-    // TODO: Improve this test when we have better statistics
-    sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
-      .toDF().createOrReplaceTempView("sizeTst")
-    spark.catalog.cacheTable("sizeTst")
-    assert(
-      spark.table("sizeTst").queryExecution.analyzed.stats.sizeInBytes >
-        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+    withTempView("sizeTst") {
+      // TODO: Improve this test when we have better statistics
+      sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+        .toDF().createOrReplaceTempView("sizeTst")
+      spark.catalog.cacheTable("sizeTst")
+      assert(
+        spark.table("sizeTst").queryExecution.analyzed.stats.sizeInBytes >
+          spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+    }
   }
 
   test("projection") {
@@ -187,18 +189,20 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-2729 regression: timestamp data type") {
-    val timestamps = (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time")
-    timestamps.createOrReplaceTempView("timestamps")
+    withTempView("timestamps") {
+      val timestamps = (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time")
+      timestamps.createOrReplaceTempView("timestamps")
 
-    checkAnswer(
-      sql("SELECT time FROM timestamps"),
-      timestamps.collect().toSeq)
+      checkAnswer(
+        sql("SELECT time FROM timestamps"),
+        timestamps.collect().toSeq)
 
-    spark.catalog.cacheTable("timestamps")
+      spark.catalog.cacheTable("timestamps")
 
-    checkAnswer(
-      sql("SELECT time FROM timestamps"),
-      timestamps.collect().toSeq)
+      checkAnswer(
+        sql("SELECT time FROM timestamps"),
+        timestamps.collect().toSeq)
+    }
   }
 
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
@@ -229,10 +233,12 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
 
     assert(df.schema.head.dataType === DecimalType(15, 10))
 
-    df.cache().createOrReplaceTempView("test_fixed_decimal")
-    checkAnswer(
-      sql("SELECT * FROM test_fixed_decimal"),
-      (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
+    withTempView("test_fixed_decimal") {
+      df.cache().createOrReplaceTempView("test_fixed_decimal")
+      checkAnswer(
+        sql("SELECT * FROM test_fixed_decimal"),
+        (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
+    }
   }
 
   test("test different data types") {

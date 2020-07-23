@@ -148,6 +148,11 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   test("Launcher client dependencies", k8sTestTag, MinikubeTag) {
+    val packages = if (Utils.isHadoop3) {
+      "org.apache.hadoop:hadoop-aws:3.2.0"
+    } else {
+      "com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6"
+    }
     val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
     try {
       setupMinioStorage()
@@ -164,8 +169,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
         .set("spark.kubernetes.file.upload.path", s"s3a://$BUCKET")
         .set("spark.files", s"$HOST_PATH/$fileName")
         .set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-        .set("spark.jars.packages", "com.amazonaws:aws-java-sdk:" +
-          "1.7.4,org.apache.hadoop:hadoop-aws:2.7.6")
+        .set("spark.jars.packages", packages)
         .set("spark.driver.extraJavaOptions", "-Divy.cache.dir=/tmp -Divy.home=/tmp")
       createS3Bucket(ACCESS_KEY, SECRET_KEY, minioUrlStr)
       runSparkRemoteCheckAndVerifyCompletion(appResource = examplesJar,

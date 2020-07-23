@@ -18,6 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol, HasWeightCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
@@ -79,8 +80,6 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("3.0.0")
   def setThroughOrigin(value: Boolean): this.type = set(throughOrigin, value)
 
-  setDefault(throughOrigin -> false)
-
   /** @group setParam */
   @Since("1.4.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -93,21 +92,11 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
-  setDefault(metricName -> "rmse")
+  setDefault(metricName -> "rmse", throughOrigin -> false)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    val schema = dataset.schema
-    SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
-    SchemaUtils.checkNumericType(schema, $(labelCol))
-
-    val predictionAndLabelsWithWeights = dataset
-      .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType),
-        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
-      .rdd
-      .map { case Row(prediction: Double, label: Double, weight: Double) =>
-        (prediction, label, weight) }
-    val metrics = new RegressionMetrics(predictionAndLabelsWithWeights, $(throughOrigin))
+    val metrics = getMetrics(dataset)
     $(metricName) match {
       case "rmse" => metrics.rootMeanSquaredError
       case "mse" => metrics.meanSquaredError
@@ -115,6 +104,29 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
       case "mae" => metrics.meanAbsoluteError
       case "var" => metrics.explainedVariance
     }
+  }
+
+  /**
+   * Get a RegressionMetrics, which can be used to get regression
+   * metrics such as rootMeanSquaredError, meanSquaredError, etc.
+   *
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @return RegressionMetrics
+   */
+  @Since("3.1.0")
+  def getMetrics(dataset: Dataset[_]): RegressionMetrics = {
+    val schema = dataset.schema
+    SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
+    SchemaUtils.checkNumericType(schema, $(labelCol))
+
+    val predictionAndLabelsWithWeights = dataset
+      .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType),
+        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0)
+        else checkNonNegativeWeight(col($(weightCol)).cast(DoubleType)))
+      .rdd
+      .map { case Row(prediction: Double, label: Double, weight: Double) =>
+        (prediction, label, weight) }
+    new RegressionMetrics(predictionAndLabelsWithWeights, $(throughOrigin))
   }
 
   @Since("1.4.0")

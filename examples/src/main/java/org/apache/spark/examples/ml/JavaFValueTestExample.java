@@ -66,7 +66,7 @@ public class JavaFValueTestExample {
     Row r = FValueTest.test(df, "features", "label").head();
     System.out.println("pValues: " + r.get(0).toString());
     System.out.println("degreesOfFreedom: " + r.getList(1).toString());
-    System.out.println("fvalue: " + r.get(2).toString());
+    System.out.println("fvalues: " + r.get(2).toString());
 
     // $example off$
 

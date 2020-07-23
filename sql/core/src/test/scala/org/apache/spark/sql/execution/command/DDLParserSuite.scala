@@ -40,8 +40,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class DDLParserSuite extends AnalysisTest with SharedSparkSession {
-  private lazy val parser = new SparkSqlParser(new SQLConf().copy(
-    SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT_ENABLED -> false))
+  private lazy val parser = new SparkSqlParser(new SQLConf)
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
     val e = intercept[ParseException] {
@@ -74,12 +73,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     parser.parsePlan(sql).collect {
       case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
     }.head
-  }
-
-  private def withCreateTableStatement(sql: String)(prediction: CreateTableStatement => Unit)
-    : Unit = {
-    val statement = parser.parsePlan(sql).asInstanceOf[CreateTableStatement]
-    prediction(statement)
   }
 
   test("alter database - property values must be set") {
@@ -487,17 +480,21 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("Test CTAS #3") {
     val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
-    val statement = parser.parsePlan(s3).asInstanceOf[CreateTableAsSelectStatement]
-    assert(statement.tableName(0) == "page_view")
-    assert(statement.asSelect == parser.parsePlan("SELECT * FROM src"))
-    assert(statement.partitioning.isEmpty)
-    assert(statement.bucketSpec.isEmpty)
-    assert(statement.properties.isEmpty)
-    assert(statement.provider.isEmpty)
-    assert(statement.options.isEmpty)
-    assert(statement.location.isEmpty)
-    assert(statement.comment.isEmpty)
-    assert(!statement.ifNotExists)
+    val (desc, exists) = extractTableDesc(s3)
+    assert(exists == false)
+    assert(desc.identifier.database == None)
+    assert(desc.identifier.table == "page_view")
+    assert(desc.tableType == CatalogTableType.MANAGED)
+    assert(desc.storage.locationUri == None)
+    assert(desc.schema.isEmpty)
+    assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewQueryColumnNames.isEmpty)
+    assert(desc.storage.properties == Map())
+    assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
+    assert(desc.storage.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    assert(desc.properties == Map())
   }
 
   test("Test CTAS #4") {
@@ -657,60 +654,67 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create table - basic") {
     val query = "CREATE TABLE my_table (id int, name string)"
-    withCreateTableStatement(query) { state =>
-      assert(state.tableName(0) == "my_table")
-      assert(state.tableSchema == new StructType().add("id", "int").add("name", "string"))
-      assert(state.partitioning.isEmpty)
-      assert(state.bucketSpec.isEmpty)
-      assert(state.properties.isEmpty)
-      assert(state.provider.isEmpty)
-      assert(state.options.isEmpty)
-      assert(state.location.isEmpty)
-      assert(state.comment.isEmpty)
-      assert(!state.ifNotExists)
-    }
+    val (desc, allowExisting) = extractTableDesc(query)
+    assert(!allowExisting)
+    assert(desc.identifier.database.isEmpty)
+    assert(desc.identifier.table == "my_table")
+    assert(desc.tableType == CatalogTableType.MANAGED)
+    assert(desc.schema == new StructType().add("id", "int").add("name", "string"))
+    assert(desc.partitionColumnNames.isEmpty)
+    assert(desc.bucketSpec.isEmpty)
+    assert(desc.viewText.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
+    assert(desc.storage.locationUri.isEmpty)
+    assert(desc.storage.inputFormat ==
+      Some("org.apache.hadoop.mapred.TextInputFormat"))
+    assert(desc.storage.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    assert(desc.storage.properties.isEmpty)
+    assert(desc.properties.isEmpty)
+    assert(desc.comment.isEmpty)
   }
 
   test("create table - with database name") {
     val query = "CREATE TABLE dbx.my_table (id int, name string)"
-    withCreateTableStatement(query) { state =>
-      assert(state.tableName(0) == "dbx")
-      assert(state.tableName(1) == "my_table")
-    }
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.identifier.database == Some("dbx"))
+    assert(desc.identifier.table == "my_table")
   }
 
   test("create table - temporary") {
     val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
     val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("CREATE TEMPORARY TABLE without a provider is not allowed."))
+    assert(e.message.contains("CREATE TEMPORARY TABLE is not supported yet"))
   }
 
   test("create table - external") {
     val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
-    val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("Operation not allowed: CREATE EXTERNAL TABLE ..."))
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.tableType == CatalogTableType.EXTERNAL)
+    assert(desc.storage.locationUri == Some(new URI("/path/to/nowhere")))
   }
 
   test("create table - if not exists") {
     val query = "CREATE TABLE IF NOT EXISTS tab1 (id int, name string)"
-    withCreateTableStatement(query) { state =>
-      assert(state.ifNotExists)
-    }
+    val (_, allowExisting) = extractTableDesc(query)
+    assert(allowExisting)
   }
 
   test("create table - comment") {
     val query = "CREATE TABLE my_table (id int, name string) COMMENT 'its hot as hell below'"
-    withCreateTableStatement(query) { state =>
-      assert(state.comment == Some("its hot as hell below"))
-    }
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.comment == Some("its hot as hell below"))
   }
 
   test("create table - partitioned columns") {
-    val query = "CREATE TABLE my_table (id int, name string) PARTITIONED BY (id)"
-    withCreateTableStatement(query) { state =>
-      val transform = IdentityTransform(FieldReference(Seq("id")))
-      assert(state.partitioning == Seq(transform))
-    }
+    val query = "CREATE TABLE my_table (id int, name string) PARTITIONED BY (month int)"
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.schema == new StructType()
+      .add("id", "int")
+      .add("name", "string")
+      .add("month", "int"))
+    assert(desc.partitionColumnNames == Seq("month"))
   }
 
   test("create table - clustered by") {
@@ -726,22 +730,20 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
        """
 
     val query1 = s"$baseQuery INTO $numBuckets BUCKETS"
-    withCreateTableStatement(query1) { state =>
-      assert(state.bucketSpec.isDefined)
-      val bucketSpec = state.bucketSpec.get
-      assert(bucketSpec.numBuckets == numBuckets)
-      assert(bucketSpec.bucketColumnNames.head.equals(bucketedColumn))
-      assert(bucketSpec.sortColumnNames.isEmpty)
-    }
+    val (desc1, _) = extractTableDesc(query1)
+    assert(desc1.bucketSpec.isDefined)
+    val bucketSpec1 = desc1.bucketSpec.get
+    assert(bucketSpec1.numBuckets == numBuckets)
+    assert(bucketSpec1.bucketColumnNames.head.equals(bucketedColumn))
+    assert(bucketSpec1.sortColumnNames.isEmpty)
 
     val query2 = s"$baseQuery SORTED BY($sortColumn) INTO $numBuckets BUCKETS"
-    withCreateTableStatement(query2) { state =>
-      assert(state.bucketSpec.isDefined)
-      val bucketSpec = state.bucketSpec.get
-      assert(bucketSpec.numBuckets == numBuckets)
-      assert(bucketSpec.bucketColumnNames.head.equals(bucketedColumn))
-      assert(bucketSpec.sortColumnNames.head.equals(sortColumn))
-    }
+    val (desc2, _) = extractTableDesc(query2)
+    assert(desc2.bucketSpec.isDefined)
+    val bucketSpec2 = desc2.bucketSpec.get
+    assert(bucketSpec2.numBuckets == numBuckets)
+    assert(bucketSpec2.bucketColumnNames.head.equals(bucketedColumn))
+    assert(bucketSpec2.sortColumnNames.head.equals(sortColumn))
   }
 
   test("create table(hive) - skewed by") {
@@ -811,9 +813,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create table - properties") {
     val query = "CREATE TABLE my_table (id int, name string) TBLPROPERTIES ('k1'='v1', 'k2'='v2')"
-    withCreateTableStatement(query) { state =>
-      assert(state.properties == Map("k1" -> "v1", "k2" -> "v2"))
-    }
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
   }
 
   test("create table(hive) - everything!") {

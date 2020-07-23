@@ -21,34 +21,31 @@ license: |
 
 ### Description
 
-The <code>LIMIT</code> clause is used to constrain the number of rows returned by
+The `LIMIT` clause is used to constrain the number of rows returned by
 the [SELECT](sql-ref-syntax-qry-select.html) statement. In general, this clause
 is used in conjunction with [ORDER BY](sql-ref-syntax-qry-select-orderby.html) to
 ensure that the results are deterministic.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 LIMIT { ALL | integer_expression }
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>ALL</em></code></dt>
-  <dd>
+* **ALL**
+
     If specified, the query returns all the rows. In other words, no limit is applied if this
     option is specified.
-  </dd>
-  <dt><code><em>integer_expression</em></code></dt>
-  <dd>
+
+* **integer_expression**
+
     Specifies a foldable expression that returns an integer.
-  </dd>
-</dl>
 
 ### Examples
 
-{% highlight sql %}
+```sql
 CREATE TABLE person (name STRING, age INT);
 INSERT INTO person VALUES
     ('Zen Hui', 25),
@@ -94,16 +91,16 @@ SELECT name, age FROM person ORDER BY name LIMIT length('SPARK');
 
 -- A non-foldable expression as an input to LIMIT is not allowed.
 SELECT name, age FROM person ORDER BY name LIMIT length(name);
-  org.apache.spark.sql.AnalysisException: The limit expression must evaluate to a constant value ...
-{% endhighlight %}
+org.apache.spark.sql.AnalysisException: The limit expression must evaluate to a constant value ...
+```
 
 ### Related Statements
 
- * [SELECT Main](sql-ref-syntax-qry-select.html)
- * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
- * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
- * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
- * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
- * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
- * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
- * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+* [SELECT Main](sql-ref-syntax-qry-select.html)
+* [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+* [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+* [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+* [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+* [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+* [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+* [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)

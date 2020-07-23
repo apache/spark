@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-The <code>CLUSTER BY</code> clause is used to first repartition the data based
+The `CLUSTER BY` clause is used to first repartition the data based
 on the input expressions and then sort the data within each partition. This is
 semantically equivalent to performing a
 [DISTRIBUTE BY](sql-ref-syntax-qry-select-distribute-by.html) followed by a
@@ -30,22 +30,19 @@ resultant rows are sorted within each partition and does not guarantee a total o
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 CLUSTER BY { expression [ , ... ] }
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>expression</em></code></dt>
-  <dd>
+* **expression**
+
     Specifies combination of one or more values, operators and SQL functions that results in a value.
-  </dd>
-</dl>
 
 ### Examples
 
-{% highlight sql %}
+```sql
 CREATE TABLE person (name STRING, age INT);
 INSERT INTO person VALUES
     ('Zen Hui', 25),
@@ -90,15 +87,15 @@ SELECT age, name FROM person CLUSTER BY age;
 | 16|Shone S|
 | 16| Jack N|
 +---+-------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [SELECT Main](sql-ref-syntax-qry-select.html)
- * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
- * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
- * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
- * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
- * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
- * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
- * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [SELECT Main](sql-ref-syntax-qry-select.html)
+* [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+* [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+* [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+* [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+* [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+* [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+* [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

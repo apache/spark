@@ -25,38 +25,30 @@ A LIKE predicate is used to search for a specific pattern.
 
 ### Syntax
 
-{% highlight sql %}
-[ NOT ] { LIKE search_pattern [ ESCAPE esc_char ] | RLIKE regex_pattern }
-{% endhighlight %}
+```sql
+[ NOT ] { LIKE search_pattern [ ESCAPE esc_char ] | [ RLIKE | REGEXP ] regex_pattern }
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>search_pattern</em></code></dt>
-  <dd>
-    Specifies a string pattern to be searched by the <code>LIKE</code> clause. It can contain special pattern-matching characters:
-    <ul>
-      <li><code>%</code></li> matches zero or more characters.
-      <li><code>_</code></li> matches exactly one character.
-    </ul>
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>esc_char</em></code></dt>
-  <dd>
-    Specifies the escape character. The default escape character is <code>\</code>.
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>regex_pattern</em></code></dt>
-  <dd>
-    Specifies a regular expression search pattern to be searched by the <code>RLIKE</code> clause.
-  </dd>
-</dl>
+* **search_pattern**
+
+    Specifies a string pattern to be searched by the `LIKE` clause. It can contain special pattern-matching characters:
+
+    * `%` matches zero or more characters.
+    * `_` matches exactly one character.
+
+* **esc_char**
+
+    Specifies the escape character. The default escape character is `\`.
+
+* **regex_pattern**
+
+    Specifies a regular expression search pattern to be searched by the `RLIKE` or `REGEXP` clause.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 CREATE TABLE person (id INT, name STRING, age INT);
 INSERT INTO person VALUES
     (100, 'John', 30),
@@ -90,12 +82,19 @@ SELECT * FROM person WHERE name NOT LIKE 'M_ry';
 |400|   Dan| 50|
 +---+------+---+
 
-SELECT * FROM person WHERE name RLIKE '[MD]';
+SELECT * FROM person WHERE name RLIKE 'M+';
 +---+----+----+
 | id|name| age|
 +---+----+----+
 |300|Mike|  80|
-|400| Dan|  50|
+|200|Mary|null|
++---+----+----+
+
+SELECT * FROM person WHERE name REGEXP 'M+';
++---+----+----+
+| id|name| age|
++---+----+----+
+|300|Mike|  80|
 |200|Mary|null|
 +---+----+----+
 
@@ -112,9 +111,9 @@ SELECT * FROM person WHERE name LIKE '%$_%' ESCAPE '$';
 +---+------+---+
 |500|Evan_W| 16|
 +---+------+---+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [SELECT](sql-ref-syntax-qry-select.html)
- * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+* [SELECT](sql-ref-syntax-qry-select.html)
+* [WHERE Clause](sql-ref-syntax-qry-select-where.html)

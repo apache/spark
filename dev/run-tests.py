@@ -101,28 +101,52 @@ def setup_test_environ(environ):
         os.environ[k] = v
 
 
-def determine_modules_to_test(changed_modules):
+def determine_modules_to_test(changed_modules, deduplicated=True):
     """
     Given a set of modules that have changed, compute the transitive closure of those modules'
     dependent modules in order to determine the set of modules that should be tested.
 
     Returns a topologically-sorted list of modules (ties are broken by sorting on module names).
+    If ``deduplicated`` is disabled, the modules are returned without tacking the deduplication
+    by dependencies into account.
 
     >>> [x.name for x in determine_modules_to_test([modules.root])]
     ['root']
     >>> [x.name for x in determine_modules_to_test([modules.build])]
     ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.core])]
+    ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.launcher])]
+    ['root']
     >>> [x.name for x in determine_modules_to_test([modules.graphx])]
     ['graphx', 'examples']
-    >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
-    >>> x # doctest: +NORMALIZE_WHITESPACE
+    >>> [x.name for x in determine_modules_to_test([modules.sql])]
+    ... # doctest: +NORMALIZE_WHITESPACE
     ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
      'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
+    >>> sorted([x.name for x in determine_modules_to_test(
+    ...     [modules.sparkr, modules.sql], deduplicated=False)])
+    ... # doctest: +NORMALIZE_WHITESPACE
+    ['avro', 'examples', 'hive', 'hive-thriftserver', 'mllib', 'pyspark-ml',
+     'pyspark-mllib', 'pyspark-sql', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+    >>> sorted([x.name for x in determine_modules_to_test(
+    ...     [modules.sql, modules.core], deduplicated=False)])
+    ... # doctest: +NORMALIZE_WHITESPACE
+    ['avro', 'catalyst', 'core', 'examples', 'graphx', 'hive', 'hive-thriftserver',
+     'mllib', 'mllib-local', 'pyspark-core', 'pyspark-ml', 'pyspark-mllib',
+     'pyspark-resource', 'pyspark-sql', 'pyspark-streaming', 'repl', 'root',
+     'sparkr', 'sql', 'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10',
+     'streaming-kinesis-asl']
     """
     modules_to_test = set()
     for module in changed_modules:
-        modules_to_test = modules_to_test.union(determine_modules_to_test(module.dependent_modules))
+        modules_to_test = modules_to_test.union(
+            determine_modules_to_test(module.dependent_modules, deduplicated))
     modules_to_test = modules_to_test.union(set(changed_modules))
+
+    if not deduplicated:
+        return modules_to_test
+
     # If we need to run all of the tests, then we should short-circuit and return 'root'
     if modules.root in modules_to_test:
         return [modules.root]
@@ -363,7 +387,8 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    build_spark_unidoc_sbt(extra_profiles)
+    if not os.environ.get("AMPLAB_JENKINS"):
+        build_spark_unidoc_sbt(extra_profiles)
 
 
 def build_apache_spark(build_tool, extra_profiles):
@@ -415,7 +440,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
     exec_sbt(profiles_and_goals)
 
 
-def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags):
+def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags):
     """Function to properly execute all tests passed in as a set from the
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
@@ -425,6 +450,8 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags):
     test_profiles = extra_profiles + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
 
+    if included_tags:
+        test_profiles += ['-Dtest.include.tags=' + ",".join(included_tags)]
     if excluded_tags:
         test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
 
@@ -532,6 +559,24 @@ def parse_opts():
         "-p", "--parallelism", type=int, default=8,
         help="The number of suites to test in parallel (default %(default)d)"
     )
+    parser.add_argument(
+        "-m", "--modules", type=str,
+        default=None,
+        help="A comma-separated list of modules to test "
+             "(default: %s)" % ",".join(sorted([m.name for m in modules.all_modules]))
+    )
+    parser.add_argument(
+        "-e", "--excluded-tags", type=str,
+        default=None,
+        help="A comma-separated list of tags to exclude in the tests, "
+             "e.g., org.apache.spark.tags.ExtendedHiveTest "
+    )
+    parser.add_argument(
+        "-i", "--included-tags", type=str,
+        default=None,
+        help="A comma-separated list of tags to include in the tests, "
+             "e.g., org.apache.spark.tags.ExtendedHiveTest "
+    )
 
     args, unknown = parser.parse_known_args()
     if unknown:
@@ -574,7 +619,7 @@ def main():
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
+        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3.2")
         hive_version = os.environ.get("AMPLAB_JENKINS_BUILD_HIVE_PROFILE", "hive2.3")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
@@ -582,27 +627,77 @@ def main():
         # /home/jenkins/anaconda2/envs/py36/bin
         os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
     else:
-        # else we're running locally and can use local settings
+        # else we're running locally or Github Actions.
         build_tool = "sbt"
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
         hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
-        test_env = "local"
+        if "GITHUB_ACTIONS" in os.environ:
+            test_env = "github_actions"
+        else:
+            test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
           "and Hive profile", hive_version, "under environment", test_env)
     extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version)
 
     changed_modules = None
+    test_modules = None
     changed_files = None
-    if test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
+    should_only_test_modules = opts.modules is not None
+    included_tags = []
+    excluded_tags = []
+    if should_only_test_modules:
+        str_test_modules = [m.strip() for m in opts.modules.split(",")]
+        test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
+
+        # If we're running the tests in Github Actions, attempt to detect and test
+        # only the affected modules.
+        if test_env == "github_actions":
+            # Set the log level of sbt as ERROR to make the output more readable.
+            if build_tool == "sbt":
+                extra_profiles.append("--error")
+            if os.environ["GITHUB_BASE_REF"] != "":
+                # Pull requests
+                changed_files = identify_changed_files_from_git_commits(
+                    os.environ["GITHUB_SHA"], target_branch=os.environ["GITHUB_BASE_REF"])
+            else:
+                # Build for each commit.
+                changed_files = identify_changed_files_from_git_commits(
+                    os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"])
+
+            modules_to_test = determine_modules_to_test(
+                determine_modules_for_files(changed_files), deduplicated=False)
+
+            if modules.root not in modules_to_test:
+                # If root module is not found, only test the intersected modules.
+                # If root module is found, just run the modules as specified initially.
+                test_modules = list(set(modules_to_test).intersection(test_modules))
+
+        changed_modules = test_modules
+        if len(changed_modules) == 0:
+            print("[info] There are no modules to test, exiting without testing.")
+            return
+
+    # If we're running the tests in AMPLab Jenkins, calculate the diff from the targeted branch, and
+    # detect modules to test.
+    elif test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
+        test_modules = determine_modules_to_test(changed_modules)
         excluded_tags = determine_tags_to_exclude(changed_modules)
 
+    # If there is no changed module found, tests all.
     if not changed_modules:
         changed_modules = [modules.root]
-        excluded_tags = []
+    if not test_modules:
+        test_modules = determine_modules_to_test(changed_modules)
+
+    if opts.excluded_tags:
+        excluded_tags.extend([t.strip() for t in opts.excluded_tags.split(",")])
+    if opts.included_tags:
+        included_tags.extend([t.strip() for t in opts.included_tags.split(",")])
+
     print("[info] Found the following changed modules:",
           ", ".join(x.name for x in changed_modules))
 
@@ -615,40 +710,39 @@ def main():
         test_environ.update(m.environ)
     setup_test_environ(test_environ)
 
-    test_modules = determine_modules_to_test(changed_modules)
-
-    # license checks
-    run_apache_rat_checks()
-
-    # style checks
-    if not changed_files or any(f.endswith(".scala")
-                                or f.endswith("scalastyle-config.xml")
-                                for f in changed_files):
-        run_scala_style_checks(extra_profiles)
     should_run_java_style_checks = False
-    if not changed_files or any(f.endswith(".java")
-                                or f.endswith("checkstyle.xml")
-                                or f.endswith("checkstyle-suppressions.xml")
-                                for f in changed_files):
-        # Run SBT Checkstyle after the build to prevent a side-effect to the build.
-        should_run_java_style_checks = True
-    if not changed_files or any(f.endswith("lint-python")
-                                or f.endswith("tox.ini")
-                                or f.endswith(".py")
-                                for f in changed_files):
-        run_python_style_checks()
-    if not changed_files or any(f.endswith(".R")
-                                or f.endswith("lint-r")
-                                or f.endswith(".lintr")
-                                for f in changed_files):
-        run_sparkr_style_checks()
+    if not should_only_test_modules:
+        # license checks
+        run_apache_rat_checks()
+
+        # style checks
+        if not changed_files or any(f.endswith(".scala")
+                                    or f.endswith("scalastyle-config.xml")
+                                    for f in changed_files):
+            run_scala_style_checks(extra_profiles)
+        if not changed_files or any(f.endswith(".java")
+                                    or f.endswith("checkstyle.xml")
+                                    or f.endswith("checkstyle-suppressions.xml")
+                                    for f in changed_files):
+            # Run SBT Checkstyle after the build to prevent a side-effect to the build.
+            should_run_java_style_checks = True
+        if not changed_files or any(f.endswith("lint-python")
+                                    or f.endswith("tox.ini")
+                                    or f.endswith(".py")
+                                    for f in changed_files):
+            run_python_style_checks()
+        if not changed_files or any(f.endswith(".R")
+                                    or f.endswith("lint-r")
+                                    or f.endswith(".lintr")
+                                    for f in changed_files):
+            run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
     # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
 
-    if any(m.should_run_build_tests for m in test_modules):
+    if any(m.should_run_build_tests for m in test_modules) and test_env != "amplab_jenkins":
         run_build_tests()
 
     # spark build
@@ -663,7 +757,7 @@ def main():
         build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
 
     # run the test suites
-    run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags)
+    run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:

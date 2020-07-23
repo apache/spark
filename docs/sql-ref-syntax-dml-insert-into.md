@@ -25,57 +25,43 @@ The `INSERT INTO` statement inserts new rows into a table. The inserted rows can
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 INSERT INTO [ TABLE ] table_identifier [ partition_spec ]
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
 
-<dl>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
+    Specifies a table name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions.<br><br>
-    <b>Syntax:</b>
-      <code>
-        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
-      </code>
-  </dd>
-</dl>
+    for partitions.
 
-<dl>
-  <dt><code><em>VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]</em></code></dt>
-  <dd>Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to separate each value in the clause. More than one set of values can be specified to insert multiple rows.</dd>
-</dl>
+    **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
-<dl>
-  <dt><code><em>query</em></code></dt>
-  <dd>A query that produces the rows to be inserted. It can be in one of following formats:
-    <ul>
-      <li>a <code>SELECT</code> statement</li>
-      <li>a <code>TABLE</code> statement</li>
-      <li>a <code>FROM</code> statement</li>
-    </ul>
-   </dd>
-</dl>
+* **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
+
+    Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted.
+    A comma must be used to separate each value in the clause. More than one set of values can be specified to insert multiple rows.
+
+* **query**
+
+    A query that produces the rows to be inserted. It can be in one of following formats:
+    * a `SELECT` statement
+    * a `TABLE` statement
+    * a `FROM` statement
 
 ### Examples
 
 #### Single Row Insert Using a VALUES Clause
 
-{% highlight sql %}
+```sql
 CREATE TABLE students (name VARCHAR(64), address VARCHAR(64), student_id INT)
     USING PARQUET PARTITIONED BY (student_id);
 
@@ -88,11 +74,11 @@ SELECT * FROM students;
 +---------+---------------------+----------+
 |Amy Smith|123 Park Ave,San Jose|    111111|
 +---------+---------------------+----------+
-{% endhighlight %}
+```
 
 #### Multi-Row Insert Using a VALUES Clause
 
-{% highlight sql %}
+```sql
 INSERT INTO students VALUES
     ('Bob Brown', '456 Taylor St, Cupertino', 222222),
     ('Cathy Johnson', '789 Race Ave, Palo Alto', 333333);
@@ -107,11 +93,11 @@ SELECT * FROM students;
 +-------------+------------------------+----------+
 |Cathy Johnson| 789 Race Ave, Palo Alto|    333333|
 +--------------+-----------------------+----------+
-{% endhighlight %}
+```
 
 #### Insert Using a SELECT Statement
 
-{% highlight sql %}
+```sql
 -- Assuming the persons table has already been created and populated.
 SELECT * FROM persons;
 +-------------+-------------------------+---------+
@@ -137,11 +123,11 @@ SELECT * FROM students;
 +-------------+-------------------------+----------+
 |Dora Williams|134 Forest Ave, Melo Park|    444444|
 +-------------+-------------------------+----------+
-{% endhighlight %}
+```
 
 #### Insert Using a TABLE Statement
 
-{% highlight sql %}
+```sql
 -- Assuming the visiting_students table has already been created and populated.
 SELECT * FROM visiting_students;
 +-------------+---------------------+----------+
@@ -170,11 +156,11 @@ SELECT * FROM students;
 +-------------+-------------------------+----------+
 |Gordon Martin|     779 Lake Ave, Oxford|    888888|
 +-------------+-------------------------+----------+
-{% endhighlight %}
+```
 
 #### Insert Using a FROM Statement
 
-{% highlight sql %}
+```sql
 -- Assuming the applicants table has already been created and populated.
 SELECT * FROM applicants;
 +-----------+--------------------------+----------+---------+
@@ -210,10 +196,10 @@ SELECT * FROM students;
 +-------------+-------------------------+----------+
 |   Jason Wang|    908 Bird St, Saratoga|    121212|
 +-------------+-------------------------+----------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
- * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
- * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
+* [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
+* [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
+* [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)

@@ -27,37 +27,28 @@ partition spec.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 SHOW PARTITIONS table_identifier [ partition_spec ]
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
-<dl>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
+* **table_identifier**
+
+    Specifies a table name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions. When specified, the partitions that match the partition spec are returned.<br><br>
-    <b>Syntax:</b>
-      <code>
-        PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )
-      </code>
-  </dd>
-</dl>
+    for partitions. When specified, the partitions that match the partition specification are returned.
+
+    **Syntax:** `PARTITION ( partition_col_name = partition_col_val [ , ... ] )`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- create a partitioned table and insert a few rows.
 USE salesdb;
 CREATE TABLE customer(id INT, name STRING) PARTITIONED BY (state STRING, city STRING);
@@ -109,11 +100,11 @@ SHOW PARTITIONS customer PARTITION (city =  'San Jose');
 +----------------------+
 |state=CA/city=San Jose|
 +----------------------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
- * [INSERT STATEMENT](sql-ref-syntax-dml-insert.html)
- * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
- * [SHOW TABLE](sql-ref-syntax-aux-show-table.html)
+* [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+* [INSERT STATEMENT](sql-ref-syntax-dml-insert.html)
+* [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+* [SHOW TABLE](sql-ref-syntax-aux-show-table.html)

@@ -288,7 +288,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       """.stripMargin
     val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
     val dataType = SchemaConverters.toSqlType(avroSchema).dataType
-    val deserializer = new AvroDeserializer(avroSchema, dataType, rebaseDateTime = false)
+    val deserializer = new AvroDeserializer(avroSchema, dataType)
 
     def checkDeserialization(data: GenericData.Record, expected: Any): Unit = {
       assert(checkResult(

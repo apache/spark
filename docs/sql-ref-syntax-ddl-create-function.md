@@ -33,68 +33,59 @@ aggregate functions using Scala, Python and Java APIs. Please refer to
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     function_name AS class_name [ resource_locations ]
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>OR REPLACE</em></code></dt>
-  <dd>
+* **OR REPLACE**
+
     If specified, the resources for the function are reloaded. This is mainly useful
     to pick up any changes made to the implementation of the function. This
-    parameter is mutually exclusive to <code>IF NOT EXISTS</code> and can not
+    parameter is mutually exclusive to `IF NOT EXISTS` and can not
     be specified together.
-  </dd>
-  <dt><code><em>TEMPORARY</em></code></dt>
-  <dd>
-    Indicates the scope of function being created. When <code>TEMPORARY</code> is specified, the
+
+* **TEMPORARY**
+
+    Indicates the scope of function being created. When `TEMPORARY` is specified, the
     created function is valid and visible in the current session. No persistent
     entry is made in the catalog for these kind of functions.
-  </dd>
-  <dt><code><em>IF NOT EXISTS</em></code></dt>
-  <dd>
+
+* **IF NOT EXISTS**
+
     If specified, creates the function only when it does not exist. The creation
     of function succeeds (no error is thrown) if the specified function already
-    exists in the system. This parameter is mutually exclusive to <code> OR REPLACE</code> 
+    exists in the system. This parameter is mutually exclusive to `OR REPLACE`
     and can not be specified together.
-  </dd>
-  <dt><code><em>function_name</em></code></dt>
-  <dd>
-    Specifies a name of function to be created. The function name may be
-    optionally qualified with a database name. <br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] function_name
-      </code>
-  </dd>
-  <dt><code><em>class_name</em></code></dt>
-  <dd>
+
+* **function_name**
+
+    Specifies a name of function to be created. The function name may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] function_name`
+
+* **class_name**
+
     Specifies the name of the class that provides the implementation for function to be created.
     The implementing class should extend one of the base classes as follows:
-    <ul>
-      <li>Should extend <code>UDF</code> or <code>UDAF</code> in <code>org.apache.hadoop.hive.ql.exec</code> package.</li>
-      <li>Should extend <code>AbstractGenericUDAFResolver</code>, <code>GenericUDF</code>, or
-          <code>GenericUDTF</code> in <code>org.apache.hadoop.hive.ql.udf.generic</code> package.</li>
-      <li>Should extend <code>UserDefinedAggregateFunction</code> in <code>org.apache.spark.sql.expressions</code> package.</li>
-    </ul>
-  </dd>
-  <dt><code><em>resource_locations</em></code></dt>
-  <dd>
+
+    * Should extend `UDF` or `UDAF` in `org.apache.hadoop.hive.ql.exec` package.
+    * Should extend `AbstractGenericUDAFResolver`, `GenericUDF`, or
+      `GenericUDTF` in `org.apache.hadoop.hive.ql.udf.generic` package.
+    * Should extend `UserDefinedAggregateFunction` in `org.apache.spark.sql.expressions` package.
+
+* **resource_locations**
+
     Specifies the list of resources that contain the implementation of the function
-    along with its dependencies. <br><br>
-    <b>Syntax:</b>
-      <code>
-        USING { { (JAR | FILE ) resource_uri } , ... }
-      </code>
-  </dd>
-</dl>
+    along with its dependencies.
+
+    **Syntax:** `USING { { (JAR | FILE ) resource_uri } , ... }`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- 1. Create a simple UDF `SimpleUdf` that increments the supplied integral value by 10.
 --    import org.apache.hadoop.hive.ql.exec.UDF;
 --    public class SimpleUdf extends UDF {
@@ -166,10 +157,10 @@ SELECT simple_udf(c1) AS function_return_value FROM t1;
 |                   21|
 |                   22|
 +---------------------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
- * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
- * [DROP FUNCTION](sql-ref-syntax-ddl-drop-function.html)
+* [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
+* [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+* [DROP FUNCTION](sql-ref-syntax-ddl-drop-function.html)

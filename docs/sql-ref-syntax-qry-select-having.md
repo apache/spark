@@ -21,39 +21,35 @@ license: |
 
 ### Description
 
-The <code>HAVING</code> clause is used to filter the results produced by
-<code>GROUP BY</code> based on the specified condition. It is often used
+The `HAVING` clause is used to filter the results produced by
+`GROUP BY` based on the specified condition. It is often used
 in conjunction with a [GROUP BY](sql-ref-syntax-qry-select-groupby.html)
 clause.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 HAVING boolean_expression
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>boolean_expression</em></code></dt>
-  <dd>
-    Specifies any expression that evaluates to a result type <code>boolean</code>. Two or
-    more expressions may be combined together using the logical
-    operators ( <code>AND</code>, <code>OR</code> ).<br><br>
+* **boolean_expression**
 
-    <b>Note</b><br>
-    The expressions specified in the <code>HAVING</code> clause can only refer to:
-     <ol>
-      <li>Constants</li>
-      <li>Expressions that appear in GROUP BY</li>
-      <li>Aggregate functions</li>
-    </ol>
-  </dd>
-</dl>
+    Specifies any expression that evaluates to a result type `boolean`. Two or
+    more expressions may be combined together using the logical
+    operators ( `AND`, `OR` ).
+
+    **Note**
+
+    The expressions specified in the `HAVING` clause can only refer to:
+    1. Constants
+    2. Expressions that appear in GROUP BY
+    3. Aggregate functions
 
 ### Examples
 
-{% highlight sql %}
+```sql
 CREATE TABLE dealer (id INT, city STRING, car_model STRING, quantity INT);
 INSERT INTO dealer VALUES
     (100, 'Fremont', 'Honda Civic', 10),
@@ -117,15 +113,15 @@ SELECT sum(quantity) AS sum FROM dealer HAVING sum(quantity) > 10;
 +---+
 | 78|
 +---+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [SELECT Main](sql-ref-syntax-qry-select.html)
- * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
- * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
- * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
- * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
- * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
- * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
- * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [SELECT Main](sql-ref-syntax-qry-select.html)
+* [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+* [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+* [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+* [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+* [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+* [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+* [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

@@ -25,17 +25,17 @@ Reset any runtime configurations specific to the current session which were set 
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 RESET
-{% endhighlight %}
+```
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Reset any runtime configurations specific to the current session which were set via the SET command to their default values.
 RESET;
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
+* [SET](sql-ref-syntax-aux-conf-mgmt-set.html)

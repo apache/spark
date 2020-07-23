@@ -377,23 +377,27 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   private def encodeDecodeTest(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
-      val encoder = RowEncoder(schema).resolveAndBind()
-      val inputGenerator = RandomDataGenerator.forType(schema, nullable = false).get
+      Seq(false, true).foreach { java8Api =>
+        withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+          val encoder = RowEncoder(schema).resolveAndBind()
+          val inputGenerator = RandomDataGenerator.forType(schema, nullable = false).get
 
-      var input: Row = null
-      try {
-        for (_ <- 1 to 5) {
-          input = inputGenerator.apply().asInstanceOf[Row]
-          val convertedBack = roundTrip(encoder, input)
-          assert(input == convertedBack)
+          var input: Row = null
+          try {
+            for (_ <- 1 to 5) {
+              input = inputGenerator.apply().asInstanceOf[Row]
+              val convertedBack = roundTrip(encoder, input)
+              assert(input == convertedBack)
+            }
+          } catch {
+            case e: Exception =>
+              fail(
+                s"""
+                   |schema: ${schema.simpleString}
+                   |input: ${input}
+                 """.stripMargin, e)
+          }
         }
-      } catch {
-        case e: Exception =>
-          fail(
-            s"""
-               |schema: ${schema.simpleString}
-               |input: ${input}
-             """.stripMargin, e)
       }
     }
   }

@@ -21,56 +21,48 @@ license: |
 
 ### Description
 
-The <code>ORDER BY</code> clause is used to return the result rows in a sorted manner
+The `ORDER BY` clause is used to return the result rows in a sorted manner
 in the user specified order. Unlike the [SORT BY](sql-ref-syntax-qry-select-sortby.html)
 clause, this clause guarantees a total order in the output.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ... ] }
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>ORDER BY</em></code></dt>
-  <dd>
-    Specifies a comma-separated list of expressions along with optional parameters <code>sort_direction</code>
-    and <code>nulls_sort_order</code> which are used to sort the rows.
-  </dd>
-  <dt><code><em>sort_direction</em></code></dt>
-  <dd>
+* **ORDER BY**
+
+    Specifies a comma-separated list of expressions along with optional parameters `sort_direction`
+    and `nulls_sort_order` which are used to sort the rows.
+
+* **sort_direction**
+
     Optionally specifies whether to sort the rows in ascending or descending
-    order. The valid values for the sort direction are <code>ASC</code> for ascending
-    and <code>DESC</code> for descending. If sort direction is not explicitly specified, then by default
-    rows are sorted ascending. <br><br>
-    <b>Syntax:</b>
-    <code>
-       [ ASC | DESC ]
-    </code>
-  </dd>
-  <dt><code><em>nulls_sort_order</em></code></dt>
-  <dd>
+    order. The valid values for the sort direction are `ASC` for ascending
+    and `DESC` for descending. If sort direction is not explicitly specified, then by default
+    rows are sorted ascending.
+
+    **Syntax:** [ ASC `|` DESC ]
+
+* **nulls_sort_order**
+
     Optionally specifies whether NULL values are returned before/after non-NULL values. If
-    <code>null_sort_order</code> is not specified, then NULLs sort first if sort order is
-    <code>ASC</code> and NULLS sort last if sort order is <code>DESC</code>.<br><br>
-    <ol>
-      <li> If <code>NULLS FIRST</code> is specified, then NULL values are returned first
-           regardless of the sort order.</li>
-      <li>If <code>NULLS LAST</code> is specified, then NULL values are returned last regardless of
-           the sort order. </li>
-    </ol><br>
-    <b>Syntax:</b>
-    <code>
-       [ NULLS { FIRST | LAST } ]
-    </code>
-  </dd>
-</dl>
+    `null_sort_order` is not specified, then NULLs sort first if sort order is
+    `ASC` and NULLS sort last if sort order is `DESC`.
+
+    1. If `NULLS FIRST` is specified, then NULL values are returned first
+       regardless of the sort order.
+    2. If `NULLS LAST` is specified, then NULL values are returned last regardless of
+       the sort order.
+
+    **Syntax:** `[ NULLS { FIRST | LAST } ]`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 CREATE TABLE person (id INT, name STRING, age INT);
 INSERT INTO person VALUES
     (100, 'John', 30),
@@ -139,15 +131,15 @@ SELECT * FROM person ORDER BY name ASC, age DESC;
 |200| Mary|null|
 |300| Mike|  80|
 +---+-----+----+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [SELECT Main](sql-ref-syntax-qry-select.html)
- * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
- * [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
- * [HAVING Clause](sql-ref-syntax-qry-select-having.html)
- * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
- * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
- * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
- * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [SELECT Main](sql-ref-syntax-qry-select.html)
+* [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+* [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+* [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+* [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+* [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+* [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+* [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)

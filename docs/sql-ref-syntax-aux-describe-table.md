@@ -28,53 +28,43 @@ to return the metadata pertaining to a partition or column respectively.
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 { DESC | DESCRIBE } [ TABLE ] [ format ] table_identifier [ partition_spec ] [ col_name ]
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>format</em></code></dt>
-  <dd>
+* **format**
+
     Specifies the optional format of describe output. If `EXTENDED` is specified
     then additional metadata information (such as parent database, owner, and access time)
     is returned. 
-  </dd>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies a table name, which may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-  <dt><code><em>partition_spec</em></code></dt>
-  <dd>
+
+* **table_identifier**
+
+    Specifies a table name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions. When specified, additional partition metadata is returned.<br><br>
-    <b>Syntax:</b>
-      <code>
-        PARTITION ( partition_col_name  = partition_col_val [ , ... ] )
-      </code>
-  </dd>  
-  <dt><code><em>col_name</em></code></dt>
-  <dd>
+    for partitions. When specified, additional partition metadata is returned.
+
+    **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
+
+* **col_name**
+
     An optional parameter that specifies the column name that needs to be described.
     The supplied column name may be optionally qualified. Parameters `partition_spec`
     and `col_name` are  mutually exclusive and can not be specified together. Currently
-    nested columns are not allowed to be specified.<br><br>
+    nested columns are not allowed to be specified.
     
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] [ table_name. ] column_name
-      </code>
-   </dd>
-</dl>
+    **Syntax:** `[ database_name. ] [ table_name. ] column_name`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Creates a table `customer`. Assumes current database is `salesdb`.
 CREATE TABLE customer(
         cust_id INT,
@@ -183,10 +173,10 @@ DESCRIBE customer salesdb.customer.name;
 |data_type|    string|
 |  comment|Short name|
 +---------+----------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
- * [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)
- * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+* [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+* [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)
+* [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)

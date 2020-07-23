@@ -31,6 +31,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.UnsafeAlignedOffset
 
 
@@ -204,11 +205,13 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("group by function") {
-    Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("data")
+    withTempView("data") {
+      Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("data")
 
-    checkAnswer(
-      sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
-      Row(1, Array(2)) :: Nil)
+      checkAnswer(
+        sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
+        Row(1, Array(2)) :: Nil)
+    }
   }
 
   test("empty table") {
@@ -778,7 +781,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     assert(math.abs(corr6 + 1.0) < 1e-12)
 
     // Test for udaf_corr in HiveCompatibilitySuite
-    // udaf_corr has been blacklisted due to numerical errors
+    // udaf_corr has been excluded due to numerical errors
     // We test it here:
     // SELECT corr(b, c) FROM covar_tab WHERE a < 1; => NULL
     // SELECT corr(b, c) FROM covar_tab WHERE a < 3; => NULL
@@ -800,43 +803,45 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       (5, 8, 17),
       (6, 2, 11)).toDF("a", "b", "c")
 
-    covar_tab.createOrReplaceTempView("covar_tab")
+    withTempView("covar_tab") {
+      covar_tab.createOrReplaceTempView("covar_tab")
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT corr(b, c) FROM covar_tab WHERE a < 1
-        """.stripMargin),
-      Row(null) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT corr(b, c) FROM covar_tab WHERE a < 1
+          """.stripMargin),
+        Row(null) :: Nil)
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT corr(b, c) FROM covar_tab WHERE a < 3
-        """.stripMargin),
-      Row(null) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT corr(b, c) FROM covar_tab WHERE a < 3
+          """.stripMargin),
+        Row(null) :: Nil)
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT corr(b, c) FROM covar_tab WHERE a = 3
-        """.stripMargin),
-      Row(Double.NaN) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT corr(b, c) FROM covar_tab WHERE a = 3
+          """.stripMargin),
+        Row(Double.NaN) :: Nil)
 
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
-        """.stripMargin),
-      Row(1, null) ::
-      Row(2, null) ::
-      Row(3, Double.NaN) ::
-      Row(4, Double.NaN) ::
-      Row(5, Double.NaN) ::
-      Row(6, Double.NaN) :: Nil)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
+          """.stripMargin),
+        Row(1, null) ::
+        Row(2, null) ::
+        Row(3, Double.NaN) ::
+        Row(4, Double.NaN) ::
+        Row(5, Double.NaN) ::
+        Row(6, Double.NaN) :: Nil)
 
-    val corr7 = spark.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
-    assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
+      val corr7 = spark.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
+      assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
+    }
   }
 
   test("covariance: covar_pop and covar_samp") {
@@ -1050,6 +1055,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 class HashAggregationQuerySuite extends AggregationQuerySuite
 
 
+@SlowHiveTest
 class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {

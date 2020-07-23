@@ -88,12 +88,11 @@ case class AvroPartitionReaderFactory(
       reader.sync(partitionedFile.start)
       val stop = partitionedFile.start + partitionedFile.length
 
-      val rebaseDateTime = DataSourceUtils.needRebaseDateTime(
-        reader.asInstanceOf[DataFileReader[_]].getMetaString).getOrElse {
-        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ)
-      }
+      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+        reader.asInstanceOf[DataFileReader[_]].getMetaString,
+        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
       val deserializer = new AvroDeserializer(
-        userProvidedSchema.getOrElse(reader.getSchema), readDataSchema, rebaseDateTime)
+        userProvidedSchema.getOrElse(reader.getSchema), readDataSchema, datetimeRebaseMode)
 
       val fileReader = new PartitionReader[InternalRow] {
         private[this] var completed = false

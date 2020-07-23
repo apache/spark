@@ -20,8 +20,6 @@ An example for FValue testing.
 Run with:
   bin/spark-submit examples/src/main/python/ml/fvalue_test_example.py
 """
-from __future__ import print_function
-
 from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.linalg import Vectors
@@ -46,7 +44,7 @@ if __name__ == "__main__":
     ftest = FValueTest.test(df, "features", "label").head()
     print("pValues: " + str(ftest.pValues))
     print("degreesOfFreedom: " + str(ftest.degreesOfFreedom))
-    print("fvalue: " + str(ftest.fValues))
+    print("fvalues: " + str(ftest.fValues))
     # $example off$
 
     spark.stop()

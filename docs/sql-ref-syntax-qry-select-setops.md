@@ -35,13 +35,13 @@ Note that input relations must have the same number of columns and compatible da
 
 #### Syntax
 
-{% highlight sql %}
+```sql
 [ ( ] relation [ ) ] EXCEPT | MINUS [ ALL | DISTINCT ] [ ( ] relation [ ) ]
-{% endhighlight %}
+```
 
 #### Examples
 
-{% highlight sql %}
+```sql
 -- Use number1 and number2 tables to demonstrate set operators in this page.
 SELECT * FROM number1;
 +---+
@@ -98,7 +98,7 @@ SELECT c FROM number1 MINUS ALL (SELECT c FROM number2);
 |  3|
 |  4|
 +---+
-{% endhighlight %}
+```
 
 ### INTERSECT
 
@@ -106,13 +106,13 @@ SELECT c FROM number1 MINUS ALL (SELECT c FROM number2);
 
 #### Syntax
 
-{% highlight sql %}
+```sql
 [ ( ] relation [ ) ] INTERSECT [ ALL | DISTINCT ] [ ( ] relation [ ) ]
-{% endhighlight %}
+```
 
 #### Examples
 
-{% highlight sql %}
+```sql
 (SELECT c FROM number1) INTERSECT (SELECT c FROM number2);
 +---+
 |  c|
@@ -137,7 +137,7 @@ SELECT c FROM number1 MINUS ALL (SELECT c FROM number2);
 |  2|
 |  2|
 +---+
-{% endhighlight %}
+```
 
 ### UNION
 
@@ -145,13 +145,13 @@ SELECT c FROM number1 MINUS ALL (SELECT c FROM number2);
 
 #### Syntax
 
-{% highlight sql %}
+```sql
 [ ( ] relation [ ) ] UNION [ ALL | DISTINCT ] [ ( ] relation [ ) ]
-{% endhighlight %}
+```
 
 ### Examples
 
-{% highlight sql %}
+```sql
 (SELECT c FROM number1) UNION (SELECT c FROM number2);
 +---+
 |  c|
@@ -189,8 +189,8 @@ SELECT c FROM number1 UNION ALL (SELECT c FROM number2);
 |  2|
 |  2|
 +---+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [SELECT Statement](sql-ref-syntax-qry-select.html)
+* [SELECT Statement](sql-ref-syntax-qry-select.html)

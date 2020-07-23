@@ -146,45 +146,15 @@ class VarianceThresholdSelectorModel private[ml](
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    val newSize = selectedFeatures.length
-    val func = { vector: Vector =>
-      vector match {
-        case SparseVector(_, indices, values) =>
-          val (newIndices, newValues) = compressSparse(indices, values)
-          Vectors.sparse(newSize, newIndices, newValues)
-        case DenseVector(values) =>
-          Vectors.dense(selectedFeatures.map(values))
-        case other =>
-          throw new UnsupportedOperationException(
-            s"Only sparse and dense vectors are supported but got ${other.getClass}.")
-      }
-    }
-
-    val transformer = udf(func)
-    dataset.withColumn($(outputCol), transformer(col($(featuresCol))),
-      outputSchema($(outputCol)).metadata)
+    SelectorModel.transform(dataset, selectedFeatures, outputSchema, $(outputCol), $(featuresCol))
   }
 
   @Since("3.1.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    val newField = prepOutputField(schema)
+    val newField =
+      SelectorModel.prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol), true)
     SchemaUtils.appendColumn(schema, newField)
-  }
-
-  /**
-   * Prepare the output column field, including per-feature metadata.
-   */
-  private def prepOutputField(schema: StructType): StructField = {
-    val selector = selectedFeatures.toSet
-    val origAttrGroup = AttributeGroup.fromStructField(schema($(featuresCol)))
-    val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
-      origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
-    } else {
-      Array.fill[Attribute](selector.size)(NominalAttribute.defaultAttr)
-    }
-    val newAttributeGroup = new AttributeGroup($(outputCol), featureAttributes)
-    newAttributeGroup.toStructField()
   }
 
   @Since("3.1.0")
@@ -201,33 +171,6 @@ class VarianceThresholdSelectorModel private[ml](
   @Since("3.1.0")
   override def toString: String = {
     s"VarianceThresholdSelectorModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
-  }
-
-  private[spark] def compressSparse(
-      indices: Array[Int],
-      values: Array[Double]): (Array[Int], Array[Double]) = {
-    val newValues = new ArrayBuilder.ofDouble
-    val newIndices = new ArrayBuilder.ofInt
-    var i = 0
-    var j = 0
-    while (i < indices.length && j < selectedFeatures.length) {
-      val indicesIdx = indices(i)
-      val filterIndicesIdx = selectedFeatures(j)
-      if (indicesIdx == filterIndicesIdx) {
-        newIndices += j
-        newValues += values(i)
-        j += 1
-        i += 1
-      } else {
-        if (indicesIdx > filterIndicesIdx) {
-          j += 1
-        } else {
-          i += 1
-        }
-      }
-    }
-    // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
-    (newIndices.result(), newValues.result())
   }
 }
 

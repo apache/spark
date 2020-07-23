@@ -1,8 +1,8 @@
 pyspark.sql module
 ==================
 
-Module Context
---------------
+Module Contents
+---------------
 
 .. automodule:: pyspark.sql
     :members:

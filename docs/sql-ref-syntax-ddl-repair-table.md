@@ -25,26 +25,21 @@ license: |
 
 ### Syntax
 
-{% highlight sql %}
+```sql
 MSCK REPAIR TABLE table_identifier
-{% endhighlight %}
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>table_identifier</em></code></dt>
-  <dd>
-    Specifies the name of the table to be repaired. The table name may be optionally qualified with a database name.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ database_name. ] table_name
-      </code>
-  </dd>
-</dl>
+* **table_identifier**
+
+    Specifies the name of the table to be repaired. The table name may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- create a partitioned table from existing data /tmp/namesAndAges.parquet
 CREATE TABLE t1 (name STRING, age INT) USING parquet PARTITIONED BY (age)
     LOCATION "/tmp/namesAndAges.parquet";
@@ -66,8 +61,8 @@ SELECT * FROM t1;
 +-------+---+
 |   Andy| 30|
 +-------+---+
-{% endhighlight %}
+```
 
 ### Related Statements
 
- * [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
+* [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)

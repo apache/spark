@@ -35,22 +35,29 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferField(parser) === expectedType)
   }
 
-  def checkTimestampType(pattern: String, json: String): Unit = {
-    checkType(Map("timestampFormat" -> pattern), json, TimestampType)
+  def checkTimestampType(pattern: String, json: String, inferTimestamp: Boolean): Unit = {
+    checkType(
+      Map("timestampFormat" -> pattern, "inferTimestamp" -> inferTimestamp.toString),
+      json,
+      if (inferTimestamp) TimestampType else StringType)
   }
 
   test("inferring timestamp type") {
-    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
-        checkTimestampType("yyyy", """{"a": "2018"}""")
-        checkTimestampType("yyyy=MM", """{"a": "2018=12"}""")
-        checkTimestampType("yyyy MM dd", """{"a": "2018 12 02"}""")
-        checkTimestampType(
-          "yyyy-MM-dd'T'HH:mm:ss.SSS",
-          """{"a": "2018-12-02T21:04:00.123"}""")
-        checkTimestampType(
-          "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
-          """{"a": "2018-12-02T21:04:00.123567+01:00"}""")
+    Seq(true, false).foreach { inferTimestamp =>
+      Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+          checkTimestampType("yyyy", """{"a": "2018"}""", inferTimestamp)
+          checkTimestampType("yyyy=MM", """{"a": "2018=12"}""", inferTimestamp)
+          checkTimestampType("yyyy MM dd", """{"a": "2018 12 02"}""", inferTimestamp)
+          checkTimestampType(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            """{"a": "2018-12-02T21:04:00.123"}""",
+            inferTimestamp)
+          checkTimestampType(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
+            """{"a": "2018-12-02T21:04:00.123567+01:00"}""",
+            inferTimestamp)
+        }
       }
     }
   }
@@ -71,16 +78,19 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("skip decimal type inferring") {
-    Seq("legacy", "corrected").foreach { legacyParserPolicy =>
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
-        checkType(
-          options = Map(
-            "prefersDecimal" -> "false",
-            "timestampFormat" -> "yyyyMMdd.HHmmssSSS"
-          ),
-          json = """{"a": "20181202.210400123"}""",
-          dt = TimestampType
-        )
+    Seq(true, false).foreach { inferTimestamp =>
+      Seq("legacy", "corrected").foreach { legacyParserPolicy =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+          checkType(
+            options = Map(
+              "prefersDecimal" -> "false",
+              "timestampFormat" -> "yyyyMMdd.HHmmssSSS",
+              "inferTimestamp" -> inferTimestamp.toString
+            ),
+            json = """{"a": "20181202.210400123"}""",
+            dt = if (inferTimestamp) TimestampType else StringType
+          )
+        }
       }
     }
   }
