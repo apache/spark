@@ -34,7 +34,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     with ResetSystemProperties with Eventually {
 
   val numExecs = 3
-  val numParts = 6
+  val numParts = 3
 
   test(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor") {
