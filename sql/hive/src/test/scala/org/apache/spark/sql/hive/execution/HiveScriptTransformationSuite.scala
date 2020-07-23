@@ -41,7 +41,6 @@ class HiveScriptTransformationSuite extends SparkPlanTest with SQLTestUtils with
   import spark.implicits._
   import ScriptTransformationIOSchema._
 
-
   private val serdeIOSchema = defaultIOSchema.copy(
     inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
     outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
