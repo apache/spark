@@ -40,7 +40,6 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
-
   def input: Seq[Expression]
   def script: String
   def output: Seq[Attribute]
@@ -91,7 +90,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     (outputStream, proc, inputStream, stderrBuffer)
   }
 
-  def processIterator(
+  protected def processIterator(
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow]
 
@@ -105,7 +104,6 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
 
       val outputRowFormat = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
-      val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
       val processRowWithoutSerde = if (!ioschema.schemaLess) {
         prevLine: String =>
           new GenericInternalRow(
@@ -118,9 +116,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         // Here we change spark's behavior same as hive's default serde.
         // But in hive, TRANSFORM with schema less behavior like origin spark, we will fix this
         // to keep spark and hive behavior same in SPARK-32388
+        val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
           new GenericInternalRow(
-            prevLine.split(outputRowFormat, 2)
+            prevLine.split(outputRowFormat).slice(0, 2)
               .map(kvWriter))
       }
 
