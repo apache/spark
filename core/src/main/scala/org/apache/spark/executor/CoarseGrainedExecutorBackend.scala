@@ -40,7 +40,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
+import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, SignalUtils, ThreadUtils, Utils}
@@ -166,11 +166,15 @@ private[spark] class CoarseGrainedExecutorBackend(
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
         if (decommissioned) {
-          logError("Asked to launch a task while decommissioned.")
+          val msg = "Asked to launch a task while decommissioned."
+          logError(msg)
           driver match {
             case Some(endpoint) =>
               logInfo("Sending DecommissionExecutor to driver.")
-              endpoint.send(DecommissionExecutor(executorId))
+              endpoint.send(
+                DecommissionExecutor(
+                  executorId,
+                  ExecutorDecommissionInfo(msg, isHostDecommissioned = false)))
             case _ =>
               logError("No registered driver to send Decommission to.")
           }
@@ -259,12 +263,14 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   private def decommissionSelf(): Boolean = {
-    logInfo("Decommissioning self w/sync")
+    val msg = "Decommissioning self w/sync"
+    logInfo(msg)
     try {
       decommissioned = true
       // Tell master we are are decommissioned so it stops trying to schedule us
       if (driver.nonEmpty) {
-        driver.get.askSync[Boolean](DecommissionExecutor(executorId))
+        driver.get.askSync[Boolean](DecommissionExecutor(
+            executorId, ExecutorDecommissionInfo(msg, false)))
       } else {
         logError("No driver to message decommissioning.")
       }
