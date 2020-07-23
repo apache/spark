@@ -48,7 +48,6 @@ private[storage] class BlockManagerDecommissioner(
   @volatile private var rddBlocksLeft: Boolean = true
   @volatile private var shuffleBlocksLeft: Boolean = true
 
-
   /**
    * This runnable consumes any shuffle blocks in the queue for migration. This part of a
    * producer/consumer where the main migration loop updates the queue of blocks to be migrated
@@ -128,8 +127,6 @@ private[storage] class BlockManagerDecommissioner(
   // Shuffles which have migrated. This used to know when we are "done", being done can change
   // if a new shuffle file is created by a running task.
   private val numMigratedShuffles = new AtomicInteger(0)
-
-
 
   // Shuffles which are queued for migration & number of retries so far.
   // Visible in storage for testing.
@@ -369,7 +366,7 @@ private[storage] class BlockManagerDecommissioner(
     if (stopped || (stoppedRDD && stoppedShuffle)) {
       (System.nanoTime(), true)
     } else {
-
+      // Chose the min of the running times.
       val lastMigrationTime = if (
         conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED) &&
         conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)) {
