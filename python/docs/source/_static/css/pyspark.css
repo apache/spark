@@ -18,7 +18,7 @@
 
 /* PySpark style CSS overwrite */
 
-/* Lato font (from its parent) does not make any difference when it's bold. Defaults to 'Source Sans Pro'*/
+/* Lato font (from its parent) does not make any difference when it's bold. Defaults to 'Source Sans Pro' */
 body {
     font-family:"Source Sans Pro",sans-serif!important;
 }
