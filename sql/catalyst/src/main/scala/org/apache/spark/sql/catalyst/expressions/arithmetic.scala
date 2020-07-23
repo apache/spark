@@ -412,7 +412,7 @@ case class IntegralDivide(
     left: Expression,
     right: Expression) extends DivModLike {
 
-  override def inputType: AbstractDataType = TypeCollection(IntegralType, DecimalType)
+  override def inputType: AbstractDataType = TypeCollection(LongType, DecimalType)
 
   override def dataType: DataType = LongType
 

@@ -213,7 +213,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    * Returns all files except the deleted ones.
    */
   def allFiles(): Array[T] = {
-    var latestId = getLatest().map(_._1).getOrElse(-1L)
+    var latestId = getLatestBatchId().getOrElse(-1L)
     // There is a race condition when `FileStreamSink` is deleting old files and `StreamFileIndex`
     // is calling this method. This loop will retry the reading to deal with the
     // race condition.
@@ -347,7 +347,7 @@ object CompactibleFileStreamLog {
     } else if (defaultInterval < (latestCompactBatchId + 1) / 2) {
       // Find the first divisor >= default compact interval
       def properDivisors(min: Int, n: Int) =
-        (min to n/2).view.filter(i => n % i == 0) :+ n
+        (min to n/2).view.filter(i => n % i == 0).toSeq :+ n
 
       properDivisors(defaultInterval, latestCompactBatchId + 1).head
     } else {

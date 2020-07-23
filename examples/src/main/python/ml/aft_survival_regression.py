@@ -20,8 +20,6 @@ An example demonstrating aft survival regression.
 Run with:
   bin/spark-submit examples/src/main/python/ml/aft_survival_regression.py
 """
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml.regression import AFTSurvivalRegression
 from pyspark.ml.linalg import Vectors

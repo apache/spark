@@ -532,6 +532,18 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("SPARK-31935: Hadoop file system config should be effective in data source options") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val defaultFs = "nonexistFS://nonexistFS"
+      val expectMessage = "No FileSystem for scheme nonexistFS"
+      val message = intercept[java.io.IOException] {
+        spark.readStream.option("fs.defaultFS", defaultFs).text(path)
+      }.getMessage
+      assert(message.filterNot(Set(':', '"').contains) == expectMessage)
+    }
+  }
+
   test("read from textfile") {
     withTempDirs { case (src, tmp) =>
       val textStream = spark.readStream.textFile(src.getCanonicalPath)

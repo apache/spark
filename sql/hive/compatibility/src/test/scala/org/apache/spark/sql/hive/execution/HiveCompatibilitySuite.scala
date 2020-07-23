@@ -26,10 +26,12 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
+import org.apache.spark.tags.SlowHiveTest
 
 /**
  * Runs the test cases that are included in the hive distribution.
  */
+@SlowHiveTest
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   // TODO: bundle in jar files... get from classpath
   private lazy val hiveQueryDir = TestHive.getHiveFile(
@@ -39,6 +41,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
   private val originalSessionLocalTimeZone = TestHive.conf.sessionLocalTimeZone
+  private val originalLegacyAllowCastNumericToTimestamp =
+    TestHive.conf.legacyAllowCastNumericToTimestamp
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
@@ -58,6 +62,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Fix session local timezone to America/Los_Angeles for those timezone sensitive tests
     // (timestamp_*)
     TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, "America/Los_Angeles")
+    // Ensures that cast numeric to timestamp enabled so that we can test them
+    TestHive.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP, true)
     RuleExecutor.resetMetrics()
   }
 
@@ -68,6 +74,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
       TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, originalSessionLocalTimeZone)
+      TestHive.setConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP,
+        originalLegacyAllowCastNumericToTimestamp)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
@@ -77,7 +85,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
-  override def blackList: Seq[String] = Seq(
+  override def excludeList: Seq[String] = Seq(
     // These tests use hooks that are not on the classpath and thus break all subsequent execution.
     "hook_order",
     "hook_context_cs",
@@ -508,7 +516,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // This test uses CREATE EXTERNAL TABLE without specifying LOCATION
     "alter2",
 
-    // [SPARK-16248][SQL] Whitelist the list of Hive fallback functions
+    // [SPARK-16248][SQL] Include the list of Hive fallback functions
     "udf_field",
     "udf_reflect2",
     "udf_xpath",
@@ -596,7 +604,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_radians"
   )
 
-  private def commonWhiteList = Seq(
+  private def commonIncludeList = Seq(
     "add_part_exist",
     "add_part_multiple",
     "add_partition_no_whitelist",
@@ -1134,14 +1142,14 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   )
 
   /**
-   * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
-   * blacklist are implicitly marked as ignored.
+   * The set of tests that are believed to be working in catalyst. Tests not on includeList or
+   * excludeList are implicitly marked as ignored.
    */
-  override def whiteList: Seq[String] = if (HiveUtils.isHive23) {
-    commonWhiteList ++ Seq(
+  override def includeList: Seq[String] = if (HiveUtils.isHive23) {
+    commonIncludeList ++ Seq(
       "decimal_1_1"
     )
   } else {
-    commonWhiteList
+    commonIncludeList
   }
 }

@@ -30,7 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
-import org.apache.spark.sql.execution.HiveResult
+import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -54,6 +54,9 @@ import org.apache.spark.sql.types._
  */
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
 
+
+  override def mode: ServerMode.Value = ServerMode.binary
+
   override protected def testFile(fileName: String): String = {
     val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
     // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
@@ -64,7 +67,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   }
 
   /** List of test cases to ignore, in lower cases. */
-  override def blackList: Set[String] = super.blackList ++ Set(
+  override def ignoreList: Set[String] = super.ignoreList ++ Set(
     // Missing UDF
     "postgreSQL/boolean.sql",
     "postgreSQL/case.sql",
@@ -205,7 +208,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   }
 
   override def createScalaTestCase(testCase: TestCase): Unit = {
-    if (blackList.exists(t =>
+    if (ignoreList.exists(t =>
       testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
@@ -257,8 +260,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   private def getNormalizedResult(statement: Statement, sql: String): (String, Seq[String]) = {
     val rs = statement.executeQuery(sql)
     val cols = rs.getMetaData.getColumnCount
+    val timeFormatters = getTimeFormatters
     val buildStr = () => (for (i <- 1 to cols) yield {
-      getHiveResult(rs.getObject(i))
+      getHiveResult(rs.getObject(i), timeFormatters)
     }).mkString("\t")
 
     val answer = Iterator.continually(rs.next()).takeWhile(identity).map(_ => buildStr()).toSeq
@@ -280,18 +284,18 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       upperCase.startsWith("(")
   }
 
-  private def getHiveResult(obj: Object): String = {
+  private def getHiveResult(obj: Object, timeFormatters: TimeFormatters): String = {
     obj match {
       case null =>
-        HiveResult.toHiveString((null, StringType))
+        toHiveString((null, StringType), false, timeFormatters)
       case d: java.sql.Date =>
-        HiveResult.toHiveString((d, DateType))
+        toHiveString((d, DateType), false, timeFormatters)
       case t: Timestamp =>
-        HiveResult.toHiveString((t, TimestampType))
+        toHiveString((t, TimestampType), false, timeFormatters)
       case d: java.math.BigDecimal =>
-        HiveResult.toHiveString((d, DecimalType.fromDecimal(Decimal(d))))
+        toHiveString((d, DecimalType.fromDecimal(Decimal(d))), false, timeFormatters)
       case bin: Array[Byte] =>
-        HiveResult.toHiveString((bin, BinaryType))
+        toHiveString((bin, BinaryType), false, timeFormatters)
       case other =>
         other.toString
     }

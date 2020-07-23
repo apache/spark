@@ -29,7 +29,7 @@
     <download-maven-plugin.version>1.3.0</download-maven-plugin.version>
     <exec-maven-plugin.version>1.4.0</exec-maven-plugin.version>
     <extraScalaTestArgs></extraScalaTestArgs>
-    <kubernetes-client.version>4.7.1</kubernetes-client.version>
+    <kubernetes-client.version>4.9.2</kubernetes-client.version>
     <scala-maven-plugin.version>3.2.2</scala-maven-plugin.version>
     <scalatest-maven-plugin.version>1.0</scalatest-maven-plugin.version>
     <sbt.project.name>kubernetes-integration-tests</sbt.project.name>
@@ -77,12 +77,6 @@
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <type>test-jar</type>
     </dependency>
-    <dependency>
-      <groupId>com.amazonaws</groupId>
-      <artifactId>aws-java-sdk</artifactId>
-      <version>1.7.4</version>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 
   <build>
@@ -121,6 +115,9 @@
 
                 <argument>--spark-tgz</argument>
                 <argument>${spark.kubernetes.test.sparkTgz}</argument>
+
+                <argument>--test-exclude-tags</argument>
+                <argument>"${test.exclude.tags}"</argument>
               </arguments>
             </configuration>
           </execution>
@@ -186,4 +183,31 @@
 
   </build>
 
+  <profiles>
+    <profile>
+      <id>hadoop-2.7</id>
+      <dependencies>
+        <dependency>
+          <groupId>com.amazonaws</groupId>
+          <artifactId>aws-java-sdk</artifactId>
+          <version>1.7.4</version>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hadoop-3.2</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>com.amazonaws</groupId>
+          <artifactId>aws-java-sdk-bundle</artifactId>
+          <version>1.11.375</version>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 </project>

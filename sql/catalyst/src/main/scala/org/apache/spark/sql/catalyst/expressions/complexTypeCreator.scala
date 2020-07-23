@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
@@ -255,7 +255,7 @@ object CreateMap {
        {1.0:"2",3.0:"4"}
   """, since = "2.4.0")
 case class MapFromArrays(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
@@ -311,7 +311,12 @@ case object NamePlaceholder extends LeafExpression with Unevaluable {
 /**
  * Returns a Row containing the evaluation of all children expressions.
  */
-object CreateStruct extends FunctionBuilder {
+object CreateStruct {
+  /**
+   * Returns a named struct with generated names or using the names when available.
+   * It should not be used for `struct` expressions or functions explicitly called
+   * by users.
+   */
   def apply(children: Seq[Expression]): CreateNamedStruct = {
     CreateNamedStruct(children.zipWithIndex.flatMap {
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
@@ -321,11 +326,22 @@ object CreateStruct extends FunctionBuilder {
   }
 
   /**
+   * Returns a named struct with a pretty SQL name. It will show the pretty SQL string
+   * in its output column name as if `struct(...)` was called. Should be
+   * used for `struct` expressions or functions explicitly called by users.
+   */
+  def create(children: Seq[Expression]): CreateNamedStruct = {
+    val expr = CreateStruct(children)
+    expr.setTagValue(FUNC_ALIAS, "struct")
+    expr
+  }
+
+  /**
    * Entry to use in the function registry.
    */
   val registryEntry: (String, (ExpressionInfo, FunctionBuilder)) = {
     val info: ExpressionInfo = new ExpressionInfo(
-      "org.apache.spark.sql.catalyst.expressions.NamedStruct",
+      classOf[CreateNamedStruct].getCanonicalName,
       null,
       "struct",
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
@@ -335,7 +351,7 @@ object CreateStruct extends FunctionBuilder {
       "",
       "",
       "")
-    ("struct", (info, this))
+    ("struct", (info, this.create))
   }
 }
 
@@ -433,7 +449,15 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
        """.stripMargin, isNull = FalseLiteral)
   }
 
-  override def prettyName: String = "named_struct"
+  // There is an alias set at `CreateStruct.create`. If there is an alias,
+  // this is the struct function explicitly called by a user and we should
+  // respect it in the SQL string as `struct(...)`.
+  override def prettyName: String = getTagValue(FUNC_ALIAS).getOrElse("named_struct")
+
+  override def sql: String = getTagValue(FUNC_ALIAS).map { alias =>
+    val childrenSQL = children.indices.filter(_ % 2 == 1).map(children(_).sql).mkString(", ")
+    s"$alias($childrenSQL)"
+  }.getOrElse(super.sql)
 }
 
 /**
@@ -452,7 +476,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   since = "2.0.1")
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
-  extends TernaryExpression with ExpectsInputTypes {
+  extends TernaryExpression with ExpectsInputTypes with NullIntolerant {
 
   def this(child: Expression, pairDelim: Expression) = {
     this(child, pairDelim, Literal(":"))
@@ -514,4 +538,62 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   }
 
   override def prettyName: String = "str_to_map"
+}
+
+/**
+ * Adds/replaces field in struct by name.
+ */
+case class WithFields(
+    structExpr: Expression,
+    names: Seq[String],
+    valExprs: Seq[Expression]) extends Unevaluable {
+
+  assert(names.length == valExprs.length)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!structExpr.dataType.isInstanceOf[StructType]) {
+      TypeCheckResult.TypeCheckFailure(
+        "struct argument should be struct type, got: " + structExpr.dataType.catalogString)
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def children: Seq[Expression] = structExpr +: valExprs
+
+  override def dataType: StructType = evalExpr.dataType.asInstanceOf[StructType]
+
+  override def foldable: Boolean = structExpr.foldable && valExprs.forall(_.foldable)
+
+  override def nullable: Boolean = structExpr.nullable
+
+  override def prettyName: String = "with_fields"
+
+  lazy val evalExpr: Expression = {
+    val existingExprs = structExpr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
+      case (name, i) => (name, GetStructField(KnownNotNull(structExpr), i).asInstanceOf[Expression])
+    }
+
+    val addOrReplaceExprs = names.zip(valExprs)
+
+    val resolver = SQLConf.get.resolver
+    val newExprs = addOrReplaceExprs.foldLeft(existingExprs) {
+      case (resultExprs, newExpr @ (newExprName, _)) =>
+        if (resultExprs.exists(x => resolver(x._1, newExprName))) {
+          resultExprs.map {
+            case (name, _) if resolver(name, newExprName) => newExpr
+            case x => x
+          }
+        } else {
+          resultExprs :+ newExpr
+        }
+    }.flatMap { case (name, expr) => Seq(Literal(name), expr) }
+
+    val expr = CreateNamedStruct(newExprs)
+    if (structExpr.nullable) {
+      If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+    } else {
+      expr
+    }
+  }
 }

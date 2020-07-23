@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{ExplainUtils, RowIterator}
@@ -61,21 +62,30 @@ trait HashJoin extends BaseJoinExec {
   protected lazy val (buildKeys, streamedKeys) = {
     require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
       "Join keys from two sides should have same types")
-    val lkeys = bindReferences(HashJoin.rewriteKeyExpr(leftKeys), left.output)
-    val rkeys = bindReferences(HashJoin.rewriteKeyExpr(rightKeys), right.output)
     buildSide match {
-      case BuildLeft => (lkeys, rkeys)
-      case BuildRight => (rkeys, lkeys)
+      case BuildLeft => (leftKeys, rightKeys)
+      case BuildRight => (rightKeys, leftKeys)
     }
   }
 
+  @transient private lazy val (buildOutput, streamedOutput) = {
+    buildSide match {
+      case BuildLeft => (left.output, right.output)
+      case BuildRight => (right.output, left.output)
+    }
+  }
 
+  @transient protected lazy val buildBoundKeys =
+    bindReferences(HashJoin.rewriteKeyExpr(buildKeys), buildOutput)
+
+  @transient protected lazy val streamedBoundKeys =
+    bindReferences(HashJoin.rewriteKeyExpr(streamedKeys), streamedOutput)
 
   protected def buildSideKeyGenerator(): Projection =
-    UnsafeProjection.create(buildKeys)
+    UnsafeProjection.create(buildBoundKeys)
 
   protected def streamSideKeyGenerator(): UnsafeProjection =
-    UnsafeProjection.create(streamedKeys)
+    UnsafeProjection.create(streamedBoundKeys)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
     Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
@@ -205,7 +215,7 @@ trait HashJoin extends BaseJoinExec {
         existenceJoin(streamedIter, hashed)
       case x =>
         throw new IllegalArgumentException(
-          s"BroadcastHashJoin should not take $x as the JoinType")
+          s"HashJoin should not take $x as the JoinType")
     }
 
     val resultProj = createResultProjection

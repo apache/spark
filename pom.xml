@@ -119,11 +119,11 @@
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.30</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>2.7.4</hadoop.version>
+    <hadoop.version>3.2.0</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.4.14</zookeeper.version>
-    <curator.version>2.7.1</curator.version>
+    <curator.version>2.13.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
@@ -139,7 +139,7 @@
     <orc.classifier></orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jetty.version>9.4.18.v20190429</jetty.version>
+    <jetty.version>9.4.28.v20200408</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.9.5</chill.version>
     <ivy.version>2.4.0</ivy.version>
@@ -170,16 +170,16 @@
     <snappy.version>1.1.7.5</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.10</commons-codec.version>
-    <commons-io.version>2.4</commons-io.version>
+    <commons-io.version>2.5</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.9</commons-lang3.version>
+    <commons-lang3.version>3.10</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
-    <janino.version>3.0.16</janino.version>
+    <janino.version>3.1.2</janino.version>
     <jersey.version>2.30</jersey.version>
     <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -187,8 +187,8 @@
     <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.7.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>2.52.0</selenium.version>
-    <htmlunit.version>2.22</htmlunit.version>
+    <selenium.version>3.141.59</selenium.version>
+    <htmlunit.version>2.40.0</htmlunit.version>
     <!--
     Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
     -->
@@ -204,6 +204,9 @@
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
 
     <test.java.home>${java.home}</test.java.home>
+
+    <!-- Some UI tests require Chrome and Chrome driver installed so those tests are disabled by default. -->
+    <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest</test.default.exclude.tags>
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
 
@@ -243,6 +246,7 @@
       things breaking.
     -->
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
+    <spark.test.webdriver.chrome.driver></spark.test.webdriver.chrome.driver>
 
     <CodeCacheSize>1g</CodeCacheSize>
   </properties>
@@ -587,12 +591,16 @@
             <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
-        <artifactId>selenium-htmlunit-driver</artifactId>
-        <version>${selenium.version}</version>
+        <artifactId>htmlunit-driver</artifactId>
+        <version>${htmlunit.version}</version>
         <scope>test</scope>
       </dependency>
       <!-- Update htmlunit dependency that selenium uses for better JS support -->
@@ -661,7 +669,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.4.4-3</version>
+        <version>1.4.5-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -968,6 +976,18 @@
         <groupId>com.ibm.db2</groupId>
         <artifactId>jcc</artifactId>
         <version>11.5.0.0</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.microsoft.sqlserver</groupId>
+        <artifactId>mssql-jdbc</artifactId>
+        <version>8.2.2.jre8</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.oracle.database.jdbc</groupId>
+        <artifactId>ojdbc8</artifactId>
+        <version>19.6.0.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1356,6 +1376,10 @@
           <exclusion>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP-java7</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2512,10 +2536,11 @@
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
+              <spark.test.webdriver.chrome.driver>${spark.test.webdriver.chrome.driver}</spark.test.webdriver.chrome.driver>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>
-            <tagsToExclude>${test.exclude.tags}</tagsToExclude>
+            <tagsToExclude>${test.exclude.tags},${test.default.exclude.tags}</tagsToExclude>
             <tagsToInclude>${test.include.tags}</tagsToInclude>
           </configuration>
           <executions>
@@ -2568,6 +2593,12 @@
               </fileset>
               <fileset>
                 <directory>lib_managed</directory>
+              </fileset>
+              <fileset>
+                <directory>metastore_db</directory>
+              </fileset>
+              <fileset>
+                <directory>spark-warehouse</directory>
               </fileset>
             </filesets>
           </configuration>
@@ -3029,15 +3060,16 @@
 
     <profile>
       <id>hadoop-2.7</id>
-      <!-- Default hadoop profile. Uses global properties. -->
+      <properties>
+        <hadoop.version>2.7.4</hadoop.version>
+        <curator.version>2.7.1</curator.version>
+        <commons-io.version>2.4</commons-io.version>
+      </properties>
     </profile>
 
     <profile>
       <id>hadoop-3.2</id>
-      <properties>
-        <hadoop.version>3.2.0</hadoop.version>
-        <curator.version>2.13.0</curator.version>
-      </properties>
+      <!-- Default hadoop profile. Uses global properties. -->
     </profile>
 
     <profile>
@@ -3133,7 +3165,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.1</scala.version>
+        <scala.version>2.13.3</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <dependencyManagement>

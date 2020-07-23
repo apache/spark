@@ -53,7 +53,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
       > SELECT _FUNC_('Spark');
        8cde774d6f7333752ed72cacddb05126
   """)
-case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Md5(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
 
@@ -89,7 +90,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
   """)
 // scalastyle:on line.size.limit
 case class Sha2(left: Expression, right: Expression)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def dataType: DataType = StringType
   override def nullable: Boolean = true
@@ -160,7 +161,8 @@ case class Sha2(left: Expression, right: Expression)
       > SELECT _FUNC_('Spark');
        85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c
   """)
-case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Sha1(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
 
@@ -187,7 +189,8 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
       > SELECT _FUNC_('Spark');
        1557323817
   """)
-case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Crc32(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = LongType
 

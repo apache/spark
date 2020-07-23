@@ -992,7 +992,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         subqueryExpressions ++= (getSubqueryExpressions(s.plan) :+ s)
         s
     }
-    subqueryExpressions
+    subqueryExpressions.toSeq
   }
 
   private def getNumSorts(plan: LogicalPlan): Int = {
@@ -1313,7 +1313,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       // need to execute the query before we can examine fs.inputRDDs()
       assert(stripAQEPlan(df.queryExecution.executedPlan) match {
         case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
-            fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _)))) =>
+            fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _, _)))) =>
           partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
             fs.inputRDDs().forall(
               _.asInstanceOf[FileScanRDD].filePartitions.forall(

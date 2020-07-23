@@ -373,6 +373,25 @@ Security options for the Spark History Server are covered more detail in the
     </td>
     <td>3.0.0</td>
   </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.enabled</td>
+    <td>false</td>
+    <td>
+      Whether to use HybridStore as the store when parsing event logs. HybridStore will first write data
+      to an in-memory store and having a background thread that dumps data to a disk store after the writing
+      to in-memory store is completed.
+    </td>
+    <td>3.1.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.maxMemoryUsage</td>
+    <td>2g</td>
+    <td>
+      Maximum memory space that can be used to create HybridStore. The HybridStore co-uses the heap memory,
+      so the heap memory should be increased through the memory option for SHS if the HybridStore is enabled.
+    </td>
+    <td>3.1.0</td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
@@ -480,7 +499,8 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
        A list of all tasks for the given stage attempt.
       <br><code>?offset=[offset]&amp;length=[len]</code> list tasks in the given range.
       <br><code>?sortBy=[runtime|-runtime]</code> sort the tasks.
-      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime</code>
+      <br><code>?status=[running|success|killed|failed|unknown]</code> list only tasks in the state.
+      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime&amp;status=running</code>
     </td>
   </tr>
   <tr>
@@ -543,6 +563,24 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations/[outputOp-id]</code></td>
     <td>Details of the given operation and given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/sql</code></td>
+    <td>A list of all queries for a given application.
+    <br>
+    <code>?details=[true (default) | false]</code> lists/hides details of Spark plan nodes.
+    <br>
+    <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand when Physical Plan size is high.
+    <br>
+    <code>?offset=[offset]&length=[len]</code> lists queries in the given range.
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/sql/[execution-id]</code></td>
+    <td>Details for the given query.
+    <br>
+    <code>?details=[true (default) | false]</code> lists/hides metric details in addition to given query details.
+    <br>
+    <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
   </tr>
   <tr>
     <td><code>/applications/[app-id]/environment</code></td>

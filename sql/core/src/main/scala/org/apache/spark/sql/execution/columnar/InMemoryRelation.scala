@@ -123,7 +123,7 @@ case class CachedRDDBuilder(
           rowCountStats.add(rowCount)
 
           val stats = InternalRow.fromSeq(
-            columnBuilders.flatMap(_.columnStats.collectedStatistics))
+            columnBuilders.flatMap(_.columnStats.collectedStatistics).toSeq)
           CachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)

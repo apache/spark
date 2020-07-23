@@ -85,17 +85,18 @@ class UnivocityParser(
   // We preallocate it avoid unnecessary allocations.
   private val noRows = None
 
-  private val timestampFormatter = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    needVarLengthSecondFraction = true)
-  private val dateFormatter = DateFormatter(
+    isParsing = true)
+  private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   private val csvFilters = new CSVFilters(filters, requiredSchema)
 
@@ -185,7 +186,7 @@ class UnivocityParser(
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
-            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
         }
       }
@@ -198,7 +199,7 @@ class UnivocityParser(
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
-            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToDate(str, options.zoneId).getOrElse(throw e)
         }
       }

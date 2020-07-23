@@ -93,4 +93,37 @@ class RegressionEvaluatorSuite
   test("should support all NumericType labels and not support other types") {
     MLTestingUtils.checkNumericTypes(new RegressionEvaluator, spark)
   }
+
+  test("getMetrics") {
+    val dataset = LinearDataGenerator.generateLinearInput(
+      6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1)
+      .map(_.asML).toDF()
+
+    val trainer = new LinearRegression
+    val model = trainer.fit(dataset)
+    val predictions = model.transform(dataset)
+
+    val evaluator = new RegressionEvaluator()
+
+    val metrics = evaluator.getMetrics(predictions)
+    val rmse = metrics.rootMeanSquaredError
+    val r2 = metrics.r2
+    val mae = metrics.meanAbsoluteError
+    val variance = metrics.explainedVariance
+
+    // default = rmse
+    assert(evaluator.evaluate(predictions) == rmse)
+
+    // r2 score
+    evaluator.setMetricName("r2")
+    assert(evaluator.evaluate(predictions) == r2)
+
+    // mae
+    evaluator.setMetricName("mae")
+    assert(evaluator.evaluate(predictions) == mae)
+
+    // var
+    evaluator.setMetricName("var")
+    assert(evaluator.evaluate(predictions) == variance)
+  }
 }

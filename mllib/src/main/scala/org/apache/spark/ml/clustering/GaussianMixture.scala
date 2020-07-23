@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.impl.Utils.{unpackUpperTriangular, EPSILON}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
@@ -57,6 +58,8 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   /** @group getParam */
   @Since("2.0.0")
   def getK: Int = $(k)
+
+  setDefault(k -> 2, maxIter -> 100, tol -> 0.01, blockSize -> 1)
 
   /**
    * Validates and transforms the input schema.
@@ -327,11 +330,6 @@ class GaussianMixture @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
   extends Estimator[GaussianMixtureModel] with GaussianMixtureParams with DefaultParamsWritable {
 
-  setDefault(
-    k -> 2,
-    maxIter -> 100,
-    tol -> 0.01)
-
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixture = defaultCopy(extra)
 
@@ -391,7 +389,6 @@ class GaussianMixture @Since("2.0.0") (
    */
   @Since("3.1.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
-  setDefault(blockSize -> 1)
 
   /**
    * Number of samples per cluster to use when initializing Gaussians.
@@ -417,7 +414,7 @@ class GaussianMixture @Since("2.0.0") (
     instr.logNumFeatures(numFeatures)
 
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
     } else {
       lit(1.0)
     }
@@ -491,12 +488,7 @@ class GaussianMixture @Since("2.0.0") (
             (i, (agg.means(i), agg.covs(i), agg.weights(i), ws))
           }
         } else Iterator.empty
-      }.reduceByKey { case ((mean1, cov1, w1, ws1), (mean2, cov2, w2, ws2)) =>
-        // update the weights, means and covariances for i-th distributions
-        BLAS.axpy(1.0, mean2, mean1)
-        BLAS.axpy(1.0, cov2, cov1)
-        (mean1, cov1, w1 + w2, ws1 + ws2)
-      }.mapValues { case (mean, cov, w, ws) =>
+      }.reduceByKey(GaussianMixture.mergeWeightsMeans).mapValues { case (mean, cov, w, ws) =>
         // Create new distributions based on the partial assignments
         // (often referred to as the "M" step in literature)
         GaussianMixture.updateWeightsAndGaussians(mean, cov, w, ws)
@@ -559,12 +551,7 @@ class GaussianMixture @Since("2.0.0") (
           agg.meanIter.zip(agg.covIter).zipWithIndex
             .map { case ((mean, cov), i) => (i, (mean, cov, agg.weights(i), ws)) }
         } else Iterator.empty
-      }.reduceByKey { case ((mean1, cov1, w1, ws1), (mean2, cov2, w2, ws2)) =>
-        // update the weights, means and covariances for i-th distributions
-        BLAS.axpy(1.0, mean2, mean1)
-        BLAS.axpy(1.0, cov2, cov1)
-        (mean1, cov1, w1 + w2, ws1 + ws2)
-      }.mapValues { case (mean, cov, w, ws) =>
+      }.reduceByKey(GaussianMixture.mergeWeightsMeans).mapValues { case (mean, cov, w, ws) =>
         // Create new distributions based on the partial assignments
         // (often referred to as the "M" step in literature)
         GaussianMixture.updateWeightsAndGaussians(mean, cov, w, ws)
@@ -623,8 +610,8 @@ class GaussianMixture @Since("2.0.0") (
     val gaussians = Array.tabulate(numClusters) { i =>
       val start = i * numSamples
       val end = start + numSamples
-      val sampleSlice = samples.view(start, end)
-      val weightSlice = sampleWeights.view(start, end)
+      val sampleSlice = samples.view.slice(start, end)
+      val weightSlice = sampleWeights.view.slice(start, end)
       val localWeightSum = weightSlice.sum
       weights(i) = localWeightSum / weightSum
 
@@ -688,6 +675,16 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
       triangularValues: Array[Double]): DenseMatrix = {
     val symmetricValues = unpackUpperTriangular(n, triangularValues)
     new DenseMatrix(n, n, symmetricValues)
+  }
+
+  private def mergeWeightsMeans(
+      a: (DenseVector, DenseVector, Double, Double),
+      b: (DenseVector, DenseVector, Double, Double)): (DenseVector, DenseVector, Double, Double) =
+  {
+    // update the weights, means and covariances for i-th distributions
+    BLAS.axpy(1.0, b._1, a._1)
+    BLAS.axpy(1.0, b._2, a._2)
+    (a._1, a._2, a._3 + b._3, a._4 + b._4)
   }
 
   /**

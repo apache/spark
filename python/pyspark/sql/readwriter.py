@@ -15,16 +15,10 @@
 # limitations under the License.
 #
 
-import sys
-
-if sys.version >= '3':
-    basestring = unicode = str
-
 from py4j.java_gateway import JavaClass
 
 from pyspark import RDD, since
-from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql.column import _to_seq
+from pyspark.sql.column import _to_seq, _to_java_column
 from pyspark.sql.types import *
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
@@ -94,7 +88,7 @@ class DataFrameReader(OptionUtils):
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
-        elif isinstance(schema, basestring):
+        elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
         else:
             raise TypeError("schema should be StructType or string")
@@ -174,7 +168,7 @@ class DataFrameReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.load(path))
         elif path is not None:
             if type(path) != list:
@@ -294,16 +288,16 @@ class DataFrameReader(OptionUtils):
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
             samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
             locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             path = [path]
         if type(path) == list:
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             def func(iterator):
                 for x in iterator:
-                    if not isinstance(x, basestring):
-                        x = unicode(x)
-                    if isinstance(x, unicode):
+                    if not isinstance(x, str):
+                        x = str(x)
+                    if isinstance(x, str):
                         x = x.encode("utf-8")
                     yield x
             keyed = path.mapPartitions(func)
@@ -352,7 +346,6 @@ class DataFrameReader(OptionUtils):
                        recursiveFileLookup=recursiveFileLookup)
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
-    @ignore_unicode_prefix
     @since(1.6)
     def text(self, paths, wholetext=False, lineSep=None, pathGlobFilter=None,
              recursiveFileLookup=None):
@@ -376,15 +369,15 @@ class DataFrameReader(OptionUtils):
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
-        [Row(value=u'hello'), Row(value=u'this')]
+        [Row(value='hello'), Row(value='this')]
         >>> df = spark.read.text('python/test_support/sql/text-test.txt', wholetext=True)
         >>> df.collect()
-        [Row(value=u'hello\\nthis')]
+        [Row(value='hello\\nthis')]
         """
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup)
-        if isinstance(paths, basestring):
+        if isinstance(paths, str):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
@@ -529,16 +522,16 @@ class DataFrameReader(OptionUtils):
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
             enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
             pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             path = [path]
         if type(path) == list:
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             def func(iterator):
                 for x in iterator:
-                    if not isinstance(x, basestring):
-                        x = unicode(x)
-                    if isinstance(x, unicode):
+                    if not isinstance(x, str):
+                        x = str(x)
+                    if isinstance(x, str):
                         x = x.encode("utf-8")
                     yield x
             keyed = path.mapPartitions(func)
@@ -574,7 +567,7 @@ class DataFrameReader(OptionUtils):
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
                        recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             path = [path]
         return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
 
@@ -763,7 +756,7 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]
 
-        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+        if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
@@ -788,7 +781,7 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]
 
-        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+        if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.sortBy(col, _to_seq(self._spark._sc, cols))
@@ -1080,6 +1073,145 @@ class DataFrameWriter(OptionUtils):
         for k in properties:
             jprop.setProperty(k, properties[k])
         self.mode(mode)._jwrite.jdbc(url, table, jprop)
+
+
+class DataFrameWriterV2(object):
+    """
+    Interface used to write a class:`pyspark.sql.dataframe.DataFrame`
+    to external storage using the v2 API.
+
+    .. versionadded:: 3.1.0
+    """
+
+    def __init__(self, df, table):
+        self._df = df
+        self._spark = df.sql_ctx
+        self._jwriter = df._jdf.writeTo(table)
+
+    @since(3.1)
+    def using(self, provider):
+        """
+        Specifies a provider for the underlying output data source.
+        Spark's default catalog supports "parquet", "json", etc.
+        """
+        self._jwriter.using(provider)
+        return self
+
+    @since(3.1)
+    def option(self, key, value):
+        """
+        Add a write option.
+        """
+        self._jwriter.option(key, to_str(value))
+        return self
+
+    @since(3.1)
+    def options(self, **options):
+        """
+        Add write options.
+        """
+        options = {k: to_str(v) for k, v in options.items()}
+        self._jwriter.options(options)
+        return self
+
+    @since(3.1)
+    def tableProperty(self, property, value):
+        """
+        Add table property.
+        """
+        self._jwriter.tableProperty(property, value)
+        return self
+
+    @since(3.1)
+    def partitionedBy(self, col, *cols):
+        """
+        Partition the output table created by `create`, `createOrReplace`, or `replace` using
+        the given columns or transforms.
+
+        When specified, the table data will be stored by these values for efficient reads.
+
+        For example, when a table is partitioned by day, it may be stored
+        in a directory layout like:
+
+        * `table/day=2019-06-01/`
+        * `table/day=2019-06-02/`
+
+        Partitioning is one of the most widely used techniques to optimize physical data layout.
+        It provides a coarse-grained index for skipping unnecessary data reads when queries have
+        predicates on the partitioned columns. In order for partitioning to work well, the number
+        of distinct values in each column should typically be less than tens of thousands.
+
+        `col` and `cols` support only the following functions:
+
+        * :py:func:`pyspark.sql.functions.years`
+        * :py:func:`pyspark.sql.functions.months`
+        * :py:func:`pyspark.sql.functions.days`
+        * :py:func:`pyspark.sql.functions.hours`
+        * :py:func:`pyspark.sql.functions.bucket`
+
+        """
+        col = _to_java_column(col)
+        cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
+        return self
+
+    @since(3.1)
+    def create(self):
+        """
+        Create a new table from the contents of the data frame.
+
+        The new table's schema, partition layout, properties, and other configuration will be
+        based on the configuration set on this writer.
+        """
+        self._jwriter.create()
+
+    @since(3.1)
+    def replace(self):
+        """
+        Replace an existing table with the contents of the data frame.
+
+        The existing table's schema, partition layout, properties, and other configuration will be
+        replaced with the contents of the data frame and the configuration set on this writer.
+        """
+        self._jwriter.replace()
+
+    @since(3.1)
+    def createOrReplace(self):
+        """
+        Create a new table or replace an existing table with the contents of the data frame.
+
+        The output table's schema, partition layout, properties,
+        and other configuration will be based on the contents of the data frame
+        and the configuration set on this writer.
+        If the table exists, its configuration and data will be replaced.
+        """
+        self._jwriter.createOrReplace()
+
+    @since(3.1)
+    def append(self):
+        """
+        Append the contents of the data frame to the output table.
+        """
+        self._jwriter.append()
+
+    @since(3.1)
+    def overwrite(self, condition):
+        """
+        Overwrite rows matching the given filter condition with the contents of the data frame in
+        the output table.
+        """
+        condition = _to_java_column(column)
+        self._jwriter.overwrite(condition)
+
+    @since(3.1)
+    def overwritePartitions(self):
+        """
+        Overwrite all partition for which the data frame contains at least one row with the contents
+        of the data frame in the output table.
+
+        This operation is equivalent to Hive's `INSERT OVERWRITE ... PARTITION`, which replaces
+        partitions dynamically depending on the contents of the data frame.
+        """
+        self._jwriter.overwritePartitions()
 
 
 def _test():

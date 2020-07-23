@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -87,11 +88,11 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
     } else {
       col($(featuresCol))
     }
-    val w = if (hasWeightCol) col($(weightCol)).cast(DoubleType) else lit(1.0)
+    val w =
+      if (hasWeightCol) checkNonNegativeWeight(col($(weightCol)).cast(DoubleType)) else lit(1.0)
 
     dataset.select(col($(labelCol)).cast(DoubleType), f, w).rdd.map {
-      case Row(label: Double, feature: Double, weight: Double) =>
-        (label, feature, weight)
+      case Row(label: Double, feature: Double, weight: Double) => (label, feature, weight)
     }
   }
 

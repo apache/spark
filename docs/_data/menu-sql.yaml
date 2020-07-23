@@ -76,14 +76,6 @@
 - text: SQL Reference
   url: sql-ref.html
   subitems:
-    - text: Data Types
-      url: sql-ref-datatypes.html
-    - text: Identifiers
-      url: sql-ref-identifier.html
-    - text: Literals
-      url: sql-ref-literals.html
-    - text: Null Semantics
-      url: sql-ref-null-semantics.html
     - text: ANSI Compliance
       url: sql-ref-ansi-compliance.html
       subitems:
@@ -93,6 +85,27 @@
           url: sql-ref-ansi-compliance.html#type-conversion
         - text: SQL Keywords
           url: sql-ref-ansi-compliance.html#sql-keywords
+    - text: Data Types
+      url: sql-ref-datatypes.html
+    - text: Datetime Pattern
+      url: sql-ref-datetime-pattern.html
+    - text: Functions
+      url: sql-ref-functions.html
+      subitems:
+      - text: Built-in Functions
+        url: sql-ref-functions-builtin.html
+      - text: Scalar UDFs (User-Defined Functions)
+        url: sql-ref-functions-udf-scalar.html
+      - text: UDAFs (User-Defined Aggregate Functions)
+        url: sql-ref-functions-udf-aggregate.html
+      - text: Integration with Hive UDFs/UDAFs/UDTFs
+        url: sql-ref-functions-udf-hive.html
+    - text: Identifiers
+      url: sql-ref-identifier.html
+    - text: Literals
+      url: sql-ref-literals.html
+    - text: Null Semantics
+      url: sql-ref-null-semantics.html
     - text: SQL Syntax
       url: sql-ref-syntax.html
       subitems:
@@ -126,7 +139,7 @@
             - text: REPAIR TABLE
               url: sql-ref-syntax-ddl-repair-table.html
             - text: USE DATABASE
-              url: sql-ref-syntax-qry-select-usedb.html
+              url: sql-ref-syntax-ddl-usedb.html
         - text: Data Manipulation Statements
           url: sql-ref-syntax-dml.html
           subitems:
@@ -158,22 +171,22 @@
                   url: sql-ref-syntax-qry-select-limit.html
                 - text: Common Table Expression
                   url: sql-ref-syntax-qry-select-cte.html
+                - text: Hints
+                  url: sql-ref-syntax-qry-select-hints.html
                 - text: Inline Table
                   url: sql-ref-syntax-qry-select-inline-table.html
                 - text: JOIN
                   url: sql-ref-syntax-qry-select-join.html
-                - text: Join Hints
-                  url: sql-ref-syntax-qry-select-hints.html
                 - text: LIKE Predicate
                   url: sql-ref-syntax-qry-select-like.html
                 - text: Set Operators
                   url: sql-ref-syntax-qry-select-setops.html
                 - text: TABLESAMPLE
-                  url: sql-ref-syntax-qry-sampling.html
+                  url: sql-ref-syntax-qry-select-sampling.html
                 - text: Table-valued Function
                   url: sql-ref-syntax-qry-select-tvf.html
                 - text: Window Function
-                  url: sql-ref-syntax-qry-window.html
+                  url: sql-ref-syntax-qry-select-window.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements
@@ -194,7 +207,9 @@
                 - text: CLEAR CACHE
                   url: sql-ref-syntax-aux-cache-clear-cache.html
                 - text: REFRESH TABLE
-                  url: sql-ref-syntax-aux-refresh-table.html
+                  url: sql-ref-syntax-aux-cache-refresh-table.html
+                - text: REFRESH FUNCTION
+                  url: sql-ref-syntax-aux-cache-refresh-function.html
                 - text: REFRESH
                   url: sql-ref-syntax-aux-cache-refresh.html
             - text: DESCRIBE
@@ -236,6 +251,8 @@
                   url: sql-ref-syntax-aux-conf-mgmt-set.html
                 - text: RESET
                   url: sql-ref-syntax-aux-conf-mgmt-reset.html
+                - text: SET TIME ZONE
+                  url: sql-ref-syntax-aux-conf-mgmt-set-timezone.html
             - text: RESOURCE MANAGEMENT
               url: sql-ref-syntax-aux-resource-mgmt.html
               subitems:
@@ -247,16 +264,3 @@
                   url: sql-ref-syntax-aux-resource-mgmt-list-file.html
                 - text: LIST JAR
                   url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
-    - text: Functions
-      url: sql-ref-functions.html
-      subitems:
-      - text: Built-in Functions
-        url: sql-ref-functions-builtin.html
-      - text: Scalar UDFs (User-Defined Functions)
-        url: sql-ref-functions-udf-scalar.html
-      - text: UDAFs (User-Defined Aggregate Functions)
-        url: sql-ref-functions-udf-aggregate.html
-      - text: Integration with Hive UDFs/UDAFs/UDTFs
-        url: sql-ref-functions-udf-hive.html
-    - text: Datetime Pattern
-      url: sql-ref-datetime-pattern.html

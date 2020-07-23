@@ -495,7 +495,7 @@ object SQLConf {
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The skew factor must be positive.")
-      .createWithDefault(10)
+      .createWithDefault(5)
 
   val SKEW_JOIN_SKEWED_PARTITION_THRESHOLD =
     buildConf("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes")
@@ -1163,6 +1163,15 @@ object SQLConf {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
+  val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
+    .doc("The suggested (not guaranteed) minimum number of split file partitions. " +
+      "If not set, the default value is `spark.default.parallelism`. This configuration is " +
+      "effective only when using file-based sources such as Parquet, JSON and ORC.")
+    .version("3.1.0")
+    .intConf
+    .checkValue(v => v > 0, "The min partition number must be a positive integer.")
+    .createOptional
+
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
       "encountering corrupted files and the contents that have been read will still be returned. " +
@@ -1223,6 +1232,16 @@ object SQLConf {
       .version("2.0.0")
       .intConf
       .createWithDefault(10)
+
+  val STATE_STORE_FORMAT_VALIDATION_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.formatValidation.enabled")
+      .internal()
+      .doc("When true, check if the UnsafeRow from the state store is valid or not when running " +
+        "streaming queries. This can happen if the state store format has been changed. Note, " +
+        "the feature is only effective in the build-in HDFS state store provider now.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.flatMapGroupsWithState.stateFormatVersion")
@@ -1530,18 +1549,18 @@ object SQLConf {
 
   val STREAMING_CHECKPOINT_FILE_MANAGER_CLASS =
     buildConf("spark.sql.streaming.checkpointFileManagerClass")
+      .internal()
       .doc("The class used to write checkpoint files atomically. This class must be a subclass " +
         "of the interface CheckpointFileManager.")
       .version("2.4.0")
-      .internal()
       .stringConf
 
   val STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.escapedPathCheck.enabled")
+      .internal()
       .doc("Whether to detect a streaming query may pick up an incorrect checkpoint path due " +
         "to SPARK-26824.")
       .version("3.0.0")
-      .internal()
       .booleanConf
       .createWithDefault(true)
 
@@ -1691,9 +1710,9 @@ object SQLConf {
   val SESSION_LOCAL_TIMEZONE = buildConf("spark.sql.session.timeZone")
     .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
       "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
-      "Zone offsets must be in the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. " +
-      "Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other short names are not " +
-      "recommended to use because they can be ambiguous.")
+      "Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm' or '(+|-)HH:mm:ss', e.g '-08', " +
+      "'+01:00' or '-13:33:33'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'. Other " +
+      "short names are not recommended to use because they can be ambiguous.")
     .version("2.2.0")
     .stringConf
     .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
@@ -1783,6 +1802,15 @@ object SQLConf {
         "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
+
+  val PYSPARK_JVM_STACKTRACE_ENABLED =
+    buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
+      .doc("When true, it shows the JVM stacktrace in the user-facing PySpark exception " +
+        "together with Python stacktrace. By default, it is disabled and hides JVM stacktrace " +
+        "and shows a Python-friendly exception only.")
+      .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val ARROW_SPARKR_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.sparkr.enabled")
@@ -2064,6 +2092,15 @@ object SQLConf {
       .version("2.4.1")
       .booleanConf
       .createWithDefault(true)
+
+  val DISABLE_HINTS =
+    buildConf("spark.sql.optimizer.disableHints")
+      .internal()
+      .doc("When true, the optimizer will disable user-specified hints that are additional " +
+        "directives for better planning of a query.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST =
     buildConf("spark.sql.optimizer.nestedPredicatePushdown.supportedFileSources")
@@ -2493,6 +2530,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val JSON_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.json.filterPushdown.enabled")
+    .doc("When true, enable filter pushdown to JSON datasource.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val ADD_PARTITION_BATCH_SIZE =
     buildConf("spark.sql.addPartitionInBatch.size")
       .internal()
@@ -2585,6 +2628,49 @@ object SQLConf {
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
+
+  val LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP =
+    buildConf("spark.sql.legacy.allowCastNumericToTimestamp")
+      .internal()
+      .doc("When true, allow casting numeric to timestamp," +
+        "when false, forbid the cast, more details in SPARK-31710")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val COALESCE_BUCKETS_IN_JOIN_ENABLED =
+    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.enabled")
+      .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
+        "the side with a bigger number of buckets will be coalesced to have the same number " +
+        "of buckets as the other side. Bigger number of buckets is divisible by the smaller " +
+        "number of buckets. Bucket coalescing is applied to sort-merge joins and " +
+        "shuffled hash join. Note: Coalescing bucketed table can avoid unnecessary shuffling " +
+        "in join, but it also reduces parallelism and could possibly cause OOM for " +
+        "shuffled hash join.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO =
+    buildConf("spark.sql.bucketing.coalesceBucketsInJoin.maxBucketRatio")
+      .doc("The ratio of the number of two buckets being coalesced should be less than or " +
+        "equal to this value for bucket coalescing to be applied. This configuration only " +
+        s"has an effect when '${COALESCE_BUCKETS_IN_JOIN_ENABLED.key}' is set to true.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ > 0, "The difference must be positive.")
+      .createWithDefault(4)
+
+  val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
+    buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
+      .internal()
+      .doc("The maximum number of partitionings that a HashPartitioning can be expanded to. " +
+        "This configuration is applicable only for BroadcastHashJoin inner joins and can be " +
+        "set to '0' to disable this feature.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0, "The value must be non-negative.")
+      .createWithDefault(8)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -2715,6 +2801,8 @@ class SQLConf extends Serializable with Logging {
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
+  def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
+
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
@@ -2751,6 +2839,8 @@ class SQLConf extends Serializable with Logging {
 
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
+  def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
+
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
@@ -2775,7 +2865,15 @@ class SQLConf extends Serializable with Logging {
 
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
-  def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
+  def defaultNumShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
+
+  def numShufflePartitions: Int = {
+    if (adaptiveExecutionEnabled && coalesceShufflePartitionsEnabled) {
+      getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(defaultNumShufflePartitions)
+    } else {
+      defaultNumShufflePartitions
+    }
+  }
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
@@ -2787,9 +2885,6 @@ class SQLConf extends Serializable with Logging {
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
-
-  def initialShufflePartitionNum: Int =
-    getConf(COALESCE_PARTITIONS_INITIAL_PARTITION_NUM).getOrElse(numShufflePartitions)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
@@ -2884,6 +2979,9 @@ class SQLConf extends Serializable with Logging {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
+
+  def broadcastHashJoinOutputPartitioningExpandLimit: Int =
+    getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -3063,6 +3161,8 @@ class SQLConf extends Serializable with Logging {
 
   def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
 
+  def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
+
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
 
   def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
@@ -3163,7 +3263,19 @@ class SQLConf extends Serializable with Logging {
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
+  def jsonFilterPushDown: Boolean = getConf(JSON_FILTER_PUSHDOWN_ENABLED)
+
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
+
+  def legacyAllowCastNumericToTimestamp: Boolean =
+    getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
+
+  def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
+
+  def coalesceBucketsInJoinEnabled: Boolean = getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED)
+
+  def coalesceBucketsInJoinMaxBucketRatio: Int =
+    getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
 
   /** ********************** SQLConf functionality methods ************ */
 

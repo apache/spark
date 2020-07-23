@@ -336,7 +336,7 @@ private[kafka010] class KafkaOffsetReader(
               }
             })
           }
-          incorrectOffsets
+          incorrectOffsets.toSeq
         }
 
         // Retry to fetch latest offsets when detecting incorrect offsets. We don't use
