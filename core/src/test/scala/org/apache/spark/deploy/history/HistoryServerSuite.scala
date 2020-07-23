@@ -35,8 +35,10 @@ import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito._
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatestplus.selenium.WebBrowser
 
@@ -309,14 +311,18 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     val urlsThroughKnox = responseThroughKnox \\ "@href" map (_.toString)
     val siteRelativeLinksThroughKnox = urlsThroughKnox filter (_.startsWith("/"))
-    all (siteRelativeLinksThroughKnox) should startWith (knoxBaseUrl)
+    for (link <- siteRelativeLinksThroughKnox) {
+      link should startWith (knoxBaseUrl)
+    }
 
     val directRequest = mock[HttpServletRequest]
     val directResponse = page.render(directRequest)
 
     val directUrls = directResponse \\ "@href" map (_.toString)
     val directSiteRelativeLinks = directUrls filter (_.startsWith("/"))
-    all (directSiteRelativeLinks) should not startWith (knoxBaseUrl)
+    for (link <- directSiteRelativeLinks) {
+      link should not startWith (knoxBaseUrl)
+    }
   }
 
   test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
@@ -331,7 +337,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // then
     val urls = response \\ "@href" map (_.toString)
     val siteRelativeLinks = urls filter (_.startsWith("/"))
-    all (siteRelativeLinks) should startWith (uiRoot)
+    for (link <- siteRelativeLinks) {
+      link should startWith (uiRoot)
+    }
   }
 
   test("/version api endpoint") {

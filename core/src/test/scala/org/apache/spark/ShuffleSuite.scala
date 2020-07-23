@@ -20,7 +20,8 @@ package org.apache.spark
 import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.internal.config

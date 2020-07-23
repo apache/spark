@@ -24,7 +24,8 @@ import scala.util.{Random, Try}
 import scala.util.control.NonFatal
 
 import org.mockito.Mockito._
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
