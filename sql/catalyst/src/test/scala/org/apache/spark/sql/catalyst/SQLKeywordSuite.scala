@@ -159,7 +159,7 @@ class SQLKeywordSuite extends SparkFunSuite with SQLKeywordUtils {
     }
   }
 
-  test("Spark keywords are documented correctly under ansi mode") {
+  test("Spark keywords are documented correctly under ANSI mode") {
     // keywords under ANSI mode should either be reserved or non-reserved.
     keywordsInDoc.map(_.apply(1)).foreach { desc =>
       assert(desc == "reserved" || desc == "non-reserved")
