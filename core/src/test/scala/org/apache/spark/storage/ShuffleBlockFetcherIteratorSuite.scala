@@ -66,6 +66,14 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     transfer
   }
 
+  private def createMockBlockManager(): BlockManager = {
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+    doReturn(None).when(blockManager).hostLocalDirManager
+    blockManager
+  }
+
   private def initHostLocalDirManager(
       blockManager: BlockManager,
       hostLocalDirs: Map[String, Array[String]]): Unit = {
@@ -114,9 +122,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("successful 3 local + 4 host local + 2 remote reads") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-local-client", "test-local-host", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
+    val blockManager = createMockBlockManager()
+    val localBmId = blockManager.blockManagerId
 
     // Make sure blockManager.getBlockData would return the blocks
     val localBlocks = Map[BlockId, ManagedBuffer](
@@ -199,9 +206,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("error during accessing host local dirs for executors") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-local-client", "test-local-host", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
+    val blockManager = createMockBlockManager()
     val hostLocalBlocks = Map[BlockId, ManagedBuffer](
       ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer())
 
@@ -252,10 +257,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("Hit maxBytesInFlight limitation before maxBlocksInFlightPerAddress") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
     val remoteBmId1 = BlockManagerId("test-remote-client-1", "test-remote-host1", 1)
     val remoteBmId2 = BlockManagerId("test-remote-client-2", "test-remote-host2", 2)
     val blockId1 = ShuffleBlockId(0, 1, 0)
@@ -297,10 +299,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("Hit maxBlocksInFlightPerAddress limitation before maxBytesInFlight") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
     val remoteBmId = BlockManagerId("test-remote-client-1", "test-remote-host", 2)
     val blockId1 = ShuffleBlockId(0, 1, 0)
     val blockId2 = ShuffleBlockId(0, 2, 0)
@@ -344,10 +343,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("fetch continuous blocks in batch successful 3 local + 4 host local + 2 remote reads") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
+    val localBmId = blockManager.blockManagerId
     // Make sure blockManager.getBlockData would return the merged block
     val localBlocks = Seq[BlockId](
       ShuffleBlockId(0, 0, 0),
@@ -431,10 +428,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("fetch continuous blocks in batch should respect maxBytesInFlight") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
     // Make sure remote blocks would return the merged block
     val remoteBmId1 = BlockManagerId("test-client-1", "test-client-1", 1)
     val remoteBmId2 = BlockManagerId("test-client-2", "test-client-2", 2)
@@ -490,10 +484,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("fetch continuous blocks in batch should respect maxBlocksInFlightPerAddress") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-local-host", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
     // Make sure remote blocks would return the merged block
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 1)
     val remoteBlocks = Seq(
@@ -545,10 +536,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("release current unexhausted buffer in case the task completes early") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val blocks = Map[BlockId, ManagedBuffer](
@@ -613,10 +601,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("fail all blocks if any of the remote request fails") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val blocks = Map[BlockId, ManagedBuffer](
@@ -703,10 +688,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("retry corrupt blocks") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val blocks = Map[BlockId, ManagedBuffer](
@@ -781,9 +763,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
   test("big blocks are also checked for corruption") {
     val streamLength = 10000L
-    val blockManager = mock(classOf[BlockManager])
-    val localBlockManagerId = BlockManagerId("local-client", "local-client", 1)
-    doReturn(localBlockManagerId).when(blockManager).blockManagerId
+    val blockManager = createMockBlockManager()
 
     // This stream will throw IOException when the first byte is read
     val corruptBuffer1 = mockCorruptBuffer(streamLength, 0)
@@ -902,10 +882,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("retry corrupt blocks (disabled)") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val blocks = Map[BlockId, ManagedBuffer](
@@ -967,10 +944,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
   test("Blocks should be shuffled to disk when size of the request is above the" +
     " threshold(maxReqSizeShuffleToMem).") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
     val diskBlockManager = mock(classOf[DiskBlockManager])
     val tmpDir = Utils.createTempDir()
     doReturn{
@@ -1032,10 +1006,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   test("fail zero-size blocks") {
-    val blockManager = mock(classOf[BlockManager])
-    val localBmId = BlockManagerId("test-client", "test-client", 1)
-    doReturn(localBmId).when(blockManager).blockManagerId
-
+    val blockManager = createMockBlockManager()
     // Make sure remote blocks would return
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val blocks = Map[BlockId, ManagedBuffer](
