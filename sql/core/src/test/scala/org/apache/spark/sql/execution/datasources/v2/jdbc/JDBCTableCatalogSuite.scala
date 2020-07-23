@@ -98,9 +98,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   }
 
   test("create a table") {
-    sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
-    checkAnswer(
-      sql("SHOW TABLES IN h2.test"),
-      Seq(Row("test", "people"), Row("test", "new_table")))
+    withTable("h2.test.new_table") {
+      sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _")
+      checkAnswer(
+        sql("SHOW TABLES IN h2.test"),
+        Seq(Row("test", "people"), Row("test", "new_table")))
+    }
   }
 }
