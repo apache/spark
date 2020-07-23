@@ -1123,7 +1123,7 @@ class PlanParserSuite extends AnalysisTest {
             ("TOK_TABLEROWFORMATNULL", "'NULL'")), None, None,
           List.empty, List.empty, None, None, false)))
 
-    // verify ROW FORMAT SERDE
+    // verify with ROW FORMAT SERDE
     intercept(
       """
         |SELECT TRANSFORM(a, b, c)
