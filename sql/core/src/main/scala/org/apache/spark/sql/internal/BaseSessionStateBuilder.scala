@@ -17,7 +17,6 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkConf
-
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, ResolveSessionCatalog}
