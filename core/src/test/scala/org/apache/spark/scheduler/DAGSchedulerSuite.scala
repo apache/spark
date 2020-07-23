@@ -2277,7 +2277,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(stackTraceString.contains("org.apache.spark.rdd.RDD.count"))
 
     // should include the FunSuite setup:
-    assert(stackTraceString.contains("org.scalatest.FunSuite"))
+    assert(stackTraceString.contains("org.scalatest.funsuite.AnyFunSuite"))
   }
 
   test("catch errors in event loop") {

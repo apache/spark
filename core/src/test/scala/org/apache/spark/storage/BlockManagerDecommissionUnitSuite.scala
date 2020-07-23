@@ -21,8 +21,8 @@ import scala.concurrent.duration._
 
 import org.mockito.{ArgumentMatchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
-import org.scalatest._
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.internal.config

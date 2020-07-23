@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.util.Random
 
-import org.scalatest.Matchers.the
+import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -31,7 +31,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
