@@ -329,6 +329,21 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     assert(sink.allData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7, 11, 22, 33))
   }
 
+  test("drop temp view") {
+    val input = MemoryStream[Int]
+    val tableName = "memStream"
+    val query = input.toDF().writeStream
+      .format("memory")
+      .queryName(tableName)
+      .start()
+    input.addData(1, 2, 3)
+    query.processAllAvailable()
+
+    assert(spark.catalog.tableExists(tableName))
+    query.stop()
+    assert(!spark.catalog.tableExists(tableName))
+  }
+
   private def addBatchFunc(sink: MemorySink, needTruncate: Boolean)(
       batchId: Long,
       vals: Seq[Int]): Unit = {

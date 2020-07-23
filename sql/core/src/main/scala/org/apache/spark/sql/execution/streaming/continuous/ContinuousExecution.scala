@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, Offset =
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
+import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.util.Clock
 
@@ -425,6 +426,11 @@ class ContinuousExecution(
       // The query execution thread will clean itself up in the finally clause of runContinuous.
       // We just need to interrupt the long running job.
       interruptAndAwaitExecutionThreadTermination()
+    }
+    if (sink.isInstanceOf[MemorySink]) {
+      // A temp view is created in DataStreamWriter.start() for the MemorySink, so here we drop it
+      // correspondingly.
+      sparkSession.catalog.dropTempView(name)
     }
     logInfo(s"Query $prettyIdString was stopped")
   }

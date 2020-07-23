@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Tabl
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
+import org.apache.spark.sql.execution.streaming.sources.{MemorySink, WriteToMicroBatchDataSource}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.util.Clock
@@ -164,6 +164,11 @@ class MicroBatchExecution(
       interruptAndAwaitExecutionThreadTermination()
       // microBatchThread may spawn new jobs, so we need to cancel again to prevent a leak
       sparkSession.sparkContext.cancelJobGroup(runId.toString)
+    }
+    if (sink.isInstanceOf[MemorySink]) {
+      // A temp view is created in DataStreamWriter.start() for the MemorySink, so here we drop it
+      // correspondingly.
+      sparkSession.catalog.dropTempView(name)
     }
     logInfo(s"Query $prettyIdString was stopped")
   }
