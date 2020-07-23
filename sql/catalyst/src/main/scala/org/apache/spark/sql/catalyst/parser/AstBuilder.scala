@@ -3613,7 +3613,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val functionName = Option(ctx.multipartIdentifier)
       .map(visitMultipartIdentifier)
       .map(UnresolvedFunc(_))
-
     ShowFunctions(functionName, userScope, systemScope, pattern)
   }
 
@@ -3654,7 +3653,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-
     val isTemp = ctx.TEMPORARY != null
     val func: LogicalPlan = if (isTemp) {
       import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
