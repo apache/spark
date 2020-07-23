@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioning, Partitioning, PartitioningCollection, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, LongType}
 
 /**
@@ -51,11 +50,22 @@ case class BroadcastHashJoinExec(
     isNullAwareAntiJoin: Boolean = false)
   extends HashJoin with CodegenSupport {
 
+  if (isNullAwareAntiJoin) {
+    // TODO support multi column NULL-aware anti join in future.
+    // See. http://www.vldb.org/pvldb/vol2/vldb09-423.pdf Section 6
+    // multi-column null aware anti join is much more complicated than single column ones.
+    require(leftKeys.length == 1, "leftKeys length should be 1")
+    require(rightKeys.length == 1, "rightKeys length should be 1")
+    require(joinType == LeftAnti, "joinType must be LeftAnti.")
+    require(buildSide == BuildRight, "buildSide must be BuildRight.")
+    require(condition.isEmpty, "null aware anti join optimize condition should be empty.")
+  }
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = HashedRelationBroadcastMode(buildBoundKeys)
+    val mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAwareAntiJoin)
     buildSide match {
       case BuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
@@ -137,9 +147,11 @@ case class BroadcastHashJoinExec(
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     if (isNullAwareAntiJoin) {
       streamedPlan.execute().mapPartitionsInternal { streamedIter =>
-        if (broadcastRelation.value.inputEmpty) {
+        val hashed = broadcastRelation.value.asReadOnlyCopy()
+        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
+        if (hashed.isOriginInputEmpty) {
           streamedIter
-        } else if (broadcastRelation.value.anyNullKeyExists) {
+        } else if (hashed.allNullColumnKeyExistsInOriginInput) {
           Iterator.empty
         } else {
           val keyGenerator = UnsafeProjection.create(
@@ -149,9 +161,14 @@ case class BroadcastHashJoinExec(
           )
           streamedIter.filter(row => {
             val lookupKey: UnsafeRow = keyGenerator(row)
-            val streamedRowIsNull = lookupKey.isNullAt(0)
-            val notInKeyEqual = broadcastRelation.value.get(lookupKey) != null
-            !streamedRowIsNull && !notInKeyEqual
+            if (lookupKey.allNull()) {
+              false
+            } else {
+              // in isNullAware mode
+              // UnsafeHashedRelation include anyNull key, if match, dropped row
+              // Same as LongHashedRelation where lookupKey isNotNullAt(0)
+              hashed.get(lookupKey) == null
+            }
           })
         }
       }
@@ -477,26 +494,45 @@ case class BroadcastHashJoinExec(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
+    val isLongHashedRelation = broadcastRelation.value.isInstanceOf[LongHashedRelation]
+
+    // fast stop if isOriginInputEmpty = true
+    // whether isNullAwareAntiJoin is true or false
+    // should accept all rows in streamedSide
+    if (broadcastRelation.value.isOriginInputEmpty) {
+      return s"""
+                |// Common Anti Join isOriginInputEmpty(true) accept all
+                |$numOutput.add(1);
+                |${consume(ctx, input)}
+          """.stripMargin
+    }
 
     if (isNullAwareAntiJoin) {
-      require(leftKeys.length == 1, "leftKeys length should be 1")
-      require(rightKeys.length == 1, "rightKeys length should be 1")
-      require(joinType == LeftAnti, "joinType must be LeftAnti.")
-      require(buildSide == BuildRight, "buildSide must be BuildRight.")
-      require(SQLConf.get.nullAwareAntiJoinOptimizeEnabled,
-        "nullAwareAntiJoinOptimizeEnabled must be on for null aware anti join optimize.")
-      require(checkCondition == "", "null aware anti join optimize condition should be empty.")
-
-      if (broadcastRelation.value.inputEmpty) {
+      if (broadcastRelation.value.allNullColumnKeyExistsInOriginInput) {
         return s"""
-           |// singleColumn NAAJ inputEmpty(true) accept all
-           |$numOutput.add(1);
-           |${consume(ctx, input)}
-         """.stripMargin
-      } else if (broadcastRelation.value.anyNullKeyExists) {
+                  |// NAAJ isOriginInputEmpty(false) anyNullKeyExists(true) reject all
+            """.stripMargin
+      } else {
+        val found = ctx.freshName("found")
         return s"""
-           |// singleColumn NAAJ inputEmpty(false) anyNullKeyExists(true) reject all
-         """.stripMargin
+                  |// NAAJ isOriginInputEmpty(false) allNullColumnKeyExistsInOriginInput(false)
+                  |boolean $found = false;
+                  |// generate join key for stream side
+                  |${keyEv.code}
+                  |if (${ if (isLongHashedRelation) s"$anyNull" else s"${keyEv.value}.allNull()"}) {
+                  |  $found = true;
+                  |} else {
+                  |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+                  |  if ($matched != null) {
+                  |    $found = true;
+                  |  }
+                  |}
+                  |
+                  |if (!$found) {
+                  |  $numOutput.add(1);
+                  |  ${consume(ctx, input)}
+                  |}
+            """.stripMargin
       }
     }
 
@@ -517,8 +553,6 @@ case class BroadcastHashJoinExec(
          |    }
          |  }
          |}
-         |// special case for NullAwareAntiJoin, if anyNull in streamedRow, row should be dropped.
-         |${ if (isNullAwareAntiJoin) s"else { $found = true; }" else ""}
          |if (!$found) {
          |  $numOutput.add(1);
          |  ${consume(ctx, input)}
@@ -546,8 +580,6 @@ case class BroadcastHashJoinExec(
          |    }
          |  }
          |}
-         |// special case for NullAwareAntiJoin, if anyNull in streamedRow, row should be dropped.
-         |${ if (isNullAwareAntiJoin) s"else { $found = true; }" else ""}
          |if (!$found) {
          |  $numOutput.add(1);
          |  ${consume(ctx, input)}

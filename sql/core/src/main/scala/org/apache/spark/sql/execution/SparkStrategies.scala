@@ -233,14 +233,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           .getOrElse(createJoinWithoutHint())
 
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
-        if (SQLConf.get.nullAwareAntiJoinOptimizeUseBHJ) {
-          // for BHJ Prototype
-          Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
-            None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
-        } else {
-          Seq(joins.BroadcastNullAwareLeftAntiHashJoinExec(leftKeys, rightKeys,
-            planLater(j.left), planLater(j.right), BuildRight, LeftAnti, None))
-        }
+        Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+          None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
       // If it is not an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast nested loop join. If both sides have the broadcast

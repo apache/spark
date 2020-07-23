@@ -2676,18 +2676,10 @@ object SQLConf {
     buildConf("spark.sql.nullAwareAntiJoin.optimize.enabled")
       .internal()
       .doc("When true, NULL-aware anti join execution will be planed into " +
-        "BroadcastNullAwareLeftAntiHashJoinExec, " +
+        "BroadcastJoinExec with flag isNullAwareAntiJoin enabled, " +
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup." +
         "Only support for singleColumn NAAJ for now.")
-      .booleanConf
-      .createWithDefault(false)
-
-  val NULL_AWARE_ANTI_JOIN_OPTIMIZE_USE_BHJ =
-    buildConf("spark.sql.nullAwareAntiJoin.optimize.use.bhj")
-      .internal()
-      .doc("When true, NULL-aware anti join execution will be planed into " +
-        "BroadcastHashJoinExec with special execution.")
       .booleanConf
       .createWithDefault(false)
 
@@ -3298,9 +3290,6 @@ class SQLConf extends Serializable with Logging {
 
   def nullAwareAntiJoinOptimizeEnabled: Boolean =
     getConf(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED)
-
-  def nullAwareAntiJoinOptimizeUseBHJ: Boolean =
-    getConf(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_USE_BHJ)
 
   /** ********************** SQLConf functionality methods ************ */
 

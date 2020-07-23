@@ -72,18 +72,6 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def keyIsUnique: Boolean
 
   /**
-   * Note that, the hashed relation can be empty despite the Iterator[InternalRow] being not empty,
-   * since the hashed relation skips over null keys.
-   */
-  def inputEmpty: Boolean
-
-  /**
-   * It's only used in null aware anti join since the hashed relation skips over null keys.
-   * If buildSide include null key row, all streamedSide row will be dropped in NAAJ.
-   */
-  def anyNullKeyExists: Boolean
-
-  /**
    * Returns an iterator for keys of InternalRow type.
    */
   def keys(): Iterator[InternalRow]
@@ -92,6 +80,32 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Returns a read-only copy of this, to be safely used in current thread.
    */
   def asReadOnlyCopy(): HashedRelation
+
+
+  /**
+   * Normally HashedRelation is built from an Source (input: Iterator[InternalRow]).
+   * This indicates the origin input is empty.
+   * Note that, the hashed relation can be empty despite the input being not empty,
+   * since the hashed relation skips over null keys.
+   */
+  var isOriginInputEmpty: Boolean
+  def setOriginInputEmtpy(isOriginInputEmpty: Boolean): HashedRelation = {
+    this.isOriginInputEmpty = isOriginInputEmpty
+    this
+  }
+
+  /**
+   * It's only used in null aware anti join.
+   * This will be set true if Source (input: Iterator[InternalRow]) contains a key,
+   * which is allNullColumn.
+   */
+  var allNullColumnKeyExistsInOriginInput: Boolean
+  def setAllNullColumnKeyExistsInOriginInput(
+      allNullColumnKeyExistsInOriginInput: Boolean): HashedRelation = {
+    this.allNullColumnKeyExistsInOriginInput =
+      allNullColumnKeyExistsInOriginInput
+    this
+  }
 
   /**
    * Release any used resources.
@@ -108,7 +122,8 @@ private[execution] object HashedRelation {
       input: Iterator[InternalRow],
       key: Seq[Expression],
       sizeEstimate: Int = 64,
-      taskMemoryManager: TaskMemoryManager = null): HashedRelation = {
+      taskMemoryManager: TaskMemoryManager = null,
+      isNullAware: Boolean = false): HashedRelation = {
     val mm = Option(taskMemoryManager).getOrElse {
       new TaskMemoryManager(
         new UnifiedMemoryManager(
@@ -120,9 +135,9 @@ private[execution] object HashedRelation {
     }
 
     if (key.length == 1 && key.head.dataType == LongType) {
-      LongHashedRelation(input, key, sizeEstimate, mm)
+      LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     } else {
-      UnsafeHashedRelation(input, key, sizeEstimate, mm)
+      UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     }
   }
 }
@@ -146,6 +161,9 @@ private[joins] class UnsafeHashedRelation(
 
   override def asReadOnlyCopy(): UnsafeHashedRelation = {
     new UnsafeHashedRelation(numKeys, numFields, binaryMap)
+      .setOriginInputEmtpy(this.isOriginInputEmpty)
+      .setAllNullColumnKeyExistsInOriginInput(this.allNullColumnKeyExistsInOriginInput)
+      .asInstanceOf[UnsafeHashedRelation]
   }
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
@@ -227,8 +245,9 @@ private[joins] class UnsafeHashedRelation(
       writeInt: (Int) => Unit,
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
-    writeBoolean(anyNullKeyExists)
     writeInt(numFields)
+    writeBoolean(isOriginInputEmpty)
+    writeBoolean(allNullColumnKeyExistsInOriginInput)
     // TODO: move these into BytesToBytesMap
     writeLong(binaryMap.numKeys())
     writeLong(binaryMap.numValues())
@@ -262,8 +281,9 @@ private[joins] class UnsafeHashedRelation(
       readInt: () => Int,
       readLong: () => Long,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
-    val anyNullKeyExists = readBoolean()
     numFields = readInt()
+    isOriginInputEmpty = readBoolean()
+    allNullColumnKeyExistsInOriginInput = readBoolean()
     resultRow = new UnsafeRow(numFields)
     val nKeys = readLong()
     val nValues = readLong()
@@ -288,8 +308,6 @@ private[joins] class UnsafeHashedRelation(
       taskMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
       pageSizeBytes)
-
-    binaryMap.setAnyNullKeyExists(anyNullKeyExists)
 
     var i = 0
     var keyBuffer = new Array[Byte](1024)
@@ -321,9 +339,8 @@ private[joins] class UnsafeHashedRelation(
     read(() => in.readBoolean(), () => in.readInt(), () => in.readLong(), in.readBytes)
   }
 
-  override def inputEmpty: Boolean = binaryMap.inputEmpty
-
-  override def anyNullKeyExists: Boolean = binaryMap.isAnyNullKeyExists
+  override var isOriginInputEmpty: Boolean = _
+  override var allNullColumnKeyExistsInOriginInput: Boolean = _
 }
 
 private[joins] object UnsafeHashedRelation {
@@ -333,6 +350,15 @@ private[joins] object UnsafeHashedRelation {
       key: Seq[Expression],
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager): HashedRelation = {
+    apply(input, key, sizeEstimate, taskMemoryManager, isNullAware = false)
+  }
+
+  def apply(
+      input: Iterator[InternalRow],
+      key: Seq[Expression],
+      sizeEstimate: Int,
+      taskMemoryManager: TaskMemoryManager,
+      isNullAware: Boolean = false): HashedRelation = {
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
@@ -345,11 +371,19 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
+    val numKeys = key.length
+    val isOriginInputEmpty = !input.hasNext
+    var allNullColumnKeyExistsInOriginInput: Boolean = false
     while (input.hasNext) {
       val row = input.next().asInstanceOf[UnsafeRow]
       numFields = row.numFields()
       val key = keyGenerator(row)
-      if (!key.anyNull) {
+      if ((0 until numKeys).forall(key.isNullAt)) {
+        allNullColumnKeyExistsInOriginInput = true
+      }
+
+      // TODO keep anyNull key for multi column NAAJ support in future
+      if (isNullAware || (!isNullAware && !key.anyNull)) {
         val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
         val success = loc.append(
           key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
@@ -360,12 +394,12 @@ private[joins] object UnsafeHashedRelation {
           throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
           // scalastyle:on throwerror
         }
-      } else {
-        binaryMap.setAnyNullKeyExists(true)
       }
     }
 
     new UnsafeHashedRelation(key.size, numFields, binaryMap)
+        .setOriginInputEmtpy(isOriginInputEmpty)
+        .setAllNullColumnKeyExistsInOriginInput(allNullColumnKeyExistsInOriginInput)
   }
 }
 
@@ -405,9 +439,6 @@ private[joins] object UnsafeHashedRelation {
  */
 private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, capacity: Int)
   extends MemoryConsumer(mm) with Externalizable with KryoSerializable {
-
-  var anyNullKeyExists = false
-  def inputEmpty: Boolean = numKeys == 0 && !anyNullKeyExists
 
   // Whether the keys are stored in dense mode or not.
   private var isDense = false
@@ -787,7 +818,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       writeBoolean: (Boolean) => Unit,
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
-    writeBoolean(anyNullKeyExists)
     writeBoolean(isDense)
     writeLong(minKey)
     writeLong(maxKey)
@@ -829,7 +859,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       readBoolean: () => Boolean,
       readLong: () => Long,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
-    anyNullKeyExists = readBoolean()
     isDense = readBoolean()
     minKey = readLong()
     maxKey = readLong()
@@ -863,7 +892,11 @@ class LongHashedRelation(
   // Needed for serialization (it is public to make Java serialization work)
   def this() = this(0, null)
 
-  override def asReadOnlyCopy(): LongHashedRelation = new LongHashedRelation(nFields, map)
+  override def asReadOnlyCopy(): LongHashedRelation =
+    new LongHashedRelation(nFields, map)
+    .setOriginInputEmtpy(this.isOriginInputEmpty)
+    .setAllNullColumnKeyExistsInOriginInput(this.allNullColumnKeyExistsInOriginInput)
+    .asInstanceOf[LongHashedRelation]
 
   override def estimatedSize: Long = map.getTotalMemoryConsumption
 
@@ -895,12 +928,16 @@ class LongHashedRelation(
 
   override def writeExternal(out: ObjectOutput): Unit = {
     out.writeInt(nFields)
+    out.writeBoolean(isOriginInputEmpty)
+    out.writeBoolean(allNullColumnKeyExistsInOriginInput)
     out.writeObject(map)
   }
 
   override def readExternal(in: ObjectInput): Unit = {
     nFields = in.readInt()
     resultRow = new UnsafeRow(nFields)
+    isOriginInputEmpty = in.readBoolean()
+    allNullColumnKeyExistsInOriginInput = in.readBoolean()
     map = in.readObject().asInstanceOf[LongToUnsafeRowMap]
   }
 
@@ -909,9 +946,8 @@ class LongHashedRelation(
    */
   override def keys(): Iterator[InternalRow] = map.keys()
 
-  override def inputEmpty: Boolean = map.inputEmpty
-
-  override def anyNullKeyExists: Boolean = map.anyNullKeyExists
+  override var isOriginInputEmpty: Boolean = _
+  override var allNullColumnKeyExistsInOriginInput: Boolean = _
 }
 
 /**
@@ -923,30 +959,47 @@ private[joins] object LongHashedRelation {
       key: Seq[Expression],
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager): LongHashedRelation = {
+    apply(input, key, sizeEstimate, taskMemoryManager, isNullAware = false)
+  }
+
+  def apply(
+      input: Iterator[InternalRow],
+      key: Seq[Expression],
+      sizeEstimate: Int,
+      taskMemoryManager: TaskMemoryManager,
+      isNullAware: Boolean): LongHashedRelation = {
 
     val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)
 
     // Create a mapping of key -> rows
     var numFields = 0
+    val isOriginInputEmpty: Boolean = !input.hasNext
+    var allNullColumnKeyExistsInOriginInput: Boolean = false
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
       numFields = unsafeRow.numFields()
       val rowKey = keyGenerator(unsafeRow)
       if (!rowKey.isNullAt(0)) {
+        // LongToUnsafeRowMap can't insert null key
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
       } else {
-        map.anyNullKeyExists = true
+        // LongHashedRelation is single-column key
+        // rowKey.isNullAt(0) equivalent to allNullColumnKeyExistsInOriginInput
+        allNullColumnKeyExistsInOriginInput = true
       }
     }
     map.optimize()
     new LongHashedRelation(numFields, map)
+      .setOriginInputEmtpy(isOriginInputEmpty)
+      .setAllNullColumnKeyExistsInOriginInput(allNullColumnKeyExistsInOriginInput)
+      .asInstanceOf[LongHashedRelation]
   }
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
-case class HashedRelationBroadcastMode(key: Seq[Expression])
+case class HashedRelationBroadcastMode(key: Seq[Expression], isNullAware: Boolean = false)
   extends BroadcastMode {
 
   override def transform(rows: Array[InternalRow]): HashedRelation = {
@@ -958,9 +1011,9 @@ case class HashedRelationBroadcastMode(key: Seq[Expression])
       sizeHint: Option[Long]): HashedRelation = {
     sizeHint match {
       case Some(numRows) =>
-        HashedRelation(rows, canonicalized.key, numRows.toInt)
+        HashedRelation(rows, canonicalized.key, numRows.toInt, isNullAware = isNullAware)
       case None =>
-        HashedRelation(rows, canonicalized.key)
+        HashedRelation(rows, canonicalized.key, isNullAware = isNullAware)
     }
   }
 

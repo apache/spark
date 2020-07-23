@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BroadcastNullAwareLeftAntiHashJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -1671,7 +1671,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
             Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
         if (config._1) {
-          assert(findJoinExec(df).isInstanceOf[BroadcastNullAwareLeftAntiHashJoinExec])
+          assert(findJoinExec(df).isInstanceOf[BroadcastHashJoinExec])
         } else {
           assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
         }
@@ -1680,7 +1680,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         df = sql("select * from l where a not in (select c from r where d < 6.0)")
         checkAnswer(df, Seq.empty)
         if (config._1) {
-          assert(findJoinExec(df).isInstanceOf[BroadcastNullAwareLeftAntiHashJoinExec])
+          assert(findJoinExec(df).isInstanceOf[BroadcastHashJoinExec])
         } else {
           assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
         }
@@ -1689,7 +1689,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         df = sql("select * from l where b = 5.0 and a not in (select c from r where c is not null)")
         checkAnswer(df, Seq.empty)
         if (config._1) {
-          assert(findJoinExec(df).isInstanceOf[BroadcastNullAwareLeftAntiHashJoinExec])
+          assert(findJoinExec(df).isInstanceOf[BroadcastHashJoinExec])
         } else {
           assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
         }
@@ -1698,7 +1698,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         df = sql("select * from l where a = 6 and a not in (select c from r where c is not null)")
         checkAnswer(df, Seq.empty)
         if (config._1) {
-          assert(findJoinExec(df).isInstanceOf[BroadcastNullAwareLeftAntiHashJoinExec])
+          assert(findJoinExec(df).isInstanceOf[BroadcastHashJoinExec])
         } else {
           assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
         }
@@ -1707,7 +1707,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         df = sql("select * from l where a = 1 and a not in (select c from r where c is not null)")
         checkAnswer(df, Row(1, 2.0) :: Row(1, 2.0) :: Nil)
         if (config._1) {
-          assert(findJoinExec(df).isInstanceOf[BroadcastNullAwareLeftAntiHashJoinExec])
+          assert(findJoinExec(df).isInstanceOf[BroadcastHashJoinExec])
         } else {
           assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
         }
@@ -1725,7 +1725,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         checkAnswer(df,
             Row(null, 5.0) :: Nil)
         if (config._1) {
-          assert(findJoinExec(df).isInstanceOf[BroadcastNullAwareLeftAntiHashJoinExec])
+          assert(findJoinExec(df).isInstanceOf[BroadcastHashJoinExec])
         } else {
           assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
         }
