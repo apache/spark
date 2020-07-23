@@ -19,11 +19,9 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
 import java.util.{Arrays, Map => JMap}
-import java.util.concurrent.RejectedExecutionException
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.shims.Utils
@@ -37,7 +35,6 @@ import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveStrin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.{Utils => SparkUtils}
 
 private[hive] class SparkExecuteStatementOperation(
     val sqlContext: SQLContext,
@@ -181,7 +178,7 @@ private[hive] class SparkExecuteStatementOperation(
         resultOffset += 1
       }
       previousFetchEndOffset = resultOffset
-      log.info(s"Returning result set with ${curRow} rows from offsets " +
+      logInfo(s"Returning result set with ${curRow} rows from offsets " +
         s"[$previousFetchStartOffset, $previousFetchEndOffset) with $statementId")
       resultRowSet
     }
@@ -218,7 +215,9 @@ private[hive] class SparkExecuteStatementOperation(
                   execute()
                 }
               } catch {
-                case e: HiveSQLException => setOperationException(e)
+                case e: HiveSQLException =>
+                  setOperationException(e)
+                  logError(s"Error executing query with $statementId,", e)
               }
             }
           }
@@ -238,21 +237,7 @@ private[hive] class SparkExecuteStatementOperation(
         val backgroundHandle =
           parentSession.getSessionManager().submitBackgroundOperation(backgroundOperation)
         setBackgroundHandle(backgroundHandle)
-      } catch {
-        case rejected: RejectedExecutionException =>
-          logError("Error submitting query in background, query rejected", rejected)
-          setState(OperationState.ERROR)
-          HiveThriftServer2.eventManager.onStatementError(
-            statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
-          throw new HiveSQLException("The background threadpool cannot accept" +
-            " new task for execution, please retry the operation", rejected)
-        case NonFatal(e) =>
-          logError(s"Error executing query in background", e)
-          setState(OperationState.ERROR)
-          HiveThriftServer2.eventManager.onStatementError(
-            statementId, e.getMessage, SparkUtils.exceptionString(e))
-          throw new HiveSQLException(e)
-      }
+      } catch onError()
     }
   }
 
@@ -292,30 +277,7 @@ private[hive] class SparkExecuteStatementOperation(
       }
       dataTypes = result.schema.fields.map(_.dataType)
     } catch {
-      // Actually do need to catch Throwable as some failures don't inherit from Exception and
-      // HiveServer will silently swallow them.
-      case e: Throwable =>
-        // When cancel() or close() is called very quickly after the query is started,
-        // then they may both call cleanup() before Spark Jobs are started. But before background
-        // task interrupted, it may have start some spark job, so we need to cancel again to
-        // make sure job was cancelled when background thread was interrupted
-        if (statementId != null) {
-          sqlContext.sparkContext.cancelJobGroup(statementId)
-        }
-        val currentState = getStatus().getState()
-        if (currentState.isTerminal) {
-          // This may happen if the execution was cancelled, and then closed from another thread.
-          logWarning(s"Ignore exception in terminal state with $statementId: $e")
-        } else {
-          logError(s"Error executing query with $statementId, currentState $currentState, ", e)
-          setState(OperationState.ERROR)
-          HiveThriftServer2.eventManager.onStatementError(
-            statementId, e.getMessage, SparkUtils.exceptionString(e))
-          e match {
-            case _: HiveSQLException => throw e
-            case _ => throw new HiveSQLException("Error running query: " + e.toString, e)
-          }
-        }
+      onError(needCancel = true)
     } finally {
       synchronized {
         if (!getStatus.getState.isTerminal) {
@@ -346,9 +308,7 @@ private[hive] class SparkExecuteStatementOperation(
       }
     }
     // RDDs will be cleaned automatically upon garbage collection.
-    if (statementId != null) {
-      sqlContext.sparkContext.cancelJobGroup(statementId)
-    }
+    sqlContext.sparkContext.cancelJobGroup(statementId)
   }
 }
 

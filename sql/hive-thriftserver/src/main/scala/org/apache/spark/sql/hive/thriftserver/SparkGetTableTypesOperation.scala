@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.UUID
-
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetTableTypesOperation
@@ -42,7 +40,6 @@ private[hive] class SparkGetTableTypesOperation(
   with Logging {
 
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     val logMsg = "Listing table types"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
