@@ -490,7 +490,7 @@ object SparkParallelTestGrouping {
   private def testNameToTestGroup(name: String): String = name match {
     case _ if testsWhichShouldRunInTheirOwnDedicatedJvm.contains(name) => name
     // Different with the cases in testsWhichShouldRunInTheirOwnDedicatedJvm, here we are grouping
-    // all tests of `org.apache.spark.sql.hive.execution.*` into a single group, instead of
+    // all suites of `org.apache.spark.sql.hive.execution.*` into a single group, instead of
     // launching one JVM per suite.
     case _ if name.contains("org.apache.spark.sql.hive.execution") => HIVE_EXECUTION_TEST_GROUP
     case _ => DEFAULT_TEST_GROUP
