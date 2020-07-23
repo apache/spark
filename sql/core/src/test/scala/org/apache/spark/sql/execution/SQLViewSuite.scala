@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf.MAX_NESTED_VIEW_DEPTH
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -268,7 +269,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-32374: disallow setting properties for CREATE TEMPORARY VIEW") {
     withTempView("myabcdview") {
-      val e = intercept[AnalysisException] {
+      val e = intercept[ParseException] {
         sql("CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt")
       }
       assert(e.message.contains(
