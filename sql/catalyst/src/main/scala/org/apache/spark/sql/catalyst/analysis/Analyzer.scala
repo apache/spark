@@ -1389,7 +1389,7 @@ class Analyzer(
       case e @ Except(left, right, _) if !e.duplicateResolved =>
         e.copy(right = dedupRight(left, right))
       // Only after we finish by-name resolution for Union
-      case u: logical.Union if !u.duplicateResolved && !u.byName =>
+      case u: Union if !u.byName && !u.duplicateResolved =>
         // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
         // feature in streaming.
         val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
