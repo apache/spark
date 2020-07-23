@@ -3595,7 +3595,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       } else {
         Seq(describeFuncName.getText)
       }
-    DescribeFunctionStatement(functionName, EXTENDED != null)
+    DescribeFunction(UnresolvedFunc(functionName), EXTENDED != null)
   }
 
   /**
@@ -3610,8 +3610,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case Some(x) => throw new ParseException(s"SHOW $x FUNCTIONS not supported", ctx)
     }
     val pattern = Option(ctx.pattern).map(string(_))
-    val functionName = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
-    ShowFunctionsStatement(userScope, systemScope, pattern, functionName)
+    val functionName = Option(ctx.multipartIdentifier)
+      .map(visitMultipartIdentifier)
+      .map(UnresolvedFunc(_))
+
+    ShowFunctions(functionName, userScope, systemScope, pattern)
   }
 
   /**
@@ -3624,8 +3627,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
     val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    DropFunctionStatement(
-      functionName,
+    DropFunction(
+      UnresolvedFunc(functionName),
       ctx.EXISTS != null,
       ctx.TEMPORARY != null)
   }
@@ -3650,12 +3653,25 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       }
     }
 
-    val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CreateFunctionStatement(
-      functionIdentifier,
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+
+    val isTemp = ctx.TEMPORARY != null
+    val func: LogicalPlan = if (isTemp) {
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
+      if (nameParts.length > 2) {
+        throw new AnalysisException(s"Unsupported function name '${nameParts.quoted}'")
+      }
+      ResolvedFunc(nameParts.asIdentifier)
+    } else {
+      UnresolvedFunc(nameParts)
+    }
+
+    CreateFunction(
+      func,
       string(ctx.className),
-      resources.toSeq,
-      ctx.TEMPORARY != null,
+      resources,
+      isTemp,
       ctx.EXISTS != null,
       ctx.REPLACE != null)
   }
