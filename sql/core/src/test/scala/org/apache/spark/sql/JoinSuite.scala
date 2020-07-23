@@ -1114,15 +1114,17 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     // Test broadcast hash join
     withSQLConf(
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50") {
-      val plan = df1.join(df2, $"k1" === $"k2")
-        .join(df3, $"k1" === $"k3")
-        .join(df4, $"k1" === $"k4")
-        .queryExecution
-        .executedPlan
-      assert(plan.collect { case _: SortMergeJoinExec => true }.size === 2)
-      assert(plan.collect { case _: BroadcastHashJoinExec => true }.size === 1)
-      // No extra sort before last sort merge join
-      assert(plan.collect { case _: SortExec => true }.size === 3)
+      Seq("inner", "left_outer").foreach(joinType => {
+        val plan = df1.join(df2, $"k1" === $"k2", joinType)
+          .join(df3, $"k1" === $"k3", joinType)
+          .join(df4, $"k1" === $"k4", joinType)
+          .queryExecution
+          .executedPlan
+        assert(plan.collect { case _: SortMergeJoinExec => true }.size === 2)
+        assert(plan.collect { case _: BroadcastHashJoinExec => true }.size === 1)
+        // No extra sort before last sort merge join
+        assert(plan.collect { case _: SortExec => true }.size === 3)
+      })
     }
 
     // Test shuffled hash join
@@ -1131,15 +1133,18 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       val df3 = spark.range(10).select($"id".as("k3"))
-      val plan = df1.join(df2, $"k1" === $"k2")
-        .join(df3, $"k1" === $"k3")
-        .join(df4, $"k1" === $"k4")
-        .queryExecution
-        .executedPlan
-      assert(plan.collect { case _: SortMergeJoinExec => true }.size === 2)
-      assert(plan.collect { case _: ShuffledHashJoinExec => true }.size === 1)
-      // No extra sort before last sort merge join
-      assert(plan.collect { case _: SortExec => true }.size === 3)
+
+      Seq("inner", "left_outer").foreach(joinType => {
+        val plan = df1.join(df2, $"k1" === $"k2", joinType)
+          .join(df3, $"k1" === $"k3", joinType)
+          .join(df4, $"k1" === $"k4", joinType)
+          .queryExecution
+          .executedPlan
+        assert(plan.collect { case _: SortMergeJoinExec => true }.size === 2)
+        assert(plan.collect { case _: ShuffledHashJoinExec => true }.size === 1)
+        // No extra sort before last sort merge join
+        assert(plan.collect { case _: SortExec => true }.size === 3)
+      })
     }
   }
 }
