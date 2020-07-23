@@ -137,6 +137,9 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
    *         return `false`. It returns `false` if all predicates return `true`.
    */
   def skipRow(row: InternalRow, index: Int): Boolean = {
+    assert(0 <= index && index < schema.fields.length,
+      s"The index $index is out of the valid range [0, ${schema.fields.length}). " +
+      s"It must point out to a field of the schema: ${schema.catalogString}.")
     var skip = false
     for (pred <- predicates(index) if !skip) {
       pred.refCount -= 1
