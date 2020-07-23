@@ -494,17 +494,26 @@ private[spark] class BlockManager(
       registerWithExternalShuffleServer()
     }
 
-    hostLocalDirManager =
-      if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
-          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL) &&
-          (externalBlockStoreClient.isDefined || !conf.get(config.DYN_ALLOCATION_ENABLED)) ) {
-          Some(new HostLocalDirManager(
-            futureExecutionContext,
-            conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
-            blockStoreClient))
+    hostLocalDirManager = {
+      val canUseHostLocalReading = conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
+        !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)
+      val externalShuffleServiceEnabled = externalBlockStoreClient.isDefined
+      val dynamicAllocationDisabled = !conf.get(config.DYN_ALLOCATION_ENABLED)
+      val dynamicAllocationEnabledWithShuffleTacking = conf.get(config.DYN_ALLOCATION_ENABLED) &&
+        conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)
+
+      if (canUseHostLocalReading && (
+        externalShuffleServiceEnabled ||
+        dynamicAllocationDisabled ||
+        dynamicAllocationEnabledWithShuffleTacking)) {
+        Some(new HostLocalDirManager(
+          futureExecutionContext,
+          conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
+          blockStoreClient))
       } else {
         None
       }
+    }
 
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
