@@ -24,13 +24,16 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configurable
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.TaskContext
+import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
 /**
  * An [[FileCommitProtocol]] implementation backed by an underlying Hadoop OutputCommitter
@@ -105,13 +108,9 @@ class HadoopMapReduceCommitProtocol(
       taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
     val filename = getFilename(taskContext, ext)
 
+    dir.map(partitionPaths += _)
+
     val stagingDir: Path = committer match {
-      case _ if dynamicPartitionOverwrite =>
-        assert(dir.isDefined,
-          "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
-        partitionPaths += dir.get
-        this.stagingDir
-      // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter =>
         new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
       case _ => new Path(path)
@@ -238,11 +237,56 @@ class HadoopMapReduceCommitProtocol(
     partitionPaths = mutable.Set[String]()
   }
 
+  /**
+   * Commits a task output.  Before committing the task output, we need to know whether some other
+   * task attempt might be racing to commit the same output partition. Therefore, coordinate with
+   * the driver in order to determine whether this attempt can commit (please see SPARK-4879 for
+   * details).
+   *
+   * Output commit coordinator is only used when `spark.hadoop.outputCommitCoordination.enabled`
+   * is set to true (which is the default).
+   */
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
     val attemptId = taskContext.getTaskAttemptID
+    val splitId = attemptId.getTaskID.getId
+
     logTrace(s"Commit task ${attemptId}")
-    SparkHadoopMapRedUtil.commitTask(
-      committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
+
+    // First, check whether the task's output has already been committed by some other attempt
+    if (committer.needsTaskCommit(taskContext)) {
+      val shouldCoordinateWithDriver: Boolean = {
+        val sparkConf = SparkEnv.get.conf
+        // We only need to coordinate with the driver if there are concurrent task attempts.
+        // Note that this could happen even when speculation is not enabled (e.g. see SPARK-8029).
+        // This (undocumented) setting is an escape-hatch in case the commit code introduces bugs.
+        sparkConf.getBoolean("spark.hadoop.outputCommitCoordination.enabled", defaultValue = true)
+      }
+
+      if (shouldCoordinateWithDriver) {
+        val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
+        val ctx = TaskContext.get()
+        val canCommit = outputCommitCoordinator.canCommit(ctx.stageId(), ctx.stageAttemptNumber(),
+          splitId, ctx.attemptNumber())
+
+        if (canCommit) {
+          performCommit(taskContext)
+        } else {
+          val message =
+            s"$attemptId: Not committed because the driver did not authorize commit"
+          logInfo(message)
+          // We need to abort the task so that the driver can reschedule new attempts, if necessary
+          committer.abortTask(taskContext)
+          throw new CommitDeniedException(message, ctx.stageId(), splitId, ctx.attemptNumber())
+        }
+      } else {
+        // Speculation is disabled or a user has chosen to manually bypass the commit coordination
+        performCommit(taskContext)
+      }
+    } else {
+      // Some other attempt committed the output, so we do nothing and signal success
+      logInfo(s"No need to commit output of task because needsTaskCommit=false: $attemptId")
+    }
+
     new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
   }
 
@@ -269,6 +313,46 @@ class HadoopMapReduceCommitProtocol(
     } catch {
       case e: IOException =>
         logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
+    }
+  }
+
+  def performCommit(taskContext: TaskAttemptContext): Unit = {
+    val mrTaskAttemptID = taskContext.getTaskAttemptID
+
+    try {
+      val fs = stagingDir.getFileSystem(taskContext.getConfiguration)
+      val tmpOutputPath =
+        committer match {
+          case f: FileOutputCommitter =>
+            new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
+          case _ => new Path(path)
+        }
+
+      logDebug(s"Committing task attempt files($tmpOutputPath) to $stagingDir")
+      recursiveRenameFile(fs, tmpOutputPath, stagingDir)
+      committer.commitTask(taskContext)
+      logInfo(s"$mrTaskAttemptID: Committed")
+    } catch {
+      case cause: IOException =>
+        logError(s"Error committing the output of task: $mrTaskAttemptID", cause)
+        committer.abortTask(taskContext)
+        throw cause
+    }
+  }
+
+  def recursiveRenameFile(fs: FileSystem, src: Path, dst: Path): Unit = {
+    src match {
+      case _ if !fs.exists(src) => throw new IOException(s"Path $src not exists!")
+      case _ if fs.isFile(src) =>
+        if (!fs.exists(dst.getParent)) {
+          fs.mkdirs(dst.getParent)
+        }
+        fs.rename(src, dst)
+      case _ if fs.isDirectory(src) =>
+        fs.listStatus(src).map(_.getPath).foreach { file =>
+          recursiveRenameFile(fs, file, new Path(dst, file.getName))
+        }
+      case _ =>
     }
   }
 }
