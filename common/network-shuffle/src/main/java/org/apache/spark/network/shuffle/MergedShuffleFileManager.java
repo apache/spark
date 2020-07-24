@@ -92,12 +92,12 @@ public interface MergedShuffleFileManager {
   ManagedBuffer getMergedBlockData(String appId, int shuffleId, int reduceId, int chunkId);
 
   /**
-   * Get the number of chunks for a given merged shuffle file.
+   * Get the meta information of a merged block.
    *
    * @param appId application ID
    * @param shuffleId shuffle ID
    * @param reduceId reducer ID
-   * @return number of chunks
+   * @return meta information of a merged block
    */
-  int getChunkCount(String appId, int shuffleId, int reduceId);
+  MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int reduceId);
 }

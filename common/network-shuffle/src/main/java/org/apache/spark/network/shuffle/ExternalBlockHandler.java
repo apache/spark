@@ -32,6 +32,7 @@ import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +56,8 @@ import org.apache.spark.network.util.TransportConf;
  * Blocks are registered with the "one-for-one" strategy, meaning each Transport-layer Chunk
  * is equivalent to one block.
  */
-public class ExternalBlockHandler extends RpcHandler {
+public class ExternalBlockHandler extends RpcHandler
+    implements RpcHandler.MergedBlockMetaReqHandler {
   private static final Logger logger = LoggerFactory.getLogger(ExternalBlockHandler.class);
   private static final String SHUFFLE_BLOCK_PREFIX = "shuffle";
   private static final String SHUFFLE_CHUNK_PREFIX = "shuffleChunk";
@@ -166,29 +168,6 @@ public class ExternalBlockHandler extends RpcHandler {
       } finally {
         responseDelayContext.stop();
       }
-    } else if (msgObj instanceof FetchMergedBlocksMeta) {
-      final Timer.Context responseDelayContext =
-          metrics.fetchMergedBlocksMetaLatencyMillis.time();
-      try {
-        FetchMergedBlocksMeta mergedMetaReq = (FetchMergedBlocksMeta) msgObj;
-        checkAuth(client, mergedMetaReq.appId);
-        int[] chunkCounts = new int[mergedMetaReq.blockIds.length];
-        for (int i = 0; i < mergedMetaReq.blockIds.length; i++) {
-          String[] blockIdParts = mergedMetaReq.blockIds[i].split("_");
-          if (blockIdParts.length != 4 || !blockIdParts[0].equals(SHUFFLE_BLOCK_PREFIX)) {
-            throw new IllegalArgumentException(
-                "Unexpected shuffle block id format: " + mergedMetaReq.blockIds[i]);
-          }
-          chunkCounts[i] =
-              mergeManager.getChunkCount(mergedMetaReq.appId, Integer.parseInt(blockIdParts[1]),
-                  Integer.parseInt(blockIdParts[3]));
-          logger.debug(
-              "Merged block {} with {} chunks", mergedMetaReq.blockIds[i], chunkCounts[i]);
-        }
-        callback.onSuccess(new MergedBlocksMeta(chunkCounts).toByteBuffer());
-      } finally {
-        responseDelayContext.stop();
-      }
     } else if (msgObj instanceof RegisterExecutor) {
       final Timer.Context responseDelayContext =
         metrics.registerExecutorRequestLatencyMillis.time();
@@ -230,6 +209,35 @@ public class ExternalBlockHandler extends RpcHandler {
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
+  }
+
+  @Override
+  public void receiveMergeBlockMetaReq(
+      TransportClient client, String appId, String mergedBlockId,
+      MergedBlockMetaResponseCallback callback) {
+
+    final Timer.Context responseDelayContext = metrics.fetchMergedBlocksMetaLatencyMillis.time();
+    try {
+      checkAuth(client, appId);
+      String[] blockIdParts = mergedBlockId.split("_");
+      if (blockIdParts.length != 4 || !blockIdParts[0].equals(SHUFFLE_BLOCK_PREFIX)) {
+        throw new IllegalArgumentException(
+            "Unexpected shuffle block id format: " + mergedBlockId);
+      }
+      MergedBlockMeta mergedMeta =
+          mergeManager.getMergedBlockMeta(appId, Integer.parseInt(blockIdParts[1]),
+              Integer.parseInt(blockIdParts[3]));
+      logger.debug(
+          "Merged block chunks {} : {} ", mergedBlockId, mergedMeta.getNumChunks());
+      callback.onSuccess(mergedMeta.getNumChunks(), mergedMeta.getChunksBitmapBuffer());
+    } finally {
+      responseDelayContext.stop();
+    }
+  }
+
+  @Override
+  public MergedBlockMetaReqHandler getMergedBlockMetaReqHandler() {
+    return this;
   }
 
   @Override
@@ -547,8 +555,8 @@ public class ExternalBlockHandler extends RpcHandler {
     }
 
     @Override
-    public int getChunkCount(String appId, int shuffleId, int reduceId) {
-      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+    public MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int reduceId) {
+      return null;
     }
   }
 

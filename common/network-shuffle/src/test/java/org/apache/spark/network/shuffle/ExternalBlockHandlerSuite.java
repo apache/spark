@@ -23,6 +23,7 @@ import java.util.Iterator;
 
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Timer;
+import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -40,11 +41,9 @@ import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.shuffle.protocol.FetchMergedBlocksMeta;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
-import org.apache.spark.network.shuffle.protocol.MergedBlocksMeta;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
@@ -234,28 +233,33 @@ public class ExternalBlockHandlerSuite {
 
   @Test
   public void testFetchMergedBlocksMeta() {
-    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+    when(mergedShuffleManager.getMergedBlockMeta("app0", 0, 0)).thenReturn(
+        new MergedBlockMeta(1, mock(ManagedBuffer.class)));
+    when(mergedShuffleManager.getMergedBlockMeta("app0", 0, 1)).thenReturn(
+        new MergedBlockMeta(3, mock(ManagedBuffer.class)));
+    when(mergedShuffleManager.getMergedBlockMeta("app0", 0, 2)).thenReturn(
+        new MergedBlockMeta(5, mock(ManagedBuffer.class)));
 
-    when(mergedShuffleManager.getChunkCount("app0", 0, 0)).thenReturn(1);
-    when(mergedShuffleManager.getChunkCount("app0", 0, 1)).thenReturn(3);
-    when(mergedShuffleManager.getChunkCount("app0", 0, 2)).thenReturn(5);
+    int[] expectedCount = new int[]{1, 3, 5};
+    String appId = "app0";
 
-    ByteBuffer chunksCountsReq = new FetchMergedBlocksMeta("app0",
-        new String[]{"shuffle_0_-1_0", "shuffle_0_-1_1", "shuffle_0_-1_2"}).toByteBuffer();
-    handler.receive(client, chunksCountsReq, callback);
     for (int reduceId = 0; reduceId < 3; reduceId++) {
-      verify(mergedShuffleManager, times(1)).getChunkCount("app0", 0, reduceId);
+      String blockId = "shuffle_0_-1_" + reduceId;
+      MergedBlockMetaResponseCallback callback = mock(MergedBlockMetaResponseCallback.class);
+
+      handler.getMergedBlockMetaReqHandler()
+          .receiveMergeBlockMetaReq(client, appId, blockId, callback);
+      verify(mergedShuffleManager, times(1)).getMergedBlockMeta("app0", 0, reduceId);
+
+      ArgumentCaptor<Integer> numChunksResponse = ArgumentCaptor.forClass(Integer.class);
+      ArgumentCaptor<ManagedBuffer> chunkBitmapResponse =
+          ArgumentCaptor.forClass(ManagedBuffer.class);
+      verify(callback, times(1)).onSuccess(numChunksResponse.capture(),
+          chunkBitmapResponse.capture());
+      assertEquals("num chunks in merged block " + reduceId, expectedCount[reduceId],
+          numChunksResponse.getValue().intValue());
+      assertNotNull("chunks bitmap buffer " + reduceId, chunkBitmapResponse.getValue());
     }
-    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
-    verify(callback, times(1)).onSuccess(response.capture());
-    verify(callback, never()).onFailure(any());
-
-    MergedBlocksMeta chunkCounts =
-        (MergedBlocksMeta) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
-
-    assertNotNull(chunkCounts.numChunks);
-    assertEquals(3, chunkCounts.numChunks.length);
-    assertArrayEquals(new int[]{1, 3, 5}, chunkCounts.numChunks);
   }
 
   @Test
@@ -324,7 +328,8 @@ public class ExternalBlockHandlerSuite {
         };
     for (int reduceId = 0; reduceId < 2; reduceId++) {
       for (int chunkId = 0; chunkId < 2; chunkId++) {
-        when(mergedShuffleManager.getMergedBlockData("app0", 0, reduceId, chunkId)).thenReturn(buffers[reduceId][chunkId]);
+        when(mergedShuffleManager.getMergedBlockData(
+         "app0", 0, reduceId, chunkId)).thenReturn(buffers[reduceId][chunkId]);
       }
     }
 
@@ -351,7 +356,7 @@ public class ExternalBlockHandlerSuite {
     }
     assertFalse(bufferIter.hasNext());
 
-    verify(mergedShuffleManager, never()).getChunkCount(anyString(), anyInt(), anyInt());
+    verify(mergedShuffleManager, never()).getMergedBlockMeta(anyString(), anyInt(), anyInt());
     verify(blockResolver, never()).getBlockData(
         anyString(), anyString(), anyInt(), anyInt(), anyInt());
     verify(mergedShuffleManager, times(1)).getMergedBlockData("app0", 0, 0, 0);

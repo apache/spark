@@ -222,8 +222,8 @@ public class OneForOneBlockFetcher {
       // If failed block is a merged block, we only fail this block and do not
       // fail the remaining blocks. The failed merged block will be retried by
       // falling back to fetching the original unmerged blocks.
-      if (isMergedBlock(blockIds[chunkIndex])) {
-        failSingleMergedBlock(blockIds[chunkIndex], e);
+      if ((blockIds[chunkIndex]).startsWith(SHUFFLE_CHUNK_PREFIX)) {
+        failSingleBlockChunk(blockIds[chunkIndex], e);
       } else {
         // On receipt of a failure, fail every block from chunkIndex onwards.
         String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
@@ -280,21 +280,12 @@ public class OneForOneBlockFetcher {
     }
   }
 
-  private void failSingleMergedBlock(String mergedBlockId, Throwable e) {
+  private void failSingleBlockChunk(String shuffleBlockChunkId, Throwable e) {
     try {
-      listener.onBlockFetchFailure(mergedBlockId, e);
+      listener.onBlockFetchFailure(shuffleBlockChunkId, e);
     } catch (Exception e2) {
       logger.error("Error in block fetch failure callback", e2);
     }
-  }
-
-  /** Verify if a given block id represents a merged block. */
-  // TODO this needs to be updated to support merged shuffle chunks. Right now
-  // TODO fallback handling for merged shuffle chunk is not enabled.
-  private boolean isMergedBlock(String blockId) {
-    String[] blockIdParts = blockId.split("_");
-    return blockIdParts.length == 4 && blockIdParts[0].equals("shuffle")
-        && blockIdParts[2].equals("-1");
   }
 
   private class DownloadCallback implements StreamCallback {
@@ -327,9 +318,8 @@ public class OneForOneBlockFetcher {
     @Override
     public void onFailure(String streamId, Throwable cause) throws IOException {
       channel.close();
-      // Do not fail the remaining blocks if the failed block is a merged block.
-      if (isMergedBlock(blockIds[chunkIndex])) {
-        failSingleMergedBlock(blockIds[chunkIndex], cause);
+      if ((blockIds[chunkIndex]).startsWith(SHUFFLE_CHUNK_PREFIX)) {
+        failSingleBlockChunk(blockIds[chunkIndex], cause);
       } else {
         // On receipt of a failure, fail every block from chunkIndex onwards.
         String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
