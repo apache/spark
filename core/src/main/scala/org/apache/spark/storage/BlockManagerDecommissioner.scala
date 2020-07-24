@@ -102,7 +102,6 @@ private[storage] class BlockManagerDecommissioner(
               } else {
                 logError(s"Skipping block ${shuffleBlockInfo} because it has failed ${retryCount}")
               }
-              logInfo(s"Migrated ${shuffleBlockInfo}")
               numMigratedShuffles.incrementAndGet()
           }
         }
@@ -135,8 +134,10 @@ private[storage] class BlockManagerDecommissioner(
 
   // Set if we encounter an error attempting to migrate and stop.
   @volatile private var stopped = false
-  @volatile private var stoppedRDD = false
-  @volatile private var stoppedShuffle = false
+  @volatile private var stoppedRDD =
+    !conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)
+  @volatile private var stoppedShuffle =
+    !conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
 
   private val migrationPeers =
     mutable.HashMap[BlockManagerId, ShuffleMigrationRunnable]()
@@ -301,13 +302,9 @@ private[storage] class BlockManagerDecommissioner(
     logInfo("Starting block migration thread")
     if (conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)) {
       rddBlockMigrationExecutor.submit(rddBlockMigrationRunnable)
-    } else {
-      stoppedRDD = true
     }
     if (conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
       shuffleBlockMigrationRefreshExecutor.submit(shuffleBlockMigrationRefreshRunnable)
-    } else {
-      stoppedShuffle = true
     }
     if (!conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED) &&
       !conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)) {

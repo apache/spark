@@ -442,8 +442,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           case e: Exception =>
             logError(s"Unexpected error during decommissioning ${e.toString}", e)
         }
-        // Send decommission message to the executor (it could have originated on the executor
-        // but not necessarily.
+        // Send decommission message to the executor, this may be a duplicate since the executor
+        // could have been the one to notify us. But it's also possible the notification came from
+        // elsewhere and the executor does not yet know.
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             executorInfo.executorEndpoint.send(DecommissionSelf)

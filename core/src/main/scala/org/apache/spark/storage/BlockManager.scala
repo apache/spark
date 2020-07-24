@@ -1823,7 +1823,7 @@ private[spark] class BlockManager(
   }
 
   /*
-   *  Returns the last migration time and a boolean for if all blocks have been migrated.
+   *  Returns the last migration time and a boolean denoting if all the blocks have been migrated.
    *  If there are any tasks running since that time the boolean may be incorrect.
    */
   private[spark] def lastMigrationInfo(): (Long, Boolean) = {

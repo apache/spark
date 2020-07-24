@@ -79,7 +79,6 @@ private[spark] class CoarseGrainedExecutorBackend(
    */
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
-  // Track our decommissioning status internally.
   @volatile private var decommissioned = false
 
   override def onStart(): Unit = {
@@ -291,7 +290,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       // is viewed as acceptable to minimize introduction of any new locking structures in critical
       // code paths.
 
-      val shutdownThread = new Thread() {
+      val shutdownThread = ThreadUtils.runInNewThread("wait-for-blocks-to-migrate") {
         var lastTaskRunningTime = System.nanoTime()
         val sleep_time = 1000 // 1s
 
@@ -300,11 +299,10 @@ private[spark] class CoarseGrainedExecutorBackend(
           if (executor == null || executor.numRunningTasks == 0) {
             if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
               logInfo("No running tasks, checking migrations")
-              val allBlocksMigrated = env.blockManager.lastMigrationInfo()
+              val (migrationTime, allBlocksMigrated) = env.blockManager.lastMigrationInfo()
               // We can only trust allBlocksMigrated boolean value if there were no tasks running
               // since the start of computing it.
-              if (allBlocksMigrated._2 &&
-                (allBlocksMigrated._1 > lastTaskRunningTime)) {
+              if (allBlocksMigrated && (migrationTime > lastTaskRunningTime)) {
                 logInfo("No running tasks, all blocks migrated, stopping.")
                 exitExecutor(0, "Finished decommissioning", notifyDriver = true)
               } else {
@@ -316,7 +314,7 @@ private[spark] class CoarseGrainedExecutorBackend(
             }
             Thread.sleep(sleep_time)
           } else {
-            logInfo("Blocked from shutdown by running task")
+            logInfo("Blocked from shutdown by running ${executor.numRunningtasks} tasks")
             // If there is a running task it could store blocks, so make sure we wait for a
             // migration loop to complete after the last task is done.
             Thread.sleep(sleep_time)
