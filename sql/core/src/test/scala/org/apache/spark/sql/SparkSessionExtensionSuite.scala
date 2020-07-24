@@ -774,7 +774,8 @@ case class MyQueryStagePrepRule() extends Rule[SparkPlan] {
 case class MyNewQueryStageRule() extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = plan.transformDown {
     case plan if !plan.isInstanceOf[AdaptiveSparkPlanExec] =>
-      assert(plan.getTagValue(QueryPrepRuleHelper.myPrepTag).get == QueryPrepRuleHelper.myPrepTagValue)
+      assert(plan.getTagValue(QueryPrepRuleHelper.myPrepTag).get ==
+          QueryPrepRuleHelper.myPrepTagValue)
       plan
   }
 }
