@@ -106,15 +106,11 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("non-primitive type with nullability:true") {
-    val schemaNull = StructType(Seq(StructField("col", NullType, true)))
-    val rddNull = spark.sparkContext.parallelize((1 to 10).map(i => Row(null)))
-    cachePrimitiveTest(spark.createDataFrame(rddNull, schemaNull), "Null")
-
     tesNonPrimitiveType(true)
   }
 
   test("non-primitive type with nullability:false") {
-      tesNonPrimitiveType(false)
+    tesNonPrimitiveType(false)
   }
 
   test("simple columnar query") {
@@ -248,7 +244,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
         StructField("f1", FloatType, true) ::
         StructField("f2", ArrayType(BooleanType), true) :: Nil)
     val dataTypes =
-      Seq(StringType, BinaryType, NullType, BooleanType,
+      Seq(StringType, BinaryType, BooleanType,
         ByteType, ShortType, IntegerType, LongType,
         FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
         DateType, TimestampType, ArrayType(IntegerType), struct)

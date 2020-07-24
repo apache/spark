@@ -115,9 +115,9 @@ SELECT
 
 -- [SPARK-27880] Implement boolean aggregates(BOOL_AND, BOOL_OR and EVERY)
 CREATE OR REPLACE TEMPORARY VIEW bool_test AS SELECT * FROM VALUES
-  (TRUE, null, FALSE, null),
-  (FALSE, TRUE, null, null),
-  (null, TRUE, FALSE, null) AS bool_test(b1, b2, b3, b4);
+  (TRUE, null, FALSE),
+  (FALSE, TRUE, null),
+  (null, TRUE, FALSE) AS bool_test(b1, b2, b3);
 
 -- empty case
 SELECT BOOL_AND(b1) AS n1, BOOL_OR(b3) AS n2 FROM bool_test WHERE 1 = 0;
@@ -126,7 +126,6 @@ SELECT
   BOOL_AND(b1)     AS f1,
   BOOL_AND(b2)     AS t2,
   BOOL_AND(b3)     AS f3,
-  BOOL_AND(b4)     AS n4,
   BOOL_AND(NOT b2) AS f5,
   BOOL_AND(NOT b3) AS t6
 FROM bool_test;
@@ -135,7 +134,6 @@ SELECT
   EVERY(b1)     AS f1,
   EVERY(b2)     AS t2,
   EVERY(b3)     AS f3,
-  EVERY(b4)     AS n4,
   EVERY(NOT b2) AS f5,
   EVERY(NOT b3) AS t6
 FROM bool_test;
@@ -144,7 +142,6 @@ SELECT
   BOOL_OR(b1)      AS t1,
   BOOL_OR(b2)      AS t2,
   BOOL_OR(b3)      AS f3,
-  BOOL_OR(b4)      AS n4,
   BOOL_OR(NOT b2)  AS f5,
   BOOL_OR(NOT b3)  AS t6
 FROM bool_test;

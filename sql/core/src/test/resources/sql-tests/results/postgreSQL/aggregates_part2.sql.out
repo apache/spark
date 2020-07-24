@@ -135,9 +135,9 @@ true	false	true	false	true	true	true	true	true
 
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW bool_test AS SELECT * FROM VALUES
-  (TRUE, null, FALSE, null),
-  (FALSE, TRUE, null, null),
-  (null, TRUE, FALSE, null) AS bool_test(b1, b2, b3, b4)
+  (TRUE, null, FALSE),
+  (FALSE, TRUE, null),
+  (null, TRUE, FALSE) AS bool_test(b1, b2, b3, b4)
 -- !query schema
 struct<>
 -- !query output
@@ -157,14 +157,13 @@ SELECT
   BOOL_AND(b1)     AS f1,
   BOOL_AND(b2)     AS t2,
   BOOL_AND(b3)     AS f3,
-  BOOL_AND(b4)     AS n4,
   BOOL_AND(NOT b2) AS f5,
   BOOL_AND(NOT b3) AS t6
 FROM bool_test
 -- !query schema
 struct<f1:boolean,t2:boolean,f3:boolean,n4:boolean,f5:boolean,t6:boolean>
 -- !query output
-false	true	false	NULL	false	true
+false	true	false	false	true
 
 
 -- !query
@@ -172,14 +171,13 @@ SELECT
   EVERY(b1)     AS f1,
   EVERY(b2)     AS t2,
   EVERY(b3)     AS f3,
-  EVERY(b4)     AS n4,
   EVERY(NOT b2) AS f5,
   EVERY(NOT b3) AS t6
 FROM bool_test
 -- !query schema
 struct<f1:boolean,t2:boolean,f3:boolean,n4:boolean,f5:boolean,t6:boolean>
 -- !query output
-false	true	false	NULL	false	true
+false	true	false	false	true
 
 
 -- !query
@@ -187,14 +185,13 @@ SELECT
   BOOL_OR(b1)      AS t1,
   BOOL_OR(b2)      AS t2,
   BOOL_OR(b3)      AS f3,
-  BOOL_OR(b4)      AS n4,
   BOOL_OR(NOT b2)  AS f5,
   BOOL_OR(NOT b3)  AS t6
 FROM bool_test
 -- !query schema
 struct<t1:boolean,t2:boolean,f3:boolean,n4:boolean,f5:boolean,t6:boolean>
 -- !query output
-true	true	false	NULL	false	true
+true	true	false	false	true
 
 
 -- !query

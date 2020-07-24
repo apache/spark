@@ -118,7 +118,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
 
     val simpleTypes =
-      NullType ::
       BooleanType ::
       ByteType ::
       ShortType ::
