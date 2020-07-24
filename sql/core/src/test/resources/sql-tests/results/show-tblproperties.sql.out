@@ -91,7 +91,7 @@ struct<>
 
 
 -- !query
-CREATE TEMPORARY VIEW tv TBLPROPERTIES('p1'='v1') AS SELECT 1 AS c1
+CREATE TEMPORARY VIEW tv AS SELECT 1 AS c1
 -- !query schema
 struct<>
 -- !query output

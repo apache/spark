@@ -229,7 +229,7 @@ BSD 3-Clause
 ------------
 
 python/lib/py4j-*-src.zip
-python/pyspark/cloudpickle.py
+python/pyspark/cloudpickle/*.py
 python/pyspark/join.py
 core/src/main/resources/org/apache/spark/ui/static/d3.min.js
 

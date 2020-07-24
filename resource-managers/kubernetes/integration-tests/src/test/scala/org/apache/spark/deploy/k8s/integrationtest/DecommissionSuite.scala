@@ -16,6 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Worker
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
@@ -28,18 +29,28 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set(Worker.WORKER_DECOMMISSION_ENABLED.key, "true")
       .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.container.image", pyImage)
+      .set(config.STORAGE_DECOMMISSION_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key, "true")
+      // Ensure we have somewhere to migrate our data too
+      .set("spark.executor.instances", "3")
+      // The default of 30 seconds is fine, but for testing we just want to get this done fast.
+      .set("spark.storage.decommission.replicationReattemptInterval", "1")
 
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_DECOMISSIONING,
       mainClass = "",
       expectedLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
-        "decommissioning executor"),
+        "decommissioning executor",
+        "Final accumulator value is: 100"),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
       appLocator = appLocator,
       isJVM = false,
+      pyFiles = None,
+      executorPatience = None,
       decommissioningTest = true)
   }
 }

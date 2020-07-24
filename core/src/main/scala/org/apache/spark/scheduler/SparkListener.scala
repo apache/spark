@@ -158,6 +158,16 @@ case class SparkListenerNodeUnblacklisted(time: Long, hostId: String)
   extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerUnschedulableTaskSetAdded(
+  stageId: Int,
+  stageAttemptId: Int) extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerUnschedulableTaskSetRemoved(
+  stageId: Int,
+  stageAttemptId: Int) extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
 
 /**
@@ -340,6 +350,20 @@ private[spark] trait SparkListenerInterface {
   def onNodeUnblacklisted(nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit
 
   /**
+   * Called when a taskset becomes unschedulable due to blacklisting and dynamic allocation
+   * is enabled.
+   */
+  def onUnschedulableTaskSetAdded(
+      unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded): Unit
+
+  /**
+   * Called when an unschedulable taskset becomes schedulable and dynamic allocation
+   * is enabled.
+   */
+  def onUnschedulableTaskSetRemoved(
+      unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved): Unit
+
+  /**
    * Called when the driver receives a block update info.
    */
   def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit
@@ -424,6 +448,12 @@ abstract class SparkListener extends SparkListenerInterface {
 
   override def onNodeUnblacklisted(
       nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit = { }
+
+  override def onUnschedulableTaskSetAdded(
+      unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded): Unit = { }
+
+  override def onUnschedulableTaskSetRemoved(
+      unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved): Unit = { }
 
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = { }
 
