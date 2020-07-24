@@ -200,16 +200,16 @@ class Analyzer(
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
-    Batch("Hints", fixedPoint,
-      new ResolveHints.ResolveJoinStrategyHints(conf),
-      new ResolveHints.ResolveCoalesceHints(conf)),
-    Batch("Simple Sanity Check", Once,
-      LookupFunctions),
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
       new SubstituteUnresolvedOrdinals(conf)),
+    Batch("Hints", fixedPoint,
+      new ResolveHints.ResolveJoinStrategyHints(conf),
+      new ResolveHints.ResolveCoalesceHints(conf)),
+    Batch("Simple Sanity Check", Once,
+      LookupFunctions),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       ResolveNamespace(catalogManager) ::
