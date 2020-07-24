@@ -158,7 +158,6 @@ case class BroadcastHashJoinExec(
           )
           streamedIter.filter(row => {
             val lookupKey: UnsafeRow = keyGenerator(row)
-            // anyNull is equivalent to allNull since it's a single-column key.
             if (lookupKey.anyNull()) {
               false
             } else {
@@ -515,7 +514,6 @@ case class BroadcastHashJoinExec(
                   |boolean $found = false;
                   |// generate join key for stream side
                   |${keyEv.code}
-                  |// anyNull is equivalent to allNull since it's a single-column key.
                   |if ($anyNull) {
                   |  $found = true;
                   |} else {

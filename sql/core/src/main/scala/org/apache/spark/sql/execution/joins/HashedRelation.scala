@@ -98,14 +98,13 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   /**
    * It's only used in null aware anti join.
    * This will be set true if Source (input: Iterator[InternalRow]) contains a key,
-   * which is allNullColumn.
+   * which has all null columns.
    */
   var allNullColumnKeyExistsInOriginalInput: Boolean
 
   def setAllNullColumnKeyExistsInOriginalInput(
       allNullColumnKeyExistsInOriginalInput: Boolean): HashedRelation = {
-    this.allNullColumnKeyExistsInOriginalInput =
-      allNullColumnKeyExistsInOriginalInput
+    this.allNullColumnKeyExistsInOriginalInput = allNullColumnKeyExistsInOriginalInput
     this
   }
 
@@ -374,7 +373,6 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
-    val numKeys = key.length
     val isOriginalInputEmpty = !input.hasNext
     var allNullColumnKeyExistsInOriginalInput: Boolean = false
     while (input.hasNext) {
@@ -383,7 +381,7 @@ private[joins] object UnsafeHashedRelation {
       val key = keyGenerator(row)
       if (isNullAware &&
         !allNullColumnKeyExistsInOriginalInput &&
-        (0 until numKeys).forall(key.isNullAt)) {
+        key.isNullAt(0)) {
         allNullColumnKeyExistsInOriginalInput = true
       }
 
@@ -976,12 +974,9 @@ private[joins] object LongHashedRelation {
       numFields = unsafeRow.numFields()
       val rowKey = keyGenerator(unsafeRow)
       if (!rowKey.isNullAt(0)) {
-        // LongToUnsafeRowMap can't insert null key
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
       } else if (!allNullColumnKeyExistsInOriginalInput) {
-        // LongHashedRelation stores single-column key
-        // rowKey.isNullAt(0) equivalent to allNullColumnKeyExistsInOriginalInput
         allNullColumnKeyExistsInOriginalInput = true
       }
     }
