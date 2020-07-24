@@ -290,7 +290,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       // is viewed as acceptable to minimize introduction of any new locking structures in critical
       // code paths.
 
-      val shutdownThread = ThreadUtils.runInNewThread("wait-for-blocks-to-migrate") {
+      val shutdownThread = new Thread("wait-for-blocks-to-migrate") {
         var lastTaskRunningTime = System.nanoTime()
         val sleep_time = 1000 // 1s
 
@@ -321,7 +321,7 @@ private[spark] class CoarseGrainedExecutorBackend(
             lastTaskRunningTime = System.nanoTime()
           }
         }
-      }
+      }.setDaemon(true)
       logInfo("Will exit when finished decommissioning")
       // Return true since we are handling a signal
       true
