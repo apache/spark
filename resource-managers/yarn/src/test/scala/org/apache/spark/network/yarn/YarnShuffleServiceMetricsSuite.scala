@@ -21,7 +21,8 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.metrics2.MetricsRecordBuilder
 import org.mockito.ArgumentMatchers.{any, anyDouble, anyInt, anyLong}
 import org.mockito.Mockito.{mock, times, verify, when}
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.server.OneForOneStreamManager

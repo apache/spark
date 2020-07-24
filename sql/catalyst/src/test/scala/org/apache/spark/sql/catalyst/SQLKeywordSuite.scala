@@ -38,7 +38,7 @@ trait SQLKeywordUtils extends SQLHelper {
   }
 
   // each element is an array of 4 string: the keyword name, reserve or not in Spark ANSI mode,
-  // Spark non-ANSI mode, and the SQL standard.
+  // Spark default mode, and the SQL standard.
   val keywordsInDoc: Array[Array[String]] = {
     val docPath = {
       java.nio.file.Paths.get(sparkHome, "docs", "sql-ref-ansi-compliance.md").toFile
@@ -135,6 +135,19 @@ trait SQLKeywordUtils extends SQLHelper {
   }
 
   val reservedKeywordsInAnsiMode = allCandidateKeywords -- nonReservedKeywordsInAnsiMode
+
+  val nonReservedKeywordsInDefaultMode: Set[String] = {
+    val kwDef = """\s*[\|:]\s*([A-Z_]+)\s*""".r
+    parseAntlrGrammars("//--DEFAULT-NON-RESERVED-START", "//--DEFAULT-NON-RESERVED-END") {
+      // Parses a pattern, e.g., `    | AFTER`
+      case kwDef(symbol) =>
+        if (symbolsToExpandIntoDifferentLiterals.contains(symbol)) {
+          symbolsToExpandIntoDifferentLiterals(symbol)
+        } else {
+          symbol :: Nil
+        }
+    }
+  }
 }
 
 class SQLKeywordSuite extends SparkFunSuite with SQLKeywordUtils {
@@ -146,11 +159,32 @@ class SQLKeywordSuite extends SparkFunSuite with SQLKeywordUtils {
     }
   }
 
-  test("Spark keywords are documented correctly") {
-    val reservedKeywordsInDoc = keywordsInDoc.filter(_.apply(1) == "reserved").map(_.head).toSet
-    if (reservedKeywordsInAnsiMode != reservedKeywordsInDoc) {
-      val misImplemented = (reservedKeywordsInDoc -- reservedKeywordsInAnsiMode).toSeq.sorted
-      fail("Some keywords are documented as reserved but actually not: " +
+  test("Spark keywords are documented correctly under ANSI mode") {
+    // keywords under ANSI mode should either be reserved or non-reserved.
+    keywordsInDoc.map(_.apply(1)).foreach { desc =>
+      assert(desc == "reserved" || desc == "non-reserved")
+    }
+
+    val nonReservedInDoc = keywordsInDoc.filter(_.apply(1) == "non-reserved").map(_.head).toSet
+    if (nonReservedKeywordsInAnsiMode != nonReservedInDoc) {
+      val misImplemented = ((nonReservedInDoc -- nonReservedKeywordsInAnsiMode) ++
+        (nonReservedKeywordsInAnsiMode -- nonReservedInDoc)).toSeq.sorted
+      fail("Some keywords are documented and implemented inconsistently: " +
+        misImplemented.mkString(", "))
+    }
+  }
+
+  test("Spark keywords are documented correctly under default mode") {
+    // keywords under default mode should either be strict-non-reserved or non-reserved.
+    keywordsInDoc.map(_.apply(2)).foreach { desc =>
+      assert(desc == "strict-non-reserved" || desc == "non-reserved")
+    }
+
+    val nonReservedInDoc = keywordsInDoc.filter(_.apply(2) == "non-reserved").map(_.head).toSet
+    if (nonReservedKeywordsInDefaultMode != nonReservedInDoc) {
+      val misImplemented = ((nonReservedInDoc -- nonReservedKeywordsInDefaultMode) ++
+        (nonReservedKeywordsInDefaultMode -- nonReservedInDoc)).toSeq.sorted
+      fail("Some keywords are documented and implemented inconsistently: " +
         misImplemented.mkString(", "))
     }
   }

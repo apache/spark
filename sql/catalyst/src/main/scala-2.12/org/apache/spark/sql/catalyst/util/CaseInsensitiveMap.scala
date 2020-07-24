@@ -52,6 +52,8 @@ class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Ma
   override def -(key: String): Map[String, T] = {
     new CaseInsensitiveMap(originalMap.filter(!_._1.equalsIgnoreCase(key)))
   }
+
+  def toMap: Map[String, T] = originalMap
 }
 
 object CaseInsensitiveMap {

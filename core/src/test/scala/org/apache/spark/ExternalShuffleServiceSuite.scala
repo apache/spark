@@ -19,6 +19,7 @@ package org.apache.spark
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.config

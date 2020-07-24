@@ -26,8 +26,9 @@ import scala.language.implicitConversions
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doAnswer, mock, spy, when}
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager

@@ -20,11 +20,9 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-import org.scalatest.Matchers._
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.execution.ProjectExec
