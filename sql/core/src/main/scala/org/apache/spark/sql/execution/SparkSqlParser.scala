@@ -90,7 +90,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    ResetCommand(Option(ctx.multipartIdentifier()).map(_.getText))
+    ResetCommand(Option(remainder(ctx.RESET().getSymbol).trim).filter(_.nonEmpty))
   }
 
   /**
