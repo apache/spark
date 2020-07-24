@@ -115,8 +115,7 @@ public abstract class BlockStoreClient implements Closeable {
                     ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
           } catch (Throwable t) {
             logger.warn("Error trying to get the host local dirs for " +
-                            Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
-                    t.getCause());
+              Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
             hostLocalDirsCompletable.completeExceptionally(t);
           } finally {
             client.close();
@@ -126,8 +125,7 @@ public abstract class BlockStoreClient implements Closeable {
         @Override
         public void onFailure(Throwable t) {
           logger.warn("Error trying to get the host local dirs for " +
-            Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
-            t.getCause());
+            Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
           hostLocalDirsCompletable.completeExceptionally(t);
           client.close();
         }
