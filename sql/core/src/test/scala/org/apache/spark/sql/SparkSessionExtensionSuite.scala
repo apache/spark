@@ -756,14 +756,15 @@ class MyExtensions extends (SparkSessionExtensions => Unit) {
 }
 
 object QueryPrepRuleHelper {
-  val myTag: TreeNodeTag[String] = TreeNodeTag[String]("myTag")
+  val myPrepTag: TreeNodeTag[String] = TreeNodeTag[String]("myPrepTag")
+  val myPrepTagValue: TreeNodeTag[String] = TreeNodeTag[String]("myPrepTagValue")
 }
 
 // this rule will run during AQE query preparation and will write custom tags to each node
 case class MyQueryStagePrepRule() extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = plan.transformDown {
     case plan =>
-      plan.setTagValue(QueryPrepRuleHelper.myTag, "custom tag")
+      plan.setTagValue(QueryPrepRuleHelper.myPrepTag, QueryPrepRuleHelper.myPrepTagValue)
       plan
   }
 }
@@ -773,7 +774,7 @@ case class MyQueryStagePrepRule() extends Rule[SparkPlan] {
 case class MyNewQueryStageRule() extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = plan.transformDown {
     case plan if !plan.isInstanceOf[AdaptiveSparkPlanExec] =>
-      assert(plan.getTagValue(QueryPrepRuleHelper.myTag).get == "custom tag")
+      assert(plan.getTagValue(QueryPrepRuleHelper.myPrepTag).get == QueryPrepRuleHelper.myPrepTagValue)
       plan
   }
 }
