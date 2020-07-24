@@ -493,11 +493,11 @@ final class ShuffleBlockFetcherIterator(
                   fetchHostLocalBlock(blockId, mapIndex, dirs, bmId)
                 }
             }
-            logDebug(s"Got host-local blocks (without cached executors' dir) in " +
+            logDebug("Got host-local blocks (without cached executors' dir) in " +
               s"${Utils.getUsedTimeNs(startTimeNs)}")
 
           case Failure(throwable) =>
-            logError(s"Error occurred while fetching host local blocks", throwable)
+            logError("Error occurred while fetching host local blocks", throwable)
             val bmId = bmIds.head
             val blockInfoSeq = immutableHostLocalBlocksWithoutDirs(bmId)
             val (blockId, _, mapIndex) = blockInfoSeq.head
