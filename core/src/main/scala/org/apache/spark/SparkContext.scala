@@ -80,6 +80,8 @@ import org.apache.spark.util.logging.DriverLogger
  */
 class SparkContext(config: SparkConf) extends Logging {
 
+  private val foo = 0
+
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
