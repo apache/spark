@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
-import org.apache.spark.sql.execution.bucketing.CoalesceBucketsInSortMergeJoin
+import org.apache.spark.sql.execution.bucketing.CoalesceBucketsInJoin
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -332,7 +332,7 @@ object QueryExecution {
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
-      CoalesceBucketsInSortMergeJoin(sparkSession.sessionState.conf),
+      CoalesceBucketsInJoin(sparkSession.sessionState.conf),
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       EnsureRequirements(sparkSession.sessionState.conf),

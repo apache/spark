@@ -622,33 +622,11 @@ class ResolveSessionCatalog(
         CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
           replace)
       }
-  }
 
-  // TODO: move function related v2 statements to the new framework.
-  private def parseSessionCatalogFunctionIdentifier(
-      nameParts: Seq[String],
-      sql: String): FunctionIdentifier = {
-    if (nameParts.length == 1 && isTempFunction(nameParts.head)) {
-      return FunctionIdentifier(nameParts.head)
-    }
-
-    nameParts match {
-      case SessionCatalogAndIdentifier(_, ident) =>
-        if (nameParts.length == 1) {
-          // If there is only one name part, it means the current catalog is the session catalog.
-          // Here we don't fill the default database, to keep the error message unchanged for
-          // v1 commands.
-          FunctionIdentifier(nameParts.head, None)
-        } else {
-          ident.namespace match {
-            case Array(db) => FunctionIdentifier(ident.name, Some(db))
-            case _ =>
-              throw new AnalysisException(s"Unsupported function name '$ident'")
-          }
-        }
-
-      case _ => throw new AnalysisException(s"$sql is only supported in v1 catalog")
-    }
+    case RefreshFunction(ResolvedFunc(identifier)) =>
+      // Fallback to v1 command
+      val funcIdentifier = identifier.asFunctionIdentifier
+      RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = tableName match {

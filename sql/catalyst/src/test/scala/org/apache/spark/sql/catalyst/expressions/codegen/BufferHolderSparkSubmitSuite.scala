@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.scalatest.{Assertions, BeforeAndAfterEach, Matchers}
+import org.scalatest.{Assertions, BeforeAndAfterEach}
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.SparkSubmitSuite
