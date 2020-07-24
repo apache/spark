@@ -31,6 +31,7 @@ import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
@@ -161,35 +162,31 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   }
 
   @Override
-  public void getMergedBlocksMeta(
+  public void getMergedBlockMeta(
       String host,
       int port,
-      String[] blocks,
+      String mergedBlockId,
       MergedBlocksMetaListener listener) {
     checkInit();
-    logger.debug("Get merged blocks meta from {}:{} with {} blocks", host, port, blocks.length);
+    logger.debug("Get merged blocks meta from {}:{} for block {}", host, port, mergedBlockId);
     try {
       TransportClient client = clientFactory.createClient(host, port);
-      FetchMergedBlocksMeta mergedBlocksMetaReq = new FetchMergedBlocksMeta(appId, blocks);
-      client.sendRpc(mergedBlocksMetaReq.toByteBuffer(), new RpcResponseCallback() {
+      client.sendMergedBlockMetaReq(appId, mergedBlockId, new MergedBlockMetaResponseCallback() {
         @Override
-        public void onSuccess(ByteBuffer response) {
-
-          MergedBlocksMeta blocksMeta =
-              (MergedBlocksMeta) BlockTransferMessage.Decoder.fromByteBuffer(response);
-          logger.trace("Successfully got merged blocks meta {}", blocksMeta);
-          listener.onSuccess(blocks, blocksMeta.numChunks);
+        public void onSuccess(int numChunks, ManagedBuffer buffer) {
+          logger.trace("Successfully got merged block meta for {}", mergedBlockId);
+          listener.onSuccess(mergedBlockId, new MergedBlockMeta(numChunks, buffer));
         }
 
         @Override
         public void onFailure(Throwable e) {
-          logger.error("Failed while getting merged blocks meta", e);
-          listener.onFailure(blocks, e);
+          logger.error("Failed while getting merged block meta", e);
+          listener.onFailure(mergedBlockId, e);
         }
       });
     } catch (Exception e) {
-      logger.error("Exception while getting merged blocks meta", e);
-      listener.onFailure(blocks, e);
+      logger.error("Exception while getting merged block meta", e);
+      listener.onFailure(mergedBlockId, e);
     }
   }
 

@@ -103,6 +103,8 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
         getMergedShuffleFile(mergedBlockId.appId, mergedBlockId.name)
       case mergedIndexBlockId: ShuffleMergedIndexBlockId =>
         getMergedShuffleFile(mergedIndexBlockId.appId, mergedIndexBlockId.name)
+      case mergedMetaBlockId: ShuffleMergedMetaBlockId =>
+        getMergedShuffleFile(mergedMetaBlockId.appId, mergedMetaBlockId.name)
       case _ =>
         throw new RuntimeException(s"Only merged block ID is supported, but got ${blockId}")
     }

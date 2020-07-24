@@ -28,7 +28,7 @@ import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.ExecutorDiskUtils
+import org.apache.spark.network.shuffle.{ExecutorDiskUtils, MergedBlockMeta}
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
@@ -109,6 +109,11 @@ private[spark] class IndexShuffleBlockResolver(
   private def getMergedBlockIndexFile(appId: String, shuffleId: Int, reduceId: Int): File = {
     blockManager.diskBlockManager.getMergedShuffleFile(
       ShuffleMergedIndexBlockId(appId, shuffleId, reduceId))
+  }
+
+  private def getMergedBlockMetaFile(appId: String, shuffleId: Int, reduceId: Int): File = {
+    blockManager.diskBlockManager.getMergedShuffleFile(
+      ShuffleMergedMetaBlockId(appId, shuffleId, reduceId))
   }
 
   /**
@@ -348,6 +353,18 @@ private[spark] class IndexShuffleBlockResolver(
         new FileSegmentManagedBuffer(transportConf, dataFile,
           offsets.get(index), chunkSizes(index))
     }
+  }
+
+  /**
+   * This is only used for reading local merged block meta data.
+   */
+  override def getMergedBlockMeta(blockId: ShuffleBlockId): MergedBlockMeta = {
+    val indexFile = getMergedBlockIndexFile(conf.getAppId, blockId.shuffleId, blockId.reduceId)
+    val size = indexFile.length.toInt
+    val numChunks = (size / 8) - 1
+    val metaFile = getMergedBlockMetaFile(conf.getAppId, blockId.shuffleId, blockId.reduceId)
+    val chunkBitMaps = new FileSegmentManagedBuffer(transportConf, metaFile, 0L, metaFile.length)
+    new MergedBlockMeta(numChunks, chunkBitMaps)
   }
 
   override def getBlockData(

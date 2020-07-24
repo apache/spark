@@ -29,13 +29,14 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOutputStream}
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, MapStatus, MergeStatus, OutputStatus}
+import org.apache.spark.scheduler.{MapStatus, MergeStatus, OutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
@@ -465,6 +466,17 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def getMapSizesForMergeResult(
       shuffleId: Int,
       partitionId: Int): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])]
+
+  /**
+   * Called from executors upon fetch failure on a merged shuffle block chunk. This is to get the
+   * server URIs and output sizes for each shuffle block that is merged in the specified merged
+   * shuffle block chunk so fetch failure on a merged shuffle block chunk can fall back to fetching
+   * the unmerged blocks.
+   */
+  def getMapSizesForMergeResult(
+      shuffleId: Int,
+      partitionId: Int,
+      chunkBitmap: RoaringBitmap): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -956,6 +968,15 @@ private[spark] class MapOutputTrackerMaster(
     Seq.empty
   }
 
+  // This method is only called in local-mode. Since push based shuffle won't be
+  // enabled in local-mode, this method returns empty list.
+  def getMapSizesForMergeResult(
+      shuffleId: Int,
+      partitionId: Int,
+      chunkTracker: RoaringBitmap): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    Seq.empty
+  }
+
   override def stop(): Unit = {
     outputStatusesRequests.offer(PoisonPill)
     threadpool.shutdown()
@@ -1028,10 +1049,40 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     logDebug(s"Fetching backup outputs for shuffle $shuffleId, partition $partitionId")
     // Fetch the map statuses and merge statuses again since they might have already been
     // cleared by another task running in the same executor.
-    val (mapOutputStatuses, mergeResultStatues) = getStatuses(shuffleId, conf)
+    val (mapOutputStatuses, mergeResultStatuses) = getStatuses(shuffleId, conf)
     try {
+      val mergeStatus = mergeResultStatuses(partitionId)
+      // The original MergeStatus is no longer available, we cannot identify the list of
+      // unmerged blocks to fetch in this case. Throw MetadataFetchFailedException.
+      MapOutputTracker.validateStatus(mergeStatus, shuffleId, partitionId)
       MapOutputTracker.getMapStatusesForMergeStatus(shuffleId, partitionId,
-        mapOutputStatuses, mergeResultStatues)
+        mapOutputStatuses, mergeStatus.tracker)
+    } catch {
+      // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
+      case e: MetadataFetchFailedException =>
+        mapStatuses.clear()
+        mergeStatuses.clear()
+        throw e
+    }
+  }
+
+  /**
+   * Called from executors upon fetch failure on a merged shuffle block chunk. This is to get the
+   * server URIs and output sizes for each shuffle block that is merged in the specified merged
+   * shuffle block chunk so fetch failure on a merged shuffle block chunk can fall back to fetching
+   * the unmerged blocks.
+   */
+  override def getMapSizesForMergeResult(
+      shuffleId: Int,
+      partitionId: Int,
+      chunkTracker: RoaringBitmap): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    logDebug(s"Fetching backup outputs for shuffle $shuffleId, partition $partitionId")
+    // Fetch the map statuses and merge statuses again since they might have already been
+    // cleared by another task running in the same executor.
+    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf)
+    try {
+      MapOutputTracker.getMapStatusesForMergeStatus(shuffleId, partitionId, mapOutputStatuses,
+        chunkTracker)
     } catch {
       // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
       case e: MetadataFetchFailedException =>
@@ -1246,9 +1297,11 @@ private[spark] object MapOutputTracker extends Logging {
           // Add location for the mapper shuffle partition blocks
           for ((mapStatus, mapIndex) <- remainingMapStatuses) {
             validateStatus(mapStatus, shuffleId, partId)
-            splitsByAddress.getOrElseUpdate(mapStatus.location, ListBuffer()) +=
-              ((ShuffleBlockId(shuffleId, mapStatus.mapId, partId),
-                mapStatus.getSizeForBlock(partId), mapIndex))
+            val size = mapStatus.getSizeForBlock(partId)
+            if (size != 0) {
+              splitsByAddress.getOrElseUpdate(mapStatus.location, ListBuffer()) +=
+                ((ShuffleBlockId(shuffleId, mapStatus.mapId, partId), size, mapIndex))
+            }
           }
       }
     } else {
@@ -1267,14 +1320,6 @@ private[spark] object MapOutputTracker extends Logging {
     splitsByAddress.mapValues(_.toSeq).iterator
   }
 
-  private def validateStatus(status: OutputStatus, shuffleId: Int, partition: Int) : Unit = {
-    if (status == null) {
-      val errorMessage = s"Missing an output location for shuffle $shuffleId"
-      logError(errorMessage)
-      throw new MetadataFetchFailedException(shuffleId, partition, errorMessage)
-    }
-  }
-
   /**
    * Given a partition ID, an array of map statuses, and an array of merge statuses, identify
    * the metadata about the shuffle partition blocks that are merged into the shuffle block
@@ -1284,7 +1329,8 @@ private[spark] object MapOutputTracker extends Logging {
    * @param partitionId The partition ID of the MergeStatus for which we look for the metadata
    *                    of the merged shuffle partition blocks
    * @param mapStatuses List of map statuses, indexed by map ID
-   * @param mergeStatuses List of merge statuses, index by reduce ID
+   * @param tracker     bitmap containing mapIds that belong to the merged block or merged block
+   *                    chunk.
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block ID, shuffle block size) tuples
    *         describing the shuffle blocks that are stored at that block manager.
@@ -1293,21 +1339,13 @@ private[spark] object MapOutputTracker extends Logging {
       shuffleId: Int,
       partitionId: Int,
       mapStatuses: Array[MapStatus],
-      mergeStatuses: Array[MergeStatus]): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    assert (mapStatuses != null && mergeStatuses != null)
+      tracker: RoaringBitmap): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    assert (mapStatuses != null && tracker != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
-    val mergeStatus = mergeStatuses(partitionId)
-    // The original MergeStatus is no longer available, we cannot identify the list of
-    // unmerged blocks to fetch in this case. Throw MetadataFetchFailedException.
-    if (mergeStatus == null) {
-      val errorMessage = s"Missing an output location for shuffle $shuffleId " +
-        s"for merge block backup"
-      logError(errorMessage)
-      throw new MetadataFetchFailedException(shuffleId, partitionId, errorMessage)
-    }
     for ((status, mapIndex) <- mapStatuses.zipWithIndex) {
-      if (mergeStatus.tracker.contains(mapIndex)) {
-        validateStatus(status, shuffleId, partitionId)
+      // Only add blocks that are merged
+      if (tracker.contains(mapIndex)) {
+        MapOutputTracker.validateStatus(status, shuffleId, partitionId)
         splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
           ((ShuffleBlockId(shuffleId, status.mapId, partitionId),
             status.getSizeForBlock(partitionId), mapIndex))
@@ -1316,4 +1354,11 @@ private[spark] object MapOutputTracker extends Logging {
     splitsByAddress.toSeq
   }
 
+  def validateStatus(status: OutputStatus, shuffleId: Int, partition: Int) : Unit = {
+    if (status == null) {
+      val errorMessage = s"Missing an output location for shuffle $shuffleId partition $partition"
+      logError(errorMessage)
+      throw new MetadataFetchFailedException(shuffleId, partition, errorMessage)
+    }
+  }
 }

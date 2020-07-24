@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.shuffle.MergedBlockMeta
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 
 private[spark]
@@ -44,6 +45,11 @@ trait ShuffleBlockResolver {
    * Retrieve the data for the specified merged shuffle block as multiple chunks.
    */
   def getMergedBlockData(blockId: ShuffleBlockId): Seq[ManagedBuffer]
+
+  /**
+   * Retrieve the meta data for the specified merged shuffle block.
+   */
+  def getMergedBlockMeta(blockId: ShuffleBlockId): MergedBlockMeta
 
   def stop(): Unit
 }

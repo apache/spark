@@ -138,4 +138,9 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
     LOG.debug("Authorization successful for client {}.", channel.remoteAddress());
     return true;
   }
+
+  @Override
+  public MergedBlockMetaReqHandler getMergedBlockMetaReqHandler() {
+    return saslHandler.getMergedBlockMetaReqHandler();
+  }
 }

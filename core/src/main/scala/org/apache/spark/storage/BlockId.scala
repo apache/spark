@@ -107,6 +107,15 @@ case class ShuffleMergedIndexBlockId(
 }
 
 @DeveloperApi
+case class ShuffleMergedMetaBlockId(
+    appId: String,
+    shuffleId: Int,
+    reduceId: Int) extends BlockId {
+  override def name: String =
+    "mergedShuffle_" + appId + "_" + shuffleId + "_" + reduceId + ".meta"
+}
+
+@DeveloperApi
 case class BroadcastBlockId(broadcastId: Long, field: String = "") extends BlockId {
   override def name: String = "broadcast_" + broadcastId + (if (field == "") "" else "_" + field)
 }

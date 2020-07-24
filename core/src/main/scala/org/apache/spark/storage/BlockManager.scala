@@ -723,6 +723,13 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Get the local merged shuffle block metada data for the given block ID.
+   */
+  def getMergedBlockMeta(blockId: ShuffleBlockId): MergedBlockMeta = {
+    shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId)
+  }
+
+  /**
    * Get the BlockStatus for the block identified by the given ID, if it exists.
    * NOTE: This is mainly for testing.
    */
