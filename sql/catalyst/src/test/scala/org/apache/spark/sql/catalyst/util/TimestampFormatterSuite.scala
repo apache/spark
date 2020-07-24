@@ -435,4 +435,10 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       assert(formatter.format(date(1970, 4, 10)) == "100")
     }
   }
+
+  test("avoid silent data change when timestamp overflows") {
+    val formatter = TimestampFormatter("y", UTC, isParsing = true)
+    val exception = intercept[ArithmeticException](formatter.parse("9999999"))
+    assert(exception.getMessage === "long overflow")
+  }
 }

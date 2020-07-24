@@ -1,5 +1,13 @@
 --- TESTS FOR DATETIME PARSING FUNCTIONS WITH INVALID VALUES ---
 
+-- parsing invalid value with pattern 'y'
+select to_timestamp('300000', 'y');
+select to_timestamp('1', 'yy');
+select to_timestamp('-12', 'yy');
+select to_timestamp('123', 'yy');
+select to_timestamp('1', 'yyy');
+select to_timestamp('12', 'yyy');
+
 -- parsing invalid values with pattern 'D'
 select to_timestamp('366', 'D');
 select to_timestamp('9', 'DD');
