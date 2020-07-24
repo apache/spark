@@ -32,6 +32,7 @@ import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.roaringbitmap.RoaringBitmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,7 +85,7 @@ public class RemoteBlockPushResolverSuite {
     try {
       String appId = "app_NoIndexFile";
       registerApplication(appId, localDirs);
-      pushResolver.getChunkCount(appId, 0, 0);
+      pushResolver.getMergedBlockMeta(appId, 0, 0);
       removeApplication(appId);
     } catch (Throwable t) {
       assertTrue(t.getMessage().startsWith("Application merged shuffle index file is not found"));
@@ -105,9 +106,8 @@ public class RemoteBlockPushResolverSuite {
         ByteBuffer.wrap(new byte[5])
     };
     pushBlockHelper(appId, pushBlocks, blocks);
-    int numChunks = pushResolver.getChunkCount(appId, 0, 0);
-    assertEquals(2, numChunks);
-    validateChunks(appId,0, 0, numChunks, new int[]{4, 5});
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(appId, 0, 0);
+    validateChunks(appId, 0, 0, blockMeta, new int[]{4, 5}, new int[][]{{0}, {1}});
     removeApplication(appId);
   }
 
@@ -128,9 +128,8 @@ public class RemoteBlockPushResolverSuite {
         ByteBuffer.wrap(new byte[3])
     };
     pushBlockHelper(appId, pushBlocks, buffers);
-    int numChunks = pushResolver.getChunkCount(appId, 0, 0);
-    assertEquals(3, numChunks);
-    validateChunks(appId,0, 0, numChunks, new int[]{5, 5, 3});
+    MergedBlockMeta meta = pushResolver.getMergedBlockMeta(appId, 0, 0);
+    validateChunks(appId, 0, 0, meta, new int[]{5, 5, 3}, new int[][]{{0, 1}, {2}, {3}});
     removeApplication(appId);
   }
 
@@ -152,9 +151,8 @@ public class RemoteBlockPushResolverSuite {
         ByteBuffer.wrap(new byte[3])
     };
     pushBlockHelper(appId, pushBlocks, buffers);
-    int numChunks = pushResolver.getChunkCount(appId, 0, 0);
-    assertEquals(3, numChunks);
-    validateChunks(appId,0, 0, numChunks, new int[]{5, 5, 3});
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(appId, 0, 0);
+    validateChunks(appId, 0, 0, blockMeta, new int[]{5, 5, 3}, new int[][]{{0, 1}, {2}, {3}});
     removeApplication(appId);
   }
 
@@ -175,11 +173,18 @@ public class RemoteBlockPushResolverSuite {
   }
 
   private void validateChunks(
-      String appId, int shuffleId, int reduceId, int numChunks, int[] expectedSizes) {
-    for (int i = 0; i < numChunks; i++) {
+      String appId, int shuffleId, int reduceId, MergedBlockMeta meta,
+      int[] expectedSizes, int[][] expectedMapsPerChunk) throws IOException {
+    assertEquals("num chunks", expectedSizes.length, meta.getNumChunks());
+    RoaringBitmap[] bitmaps = meta.readChunkBitmaps();
+    assertEquals("num of bitmaps", meta.getNumChunks(), bitmaps.length);
+    for (int i = 0; i < meta.getNumChunks(); i++) {
+      RoaringBitmap chunkBitmap = bitmaps[i];
+      Arrays.stream(expectedMapsPerChunk[i]).forEach(x -> assertTrue(chunkBitmap.contains(x)));
+    }
+    for (int i = 0; i < meta.getNumChunks(); i++) {
       FileSegmentManagedBuffer mb =
-          (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(appId, shuffleId, reduceId,
-              i);
+          (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(appId, shuffleId, reduceId, i);
       assertEquals(expectedSizes[i], mb.getLength());
     }
   }
