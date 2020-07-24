@@ -2229,6 +2229,19 @@ class DataSourceV2SQLSuite
       "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
   }
 
+  test("REFRESH FUNCTION: only support session catalog") {
+    val e = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION testcat.ns1.ns2.fun")
+    }
+    assert(e.message.contains("function lookup is only supported in v1 catalog"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains(
+      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
+  }
+
   test("global temp view should not be masked by v2 catalog") {
     val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
     spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)

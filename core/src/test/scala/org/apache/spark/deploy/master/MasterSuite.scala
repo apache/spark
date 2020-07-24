@@ -31,8 +31,10 @@ import scala.reflect.ClassTag
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfter, Matchers, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}

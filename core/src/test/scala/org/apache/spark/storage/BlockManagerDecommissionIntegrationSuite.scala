@@ -146,7 +146,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
 
     val execToDecommission = execs.head
     logDebug(s"Decommissioning executor ${execToDecommission}")
-    sched.decommissionExecutor(execToDecommission)
+    sched.decommissionExecutor(execToDecommission, ExecutorDecommissionInfo("", false))
 
     // Wait for job to finish.
     val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 15.seconds)

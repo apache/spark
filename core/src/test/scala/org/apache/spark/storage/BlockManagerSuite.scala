@@ -32,9 +32,11 @@ import scala.reflect.ClassTag
 import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
 import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify, when}
-import org.scalatest._
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager

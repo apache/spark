@@ -21,6 +21,8 @@ import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
 
+import scala.collection.JavaConverters._
+
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
@@ -1304,7 +1306,8 @@ class JDBCSuite extends QueryTest
     testJdbcOptions(new JDBCOptions(parameters))
     testJdbcOptions(new JDBCOptions(CaseInsensitiveMap(parameters)))
     // test add/remove key-value from the case-insensitive map
-    var modifiedParameters = CaseInsensitiveMap(Map.empty) ++ parameters
+    var modifiedParameters =
+      (CaseInsensitiveMap(Map.empty) ++ parameters).asInstanceOf[Map[String, String]]
     testJdbcOptions(new JDBCOptions(modifiedParameters))
     modifiedParameters -= "dbtable"
     assert(modifiedParameters.get("dbTAblE").isEmpty)
@@ -1716,5 +1719,24 @@ class JDBCSuite extends QueryTest
     val parts = Array[String]("THEID = 2")
     jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts)
     checkAnswer(jdbcDF, Row("mary", 2) :: Nil)
+  }
+
+  test("SPARK-32364: JDBCOption constructor") {
+    val extraOptions = CaseInsensitiveMap[String](Map("UrL" -> "url1", "dBTable" -> "table1"))
+    val connectionProperties = new Properties()
+    connectionProperties.put("url", "url2")
+    connectionProperties.put("dbtable", "table2")
+
+    // connection property should override the options in extraOptions
+    val params = extraOptions ++ connectionProperties.asScala
+    assert(params.size == 2)
+    assert(params.get("uRl").contains("url2"))
+    assert(params.get("DbtaBle").contains("table2"))
+
+    // JDBCOptions constructor parameter should overwrite the existing conf
+    val options = new JDBCOptions(url, "table3", params)
+    assert(options.asProperties.size == 2)
+    assert(options.asProperties.get("url") == url)
+    assert(options.asProperties.get("dbtable") == "table3")
   }
 }

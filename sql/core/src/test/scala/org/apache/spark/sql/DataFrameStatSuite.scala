@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Random
 
-import org.scalatest.Matchers._
+import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions

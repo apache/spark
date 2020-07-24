@@ -15,26 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.scheduler
 
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
-
-import org.apache.spark.SparkFunSuite
-
-class DistributionSuite extends SparkFunSuite with Matchers {
-  test("summary") {
-    val d = new Distribution((1 to 100).toArray.map{_.toDouble})
-    val stats = d.statCounter
-    stats.count should be (100)
-    stats.mean should be (50.5)
-    stats.sum should be (50 * 101)
-
-    val quantiles = d.getQuantiles()
-    quantiles(0) should be (1)
-    quantiles(1) should be (26)
-    quantiles(2) should be (51)
-    quantiles(3) should be (76)
-    quantiles(4) should be (100)
-  }
-}
+/**
+ * Provides more detail when an executor is being decommissioned.
+ * @param message Human readable reason for why the decommissioning is happening.
+ * @param isHostDecommissioned Whether the host (aka the `node` or `worker` in other places) is
+ *                             being decommissioned too. Used to infer if the shuffle data might
+ *                             be lost even if the external shuffle service is enabled.
+ */
+private[spark]
+case class ExecutorDecommissionInfo(message: String, isHostDecommissioned: Boolean)
