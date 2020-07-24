@@ -99,6 +99,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("create a table") {
     withTable("h2.test.new_table") {
+      // TODO (SPARK-32427): Omit USING in CREATE TABLE
       sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _")
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
