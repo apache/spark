@@ -227,7 +227,7 @@ class Dataset[T] private[sql](
     val plan = queryExecution.analyzed match {
       case c: Command =>
         LocalRelation(c.output, withAction("command", queryExecution)(_.executeCollect()))
-      case u @ Union(children) if children.forall(_.isInstanceOf[Command]) =>
+      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
         LocalRelation(u.output, withAction("command", queryExecution)(_.executeCollect()))
       case _ =>
         queryExecution.analyzed
@@ -2071,51 +2071,9 @@ class Dataset[T] private[sql](
    * @since 3.1.0
    */
   def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T] = withSetOperator {
-    // Check column name duplication
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val leftOutputAttrs = logicalPlan.output
-    val rightOutputAttrs = other.logicalPlan.output
-
-    SchemaUtils.checkColumnNameDuplication(
-      leftOutputAttrs.map(_.name),
-      "in the left attributes",
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
-    SchemaUtils.checkColumnNameDuplication(
-      rightOutputAttrs.map(_.name),
-      "in the right attributes",
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
-    // Builds a project list for `other` based on `logicalPlan` output names
-    val rightProjectList = leftOutputAttrs.map { lattr =>
-      rightOutputAttrs.find { rattr => resolver(lattr.name, rattr.name) }.getOrElse {
-        if (allowMissingColumns) {
-          Alias(Literal(null, lattr.dataType), lattr.name)()
-        } else {
-          throw new AnalysisException(
-            s"""Cannot resolve column name "${lattr.name}" among """ +
-              s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
-        }
-      }
-    }
-
-    // Delegates failure checks to `CheckAnalysis`
-    val notFoundAttrs = rightOutputAttrs.diff(rightProjectList)
-    val rightChild = Project(rightProjectList ++ notFoundAttrs, other.logicalPlan)
-
-    // Builds a project for `logicalPlan` based on `other` output names, if allowing
-    // missing columns.
-    val leftChild = if (allowMissingColumns) {
-      val missingAttrs = notFoundAttrs.map { attr =>
-        Alias(Literal(null, attr.dataType), attr.name)()
-      }
-      Project(leftOutputAttrs ++ missingAttrs, logicalPlan)
-    } else {
-      logicalPlan
-    }
-
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(leftChild, rightChild))
+    CombineUnions(Union(logicalPlan :: other.logicalPlan :: Nil, true, allowMissingColumns))
   }
 
   /**

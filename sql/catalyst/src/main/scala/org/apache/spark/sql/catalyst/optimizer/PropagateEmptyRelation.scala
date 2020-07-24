@@ -50,8 +50,8 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
   override def conf: SQLConf = SQLConf.get
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p @ Union(children) if children.exists(isEmptyLocalRelation) =>
-      val newChildren = children.filterNot(isEmptyLocalRelation)
+    case p: Union if p.children.exists(isEmptyLocalRelation) =>
+      val newChildren = p.children.filterNot(isEmptyLocalRelation)
       if (newChildren.isEmpty) {
         empty(p)
       } else {
