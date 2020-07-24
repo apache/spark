@@ -51,9 +51,6 @@ case class BroadcastHashJoinExec(
   extends HashJoin with CodegenSupport {
 
   if (isNullAwareAntiJoin) {
-    // TODO support multi column NULL-aware anti join in future.
-    // See. http://www.vldb.org/pvldb/vol2/vldb09-423.pdf Section 6
-    // multi-column null aware anti join is much more complicated than single column ones.
     require(leftKeys.length == 1, "leftKeys length should be 1")
     require(rightKeys.length == 1, "rightKeys length should be 1")
     require(joinType == LeftAnti, "joinType must be LeftAnti.")
@@ -149,9 +146,9 @@ case class BroadcastHashJoinExec(
       streamedPlan.execute().mapPartitionsInternal { streamedIter =>
         val hashed = broadcastRelation.value.asReadOnlyCopy()
         TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-        if (hashed.isOriginInputEmpty) {
+        if (hashed.isOriginalInputEmpty) {
           streamedIter
-        } else if (hashed.allNullColumnKeyExistsInOriginInput) {
+        } else if (hashed.allNullColumnKeyExistsInOriginalInput) {
           Iterator.empty
         } else {
           val keyGenerator = UnsafeProjection.create(
@@ -161,12 +158,11 @@ case class BroadcastHashJoinExec(
           )
           streamedIter.filter(row => {
             val lookupKey: UnsafeRow = keyGenerator(row)
-            if (lookupKey.allNull()) {
+            // anyNull is equivalent to allNull since it's a single-column key.
+            if (lookupKey.anyNull()) {
               false
             } else {
-              // in isNullAware mode
-              // UnsafeHashedRelation include anyNull key, if match, dropped row
-              // Same as LongHashedRelation where lookupKey isNotNullAt(0)
+              // Anti Join: Drop the row on the streamed side if it is a match on the build
               hashed.get(lookupKey) == null
             }
           })
@@ -494,32 +490,33 @@ case class BroadcastHashJoinExec(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val isLongHashedRelation = broadcastRelation.value.isInstanceOf[LongHashedRelation]
 
-    // fast stop if isOriginInputEmpty = true
-    // whether isNullAwareAntiJoin is true or false
-    // should accept all rows in streamedSide
-    if (broadcastRelation.value.isOriginInputEmpty) {
+    // fast stop if isOriginalInputEmpty = true, should accept all rows in streamedSide
+    if (broadcastRelation.value.isOriginalInputEmpty) {
       return s"""
-                |// Common Anti Join isOriginInputEmpty(true) accept all
+                |// Anti Join isOriginalInputEmpty(true) accept all
                 |$numOutput.add(1);
                 |${consume(ctx, input)}
           """.stripMargin
     }
 
     if (isNullAwareAntiJoin) {
-      if (broadcastRelation.value.allNullColumnKeyExistsInOriginInput) {
+      if (broadcastRelation.value.allNullColumnKeyExistsInOriginalInput) {
         return s"""
-                  |// NAAJ isOriginInputEmpty(false) anyNullKeyExists(true) reject all
+                  |// NAAJ
+                  |// isOriginalInputEmpty(false) allNullColumnKeyExistsInOriginalInput(true)
+                  |// reject all
             """.stripMargin
       } else {
         val found = ctx.freshName("found")
         return s"""
-                  |// NAAJ isOriginInputEmpty(false) allNullColumnKeyExistsInOriginInput(false)
+                  |// NAAJ
+                  |// isOriginalInputEmpty(false) allNullColumnKeyExistsInOriginalInput(false)
                   |boolean $found = false;
                   |// generate join key for stream side
                   |${keyEv.code}
-                  |if (${ if (isLongHashedRelation) s"$anyNull" else s"${keyEv.value}.allNull()"}) {
+                  |// anyNull is equivalent to allNull since it's a single-column key.
+                  |if ($anyNull) {
                   |  $found = true;
                   |} else {
                   |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});

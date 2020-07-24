@@ -393,9 +393,11 @@ object PhysicalWindow {
 
 object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with PredicateHelper {
 
-  // SingleColumn NullAwareAntiJoin
+  // TODO support multi column NULL-aware anti join in future.
+  // See. http://www.vldb.org/pvldb/vol2/vldb09-423.pdf Section 6
+  // multi-column null aware anti join is much more complicated than single column ones.
+
   // streamedSideKeys, buildSideKeys
-  // currently these two return Seq[Expression] should have only one element
   private type ReturnType = (Seq[Expression], Seq[Expression])
 
   /**

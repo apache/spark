@@ -84,13 +84,14 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
 
   /**
    * Normally HashedRelation is built from an Source (input: Iterator[InternalRow]).
-   * This indicates the origin input is empty.
+   * This indicates the original input is empty.
    * Note that, the hashed relation can be empty despite the input being not empty,
    * since the hashed relation skips over null keys.
    */
-  var isOriginInputEmpty: Boolean
-  def setOriginInputEmtpy(isOriginInputEmpty: Boolean): HashedRelation = {
-    this.isOriginInputEmpty = isOriginInputEmpty
+  var isOriginalInputEmpty: Boolean
+
+  def setOriginInputEmtpy(isOriginalInputEmpty: Boolean): HashedRelation = {
+    this.isOriginalInputEmpty = isOriginalInputEmpty
     this
   }
 
@@ -99,11 +100,12 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * This will be set true if Source (input: Iterator[InternalRow]) contains a key,
    * which is allNullColumn.
    */
-  var allNullColumnKeyExistsInOriginInput: Boolean
-  def setAllNullColumnKeyExistsInOriginInput(
-      allNullColumnKeyExistsInOriginInput: Boolean): HashedRelation = {
-    this.allNullColumnKeyExistsInOriginInput =
-      allNullColumnKeyExistsInOriginInput
+  var allNullColumnKeyExistsInOriginalInput: Boolean
+
+  def setAllNullColumnKeyExistsInOriginalInput(
+      allNullColumnKeyExistsInOriginalInput: Boolean): HashedRelation = {
+    this.allNullColumnKeyExistsInOriginalInput =
+      allNullColumnKeyExistsInOriginalInput
     this
   }
 
@@ -117,6 +119,7 @@ private[execution] object HashedRelation {
 
   /**
    * Create a HashedRelation from an Iterator of InternalRow.
+   * If isNullAware is true, UnsafeHashedRelation will store rows with null keys.
    */
   def apply(
       input: Iterator[InternalRow],
@@ -135,7 +138,7 @@ private[execution] object HashedRelation {
     }
 
     if (key.length == 1 && key.head.dataType == LongType) {
-      LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
+      LongHashedRelation(input, key, sizeEstimate, mm)
     } else {
       UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     }
@@ -161,8 +164,8 @@ private[joins] class UnsafeHashedRelation(
 
   override def asReadOnlyCopy(): UnsafeHashedRelation = {
     new UnsafeHashedRelation(numKeys, numFields, binaryMap)
-      .setOriginInputEmtpy(this.isOriginInputEmpty)
-      .setAllNullColumnKeyExistsInOriginInput(this.allNullColumnKeyExistsInOriginInput)
+      .setOriginInputEmtpy(this.isOriginalInputEmpty)
+      .setAllNullColumnKeyExistsInOriginalInput(this.allNullColumnKeyExistsInOriginalInput)
       .asInstanceOf[UnsafeHashedRelation]
   }
 
@@ -246,8 +249,8 @@ private[joins] class UnsafeHashedRelation(
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
     writeInt(numFields)
-    writeBoolean(isOriginInputEmpty)
-    writeBoolean(allNullColumnKeyExistsInOriginInput)
+    writeBoolean(isOriginalInputEmpty)
+    writeBoolean(allNullColumnKeyExistsInOriginalInput)
     // TODO: move these into BytesToBytesMap
     writeLong(binaryMap.numKeys())
     writeLong(binaryMap.numValues())
@@ -282,8 +285,8 @@ private[joins] class UnsafeHashedRelation(
       readLong: () => Long,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
     numFields = readInt()
-    isOriginInputEmpty = readBoolean()
-    allNullColumnKeyExistsInOriginInput = readBoolean()
+    isOriginalInputEmpty = readBoolean()
+    allNullColumnKeyExistsInOriginalInput = readBoolean()
     resultRow = new UnsafeRow(numFields)
     val nKeys = readLong()
     val nValues = readLong()
@@ -339,8 +342,8 @@ private[joins] class UnsafeHashedRelation(
     read(() => in.readBoolean(), () => in.readInt(), () => in.readLong(), in.readBytes)
   }
 
-  override var isOriginInputEmpty: Boolean = _
-  override var allNullColumnKeyExistsInOriginInput: Boolean = _
+  override var isOriginalInputEmpty: Boolean = _
+  override var allNullColumnKeyExistsInOriginalInput: Boolean = _
 }
 
 private[joins] object UnsafeHashedRelation {
@@ -372,17 +375,16 @@ private[joins] object UnsafeHashedRelation {
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
     val numKeys = key.length
-    val isOriginInputEmpty = !input.hasNext
-    var allNullColumnKeyExistsInOriginInput: Boolean = false
+    val isOriginalInputEmpty = !input.hasNext
+    var allNullColumnKeyExistsInOriginalInput: Boolean = false
     while (input.hasNext) {
       val row = input.next().asInstanceOf[UnsafeRow]
       numFields = row.numFields()
       val key = keyGenerator(row)
       if ((0 until numKeys).forall(key.isNullAt)) {
-        allNullColumnKeyExistsInOriginInput = true
+        allNullColumnKeyExistsInOriginalInput = true
       }
 
-      // TODO keep anyNull key for multi column NAAJ support in future
       if (isNullAware || (!isNullAware && !key.anyNull)) {
         val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
         val success = loc.append(
@@ -398,8 +400,8 @@ private[joins] object UnsafeHashedRelation {
     }
 
     new UnsafeHashedRelation(key.size, numFields, binaryMap)
-        .setOriginInputEmtpy(isOriginInputEmpty)
-        .setAllNullColumnKeyExistsInOriginInput(allNullColumnKeyExistsInOriginInput)
+        .setOriginInputEmtpy(isOriginalInputEmpty)
+        .setAllNullColumnKeyExistsInOriginalInput(allNullColumnKeyExistsInOriginalInput)
   }
 }
 
@@ -894,8 +896,8 @@ class LongHashedRelation(
 
   override def asReadOnlyCopy(): LongHashedRelation =
     new LongHashedRelation(nFields, map)
-    .setOriginInputEmtpy(this.isOriginInputEmpty)
-    .setAllNullColumnKeyExistsInOriginInput(this.allNullColumnKeyExistsInOriginInput)
+    .setOriginInputEmtpy(this.isOriginalInputEmpty)
+    .setAllNullColumnKeyExistsInOriginalInput(this.allNullColumnKeyExistsInOriginalInput)
     .asInstanceOf[LongHashedRelation]
 
   override def estimatedSize: Long = map.getTotalMemoryConsumption
@@ -928,16 +930,16 @@ class LongHashedRelation(
 
   override def writeExternal(out: ObjectOutput): Unit = {
     out.writeInt(nFields)
-    out.writeBoolean(isOriginInputEmpty)
-    out.writeBoolean(allNullColumnKeyExistsInOriginInput)
+    out.writeBoolean(isOriginalInputEmpty)
+    out.writeBoolean(allNullColumnKeyExistsInOriginalInput)
     out.writeObject(map)
   }
 
   override def readExternal(in: ObjectInput): Unit = {
     nFields = in.readInt()
     resultRow = new UnsafeRow(nFields)
-    isOriginInputEmpty = in.readBoolean()
-    allNullColumnKeyExistsInOriginInput = in.readBoolean()
+    isOriginalInputEmpty = in.readBoolean()
+    allNullColumnKeyExistsInOriginalInput = in.readBoolean()
     map = in.readObject().asInstanceOf[LongToUnsafeRowMap]
   }
 
@@ -946,8 +948,8 @@ class LongHashedRelation(
    */
   override def keys(): Iterator[InternalRow] = map.keys()
 
-  override var isOriginInputEmpty: Boolean = _
-  override var allNullColumnKeyExistsInOriginInput: Boolean = _
+  override var isOriginalInputEmpty: Boolean = _
+  override var allNullColumnKeyExistsInOriginalInput: Boolean = _
 }
 
 /**
@@ -959,23 +961,14 @@ private[joins] object LongHashedRelation {
       key: Seq[Expression],
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager): LongHashedRelation = {
-    apply(input, key, sizeEstimate, taskMemoryManager, isNullAware = false)
-  }
-
-  def apply(
-      input: Iterator[InternalRow],
-      key: Seq[Expression],
-      sizeEstimate: Int,
-      taskMemoryManager: TaskMemoryManager,
-      isNullAware: Boolean): LongHashedRelation = {
 
     val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)
 
     // Create a mapping of key -> rows
     var numFields = 0
-    val isOriginInputEmpty: Boolean = !input.hasNext
-    var allNullColumnKeyExistsInOriginInput: Boolean = false
+    val isOriginalInputEmpty: Boolean = !input.hasNext
+    var allNullColumnKeyExistsInOriginalInput: Boolean = false
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
       numFields = unsafeRow.numFields()
@@ -986,14 +979,14 @@ private[joins] object LongHashedRelation {
         map.append(key, unsafeRow)
       } else {
         // LongHashedRelation is single-column key
-        // rowKey.isNullAt(0) equivalent to allNullColumnKeyExistsInOriginInput
-        allNullColumnKeyExistsInOriginInput = true
+        // rowKey.isNullAt(0) equivalent to allNullColumnKeyExistsInOriginalInput
+        allNullColumnKeyExistsInOriginalInput = true
       }
     }
     map.optimize()
     new LongHashedRelation(numFields, map)
-      .setOriginInputEmtpy(isOriginInputEmpty)
-      .setAllNullColumnKeyExistsInOriginInput(allNullColumnKeyExistsInOriginInput)
+      .setOriginInputEmtpy(isOriginalInputEmpty)
+      .setAllNullColumnKeyExistsInOriginalInput(allNullColumnKeyExistsInOriginalInput)
       .asInstanceOf[LongHashedRelation]
   }
 }

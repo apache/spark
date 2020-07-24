@@ -268,10 +268,8 @@ trait HashJoin extends BaseJoinExec {
   private def antiJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
-    // fast stop if isOriginInputEmpty = true
-    // whether isNullAwareAntiJoin is true or false
-    // should accept all rows in streamedSide
-    if (hashedRelation.isOriginInputEmpty) {
+    // fast stop if isOriginalInputEmpty = true, should accept all rows in streamedSide
+    if (hashedRelation.isOriginalInputEmpty) {
       return streamIter
     }
 
