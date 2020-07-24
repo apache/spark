@@ -108,7 +108,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
       schema: StructType,
       partitions: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
-      checkNamespace(ident.namespace())
+    checkNamespace(ident.namespace())
     if (partitions.nonEmpty) {
       throw new UnsupportedOperationException("Cannot create JDBC table with partition")
     }
