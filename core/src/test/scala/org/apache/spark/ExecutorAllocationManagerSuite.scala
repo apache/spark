@@ -1142,7 +1142,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       .set(config.DYN_ALLOCATION_TESTING, true)
       // SPARK-22864: effectively disable the allocation schedule by setting the period to a
       // really long value.
-      .set(TEST_SCHEDULE_INTERVAL, 10000L)
+      .set(TEST_SCHEDULE_INTERVAL, 30000L)
   }
 
   private def createManager(
