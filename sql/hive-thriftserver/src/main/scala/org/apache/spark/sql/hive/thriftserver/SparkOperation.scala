@@ -119,7 +119,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
             throw new HiveSQLException("The background threadpool cannot accept" +
               " new task for execution, please retry the operation", rejected)
           case _ =>
-            val tips = if (runAsync) "in background" else ""
+            val tips = if (shouldRunAsync()) "in background" else ""
             throw new HiveSQLException(s"Error operating $getType $tips ${e.getMessage}", e)
         }
       }
