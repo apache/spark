@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 
 /**
- * A serializer to serialize Spark rows to ORC structs.
+ * A serializer to serialize Spark rows to ORC structs. Multiple calls return the same [[OrcStruct]]
+ * object. If needed, caller should copy before making a new call.
  */
 class OrcSerializer(dataSchema: StructType) {
 
@@ -175,14 +176,14 @@ class OrcSerializer(dataSchema: StructType) {
           result
         }
 
-//      if (reuseObj) {
-//        val result = new OrcStruct(orcSchema)
-//        (getter, ordinal) => baseConverter.apply(result, getter, ordinal)
-//      } else {
+      if (reuseObj) {
+        val result = new OrcStruct(orcSchema)
+        (getter, ordinal) => baseConverter.apply(result, getter, ordinal)
+      } else {
         (getter, ordinal) =>
           val result = new OrcStruct(orcSchema)
           baseConverter.apply(result, getter, ordinal)
-//      }
+      }
 
     case ArrayType(elementType, _) =>
       val orcSchema = schemaConverter(dataType)
@@ -203,20 +204,20 @@ class OrcSerializer(dataSchema: StructType) {
         }
       }
 
-//      if (reuseObj) {
-//        val result = new OrcList[WritableComparable[_]](orcSchema)
-//        (getter, ordinal) => {
-//          result.clear()
-//          baseArrayConverter.apply(result, getter, ordinal)
-//          result
-//        }
-//      } else {
+      if (reuseObj) {
+        val result = new OrcList[WritableComparable[_]](orcSchema)
+        (getter, ordinal) => {
+          result.clear()
+          baseArrayConverter.apply(result, getter, ordinal)
+          result
+        }
+      } else {
         (getter, ordinal) => {
           val result = new OrcList[WritableComparable[_]](orcSchema)
           baseArrayConverter.apply(result, getter, ordinal)
           result
         }
-//      }
+      }
 
     case MapType(keyType, valueType, _) =>
       val orcSchema = schemaConverter(dataType)
@@ -242,20 +243,20 @@ class OrcSerializer(dataSchema: StructType) {
         }
       }
 
-//      if (reuseObj) {
-//        val result = new OrcMap[WritableComparable[_], WritableComparable[_]](orcSchema)
-//        (getter, ordinal) => {
-//          result.clear()
-//          baseMapConverter.apply(result, getter, ordinal)
-//          result
-//        }
-//      } else {
+      if (reuseObj) {
+        val result = new OrcMap[WritableComparable[_], WritableComparable[_]](orcSchema)
+        (getter, ordinal) => {
+          result.clear()
+          baseMapConverter.apply(result, getter, ordinal)
+          result
+        }
+      } else {
         (getter, ordinal) => {
           val result = new OrcMap[WritableComparable[_], WritableComparable[_]](orcSchema)
           baseMapConverter.apply(result, getter, ordinal)
           result
         }
-//      }
+      }
 
     case udt: UserDefinedType[_] => newConverter(udt.sqlType, reuseObj)
 
