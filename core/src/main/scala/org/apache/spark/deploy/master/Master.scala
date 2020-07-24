@@ -245,7 +245,7 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
-    case WorkerDecommission(id, workerRef) =>
+    case DecommissionWorker(id, workerRef) =>
       logInfo("Recording worker %s decommissioning".format(id))
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
@@ -874,7 +874,7 @@ private[deploy] class Master(
 
   /**
    * Decommission all workers that are active on any of the given hostnames. The decommissioning is
-   * asynchronously done by enqueueing WorkerDecommission messages to self. No checks are done about
+   * asynchronously done by enqueueing DecommissionWorker messages to self. No checks are done about
    * the prior state of the worker. So an already decommissioned worker will match as well.
    *
    * @param hostnames: A list of hostnames without the ports. Like "localhost", "foo.bar.com" etc
@@ -893,7 +893,7 @@ private[deploy] class Master(
     // The workers are removed async to avoid blocking the receive loop for the entire batch
     workersToRemove.foreach(wi => {
       logInfo(s"Sending the worker decommission to ${wi.id} and ${wi.endpoint}")
-      self.send(WorkerDecommission(wi.id, wi.endpoint))
+      self.send(DecommissionWorker(wi.id, wi.endpoint))
     })
 
     // Return the count of workers actually removed

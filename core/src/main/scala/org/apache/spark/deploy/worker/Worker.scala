@@ -668,7 +668,7 @@ private[deploy] class Worker(
       finishedApps += id
       maybeCleanupApplication(id)
 
-    case WorkerDecommission(_, _) =>
+    case DecommissionWorker(_, _) =>
       decommissionSelf()
   }
 
@@ -772,7 +772,7 @@ private[deploy] class Worker(
     if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
       logDebug("Decommissioning self")
       decommissioned = true
-      sendToMaster(WorkerDecommission(workerId, self))
+      sendToMaster(DecommissionWorker(workerId, self))
     } else {
       logWarning("Asked to decommission self, but decommissioning not enabled")
     }
