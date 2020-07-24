@@ -64,7 +64,7 @@ private[deploy] object DeployMessages {
    * @param id the worker id
    * @param worker the worker endpoint ref
    */
-  case class DecommissionWorker(
+  case class WorkerDecommission(
       id: String,
       worker: RpcEndpointRef)
     extends DeployMessage
