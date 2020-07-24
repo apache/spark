@@ -178,6 +178,11 @@ class _LinearSVCParams(_JavaClassifierParams, HasRegParam, HasMaxIter, HasFitInt
                       " all predictions 0.0 and -Inf will make all predictions 1.0.",
                       typeConverter=TypeConverters.toFloat)
 
+    def __init__(self, *args):
+        super(_LinearSVCParams, self).__init__(*args)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
+                         standardization=True, threshold=0.0, aggregationDepth=2)
+
 
 @inherit_doc
 class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable):
@@ -244,6 +249,8 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
     True
     >>> model.intercept == model2.intercept
     True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
 
     .. versionadded:: 2.2.0
     """
@@ -262,8 +269,6 @@ class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable
         super(LinearSVC, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LinearSVC", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
-                         standardization=True, threshold=0.0, aggregationDepth=2)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -426,6 +431,10 @@ class _LogisticRegressionParams(_JavaProbabilisticClassifierParams, HasRegParam,
                                     "equal with 1 for binomial regression, or the number of "
                                     "classes for multinomial regression.",
                                     typeConverter=TypeConverters.toVector)
+
+    def __init__(self, *args):
+        super(_LogisticRegressionParams, self).__init__(*args)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto")
 
     @since("1.4.0")
     def setThreshold(self, value):
@@ -616,6 +625,8 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
     True
     >>> model2
     LogisticRegressionModel: uid=..., numClasses=2, numFeatures=2
+    >>> blorModel.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
 
     .. versionadded:: 1.3.0
     """
@@ -642,7 +653,6 @@ class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams,
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
@@ -1130,7 +1140,12 @@ class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams):
     """
     Params for :py:class:`DecisionTreeClassifier` and :py:class:`DecisionTreeClassificationModel`.
     """
-    pass
+
+    def __init__(self, *args):
+        super(_DecisionTreeClassifierParams, self).__init__(*args)
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                         impurity="gini", leafCol="", minWeightFractionPerNode=0.0)
 
 
 @inherit_doc
@@ -1197,7 +1212,8 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
     >>> model2 = DecisionTreeClassificationModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
     True
-
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
     >>> df3 = spark.createDataFrame([
     ...     (1.0, 0.2, Vectors.dense(1.0)),
     ...     (1.0, 0.8, Vectors.dense(1.0)),
@@ -1229,9 +1245,6 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.DecisionTreeClassifier", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini", leafCol="", minWeightFractionPerNode=0.0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1365,7 +1378,14 @@ class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams):
     """
     Params for :py:class:`RandomForestClassifier` and :py:class:`RandomForestClassificationModel`.
     """
-    pass
+
+    def __init__(self, *args):
+        super(_RandomForestClassifierParams, self).__init__(*args)
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                         impurity="gini", numTrees=20, featureSubsetStrategy="auto",
+                         subsamplingRate=1.0, leafCol="", minWeightFractionPerNode=0.0,
+                         bootstrap=True)
 
 
 @inherit_doc
@@ -1437,6 +1457,8 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
     >>> model2 = RandomForestClassificationModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
     True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -1459,11 +1481,6 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.RandomForestClassifier", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini", numTrees=20, featureSubsetStrategy="auto",
-                         subsamplingRate=1.0, leafCol="", minWeightFractionPerNode=0.0,
-                         bootstrap=True)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1633,6 +1650,14 @@ class _GBTClassifierParams(_GBTParams, _HasVarianceImpurity):
                      "Supported options: " + ", ".join(supportedLossTypes),
                      typeConverter=TypeConverters.toString)
 
+    def __init__(self, *args):
+        super(_GBTClassifierParams, self).__init__(*args)
+        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
+                         lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0,
+                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
+                         leafCol="", minWeightFractionPerNode=0.0)
+
     @since("1.4.0")
     def getLossType(self):
         """
@@ -1724,6 +1749,8 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
     True
     >>> model.treeWeights == model2.treeWeights
     True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
     >>> model.trees
     [DecisionTreeRegressionModel...depth=..., DecisionTreeRegressionModel...]
     >>> validation = spark.createDataFrame([(0.0, Vectors.dense(-1.0),)],
@@ -1760,11 +1787,6 @@ class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.GBTClassifier", self.uid)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0,
-                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                         leafCol="", minWeightFractionPerNode=0.0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1962,6 +1984,10 @@ class _NaiveBayesParams(_JavaPredictorParams, HasWeightCol):
                       "and gaussian.",
                       typeConverter=TypeConverters.toString)
 
+    def __init__(self, *args):
+        super(_NaiveBayesParams, self).__init__(*args)
+        self._setDefault(smoothing=1.0, modelType="multinomial")
+
     @since("1.5.0")
     def getSmoothing(self):
         """
@@ -2045,6 +2071,8 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     True
     >>> model.theta == model2.theta
     True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
     >>> nb = nb.setThresholds([0.01, 10.00])
     >>> model3 = nb.fit(df)
     >>> result = model3.transform(test0).head()
@@ -2080,7 +2108,6 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.NaiveBayes", self.uid)
-        self._setDefault(smoothing=1.0, modelType="multinomial")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2172,8 +2199,8 @@ class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, H
     initialWeights = Param(Params._dummy(), "initialWeights", "The initial weights of the model.",
                            typeConverter=TypeConverters.toVector)
 
-    def __init__(self):
-        super(_MultilayerPerceptronParams, self).__init__()
+    def __init__(self, *args):
+        super(_MultilayerPerceptronParams, self).__init__(*args)
         self._setDefault(maxIter=100, tol=1E-6, blockSize=128, stepSize=0.03, solver="l-bfgs")
 
     @since("1.6.0")
@@ -2254,6 +2281,8 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPer
     >>> model.getLayers() == model2.getLayers()
     True
     >>> model.weights == model2.weights
+    True
+    >>> model.transform(testDF).take(1) == model2.transform(testDF).take(1)
     True
     >>> mlp2 = mlp2.setInitialWeights(list(range(0, 12)))
     >>> model3 = mlp2.fit(df)
@@ -2429,6 +2458,8 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, Jav
     >>> model2 = OneVsRestModel.load(model_path)
     >>> model2.transform(test0).head().newPrediction
     0.0
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
     >>> model.transform(test2).columns
     ['features', 'rawPrediction', 'newPrediction']
 
@@ -2854,6 +2885,17 @@ class FMClassifier(JavaProbabilisticClassifier, _FactorizationMachinesParams, Ja
     DenseVector([14.8232])
     >>> model.factors
     DenseMatrix(1, 2, [0.0163, -0.0051], 1)
+    >>> model_path = temp_path + "/fm_model"
+    >>> model.save(model_path)
+    >>> model2 = FMClassificationModel.load(model_path)
+    >>> model2.intercept
+    -7.316665276826291
+    >>> model2.linear
+    DenseVector([14.8232])
+    >>> model2.factors
+    DenseMatrix(1, 2, [0.0163, -0.0051], 1)
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
 
     .. versionadded:: 3.0.0
     """

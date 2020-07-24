@@ -54,7 +54,6 @@ private[feature] trait ChiSqSelectorParams extends Params
     "Number of features that selector will select, ordered by ascending p-value. If the" +
       " number of features is < numTopFeatures, then this will select all features.",
     ParamValidators.gtEq(1))
-  setDefault(numTopFeatures -> 50)
 
   /** @group getParam */
   @Since("1.6.0")
@@ -70,7 +69,6 @@ private[feature] trait ChiSqSelectorParams extends Params
   final val percentile = new DoubleParam(this, "percentile",
     "Percentile of features that selector will select, ordered by ascending p-value.",
     ParamValidators.inRange(0, 1))
-  setDefault(percentile -> 0.1)
 
   /** @group getParam */
   @Since("2.1.0")
@@ -85,7 +83,6 @@ private[feature] trait ChiSqSelectorParams extends Params
   @Since("2.1.0")
   final val fpr = new DoubleParam(this, "fpr", "The highest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
-  setDefault(fpr -> 0.05)
 
   /** @group getParam */
   @Since("2.1.0")
@@ -100,7 +97,6 @@ private[feature] trait ChiSqSelectorParams extends Params
   @Since("2.2.0")
   final val fdr = new DoubleParam(this, "fdr",
     "The upper bound of the expected false discovery rate.", ParamValidators.inRange(0, 1))
-  setDefault(fdr -> 0.05)
 
   /** @group getParam */
   def getFdr: Double = $(fdr)
@@ -114,7 +110,6 @@ private[feature] trait ChiSqSelectorParams extends Params
   @Since("2.2.0")
   final val fwe = new DoubleParam(this, "fwe",
     "The upper bound of the expected family-wise error rate.", ParamValidators.inRange(0, 1))
-  setDefault(fwe -> 0.05)
 
   /** @group getParam */
   def getFwe: Double = $(fwe)
@@ -129,11 +124,13 @@ private[feature] trait ChiSqSelectorParams extends Params
     "The selector type of the ChisqSelector. " +
       "Supported options: " + OldChiSqSelector.supportedSelectorTypes.mkString(", "),
     ParamValidators.inArray[String](OldChiSqSelector.supportedSelectorTypes))
-  setDefault(selectorType -> OldChiSqSelector.NumTopFeatures)
 
   /** @group getParam */
   @Since("2.1.0")
   def getSelectorType: String = $(selectorType)
+
+  setDefault(numTopFeatures -> 50, percentile -> 0.1, fpr -> 0.05, fdr -> 0.05, fwe -> 0.05,
+    selectorType -> OldChiSqSelector.NumTopFeatures)
 }
 
 /**
