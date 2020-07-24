@@ -75,7 +75,11 @@ case class RecursiveRelation(
     cteName: String,
     anchorTerm: LogicalPlan,
     recursiveTerm: LogicalPlan) extends UnionBase {
-  override def children: Seq[LogicalPlan] = anchorTerm :: recursiveTerm :: Nil
+  override val children: Seq[LogicalPlan] = anchorTerm :: recursiveTerm :: Nil
+
+  override val byName: Boolean = false
+
+  override val allowMissingCol: Boolean = false
 }
 
 /**
@@ -255,6 +259,11 @@ object Union {
 }
 
 abstract class UnionBase extends LogicalPlan {
+  def byName: Boolean
+  def allowMissingCol: Boolean
+
+  assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
+
   // updating nullability to make all the children consistent
   override def output: Seq[Attribute] = {
     children.map(_.output).transpose.map { attrs =>
@@ -280,36 +289,7 @@ abstract class UnionBase extends LogicalPlan {
           child.output.zip(children.head.output).forall {
             case (l, r) => l.dataType.sameType(r.dataType)
           })
-    children.length > 1 && childrenResolved && allChildrenCompatible
-  }
-}
-
-/**
- * Logical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
- */
-case class Union(children: Seq[LogicalPlan]) extends UnionBase {
-  override def maxRows: Option[Long] = {
-    if (children.exists(_.maxRows.isEmpty)) {
-      None
-    } else {
-      Some(children.flatMap(_.maxRows).sum)
-    }
-  }
-
-  /**
-   * Note the definition has assumption about how union is implemented physically.
-   */
-  override def maxRowsPerPartition: Option[Long] = {
-    if (children.exists(_.maxRowsPerPartition.isEmpty)) {
-      None
-    } else {
-      Some(children.flatMap(_.maxRowsPerPartition).sum)
-    }
-  }
-
-  def duplicateResolved: Boolean = {
-    children.map(_.outputSet.size).sum ==
-      AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
+    children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
   }
 
   /**
@@ -346,6 +326,43 @@ case class Union(children: Seq[LogicalPlan]) extends UnionBase {
     children
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(merge(_, _))
+  }
+}
+
+/**
+ * Logical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * @param byName          Whether resolves columns in the children by column names.
+ * @param allowMissingCol Allows missing columns in children query plans. If it is true,
+ *                        this function allows different set of column names between two Datasets.
+ *                        This can be set to true only if `byName` is true.
+ */
+case class Union(
+    children: Seq[LogicalPlan],
+    byName: Boolean = false,
+    allowMissingCol: Boolean = false) extends UnionBase {
+  override def maxRows: Option[Long] = {
+    if (children.exists(_.maxRows.isEmpty)) {
+      None
+    } else {
+      Some(children.flatMap(_.maxRows).sum)
+    }
+  }
+
+  /**
+   * Note the definition has assumption about how union is implemented physically.
+   */
+  override def maxRowsPerPartition: Option[Long] = {
+    if (children.exists(_.maxRowsPerPartition.isEmpty)) {
+      None
+    } else {
+      Some(children.flatMap(_.maxRowsPerPartition).sum)
+    }
+  }
+
+  def duplicateResolved: Boolean = {
+    children.map(_.outputSet.size).sum ==
+      AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 }
 

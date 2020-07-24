@@ -264,7 +264,7 @@ Below is a list of all the keywords in Spark SQL.
 |MAP|non-reserved|non-reserved|non-reserved|
 |MATCHED|non-reserved|non-reserved|non-reserved|
 |MERGE|non-reserved|non-reserved|non-reserved|
-|MINUS|not-reserved|strict-non-reserved|non-reserved|
+|MINUS|non-reserved|strict-non-reserved|non-reserved|
 |MINUTE|reserved|non-reserved|reserved|
 |MONTH|reserved|non-reserved|reserved|
 |MSCK|non-reserved|non-reserved|non-reserved|

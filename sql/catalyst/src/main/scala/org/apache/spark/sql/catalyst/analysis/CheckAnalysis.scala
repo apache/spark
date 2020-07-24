@@ -720,7 +720,7 @@ trait CheckAnalysis extends PredicateHelper {
         checkRecursion(left, mutable.Map.empty)
         checkRecursion(right, mutable.Map.empty)
       case Aggregate(_, _, child) => checkRecursion(child, mutable.Map.empty)
-      case Union(children) =>
+      case Union(children, _, _) =>
         children.foreach(checkRecursion(_,
           mutable.Map(allowedRecursiveReferencesAndCounts.keys.map(name => name -> 0).toSeq: _*)))
       case o =>

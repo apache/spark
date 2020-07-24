@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DoubleType, StringType, StructType}
 
 /**
  * Test cases for various [[JSONOptions]].
@@ -102,20 +103,20 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
     assert(df.first().getLong(0) == 18)
   }
 
-  // The following two tests are not really working - need to look into Jackson's
-  // JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.
-  ignore("allowNonNumericNumbers off") {
+  test("allowNonNumericNumbers off") {
     val str = """{"age": NaN}"""
-    val df = spark.read.json(Seq(str).toDS())
+    val df = spark.read.option("allowNonNumericNumbers", false).json(Seq(str).toDS())
 
-    assert(df.schema.head.name == "_corrupt_record")
+    assert(df.schema === new StructType().add("_corrupt_record", StringType))
+    checkAnswer(df, Row(str))
   }
 
-  ignore("allowNonNumericNumbers on") {
+  test("allowNonNumericNumbers on") {
     val str = """{"age": NaN}"""
-    val df = spark.read.option("allowNonNumericNumbers", "true").json(Seq(str).toDS())
+    val df = spark.read.option("allowNonNumericNumbers", true).json(Seq(str).toDS())
 
     assert(df.schema.head.name == "age")
+    assert(df.schema.head.dataType == DoubleType)
     assert(df.first().getDouble(0).isNaN)
   }
 
