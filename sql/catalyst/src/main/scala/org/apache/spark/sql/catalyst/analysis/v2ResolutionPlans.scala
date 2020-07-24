@@ -43,7 +43,7 @@ case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
 }
 
 /**
- * Holds the name of a table or a view that has yet to be looked up in a catalog. It will
+ * Holds the name of a table or view that has yet to be looked up in a catalog. It will
  * be resolved to [[ResolvedTable]] or [[ResolvedView]] during analysis.
  */
 case class UnresolvedTableOrView(multipartIdentifier: Seq[String], acceptTempView: Boolean = true)
