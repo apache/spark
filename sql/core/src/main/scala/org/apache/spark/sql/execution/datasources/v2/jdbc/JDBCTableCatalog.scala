@@ -56,8 +56,9 @@ class JDBCTableCatalog extends TableCatalog with Logging {
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     checkNamespace(namespace)
     withConnection { conn =>
+      val schemaPattern = if (namespace.length == 1) namespace.head else null
       val rs = conn.getMetaData
-        .getTables(null, schemaPattern(namespace), "%", Array("TABLE"));
+        .getTables(null, schemaPattern, "%", Array("TABLE"));
       new Iterator[Identifier] {
         def hasNext = rs.next()
         def next = Identifier.of(namespace, rs.getString("TABLE_NAME"))
@@ -153,9 +154,5 @@ class JDBCTableCatalog extends TableCatalog with Logging {
 
   private def getTableName(ident: Identifier): String = {
     (ident.namespace() :+ ident.name()).map(dialect.quoteIdentifier).mkString(".")
-  }
-
-  private def schemaPattern(namespaces: Array[String]): String = {
-    if (namespaces.length == 1) namespaces.head else null
   }
 }
