@@ -445,3 +445,14 @@ case class ShowColumnsStatement(
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
+
+/**
+ *  CREATE FUNCTION statement, as parsed from SQL
+ */
+case class CreateFunctionStatement(
+    functionName: Seq[String],
+    className: String,
+    resources: Seq[FunctionResource],
+    isTemp: Boolean,
+    ignoreIfExists: Boolean,
+    replace: Boolean) extends ParsedStatement

@@ -2086,41 +2086,34 @@ class DDLParserSuite extends AnalysisTest {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     parseCompare("CREATE FUNCTION a as 'fun'",
-      CreateFunction(UnresolvedFunc(Seq("a")), "fun", Seq(), false, false, false))
+      CreateFunctionStatement(Seq("a"), "fun", Seq(), false, false, false))
 
     parseCompare("CREATE FUNCTION a.b.c as 'fun'",
-      CreateFunction(UnresolvedFunc(Seq("a", "b", "c")), "fun", Seq(), false, false, false))
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, false, false))
 
     parseCompare("CREATE OR REPLACE FUNCTION a.b.c as 'fun'",
-      CreateFunction(UnresolvedFunc(Seq("a", "b", "c")), "fun", Seq(), false, false, true))
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, false, true))
 
-    parseCompare("CREATE TEMPORARY FUNCTION a as 'fun'",
-      CreateFunction(ResolvedFunc(Seq("a").asIdentifier), "fun", Seq(), true, false, false))
-
-    parseCompare("CREATE TEMPORARY FUNCTION a.b as 'fun'",
-      CreateFunction(ResolvedFunc(Seq("a", "b").asIdentifier), "fun", Seq(), true, false, false))
-
-    val caught = intercept[AnalysisException](
-      parsePlan("CREATE TEMPORARY FUNCTION a.b.c as 'fun'"))
-    assert(caught.getMessage.contains("Unsupported function name 'a.b.c'"))
+    parseCompare("CREATE TEMPORARY FUNCTION a.b.c as 'fun'",
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), true, false, false))
 
     parseCompare("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'",
-      CreateFunction(UnresolvedFunc(Seq("a", "b", "c")), "fun", Seq(), false, true, false))
+      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, true, false))
 
     parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j'",
-      CreateFunction(UnresolvedFunc(Seq("a")), "fun", Seq(FunctionResource(JarResource, "j")),
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(JarResource, "j")),
         false, false, false))
 
     parseCompare("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'",
-      CreateFunction(UnresolvedFunc(Seq("a")), "fun", Seq(FunctionResource(ArchiveResource, "a")),
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(ArchiveResource, "a")),
         false, false, false))
 
     parseCompare("CREATE FUNCTION a as 'fun' USING FILE 'f'",
-      CreateFunction(UnresolvedFunc(Seq("a")), "fun", Seq(FunctionResource(FileResource, "f")),
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(FileResource, "f")),
         false, false, false))
 
     parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'",
-      CreateFunction(UnresolvedFunc(Seq("a")), "fun", Seq(FunctionResource(JarResource, "j"),
+      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(JarResource, "j"),
         FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
         false, false, false))
 

@@ -3615,10 +3615,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case Some(x) => throw new ParseException(s"SHOW $x FUNCTIONS not supported", ctx)
     }
     val pattern = Option(ctx.pattern).map(string(_))
-    val functionName = Option(ctx.multipartIdentifier)
+    val unresolvedFuncOpt = Option(ctx.multipartIdentifier)
       .map(visitMultipartIdentifier)
       .map(UnresolvedFunc(_))
-    ShowFunctions(functionName, userScope, systemScope, pattern)
+    ShowFunctions(unresolvedFuncOpt, userScope, systemScope, pattern)
   }
 
   /**
@@ -3657,24 +3657,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       }
     }
 
-    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val isTemp = ctx.TEMPORARY != null
-    val func: LogicalPlan = if (isTemp) {
-      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-      // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
-      if (nameParts.length > 2) {
-        throw new AnalysisException(s"Unsupported function name '${nameParts.quoted}'")
-      }
-      ResolvedFunc(nameParts.asIdentifier)
-    } else {
-      UnresolvedFunc(nameParts)
-    }
-
-    CreateFunction(
-      func,
+    val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
+    CreateFunctionStatement(
+      functionIdentifier,
       string(ctx.className),
-      resources,
-      isTemp,
+      resources.toSeq,
+      ctx.TEMPORARY != null,
       ctx.EXISTS != null,
       ctx.REPLACE != null)
   }

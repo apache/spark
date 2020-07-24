@@ -592,16 +592,31 @@ class ResolveSessionCatalog(
       val funcIdentifier = identifier.asFunctionIdentifier
       DropFunctionCommand(funcIdentifier.database, funcIdentifier.funcName, ifExists, isTemp)
 
-    case c @ CreateFunction(ResolvedFunc(identifier), _, _, _, _, _) =>
-      val funcIdentifier = identifier.asFunctionIdentifier
-      CreateFunctionCommand(
-        funcIdentifier.database,
-        funcIdentifier.funcName,
-        c.className,
-        c.resources,
-        c.isTemp,
-        c.ignoreIfExists,
-        c.replace)
+    case CreateFunctionStatement(nameParts,
+      className, resources, isTemp, ignoreIfExists, replace) =>
+      if (isTemp) {
+        // temp func doesn't belong to any catalog and we shouldn't resolve catalog in the name.
+        val database = if (nameParts.length > 2) {
+          throw new AnalysisException(s"Unsupported function name '${nameParts.quoted}'")
+        } else if (nameParts.length == 2) {
+          Some(nameParts.head)
+        } else {
+          None
+        }
+        CreateFunctionCommand(
+          database,
+          nameParts.last,
+          className,
+          resources,
+          isTemp,
+          ignoreIfExists,
+          replace)
+      } else {
+        val FunctionIdentifier(function, database) =
+          parseSessionCatalogFunctionIdentifier(nameParts)
+        CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
+          replace)
+      }
 
     case RefreshFunction(ResolvedFunc(identifier)) =>
       // Fallback to v1 command
