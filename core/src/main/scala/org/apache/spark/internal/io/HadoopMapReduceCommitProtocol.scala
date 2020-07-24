@@ -317,7 +317,7 @@ class HadoopMapReduceCommitProtocol(
   }
 
   def performCommit(taskContext: TaskAttemptContext): Unit = {
-    val mrTaskAttemptID = taskContext.getTaskAttemptID
+    val attemptID = taskContext.getTaskAttemptID
 
     try {
       val fs = stagingDir.getFileSystem(taskContext.getConfiguration)
@@ -331,10 +331,10 @@ class HadoopMapReduceCommitProtocol(
       logDebug(s"Committing task attempt files($tmpOutputPath) to $stagingDir")
       recursiveRenameFile(fs, tmpOutputPath, stagingDir)
       committer.commitTask(taskContext)
-      logInfo(s"$mrTaskAttemptID: Committed")
+      logInfo(s"$attemptID: Committed")
     } catch {
       case cause: IOException =>
-        logError(s"Error committing the output of task: $mrTaskAttemptID", cause)
+        logError(s"Error committing the output of task: $attemptID", cause)
         committer.abortTask(taskContext)
         throw cause
     }

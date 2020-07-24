@@ -32,9 +32,6 @@ import org.apache.spark.sql.test.TestSparkSession
 class UserParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
   extends ParquetOutputCommitter(outputPath, context) {
 
-  override def abortTask(context: TaskAttemptContext): Unit = {
-    sys.error("mock abortTask failed")
-  }
   override def commitTask(context: TaskAttemptContext): Unit = {
     if (context.getTaskAttemptID.getId == 1) {
       sys.error("mock commitTask failed")
@@ -67,7 +64,7 @@ class SQLHadoopMapReduceCommitProtocolSuite extends QueryTest with SharedSparkSe
 
       sql(
         s"""INSERT OVERWRITE TABLE insertTable PARTITION (part)
-           |SELECT /*+REPARTITION(2) */ id, 1
+           |SELECT /*+ REPARTITION(2) */ id, 1
            |FROM range(10)
            |""".stripMargin)
       val expected = Range(0, 10).map(Row(_, 1))
