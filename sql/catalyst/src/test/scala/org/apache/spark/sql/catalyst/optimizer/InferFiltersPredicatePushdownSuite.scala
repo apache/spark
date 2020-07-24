@@ -17,28 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{IsNotNull, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.expressions.{IsNotNull, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.internal.SQLConf
 
 class InferFiltersPredicatePushdownSuite extends PlanTest {
-
-  object OptimizeOriginal extends Optimizer(
-    new CatalogManager(
-      new SQLConf(),
-      FakeV2SessionCatalog,
-      new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, new SQLConf()))) {
-    override def defaultBatches: Seq[Batch] = super.defaultBatches
-  }
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val b = Batch("InferAndPushDownFilters", FixedPoint(100),
