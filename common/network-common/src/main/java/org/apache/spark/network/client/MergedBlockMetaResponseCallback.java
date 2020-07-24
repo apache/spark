@@ -15,27 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle;
+package org.apache.spark.network.client;
 
-import java.util.EventListener;
+import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
- * Listener for receiving success or failure events when fetching meta of merged blocks.
+ * Callback for the result of a single
+ * {@link org.apache.spark.network.protocol.MergedBlockMetaRequest}.
  */
-public interface MergedBlocksMetaListener extends EventListener {
-
+public interface MergedBlockMetaResponseCallback extends BaseResponseCallback {
   /**
-   * Called after successfully receiving the meta of merged blocks. Currently, the meta only
-   * includes the count of chunks in a merged block.
-   * @param mergedBlockId  merged block Id.
-   * @param meta contains meta information of a merged block.
+   * Called upon receipt of a particular merged block meta.
+   *
+   * The given buffer will initially have a refcount of 1, but will be release()'d as soon as this
+   * call returns. You must therefore either retain() the buffer or copy its contents before
+   * returning.
    */
-  void onSuccess(String mergedBlockId, MergedBlockMeta meta);
-
-  /**
-   * Called when there is an exception while fetching the meta of merged blocks.
-   * @param mergedBlockId   merged block Id.
-   * @param exception exception getting chunk counts.
-   */
-  void onFailure(String mergedBlockId, Throwable exception);
+  void onSuccess(int numChunks, ManagedBuffer buffer);
 }

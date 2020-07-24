@@ -357,8 +357,10 @@ public class SparkSaslSuite {
   public void testDelegates() throws Exception {
     Method[] rpcHandlerMethods = RpcHandler.class.getDeclaredMethods();
     for (Method m : rpcHandlerMethods) {
-      Method delegate = SaslRpcHandler.class.getMethod(m.getName(), m.getParameterTypes());
-      assertNotEquals(delegate.getDeclaringClass(), RpcHandler.class);
+      if (!m.getName().contains("lambda")) {
+        Method delegate = SaslRpcHandler.class.getMethod(m.getName(), m.getParameterTypes());
+        assertNotEquals(delegate.getDeclaringClass(), RpcHandler.class);
+      }
     }
   }
 

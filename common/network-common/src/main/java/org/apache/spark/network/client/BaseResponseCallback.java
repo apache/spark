@@ -15,27 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle;
-
-import java.util.EventListener;
+package org.apache.spark.network.client;
 
 /**
- * Listener for receiving success or failure events when fetching meta of merged blocks.
+ * A basic callback. This is extended by {@link RpcResponseCallback} and
+ * {@link MergedBlockMetaResponseCallback} so that both RpcRequests and MergedBlockMetaRequests
+ * can be handled in {@link TransportResponseHandler} a similar way.
  */
-public interface MergedBlocksMetaListener extends EventListener {
+public interface BaseResponseCallback {
 
-  /**
-   * Called after successfully receiving the meta of merged blocks. Currently, the meta only
-   * includes the count of chunks in a merged block.
-   * @param mergedBlockId  merged block Id.
-   * @param meta contains meta information of a merged block.
-   */
-  void onSuccess(String mergedBlockId, MergedBlockMeta meta);
-
-  /**
-   * Called when there is an exception while fetching the meta of merged blocks.
-   * @param mergedBlockId   merged block Id.
-   * @param exception exception getting chunk counts.
-   */
-  void onFailure(String mergedBlockId, Throwable exception);
+  /** Exception either propagated from server or raised on client side. */
+  void onFailure(Throwable e);
 }
