@@ -7,6 +7,7 @@ select to_timestamp('-12', 'yy');
 select to_timestamp('123', 'yy');
 select to_timestamp('1', 'yyy');
 select to_timestamp('12', 'yyy');
+select to_timestamp('1234567', 'yyyyyyy');
 
 -- parsing invalid values with pattern 'D'
 select to_timestamp('366', 'D');
