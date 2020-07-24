@@ -113,6 +113,7 @@ trait ThreadAudit extends Logging {
         logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
           s"thread names: ${remainingThreadNames.mkString(", ")} =====\n")
       }
+      logWarning(s"\n\n===== ACTIVE THREAD COUNT ${Thread.activeCount()} =====\n")
     } else {
       logWarning("\n\n===== THREAD AUDIT POST ACTION CALLED " +
         s"WITHOUT PRE ACTION IN SUITE $shortSuiteName =====\n")
