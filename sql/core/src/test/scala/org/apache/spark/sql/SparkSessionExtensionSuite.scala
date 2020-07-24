@@ -757,7 +757,7 @@ class MyExtensions extends (SparkSessionExtensions => Unit) {
 
 object QueryPrepRuleHelper {
   val myPrepTag: TreeNodeTag[String] = TreeNodeTag[String]("myPrepTag")
-  val myPrepTagValue: TreeNodeTag[String] = TreeNodeTag[String]("myPrepTagValue")
+  val myPrepTagValue: String = "myPrepTagValue"
 }
 
 // this rule will run during AQE query preparation and will write custom tags to each node
