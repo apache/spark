@@ -69,7 +69,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED, persist)
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, shuffle)
-      // Just replicate blocks as fast as we can during testing, there isn't another
+      // Just replicate blocks quickly during testing, there isn't another
       // workload we need to worry about.
       .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 10L)
 
