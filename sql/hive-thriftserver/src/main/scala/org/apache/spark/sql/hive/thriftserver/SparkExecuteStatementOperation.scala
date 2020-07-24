@@ -109,7 +109,7 @@ private[hive] class SparkExecuteStatementOperation(
   }
 
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = withLocalProperties {
-    log.info(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
+    logInfo(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
       s"with ${statementId}")
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
