@@ -1415,16 +1415,11 @@ package object config {
 
   private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
     ConfigBuilder("spark.shuffle.readHostLocalDisk")
-      .doc("When enabled, shuffle blocks requested from those block managers which are running " +
-        "on the same host are read from the disk directly instead of being fetched as remote " +
-        "blocks over the network. Note that for k8s workloads, this only works when nodes are " +
-        "using non-isolated container storage." +
-        s"To enable the feature, one should disable ${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key} first." +
-        " And make sure that one of the following requirements are satisfied:\n" +
-        s"1. external shuffle service is enabled (${SHUFFLE_SERVICE_ENABLED.key});" +
-        s"2. dynamic allocation is disabled (${DYN_ALLOCATION_ENABLED.key});" +
-        s"3. dynamic allocation is enabled with shuffle tracking " +
-        s"(${DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED});")
+      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled, shuffle " +
+        "blocks requested from those block managers which are running on the same host are " +
+        "read from the disk directly instead of being fetched as remote blocks over the " +
+        "network. Note that for k8s workloads, this only works when nodes are using " +
+        "non-isolated container storage.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
