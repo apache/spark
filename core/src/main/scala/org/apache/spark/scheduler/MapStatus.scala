@@ -219,6 +219,7 @@ private[spark] class HighlyCompressedMapStatus private (
     loc = BlockManagerId(in)
     emptyBlocks = new RoaringBitmap()
     emptyBlocks.readExternal(in)
+    numNonEmptyBlocks = emptyBlocks.getCardinality
     avgSize = in.readLong()
     val count = in.readInt()
     val hugeBlockSizesImpl = mutable.Map.empty[Int, Byte]
