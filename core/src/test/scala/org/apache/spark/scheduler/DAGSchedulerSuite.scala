@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
@@ -28,6 +28,8 @@ import scala.util.control.NonFatal
 import org.mockito.Mockito.spy
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
+import org.scalactic.source.Position
+import org.scalatest.Tag
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
@@ -125,7 +127,8 @@ class MyRDD(
 
 class DAGSchedulerSuiteDummyException extends Exception
 
-class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLimits {
+class DAGSchedulerSuite extends SparkFunSuite
+    with LocalSparkContext with TimeLimits with SparkConfHelper {
 
   import DAGSchedulerSuite._
 
@@ -295,7 +298,20 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    init(new SparkConf())
+  }
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+      (implicit pos: Position): Unit = {
+    testWithSparkConf(testName, testTags: _*)()(testFun)(pos)
+  }
+
+  private def testWithSparkConf(testName: String, testTags: Tag*)
+      (pairs: (String, String)*)(testFun: => Any)(implicit pos: Position): Unit = {
+    super.test(testName, testTags: _*) {
+      withSparkConf(pairs: _*) { conf: SparkConf =>
+        init(conf)
+      }
+    }
   }
 
   private def init(testConf: SparkConf): Unit = {
@@ -488,13 +504,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertDataStructuresEmpty()
   }
 
-  test("All shuffle files on the storage endpoint should be cleaned up when it is lost") {
-    // reset the test context with the right shuffle service config
-    afterEach()
-    val conf = new SparkConf()
-    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
-    conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
-    init(conf)
+  testWithSparkConf("All shuffle files on the storage endpoint should be cleaned up when it is lost")(
+    config.SHUFFLE_SERVICE_ENABLED.key -> "true",
+    "spark.files.fetchFailure.unRegisterOutputOnHost" -> "true") {
     runEvent(ExecutorAdded("hostA-exec1", "hostA"))
     runEvent(ExecutorAdded("hostA-exec2", "hostA"))
     runEvent(ExecutorAdded("hostB-exec", "hostB"))
@@ -562,13 +574,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mapStatus2(2).location.host === "hostB")
   }
 
-  test("SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure") {
-    // reset the test context with the right shuffle service config
-    afterEach()
-    val conf = new SparkConf()
-    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
-    init(conf)
-
+  testWithSparkConf("SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure")(
+    config.SHUFFLE_SERVICE_ENABLED.key -> "true") {
     val shuffleMapRdd = new MyRDD(sc, 3, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
     val shuffleId = shuffleDep.shuffleId
@@ -856,12 +863,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     } else {
       "not lost"
     }
-    test(s"shuffle files $maybeLost when $eventDescription") {
-      // reset the test context with the right shuffle service config
-      afterEach()
-      val conf = new SparkConf()
-      conf.set(config.SHUFFLE_SERVICE_ENABLED.key, shuffleServiceOn.toString)
-      init(conf)
+    testWithSparkConf(s"shuffle files $maybeLost when $eventDescription")(
+      config.SHUFFLE_SERVICE_ENABLED.key -> shuffleServiceOn.toString) {
       assert(sc.env.blockManager.externalShuffleServiceEnabled == shuffleServiceOn)
 
       val shuffleMapRdd = new MyRDD(sc, 2, Nil)
@@ -2875,12 +2878,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     (shuffleId1, shuffleId2)
   }
 
-  test("SPARK-25341: abort stage while using old fetch protocol") {
-    // reset the test context with using old fetch protocol
-    afterEach()
-    val conf = new SparkConf()
-    conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
-    init(conf)
+  testWithSparkConf("SPARK-25341: abort stage while using old fetch protocol")(
+    config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key -> "true") {
     // Construct the scenario of indeterminate stage fetch failed.
     constructIndeterminateStageFetchFailed()
     // The job should fail because Spark can't rollback the shuffle map stage while
@@ -3207,12 +3206,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(error.contains("Multiple ResourceProfiles specified in the RDDs"))
   }
 
-  test("test 2 resource profile with merge conflict config true") {
-    afterEach()
-    val conf = new SparkConf()
-    conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
-    init(conf)
-
+  testWithSparkConf("test 2 resource profile with merge conflict config true")(
+    config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true") {
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
@@ -3228,12 +3223,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mergedRp.getExecutorCores.get == 4)
   }
 
-  test("test multiple resource profiles created from merging use same rp") {
-    afterEach()
-    val conf = new SparkConf()
-    conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
-    init(conf)
-
+  testWithSparkConf("test multiple resource profiles created from merging use same rp")(
+    config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true") {
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
@@ -3324,11 +3315,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mergedRp.taskResources.get(GPU).get.amount == 2)
   }
 
-  test("test merge 3 resource profiles") {
-    afterEach()
-    val conf = new SparkConf()
-    conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
-    init(conf)
+  testWithSparkConf("test merge 3 resource profiles")(
+    config.RESOURCE_PROFILE_MERGE_CONFLICTS.key -> "true") {
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfile(ereqs.requests, treqs.requests)
