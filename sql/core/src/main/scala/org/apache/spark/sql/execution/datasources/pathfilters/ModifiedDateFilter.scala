@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.pathfilters
 
-import java.time.{LocalDateTime, ZoneId, ZoneOffset}
-import java.time.format.DateTimeFormatter
 import java.util.TimeZone
 
-import scala.concurrent.duration._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
+
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -62,13 +60,13 @@ abstract class ModifiedDateFilter(sparkSession: SparkSession,
     DateTimeUtils
       .stringToTimestamp(timeString, timeZone.toZoneId)
       .getOrElse(throw new AnalysisException(
-          s"The timestamp provided for the '${strategy()}'" +
-              s" option is invalid.  The expected format is 'YYYY-MM-DDTHH:mm:ss'. " +
-              s" Provided timestamp:  " +
-              s"${options.apply(strategy())}"))
+        s"The timestamp provided for the '${strategy()}'" +
+          s" option is invalid.  The expected format is 'YYYY-MM-DDTHH:mm:ss'. " +
+          s" Provided timestamp:  " +
+          s"${options.apply(strategy())}"))
 
-    def localTime(micros: Long): Long =
-        DateTimeUtils.fromUTCTime(micros, timeZoneId)
+  def localTime(micros: Long): Long =
+    DateTimeUtils.fromUTCTime(micros, timeZoneId)
 
   def accept(fileStatus: FileStatus): Boolean
   def accept(path: Path): Boolean

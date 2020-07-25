@@ -19,18 +19,19 @@ package org.apache.spark.sql.execution.datasources.pathfilters
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 /**
-  * [SPARK-31962]
-  * Filter used to determine whether file was modified
-  * after the provided timestamp.
-  *
-  * @param sparkSession SparkSession
-  * @param hadoopConf Hadoop Configuration object
-  * @param options Map containing options
-  */
+ * [SPARK-31962]
+ * Filter used to determine whether file was modified
+ * after the provided timestamp.
+ *
+ * @param sparkSession SparkSession
+ * @param hadoopConf Hadoop Configuration object
+ * @param options Map containing options
+ */
 case class ModifiedAfterFilter(sparkSession: SparkSession,
                                hadoopConf: Configuration,
                                options: Map[String, String])

@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
+
 package org.apache.spark.sql.execution.datasources.pathfilters
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, GlobFilter}
+
 import org.apache.spark.sql.SparkSession
 
 class PathGlobFilter(sparkSession: SparkSession,
