@@ -217,6 +217,7 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
+    numNonEmptyBlocks = -1 // SPARK-32436 Scala 2.13 doesn't initialize this during deserialization
     emptyBlocks = new RoaringBitmap()
     emptyBlocks.deserialize(in)
     avgSize = in.readLong()
