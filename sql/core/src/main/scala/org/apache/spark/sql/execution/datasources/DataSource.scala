@@ -627,7 +627,14 @@ object DataSource extends Logging {
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
-    val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
+    val overriddenProvider = conf.getConfString(
+      s"spark.sql.datasource.override.$provider", provider)
+    if (overriddenProvider != provider) {
+      logInfo(s"Provider '$provider' is overridden to '$overriddenProvider'.")
+    }
+
+    val provider1 = backwardCompatibilityMap.getOrElse(
+      overriddenProvider, overriddenProvider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
         classOf[OrcDataSourceV2].getCanonicalName

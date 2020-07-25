@@ -22,6 +22,8 @@ import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
+import org.apache.spark.sql.sources.FakeSourceFour
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
@@ -144,6 +146,16 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
     }.getMessage
     val expectMessage = "No FileSystem for scheme nonexistsFs"
     assert(message.filterNot(Set(':', '"').contains) == expectMessage)
+  }
+
+  test("Override datasource by configuration") {
+    val cls = DataSource.lookupDataSource("csv", spark.sessionState.conf)
+    assert(cls.newInstance.isInstanceOf[CSVDataSourceV2])
+
+    withSQLConf("spark.sql.datasource.override.csv" -> "datasource") {
+      val cls = DataSource.lookupDataSource("csv", spark.sessionState.conf)
+      assert(cls.newInstance.isInstanceOf[FakeSourceFour])
+    }
   }
 }
 
