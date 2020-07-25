@@ -422,7 +422,7 @@ class ExecutorSuite extends SparkFunSuite
           |    org.apache.spark.api.plugin.PluginContext ctx,
           |    java.util.Map<String, String> extraConf) {
           |  try {
-          |    Thread.sleep(30 * 1000);
+          |    Thread.sleep(8 * 1000);
           |  } catch (InterruptedException e) {
           |    throw new RuntimeException(e);
           |  }
@@ -459,14 +459,14 @@ class ExecutorSuite extends SparkFunSuite
         "--name", "testApp",
         "--master", "local-cluster[1,1,1024]",
         "--conf", "spark.plugins=TestSparkPlugin",
-        "--conf", "spark.storage.blockManagerSlaveTimeoutMs=" + 10 * 1000,
-        "--conf", "spark.network.timeoutInterval=" + 10 * 1000,
-        "--conf", "spark.executor.heartbeatInterval=" + 5 * 1000,
+        "--conf", "spark.storage.blockManagerSlaveTimeoutMs=" + 5 * 1000,
+        "--conf", "spark.network.timeoutInterval=" + 1000,
+        "--conf", "spark.executor.heartbeatInterval=" + 1000,
         "--conf", "spark.executor.extraClassPath=" + jarUrl.toString,
         "--conf", "spark.driver.extraClassPath=" + jarUrl.toString,
         "--conf", "spark.ui.enabled=false",
         unusedJar.toString)
-      SparkSubmitSuite.runSparkSubmit(args, timeout = 2.minutes)
+      SparkSubmitSuite.runSparkSubmit(args, timeout = 30.seconds)
     }
   }
 

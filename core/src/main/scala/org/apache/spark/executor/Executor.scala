@@ -220,14 +220,14 @@ private[spark] class Executor(
 
   heartbeater.start()
 
-  metricsPoller.start()
-
   // Plugins need to load using a class loader that includes the executor's user classpath.
   // Plugins also needs to be initialized after the heartbeater started
   // to avoid blocking to send heartbeat (see SPARK-32175).
   private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
     PluginContainer(env, resources.asJava)
   }
+
+  metricsPoller.start()
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
