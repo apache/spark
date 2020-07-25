@@ -865,7 +865,7 @@ def nlargest(n, iterable, key=None):
 
 # If available, use C implementation
 try:
-    from _heapq import *  # noqa: F401
+    from _heapq import *
 except ImportError:
     pass
 try:

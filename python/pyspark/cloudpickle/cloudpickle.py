@@ -57,6 +57,7 @@ import warnings
 from .compat import pickle
 from typing import Generic, Union, Tuple, Callable
 from pickle import _getattribute
+from importlib._bootstrap import _find_spec
 
 try:  # pragma: no branch
     import typing_extensions as _typing_extensions
