@@ -1800,6 +1800,38 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       assert(version === SPARK_VERSION_SHORT)
     }
   }
+
+  test("SPARK-32431: consistent error for nested and top-level duplicate columns") {
+    val caseInsensitiveSchema = new StructType()
+      .add("LowerCase", LongType)
+      .add("camelcase", LongType)
+      .add("CamelCase", LongType)
+    Seq(
+      "id AS lowercase", "id + 1 AS camelCase",
+      "NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn").foreach { selectExpr =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark
+            .range(1L)
+            .selectExpr(selectExpr)
+            .write.mode("overwrite")
+            .format("avro")
+            .save(path)
+          val e = intercept[AnalysisException] {
+            spark
+              .read
+              .schema(caseInsensitiveSchema)
+              .format("avro")
+              .load(path)
+              .show
+          }
+          assert(e.getMessage.contains(
+            "Found duplicate column(s) in the data schema: `camelcase`"))
+        }
+      }
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
