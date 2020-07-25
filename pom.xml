@@ -712,7 +712,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.7.45</version>
+        <version>0.9.0</version>
       </dependency>
       <dependency>
         <groupId>commons-net</groupId>

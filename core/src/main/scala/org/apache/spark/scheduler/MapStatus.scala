@@ -205,7 +205,7 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
-    emptyBlocks.writeExternal(out)
+    emptyBlocks.serialize(out)
     out.writeLong(avgSize)
     out.writeInt(hugeBlockSizes.size)
     hugeBlockSizes.foreach { kv =>
@@ -218,7 +218,7 @@ private[spark] class HighlyCompressedMapStatus private (
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
     emptyBlocks = new RoaringBitmap()
-    emptyBlocks.readExternal(in)
+    emptyBlocks.deserialize(in)
     avgSize = in.readLong()
     val count = in.readInt()
     val hugeBlockSizesImpl = mutable.Map.empty[Int, Byte]
