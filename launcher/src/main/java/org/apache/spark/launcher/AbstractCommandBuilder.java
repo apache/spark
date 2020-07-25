@@ -240,11 +240,11 @@ abstract class AbstractCommandBuilder {
     checkState(!scala212.isDirectory() || !scala213.isDirectory(),
       "Presence of build for multiple Scala versions detected.\n" +
       "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    if (scala212.isDirectory()) {
-      return "2.12";
-    } else {
-      checkState(scala213.isDirectory(), "Cannot find any build directories.");
+    if (scala213.isDirectory()) {
       return "2.13";
+    } else {
+      checkState(scala212.isDirectory(), "Cannot find any build directories.");
+      return "2.12";
     }
   }
 
