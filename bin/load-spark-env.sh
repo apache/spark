@@ -44,8 +44,8 @@ fi
 # Setting SPARK_SCALA_VERSION if not already set.
 
 if [ -z "$SPARK_SCALA_VERSION" ]; then
-  SCALA_VERSION_1=2.12
-  SCALA_VERSION_2=2.13
+  SCALA_VERSION_1=2.13
+  SCALA_VERSION_2=2.12
 
   ASSEMBLY_DIR_1="${SPARK_HOME}/assembly/target/scala-${SCALA_VERSION_1}"
   ASSEMBLY_DIR_2="${SPARK_HOME}/assembly/target/scala-${SCALA_VERSION_2}"

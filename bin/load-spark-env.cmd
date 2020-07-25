@@ -38,8 +38,8 @@ if [%SPARK_ENV_LOADED%] == [] (
 rem Setting SPARK_SCALA_VERSION if not already set.
 
 if [%SPARK_SCALA_VERSION%] == [] (
-  set SCALA_VERSION_1=2.12
-  set SCALA_VERSION_2=2.13
+  set SCALA_VERSION_1=2.13
+  set SCALA_VERSION_2=2.12
 
   set ASSEMBLY_DIR1=%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_1%
   set ASSEMBLY_DIR2=%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_2%
