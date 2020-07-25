@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession
 class PathGlobFilter(sparkSession: SparkSession,
                      conf: Configuration,
                      options: Map[String, String])
-    extends GlobFilter(options.get("pathGlobFilter").toString)
+    extends GlobFilter(options.get("pathGlobFilter").get)
     with FileIndexFilter {
 
   override def accept(fileStatus: FileStatus): Boolean =

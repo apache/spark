@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.pathfilters
 
+import java.time.ZoneId
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+
+import scala.concurrent.duration.Duration
 
 /**
   * [SPARK-31962]
@@ -37,8 +41,10 @@ class ModifiedBeforeFilter(sparkSession: SparkSession,
     extends ModifiedDateFilter(sparkSession, hadoopConf, options)
     with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
-    (microseconds - localTime(
-      DateTimeUtils.millisToMicros(fileStatus.getModificationTime))) > 0
+    /* We standardize on microseconds wherever possible */
+    thresholdTime - localTime(
+      /* getModificationTime returns in milliseconds */
+      DateTimeUtils.getMicroseconds(fileStatus.getModificationTime,  ZoneId.of("UTC"))) > 0
 
   override def accept(path: Path): Boolean = true
   override def strategy(): String = "modifiedBefore"

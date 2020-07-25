@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.datasources.pathfilters
 
 import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeFormatter
+import java.util.TimeZone
 
+import scala.concurrent.duration._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
@@ -50,31 +52,23 @@ abstract class ModifiedDateFilter(sparkSession: SparkSession,
                                   hadoopConf: Configuration,
                                   options: Map[String, String])
     extends PathFilterStrategy(sparkSession, hadoopConf, options) {
+  val timeZoneId: String = options.getOrElse(DateTimeUtils.TIMEZONE_OPTION,
+                                             SQLConf.get.sessionLocalTimeZone)
 
-  val timeZoneId = {
-    val zones = ZoneId.getAvailableZoneIds()
-    var backupZone = "UTC"
-    if (zones.contains(SQLConf.get.sessionLocalTimeZone))
-      backupZone = SQLConf.get.sessionLocalTimeZone
-
-    val timeZoneId = options
-        .get(DateTimeUtils.TIMEZONE_OPTION)
-        .getOrElse(backupZone)
-
-    if (timeZoneId.isEmpty) backupZone
-    timeZoneId
-  }
   /* Implicitly defaults to UTC if unable to parse */
-  val timeZone = DateTimeUtils.getTimeZone(timeZoneId)
-  val timeString = UTF8String.fromString(options.get(strategy()).get)
+  val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId)
+  val timeString: UTF8String = UTF8String.fromString(options.apply(strategy()))
+  val thresholdTime: Long =
+    DateTimeUtils
+      .stringToTimestamp(timeString, timeZone.toZoneId)
+      .getOrElse(throw new AnalysisException(
+          s"The timestamp provided for the '${strategy()}'" +
+              s" option is invalid.  The expected format is 'YYYY-MM-DDTHH:mm:ss'. " +
+              s" Provided timestamp:  " +
+              s"${options.apply(strategy())}"))
 
-  val microseconds: Long = {
-    DateTimeUtils.stringToTimestamp(timeString, timeZone.toZoneId).get
-  }
-
-  def localTime(micros: Long): Long = {
-    DateTimeUtils.fromUTCTime(micros, timeZoneId)
-  }
+    def localTime(micros: Long): Long =
+        DateTimeUtils.fromUTCTime(micros, timeZoneId)
 
   def accept(fileStatus: FileStatus): Boolean
   def accept(path: Path): Boolean

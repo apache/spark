@@ -25,7 +25,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.datasources.pathfilters.{PathFilterFactory, PathFilterOptions}
+import org.apache.spark.sql.execution.datasources.pathfilters.{PathFilterFactory}
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
@@ -57,9 +57,8 @@ abstract class PartitioningAwareFileIndex(
 
   protected  val pathFilters = PathFilterFactory.create(sparkSession, hadoopConf, parameters)
 
-  protected def matchPathPattern(file: FileStatus): Boolean = {
+  protected def matchPathPattern(file: FileStatus): Boolean =
     pathFilters.forall(_.accept(file))
-  }
 
   protected lazy val recursiveFileLookup = {
     parameters.getOrElse("recursiveFileLookup", "false").toBoolean

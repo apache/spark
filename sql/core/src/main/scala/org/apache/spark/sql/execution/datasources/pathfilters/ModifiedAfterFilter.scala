@@ -37,8 +37,12 @@ case class ModifiedAfterFilter(sparkSession: SparkSession,
     extends ModifiedDateFilter(sparkSession, hadoopConf, options)
     with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
-    (localTime(DateTimeUtils.millisToMicros(fileStatus.getModificationTime))
-      - microseconds) > 0
+    (localTime(
+      DateTimeUtils
+      /* getModificationTime returns in milliseconds */
+        .millisToMicros(fileStatus.getModificationTime))
+      /* We standardize on microseconds wherever possible */
+        - thresholdTime > 0)
 
   override def accept(path: Path): Boolean = true
   override def strategy(): String = "modifiedAfter"

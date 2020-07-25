@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.{File, FileNotFoundException}
 import java.nio.file.{Files, StandardOpenOption}
-import java.time.{DateTimeException, LocalDateTime, ZoneOffset}
+import java.time.{LocalDateTime, ZoneOffset}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -560,15 +560,15 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-31962 - when modifiedAfter specified" +
+  test("SPARK-31962 - when modifiedAfter specified " +
       "before future date") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
-
+      file.setLastModified(DateTimeUtils.currentTimestamp())
       val df = spark.read
-          .option("modifiedAfter", "2010-05-10T01:11:00")
+          .option("modifiedAfter", "2019-05-10T01:11:00")
           .format("csv")
           .load(path.toString)
       assert(df.count() == 1)
@@ -595,6 +595,7 @@ class FileBasedDataSourceSuite extends QueryTest
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
+	  file.setLastModified(DateTimeUtils.currentTimestamp())
       val msg = intercept[AnalysisException] {
         spark.read
             .option("modifiedAfter", "2050-05-01T01:00:00")
@@ -607,7 +608,7 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-31962 - when modifiedAfter specified " +
-      "after future date and pathGlobFilter filtering all files") {
+      "after future date and pathGlobFilter returning results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -624,7 +625,7 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-31962 - when modifiedBefore and modifiedAfter" +
-      "are specified  and pathGlobFilter returning results") {
+      "are specified out of range and pathGlobFilter returning results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -642,32 +643,32 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-31962 - when modifiedBefore and modifiedAfter" +
-      "are specified and pathGlobFilter filtering all files") {
+      "are specified in range and pathGlobFilter returning results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedAfter", "2050-05-01T01:00:00")
+      val df = spark.read
+            .option("modifiedAfter", "2019-05-01T01:00:00")
+            .option("modifiedBefore", "2025-05-01T01:00:00")
             .option("pathGlobFilter", "*.csv")
             .format("csv")
             .load(path.toString)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      assert(df.count() == 1)
     }
   }
 
   test("SPARK-31962 - when modifiedBefore and modifiedAfter" +
-      "are specified and pathGlobFilter returning results") {
+      "are specified in range and pathGlobFilter filtering results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
       val msg = intercept[AnalysisException] {
         spark.read
-            .option("modifiedAfter", "2050-05-01T01:00:00")
-            .option("pathGlobFilter", "*.csv")
+            .option("modifiedAfter", "2019-05-01T01:00:00")
+            .option("modifiedBefore", "2025-05-01T01:00:00")
+            .option("pathGlobFilter", "*.txt")
             .format("csv")
             .load(path.toString)
       }.getMessage
@@ -675,19 +676,26 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-31962 - when modifiedBefore is specified" +
+  test("SPARK-31962 - when modifiedAfter is specified" +
       " with invalid date") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
 
-      val df =
-        spark.read.option("modifiedAfter", "2024-05+1 01:00:00")
-            .format("csv").load(path.toString)
-      assert(df.count == 1)
+      val msg = intercept[AnalysisException] {
+        spark.read
+            .option("modifiedAfter", "2024-05+1 01:00:00")
+            .format("csv")
+            .load(path.toString)
+      }.getMessage
+      println(msg)
+      assert(msg.contains("The timestamp provided")
+      && msg.contains("modifiedAfter")
+      && msg.contains("2024-05+1 01:00:00"))
     }
   }
+
   test("SPARK-31962 - PathFilterStrategies - modifiedAfter option") {
     val options = Map[String, String](
       "modifiedAfter" -> "2010-10-01T01:01:00")
@@ -747,7 +755,9 @@ class FileBasedDataSourceSuite extends QueryTest
             .format("csv")
             .load(path.toString)
       }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      assert(msg.contains("The timestamp provided for")
+      && msg.contains("modifiedBefore")
+      )
     }
   }
 
@@ -757,35 +767,29 @@ class FileBasedDataSourceSuite extends QueryTest
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
 
-      val df = spark.read
-          .option("modifiedAfter", "")
-          .format("csv")
-          .load(path.toString)
-      assert(df.count() == 1)
+      val msg = intercept[AnalysisException] {
+        spark.read
+            .option("modifiedAfter", "")
+            .format("csv")
+            .load(path.toString)
+      }.getMessage
+      assert(msg.contains("The timestamp provided for")
+          && msg.contains("modifiedAfter")
+      )
     }
   }
 
   test("SPARK-31962 - modifiedAfter filter takes into account local timezone when specified as an option.  After UTC.") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
-
-      file.setLastModified(DateTimeUtils.currentTimestamp)
-
-      val df = spark.read
-          .option("modifiedAfter", LocalDateTime.now.toString)
-          .option("timeZone", "CET")
-          .format("csv")
-          .load(path.toString)
-      assert(df.count() == 1)
 
       val timeZone = DateTimeUtils.getTimeZone("CET")
       val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(),
         Map[String, String]("modifiedAfter" -> LocalDateTime.now(timeZone.toZoneId).toString,
           "timezone" -> "CET"))
 
-      val strategyTime = strategy.head.asInstanceOf[ModifiedAfterFilter].microseconds
+      val strategyTime = strategy.head.asInstanceOf[ModifiedAfterFilter].thresholdTime
       assert(strategyTime - DateTimeUtils.toUTCTime(
         DateTimeUtils.currentTimestamp, "UTC") > 0)
     }
@@ -793,26 +797,17 @@ class FileBasedDataSourceSuite extends QueryTest
 
   test("SPARK-31962 - modifiedAfter filter takes into account local timezone when specified as an option.  Before UTC.") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
-      val timeZone = DateTimeUtils.getTimeZone("HST")
-
-      file.setLastModified(DateTimeUtils.currentTimestamp)
-      val df = spark.read
-          .option("modifiedAfter", LocalDateTime.now.toString)
-          .option("timeZone", "HST")
-          .format("csv")
-          .load(path.toString)
-      assert(df.count() == 1)
+      val timeZone = DateTimeUtils.getTimeZone("UTC")
 
       val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(),
         Map[String, String]("modifiedAfter" -> LocalDateTime.now(timeZone.toZoneId).toString,
-          "timezone" -> "HST"))
+          "timeZone" -> "HST"))
 
-      val strategyTime = strategy.head.asInstanceOf[ModifiedAfterFilter].microseconds
-      assert(strategyTime - DateTimeUtils.toUTCTime(
-        DateTimeUtils.currentTimestamp, "UTC") < 0)
+      val strategyTime = strategy.head.asInstanceOf[ModifiedAfterFilter].thresholdTime
+      assert(strategyTime - DateTimeUtils.fromUTCTime(
+        DateTimeUtils.currentTimestamp, "UTC") > 0)
     }
   }
 
@@ -822,23 +817,12 @@ class FileBasedDataSourceSuite extends QueryTest
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
 
-      file.setLastModified(DateTimeUtils.currentTimestamp)
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedBefore", LocalDateTime.now.toString)
-            .option("timeZone", "CET")
-            .format("csv")
-            .load(path.toString)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
-
-
     val timeZone = DateTimeUtils.getTimeZone("CET")
     val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(),
       Map[String, String]("modifiedBefore" -> LocalDateTime.now(timeZone.toZoneId).toString,
         "timezone" -> "CET"))
 
-    val strategyTime = strategy.head.asInstanceOf[ModifiedBeforeFilter].microseconds
+    val strategyTime = strategy.head.asInstanceOf[ModifiedBeforeFilter].thresholdTime
     assert(strategyTime - DateTimeUtils.toUTCTime(
       DateTimeUtils.currentTimestamp, "UTC") > 0)
   }
@@ -849,44 +833,15 @@ class FileBasedDataSourceSuite extends QueryTest
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
-      val timeZone = DateTimeUtils.getTimeZone("HST")
-
-      file.setLastModified(DateTimeUtils.currentTimestamp)
-
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedBefore", LocalDateTime.now.toString)
-            .option("timeZone", "HST")
-            .format("csv")
-            .load(path.toString)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      val timeZone = DateTimeUtils.getTimeZone("UTC")
 
       val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(),
         Map[String, String]("modifiedBefore" -> LocalDateTime.now(timeZone.toZoneId).toString,
-          "timezone" ->"HST"))
+          "timeZone" ->"HST"))
 
-      val strategyTime = strategy.head.asInstanceOf[ModifiedBeforeFilter].microseconds
-      assert(strategyTime - DateTimeUtils.toUTCTime(
-        DateTimeUtils.currentTimestamp,"UTC") < 0)
-    }
-  }
-
-  test("SPARK-31962 - modifiedBefore and modifiedAfter correctly filter together according to local time zone") {
-    withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-
-      file.setLastModified(LocalDateTime.of(2010,1,1,9,30,0,0).toEpochSecond(ZoneOffset.UTC))
-
-      val df = spark.read
-          .option("modifiedBefore", "2010-01-01T02:00:00")
-          .option("modifiedAfter", "2009-12-31T01:00:00")
-          .option("timeZone", "PST")
-          .format("csv")
-          .load(path.toString)
-      assert(df.count() == 1)
+      val strategyTime = strategy.head.asInstanceOf[ModifiedBeforeFilter].thresholdTime
+      assert(strategyTime - DateTimeUtils.fromUTCTime(
+        DateTimeUtils.currentTimestamp,"UTC") > 0)
     }
   }
 

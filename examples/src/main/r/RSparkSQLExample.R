@@ -144,13 +144,13 @@ df <- read.df("examples/src/main/resources/dir1", "parquet", pathGlobFilter = "*
 # 1 file1.parquet
 # $example off:load_with_path_glob_filter$
 
-# $example on:load_with_modified_date_filter$
-beforeDF <- read.df("examples/src/main/resources/dir1", "parquet", modifiedDateFilter = "2020-06-01T05:30:00")
+# $example on:load_with_modified_time_filter$
+beforeDF <- read.df("examples/src/main/resources/dir1", "parquet", modifiedBefore= "2020-07-01T05:30:00")
 #            file
 # 1 file1.parquet
-afterDF <- read.df("examples/src/main/resources/dir1", "parquet", modifiedDateFilter = "2050-06-01T05:30:00")
+afterDF <- read.df("examples/src/main/resources/dir1", "parquet", modifiedAfter = "2020-06-01T05:30:00")
 #            file
-# $example off:load_with_modified_date_filter$
+# $example off:load_with_modified_time_filter$
 
 # $example on:manual_save_options_orc$
 df <- read.df("examples/src/main/resources/users.orc", "orc")

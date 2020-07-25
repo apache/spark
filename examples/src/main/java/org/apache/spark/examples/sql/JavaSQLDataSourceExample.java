@@ -147,9 +147,14 @@ public class JavaSQLDataSourceExample {
     // |file1.parquet|
     // +-------------+
     // $example off:load_with_path_glob_filter$
-    // $example on:load_with_modified_date_filter$
+    // $example on:load_with_modified_time_filter$
     Dataset<Row> beforeFilterDF = spark.read().format("parquet")
-            .option("modifiedDateFilter", "2020-06-01T05:30:00") // File should not be filtered out
+            // Only load files modified before 7/1/2020 at 05:30
+            .option("modifiedBefore", "2020-07-01T05:30:00")
+            // Only load files modified after 6/1/2020 at 05:30
+            .option("modifiedAfter", "2020-06-01T05:30:00")
+            // Interpret both times above relative to CST timezone
+            .option("timeZone", "CST")
             .load("examples/src/main/resources/dir1");
     beforeFilterDF.show();
     // +-------------+
@@ -157,15 +162,7 @@ public class JavaSQLDataSourceExample {
     // +-------------+
     // |file1.parquet|
     // +-------------+
-    Dataset<Row> afterFilterDF = spark.read().format("parquet")
-            .option("modifiedDateFilter", "2050-06-01T05:30:00") // File should be filtered out
-            .load("examples/src/main/resources/dir1");
-    afterFilterDF.show();
-    // +-------------+
-    // |         file|
-    // +-------------+
-    // +-------------+
-    // $example off:load_with_modified_date_filter$
+    // $example off:load_with_modified_time_filter$
   }
 
   private static void runBasicDataSourceExample(SparkSession spark) {
