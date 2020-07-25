@@ -25,7 +25,7 @@ import operator
 import random
 import sys
 
-import pyspark.heapq3 as heapq
+import heapq
 from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattenedValuesSerializer, \
     CompressedSerializer, AutoBatchedSerializer
 from pyspark.util import fail_on_stopiteration
@@ -498,7 +498,7 @@ class ExternalSorter(object):
         if current_chunk:
             chunks.append(iter(current_chunk))
 
-        return heapq.merge(chunks, key=key, reverse=reverse)
+        return heapq.merge(*chunks, key=key, reverse=reverse)
 
 
 class ExternalList(object):
