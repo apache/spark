@@ -504,7 +504,8 @@ class DAGSchedulerSuite extends SparkFunSuite
     assertDataStructuresEmpty()
   }
 
-  testWithSparkConf("All shuffle files on the storage endpoint should be cleaned up when it is lost")(
+  testWithSparkConf(
+    "All shuffle files on the storage endpoint should be cleaned up when it is lost")(
     config.SHUFFLE_SERVICE_ENABLED.key -> "true",
     "spark.files.fetchFailure.unRegisterOutputOnHost" -> "true") {
     runEvent(ExecutorAdded("hostA-exec1", "hostA"))
@@ -574,7 +575,8 @@ class DAGSchedulerSuite extends SparkFunSuite
     assert(mapStatus2(2).location.host === "hostB")
   }
 
-  testWithSparkConf("SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure")(
+  testWithSparkConf(
+    "SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure")(
     config.SHUFFLE_SERVICE_ENABLED.key -> "true") {
     val shuffleMapRdd = new MyRDD(sc, 3, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
