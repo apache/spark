@@ -23,14 +23,16 @@ import java.time.{LocalDateTime, ZoneOffset}
 import java.util.Locale
 
 import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, stringToFile}
+import org.apache.spark.sql.catalyst.util.{stringToFile, DateTimeUtils}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.pathfilters.{ModifiedAfterFilter, ModifiedBeforeFilter, PathFilterFactory, PathGlobFilter}
@@ -580,9 +582,9 @@ class FileBasedDataSourceSuite extends QueryTest
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
-      stringToFile(file,"text")
+      stringToFile(file, "text")
       val df = spark.read
-          .option("modifiedBefore","2090-05-10T01:11:00")
+          .option("modifiedBefore", "2090-05-10T01:11:00")
           .format("csv")
           .load(path.toString)
       assert(df.count() == 1)
@@ -594,7 +596,7 @@ class FileBasedDataSourceSuite extends QueryTest
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
-      stringToFile(file,"text")
+      stringToFile(file, "text")
       file.setLastModified(DateTimeUtils.currentTimestamp())
       val msg = intercept[AnalysisException] {
         spark.read
@@ -844,7 +846,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
       val strategyTime = strategy.head.asInstanceOf[ModifiedBeforeFilter].thresholdTime
       assert(strategyTime - DateTimeUtils.fromUTCTime(
-        DateTimeUtils.currentTimestamp,"UTC") > 0)
+        DateTimeUtils.currentTimestamp, "UTC") > 0)
     }
   }
 
