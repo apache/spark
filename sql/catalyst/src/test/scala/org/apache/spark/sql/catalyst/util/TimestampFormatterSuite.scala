@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{DateTimeException, Instant, LocalDateTime, LocalTime}
 import java.util.concurrent.TimeUnit
 
+import org.scalatest.matchers.should.Matchers._
+
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -288,14 +290,14 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zoneId.getId) {
           withDefaultTimeZone(zoneId) {
             withClue(s"zoneId = ${zoneId.getId}") {
-              val formatters = LegacyDateFormats.values.map { legacyFormat =>
+              val formatters = LegacyDateFormats.values.toSeq.map { legacyFormat =>
                 TimestampFormatter(
                   TimestampFormatter.defaultPattern,
                   zoneId,
                   TimestampFormatter.defaultLocale,
                   legacyFormat,
                   isParsing = false)
-              }.toSeq :+ TimestampFormatter.getFractionFormatter(zoneId)
+              } :+ TimestampFormatter.getFractionFormatter(zoneId)
               formatters.foreach { formatter =>
                 assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
                   .atZone(zoneId)

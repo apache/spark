@@ -224,7 +224,7 @@ private[hive] case class HiveGenericUDTF(
   override lazy val elementSchema = StructType(outputInspector.getAllStructFieldRefs.asScala.map {
     field => StructField(field.getFieldName, inspectorToDataType(field.getFieldObjectInspector),
       nullable = true)
-  })
+  }.toSeq)
 
   @transient
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
@@ -257,7 +257,7 @@ private[hive] case class HiveGenericUDTF(
     def collectRows(): Seq[InternalRow] = {
       val toCollect = collected
       collected = new ArrayBuffer[InternalRow]
-      toCollect
+      toCollect.toSeq
     }
   }
 

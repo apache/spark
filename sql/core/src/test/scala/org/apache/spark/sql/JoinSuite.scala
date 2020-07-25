@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrd
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
@@ -712,7 +713,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
               |ON
               |  big.key = small.a
             """.stripMargin),
-          expected
+          expected.toSeq
         )
       }
 
@@ -729,7 +730,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
               |ON
               |  big.key = small.a
             """.stripMargin),
-          expected
+          expected.toSeq
         )
       }
     }
@@ -770,7 +771,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
               |ON
               |  big.key = small.a
             """.stripMargin),
-          expected
+          expected.toSeq
         )
       }
 
@@ -787,7 +788,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
               |ON
               |  big.key = small.a
             """.stripMargin),
-          expected
+          expected.toSeq
         )
       }
 
@@ -806,7 +807,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
               |ON
               |  big.key = small.a
             """.stripMargin),
-          expected
+          expected.toSeq
         )
       }
     }
@@ -1084,6 +1085,23 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val df2 = spark.range(0)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       assert(df2.join(df1, "id").collect().isEmpty)
+    }
+  }
+
+  test("SPARK-32330: Preserve shuffled hash join build side partitioning") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      val df1 = spark.range(10).select($"id".as("k1"))
+      val df2 = spark.range(30).select($"id".as("k2"))
+      Seq("inner", "cross").foreach(joinType => {
+        val plan = df1.join(df2, $"k1" === $"k2", joinType).groupBy($"k1").count()
+          .queryExecution.executedPlan
+        assert(plan.collect { case _: ShuffledHashJoinExec => true }.size === 1)
+        // No extra shuffle before aggregate
+        assert(plan.collect { case _: ShuffleExchangeExec => true }.size === 2)
+      })
     }
   }
 }

@@ -90,7 +90,7 @@ case class AdaptiveSparkPlanExec(
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
     ensureRequirements
-  )
+  ) ++ context.session.sessionState.queryStagePrepRules
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
@@ -196,7 +196,7 @@ case class AdaptiveSparkPlanExec(
 
         // In case of errors, we cancel all running stages and throw exception.
         if (errors.nonEmpty) {
-          cleanUpAndThrowException(errors, None)
+          cleanUpAndThrowException(errors.toSeq, None)
         }
 
         // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less

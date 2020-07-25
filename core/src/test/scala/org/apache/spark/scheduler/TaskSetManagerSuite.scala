@@ -415,7 +415,7 @@ class TaskSetManagerSuite
 
     // Now mark host2 as dead
     sched.removeExecutor("exec2")
-    manager.executorLost("exec2", "host2", SlaveLost())
+    manager.executorLost("exec2", "host2", ExecutorProcessLost())
 
     // nothing should be chosen
     assert(manager.resourceOffer("exec1", "host1", ANY)._1 === None)
@@ -598,10 +598,10 @@ class TaskSetManagerSuite
       Array(PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY)))
     // test if the valid locality is recomputed when the executor is lost
     sched.removeExecutor("execC")
-    manager.executorLost("execC", "host2", SlaveLost())
+    manager.executorLost("execC", "host2", ExecutorProcessLost())
     assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, NO_PREF, ANY)))
     sched.removeExecutor("execD")
-    manager.executorLost("execD", "host1", SlaveLost())
+    manager.executorLost("execD", "host1", ExecutorProcessLost())
     assert(manager.myLocalityLevels.sameElements(Array(NO_PREF, ANY)))
   }
 
@@ -814,7 +814,7 @@ class TaskSetManagerSuite
     assert(resubmittedTasks === 0)
     assert(manager.runningTasks === 1)
 
-    manager.executorLost("execB", "host2", new SlaveLost())
+    manager.executorLost("execB", "host2", new ExecutorProcessLost())
     assert(manager.runningTasks === 0)
     assert(resubmittedTasks === 0)
   }
@@ -923,7 +923,7 @@ class TaskSetManagerSuite
     // Make sure schedBackend.killTask(2, "exec3", true, "another attempt succeeded") gets called
     assert(killTaskCalled)
     // Host 3 Losts, there's only task 2.0 on it, which killed by task 2.1
-    manager.executorLost("exec3", "host3", SlaveLost())
+    manager.executorLost("exec3", "host3", ExecutorProcessLost())
     // Check the resubmittedTasks
     assert(resubmittedTasks === 0)
   }
@@ -1044,8 +1044,8 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("execB.2", "host2", ANY) !== None)
     sched.removeExecutor("execA")
     sched.removeExecutor("execB.2")
-    manager.executorLost("execA", "host1", SlaveLost())
-    manager.executorLost("execB.2", "host2", SlaveLost())
+    manager.executorLost("execA", "host1", ExecutorProcessLost())
+    manager.executorLost("execB.2", "host2", ExecutorProcessLost())
     clock.advance(LOCALITY_WAIT_MS * 4)
     sched.addExecutor("execC", "host3")
     manager.executorAdded()
@@ -1569,7 +1569,7 @@ class TaskSetManagerSuite
 
     assert(resubmittedTasks.isEmpty)
     // Host 2 Losts, meaning we lost the map output task4
-    manager.executorLost("exec2", "host2", SlaveLost())
+    manager.executorLost("exec2", "host2", ExecutorProcessLost())
     // Make sure that task with index 2 is re-submitted
     assert(resubmittedTasks.contains(2))
 
@@ -1670,7 +1670,7 @@ class TaskSetManagerSuite
     for (i <- 0 to 99) {
       locations += Seq(TaskLocation("host" + i))
     }
-    val taskSet = FakeTask.createTaskSet(100, locations: _*)
+    val taskSet = FakeTask.createTaskSet(100, locations.toSeq: _*)
     val clock = new ManualClock
     // make sure we only do one rack resolution call, for the entire batch of hosts, as this
     // can be expensive.  The FakeTaskScheduler calls rack resolution more than the real one
@@ -1909,6 +1909,112 @@ class TaskSetManagerSuite
   test("SPARK-29976 when a speculation time threshold is provided, should not speculative " +
       "if there are too many tasks in the stage even though time threshold is provided") {
     testSpeculationDurationThreshold(true, 2, 1)
+  }
+
+  test("SPARK-21040: Check speculative tasks are launched when an executor is decommissioned" +
+    " and the tasks running on it cannot finish within EXECUTOR_DECOMMISSION_KILL_INTERVAL") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
+    val taskSet = FakeTask.createTaskSet(4)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 1.5)
+    sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
+    sc.conf.set(config.EXECUTOR_DECOMMISSION_KILL_INTERVAL.key, "5s")
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+      task.metrics.internalAccums
+    }
+
+    // Start TASK 0,1 on exec1, TASK 2 on exec2
+    (0 until 2).foreach { _ =>
+      val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)._1
+      assert(taskOption.isDefined)
+      assert(taskOption.get.executorId === "exec1")
+    }
+    val taskOption2 = manager.resourceOffer("exec2", "host2", NO_PREF)._1
+    assert(taskOption2.isDefined)
+    assert(taskOption2.get.executorId === "exec2")
+
+    clock.advance(6*1000) // time = 6s
+    // Start TASK 3 on exec2 after some delay
+    val taskOption3 = manager.resourceOffer("exec2", "host2", NO_PREF)._1
+    assert(taskOption3.isDefined)
+    assert(taskOption3.get.executorId === "exec2")
+
+    assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
+
+    clock.advance(4*1000) // time = 10s
+    // Complete the first 2 tasks and leave the other 2 tasks in running
+    for (id <- Set(0, 1)) {
+      manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
+      assert(sched.endedTasks(id) === Success)
+    }
+
+    // checkSpeculatableTasks checks that the task runtime is greater than the threshold for
+    // speculating. Since we use a SPECULATION_MULTIPLIER of 1.5, So tasks need to be running for
+    // > 15s for speculation
+    assert(!manager.checkSpeculatableTasks(0))
+    assert(sched.speculativeTasks.toSet === Set())
+
+    // decommission exec-2. All tasks running on exec-2 (i.e. TASK 2,3)  will be added to
+    // executorDecommissionSpeculationTriggerTimeoutOpt
+    // (TASK 2 -> 15, TASK 3 -> 15)
+    manager.executorDecommission("exec2")
+    assert(manager.tidToExecutorKillTimeMapping.keySet === Set(2, 3))
+    assert(manager.tidToExecutorKillTimeMapping(2) === 15*1000)
+    assert(manager.tidToExecutorKillTimeMapping(3) === 15*1000)
+
+    assert(manager.checkSpeculatableTasks(0))
+    // TASK 2 started at t=0s, so it can still finish before t=15s (Median task runtime = 10s)
+    // TASK 3 started at t=6s, so it might not finish before t=15s. So TASK 3 should be part
+    // of speculativeTasks
+    assert(sched.speculativeTasks.toSet === Set(3))
+    assert(manager.copiesRunning(3) === 1)
+
+    // Offer resource to start the speculative attempt for the running task
+    val taskOption3New = manager.resourceOffer("exec3", "host3", NO_PREF)._1
+    // Offer more resources. Nothing should get scheduled now.
+    assert(manager.resourceOffer("exec3", "host3", NO_PREF)._1.isEmpty)
+    assert(taskOption3New.isDefined)
+
+    // Assert info about the newly launched speculative task
+    val speculativeTask3 = taskOption3New.get
+    assert(speculativeTask3.index === 3)
+    assert(speculativeTask3.taskId === 4)
+    assert(speculativeTask3.executorId === "exec3")
+    assert(speculativeTask3.attemptNumber === 1)
+
+    clock.advance(1*1000) // time = 11s
+    // Running checkSpeculatableTasks again should return false
+    assert(!manager.checkSpeculatableTasks(0))
+    assert(manager.copiesRunning(2) === 1)
+    assert(manager.copiesRunning(3) === 2)
+
+    clock.advance(5*1000) // time = 16s
+    // At t=16s, TASK 2 has been running for 16s. It is more than the
+    // SPECULATION_MULTIPLIER * medianRuntime = 1.5 * 10 = 15s. So now TASK 2 will
+    // be selected for speculation. Here we are verifying that regular speculation configs
+    // should still take effect even when a EXECUTOR_DECOMMISSION_KILL_INTERVAL is provided and
+    // corresponding executor is decommissioned
+    assert(manager.checkSpeculatableTasks(0))
+    assert(sched.speculativeTasks.toSet === Set(2, 3))
+    assert(manager.copiesRunning(2) === 1)
+    assert(manager.copiesRunning(3) === 2)
+    val taskOption2New = manager.resourceOffer("exec3", "host3", NO_PREF)._1
+    assert(taskOption2New.isDefined)
+    val speculativeTask2 = taskOption2New.get
+    // Ensure that TASK 2 is re-launched on exec3, host3
+    assert(speculativeTask2.index === 2)
+    assert(speculativeTask2.taskId === 5)
+    assert(speculativeTask2.executorId === "exec3")
+    assert(speculativeTask2.attemptNumber === 1)
+
+    assert(manager.copiesRunning(2) === 2)
+    assert(manager.copiesRunning(3) === 2)
+
+    // Offering additional resources should not lead to any speculative tasks being respawned
+    assert(manager.resourceOffer("exec1", "host1", ANY)._1.isEmpty)
   }
 
   test("SPARK-29976 Regular speculation configs should still take effect even when a " +

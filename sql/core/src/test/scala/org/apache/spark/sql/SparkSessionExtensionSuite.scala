@@ -26,7 +26,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, UnresolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
@@ -142,6 +144,28 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
         "plan is expected to be a local relation"
       )
+    }
+  }
+
+  test("inject adaptive query prep rule") {
+    val extensions = create { extensions =>
+      // inject rule that will run during AQE query stage preparation and will add custom tags
+      // to the plan
+      extensions.injectQueryStagePrepRule(session => MyQueryStagePrepRule())
+      // inject rule that will run during AQE query stage optimization and will verify that the
+      // custom tags were written in the preparation phase
+      extensions.injectColumnar(session =>
+        MyColumarRule(MyNewQueryStageRule(), MyNewQueryStageRule()))
+    }
+    withSession(extensions) { session =>
+      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
+      assert(session.sessionState.queryStagePrepRules.contains(MyQueryStagePrepRule()))
+      assert(session.sessionState.columnarRules.contains(
+        MyColumarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
+      import session.sqlContext.implicits._
+      val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
+      val df = data.selectExpr("vals + 1")
+      df.collect()
     }
   }
 
@@ -728,6 +752,31 @@ class MyExtensions extends (SparkSessionExtensions => Unit) {
     e.injectParser(MyParser)
     e.injectFunction(MyExtensions.myFunction)
     e.injectColumnar(session => MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
+  }
+}
+
+object QueryPrepRuleHelper {
+  val myPrepTag: TreeNodeTag[String] = TreeNodeTag[String]("myPrepTag")
+  val myPrepTagValue: String = "myPrepTagValue"
+}
+
+// this rule will run during AQE query preparation and will write custom tags to each node
+case class MyQueryStagePrepRule() extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan.transformDown {
+    case plan =>
+      plan.setTagValue(QueryPrepRuleHelper.myPrepTag, QueryPrepRuleHelper.myPrepTagValue)
+      plan
+  }
+}
+
+// this rule will run during AQE query stage optimization and will verify custom tags were
+// already written during query preparation phase
+case class MyNewQueryStageRule() extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan.transformDown {
+    case plan if !plan.isInstanceOf[AdaptiveSparkPlanExec] =>
+      assert(plan.getTagValue(QueryPrepRuleHelper.myPrepTag).get ==
+          QueryPrepRuleHelper.myPrepTagValue)
+      plan
   }
 }
 

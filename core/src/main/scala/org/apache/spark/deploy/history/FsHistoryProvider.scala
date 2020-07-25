@@ -128,6 +128,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val storePath = conf.get(LOCAL_STORE_DIR).map(new File(_))
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
 
+  private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
+
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath()).toFile()
@@ -158,6 +160,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     new HistoryServerDiskManager(conf, path, listing, clock)
   }
 
+  private var memoryManager: HistoryServerMemoryManager = null
+  if (hybridStoreEnabled) {
+    memoryManager = new HistoryServerMemoryManager(conf)
+  }
+
   private val fileCompactor = new EventLogFileCompactor(conf, hadoopConf, fs,
     conf.get(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN), conf.get(EVENT_LOG_COMPACTION_SCORE_THRESHOLD))
 
@@ -181,23 +188,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     processing.remove(path.getName)
   }
 
-  private val blacklist = new ConcurrentHashMap[String, Long]
+  private val inaccessibleList = new ConcurrentHashMap[String, Long]
 
   // Visible for testing
-  private[history] def isBlacklisted(path: Path): Boolean = {
-    blacklist.containsKey(path.getName)
+  private[history] def isAccessible(path: Path): Boolean = {
+    !inaccessibleList.containsKey(path.getName)
   }
 
-  private def blacklist(path: Path): Unit = {
-    blacklist.put(path.getName, clock.getTimeMillis())
+  private def markInaccessible(path: Path): Unit = {
+    inaccessibleList.put(path.getName, clock.getTimeMillis())
   }
 
   /**
-   * Removes expired entries in the blacklist, according to the provided `expireTimeInSeconds`.
+   * Removes expired entries in the inaccessibleList, according to the provided
+   * `expireTimeInSeconds`.
    */
-  private def clearBlacklist(expireTimeInSeconds: Long): Unit = {
+  private def clearInaccessibleList(expireTimeInSeconds: Long): Unit = {
     val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
-    blacklist.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
+    inaccessibleList.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
   }
 
   private val activeUIs = new mutable.HashMap[(String, Option[String]), LoadedAppUI]()
@@ -262,6 +270,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def startPolling(): Unit = {
     diskManager.foreach(_.initialize())
+    if (memoryManager != null) {
+      memoryManager.initialize()
+    }
 
     // Validate the log directory.
     val path = new Path(logDir)
@@ -460,7 +471,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
 
       val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
-        .filter { entry => !isBlacklisted(entry.getPath) }
+        .filter { entry => isAccessible(entry.getPath) }
         .filter { entry => !isProcessing(entry.getPath) }
         .flatMap { entry => EventLogFileReader(fs, entry) }
         .filter { reader =>
@@ -677,8 +688,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case e: AccessControlException =>
         // We don't have read permissions on the log file
         logWarning(s"Unable to read log $rootPath", e)
-        blacklist(rootPath)
-        // SPARK-28157 We should remove this blacklisted entry from the KVStore
+        markInaccessible(rootPath)
+        // SPARK-28157 We should remove this inaccessible entry from the KVStore
         // to handle permission-only changes with the same file sizes later.
         listing.delete(classOf[LogInfo], rootPath.toString)
       case e: Exception =>
@@ -946,8 +957,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    // Clean the blacklist from the expired entries.
-    clearBlacklist(CLEAN_INTERVAL_S)
+    // Clean the inaccessibleList from the expired entries.
+    clearInaccessibleList(CLEAN_INTERVAL_S)
   }
 
   private def deleteAttemptLogs(
@@ -1167,6 +1178,95 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // At this point the disk data either does not exist or was deleted because it failed to
     // load, so the event log needs to be replayed.
 
+    // If the hybrid store is enabled, try it first and fail back to leveldb store.
+    if (hybridStoreEnabled) {
+      try {
+        return createHybridStore(dm, appId, attempt, metadata)
+      } catch {
+        case e: Exception =>
+          logInfo(s"Failed to create HybridStore for $appId/${attempt.info.attemptId}." +
+            " Using LevelDB.", e)
+      }
+    }
+
+    createLevelDBStore(dm, appId, attempt, metadata)
+  }
+
+  private def createHybridStore(
+      dm: HistoryServerDiskManager,
+      appId: String,
+      attempt: AttemptInfoWrapper,
+      metadata: AppStatusStoreMetadata): KVStore = {
+    var retried = false
+    var hybridStore: HybridStore = null
+    val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
+      attempt.lastIndex)
+
+    // Use InMemoryStore to rebuild app store
+    while (hybridStore == null) {
+      // A RuntimeException will be thrown if the heap memory is not sufficient
+      memoryManager.lease(appId, attempt.info.attemptId, reader.totalSize,
+        reader.compressionCodec)
+      var store: HybridStore = null
+      try {
+        store = new HybridStore()
+        rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
+        hybridStore = store
+      } catch {
+        case _: IOException if !retried =>
+          // compaction may touch the file(s) which app rebuild wants to read
+          // compaction wouldn't run in short interval, so try again...
+          logWarning(s"Exception occurred while rebuilding log path ${attempt.logPath} - " +
+            "trying again...")
+          store.close()
+          memoryManager.release(appId, attempt.info.attemptId)
+          retried = true
+        case e: Exception =>
+          store.close()
+          memoryManager.release(appId, attempt.info.attemptId)
+          throw e
+      }
+    }
+
+    // Create a LevelDB and start a background thread to dump data to LevelDB
+    var lease: dm.Lease = null
+    try {
+      logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
+      lease = dm.lease(reader.totalSize, reader.compressionCodec.isDefined)
+      val levelDB = KVUtils.open(lease.tmpPath, metadata)
+      hybridStore.setLevelDB(levelDB)
+      hybridStore.switchToLevelDB(new HybridStore.SwitchToLevelDBListener {
+        override def onSwitchToLevelDBSuccess: Unit = {
+          logInfo(s"Completely switched to LevelDB for app $appId / ${attempt.info.attemptId}.")
+          levelDB.close()
+          val newStorePath = lease.commit(appId, attempt.info.attemptId)
+          hybridStore.setLevelDB(KVUtils.open(newStorePath, metadata))
+          memoryManager.release(appId, attempt.info.attemptId)
+        }
+        override def onSwitchToLevelDBFail(e: Exception): Unit = {
+          logWarning(s"Failed to switch to LevelDB for app $appId / ${attempt.info.attemptId}", e)
+          levelDB.close()
+          lease.rollback()
+        }
+      }, appId, attempt.info.attemptId)
+    } catch {
+      case e: Exception =>
+        hybridStore.close()
+        memoryManager.release(appId, attempt.info.attemptId)
+        if (lease != null) {
+          lease.rollback()
+        }
+        throw e
+    }
+
+    hybridStore
+  }
+
+  private def createLevelDBStore(
+      dm: HistoryServerDiskManager,
+      appId: String,
+      attempt: AttemptInfoWrapper,
+      metadata: AppStatusStoreMetadata): KVStore = {
     var retried = false
     var newStorePath: File = null
     while (newStorePath == null) {
@@ -1235,7 +1335,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def deleteLog(fs: FileSystem, log: Path): Boolean = {
     var deleted = false
-    if (isBlacklisted(log)) {
+    if (!isAccessible(log)) {
       logDebug(s"Skipping deleting $log as we don't have permissions on it.")
     } else {
       try {

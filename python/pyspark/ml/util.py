@@ -20,12 +20,6 @@ import sys
 import os
 import time
 import uuid
-import warnings
-
-if sys.version > '3':
-    basestring = str
-    unicode = str
-    long = int
 
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
@@ -60,10 +54,10 @@ class Identifiable(object):
     @classmethod
     def _randomUID(cls):
         """
-        Generate a unique unicode id for the object. The default implementation
+        Generate a unique string id for the object. The default implementation
         concatenates the class name, "_", and 12 random hex chars.
         """
-        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[-12:])
+        return str(cls.__name__ + "_" + uuid.uuid4().hex[-12:])
 
 
 @inherit_doc
@@ -170,8 +164,8 @@ class JavaMLWriter(MLWriter):
 
     def save(self, path):
         """Save the ML instance to the input path."""
-        if not isinstance(path, basestring):
-            raise TypeError("path should be a basestring, got type %s" % type(path))
+        if not isinstance(path, str):
+            raise TypeError("path should be a string, got type %s" % type(path))
         self._jwrite.save(path)
 
     def overwrite(self):
@@ -275,8 +269,8 @@ class JavaMLReader(MLReader):
 
     def load(self, path):
         """Load the ML instance from the input path."""
-        if not isinstance(path, basestring):
-            raise TypeError("path should be a basestring, got type %s" % type(path))
+        if not isinstance(path, str):
+            raise TypeError("path should be a string, got type %s" % type(path))
         java_obj = self._jread.load(path)
         if not hasattr(self._clazz, "_from_java"):
             raise NotImplementedError("This Java ML type cannot be loaded into Python currently: %r"
@@ -430,7 +424,7 @@ class DefaultParamsWriter(MLWriter):
         for p in instance._defaultParamMap:
             jsonDefaultParams[p.name] = instance._defaultParamMap[p]
 
-        basicMetadata = {"class": cls, "timestamp": long(round(time.time() * 1000)),
+        basicMetadata = {"class": cls, "timestamp": int(round(time.time() * 1000)),
                          "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams,
                          "defaultParamMap": jsonDefaultParams}
         if extraMetadata is not None:

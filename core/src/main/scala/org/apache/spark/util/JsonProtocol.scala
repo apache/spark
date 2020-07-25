@@ -328,11 +328,11 @@ private[spark] object JsonProtocol {
     ("Accumulables" -> accumulablesToJson(taskInfo.accumulables))
   }
 
-  private lazy val accumulableBlacklist = Set("internal.metrics.updatedBlockStatuses")
+  private lazy val accumulableExcludeList = Set("internal.metrics.updatedBlockStatuses")
 
   def accumulablesToJson(accumulables: Iterable[AccumulableInfo]): JArray = {
     JArray(accumulables
-        .filterNot(_.name.exists(accumulableBlacklist.contains))
+        .filterNot(_.name.exists(accumulableExcludeList.contains))
         .toList.map(accumulableInfoToJson))
   }
 
@@ -1214,7 +1214,8 @@ private[spark] object JsonProtocol {
       case Some(id) => id.extract[Int]
       case None => ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     }
-    new ExecutorInfo(executorHost, totalCores, logUrls, attributes, resources, resourceProfileId)
+    new ExecutorInfo(executorHost, totalCores, logUrls, attributes.toMap, resources.toMap,
+      resourceProfileId)
   }
 
   def blockUpdatedInfoFromJson(json: JValue): BlockUpdatedInfo = {
