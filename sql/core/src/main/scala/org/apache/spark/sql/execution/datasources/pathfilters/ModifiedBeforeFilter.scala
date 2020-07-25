@@ -26,14 +26,14 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 /**
-  * [SPARK-31962]
-  * Filter used to determine whether file was modified
-  * before the provided timestamp.
-  *
-  * @param sparkSession SparkSession
-  * @param hadoopConf Hadoop Configuration object
-  * @param options Map containing options
-  */
+ * [SPARK-31962]
+ * Filter used to determine whether file was modified
+ * before the provided timestamp.
+ *
+ * @param sparkSession SparkSession
+ * @param hadoopConf Hadoop Configuration object
+ * @param options Map containing options
+ */
 class ModifiedBeforeFilter(sparkSession: SparkSession,
                            hadoopConf: Configuration,
                            options: Map[String, String])

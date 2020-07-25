@@ -28,24 +28,24 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
-  * SPARK-31962 - Provide modifiedAfter and modifiedBefore options when
-  * filtering from a batch-based file data source.
-  *
-  * Example Usages
-  * Load all CSV files modified after date:
-  * spark.read.format("csv").option("modifiedAfter","2020-06-15T05:00:00").load()
-  *
-  * Load all CSV files modified before date:
-  * spark.read.format("csv").option("modifiedBefore","2020-06-15T05:00:00").load()
-  *
-  * Load all CSV files modified between two dates:
-  * spark.read.format("csv").option("modifiedAfter","2019-01-15T05:00:00")
-  * .option("modifiedBefore","2020-06-15T05:00:00").load()
-  *
-  * @param sparkSession SparkSession
-  * @param hadoopConf Hadoop Configuration object
-  * @param options Map containing options
-  */
+ * SPARK-31962 - Provide modifiedAfter and modifiedBefore options when
+ * filtering from a batch-based file data source.
+ *
+ * Example Usages
+ * Load all CSV files modified after date:
+ * spark.read.format("csv").option("modifiedAfter","2020-06-15T05:00:00").load()
+ *
+ * Load all CSV files modified before date:
+ * spark.read.format("csv").option("modifiedBefore","2020-06-15T05:00:00").load()
+ *
+ * Load all CSV files modified between two dates:
+ * spark.read.format("csv").option("modifiedAfter","2019-01-15T05:00:00")
+ * .option("modifiedBefore","2020-06-15T05:00:00").load()
+ *
+ * @param sparkSession SparkSession
+ * @param hadoopConf Hadoop Configuration object
+ * @param options Map containing options
+ */
 abstract class ModifiedDateFilter(sparkSession: SparkSession,
                                   hadoopConf: Configuration,
                                   options: Map[String, String])
