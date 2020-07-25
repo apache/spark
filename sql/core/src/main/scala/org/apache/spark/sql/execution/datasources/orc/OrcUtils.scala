@@ -208,7 +208,7 @@ object OrcUtils extends Logging {
 
   /**
    * This method returns the result schema as string based on the canPruneCols flag.
-   * resultSchemaString will be created using resultsSchema in case of
+   * resultSchemaString will be created using pruned col in case of
    * canPruneCols is true and for canPruneCols as false value
    * resultSchemaString will be created using the actual dataSchema.
    * Also as the part of this method update the MAPRED_INPUT_SCHEMA
