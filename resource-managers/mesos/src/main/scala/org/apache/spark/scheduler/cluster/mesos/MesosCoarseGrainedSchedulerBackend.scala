@@ -491,8 +491,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val tasks = new mutable.HashMap[OfferID, List[MesosTaskInfo]].withDefaultValue(Nil)
 
     // offerID -> resources
-    val remainingResources = mutable.Map(offers.map(offer =>
-      (offer.getId.getValue, offer.getResourcesList)): _*)
+    val remainingResources = mutable.Map[String, JList[Resource]]()
+    remainingResources ++= offers.map(offer => (offer.getId.getValue, offer.getResourcesList))
 
     var launchTasks = true
 

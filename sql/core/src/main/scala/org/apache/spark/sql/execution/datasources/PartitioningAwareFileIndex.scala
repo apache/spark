@@ -55,13 +55,14 @@ abstract class PartitioningAwareFileIndex(
 
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
-  protected  val pathFilters = PathFilterFactory.create(sparkSession, hadoopConf, parameters)
+  private val caseInsensitiveMap = CaseInsensitiveMap(parameters)
+  protected  val pathFilters = PathFilterFactory.create(sparkSession, hadoopConf, caseInsensitiveMap)
 
   protected def matchPathPattern(file: FileStatus): Boolean =
     pathFilters.forall(_.accept(file))
 
-  protected lazy val recursiveFileLookup = {
-    parameters.getOrElse("recursiveFileLookup", "false").toBoolean
+  protected lazy val recursiveFileLookup: Boolean = {
+    caseInsensitiveMap.getOrElse("recursiveFileLookup", "false").toBoolean
   }
 
   override def listFiles(
@@ -213,7 +214,7 @@ abstract class PartitioningAwareFileIndex(
    * and the returned DataFrame will have the column of `something`.
    */
   private def basePaths: Set[Path] = {
-    parameters.get(BASE_PATH_PARAM).map(new Path(_)) match {
+    caseInsensitiveMap.get(BASE_PATH_PARAM).map(new Path(_)) match {
       case Some(userDefinedBasePath) =>
         val fs = userDefinedBasePath.getFileSystem(hadoopConf)
         if (!fs.isDirectory(userDefinedBasePath)) {

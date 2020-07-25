@@ -2068,7 +2068,11 @@ def slice(x, start, length):
     [Row(sliced=[2, 3]), Row(sliced=[5])]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.slice(_to_java_column(x), start, length))
+    return Column(sc._jvm.functions.slice(
+        _to_java_column(x),
+        start._jc if isinstance(start, Column) else start,
+        length._jc if isinstance(length, Column) else length
+    ))
 
 
 @since(2.4)
@@ -3322,6 +3326,118 @@ def map_zip_with(col1, col2, f):
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
 
 
+# ---------------------- Partition transform functions --------------------------------
+
+@since(3.1)
+def years(col):
+    """
+    Partition transform function: A transform for timestamps and dates
+    to partition data into years.
+
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    ...     years("ts")
+    ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.years(_to_java_column(col)))
+
+
+@since(3.1)
+def months(col):
+    """
+    Partition transform function: A transform for timestamps and dates
+    to partition data into months.
+
+    >>> df.writeTo("catalog.db.table").partitionedBy(
+    ...     months("ts")
+    ... ).createOrReplace()  # doctest: +SKIP
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.months(_to_java_column(col)))
+
+
+@since(3.1)
+def days(col):
+    """
+    Partition transform function: A transform for timestamps and dates
+    to partition data into days.
+
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    ...     days("ts")
+    ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.days(_to_java_column(col)))
+
+
+@since(3.1)
+def hours(col):
+    """
+    Partition transform function: A transform for timestamps
+    to partition data into hours.
+
+    >>> df.writeTo("catalog.db.table").partitionedBy(   # doctest: +SKIP
+    ...     hours("ts")
+    ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.hours(_to_java_column(col)))
+
+
+@since(3.1)
+def bucket(numBuckets, col):
+    """
+    Partition transform function: A transform for any type that partitions
+    by a hash of the input column.
+
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    ...     bucket(42, "ts")
+    ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
+    """
+    if not isinstance(numBuckets, (int, Column)):
+        raise TypeError(
+            "numBuckets should be a Column or and int, got {}".format(type(numBuckets))
+        )
+
+    sc = SparkContext._active_spark_context
+    numBuckets = (
+        _create_column_from_literal(numBuckets)
+        if isinstance(numBuckets, int)
+        else _to_java_column(numBuckets)
+    )
+    return Column(sc._jvm.functions.bucket(numBuckets, _to_java_column(col)))
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 @since(1.3)
@@ -3411,9 +3527,9 @@ def udf(f=None, returnType=StringType()):
                            evalType=PythonEvalType.SQL_BATCHED_UDF)
 
 
-blacklist = ['map', 'since']
+ignored_fns = ['map', 'since']
 __all__ = [k for k, v in globals().items()
-           if not k.startswith('_') and k[0].islower() and callable(v) and k not in blacklist]
+           if not k.startswith('_') and k[0].islower() and callable(v) and k not in ignored_fns]
 __all__ += ["PandasUDFType"]
 __all__.sort()
 

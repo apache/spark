@@ -444,10 +444,10 @@ object SparkBuild extends PomBuild {
 object SparkParallelTestGrouping {
   // Settings for parallelizing tests. The basic strategy here is to run the slowest suites (or
   // collections of suites) in their own forked JVMs, allowing us to gain parallelism within a
-  // SBT project. Here, we take a whitelisting approach where the default behavior is to run all
+  // SBT project. Here, we take an opt-in approach where the default behavior is to run all
   // tests sequentially in a single JVM, requiring us to manually opt-in to the extra parallelism.
   //
-  // There are a reasons why such a whitelist approach is good:
+  // There are a reasons why such an opt-in approach is good:
   //
   //    1. Launching one JVM per suite adds significant overhead for short-running suites. In
   //       addition to JVM startup time and JIT warmup, it appears that initialization of Derby
@@ -469,7 +469,6 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogSuite",
     "org.apache.spark.sql.hive.StatisticsSuite",
-    "org.apache.spark.sql.hive.execution.HiveCompatibilitySuite",
     "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.client.HiveClientVersions",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
@@ -486,9 +485,14 @@ object SparkParallelTestGrouping {
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
+  private val HIVE_EXECUTION_TEST_GROUP = "hive_execution_test_group"
 
   private def testNameToTestGroup(name: String): String = name match {
     case _ if testsWhichShouldRunInTheirOwnDedicatedJvm.contains(name) => name
+    // Different with the cases in testsWhichShouldRunInTheirOwnDedicatedJvm, here we are grouping
+    // all suites of `org.apache.spark.sql.hive.execution.*` into a single group, instead of
+    // launching one JVM per suite.
+    case _ if name.contains("org.apache.spark.sql.hive.execution") => HIVE_EXECUTION_TEST_GROUP
     case _ => DEFAULT_TEST_GROUP
   }
 
@@ -1028,8 +1032,6 @@ object TestSettings {
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
-    // Required to detect Junit tests for each project, see also https://github.com/sbt/junit-interface/issues/35
-    crossPaths := false,
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
