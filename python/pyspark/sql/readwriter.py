@@ -422,7 +422,7 @@ class DataFrameReader(OptionUtils):
 
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
-            recursiveFileLookup=recursiveFileLookup, modifiedBefore=modifiedBefore, 
+            recursiveFileLookup=recursiveFileLookup, modifiedBefore=modifiedBefore,
             modifiedAfter=modifiedAfter)
         if isinstance(paths, str):
             paths = [paths]
@@ -622,7 +622,7 @@ class DataFrameReader(OptionUtils):
         :param modifiedAfter: an optional timestamp to only include files with
                     modification times occurring after the specified time.  The provided timestamp
                     must be in the following format:  YYYY-MM-DDTHH:mm:ss
-                    Example: 2020-06-01T13:00:00                             
+                    Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
