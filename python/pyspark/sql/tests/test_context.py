@@ -19,11 +19,7 @@ import shutil
 import sys
 import tempfile
 import unittest
-try:
-    from importlib import reload  # Python 3.4+ only.
-except ImportError:
-    # Otherwise, we will stick to Python 2's built-in reload.
-    pass
+from importlib import reload
 
 import py4j
 

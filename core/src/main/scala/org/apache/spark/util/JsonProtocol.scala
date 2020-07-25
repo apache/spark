@@ -1078,7 +1078,14 @@ private[spark] object JsonProtocol {
         val blockManagerAddress = blockManagerIdFromJson(json \ "Block Manager Address")
         val shuffleId = (json \ "Shuffle ID").extract[Int]
         val mapId = (json \ "Map ID").extract[Long]
-        val mapIndex = (json \ "Map Index").extract[Int]
+        val mapIndex = json \ "Map Index" match {
+          case JNothing =>
+            // Note, we use the invalid value Int.MinValue here to fill the map index for backward
+            // compatibility. Otherwise, the fetch failed event will be dropped when the history
+            // server loads the event log written by the Spark version before 3.0.
+            Int.MinValue
+          case x => x.extract[Int]
+        }
         val reduceId = (json \ "Reduce ID").extract[Int]
         val message = jsonOption(json \ "Message").map(_.extract[String])
         new FetchFailed(blockManagerAddress, shuffleId, mapId, mapIndex, reduceId,
@@ -1207,7 +1214,8 @@ private[spark] object JsonProtocol {
       case Some(id) => id.extract[Int]
       case None => ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     }
-    new ExecutorInfo(executorHost, totalCores, logUrls, attributes, resources, resourceProfileId)
+    new ExecutorInfo(executorHost, totalCores, logUrls, attributes.toMap, resources.toMap,
+      resourceProfileId)
   }
 
   def blockUpdatedInfoFromJson(json: JValue): BlockUpdatedInfo = {

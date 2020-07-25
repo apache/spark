@@ -378,6 +378,7 @@ class DataFrameReader(OptionUtils):
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
+
         mergeSchema = options.get('mergeSchema', None)
         pathGlobFilter = options.get('pathGlobFilter', None)
         modifiedDateFilter = options.get('modifiedDateFilter', None)
@@ -424,6 +425,7 @@ class DataFrameReader(OptionUtils):
         >>> df.collect()
         [Row(value=u'hello\\nthis')]
         """
+
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup, modifiedBefore=modifiedBefore,
@@ -569,6 +571,7 @@ class DataFrameReader(OptionUtils):
         >>> df2.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
         """
+
         self._set_opts(
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
@@ -965,6 +968,7 @@ class DataFrameWriter(OptionUtils):
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
+
         self.mode(mode)
         self._set_opts(
             compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
@@ -1111,6 +1115,7 @@ class DataFrameWriter(OptionUtils):
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
+
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)

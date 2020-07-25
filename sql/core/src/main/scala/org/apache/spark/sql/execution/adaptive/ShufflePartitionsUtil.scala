@@ -121,7 +121,7 @@ object ShufflePartitionsUtil extends Logging {
       i += 1
     }
     createPartitionSpec()
-    partitionSpecs
+    partitionSpecs.toSeq
   }
 
   /**

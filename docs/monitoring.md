@@ -373,6 +373,25 @@ Security options for the Spark History Server are covered more detail in the
     </td>
     <td>3.0.0</td>
   </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.enabled</td>
+    <td>false</td>
+    <td>
+      Whether to use HybridStore as the store when parsing event logs. HybridStore will first write data
+      to an in-memory store and having a background thread that dumps data to a disk store after the writing
+      to in-memory store is completed.
+    </td>
+    <td>3.1.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.maxMemoryUsage</td>
+    <td>2g</td>
+    <td>
+      Maximum memory space that can be used to create HybridStore. The HybridStore co-uses the heap memory,
+      so the heap memory should be increased through the memory option for SHS if the HybridStore is enabled.
+    </td>
+    <td>3.1.0</td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,

@@ -211,7 +211,9 @@ trait PredicateHelper extends Logging {
    * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
    *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
    */
-  protected def conjunctiveNormalForm(condition: Expression): Seq[Expression] = {
+  protected def conjunctiveNormalForm(
+      condition: Expression,
+      groupExpsFunc: Seq[Expression] => Seq[Expression]): Seq[Expression] = {
     val postOrderNodes = postOrderTraversal(condition)
     val resultStack = new mutable.Stack[Seq[Expression]]
     val maxCnfNodeCount = SQLConf.get.maxCnfNodeCount
@@ -226,8 +228,8 @@ trait PredicateHelper extends Logging {
           // For each side, there is no need to expand predicates of the same references.
           // So here we can aggregate predicates of the same qualifier as one single predicate,
           // for reducing the size of pushed down predicates and corresponding codegen.
-          val right = groupExpressionsByQualifier(resultStack.pop())
-          val left = groupExpressionsByQualifier(resultStack.pop())
+          val right = groupExpsFunc(resultStack.pop())
+          val left = groupExpsFunc(resultStack.pop())
           // Stop the loop whenever the result exceeds the `maxCnfNodeCount`
           if (left.size * right.size > maxCnfNodeCount) {
             logInfo(s"As the result size exceeds the threshold $maxCnfNodeCount. " +
@@ -249,8 +251,36 @@ trait PredicateHelper extends Logging {
     resultStack.top
   }
 
-  private def groupExpressionsByQualifier(expressions: Seq[Expression]): Seq[Expression] = {
-    expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq
+  /**
+   * Convert an expression to conjunctive normal form when pushing predicates through Join,
+   * when expand predicates, we can group by the qualifier avoiding generate unnecessary
+   * expression to control the length of final result since there are multiple tables.
+   *
+   * @param condition condition need to be converted
+   * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
+   *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
+   */
+  def CNFWithGroupExpressionsByQualifier(condition: Expression): Seq[Expression] = {
+    conjunctiveNormalForm(condition, (expressions: Seq[Expression]) =>
+        expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq)
+  }
+
+  /**
+   * Convert an expression to conjunctive normal form for predicate pushdown and partition pruning.
+   * When expanding predicates, this method groups expressions by their references for reducing
+   * the size of pushed down predicates and corresponding codegen. In partition pruning strategies,
+   * we split filters by [[splitConjunctivePredicates]] and partition filters by judging if it's
+   * references is subset of partCols, if we combine expressions group by reference when expand
+   * predicate of [[Or]], it won't impact final predicate pruning result since
+   * [[splitConjunctivePredicates]] won't split [[Or]] expression.
+   *
+   * @param condition condition need to be converted
+   * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
+   *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
+   */
+  def CNFWithGroupExpressionsByReference(condition: Expression): Seq[Expression] = {
+    conjunctiveNormalForm(condition, (expressions: Seq[Expression]) =>
+        expressions.groupBy(e => AttributeSet(e.references)).map(_._2.reduceLeft(And)).toSeq)
   }
 
   /**

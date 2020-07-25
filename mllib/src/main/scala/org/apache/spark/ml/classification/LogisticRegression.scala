@@ -1159,27 +1159,6 @@ class LogisticRegressionModel private[spark] (
   }
 
   /**
-   * If the probability and prediction columns are set, this method returns the current model,
-   * otherwise it generates new columns for them and sets them as columns on a new copy of
-   * the current model
-   */
-  private[classification] def findSummaryModel():
-      (LogisticRegressionModel, String, String) = {
-    val model = if ($(probabilityCol).isEmpty && $(predictionCol).isEmpty) {
-      copy(ParamMap.empty)
-        .setProbabilityCol("probability_" + java.util.UUID.randomUUID.toString)
-        .setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
-    } else if ($(probabilityCol).isEmpty) {
-      copy(ParamMap.empty).setProbabilityCol("probability_" + java.util.UUID.randomUUID.toString)
-    } else if ($(predictionCol).isEmpty) {
-      copy(ParamMap.empty).setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
-    } else {
-      this
-    }
-    (model, model.getProbabilityCol, model.getPredictionCol)
-  }
-
-  /**
    * Evaluates the model on a test dataset.
    *
    * @param dataset Test dataset to evaluate model on.
@@ -1451,7 +1430,7 @@ sealed trait BinaryLogisticRegressionTrainingSummary extends BinaryLogisticRegre
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
- * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 private class LogisticRegressionTrainingSummaryImpl(
@@ -1476,7 +1455,7 @@ private class LogisticRegressionTrainingSummaryImpl(
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
- * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
  */
 private class LogisticRegressionSummaryImpl(
     @transient override val predictions: DataFrame,
@@ -1497,7 +1476,7 @@ private class LogisticRegressionSummaryImpl(
  *                      double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
- * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 private class BinaryLogisticRegressionTrainingSummaryImpl(
@@ -1522,7 +1501,7 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
  *                      each class as a double.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
- * @param weightCol field in "predictions" which gives the weight of each instance as a vector.
+ * @param weightCol field in "predictions" which gives the weight of each instance.
  */
 private class BinaryLogisticRegressionSummaryImpl(
     predictions: DataFrame,

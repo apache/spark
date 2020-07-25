@@ -319,12 +319,13 @@ object ResourceProfile extends Logging {
 
   private[spark] def getCustomTaskResources(
       rp: ResourceProfile): Map[String, TaskResourceRequest] = {
-    rp.taskResources.filterKeys(k => !k.equals(ResourceProfile.CPUS))
+    rp.taskResources.filterKeys(k => !k.equals(ResourceProfile.CPUS)).toMap
   }
 
   private[spark] def getCustomExecutorResources(
       rp: ResourceProfile): Map[String, ExecutorResourceRequest] = {
-    rp.executorResources.filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k))
+    rp.executorResources.
+      filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k)).toMap
   }
 
   /*
