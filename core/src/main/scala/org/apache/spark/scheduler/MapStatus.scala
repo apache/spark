@@ -161,7 +161,6 @@ private[spark] class CompressedMapStatus(
  * plus a bitmap for tracking which blocks are empty.
  *
  * @param loc location where the task is being executed
- * @param numNonEmptyBlocks the number of non-empty blocks
  * @param emptyBlocks a bitmap tracking which blocks are empty
  * @param avgSize average size of the non-empty and non-huge blocks
  * @param hugeBlockSizes sizes of huge blocks by their reduceId.
@@ -169,7 +168,6 @@ private[spark] class CompressedMapStatus(
  */
 private[spark] class HighlyCompressedMapStatus private (
     private[this] var loc: BlockManagerId,
-    private[this] var numNonEmptyBlocks: Int,
     private[this] var emptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long,
     private[this] var hugeBlockSizes: scala.collection.Map[Int, Byte],
@@ -177,11 +175,10 @@ private[spark] class HighlyCompressedMapStatus private (
   extends MapStatus with Externalizable {
 
   // loc could be null when the default constructor is called during deserialization
-  require(loc == null || avgSize > 0 || hugeBlockSizes.size > 0
-    || numNonEmptyBlocks == 0 || _mapTaskId > 0,
+  require(loc == null || avgSize > 0 || hugeBlockSizes.size > 0 || _mapTaskId > 0,
     "Average size can only be zero for map stages that produced no output")
 
-  protected def this() = this(null, -1, null, -1, null, -1)  // For deserialization only
+  protected def this() = this(null, null, -1, null, -1)  // For deserialization only
 
   override def location: BlockManagerId = loc
 
@@ -240,7 +237,6 @@ private[spark] object HighlyCompressedMapStatus {
     // We must keep track of which blocks are empty so that we don't report a zero-sized
     // block as being non-empty (or vice-versa) when using the average block size.
     var i = 0
-    var numNonEmptyBlocks: Int = 0
     var numSmallBlocks: Int = 0
     var totalSmallBlockSize: Long = 0
     // From a compression standpoint, it shouldn't matter whether we track empty or non-empty
@@ -255,7 +251,6 @@ private[spark] object HighlyCompressedMapStatus {
     while (i < totalNumBlocks) {
       val size = uncompressedSizes(i)
       if (size > 0) {
-        numNonEmptyBlocks += 1
         // Huge blocks are not included in the calculation for average size, thus size for smaller
         // blocks is more accurate.
         if (size < threshold) {
@@ -276,7 +271,6 @@ private[spark] object HighlyCompressedMapStatus {
     }
     emptyBlocks.trim()
     emptyBlocks.runOptimize()
-    new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize,
-      hugeBlockSizes, mapTaskId)
+    new HighlyCompressedMapStatus(loc, emptyBlocks, avgSize, hugeBlockSizes, mapTaskId)
   }
 }
