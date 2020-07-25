@@ -966,7 +966,6 @@ class DataFrameWriter(OptionUtils):
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-
         self.mode(mode)
         self._set_opts(
             compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
@@ -1113,7 +1112,6 @@ class DataFrameWriter(OptionUtils):
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
