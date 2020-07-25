@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.pathfilters
 
 import org.apache.hadoop.fs.{FileStatus, PathFilter}
 
+
 trait FileIndexFilter extends PathFilter with Serializable {
   def accept(fileStatus: FileStatus): Boolean
+  def strategy(): String
 }

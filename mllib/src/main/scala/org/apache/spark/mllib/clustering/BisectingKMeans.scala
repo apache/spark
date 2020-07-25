@@ -225,7 +225,7 @@ class BisectingKMeans private (
             divisibleIndices.contains(parentIndex(index))
           }
           newClusters = summarize(d, newAssignments, dMeasure)
-          newClusterCenters = newClusters.mapValues(_.center).map(identity)
+          newClusterCenters = newClusters.mapValues(_.center).map(identity).toMap
         }
         if (preIndices != null) {
           preIndices.unpersist()

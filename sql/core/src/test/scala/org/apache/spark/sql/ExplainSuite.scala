@@ -347,7 +347,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   test("Coalesced bucket info should be a part of explain string") {
     withTable("t1", "t2") {
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
-        SQLConf.COALESCE_BUCKETS_IN_SORT_MERGE_JOIN_ENABLED.key -> "true") {
+        SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
         Seq(1, 2).toDF("i").write.bucketBy(8, "i").saveAsTable("t1")
         Seq(2, 3).toDF("i").write.bucketBy(4, "i").saveAsTable("t2")
         val df1 = spark.table("t1")

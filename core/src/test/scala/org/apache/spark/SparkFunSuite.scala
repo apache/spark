@@ -25,7 +25,8 @@ import org.apache.log4j.spi.LoggingEvent
 
 import scala.annotation.tailrec
 import org.apache.log4j.{Appender, AppenderSkeleton, Level, Logger}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, FunSuite, Outcome}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Outcome}
+import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{AccumulatorContext, Utils}
@@ -57,7 +58,7 @@ import scala.collection.mutable.ArrayBuffer
  * }
  */
 abstract class SparkFunSuite
-  extends FunSuite
+  extends AnyFunSuite
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1962,7 +1962,6 @@ class DDLParserSuite extends AnalysisTest {
       """
         |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a.b.c
         |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
         |COMMENT 'BLABLA'
         |AS SELECT * FROM tab1
       """.stripMargin
@@ -1971,7 +1970,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq("a", "b", "c"),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
-      Map("prop1Key" -> "prop1Val"),
+      Map(),
       Some("SELECT * FROM tab1"),
       parsePlan("SELECT * FROM tab1"),
       false,
@@ -2001,6 +2000,17 @@ class DDLParserSuite extends AnalysisTest {
     val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
     intercept(sql1, "Found duplicate clauses: COMMENT")
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
+  }
+
+  test("SPARK-32374: create temporary view with properties not allowed") {
+    assertUnsupported(
+      sql = """
+        |CREATE OR REPLACE TEMPORARY VIEW a.b.c
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |AS SELECT * FROM tab1
+      """.stripMargin,
+      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
   }
 
   test("SHOW TBLPROPERTIES table") {
@@ -2107,6 +2117,15 @@ class DDLParserSuite extends AnalysisTest {
 
     intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
       "Operation not allowed: CREATE FUNCTION with resource type 'other'")
+  }
+
+  test("REFRESH FUNCTION") {
+    parseCompare("REFRESH FUNCTION c",
+      RefreshFunction(UnresolvedFunc(Seq("c"))))
+    parseCompare("REFRESH FUNCTION b.c",
+      RefreshFunction(UnresolvedFunc(Seq("b", "c"))))
+    parseCompare("REFRESH FUNCTION a.b.c",
+      RefreshFunction(UnresolvedFunc(Seq("a", "b", "c"))))
   }
 
   private case class TableSpec(

@@ -21,15 +21,11 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.SparkSession
 
-class PathFilterOptions(
+case class PathFilterOptions(
     sparkSession: SparkSession,
     hadoopConf: Configuration,
     parameters: Map[String, String]) {
   def filters(): Iterable[FileIndexFilter] = {
-    val pathGlobFilter = parameters.get("pathGlobFilter").map(new PathGlobFilter(_))
-    val modifiedDateFilter = parameters
-      .get("modifiedDateFilter")
-      .map(new ModifiedDateFilter(sparkSession, hadoopConf, _))
-    pathGlobFilter ++ modifiedDateFilter
+    PathFilterFactory.create(sparkSession, hadoopConf, parameters)
   }
 }

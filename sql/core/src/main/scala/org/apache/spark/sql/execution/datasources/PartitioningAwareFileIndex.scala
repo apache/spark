@@ -18,16 +18,14 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
+import org.apache.spark.sql.catalyst.{InternalRow, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.datasources.pathfilters.PathFilterOptions
+import org.apache.spark.sql.execution.datasources.pathfilters.{PathFilterFactory}
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
@@ -57,15 +55,14 @@ abstract class PartitioningAwareFileIndex(
 
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
-  protected lazy val pathFilters = new PathFilterOptions(
-    sparkSession, hadoopConf, parameters).filters()
+  private val caseInsensitiveMap = CaseInsensitiveMap(parameters)
+  protected  val pathFilters = PathFilterFactory.create(sparkSession, hadoopConf, caseInsensitiveMap)
 
-  protected def matchPathPattern(file: FileStatus): Boolean = {
+  protected def matchPathPattern(file: FileStatus): Boolean =
     pathFilters.forall(_.accept(file))
-  }
 
-  protected lazy val recursiveFileLookup = {
-    parameters.getOrElse("recursiveFileLookup", "false").toBoolean
+  protected lazy val recursiveFileLookup: Boolean = {
+    caseInsensitiveMap.getOrElse("recursiveFileLookup", "false").toBoolean
   }
 
   override def listFiles(
@@ -217,7 +214,7 @@ abstract class PartitioningAwareFileIndex(
    * and the returned DataFrame will have the column of `something`.
    */
   private def basePaths: Set[Path] = {
-    parameters.get(BASE_PATH_PARAM).map(new Path(_)) match {
+    caseInsensitiveMap.get(BASE_PATH_PARAM).map(new Path(_)) match {
       case Some(userDefinedBasePath) =>
         val fs = userDefinedBasePath.getFileSystem(hadoopConf)
         if (!fs.isDirectory(userDefinedBasePath)) {

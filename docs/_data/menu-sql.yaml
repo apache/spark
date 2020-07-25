@@ -208,6 +208,8 @@
                   url: sql-ref-syntax-aux-cache-clear-cache.html
                 - text: REFRESH TABLE
                   url: sql-ref-syntax-aux-cache-refresh-table.html
+                - text: REFRESH FUNCTION
+                  url: sql-ref-syntax-aux-cache-refresh-function.html
                 - text: REFRESH
                   url: sql-ref-syntax-aux-cache-refresh.html
             - text: DESCRIBE
@@ -249,6 +251,8 @@
                   url: sql-ref-syntax-aux-conf-mgmt-set.html
                 - text: RESET
                   url: sql-ref-syntax-aux-conf-mgmt-reset.html
+                - text: SET TIME ZONE
+                  url: sql-ref-syntax-aux-conf-mgmt-set-timezone.html
             - text: RESOURCE MANAGEMENT
               url: sql-ref-syntax-aux-resource-mgmt.html
               subitems:
