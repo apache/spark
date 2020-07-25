@@ -87,7 +87,6 @@ def generic_file_source_options_example(spark):
     # $example off:load_with_modified_time_filter$
 
 
-
 def basic_datasource_example(spark):
     # $example on:generic_load_save_functions$
     df = spark.read.load("examples/src/main/resources/users.parquet")
