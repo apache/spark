@@ -207,16 +207,19 @@ object OrcUtils extends Logging {
   }
 
   /**
+   * This method returns the result schema as string based on the canPruneCols flag.
+   * resultSchemaString will be created using resultsSchema in case of
+   * canPruneCols is true and for canPruneCols as false value
+   * resultSchemaString will be created using the actual dataSchema.
+   * Also as the part of this method update the MAPRED_INPUT_SCHEMA
+   *
    * @param canPruneCols Flag to decide whether pruned cols schema is send to resultSchema
    *                     or send the entire dataSchema to resultSchema.
    * @param dataSchema   Schema of the orc files.
    * @param resultSchema Result data schema created from the query.
    * @param partitionSchema Schema of partitions.
    * @param conf Hadoop Configuration
-   * @return Returns the result schema as string based on the canPruneCols flag.
-   *         resultSchemaString will be created using resultsSchema in case of
-   *         canPruneCols is true and for canPruneCols as false value
-   *         resultSchemaString will be created using the actual dataSchema.
+   * @return Returns the result schema as string
    */
   def orcResultSchemaString(
       canPruneCols: Boolean,
