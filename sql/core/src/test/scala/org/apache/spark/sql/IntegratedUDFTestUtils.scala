@@ -200,7 +200,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
       "PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python3"))
     if (TestUtils.testCommandAvailable(pythonExec)) {
       pythonExec
-    } else {
+    } else if (pythonExec.equalsIgnoreCase("python") &&
+        TestUtils.testCommandAvailable("python3")) {
+      "python3"
+    } else if {
       "python"
     }
   }
