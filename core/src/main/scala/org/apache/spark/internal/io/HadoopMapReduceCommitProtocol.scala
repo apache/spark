@@ -107,8 +107,7 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def newTaskTempFileAbsPath(
-                                       taskContext: TaskAttemptContext, absoluteDir: String,
-                                       ext: String): String = {
+      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
     val filename = getFilename(taskContext, ext)
     outputPath = new Path(absoluteDir)
 
