@@ -1140,7 +1140,8 @@ class FileBasedDataSourceSuite extends QueryTest
 
   test("SPARK-31935: Hadoop file system config should be effective in data source options") {
     Seq("parquet", "").foreach { format =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> format,
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> format,
         "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
         "fs.file.impl.disable.cache" -> "true") {
         withTempDir { dir =>
