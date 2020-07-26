@@ -74,12 +74,14 @@ object SubqueryExpression {
   }
 
   /**
-   * Returns true when an expression contains a subquery that has outer reference(s). The outer
+   * Returns true when an expression contains a subquery that has outer reference(s) except
+   * the [[org.apache.spark.sql.catalyst.expressions.DynamicPruningSubquery]]. The outer
    * reference attributes are kept as children of subquery expression by
    * [[org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveSubquery]]
    */
   def hasCorrelatedSubquery(e: Expression): Boolean = {
     e.find {
+      case _: DynamicPruningSubquery => false
       case s: SubqueryExpression => s.children.nonEmpty
       case _ => false
     }.isDefined

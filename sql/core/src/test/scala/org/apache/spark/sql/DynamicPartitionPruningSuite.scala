@@ -1280,6 +1280,57 @@ abstract class DynamicPartitionPruningSuiteBase
       )
     }
   }
+
+  test("Infer DPP filter to other partition column") {
+    val df = sql(
+      """
+        |SELECT t11.store_id,
+        |       t11.code,
+        |       t3.product_id
+        |FROM   (SELECT t1.store_id,
+        |               t2.code
+        |        FROM fact_stats t1
+        |        JOIN code_stats t2
+        |            ON t1.store_id = t2.store_id) t11
+        |       JOIN product t3
+        |         ON t11.store_id = t3.store_id AND t3.product_id < 3
+        |""".stripMargin)
+
+    assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 2)
+    checkDistinctSubqueries(df, 1)
+    checkPartitionPruningPredicate(df, false, true)
+
+    checkAnswer(df,
+      Row(2, 20, 2) ::
+        Row(2, 20, 2) ::
+        Row(1, 10, 1) :: Nil
+    )
+  }
+
+  test("Should not infer DPP filter to other non-partition column") {
+    val df = sql(
+      """
+        |SELECT t11.store_id,
+        |       t11.country,
+        |       t3.product_id
+        |FROM   (SELECT t1.store_id,
+        |               t2.country
+        |        FROM fact_stats t1
+        |        JOIN dim_stats t2
+        |            ON t1.store_id = t2.store_id) t11
+        |       JOIN product t3
+        |         ON t11.store_id = t3.store_id AND t3.product_id < 3
+        |""".stripMargin)
+
+    assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
+    checkPartitionPruningPredicate(df, false, true)
+
+    checkAnswer(df,
+      Row(2, "NL", 2) ::
+        Row(2, "NL", 2) ::
+        Row(1, "NL", 1) :: Nil
+    )
+  }
 }
 
 class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase {
