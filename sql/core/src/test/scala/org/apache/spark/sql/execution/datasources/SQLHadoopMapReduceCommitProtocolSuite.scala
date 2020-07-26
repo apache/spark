@@ -51,6 +51,8 @@ class SQLHadoopMapReduceCommitProtocolSuite extends QueryTest with SharedSparkSe
 
   val partitionTableName: String = "partTable"
 
+  val partitionTableName2: String = "partTable2"
+
   def createNonPartitionTable(): Unit = {
     sql(
       s"""
@@ -74,6 +76,18 @@ class SQLHadoopMapReduceCommitProtocolSuite extends QueryTest with SharedSparkSe
           """.stripMargin)
   }
 
+  def createPartitionTable2(): Unit = {
+    sql(
+      s"""
+         |CREATE TABLE $partitionTableName2(i int, part1 int, part2 int) USING PARQUET
+         |PARTITIONED BY (part1, part2)
+         |OPTIONS (
+         |  `partitionOverwriteMode` 'dynamic',
+         |  `serialization.format` '1'
+         |)
+          """.stripMargin)
+  }
+
   def testWithNonPartitionTable(body: () => Unit): Unit = {
     withTable(nonPartitionTableName) {
       createNonPartitionTable()
@@ -88,7 +102,36 @@ class SQLHadoopMapReduceCommitProtocolSuite extends QueryTest with SharedSparkSe
     }
   }
 
-  test("write partition table") {
+  def testWithPartitionTable2[T](body: => T): Unit = {
+    withTable(partitionTableName2) {
+      createPartitionTable2()
+      body
+    }
+  }
+
+  test("append partition table") {
+    val commitClazz = classOf[UserParquetOutputCommitter].getName
+    sparkContext.hadoopConfiguration.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key, commitClazz)
+
+    testWithPartitionTable {
+      val expected = Range(0, 10).map(Row(_, 1))
+
+      sql(
+        s"""INSERT OVERWRITE TABLE $partitionTableName PARTITION (part=1)
+           |SELECT id
+           |FROM range(5)
+           |""".stripMargin)
+
+      sql(
+        s"""INSERT INTO TABLE $partitionTableName PARTITION (part=1)
+           |SELECT /*+ REPARTITION(2) */ id
+           |FROM range(5, 10)
+           |""".stripMargin)
+      checkAnswer(spark.table(partitionTableName), expected)
+    }
+  }
+
+  test("overwrite partition table") {
     val commitClazz = classOf[UserParquetOutputCommitter].getName
     sparkContext.hadoopConfiguration.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key, commitClazz)
 
@@ -110,7 +153,7 @@ class SQLHadoopMapReduceCommitProtocolSuite extends QueryTest with SharedSparkSe
     }
   }
 
-  test("write dynamic partition table") {
+  test("overwrite dynamic partition table") {
     val commitClazz = classOf[UserParquetOutputCommitter].getName
     sparkContext.hadoopConfiguration.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key, commitClazz)
 
@@ -132,6 +175,34 @@ class SQLHadoopMapReduceCommitProtocolSuite extends QueryTest with SharedSparkSe
            |FROM range(10)
            |""".stripMargin)
       checkAnswer(spark.table(partitionTableName), expected)
+    }
+  }
+
+  test("overwrite partition table with two partition columns") {
+    val commitClazz = classOf[UserParquetOutputCommitter].getName
+    sparkContext.hadoopConfiguration.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key, commitClazz)
+
+    testWithPartitionTable2 {
+      val expected = Range(0, 10).flatMap(k => Seq(Row(k, 1, 1), Row(k, 1, 2), Row(k, 2, 2)))
+
+      sql(
+        s"""INSERT OVERWRITE TABLE $partitionTableName2 PARTITION (part1, part2)
+           |SELECT id, 1, 1
+           |FROM range(5)
+           |""".stripMargin)
+
+      sql(
+        s"""INSERT OVERWRITE TABLE $partitionTableName2 PARTITION (part1, part2)
+           |SELECT /*+ REPARTITION(2) */ id, 1, 1
+           |FROM range(10)
+           |UNION ALL
+           |SELECT /*+ REPARTITION(2) */ id, 1, 2
+           |FROM range(10)
+           |UNION ALL
+           |SELECT /*+ REPARTITION(2) */ id, 2, 2
+           |FROM range(10)
+           |""".stripMargin)
+      checkAnswer(spark.table(partitionTableName2), expected)git
     }
   }
 }
