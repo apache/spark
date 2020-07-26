@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -48,7 +48,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 abstract class ModifiedDateFilter(sparkSession: SparkSession,
                                   hadoopConf: Configuration,
-                                  options: Map[String, String])
+                                  options: CaseInsensitiveMap[String])
     extends PathFilterStrategy(sparkSession, hadoopConf, options) {
   val timeZoneId: String = options.getOrElse(DateTimeUtils.TIMEZONE_OPTION,
                                              SQLConf.get.sessionLocalTimeZone)

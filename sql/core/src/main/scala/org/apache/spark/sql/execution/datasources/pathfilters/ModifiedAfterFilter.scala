@@ -21,7 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 
 /**
  * [SPARK-31962]
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
  */
 case class ModifiedAfterFilter(sparkSession: SparkSession,
                                hadoopConf: Configuration,
-                               options: Map[String, String])
+                               options: CaseInsensitiveMap[String])
     extends ModifiedDateFilter(sparkSession, hadoopConf, options)
     with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
@@ -52,8 +52,8 @@ case class ModifiedAfterFilter(sparkSession: SparkSession,
 case object ModifiedAfterFilter extends PathFilterObject {
   def get(sparkSession: SparkSession,
           configuration: Configuration,
-          options: Map[String, String]): ModifiedAfterFilter = {
+          options: CaseInsensitiveMap[String]): ModifiedAfterFilter = {
     new ModifiedAfterFilter(sparkSession, configuration, options)
   }
-  def strategy(): String = "modifiedAfter"
+  def strategy(): String = "modifiedafter"
 }

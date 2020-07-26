@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.pathfilters
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 object PathFilterFactory {
   PathFilterStrategies.register(ModifiedAfterFilter)
@@ -27,7 +28,7 @@ object PathFilterFactory {
   PathFilterStrategies.register(PathGlobFilter)
   def create(sparkSession: SparkSession,
              conf: Configuration,
-             parameters: Map[String, String]): Iterable[FileIndexFilter] = {
+             parameters: CaseInsensitiveMap[String]): Iterable[FileIndexFilter] = {
     PathFilterStrategies.get(sparkSession, conf, parameters)
   }
 }
