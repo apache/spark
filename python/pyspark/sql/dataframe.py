@@ -674,7 +674,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. note:: The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
         """
         self.is_cached = True
-        self._jdf.cache()
+        self.persist(StorageLevel.MEMORY_AND_DISK)
         return self
 
     @since(1.3)
