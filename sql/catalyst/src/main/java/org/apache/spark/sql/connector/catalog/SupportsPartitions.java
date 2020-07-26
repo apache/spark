@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
 import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
 
 /**
- * A partition interface of {@link Table} to indicate partition APIs.
+ * A partition interface of {@link Table}.
  * A partition is composed of identifier and properties,
  * and properties contains metadata information of the partition.
  * <p>
