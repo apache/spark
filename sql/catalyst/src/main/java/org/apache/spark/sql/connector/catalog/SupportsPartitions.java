@@ -19,87 +19,78 @@ package org.apache.spark.sql.connector.catalog;
 import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
+import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
 
 /**
- * Catalog methods for working with Partitions.
+ * A partition interface of {@link Table} to indicate partition APIs.
+ * A partition is composed of identifier and properties,
+ * and properties contains metadata information of the partition.
+ * <p>
+ * These APIs are used to modify table partition identifier or partition metadata,
+ * in some cases, they will change actual value of table data as well.
+ *
+ * @since 3.0.0
  */
 @Experimental
-public interface SupportsPartitions extends TableCatalog {
+public interface SupportsPartitions extends Table {
 
     /**
-     * Create partitions in an existing table, assuming it exists.
+     * Create a partition in table.
      *
-     * @param ident a table identifier
-     * @param partitions transforms to use for partitioning data in the table
-     * @param ignoreIfExists
+     * @param ident a new partition identifier
+     * @param properties the metadata of a partition
+     * @throws PartitionAlreadyExistsException If a partition already exists for the identifier
      */
-    void createPartitions(
-            Identifier ident,
-            TablePartition[] partitions,
-            Boolean ignoreIfExists);
+    void createPartition(
+            InternalRow ident,
+            Map<String, String> properties) throws PartitionAlreadyExistsException;
 
     /**
-     * Drop partitions from a table, assuming they exist.
+     * Drop a partition from table.
      *
-     * @param ident a table identifier
-     * @param partitions a list of string map for existing partitions
-     * @param ignoreIfNotExists
+     * @param ident a partition identifier
+     * @return true if a partition was deleted, false if no partition exists for the identifier
      */
-    void dropPartitions(
-            Identifier ident,
-            Map<String, String>[] partitions,
-            Boolean ignoreIfNotExists);
+    Boolean dropPartition(InternalRow ident);
 
     /**
-     * Override the specs of one or many existing table partitions, assuming they exist.
+     * Rename a Partition from old identifier to new identifier with no metadata changed.
      *
-     * @param ident a table identifier
-     * @param oldpartitions a list of string map for existing partitions to be renamed
-     * @param newPartitions a list of string map for new partitions
+     * @param oldIdent the partition identifier of the existing partition
+     * @param newIdent the new partition identifier of the partition
+     * @throws NoSuchPartitionException If the partition identifier to rename doesn't exist
+     * @throws PartitionAlreadyExistsException If the new partition identifier already exists
      */
-    void renamePartitions(
-            Identifier ident,
-            Map<String, String>[] oldpartitions,
-            Map<String, String>[] newPartitions);
+    void renamePartition(
+            InternalRow oldIdent,
+            InternalRow newIdent) throws NoSuchPartitionException, PartitionAlreadyExistsException;
 
     /**
-     * Alter one or many table partitions whose specs that match those specified in `parts`,
-     * assuming the partitions exist.
+     * Replace the partition metadata of the existing partition.
      *
-     * @param ident a table identifier
-     * @param partitions transforms to use for partitioning data in the table
+     * @param ident the partition identifier of the existing partition
+     * @param properties the new metadata of the partition
+     * @throws NoSuchPartitionException If the partition identifier to rename doesn't exist
      */
-    void alterPartitions(
-            Identifier ident,
-            TablePartition[] partitions);
+    void replacePartitionMetadata(
+            InternalRow ident,
+            Map<String, String> properties) throws NoSuchPartitionException;
 
     /**
-     * Retrieve the metadata of a table partition, assuming it exists.
+     * Retrieve the partition metadata of the existing partition.
      *
-     * @param ident a table identifier
-     * @param partition a list of string map for existing partitions
+     * @param ident a partition identifier
+     * @return the metadata of the partition
      */
-    TablePartition getPartition(
-            Identifier ident,
-            Map<String, String> partition);
+    Map<String, String> getPartitionMetadata(InternalRow ident);
 
     /**
-     * List the names of all partitions that belong to the specified table, assuming it exists.
+     * List the identifiers of all partitions that contains the ident in a table.
      *
-     * @param ident a table identifier
-     * @param partition a list of string map for existing partitions
+     * @param ident a prefix of partition identifier
+     * @return an array of Identifiers for the partitions
      */
-    String[] listPartitionNames(
-            Identifier ident,
-            Map<String, String> partition);
-
-    /**
-     * List the metadata of all partitions that belong to the specified table, assuming it exists.
-     *
-     * @param ident a table identifier
-     * @param partition a list of string map for existing partitions
-     */
-    TablePartition[] listPartitions(
-            Identifier ident,
-            Map<String, String> partition);
+    InternalRow[] listPartitionIdentifiers(InternalRow ident);
 }
