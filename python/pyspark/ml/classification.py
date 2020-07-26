@@ -2656,6 +2656,7 @@ class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationMo
     def evaluate(self, dataset):
         """
         Evaluates the model on a test dataset.
+
         :param dataset:
           Test dataset to evaluate model on, where dataset is an
           instance of :py:class:`pyspark.sql.DataFrame`
