@@ -236,7 +236,7 @@ private[spark] object TestUtils {
    * Test if a command is available.
    */
   def testCommandAvailable(command: String): Boolean = {
-    val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
+    val attempt = Try(Process(s"command -v $command").run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0
   }
 
