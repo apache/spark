@@ -18,7 +18,7 @@
 from py4j.java_gateway import JavaClass
 
 from pyspark import RDD, since
-from pyspark.sql.column import _to_seq
+from pyspark.sql.column import _to_seq, _to_java_column
 from pyspark.sql.types import *
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
@@ -88,7 +88,7 @@ class DataFrameReader(OptionUtils):
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
-        elif isinstance(schema, basestring):
+        elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
         else:
             raise TypeError("schema should be StructType or string")
@@ -184,7 +184,7 @@ class DataFrameReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.load(path))
         elif path is not None:
             if type(path) != list:
@@ -278,11 +278,11 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedBefore: an optional timestamp to only include files with
+        :param modifiedBefore: an optional timestamp to only include files with
                     modification times occurring before the specified time.  The provided timestamp
                     must be in the following format:  YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
-          :param modifiedAfter: an optional timestamp to only include files with
+        :param modifiedAfter: an optional timestamp to only include files with
                     modification times occurring after the specified time.  The provided timestamp
                     must be in the following format:  YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
@@ -322,7 +322,7 @@ class DataFrameReader(OptionUtils):
                 for x in iterator:
                     if not isinstance(x, str):
                         x = str(x)
-                    if isinstance(x, unicode):
+                    if isinstance(x, str):
                         x = x.encode("utf-8")
                     yield x
             keyed = path.mapPartitions(func)
@@ -357,11 +357,11 @@ class DataFrameReader(OptionUtils):
         :param pathGlobFilter: an optional glob pattern to only include files with paths matching
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
-         :param modifiedBefore: an optional timestamp to only include files with
+        :param modifiedBefore: an optional timestamp to only include files with
                     modification times occurring before the specified time.  The provided timestamp
                     must be in the following format:  YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
-          :param modifiedAfter: an optional timestamp to only include files with
+        :param modifiedAfter: an optional timestamp to only include files with
                     modification times occurring after the specified time.  The provided timestamp
                     must be in the following format:  YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
@@ -372,7 +372,6 @@ class DataFrameReader(OptionUtils):
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
-
         mergeSchema = options.get('mergeSchema', None)
         pathGlobFilter = options.get('pathGlobFilter', None)
         modifiedBefore = options.get('modifiedBefore', None)
@@ -414,10 +413,10 @@ class DataFrameReader(OptionUtils):
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
-        [Row(value=u'hello'), Row(value=u'this')]
+        [Row(value='hello'), Row(value='this')]
         >>> df = spark.read.text('python/test_support/sql/text-test.txt', wholetext=True)
         >>> df.collect()
-        [Row(value=u'hello\\nthis')]
+        [Row(value='hello\\nthis')]
         """
 
         self._set_opts(
@@ -822,7 +821,7 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]
 
-        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+        if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
@@ -847,7 +846,7 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]
 
-        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+        if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.sortBy(col, _to_seq(self._spark._sc, cols))
