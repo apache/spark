@@ -73,20 +73,11 @@ class HadoopMapReduceCommitProtocol(
    */
   private val hasValidPath = Try { new Path(path) }.isSuccess
 
-  /**
-   * Tracks files staged by this task for absolute output paths. These outputs are not managed by
-   * the Hadoop OutputCommitter, so we must move these to their final locations on job commit.
-   *
-   * The mapping is from the temp output path to the final desired output path of the file.
-   */
-  @transient private var addedAbsPathFiles: mutable.Map[String, String] = null
+  @transient private var workPath: Path = null
 
-  /**
-   * Tracks partitions with default path that have new files written into them by this task,
-   * e.g. a=1/b=2. Files under these partitions will be saved into staging directory and moved to
-   * destination directory at the end, if `dynamicPartitionOverwrite` is true.
-   */
-  @transient private var partitionPaths: mutable.Set[String] = null
+  @transient private var outputPath: Path = null
+
+  @transient private var committedPaths: mutable.Set[String] = null
 
   /**
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
@@ -108,32 +99,22 @@ class HadoopMapReduceCommitProtocol(
       taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
     val filename = getFilename(taskContext, ext)
 
-    dir.map(partitionPaths += _)
-
-    val stagingDir: Path = committer match {
-      case f: FileOutputCommitter =>
-        new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
-      case _ => new Path(path)
-    }
-
     dir.map { d =>
-      new Path(new Path(stagingDir, d), filename).toString
+      new Path(new Path(workPath, d), filename).toString
     }.getOrElse {
-      new Path(stagingDir, filename).toString
+      new Path(workPath, filename).toString
     }
   }
 
   override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
+                                       taskContext: TaskAttemptContext, absoluteDir: String,
+                                       ext: String): String = {
     val filename = getFilename(taskContext, ext)
-    val absOutputPath = new Path(absoluteDir, filename).toString
+    outputPath = new Path(absoluteDir)
 
     // Include a UUID here to prevent file collisions for one task writing to different dirs.
     // In principle we could include hash(absoluteDir) instead but this is simpler.
-    val tmpOutputPath = new Path(stagingDir, UUID.randomUUID().toString() + "-" + filename).toString
-
-    addedAbsPathFiles(tmpOutputPath) = absOutputPath
-    tmpOutputPath
+    new Path(workPath, UUID.randomUUID().toString() + "-" + filename).toString
   }
 
   protected def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
@@ -160,48 +141,38 @@ class HadoopMapReduceCommitProtocol(
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
     committer.setupJob(jobContext)
+
+    outputPath = committer match {
+      case f: FileOutputCommitter =>
+        new Path(Option(f.getOutputPath).map(_.toString).getOrElse(path))
+      case _ => new Path(path)
+    }
+    committedPaths = mutable.Set[String]()
   }
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     committer.commitJob(jobContext)
 
     if (hasValidPath) {
-      val (allAbsPathFiles, allPartitionPaths) =
-        taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])]).unzip
+      val outputPaths = taskCommits.map(_.obj.asInstanceOf[mutable.Set[String]]).flatten
+      val dstPathsMap =
+        outputPaths.map { path =>
+          new Path(path) -> new Path(path.replace(stagingDir.toString, outputPath.toString))
+        }.toMap
       val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
 
-      val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
-      logDebug(s"Committing files staged for absolute locations $filesToMove")
+      logDebug(s"Committing files staged for absolute locations $outputPaths")
       if (dynamicPartitionOverwrite) {
-        val absPartitionPaths = filesToMove.values.map(new Path(_).getParent).toSet
-        logDebug(s"Clean up absolute partition directories for overwriting: $absPartitionPaths")
-        absPartitionPaths.foreach(fs.delete(_, true))
+        val partitionPaths = dstPathsMap.values.map(_.getParent).toSet
+        logDebug(s"Clean up absolute partition directories for overwriting: ${partitionPaths}")
+        partitionPaths.foreach(fs.delete(_, true))
       }
-      for ((src, dst) <- filesToMove) {
-        fs.rename(new Path(src), new Path(dst))
+      for ((src, dst) <- dstPathsMap) {
+        recursiveRenameFile(fs, src, dst)
       }
-
-      if (dynamicPartitionOverwrite) {
-        val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
-        logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
-        for (part <- partitionPaths) {
-          val finalPartPath = new Path(path, part)
-          if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
-            // According to the official hadoop FileSystem API spec, delete op should assume
-            // the destination is no longer present regardless of return value, thus we do not
-            // need to double check if finalPartPath exists before rename.
-            // Also in our case, based on the spec, delete returns false only when finalPartPath
-            // does not exist. When this happens, we need to take action if parent of finalPartPath
-            // also does not exist(e.g. the scenario described on SPARK-23815), because
-            // FileSystem API spec on rename op says the rename dest(finalPartPath) must have
-            // a parent that exists, otherwise we may get unexpected result on the rename.
-            fs.mkdirs(finalPartPath.getParent)
-          }
-          fs.rename(new Path(stagingDir, part), finalPartPath)
-        }
+      for (outputPath <- dstPathsMap.keySet) {
+        fs.delete(outputPath, true)
       }
-
-      fs.delete(stagingDir, true)
     }
   }
 
@@ -221,8 +192,8 @@ class HadoopMapReduceCommitProtocol(
     }
     try {
       if (hasValidPath) {
-        val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
-        fs.delete(stagingDir, true)
+        val fs = workPath.getFileSystem(jobContext.getConfiguration)
+        fs.delete(workPath, true)
       }
     } catch {
       case e: IOException =>
@@ -233,8 +204,18 @@ class HadoopMapReduceCommitProtocol(
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
     committer = setupCommitter(taskContext)
     committer.setupTask(taskContext)
-    addedAbsPathFiles = mutable.Map[String, String]()
-    partitionPaths = mutable.Set[String]()
+    committedPaths = mutable.Set[String]()
+    workPath = committer match {
+      case f: FileOutputCommitter =>
+        new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
+      case _ => new Path(path)
+    }
+
+    outputPath = committer match {
+      case f: FileOutputCommitter =>
+        new Path(Option(f.getOutputPath).map(_.toString).getOrElse(path))
+      case _ => new Path(path)
+    }
   }
 
   /**
@@ -287,7 +268,7 @@ class HadoopMapReduceCommitProtocol(
       logInfo(s"No need to commit output of task because needsTaskCommit=false: $attemptId")
     }
 
-    new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
+    new TaskCommitMessage(committedPaths)
   }
 
   /**
@@ -299,17 +280,14 @@ class HadoopMapReduceCommitProtocol(
    */
   override def abortTask(taskContext: TaskAttemptContext): Unit = {
     try {
-      committer.abortTask(taskContext)
-    } catch {
-      case e: IOException =>
-        logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
-    }
-    // best effort cleanup of other staged files
-    try {
-      for ((src, _) <- addedAbsPathFiles) {
-        val tmp = new Path(src)
-        tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
+      val fs = workPath.getFileSystem(taskContext.getConfiguration)
+      committedPaths.map { pathString =>
+        val path = new Path(pathString)
+        if (fs.exists(path)) {
+          fs.delete(path, true)
+        }
       }
+      committer.abortTask(taskContext)
     } catch {
       case e: IOException =>
         logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
@@ -320,16 +298,9 @@ class HadoopMapReduceCommitProtocol(
     val attemptID = taskContext.getTaskAttemptID
 
     try {
-      val fs = stagingDir.getFileSystem(taskContext.getConfiguration)
-      val tmpOutputPath =
-        committer match {
-          case f: FileOutputCommitter =>
-            new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
-          case _ => new Path(path)
-        }
-
-      logDebug(s"Committing task attempt files($tmpOutputPath) to $stagingDir")
-      recursiveRenameFile(fs, tmpOutputPath, stagingDir)
+      logDebug(s"Committing task attempt files from $workPath to $stagingDir")
+      val fs = workPath.getFileSystem(taskContext.getConfiguration)
+      recursiveRenameFile(fs, workPath, stagingDir)
       committer.commitTask(taskContext)
       logInfo(s"$attemptID: Committed")
     } catch {
@@ -340,19 +311,40 @@ class HadoopMapReduceCommitProtocol(
     }
   }
 
+  /**
+   *
+   * @param fs
+   * @param src
+   * @param dst
+   */
   def recursiveRenameFile(fs: FileSystem, src: Path, dst: Path): Unit = {
     src match {
-      case _ if !fs.exists(src) => throw new IOException(s"Path $src not exists!")
-      case _ if fs.isFile(src) =>
+      case _ if !fs.exists(src) =>
+        throw new IOException(s"Path $src not exists!")
+
+      case _ if fs.getFileStatus(src).isFile =>
         if (!fs.exists(dst.getParent)) {
           fs.mkdirs(dst.getParent)
         }
         fs.rename(src, dst)
-      case _ if fs.isDirectory(src) =>
+        addCommitedPath(fs, dst)
+
+      case _ if fs.getFileStatus(src).isDirectory =>
         fs.listStatus(src).map(_.getPath).foreach { file =>
           recursiveRenameFile(fs, file, new Path(dst, file.getName))
         }
+
       case _ =>
     }
+  }
+
+  def addCommitedPath(fs: FileSystem, path: Path): Unit = path match {
+    case _ if fs.getFileStatus(path).isFile =>
+      committedPaths += path.toString
+
+    case _ if fs.getFileStatus(path).isDirectory =>
+      fs.listStatus(path).map(_.getPath).foreach(addCommitedPath(fs, _))
+
+    case _ =>
   }
 }
