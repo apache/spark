@@ -68,9 +68,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       numExecutors = numExecs,
       timeout = 60000) // 60s
 
-    val input = sc.parallelize(1 to numParts, numParts)
+    val input = sc.parallelize(1 to numParts, numParts).barrier()
     val accum = sc.longAccumulator("mapperRunAccumulator")
-    input.count()
 
     // Create a new RDD where we have sleep in each partition, we are also increasing
     // the value of accumulator in each partition
