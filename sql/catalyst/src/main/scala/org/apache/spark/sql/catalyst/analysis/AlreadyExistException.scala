@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.types.StructType
 
 /**
  * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception
@@ -48,14 +50,22 @@ class TableAlreadyExistsException(message: String) extends AnalysisException(mes
 class TempTableAlreadyExistsException(table: String)
   extends TableAlreadyExistsException(s"Temporary view '$table' already exists")
 
-class PartitionAlreadyExistsException(db: String, table: String, spec: TablePartitionSpec)
-  extends AnalysisException(
-    s"Partition already exists in table '$table' database '$db':\n" + spec.mkString("\n"))
+class PartitionAlreadyExistsException(message: String) extends AnalysisException(message) {
+  def this(db: String, table: String, spec: TablePartitionSpec) = {
+    this(s"Partition already exists in table '$table' database '$db':\n" + spec.mkString("\n"))
+  }
 
-class PartitionsAlreadyExistException(db: String, table: String, specs: Seq[TablePartitionSpec])
-  extends AnalysisException(
-    s"The following partitions already exists in table '$table' database '$db':\n"
+  def this(db: String, table: String, specs: Seq[TablePartitionSpec]) = {
+    this(s"The following partitions already exists in table '$table' database '$db':\n"
       + specs.mkString("\n===\n"))
+  }
+
+  def this(tableName: String, partitionIdent: InternalRow, partitionSchema: StructType) = {
+    this(s"Partition " +
+      s"${partitionIdent.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
+        .map( kv => s"${kv._1} -> ${kv._2}").mkString(",")} in $tableName exists")
+  }
+}
 
 class FunctionAlreadyExistsException(db: String, func: String)
   extends AnalysisException(s"Function '$func' already exists in database '$db'")
