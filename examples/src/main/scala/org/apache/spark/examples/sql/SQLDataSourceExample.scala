@@ -183,6 +183,34 @@ object SQLDataSourceExample {
     // $example off:schema_merging$
   }
 
+  private def runParquetConversionModeExample(spark: SparkSession): Unit = {
+    // $example on:conversion_mode$
+    // This is used to implicitly convert an RDD to a DataFrame.
+    import spark.implicits._
+
+    // Write original data type in the parquet file:
+    // message schema {
+    //   required int32 value;
+    // }
+    spark.sparkContext.makeRDD(1 to 2).toDF("value").write.parquet("d.parquet")
+
+    // Specifies the required schema:
+    // age long
+    val df = spark.read
+      .option("conversionMode", "NO_SIDE_EFFECTS").schema("age long").parquet("d.parquet")
+    df.show()
+    // +-----+
+    // |value|
+    // +-----+
+    // |    1|
+    // |    2|
+    // +-----+
+    df.printSchema()
+    // root
+    // |-- value: long (nullable = true)
+    // $example off:conversion_mode$
+  }
+
   private def runJsonDatasetExample(spark: SparkSession): Unit = {
     // $example on:json_dataset$
     // Primitive types (Int, String, etc) and Product types (case classes) encoders are
