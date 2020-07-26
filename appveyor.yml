@@ -42,7 +42,9 @@ install:
   # Install maven and dependencies
   - ps: .\dev\appveyor-install-dependencies.ps1
   # Required package for R unit tests
-  - cmd: Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow'), repos='https://cloud.r-project.org/')"
+  - cmd: Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
+  # SPARK-32451: arrow 1.0.0 breaks unit tests
+  - cmd: Rscript -e "install.packages('https://cran.r-project.org/src/contrib/Archive/arrow/arrow_0.17.1.tar.gz', repos=NULL, type='source')"
   - cmd: Rscript -e "pkg_list <- as.data.frame(installed.packages()[,c(1, 3:4)]); pkg_list[is.na(pkg_list$Priority), 1:2, drop = FALSE]"
 
 build_script:
