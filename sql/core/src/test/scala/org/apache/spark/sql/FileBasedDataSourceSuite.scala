@@ -34,7 +34,7 @@ import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, stringToFile}
+import org.apache.spark.sql.catalyst.util.{stringToFile, DateTimeUtils}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.pathfilters.{ModifiedAfterFilter, ModifiedBeforeFilter, PathFilterFactory, PathGlobFilter}
