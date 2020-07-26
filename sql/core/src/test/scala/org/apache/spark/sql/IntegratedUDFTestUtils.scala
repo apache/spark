@@ -204,7 +204,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         TestUtils.testCommandAvailable("python3")) {
       "python3"
     } else {
-      "python"
+      "python3"
     }
   }
 
