@@ -28,6 +28,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
 
   val scalaTestUDF = TestScalaUDF(name = "scalaUDF")
   val pythonTestUDF = TestPythonUDF(name = "pyUDF")
+  assume(pythonExec.equals("python3"))
   assume(isPythonAvailable)
   assume(shouldTestPythonUDFs)
 
