@@ -700,7 +700,7 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-31962 - PathFilterStrategies - modifiedAfter option") {
-    val options =CaseInsensitiveMap[String](
+    val options = CaseInsensitiveMap[String](
       Map("modifiedAfter"->"2010-10-01T01:01:00"))
     val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(), options)
     assert(strategy.head.isInstanceOf[ModifiedAfterFilter])
