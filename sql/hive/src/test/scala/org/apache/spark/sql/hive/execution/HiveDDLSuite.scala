@@ -2854,4 +2854,24 @@ class HiveDDLSuite
       assert(sql("SELECT * FROM t2 WHERE c = 'A'").collect().isEmpty)
     }
   }
+
+  test("SPARK-32445: Make NullType.sql as VOID to support hive") {
+    withView("v1") {
+      sql("create view v1 as select null as c")
+      val df = sql("select * from v1")
+      assert(df.schema.fields.head.dataType == NullType)
+      checkAnswer(
+        df,
+        Row("NULL")
+      )
+
+      sql("alter view v1 as select null as c1, 1 as c2")
+      val df2 = sql("select * from v1")
+      assert(df2.schema.fields.head.dataType == NullType)
+      checkAnswer(
+        df2,
+        Row("NULL", 1)
+      )
+    }
+  }
 }
