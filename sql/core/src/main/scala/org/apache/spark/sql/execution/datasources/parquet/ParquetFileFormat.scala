@@ -252,6 +252,8 @@ class ParquetFileFormat
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+    val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
+    val conversionMode = parquetOptions.conversionMode
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)

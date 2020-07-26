@@ -24,6 +24,7 @@ import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.ParquetRowConversionMode
 
 /**
  * Options for the Parquet data source.
@@ -69,11 +70,22 @@ class ParquetOptions(
     .get(MERGE_SCHEMA)
     .map(_.toBoolean)
     .getOrElse(sqlConf.isParquetSchemaMergingEnabled)
+
+  val conversionMode: ParquetRowConversionMode.Value = {
+    val validValues = ParquetRowConversionMode.values.map(_.toString)
+    parameters.get(CONVERSION_MODE).map(_.toUpperCase(Locale.ROOT)) match {
+      case Some(mode) if validValues.contains(mode) => ParquetRowConversionMode.withName(mode)
+      case None => sqlConf.parquetRowConversionMode
+      case Some(v) => throw new IllegalArgumentException(
+        s"The value of $CONVERSION_MODE should be one of ${validValues.mkString(", ")}, but was $v")
+    }
+  }
 }
 
 
 object ParquetOptions {
   val MERGE_SCHEMA = "mergeSchema"
+  val CONVERSION_MODE = "conversionMode"
 
   // The parquet compression short names
   private val shortParquetCompressionCodecNames = Map(
