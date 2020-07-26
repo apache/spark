@@ -418,7 +418,6 @@ class DataFrameReader(OptionUtils):
         >>> df.collect()
         [Row(value='hello\\nthis')]
         """
-
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup, modifiedBefore=modifiedBefore,
