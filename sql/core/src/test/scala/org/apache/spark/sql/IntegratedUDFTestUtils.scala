@@ -83,7 +83,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
   private lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
 
-  lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
+  private lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
 
   private lazy val isPySparkAvailable: Boolean = isPythonAvailable && Try {
     Process(
@@ -203,7 +203,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     } else if (pythonExec.equalsIgnoreCase("python") &&
         TestUtils.testCommandAvailable("python3")) {
       "python3"
-    } else if {
+    } else {
       "python"
     }
   }
