@@ -64,7 +64,7 @@ class PartitionAlreadyExistsException(message: String) extends AnalysisException
 
 class PartitionsAlreadyExistException(db: String, table: String, specs: Seq[TablePartitionSpec])
   extends AnalysisException(
-    s"The following partitions already exists in table '$table' database '$db':\n"
+    s"The following partitions already exists in table '$table' database '$db':\n")
 
 class FunctionAlreadyExistsException(db: String, func: String)
   extends AnalysisException(s"Function '$func' already exists in database '$db'")
