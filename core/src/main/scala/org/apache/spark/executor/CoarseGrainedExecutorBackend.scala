@@ -291,40 +291,41 @@ private[spark] class CoarseGrainedExecutorBackend(
       // code paths.
 
       val shutdownThread = new Thread("wait-for-blocks-to-migrate") {
-        var lastTaskRunningTime = System.nanoTime()
-        val sleep_time = 1000 // 1s
+        override def run(): Unit = {
+          var lastTaskRunningTime = System.nanoTime()
+          val sleep_time = 1000 // 1s
 
-        while (true) {
-          logInfo("Checking to see if we can shutdown.")
-          if (executor == null || executor.numRunningTasks == 0) {
-            if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
-              logInfo("No running tasks, checking migrations")
-              val (migrationTime, allBlocksMigrated) = env.blockManager.lastMigrationInfo()
-              // We can only trust allBlocksMigrated boolean value if there were no tasks running
-              // since the start of computing it.
-              if (allBlocksMigrated && (migrationTime > lastTaskRunningTime)) {
-                logInfo("No running tasks, all blocks migrated, stopping.")
-                exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+          while (true) {
+            logInfo("Checking to see if we can shutdown.")
+            if (executor == null || executor.numRunningTasks == 0) {
+              if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+                logInfo("No running tasks, checking migrations")
+                val (migrationTime, allBlocksMigrated) = env.blockManager.lastMigrationInfo()
+                // We can only trust allBlocksMigrated boolean value if there were no tasks running
+                // since the start of computing it.
+                if (allBlocksMigrated && (migrationTime > lastTaskRunningTime)) {
+                  logInfo("No running tasks, all blocks migrated, stopping.")
+                  exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+                } else {
+                  logInfo("All blocks not yet migrated.")
+                }
               } else {
-                logInfo("All blocks not yet migrated.")
+                logInfo("No running tasks, no block migration configured, stopping.")
+                exitExecutor(0, "Finished decommissioning", notifyDriver = true)
               }
+              Thread.sleep(sleep_time)
             } else {
-              logInfo("No running tasks, no block migration configured, stopping.")
-              exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+              logInfo("Blocked from shutdown by running ${executor.numRunningtasks} tasks")
+              // If there is a running task it could store blocks, so make sure we wait for a
+              // migration loop to complete after the last task is done.
+              Thread.sleep(sleep_time)
+              lastTaskRunningTime = System.nanoTime()
             }
-            Thread.sleep(sleep_time)
-          } else {
-            logInfo("Blocked from shutdown by running ${executor.numRunningtasks} tasks")
-            // If there is a running task it could store blocks, so make sure we wait for a
-            // migration loop to complete after the last task is done.
-            Thread.sleep(sleep_time)
-            lastTaskRunningTime = System.nanoTime()
           }
-        }
-      }.setDaemon(true)
-      logInfo("Will exit when finished decommissioning")
-      // Return true since we are handling a signal
-      true
+        }.setDaemon(true)
+        logInfo("Will exit when finished decommissioning")
+        // Return true since we are handling a signal
+        true
     } catch {
       case e: Exception =>
         logError("Unexpected error while decommissioning self", e)
