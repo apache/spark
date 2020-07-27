@@ -1314,6 +1314,8 @@ private[spark] class BlockManager(
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
+    // The decommissioning check is at the start of the doPut so that if we are
+    // computing and attempting to put an iterator the put can succeed.
     if (isDecommissioning()) {
       throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
     }

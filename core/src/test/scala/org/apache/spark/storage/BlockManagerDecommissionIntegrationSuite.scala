@@ -34,7 +34,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     with ResetSystemProperties with Eventually {
 
   val numExecs = 3
-  val numParts = 3
+  val numParts = numExecs * 2
 
   test(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor") {
@@ -67,6 +67,13 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     TestUtils.waitUntilExecutorsUp(sc = sc,
       numExecutors = numExecs,
       timeout = 60000) // 60s
+
+    // Wait for the executors to all be able to receive tasks
+    eventually(timeout(60.seconds), interval(1.second)) {
+      val rdd = sc.parallelize(1.to(numExecs * 3), numExecs * 3)
+      val numExecsUsed = rdd.map{ x => SparkEnv.get.executorId }.distinct().count()
+      assert(numExecsUsed === numExecs)
+    }
 
     val input = sc.parallelize(1 to numParts, numParts)
     val accum = sc.longAccumulator("mapperRunAccumulator")
@@ -191,8 +198,10 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isInstanceOf[ShuffleIndexBlockId]
         }.size
-        assert(numDataLocs === 1, s"Expect shuffle data block updates in ${blocksUpdated}")
-        assert(numIndexLocs === 1, s"Expect shuffle index block updates in ${blocksUpdated}")
+        // Since we have more partitions than executors we should have at least one shuffle block
+        // migrated.
+        assert(numDataLocs > 1, s"Expect shuffle data block updates in ${blocksUpdated}")
+        assert(numIndexLocs > 1, s"Expect shuffle index block updates in ${blocksUpdated}")
       }
     }
 
