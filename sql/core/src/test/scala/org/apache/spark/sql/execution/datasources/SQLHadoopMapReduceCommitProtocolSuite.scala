@@ -202,7 +202,7 @@ class SQLHadoopMapReduceCommitProtocolSuite extends QueryTest with SharedSparkSe
            |SELECT /*+ REPARTITION(2) */ id, 2, 2
            |FROM range(10)
            |""".stripMargin)
-      checkAnswer(spark.table(partitionTableName2), expected)git
+      checkAnswer(spark.table(partitionTableName2), expected)
     }
   }
 }
