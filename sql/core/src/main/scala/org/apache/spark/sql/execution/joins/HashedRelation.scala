@@ -81,33 +81,6 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    */
   def asReadOnlyCopy(): HashedRelation
 
-
-  /**
-   * Normally HashedRelation is built from an Source (input: Iterator[InternalRow]).
-   * This indicates the original input is empty.
-   * Note that, the hashed relation can be empty despite the input being not empty,
-   * since the hashed relation skips over null keys.
-   */
-  var isOriginalInputEmpty: Boolean
-
-  def setOriginalInputEmtpy(isOriginalInputEmpty: Boolean): HashedRelation = {
-    this.isOriginalInputEmpty = isOriginalInputEmpty
-    this
-  }
-
-  /**
-   * It's only used in null aware anti join.
-   * This will be set true if Source (input: Iterator[InternalRow]) contains a key,
-   * which has all null columns.
-   */
-  var allNullColumnKeyExistsInOriginalInput: Boolean
-
-  def setAllNullColumnKeyExistsInOriginalInput(
-      allNullColumnKeyExistsInOriginalInput: Boolean): HashedRelation = {
-    this.allNullColumnKeyExistsInOriginalInput = allNullColumnKeyExistsInOriginalInput
-    this
-  }
-
   /**
    * Release any used resources.
    */
@@ -118,7 +91,6 @@ private[execution] object HashedRelation {
 
   /**
    * Create a HashedRelation from an Iterator of InternalRow.
-   * If isNullAware is true, UnsafeHashedRelation will store rows with null keys.
    */
   def apply(
       input: Iterator[InternalRow],
@@ -136,8 +108,10 @@ private[execution] object HashedRelation {
         0)
     }
 
-    if (key.length == 1 && key.head.dataType == LongType) {
-      LongHashedRelation(input, key, sizeEstimate, mm)
+    if (isNullAware && !input.hasNext) {
+      new EmptyHashedRelation
+    } else if (key.length == 1 && key.head.dataType == LongType) {
+      LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     } else {
       UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     }
@@ -163,9 +137,6 @@ private[joins] class UnsafeHashedRelation(
 
   override def asReadOnlyCopy(): UnsafeHashedRelation = {
     new UnsafeHashedRelation(numKeys, numFields, binaryMap)
-      .setOriginalInputEmtpy(this.isOriginalInputEmpty)
-      .setAllNullColumnKeyExistsInOriginalInput(this.allNullColumnKeyExistsInOriginalInput)
-      .asInstanceOf[UnsafeHashedRelation]
   }
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
@@ -235,21 +206,18 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    write(out.writeBoolean, out.writeInt, out.writeLong, out.write)
+    write(out.writeInt, out.writeLong, out.write)
   }
 
   override def write(kryo: Kryo, out: Output): Unit = Utils.tryOrIOException {
-    write(out.writeBoolean, out.writeInt, out.writeLong, out.write)
+    write(out.writeInt, out.writeLong, out.write)
   }
 
   private def write(
-      writeBoolean: (Boolean) => Unit,
       writeInt: (Int) => Unit,
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
     writeInt(numFields)
-    writeBoolean(isOriginalInputEmpty)
-    writeBoolean(allNullColumnKeyExistsInOriginalInput)
     // TODO: move these into BytesToBytesMap
     writeLong(binaryMap.numKeys())
     writeLong(binaryMap.numValues())
@@ -275,17 +243,14 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    read(() => in.readBoolean(), () => in.readInt(), () => in.readLong(), in.readFully)
+    read(() => in.readInt(), () => in.readLong(), in.readFully)
   }
 
   private def read(
-      readBoolean: () => Boolean,
       readInt: () => Int,
       readLong: () => Long,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
     numFields = readInt()
-    isOriginalInputEmpty = readBoolean()
-    allNullColumnKeyExistsInOriginalInput = readBoolean()
     resultRow = new UnsafeRow(numFields)
     val nKeys = readLong()
     val nValues = readLong()
@@ -338,11 +303,8 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
-    read(() => in.readBoolean(), () => in.readInt(), () => in.readLong(), in.readBytes)
+    read(() => in.readInt(), () => in.readLong(), in.readBytes)
   }
-
-  override var isOriginalInputEmpty: Boolean = _
-  override var allNullColumnKeyExistsInOriginalInput: Boolean = _
 }
 
 private[joins] object UnsafeHashedRelation {
@@ -373,19 +335,11 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
-    val isOriginalInputEmpty = !input.hasNext
-    var allNullColumnKeyExistsInOriginalInput: Boolean = false
     while (input.hasNext) {
       val row = input.next().asInstanceOf[UnsafeRow]
       numFields = row.numFields()
       val key = keyGenerator(row)
-      if (isNullAware &&
-        !allNullColumnKeyExistsInOriginalInput &&
-        key.isNullAt(0)) {
-        allNullColumnKeyExistsInOriginalInput = true
-      }
-
-      if (isNullAware || !key.anyNull) {
+      if (!key.anyNull) {
         val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
         val success = loc.append(
           key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
@@ -396,12 +350,12 @@ private[joins] object UnsafeHashedRelation {
           throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
           // scalastyle:on throwerror
         }
+      } else if (isNullAware) {
+        return new EmptyHashedRelationWithAllNullKeys
       }
     }
 
     new UnsafeHashedRelation(key.size, numFields, binaryMap)
-        .setOriginalInputEmtpy(isOriginalInputEmpty)
-        .setAllNullColumnKeyExistsInOriginalInput(allNullColumnKeyExistsInOriginalInput)
   }
 }
 
@@ -894,11 +848,7 @@ class LongHashedRelation(
   // Needed for serialization (it is public to make Java serialization work)
   def this() = this(0, null)
 
-  override def asReadOnlyCopy(): LongHashedRelation =
-    new LongHashedRelation(nFields, map)
-    .setOriginalInputEmtpy(this.isOriginalInputEmpty)
-    .setAllNullColumnKeyExistsInOriginalInput(this.allNullColumnKeyExistsInOriginalInput)
-    .asInstanceOf[LongHashedRelation]
+  override def asReadOnlyCopy(): LongHashedRelation = new LongHashedRelation(nFields, map)
 
   override def estimatedSize: Long = map.getTotalMemoryConsumption
 
@@ -930,16 +880,12 @@ class LongHashedRelation(
 
   override def writeExternal(out: ObjectOutput): Unit = {
     out.writeInt(nFields)
-    out.writeBoolean(isOriginalInputEmpty)
-    out.writeBoolean(allNullColumnKeyExistsInOriginalInput)
     out.writeObject(map)
   }
 
   override def readExternal(in: ObjectInput): Unit = {
     nFields = in.readInt()
     resultRow = new UnsafeRow(nFields)
-    isOriginalInputEmpty = in.readBoolean()
-    allNullColumnKeyExistsInOriginalInput = in.readBoolean()
     map = in.readObject().asInstanceOf[LongToUnsafeRowMap]
   }
 
@@ -947,9 +893,6 @@ class LongHashedRelation(
    * Returns an iterator for keys of InternalRow type.
    */
   override def keys(): Iterator[InternalRow] = map.keys()
-
-  override var isOriginalInputEmpty: Boolean = _
-  override var allNullColumnKeyExistsInOriginalInput: Boolean = _
 }
 
 /**
@@ -960,15 +903,22 @@ private[joins] object LongHashedRelation {
       input: Iterator[InternalRow],
       key: Seq[Expression],
       sizeEstimate: Int,
-      taskMemoryManager: TaskMemoryManager): LongHashedRelation = {
+      taskMemoryManager: TaskMemoryManager): HashedRelation = {
+    apply(input, key, sizeEstimate, taskMemoryManager, false)
+  }
+
+  def apply(
+      input: Iterator[InternalRow],
+      key: Seq[Expression],
+      sizeEstimate: Int,
+      taskMemoryManager: TaskMemoryManager,
+      isNullAware: Boolean = false): HashedRelation = {
 
     val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)
 
     // Create a mapping of key -> rows
     var numFields = 0
-    val isOriginalInputEmpty: Boolean = !input.hasNext
-    var allNullColumnKeyExistsInOriginalInput: Boolean = false
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
       numFields = unsafeRow.numFields()
@@ -976,16 +926,61 @@ private[joins] object LongHashedRelation {
       if (!rowKey.isNullAt(0)) {
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
-      } else if (!allNullColumnKeyExistsInOriginalInput) {
-        allNullColumnKeyExistsInOriginalInput = true
+      } else if (isNullAware) {
+        return new EmptyHashedRelationWithAllNullKeys
       }
     }
     map.optimize()
     new LongHashedRelation(numFields, map)
-      .setOriginalInputEmtpy(isOriginalInputEmpty)
-      .setAllNullColumnKeyExistsInOriginalInput(allNullColumnKeyExistsInOriginalInput)
-      .asInstanceOf[LongHashedRelation]
   }
+}
+
+/**
+ * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
+ */
+class EmptyHashedRelation extends HashedRelation with Externalizable {
+  override def get(key: InternalRow): Iterator[InternalRow] = null
+
+  override def getValue(key: InternalRow): InternalRow = null
+
+  override def keyIsUnique: Boolean = true
+
+  override def keys(): Iterator[InternalRow] = null
+
+  override def asReadOnlyCopy(): EmptyHashedRelation = new EmptyHashedRelation
+
+  override def close(): Unit = {}
+
+  override def writeExternal(out: ObjectOutput): Unit = {}
+
+  override def readExternal(in: ObjectInput): Unit = {}
+
+  override def estimatedSize: Long = 0
+}
+
+/**
+ * A special HashedRelation indicates it build from a non-empty input:Iterator[InternalRow],
+ * which contains all null columns key.
+ */
+class EmptyHashedRelationWithAllNullKeys extends HashedRelation with Externalizable {
+  override def get(key: InternalRow): Iterator[InternalRow] = null
+
+  override def getValue(key: InternalRow): InternalRow = null
+
+  override def keyIsUnique: Boolean = true
+
+  override def keys(): Iterator[InternalRow] = null
+
+  override def asReadOnlyCopy(): EmptyHashedRelationWithAllNullKeys =
+    new EmptyHashedRelationWithAllNullKeys
+
+  override def close(): Unit = {}
+
+  override def writeExternal(out: ObjectOutput): Unit = {}
+
+  override def readExternal(in: ObjectInput): Unit = {}
+
+  override def estimatedSize: Long = 0
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */

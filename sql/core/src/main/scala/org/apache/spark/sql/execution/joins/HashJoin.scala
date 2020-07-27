@@ -268,11 +268,6 @@ trait HashJoin extends BaseJoinExec {
   private def antiJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
-    // fast stop if isOriginalInputEmpty = true, should accept all rows in streamedSide
-    if (hashedRelation.isOriginalInputEmpty) {
-      return streamIter
-    }
-
     val joinKeys = streamSideKeyGenerator()
     val joinedRow = new JoinedRow
 

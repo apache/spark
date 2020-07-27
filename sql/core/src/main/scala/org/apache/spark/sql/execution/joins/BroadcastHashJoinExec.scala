@@ -146,9 +146,9 @@ case class BroadcastHashJoinExec(
       streamedPlan.execute().mapPartitionsInternal { streamedIter =>
         val hashed = broadcastRelation.value.asReadOnlyCopy()
         TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-        if (hashed.isOriginalInputEmpty) {
+        if (hashed.isInstanceOf[EmptyHashedRelation]) {
           streamedIter
-        } else if (hashed.allNullColumnKeyExistsInOriginalInput) {
+        } else if (hashed.isInstanceOf[EmptyHashedRelationWithAllNullKeys]) {
           Iterator.empty
         } else {
           val keyGenerator = UnsafeProjection.create(
@@ -490,27 +490,23 @@ case class BroadcastHashJoinExec(
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // fast stop if isOriginalInputEmpty = true, should accept all rows in streamedSide
-    if (broadcastRelation.value.isOriginalInputEmpty) {
-      return s"""
-                |// Anti Join isOriginalInputEmpty(true) accept all
-                |$numOutput.add(1);
-                |${consume(ctx, input)}
-          """.stripMargin
-    }
-
     if (isNullAwareAntiJoin) {
-      if (broadcastRelation.value.allNullColumnKeyExistsInOriginalInput) {
+      if (broadcastRelation.value.isInstanceOf[EmptyHashedRelation]) {
+        return s"""
+                  |// NAAJ Join EmptyHashedRelation accept all
+                  |$numOutput.add(1);
+                  |${consume(ctx, input)}
+            """.stripMargin
+      } else if (broadcastRelation.value.isInstanceOf[EmptyHashedRelationWithAllNullKeys]) {
         return s"""
                   |// NAAJ
-                  |// isOriginalInputEmpty(false) allNullColumnKeyExistsInOriginalInput(true)
+                  |// EmptyHashedRelationWithAllNullKeys
                   |// reject all
             """.stripMargin
       } else {
         val found = ctx.freshName("found")
         return s"""
                   |// NAAJ
-                  |// isOriginalInputEmpty(false) allNullColumnKeyExistsInOriginalInput(false)
                   |boolean $found = false;
                   |// generate join key for stream side
                   |${keyEv.code}
