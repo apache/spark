@@ -116,6 +116,14 @@ trait CachedBatchSerializer extends Serializable {
   def supportsColumnarOutput(schema: StructType): Boolean
 
   /**
+   * The exact java types of the columns that are output in columnar processing mode. This
+   * is a performance optimization for code generation and is optional.
+   * @param attributes the attributes to be output.
+   * @param conf the config for the query that will read the data.
+   */
+  def vectorTypes(attributes: Seq[Attribute], conf: SQLConf): Option[Seq[String]] = None
+
+  /**
    * Decompress the cached data into a ColumnarBatch. This currently is only used if
    * `supportsColumnar()` returned true for the associated schema, but there are other checks
    * that can force row based output. One of the main advantages of doing columnar output over row

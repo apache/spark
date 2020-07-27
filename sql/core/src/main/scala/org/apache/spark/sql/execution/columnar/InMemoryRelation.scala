@@ -120,6 +120,15 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       case _ => false
     })
 
+  override def vectorTypes(attributes: Seq[Attribute], conf: SQLConf): Option[Seq[String]] =
+    Option(Seq.fill(attributes.length)(
+      if (!conf.offHeapColumnVectorEnabled) {
+        classOf[OnHeapColumnVector].getName
+      } else {
+        classOf[OffHeapColumnVector].getName
+      }
+    ))
+
   override def decompressColumnar(
       input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],

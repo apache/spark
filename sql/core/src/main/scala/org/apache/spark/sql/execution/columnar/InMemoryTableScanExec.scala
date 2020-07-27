@@ -28,7 +28,6 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.vectorized._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-
 case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
@@ -55,13 +54,7 @@ case class InMemoryTableScanExec(
       relation = relation.canonicalized.asInstanceOf[InMemoryRelation])
 
   override def vectorTypes: Option[Seq[String]] =
-    Option(Seq.fill(attributes.length)(
-      if (!conf.offHeapColumnVectorEnabled) {
-        classOf[OnHeapColumnVector].getName
-      } else {
-        classOf[OffHeapColumnVector].getName
-      }
-    ))
+    relation.cacheBuilder.serializer.vectorTypes(attributes, conf)
 
   /**
    * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
