@@ -83,7 +83,12 @@ object IntegratedUDFTestUtils extends SQLHelper {
     sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
   private lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
 
-  private lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
+  private lazy val isPythonAvailable: Boolean = {
+    if (!TestUtils.testCommandAvailable(pythonExec)) {
+      throw new RuntimeException(s"Python executable [$pythonExec] is unavailable.")
+    }
+    true
+  }
 
   private lazy val isPySparkAvailable: Boolean = isPythonAvailable && Try {
     Process(
