@@ -984,7 +984,7 @@ private[hive] object HiveClientImpl extends Logging {
     val typeString = if (c.metadata.contains(HIVE_TYPE_STRING)) {
       c.metadata.getString(HIVE_TYPE_STRING)
     } else {
-      c.dataType.sql
+      c.dataType.catalogString
     }
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
