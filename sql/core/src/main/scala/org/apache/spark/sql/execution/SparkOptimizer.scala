@@ -46,7 +46,7 @@ class SparkOptimizer(
       OptimizeSubqueries) :+
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates) :+
-    Batch("Infer Filters from DynamicPruning", Once,
+    Batch("Infer Filters from PartitionPruning", Once,
       InferFiltersFromConstraints) :+
     Batch("Cleanup filters that cannot be pushed down", Once,
       CleanupDynamicPruningFilters,
