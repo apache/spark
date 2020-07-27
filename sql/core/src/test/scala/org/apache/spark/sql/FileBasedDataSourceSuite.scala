@@ -832,7 +832,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
     val strategyTime = strategy.head.asInstanceOf[ModifiedBeforeFilter].thresholdTime
     assert(DateTimeUtils.fromUTCTime(
-      DateTimeUtils.currentTimestamp, "UTC") - strategyTime > 0)
+      DateTimeUtils.currentTimestamp, "UTC") - strategyTime >= 0)
   }
   }
 
