@@ -89,6 +89,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     if (operators.head.getClass != c) {
       fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
+    operators.head
   }
 
   test("join operator selection") {
@@ -1152,9 +1153,10 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       // positive not in subquery case
-      assertJoin((
+      var joinExec = assertJoin((
         "select * from testData where key not in (select a from testData2)",
         classOf[BroadcastHashJoinExec]))
+      assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
       // negative not in subquery case since multi-column is not supported
       assertJoin((
@@ -1164,16 +1166,18 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       // positive hand-written left anti join
       // testData.key nullable false
       // testData3.b nullable true
-      assertJoin((
+      joinExec = assertJoin((
         "select * from testData left anti join testData3 ON key = b or isnull(key = b)",
         classOf[BroadcastHashJoinExec]))
+      assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
       // negative hand-written left anti join
       // testData.key nullable false
       // testData2.a nullable false
-      assertJoin((
+      joinExec = assertJoin((
         "select * from testData left anti join testData2 ON key = a or isnull(key = a)",
         classOf[BroadcastHashJoinExec]))
+      assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
       // negative hand-written left anti join
       // not match pattern Or(EqualTo(a=b), IsNull(EqualTo(a=b))

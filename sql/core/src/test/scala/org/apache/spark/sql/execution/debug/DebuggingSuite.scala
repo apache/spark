@@ -69,16 +69,17 @@ class DebuggingSuite extends SharedSparkSession with DisableAdaptiveExecutionSui
     }
 
     val output = captured.toString()
+    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
     assert(output.replaceAll("\\[id=#\\d+\\]", "[id=#x]").contains(
-"""== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#x] ==
-  |Tuples output: 0
-  | id LongType: {}
-  |== WholeStageCodegen (1) ==
-  |Tuples output: 10
-  | id LongType: {java.lang.Long}
-  |== Range (0, 10, step=1, splits=2) ==
-  |Tuples output: 0
-  | id LongType: {}""".stripMargin))
+      s"""== BroadcastExchange $hashedModeString, [id=#x] ==
+         |Tuples output: 0
+         | id LongType: {}
+         |== WholeStageCodegen (1) ==
+         |Tuples output: 10
+         | id LongType: {java.lang.Long}
+         |== Range (0, 10, step=1, splits=2) ==
+         |Tuples output: 0
+         | id LongType: {}""".stripMargin))
   }
 
   test("SPARK-28537: DebugExec cannot debug columnar related queries") {

@@ -313,14 +313,6 @@ private[joins] object UnsafeHashedRelation {
       input: Iterator[InternalRow],
       key: Seq[Expression],
       sizeEstimate: Int,
-      taskMemoryManager: TaskMemoryManager): HashedRelation = {
-    apply(input, key, sizeEstimate, taskMemoryManager, isNullAware = false)
-  }
-
-  def apply(
-      input: Iterator[InternalRow],
-      key: Seq[Expression],
-      sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager,
       isNullAware: Boolean = false): HashedRelation = {
 
@@ -903,14 +895,6 @@ private[joins] object LongHashedRelation {
       input: Iterator[InternalRow],
       key: Seq[Expression],
       sizeEstimate: Int,
-      taskMemoryManager: TaskMemoryManager): HashedRelation = {
-    apply(input, key, sizeEstimate, taskMemoryManager, false)
-  }
-
-  def apply(
-      input: Iterator[InternalRow],
-      key: Seq[Expression],
-      sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager,
       isNullAware: Boolean = false): HashedRelation = {
 
@@ -936,9 +920,11 @@ private[joins] object LongHashedRelation {
 }
 
 /**
- * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
+ * Common trait with dummy implementation for NAAJ special HashedRelation
+ * EmptyHashedRelation
+ * EmptyHashedRelationWithAllNullKeys
  */
-class EmptyHashedRelation extends HashedRelation with Externalizable {
+trait NullAwareHashedRelation extends HashedRelation with Externalizable {
   override def get(key: InternalRow): Iterator[InternalRow] = null
 
   override def getValue(key: InternalRow): InternalRow = null
@@ -946,8 +932,6 @@ class EmptyHashedRelation extends HashedRelation with Externalizable {
   override def keyIsUnique: Boolean = true
 
   override def keys(): Iterator[InternalRow] = null
-
-  override def asReadOnlyCopy(): EmptyHashedRelation = new EmptyHashedRelation
 
   override def close(): Unit = {}
 
@@ -959,28 +943,19 @@ class EmptyHashedRelation extends HashedRelation with Externalizable {
 }
 
 /**
- * A special HashedRelation indicates it build from a non-empty input:Iterator[InternalRow],
+ * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
+ */
+class EmptyHashedRelation extends NullAwareHashedRelation {
+  override def asReadOnlyCopy(): EmptyHashedRelation = new EmptyHashedRelation
+}
+
+/**
+ * A special HashedRelation indicates it built from a non-empty input:Iterator[InternalRow],
  * which contains all null columns key.
  */
-class EmptyHashedRelationWithAllNullKeys extends HashedRelation with Externalizable {
-  override def get(key: InternalRow): Iterator[InternalRow] = null
-
-  override def getValue(key: InternalRow): InternalRow = null
-
-  override def keyIsUnique: Boolean = true
-
-  override def keys(): Iterator[InternalRow] = null
-
+class EmptyHashedRelationWithAllNullKeys extends NullAwareHashedRelation {
   override def asReadOnlyCopy(): EmptyHashedRelationWithAllNullKeys =
     new EmptyHashedRelationWithAllNullKeys
-
-  override def close(): Unit = {}
-
-  override def writeExternal(out: ObjectOutput): Unit = {}
-
-  override def readExternal(in: ObjectInput): Unit = {}
-
-  override def estimatedSize: Long = 0
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */

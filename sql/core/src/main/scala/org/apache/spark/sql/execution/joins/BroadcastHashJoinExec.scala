@@ -493,20 +493,17 @@ case class BroadcastHashJoinExec(
     if (isNullAwareAntiJoin) {
       if (broadcastRelation.value.isInstanceOf[EmptyHashedRelation]) {
         return s"""
-                  |// NAAJ Join EmptyHashedRelation accept all
+                  |// If the right side is empty, NAAJ simply returns the left side.
                   |$numOutput.add(1);
                   |${consume(ctx, input)}
             """.stripMargin
       } else if (broadcastRelation.value.isInstanceOf[EmptyHashedRelationWithAllNullKeys]) {
         return s"""
-                  |// NAAJ
-                  |// EmptyHashedRelationWithAllNullKeys
-                  |// reject all
+                  |// If the right side contains any all-null key, NAAJ simply returns Nil.
             """.stripMargin
       } else {
         val found = ctx.freshName("found")
         return s"""
-                  |// NAAJ
                   |boolean $found = false;
                   |// generate join key for stream side
                   |${keyEv.code}
