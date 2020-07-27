@@ -21,7 +21,6 @@ rem This script loads spark-env.cmd if it exists, and ensures it is only loaded 
 rem spark-env.cmd is loaded from SPARK_CONF_DIR if set, or within the current directory's
 rem conf\ subdirectory.
 
-set SPARK_ENV_CMD=spark-env.cmd
 if not defined SPARK_ENV_LOADED (
   set SPARK_ENV_LOADED=1
 
