@@ -19,6 +19,8 @@ package org.apache.spark.sql.util
 
 import java.util.Locale
 
+import scala.collection.mutable.Queue
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
@@ -42,7 +44,14 @@ private[spark] object SchemaUtils {
    */
   def checkSchemaColumnNameDuplication(
       schema: StructType, colType: String, caseSensitiveAnalysis: Boolean = false): Unit = {
-    checkColumnNameDuplication(schema.map(_.name), colType, caseSensitiveAnalysis)
+    val queue = new Queue[StructType]()
+    queue.enqueue(schema)
+    do {
+      val st = queue.dequeue()
+      checkColumnNameDuplication(st.map(_.name), colType, caseSensitiveAnalysis)
+      val nestedStructs = st.map(_.dataType).collect { case st: StructType => st }
+      queue.enqueue(nestedStructs: _*)
+    } while (queue.nonEmpty)
   }
 
   // Returns true if a given resolver is case-sensitive

@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StructType}
 
 class SchemaUtilsSuite extends SparkFunSuite {
 
@@ -81,5 +81,18 @@ class SchemaUtilsSuite extends SparkFunSuite {
     checkNoExceptionCases("Aa INT, b INT, aA INT", caseSensitive = true)
 
     checkNoExceptionCases("a INT, b INT, c INT", caseSensitive = false)
+  }
+
+  test("SPARK-32431: duplicated fields in nested schemas") {
+    val schema = new StructType().add("StructColumn",
+      new StructType()
+        .add("LowerCase", LongType)
+        .add("camelcase", LongType)
+        .add("CamelCase", LongType))
+    val msg = intercept[AnalysisException] {
+      SchemaUtils.checkSchemaColumnNameDuplication(
+        schema, "in SchemaUtilsSuite", caseSensitiveAnalysis = false)
+    }.getMessage
+    assert(msg.contains("Found duplicate column(s) in SchemaUtilsSuite: `camelcase`"))
   }
 }
