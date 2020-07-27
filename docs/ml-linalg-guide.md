@@ -17,13 +17,11 @@ license: |
   limitations under the License.
 ---
 
-# MLlib Linear Algebra Acceleration Guide
-
 ## Introduction
 
 This guide provides necessary information to enable accelerated linear algebra processing for Spark MLlib.
 
-Spark MLlib defines Vector and Matrix as basic data types for machine learning algorithms. On top of them, [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) and [LAPACK](https://en.wikipedia.org/wiki/LAPACK) operations are implemented and supported by [netlib-java](https://github.com/fommil/netlib-Java) (the algorithms may call [Breeze](https://github.com/scalanlp/breeze) and it will in turn call `netlib-java`). `netlib-java` can use optimized native linear algebra libraries (refered to as "native libraries" or "BLAS libraries" hereafter) for faster numerical processing. [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) and [OpenBLAS](http://www.openblas.net) are two most popular ones.
+Spark MLlib defines Vector and Matrix as basic data types for machine learning algorithms. On top of them, [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) and [LAPACK](https://en.wikipedia.org/wiki/LAPACK) operations are implemented and supported by [netlib-java](https://github.com/fommil/netlib-Java) (the algorithms may call [Breeze](https://github.com/scalanlp/breeze) and it will in turn call `netlib-java`). `netlib-java` can use optimized native linear algebra libraries (refered to as "native libraries" or "BLAS libraries" hereafter) for faster numerical processing. [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) and [OpenBLAS](http://www.openblas.net) are two popular ones.
 
 However due to license differences, the official released Spark binaries by default don't contain native libraries support for `netlib-java`.
 
@@ -72,7 +70,7 @@ sudo yum install openblas
 
 ## Check if native libraries are enabled for MLlib
 
-To verify native libraries are properly loaded, start `spark-shell` and run the following code
+To verify native libraries are properly loaded, start `spark-shell` and run the following code:
 ```
 scala> import com.github.fommil.netlib.BLAS;
 scala> System.out.println(BLAS.getInstance().getClass().getName());
