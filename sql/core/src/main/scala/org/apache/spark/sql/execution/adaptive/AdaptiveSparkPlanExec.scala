@@ -280,23 +280,8 @@ case class AdaptiveSparkPlanExec(
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      printNodeId: Boolean): Unit = {
-
-    def generateTreeStringWithName(
-        plan: SparkPlan,
-        name: String,
-        depth: Int,
-        lastChildren: Seq[Boolean]): Unit = {
-      if (depth > 0) {
-        lastChildren.init.foreach { isLast =>
-          append(if (isLast) "   " else ":  ")
-        }
-        append(if (lastChildren.last) "+- " else ":- ")
-      }
-      append(s"$name ")
-      plan.generateTreeString(
-        depth, lastChildren, append, verbose, prefix, addSuffix, maxFields, printNodeId)
-    }
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
     super.generateTreeString(
       depth,
       lastChildren,
@@ -305,17 +290,49 @@ case class AdaptiveSparkPlanExec(
       prefix,
       addSuffix,
       maxFields,
-      printNodeId)
-    generateTreeStringWithName(
+      printNodeId,
+      indent)
+    generateTreeStringWithHeader(
+      if (isFinalPlan) "Final Plan" else "Current Plan",
       currentPhysicalPlan,
-      if (isFinalPlan) "FinalPlan" else "CurrentPlan",
-      depth + 1,
-      lastChildren :+ true)
-    generateTreeStringWithName(
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      maxFields,
+      printNodeId)
+    generateTreeStringWithHeader(
+      "Initial Plan",
       initialPlan,
-      "InitialPlan",
-      depth + 1,
-      lastChildren :+ true)
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      maxFields,
+      printNodeId)
+  }
+
+  private def generateTreeStringWithHeader(
+      header: String,
+      plan: SparkPlan,
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      maxFields: Int,
+      printNodeId: Boolean): Unit = {
+    append("   " * depth)
+    append(s"+- == $header ==\n")
+    plan.generateTreeString(
+      0,
+      Nil,
+      append,
+      verbose,
+      prefix = "",
+      addSuffix = false,
+      maxFields,
+      printNodeId,
+      indent = depth + 1)
   }
 
   override def hashCode(): Int = inputPlan.hashCode()
