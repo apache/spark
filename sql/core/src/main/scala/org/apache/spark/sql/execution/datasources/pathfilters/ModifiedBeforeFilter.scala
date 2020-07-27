@@ -41,10 +41,9 @@ class ModifiedBeforeFilter(sparkSession: SparkSession,
     with FileIndexFilter {
   override def accept(fileStatus: FileStatus): Boolean =
     /* We standardize on microseconds wherever possible */
-    thresholdTime - localTime(
-      /* getModificationTime returns in milliseconds */
-      DateTimeUtils.getMicroseconds(fileStatus.getModificationTime,
-                                    ZoneId.of("UTC"))) > 0
+    thresholdTime - localTime(DateTimeUtils
+        /* getModificationTime returns in milliseconds */
+        .millisToMicros(fileStatus.getModificationTime)) > 0
 
   override def accept(path: Path): Boolean = true
   override def strategy(): String = "modifiedBefore"
