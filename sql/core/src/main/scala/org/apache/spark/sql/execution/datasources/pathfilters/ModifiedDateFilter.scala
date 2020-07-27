@@ -50,8 +50,9 @@ abstract class ModifiedDateFilter(sparkSession: SparkSession,
                                   hadoopConf: Configuration,
                                   options: CaseInsensitiveMap[String])
     extends PathFilterStrategy(sparkSession, hadoopConf, options) {
-  val timeZoneId: String = options.getOrElse(DateTimeUtils.TIMEZONE_OPTION,
-                                             SQLConf.get.sessionLocalTimeZone)
+  val timeZoneId: String = options.getOrElse(
+      DateTimeUtils.TIMEZONE_OPTION.toLowerCase,
+      SQLConf.get.sessionLocalTimeZone)
 
   /* Implicitly defaults to UTC if unable to parse */
   val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId)

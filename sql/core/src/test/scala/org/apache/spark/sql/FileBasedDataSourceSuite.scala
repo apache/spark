@@ -828,10 +828,10 @@ class FileBasedDataSourceSuite extends QueryTest
     val strategy = PathFilterFactory.create(spark, spark.sessionState.newHadoopConf(),
       CaseInsensitiveMap[String](
         Map("modifiedBefore" -> LocalDateTime.now(timeZone.toZoneId).toString,
-        "timezone" -> "CET")))
+        "timeZone" -> "CET")))
 
     val strategyTime = strategy.head.asInstanceOf[ModifiedBeforeFilter].thresholdTime
-    assert(DateTimeUtils.toUTCTime(
+    assert(DateTimeUtils.fromUTCTime(
       DateTimeUtils.currentTimestamp, "UTC") - strategyTime > 0)
   }
   }
