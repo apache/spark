@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.pathfilters
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -51,7 +51,7 @@ abstract class ModifiedDateFilter(sparkSession: SparkSession,
                                   options: CaseInsensitiveMap[String])
     extends PathFilterStrategy(sparkSession, hadoopConf, options) {
   val timeZoneId: String = options.getOrElse(
-      DateTimeUtils.TIMEZONE_OPTION.toLowerCase,
+      DateTimeUtils.TIMEZONE_OPTION.toLowerCase(Locale.ROOT),
       SQLConf.get.sessionLocalTimeZone)
 
   /* Implicitly defaults to UTC if unable to parse */
