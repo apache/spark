@@ -237,9 +237,11 @@ private[spark] object TestUtils {
    */
   def testCommandAvailable(command: String): Boolean = {
     val attempt = if (Utils.isWindows) {
-      Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
+      Try(Process(Seq(
+        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
     } else {
-      Try(Process(s"command -v $command").run(ProcessLogger(_ => ())).exitValue())
+      Try(Process(Seq(
+        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
     }
     attempt.isSuccess && attempt.get == 0
   }
