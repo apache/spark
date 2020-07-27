@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.util.UUID
+
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.operation.GetTypeInfoOperation
@@ -39,6 +41,7 @@ private[hive] class SparkGetTypeInfoOperation(
   with Logging {
 
   override def runInternal(): Unit = {
+    statementId = UUID.randomUUID().toString
     val logMsg = "Listing type info"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
