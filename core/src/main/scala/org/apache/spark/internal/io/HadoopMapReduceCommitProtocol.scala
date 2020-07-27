@@ -93,8 +93,6 @@ class HadoopMapReduceCommitProtocol(
 
   @transient private var workPath: Path = null
 
-  @transient private var outputPath: Path = null
-
   @transient private var committedPaths: mutable.Set[String] = null
 
   /**
@@ -127,7 +125,6 @@ class HadoopMapReduceCommitProtocol(
   override def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
     val filename = getFilename(taskContext, ext)
-    outputPath = new Path(absoluteDir)
 
     // Include a UUID here to prevent file collisions for one task writing to different dirs.
     // In principle we could include hash(absoluteDir) instead but this is simpler.
@@ -159,11 +156,6 @@ class HadoopMapReduceCommitProtocol(
     committer = setupCommitter(taskAttemptContext)
     committer.setupJob(jobContext)
 
-    outputPath = committer match {
-      case f: FileOutputCommitter =>
-        new Path(Option(f.getOutputPath).map(_.toString).getOrElse(path))
-      case _ => new Path(path)
-    }
     committedPaths = mutable.Set[String]()
   }
 
@@ -171,14 +163,14 @@ class HadoopMapReduceCommitProtocol(
     committer.commitJob(jobContext)
 
     if (hasValidPath) {
-      val outputPaths = taskCommits.map(_.obj.asInstanceOf[mutable.Set[String]]).flatten
+      val stagePaths = taskCommits.map(_.obj.asInstanceOf[mutable.Set[String]]).flatten
       val dstPathsMap =
-        outputPaths.map { path =>
-          new Path(path) -> new Path(path.replace(stagingDir.toString, outputPath.toString))
+        stagePaths.map { stagePath =>
+          new Path(stagePath) -> new Path(stagePath.replace(stagingDir.toString, path))
         }.toMap
       val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
 
-      logDebug(s"Committing files staged for absolute locations $outputPaths")
+      logDebug(s"Committing files staged for absolute locations $stagePaths")
       if (dynamicPartitionOverwrite) {
         val partitionPaths = dstPathsMap.values.map(_.getParent).toSet
         logDebug(s"Clean up absolute partition directories for overwriting: ${partitionPaths}")
@@ -187,8 +179,8 @@ class HadoopMapReduceCommitProtocol(
       for ((src, dst) <- dstPathsMap) {
         recursiveRenameFile(fs, src, dst)
       }
-      for (outputPath <- dstPathsMap.keySet) {
-        fs.delete(outputPath, true)
+      for (stagePath <- dstPathsMap.keySet) {
+        fs.delete(stagePath, true)
       }
     }
   }
@@ -225,12 +217,6 @@ class HadoopMapReduceCommitProtocol(
     workPath = committer match {
       case f: FileOutputCommitter =>
         new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
-      case _ => new Path(path)
-    }
-
-    outputPath = committer match {
-      case f: FileOutputCommitter =>
-        new Path(Option(f.getOutputPath).map(_.toString).getOrElse(path))
       case _ => new Path(path)
     }
   }
