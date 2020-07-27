@@ -1352,6 +1352,14 @@ class SessionCatalog(
   }
 
   /**
+   * Unregister a temporary or permanent function from a session-specific [[FunctionRegistry]]
+   * Return true if function exists.
+   */
+  def unregisterFunction(name: FunctionIdentifier): Boolean = {
+    functionRegistry.dropFunction(name)
+  }
+
+  /**
    * Drop a temporary function.
    */
   def dropTempFunction(name: String, ignoreIfNotExists: Boolean): Unit = {

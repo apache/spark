@@ -208,6 +208,8 @@
                   url: sql-ref-syntax-aux-cache-clear-cache.html
                 - text: REFRESH TABLE
                   url: sql-ref-syntax-aux-cache-refresh-table.html
+                - text: REFRESH FUNCTION
+                  url: sql-ref-syntax-aux-cache-refresh-function.html
                 - text: REFRESH
                   url: sql-ref-syntax-aux-cache-refresh.html
             - text: DESCRIBE

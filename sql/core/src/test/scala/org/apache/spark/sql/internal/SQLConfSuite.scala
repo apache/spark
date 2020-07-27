@@ -181,6 +181,21 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-32406: reset - single configuration") {
+    val appId = spark.sparkContext.getConf.getAppId
+    sql("RESET spark.app.id")
+    assert(spark.conf.get("spark.app.id") === appId, "Should not change spark core ones")
+    sql("SET spark.abc=xyz")
+    assert(spark.conf.get("spark.abc") === "xyz")
+    sql("RESET spark.abc")
+    intercept[NoSuchElementException](spark.conf.get("spark.abc"))
+    sql("RESET spark.abc") // ignore nonexistent keys
+    val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
+    sql(s"SET ${SQLConf.GROUP_BY_ORDINAL.key}=false")
+    sql(s"RESET ${SQLConf.GROUP_BY_ORDINAL.key}")
+    assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === original)
+  }
+
   test("invalid conf value") {
     spark.sessionState.conf.clear()
     val e = intercept[IllegalArgumentException] {

@@ -32,9 +32,11 @@ import scala.reflect.ClassTag
 import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
 import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify, when}
-import org.scalatest._
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
@@ -1855,9 +1857,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val exec1 = "exec1"
     val exec2 = "exec2"
     val exec3 = "exec3"
-    val store1 = makeBlockManager(800, exec1)
-    val store2 = makeBlockManager(800, exec2)
-    val store3 = makeBlockManager(800, exec3)
+    val store1 = makeBlockManager(1000, exec1)
+    val store2 = makeBlockManager(1000, exec2)
+    val store3 = makeBlockManager(1000, exec3)
 
     assert(master.getPeers(store3.blockManagerId).map(_.executorId).toSet === Set(exec1, exec2))
 
@@ -1872,9 +1874,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("test decommissionRddCacheBlocks should offload all cached blocks") {
-    val store1 = makeBlockManager(800, "exec1")
-    val store2 = makeBlockManager(800, "exec2")
-    val store3 = makeBlockManager(800, "exec3")
+    val store1 = makeBlockManager(1000, "exec1")
+    val store2 = makeBlockManager(1000, "exec2")
+    val store3 = makeBlockManager(1000, "exec3")
 
     val data = new Array[Byte](4)
     val blockId = rdd(0, 0)

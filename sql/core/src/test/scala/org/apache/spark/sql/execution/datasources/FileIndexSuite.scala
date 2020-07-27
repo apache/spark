@@ -367,13 +367,15 @@ class FileIndexSuite extends SharedSparkSession {
       val wrongBasePath = new File(dir, "unknown")
       // basePath must be a directory
       wrongBasePath.mkdir()
-      val parameters = Map("basePath" -> wrongBasePath.getCanonicalPath)
-      val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
-      val msg = intercept[IllegalArgumentException] {
-        // trigger inferPartitioning()
-        fileIndex.partitionSpec()
-      }.getMessage
-      assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+      withClue("SPARK-32368: 'basePath' can be case insensitive") {
+        val parameters = Map("bAsepAtH" -> wrongBasePath.getCanonicalPath)
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
+        val msg = intercept[IllegalArgumentException] {
+          // trigger inferPartitioning()
+          fileIndex.partitionSpec()
+        }.getMessage
+        assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+      }
     }
   }
 
