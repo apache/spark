@@ -1,17 +1,32 @@
 --- TESTS FOR DATETIME PARSING FUNCTIONS ---
 
--- parsing with pattern 'y'
+-- parsing with pattern 'y'.
+-- the range of valid year is [1, 294247],
+-- but particularly, some thrift client use java.sql.Timestamp to parse timestamp, which allows
+-- only year values less or equal than 9999. So the cases bellow only use 9999 at most to pass
+-- ThriftServerQueryTestSuite
 select to_timestamp('1', 'y');
-select to_timestamp('123456', 'y');
+select to_timestamp('009999', 'y');
 
-select to_timestamp('12', 'yy');
+-- reduced two digit form is used, the range of valid year is 20-[01, 99]
+select to_timestamp('00', 'yy');
+select to_timestamp('99', 'yy');
 
-select to_timestamp('123', 'yyy');
-select to_timestamp('123456', 'yyy');
+-- the range of valid year is [1, 294247], the field width padding to the range [3, 6]
+select to_timestamp('001', 'yyy');
+select to_timestamp('009999', 'yyy');
 
-select to_timestamp('1234', 'yyyy');
-select to_timestamp('12345', 'yyyyy');
-select to_timestamp('123456', 'yyyyyy');
+-- the range of valid year is [1, 9999], the field width padding to 4
+select to_timestamp('0001', 'yyyy');
+select to_timestamp('9999', 'yyyy');
+
+-- the range of valid year is [1, 99999], the field width padding to 5
+select to_timestamp('00001', 'yyyyy');
+select to_timestamp('09999', 'yyyyy');
+
+-- the range of valid year is [1, 294247], the field width padding to 6
+select to_timestamp('000001', 'yyyyyy');
+select to_timestamp('009999', 'yyyyyy');
 
 -- parsing with pattern 'D'
 select to_timestamp('9', 'D');
