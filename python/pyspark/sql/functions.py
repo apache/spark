@@ -1196,6 +1196,8 @@ def to_date(col, format=None):
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted. Equivalent to ``col.cast("date")``.
 
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_date(df.t).alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
@@ -1218,6 +1220,8 @@ def to_timestamp(col, format=None):
     using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted. Equivalent to ``col.cast("timestamp")``.
+
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_timestamp(df.t).alias('dt')).collect()
