@@ -71,18 +71,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.configKey() != null) {
       val keyStr = normalizeConfigString(ctx.configKey().getText)
-      if (ctx.configValue() != null) {
-        SetCommand(Some(keyStr -> Option(normalizeConfigString(ctx.configValue().getText))))
+      if (ctx.value != null) {
+        SetCommand(Some(keyStr -> Option(ctx.value.getText)))
       } else {
         SetCommand(Some(keyStr -> None))
       }
     } else {
       remainder(ctx.SET().getSymbol).trim match {
         case "-v" => SetCommand(Some("-v" -> None))
-        case s if s.isEmpty() => SetCommand(None)
+        case s if s.isEmpty => SetCommand(None)
         case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
-          "'SET key=value'. If you want to include spaces in key and value, please use quotes, " +
-          "e.g., SET \"ke y\"=`va lu e`.", ctx)
+          "'SET key=value'. If you want to include special characters in key and value, " +
+          "please use quotes or string literal, e.g., SET \"ke y\"=value.", ctx)
       }
     }
   }
@@ -101,10 +101,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       ResetCommand(Some(normalizeConfigString(ctx.configKey().getText)))
     } else {
       remainder(ctx.RESET().getSymbol).trim match {
-        case s if s.isEmpty() => ResetCommand(None)
+        case s if s.isEmpty => ResetCommand(None)
         case _ => throw new ParseException("Expected format is 'RESET' or 'RESET key'. " +
-          "If you want to include spaces in key, please use quotes, " +
-          "e.g., RESET \"ke y\".", ctx)
+          "If you want to include special characters in key, " +
+          "please use quotes or string literal, e.g., RESET \"ke y\".", ctx)
       }
     }
   }

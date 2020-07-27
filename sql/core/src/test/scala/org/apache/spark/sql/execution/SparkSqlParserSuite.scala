@@ -63,15 +63,9 @@ class SparkSqlParserSuite extends AnalysisTest {
 
   test("Report Error for invalid usage of SET command") {
     assertEqual("SET", SetCommand(None))
-    assertEqual("SET   ", SetCommand(None))
     assertEqual("SET -v", SetCommand(Some("-v", None)))
-    assertEqual("SET  -v  ", SetCommand(Some("-v", None)))
     assertEqual("SET spark.sql.key", SetCommand(Some("spark.sql.key" -> None)))
-    assertEqual("SET   spark.sql.key ", SetCommand(Some("spark.sql.key" -> None)))
-    assertEqual("SET spark.sql.key1=value", SetCommand(Some("spark.sql.key1" -> Some("value"))))
-    assertEqual("SET spark:sql:key2=value", SetCommand(Some("spark:sql:key2" -> Some("value"))))
-    assertEqual("SET spark.sql.key3 =  value",
-      SetCommand(Some("spark.sql.key3" -> Some("value"))))
+    assertEqual("SET spark:sql:key=false", SetCommand(Some("spark:sql:key" -> Some("false"))))
     assertEqual("SET spark.sql.    key=value",
       SetCommand(Some("spark.sql.key" -> Some("value"))))
     assertEqual("SET 'spark.sql.    key'=value",
@@ -80,36 +74,27 @@ class SparkSqlParserSuite extends AnalysisTest {
       SetCommand(Some("spark.sql.    key" -> Some("value"))))
     assertEqual("SET `spark.sql.    key`=value",
       SetCommand(Some("spark.sql.    key" -> Some("value"))))
-    assertEqual("SET spark.sql.key4= 'v al u   e '",
-      SetCommand(Some("spark.sql.key4" -> Some("v al u   e "))))
-    assertEqual("SET spark.sql.key4= \"v al u   e \"",
-      SetCommand(Some("spark.sql.key4" -> Some("v al u   e "))))
-    assertEqual("SET spark.sql.key4= `v al u   e `",
-      SetCommand(Some("spark.sql.key4" -> Some("v al u   e "))))
 
-    val expectedErrMsg = "Expected format is 'SET', 'SET key', or 'SET key=value'. " +
-      "If you want to include spaces in key and value, please use quotes, " +
-      "e.g., SET \"ke y\"=`va lu e`."
+    val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
+      "'SET key=value'. If you want to include special characters in key and value, " +
+      "please use quotes or string literal, e.g., SET \"ke y\"=value."
     intercept("SET spark.sql.key value", expectedErrMsg)
     intercept("SET spark.sql.key   'value'", expectedErrMsg)
     intercept("SET    spark.sql.key \"value\" ", expectedErrMsg)
     intercept("SET spark.sql.key value1 value2", expectedErrMsg)
-    intercept("SET spark.sql.key4= v al u   e ", expectedErrMsg)
-    intercept("SET spark.sql.key= value1= value2", expectedErrMsg)
   }
 
   test("Report Error for invalid usage of RESET command") {
     assertEqual("RESET", ResetCommand(None))
-    assertEqual("RESET   ", ResetCommand(None))
     assertEqual("RESET spark.sql.key", ResetCommand(Some("spark.sql.key")))
-    assertEqual("RESET   spark.sql.key ", ResetCommand(Some("spark.sql.key")))
     assertEqual("RESET spark.sql.    key", ResetCommand(Some("spark.sql.key")))
     assertEqual("RESET 'spark.sql.    key'", ResetCommand(Some("spark.sql.    key")))
     assertEqual("RESET \"spark.sql.    key\"", ResetCommand(Some("spark.sql.    key")))
     assertEqual("RESET `spark.sql.    key`", ResetCommand(Some("spark.sql.    key")))
 
     val expectedErrMsg = "Expected format is 'RESET' or 'RESET key'. " +
-      "If you want to include spaces in key, please use quotes, e.g., RESET \"ke y\"."
+      "If you want to include special characters in key, " +
+      "please use quotes or string literal, e.g., RESET \"ke y\"."
     intercept("RESET spark.sql.key1 key2", expectedErrMsg)
     intercept("RESET spark.  sql.key1 key2", expectedErrMsg)
     intercept("RESET spark.sql.key1 key2 key3", expectedErrMsg)
