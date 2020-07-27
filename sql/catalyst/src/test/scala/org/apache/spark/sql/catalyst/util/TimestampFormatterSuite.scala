@@ -439,7 +439,10 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
   test("SPARK-32424: avoid silent data change when timestamp overflows") {
     val formatter = TimestampFormatter("y", UTC, isParsing = true)
     assert(formatter.parse("294247") === date(294247))
-    val exception = intercept[ArithmeticException](formatter.parse("294248"))
-    assert(exception.getMessage === "long overflow")
+    assert(formatter.parse("-290307") === date(-290307))
+    val e1 = intercept[ArithmeticException](formatter.parse("294248"))
+    assert(e1.getMessage === "long overflow")
+    val e2 = intercept[ArithmeticException](formatter.parse("-290308"))
+    assert(e2.getMessage === "long overflow")
   }
 }
