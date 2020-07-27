@@ -12,7 +12,7 @@ select to_timestamp('009999', 'y');
 select to_timestamp('00', 'yy');
 select to_timestamp('99', 'yy');
 
--- the range of valid year is [-290307, 294247], the field width padding to the range [3, 6]
+-- the range of valid year is [-290307, 294247], the number of digits must be in [3, 6] for 'yyy'
 select to_timestamp('001', 'yyy');
 select to_timestamp('009999', 'yyy');
 
