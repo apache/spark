@@ -41,6 +41,24 @@ import org.apache.spark.internal.Logging
  *
  * Unlike Hadoop's OutputCommitter, this implementation is serializable.
  *
+ *  Driver                 Executor1                            Exectutor2
+ * +-------------------------------------------------------------------------------------+
+ * setupJob() +---------> setupTask()
+ *                           |
+ *                           v
+ *                        commitTask(): $Work_Dir/dir1/file1
+ *                           |
+ *                           v
+ *                      abortTask():  $Stage_DIR/dir1/file1
+ *
+ *            +--------------------------------------------> setupTask()
+ *                                                               |
+ *                                                               v
+ * commitJob() <--------------------------------------------+ commitTask(): $Work_Dir/dir1/file1
+ *     |
+ *     v
+ * abortJob(): Or Not
+ *
  * @param jobId the job's or stage's id
  * @param path the job's output path, or null if committer acts as a noop
  * @param dynamicPartitionOverwrite If true, Spark will overwrite partition directories at runtime
