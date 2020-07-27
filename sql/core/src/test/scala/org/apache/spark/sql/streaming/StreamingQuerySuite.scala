@@ -33,7 +33,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
@@ -1103,6 +1103,28 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         "file://foo:bar@b ar/foo/bar",
         "file://f oo:bar@bar/foo/bar").foreach { p =>
       assert(!StreamExecution.containsSpecialCharsInPath(new Path(p)), s"failed to check $p")
+    }
+  }
+
+  test("union in streaming query") {
+    val inputData1 = MemoryStream[Int]
+    val inputData2 = MemoryStream[Int]
+    withTempDir { dir =>
+      withTempView("s1", "s2") {
+        inputData1.toDF().createOrReplaceTempView("s1")
+        inputData2.toDF().createOrReplaceTempView("s2")
+        val unioned = spark.sql(
+          "select s1.value from s1 union select s2.value from s2")
+
+        val exception = intercept[AnalysisException](
+          unioned
+            .writeStream
+            .option("checkpointLocation", dir.getCanonicalPath)
+            .start(dir.getCanonicalPath))
+        assert(exception.getMessage.contains(
+          "Append output mode not supported when there are streaming aggregations on streaming " +
+            "DataFrames/DataSets without watermark"))
+      }
     }
   }
 
