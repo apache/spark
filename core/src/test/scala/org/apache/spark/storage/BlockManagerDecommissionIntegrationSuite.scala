@@ -88,8 +88,6 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
 
     // Listen for the job & block updates
-    val taskStartSem = new Semaphore(0)
-    val broadcastSem = new Semaphore(0)
     val executorRemovedSem = new Semaphore(0)
     val taskEndEvents = new ConcurrentLinkedQueue[SparkListenerTaskEnd]()
     val blocksUpdated = ArrayBuffer.empty[SparkListenerBlockUpdated]
@@ -102,20 +100,11 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
         executorRemovedSem.release()
       }
 
-      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-        taskStartSem.release()
-      }
-
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         taskEndEvents.add(taskEnd)
       }
 
       override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
-        // Once broadcast start landing on the executors we're good to proceed.
-        // We don't only use task start as it can occur before the work is on the executor.
-        if (blockUpdated.blockUpdatedInfo.blockId.isBroadcast) {
-          broadcastSem.release()
-        }
         blocksUpdated.append(blockUpdated)
       }
     })
@@ -128,11 +117,6 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
 
     // Start the computation of RDD - this step will also cache the RDD
     val asyncCount = testRdd.countAsync()
-
-    // Wait for the job to have started.
-    taskStartSem.acquire(1)
-    // Wait for each executor + driver to have it's broadcast info delivered.
-    broadcastSem.acquire((numExecs + 1))
 
     // Make sure the job is either mid run or otherwise has data to migrate.
     if (migrateDuring) {
