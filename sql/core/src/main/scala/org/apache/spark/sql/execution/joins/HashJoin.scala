@@ -52,7 +52,41 @@ trait HashJoin extends BaseJoinExec {
     }
   }
 
-  override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
+  override def outputPartitioning: Partitioning = buildSide match {
+    case BuildLeft =>
+      joinType match {
+        case _: InnerLike | RightOuter => right.outputPartitioning
+        case x =>
+          throw new IllegalArgumentException(
+            s"HashJoin should not take $x as the JoinType with building left side")
+      }
+    case BuildRight =>
+      joinType match {
+        case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin =>
+          left.outputPartitioning
+        case x =>
+          throw new IllegalArgumentException(
+            s"HashJoin should not take $x as the JoinType with building right side")
+      }
+  }
+
+  override def outputOrdering: Seq[SortOrder] = buildSide match {
+    case BuildLeft =>
+      joinType match {
+        case _: InnerLike | RightOuter => right.outputOrdering
+        case x =>
+          throw new IllegalArgumentException(
+            s"HashJoin should not take $x as the JoinType with building left side")
+      }
+    case BuildRight =>
+      joinType match {
+        case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin =>
+          left.outputOrdering
+        case x =>
+          throw new IllegalArgumentException(
+            s"HashJoin should not take $x as the JoinType with building right side")
+      }
+  }
 
   protected lazy val (buildPlan, streamedPlan) = buildSide match {
     case BuildLeft => (left, right)
