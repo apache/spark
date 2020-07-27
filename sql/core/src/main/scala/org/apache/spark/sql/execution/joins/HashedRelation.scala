@@ -109,7 +109,7 @@ private[execution] object HashedRelation {
     }
 
     if (isNullAware && !input.hasNext) {
-      new EmptyHashedRelation
+      EmptyHashedRelation
     } else if (key.length == 1 && key.head.dataType == LongType) {
       LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     } else {
@@ -343,7 +343,7 @@ private[joins] object UnsafeHashedRelation {
           // scalastyle:on throwerror
         }
       } else if (isNullAware) {
-        return new EmptyHashedRelationWithAllNullKeys
+        return EmptyHashedRelationWithAllNullKeys
       }
     }
 
@@ -911,7 +911,7 @@ private[joins] object LongHashedRelation {
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
       } else if (isNullAware) {
-        return new EmptyHashedRelationWithAllNullKeys
+        return EmptyHashedRelationWithAllNullKeys
       }
     }
     map.optimize()
@@ -925,13 +925,19 @@ private[joins] object LongHashedRelation {
  * EmptyHashedRelationWithAllNullKeys
  */
 trait NullAwareHashedRelation extends HashedRelation with Externalizable {
-  override def get(key: InternalRow): Iterator[InternalRow] = null
+  override def get(key: InternalRow): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
 
-  override def getValue(key: InternalRow): InternalRow = null
+  override def getValue(key: InternalRow): InternalRow = {
+    throw new UnsupportedOperationException
+  }
 
   override def keyIsUnique: Boolean = true
 
-  override def keys(): Iterator[InternalRow] = null
+  override def keys(): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
 
   override def close(): Unit = {}
 
@@ -945,16 +951,16 @@ trait NullAwareHashedRelation extends HashedRelation with Externalizable {
 /**
  * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
  */
-class EmptyHashedRelation extends NullAwareHashedRelation {
-  override def asReadOnlyCopy(): EmptyHashedRelation = this
+object EmptyHashedRelation extends NullAwareHashedRelation {
+  override def asReadOnlyCopy(): EmptyHashedRelation.type = this
 }
 
 /**
  * A special HashedRelation indicates it built from a non-empty input:Iterator[InternalRow],
  * which contains all null columns key.
  */
-class EmptyHashedRelationWithAllNullKeys extends NullAwareHashedRelation {
-  override def asReadOnlyCopy(): EmptyHashedRelationWithAllNullKeys = this
+object EmptyHashedRelationWithAllNullKeys extends NullAwareHashedRelation {
+  override def asReadOnlyCopy(): EmptyHashedRelationWithAllNullKeys.type = this
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */

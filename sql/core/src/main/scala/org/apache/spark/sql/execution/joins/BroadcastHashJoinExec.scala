@@ -146,9 +146,9 @@ case class BroadcastHashJoinExec(
       streamedPlan.execute().mapPartitionsInternal { streamedIter =>
         val hashed = broadcastRelation.value.asReadOnlyCopy()
         TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-        if (hashed.isInstanceOf[EmptyHashedRelation]) {
+        if (hashed == EmptyHashedRelation) {
           streamedIter
-        } else if (hashed.isInstanceOf[EmptyHashedRelationWithAllNullKeys]) {
+        } else if (hashed == EmptyHashedRelationWithAllNullKeys) {
           Iterator.empty
         } else {
           val keyGenerator = UnsafeProjection.create(
@@ -491,13 +491,13 @@ case class BroadcastHashJoinExec(
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     if (isNullAwareAntiJoin) {
-      if (broadcastRelation.value.isInstanceOf[EmptyHashedRelation]) {
+      if (broadcastRelation.value == EmptyHashedRelation) {
         return s"""
                   |// If the right side is empty, NAAJ simply returns the left side.
                   |$numOutput.add(1);
                   |${consume(ctx, input)}
             """.stripMargin
-      } else if (broadcastRelation.value.isInstanceOf[EmptyHashedRelationWithAllNullKeys]) {
+      } else if (broadcastRelation.value == EmptyHashedRelationWithAllNullKeys) {
         return s"""
                   |// If the right side contains any all-null key, NAAJ simply returns Nothing.
             """.stripMargin
