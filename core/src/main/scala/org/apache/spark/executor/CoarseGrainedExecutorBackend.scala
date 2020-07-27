@@ -297,6 +297,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
           while (true) {
             logInfo("Checking to see if we can shutdown.")
+            Thread.sleep(sleep_time)
             if (executor == null || executor.numRunningTasks == 0) {
               if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
                 logInfo("No running tasks, checking migrations")
@@ -313,12 +314,10 @@ private[spark] class CoarseGrainedExecutorBackend(
                 logInfo("No running tasks, no block migration configured, stopping.")
                 exitExecutor(0, "Finished decommissioning", notifyDriver = true)
               }
-              Thread.sleep(sleep_time)
             } else {
               logInfo("Blocked from shutdown by running ${executor.numRunningtasks} tasks")
               // If there is a running task it could store blocks, so make sure we wait for a
               // migration loop to complete after the last task is done.
-              Thread.sleep(sleep_time)
               lastTaskRunningTime = System.nanoTime()
             }
           }
