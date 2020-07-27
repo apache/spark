@@ -58,6 +58,9 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
 class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
+  private def normalizeConfigString(s: String) =
+    s.replaceAll("`", "").replaceAll("\"", "").replaceAll("'", "")
+
   /**
    * Create a [[SetCommand]] logical plan.
    *
@@ -66,20 +69,21 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    // Construct the command.
-    val keyValueDef = """\s*([a-zA-Z\d\\.:]+|`[a-zA-Z\d\s\\.:]+`)\s*=(.*)""".r
-    val keyOnlyDef = """\s*([a-zA-Z\d\\.:]+|`[a-zA-Z\d\s\\.:]+`|-v)\s*""".r
-    remainder(ctx.SET.getSymbol) match {
-      case keyValueDef(key, value) =>
-        SetCommand(Some(key.replaceAll("`", "") -> Option(value.trim)))
-      case keyOnlyDef(key) =>
-        SetCommand(Some(key.replaceAll("`", "") -> None))
-      case s if s.trim.isEmpty =>
-        SetCommand(None)
-      case _ =>
-        throw new ParseException("Expected format is 'SET key=value' or 'SET key'. " +
-          "If you want to include spaces in key, please use backquotes, " +
-          "e.g., 'SET `ke y`=value'.", ctx)
+    if (ctx.configKey() != null) {
+      val keyStr = normalizeConfigString(ctx.configKey().getText)
+      if (ctx.configValue() != null) {
+        SetCommand(Some(keyStr -> Option(normalizeConfigString(ctx.configValue().getText))))
+      } else {
+        SetCommand(Some(keyStr -> None))
+      }
+    } else {
+      remainder(ctx.SET().getSymbol).trim match {
+        case "-v" => SetCommand(Some("-v" -> None))
+        case s if s.isEmpty() => SetCommand(None)
+        case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
+          "'SET key=value'. If you want to include spaces in key and value, please use quotes, " +
+          "e.g., SET \"ke y\"=`va lu e`.", ctx)
+      }
     }
   }
 
@@ -93,7 +97,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    ResetCommand(Option(remainder(ctx.RESET().getSymbol).trim).filter(_.nonEmpty))
+    if (ctx.configKey() != null) {
+      ResetCommand(Some(normalizeConfigString(ctx.configKey().getText)))
+    } else {
+      remainder(ctx.RESET().getSymbol).trim match {
+        case s if s.isEmpty() => ResetCommand(None)
+        case _ => throw new ParseException("Expected format is 'RESET' or 'RESET key'. " +
+          "If you want to include spaces in key, please use quotes, " +
+          "e.g., RESET \"ke y\".", ctx)
+      }
+    }
   }
 
   /**
