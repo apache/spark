@@ -1106,7 +1106,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("union in streaming query") {
+  test("union in streaming query of append mode without watermark") {
     val inputData1 = MemoryStream[Int]
     val inputData2 = MemoryStream[Int]
     withTempDir { dir =>
@@ -1115,17 +1115,30 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         inputData2.toDF().createOrReplaceTempView("s2")
         val unioned = spark.sql(
           "select s1.value from s1 union select s2.value from s2")
-
-        val exception = intercept[AnalysisException](
-          unioned
-            .writeStream
-            .option("checkpointLocation", dir.getCanonicalPath)
-            .start(dir.getCanonicalPath))
-        assert(exception.getMessage.contains(
-          "Append output mode not supported when there are streaming aggregations on streaming " +
-            "DataFrames/DataSets without watermark"))
+        checkExceptionMessage(unioned, dir)
       }
     }
+  }
+
+  test("distinct in streaming query of append mode without watermark") {
+    val inputData = MemoryStream[Int]
+    withTempDir { dir =>
+      withTempView("deduptest") {
+        inputData.toDF().toDF("value").createOrReplaceTempView("deduptest")
+        val distinct = spark.sql("select distinct value from deduptest")
+        checkExceptionMessage(distinct, dir)
+      }
+    }
+  }
+
+  private def checkExceptionMessage(df: DataFrame, dir: File): Unit = {
+    val exception = intercept[AnalysisException](
+      df.writeStream
+        .option("checkpointLocation", dir.getCanonicalPath)
+        .start(dir.getCanonicalPath))
+    assert(exception.getMessage.contains(
+      "Append output mode not supported when there are streaming aggregations on streaming " +
+        "DataFrames/DataSets without watermark"))
   }
 
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */
