@@ -499,7 +499,7 @@ case class BroadcastHashJoinExec(
             """.stripMargin
       } else if (broadcastRelation.value.isInstanceOf[EmptyHashedRelationWithAllNullKeys]) {
         return s"""
-                  |// If the right side contains any all-null key, NAAJ simply returns Nil.
+                  |// If the right side contains any all-null key, NAAJ simply returns Nothing.
             """.stripMargin
       } else {
         val found = ctx.freshName("found")
