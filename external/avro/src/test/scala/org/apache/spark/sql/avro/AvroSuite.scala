@@ -1802,19 +1802,25 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-32431: consistent error for nested and top-level duplicate columns") {
-    val caseInsensitiveSchema = new StructType()
-      .add("LowerCase", LongType)
-      .add("camelcase", LongType)
-      .add("CamelCase", LongType)
     Seq(
-      "id AS lowercase", "id + 1 AS camelCase",
-      "NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn").foreach { selectExpr =>
+      Seq("id AS lowercase", "id + 1 AS camelCase") ->
+        new StructType()
+          .add("LowerCase", LongType)
+          .add("camelcase", LongType)
+          .add("CamelCase", LongType),
+      Seq("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn") ->
+        new StructType().add("StructColumn",
+          new StructType()
+            .add("LowerCase", LongType)
+            .add("camelcase", LongType)
+            .add("CamelCase", LongType))
+    ).foreach { case (selectExpr: Seq[String], caseInsensitiveSchema: StructType) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         withTempPath { dir =>
           val path = dir.getCanonicalPath
           spark
             .range(1L)
-            .selectExpr(selectExpr)
+            .selectExpr(selectExpr: _*)
             .write.mode("overwrite")
             .format("avro")
             .save(path)

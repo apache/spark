@@ -904,33 +904,41 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-32431: consistent error for nested and top-level duplicate columns") {
-    val caseInsensitiveSchema = new StructType()
-      .add("LowerCase", LongType)
-      .add("camelcase", LongType)
-      .add("CamelCase", LongType)
     Seq(
-      "id AS lowercase", "id + 1 AS camelCase",
-      "NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn").foreach { selectExpr =>
+      Seq("id AS lowercase", "id + 1 AS camelCase") ->
+        new StructType()
+          .add("LowerCase", LongType)
+          .add("camelcase", LongType)
+          .add("CamelCase", LongType),
+      Seq("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn") ->
+        new StructType().add("StructColumn",
+          new StructType()
+            .add("LowerCase", LongType)
+            .add("camelcase", LongType)
+            .add("CamelCase", LongType))
+    ).foreach { case (selectExpr: Seq[String], caseInsensitiveSchema: StructType) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         Seq("parquet", "orc", "json").map { format =>
-          withTempPath { dir =>
-            val path = dir.getCanonicalPath
-            spark
-              .range(1L)
-              .selectExpr(selectExpr)
-              .write.mode("overwrite")
-              .format(format)
-              .save(path)
-            val e = intercept[AnalysisException] {
+          withClue(s"format = $format select = ${selectExpr.mkString(",")}") {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
               spark
-                .read
-                .schema(caseInsensitiveSchema)
+                .range(1L)
+                .selectExpr(selectExpr: _*)
+                .write.mode("overwrite")
                 .format(format)
-                .load(path)
-                .show
+                .save(path)
+              val e = intercept[AnalysisException] {
+                spark
+                  .read
+                  .schema(caseInsensitiveSchema)
+                  .format(format)
+                  .load(path)
+                  .show
+              }
+              assert(e.getMessage.contains(
+                "Found duplicate column(s) in the data schema: `camelcase`"))
             }
-            assert(e.getMessage.contains(
-              "Found duplicate column(s) in the data schema: `camelcase`"))
           }
         }
       }
