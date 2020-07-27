@@ -903,7 +903,7 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-32431: consistent error for nested and top-level duplicate columns") {
+  ignore("SPARK-32431: consistent error for nested and top-level duplicate columns") {
     Seq(
       Seq("id AS lowercase", "id + 1 AS camelCase") ->
         new StructType()
