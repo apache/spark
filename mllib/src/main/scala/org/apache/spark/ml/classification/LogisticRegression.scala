@@ -506,8 +506,8 @@ class LogisticRegression @Since("1.2.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
-      probabilityCol, regParam, elasticNetParam, standardization, threshold, maxIter, tol,
-      fitIntercept, blockSize)
+      probabilityCol, regParam, elasticNetParam, standardization, threshold, thresholds, maxIter,
+      tol, fitIntercept, blockSize)
 
     val instances = extractInstances(dataset)
       .setName("training instances")
