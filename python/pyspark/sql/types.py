@@ -110,6 +110,9 @@ class NullType(DataType):
 
     __metaclass__ = DataTypeSingleton
 
+    def simpleString(self):
+        return 'void'
+
 
 class AtomicType(DataType):
     """An internal type used to represent everything that is not

@@ -33,7 +33,7 @@ class NullType private() extends DataType {
 
   private[spark] override def asNullable: NullType = this
 
-  override def sql: String = "VOID"
+  override def simpleString: String = "void"
 }
 
 /**
