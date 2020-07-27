@@ -17,9 +17,9 @@
 
 package org.apache.spark.storage
 
-import java.util.concurrent.Semaphore
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.{ConcurrentLinkedQueue, Semaphore}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
@@ -91,22 +91,11 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     val taskStartSem = new Semaphore(0)
     val broadcastSem = new Semaphore(0)
     val executorRemovedSem = new Semaphore(0)
-    val taskEndEvents = ArrayBuffer.empty[SparkListenerTaskEnd]
+    val taskEndEvents = new ConcurrentLinkedQueue[SparkListenerTaskEnd]()
     val blocksUpdated = ArrayBuffer.empty[SparkListenerBlockUpdated]
-    val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
-    val execToDecommission = new AtomicReference[String](null)
 
-    def maybeDoDecommission(candidateExecToDecom: String): Boolean = {
-      if (execToDecommission.compareAndSet(null, candidateExecToDecom)) {
-        val decomContext = s"Decommissioning executor ${candidateExecToDecom}"
-        logInfo(decomContext)
-        sched.decommissionExecutor(candidateExecToDecom,
-          ExecutorDecommissionInfo(decomContext, false))
-        true
-      } else {
-        false
-      }
-    }
+    def getExecutorIdOfAnySuccessfulTask(): Option[String] =
+      taskEndEvents.asScala.filter(_.taskInfo.successful).map(_.taskInfo.executorId).headOption
 
     sc.addSparkListener(new SparkListener {
       override def onExecutorRemoved(execRemoved: SparkListenerExecutorRemoved): Unit = {
@@ -118,16 +107,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       }
 
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-        taskEndEvents.append(taskEnd)
-        if (migrateDuring && taskEnd.taskInfo.successful) {
-          // When migrating during, we decommission an executor _after_ it is done with a task.
-          // We don't decommission an executor while it is running, because doing so might cause
-          // a task to fail. The task fails because a decommissioned block manager cannot save
-          // blocks. When this happens the task will be re-run on a different executor, but by
-          // which time we have already decommissioned a "wrong" executor. To avoid this condition,
-          // we wait for a task to finish successfully and go and decommission its executor.
-          maybeDoDecommission(taskEnd.taskInfo.executorId)
-        }
+        taskEndEvents.add(taskEnd)
       }
 
       override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
@@ -156,42 +136,40 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
 
     // Make sure the job is either mid run or otherwise has data to migrate.
     if (migrateDuring) {
-      // Give Spark a tiny bit to start executing after the broadcast blocks land.
-      // For me this works at 100, set to 300 for system variance.
-      Thread.sleep(300)
+      // Wait for one of the tasks to succeed and finish writing its blocks.
+      // This way we know that this executor had real data to migrate when it is subsequently
+      // decommissioned below.
+      eventually(timeout(3.seconds), interval(10.milliseconds)) {
+        assert(getExecutorIdOfAnySuccessfulTask().isDefined)
+      }
     } else {
       ThreadUtils.awaitResult(asyncCount, 15.seconds)
     }
 
-    sc.listenerBus.waitUntilEmpty()
+    // Decommission one of the executors.
+    val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
 
-    val asyncCountResult = if (migrateDuring) {
-      // Wait for the job to finish
-      ThreadUtils.awaitResult(asyncCount, 15.seconds)
-    } else {
-      // (See comment in listener's onTaskEnd method.)
-      // But when migrating after a job is done, we can decommission any executor that had a task
-      val executorWithSuccessfulTask = taskEndEvents
-        .filter(_.taskInfo.successful)
-        .map(_.taskInfo.executorId)
-        .head
-      val decommissioned = maybeDoDecommission(executorWithSuccessfulTask)
-      assert(decommissioned, s"No prior decommissioning should have happened")
-      // We had already waited for the job to finish above, so the timeout is zero
-      ThreadUtils.awaitResult(asyncCount, 0.seconds)
-    }
+    // When `migrateDuring=true`, we have already waited for a successful task.
+    // When `migrateDuring=false`, then we know the job is finished, so there
+    // must be a successful executor. Thus the '.get' should succeed in either case.
+    val execToDecommission = getExecutorIdOfAnySuccessfulTask().get
+    logInfo(s"Decommissioning executor ${execToDecommission}")
+    sched.decommissionExecutor(execToDecommission, ExecutorDecommissionInfo("", false))
 
+    // Wait for job to finish.
+    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 15.seconds)
     assert(asyncCountResult === numParts)
     // All tasks finished, so accum should have been increased numParts times.
     assert(accum.value === numParts)
 
+    sc.listenerBus.waitUntilEmpty()
     if (shuffle) {
       //  mappers & reducers which succeeded
-      assert(taskEndEvents.count(_.reason == Success) === 2 * numParts,
+      assert(taskEndEvents.asScala.count(_.reason == Success) === 2 * numParts,
         s"Expected ${2 * numParts} tasks got ${taskEndEvents.size} (${taskEndEvents})")
     } else {
       // only mappers which executed successfully
-      assert(taskEndEvents.count(_.reason == Success) === numParts,
+      assert(taskEndEvents.asScala.count(_.reason == Success) === numParts,
         s"Expected ${numParts} tasks got ${taskEndEvents.size} (${taskEndEvents})")
     }
 
@@ -236,7 +214,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     val execIdToBlocksMapping = storageStatus.map(
       status => (status.blockManagerId.executorId, status.blocks)).toMap
     // No cached blocks should be present on executor which was decommissioned
-    assert(execIdToBlocksMapping(execToDecommission.get()).keys.filter(_.isRDD).toSeq === Seq(),
+    assert(execIdToBlocksMapping(execToDecommission).keys.filter(_.isRDD).toSeq === Seq(),
       "Cache blocks should be migrated")
     if (persist) {
       // There should still be all the RDD blocks cached
@@ -244,7 +222,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
 
     // Make the executor we decommissioned exit
-    sched.client.killExecutors(List(execToDecommission.get()))
+    sched.client.killExecutors(List(execToDecommission))
 
     // Wait for the executor to be removed
     executorRemovedSem.acquire(1)
