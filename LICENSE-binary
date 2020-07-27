@@ -557,12 +557,6 @@ jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
 org.glassfish.hk2.external:jakarta.inject
 
 
-Python Software Foundation License
-----------------------------------
-
-pyspark/heapq3.py
-
-
 Public Domain
 -------------
 
