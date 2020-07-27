@@ -47,9 +47,9 @@ private[spark] object SchemaUtils {
     val queue = new Queue[StructType]()
     queue.enqueue(schema)
     do {
-      val st = queue.dequeue()
-      checkColumnNameDuplication(st.map(_.name), colType, caseSensitiveAnalysis)
-      val nestedStructs = st.map(_.dataType).collect { case st: StructType => st }
+      val struct = queue.dequeue()
+      checkColumnNameDuplication(struct.map(_.name), colType, caseSensitiveAnalysis)
+      val nestedStructs = struct.map(_.dataType).collect { case st: StructType => st }
       queue.enqueue(nestedStructs: _*)
     } while (queue.nonEmpty)
   }

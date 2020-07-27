@@ -84,15 +84,22 @@ class SchemaUtilsSuite extends SparkFunSuite {
   }
 
   test("SPARK-32431: duplicated fields in nested schemas") {
-    val schema = new StructType().add("StructColumn",
-      new StructType()
-        .add("LowerCase", LongType)
-        .add("camelcase", LongType)
-        .add("CamelCase", LongType))
-    val msg = intercept[AnalysisException] {
-      SchemaUtils.checkSchemaColumnNameDuplication(
-        schema, "in SchemaUtilsSuite", caseSensitiveAnalysis = false)
-    }.getMessage
-    assert(msg.contains("Found duplicate column(s) in SchemaUtilsSuite: `camelcase`"))
+    val schemaA = new StructType()
+      .add("LowerCase", LongType)
+      .add("camelcase", LongType)
+      .add("CamelCase", LongType)
+    val schemaB = new StructType()
+      .add("f1", LongType)
+      .add("StructColumn1", schemaA)
+    val schemaC = new StructType()
+      .add("f2", LongType)
+      .add("StructColumn2", schemaB)
+    Seq(schemaA, schemaB, schemaC).foreach { schema =>
+      val msg = intercept[AnalysisException] {
+        SchemaUtils.checkSchemaColumnNameDuplication(
+          schema, "in SchemaUtilsSuite", caseSensitiveAnalysis = false)
+      }.getMessage
+      assert(msg.contains("Found duplicate column(s) in SchemaUtilsSuite: `camelcase`"))
+    }
   }
 }
