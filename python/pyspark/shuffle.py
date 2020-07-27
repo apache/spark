@@ -796,7 +796,7 @@ class ExternalGroupBy(ExternalMerger):
 
         if self._sorted:
             # all the partitions are already sorted
-            sorted_items = heapq.merge(disk_items, key=operator.itemgetter(0))
+            sorted_items = heapq.merge(*disk_items, key=operator.itemgetter(0))
 
         else:
             # Flatten the combined values, so it will not consume huge
