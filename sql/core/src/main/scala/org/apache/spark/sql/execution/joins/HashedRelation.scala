@@ -946,7 +946,7 @@ trait NullAwareHashedRelation extends HashedRelation with Externalizable {
  * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
  */
 class EmptyHashedRelation extends NullAwareHashedRelation {
-  override def asReadOnlyCopy(): EmptyHashedRelation = new EmptyHashedRelation
+  override def asReadOnlyCopy(): EmptyHashedRelation = this
 }
 
 /**
@@ -954,8 +954,7 @@ class EmptyHashedRelation extends NullAwareHashedRelation {
  * which contains all null columns key.
  */
 class EmptyHashedRelationWithAllNullKeys extends NullAwareHashedRelation {
-  override def asReadOnlyCopy(): EmptyHashedRelationWithAllNullKeys =
-    new EmptyHashedRelationWithAllNullKeys
+  override def asReadOnlyCopy(): EmptyHashedRelationWithAllNullKeys = this
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */

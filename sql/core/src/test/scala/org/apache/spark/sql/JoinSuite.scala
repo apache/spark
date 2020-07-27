@@ -1150,7 +1150,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
   }
 
   test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize") {
-    withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_OPTIMIZE_ENABLED.key -> "true",
+    withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       // positive not in subquery case
       var joinExec = assertJoin((
@@ -1174,6 +1174,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       // negative hand-written left anti join
       // testData.key nullable false
       // testData2.a nullable false
+      // isnull(key = a) will be optimized to true literal and removed
       joinExec = assertJoin((
         "select * from testData left anti join testData2 ON key = a or isnull(key = a)",
         classOf[BroadcastHashJoinExec]))

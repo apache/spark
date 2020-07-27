@@ -412,7 +412,7 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
     case Join(left, right, LeftAnti,
       Some(Or(e @ EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
         IsNull(e2 @ EqualTo(_, _)))), _)
-        if SQLConf.get.nullAwareAntiJoinOptimizeEnabled &&
+        if SQLConf.get.optimizeNullAwareAntiJoin &&
           e.semanticEquals(e2) =>
       if (canEvaluate(leftAttr, left) && canEvaluate(rightAttr, right)) {
         Some(Seq(leftAttr), Seq(rightAttr))

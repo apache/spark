@@ -1,5 +1,5 @@
---CONFIG_DIM1 spark.sql.nullAwareAntiJoin.optimize.enabled=true
---CONFIG_DIM1 spark.sql.nullAwareAntiJoin.optimize.enabled=false
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
 
 create temporary view tab_a as select * from values (1, 1) as tab_a(a1, b1);
 create temporary view tab_b as select * from values (1, 1) as tab_b(a2, b2);

@@ -1,7 +1,7 @@
 -- Test filter clause for aggregate expression.
 
---CONFIG_DIM1 spark.sql.nullAwareAntiJoin.optimize.enabled=true
---CONFIG_DIM1 spark.sql.nullAwareAntiJoin.optimize.enabled=false
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
 
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
