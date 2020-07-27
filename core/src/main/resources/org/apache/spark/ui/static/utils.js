@@ -158,6 +158,9 @@ function createTemplateURI(appId, templateName) {
 function setDataTableDefaults() {
   $.extend($.fn.dataTable.defaults, {
     stateSave: true,
+    stateSaveParams: function(_, data) {
+        data.search.search = "";
+    },
     lengthMenu: [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
     pageLength: 20
   });
