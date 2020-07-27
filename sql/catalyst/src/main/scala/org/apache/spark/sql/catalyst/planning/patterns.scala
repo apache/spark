@@ -405,15 +405,15 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
    * LeftAnti(condition: Or(EqualTo(a=b), IsNull(EqualTo(a=b)))
    * will almost certainly be planned as a Broadcast Nested Loop join,
    * which is very time consuming because it's an O(M*N) calculation.
-   * But if it's a single column case, and buildSide data is small enough,
-   * O(M*N) calculation could be optimized into O(M) using hash lookup instead of loop lookup.
+   * But if it's a single column case O(M*N) calculation could be optimized into O(M)
+   * using hash lookup instead of loop lookup.
    */
   def unapply(join: Join): Option[ReturnType] = join match {
     case Join(left, right, LeftAnti,
-      Some(Or(EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
-        IsNull(EqualTo(tmpLeft: AttributeReference, tmpRight: AttributeReference)))), _)
+      Some(Or(e @ EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
+        IsNull(e2 @ EqualTo(_, _)))), _)
         if SQLConf.get.nullAwareAntiJoinOptimizeEnabled &&
-          leftAttr.semanticEquals(tmpLeft) && rightAttr.semanticEquals(tmpRight) =>
+          e.semanticEquals(e2) =>
       if (canEvaluate(leftAttr, left) && canEvaluate(rightAttr, right)) {
         Some(Seq(leftAttr), Seq(rightAttr))
       } else if (canEvaluate(leftAttr, right) && canEvaluate(rightAttr, left)) {

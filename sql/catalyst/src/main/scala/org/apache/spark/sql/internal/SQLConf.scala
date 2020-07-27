@@ -2676,12 +2676,12 @@ object SQLConf {
     buildConf("spark.sql.nullAwareAntiJoin.optimize.enabled")
       .internal()
       .doc("When true, NULL-aware anti join execution will be planed into " +
-        "BroadcastJoinExec with flag isNullAwareAntiJoin enabled, " +
+        "BroadcastHashJoinExec with flag isNullAwareAntiJoin enabled, " +
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup." +
         "Only support for singleColumn NAAJ for now.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.
