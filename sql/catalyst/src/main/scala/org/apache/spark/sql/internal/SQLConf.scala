@@ -2673,7 +2673,7 @@ object SQLConf {
       .createWithDefault(8)
 
   val OPTIMIZE_NULL_AWARE_ANTI_JOIN =
-    buildConf("spark.sql.nullAwareAntiJoin.optimize.enabled")
+    buildConf("spark.sql.optimizeNullAwareAntiJoin")
       .internal()
       .doc("When true, NULL-aware anti join execution will be planed into " +
         "BroadcastHashJoinExec with flag isNullAwareAntiJoin enabled, " +
