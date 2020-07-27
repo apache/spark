@@ -2,7 +2,7 @@
 
 -- parsing invalid value with pattern 'y'
 select to_timestamp('294248', 'y'); -- out of year value range [0, 294247]
-select to_timestamp('1', 'yy'); -- padding for reduced two digit form must be 2.
+select to_timestamp('1', 'yy'); -- the number of digits must be 2 for 'yy'.
 select to_timestamp('-12', 'yy'); -- out of year value range [0, 99] for reduced two digit form
 select to_timestamp('123', 'yy'); -- the number of digits must be 2 for 'yy'.
 select to_timestamp('1', 'yyy'); -- the number of digits must be in [3, 6] for 'yyy'
