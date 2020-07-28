@@ -2862,7 +2862,7 @@ class HiveDDLSuite
       assert(df.schema.fields.head.dataType == NullType)
       checkAnswer(
         df,
-        Row("null")
+        Row(null)
       )
 
       sql("alter view v1 as select null as c1, 1 as c2")
@@ -2870,7 +2870,7 @@ class HiveDDLSuite
       assert(df2.schema.fields.head.dataType == NullType)
       checkAnswer(
         df2,
-        Row("null", 1)
+        Row(null, 1)
       )
     }
   }
