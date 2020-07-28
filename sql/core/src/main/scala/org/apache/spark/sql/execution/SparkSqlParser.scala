@@ -66,8 +66,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.configureKey() != null) {
-      val keyStr = ctx.configureKey().getText
+    if (ctx.configKey() != null) {
+      val keyStr = ctx.configKey().getText
       if (ctx.value != null) {
         SetCommand(Some(keyStr -> Option(ctx.value.getText)))
       } else {
@@ -78,7 +78,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         case "-v" => SetCommand(Some("-v" -> None))
         case s if s.isEmpty => SetCommand(None)
         case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
-          "'SET key=value'. If you want to include special characters in key and value, " +
+          "'SET key=value'. If you want to include special characters in key, " +
           "please use quotes, e.g., SET `ke y`=value.", ctx)
       }
     }
@@ -94,8 +94,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.configureKey() != null) {
-      ResetCommand(Some(ctx.configureKey().getText))
+    if (ctx.configKey() != null) {
+      ResetCommand(Some(ctx.configKey().getText))
     } else {
       remainder(ctx.RESET().getSymbol).trim match {
         case s if s.isEmpty => ResetCommand(None)

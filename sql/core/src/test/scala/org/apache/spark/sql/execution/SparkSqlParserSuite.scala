@@ -72,7 +72,7 @@ class SparkSqlParserSuite extends AnalysisTest {
       SetCommand(Some("spark.sql.    key" -> Some("value"))))
 
     val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
-      "'SET key=value'. If you want to include special characters in key and value, " +
+      "'SET key=value'. If you want to include special characters in key, " +
       "please use quotes, e.g., SET `ke y`=value."
     intercept("SET spark.sql.key value", expectedErrMsg)
     intercept("SET spark.sql.key   'value'", expectedErrMsg)
