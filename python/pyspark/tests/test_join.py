@@ -59,8 +59,6 @@ class JoinTests(ReusedPySparkTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_join import *  # noqa: F401
-
     try:
         import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
