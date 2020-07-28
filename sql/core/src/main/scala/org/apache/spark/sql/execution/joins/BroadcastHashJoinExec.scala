@@ -46,14 +46,23 @@ case class BroadcastHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan)
+    right: SparkPlan,
+    isNullAwareAntiJoin: Boolean = false)
   extends HashJoin with CodegenSupport {
+
+  if (isNullAwareAntiJoin) {
+    require(leftKeys.length == 1, "leftKeys length should be 1")
+    require(rightKeys.length == 1, "rightKeys length should be 1")
+    require(joinType == LeftAnti, "joinType must be LeftAnti.")
+    require(buildSide == BuildRight, "buildSide must be BuildRight.")
+    require(condition.isEmpty, "null aware anti join optimize condition should be empty.")
+  }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = HashedRelationBroadcastMode(buildBoundKeys)
+    val mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAwareAntiJoin)
     buildSide match {
       case BuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
@@ -133,10 +142,37 @@ case class BroadcastHashJoinExec(
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
-    streamedPlan.execute().mapPartitions { streamedIter =>
-      val hashed = broadcastRelation.value.asReadOnlyCopy()
-      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-      join(streamedIter, hashed, numOutputRows)
+    if (isNullAwareAntiJoin) {
+      streamedPlan.execute().mapPartitionsInternal { streamedIter =>
+        val hashed = broadcastRelation.value.asReadOnlyCopy()
+        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
+        if (hashed == EmptyHashedRelation) {
+          streamedIter
+        } else if (hashed == EmptyHashedRelationWithAllNullKeys) {
+          Iterator.empty
+        } else {
+          val keyGenerator = UnsafeProjection.create(
+            BindReferences.bindReferences[Expression](
+              leftKeys,
+              AttributeSeq(left.output))
+          )
+          streamedIter.filter(row => {
+            val lookupKey: UnsafeRow = keyGenerator(row)
+            if (lookupKey.anyNull()) {
+              false
+            } else {
+              // Anti Join: Drop the row on the streamed side if it is a match on the build
+              hashed.get(lookupKey) == null
+            }
+          })
+        }
+      }
+    } else {
+      streamedPlan.execute().mapPartitions { streamedIter =>
+        val hashed = broadcastRelation.value.asReadOnlyCopy()
+        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
+        join(streamedIter, hashed, numOutputRows)
+      }
     }
   }
 
@@ -453,6 +489,40 @@ case class BroadcastHashJoinExec(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
+
+    if (isNullAwareAntiJoin) {
+      if (broadcastRelation.value == EmptyHashedRelation) {
+        return s"""
+                  |// If the right side is empty, NAAJ simply returns the left side.
+                  |$numOutput.add(1);
+                  |${consume(ctx, input)}
+            """.stripMargin
+      } else if (broadcastRelation.value == EmptyHashedRelationWithAllNullKeys) {
+        return s"""
+                  |// If the right side contains any all-null key, NAAJ simply returns Nothing.
+            """.stripMargin
+      } else {
+        val found = ctx.freshName("found")
+        return s"""
+                  |boolean $found = false;
+                  |// generate join key for stream side
+                  |${keyEv.code}
+                  |if ($anyNull) {
+                  |  $found = true;
+                  |} else {
+                  |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+                  |  if ($matched != null) {
+                  |    $found = true;
+                  |  }
+                  |}
+                  |
+                  |if (!$found) {
+                  |  $numOutput.add(1);
+                  |  ${consume(ctx, input)}
+                  |}
+            """.stripMargin
+      }
+    }
 
     if (uniqueKeyCodePath) {
       val found = ctx.freshName("found")

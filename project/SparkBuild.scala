@@ -1031,16 +1031,7 @@ object TestSettings {
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
-    // Show only the failed test cases with full stack traces in github action to make the log more
-    // readable.
-    // Check https://www.scalatest.org/user_guide/using_the_runner for the details of options .
-    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
-      sys.env.get("GITHUB_ACTIONS").map { _ =>
-        Seq("-eNCXEHLOPQMDF")
-      }.getOrElse(Nil): _*),
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
-    // Required to detect Junit tests for each project, see also https://github.com/sbt/junit-interface/issues/35
-    crossPaths := false,
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
