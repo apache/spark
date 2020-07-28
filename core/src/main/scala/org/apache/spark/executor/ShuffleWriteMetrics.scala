@@ -18,8 +18,8 @@
 package org.apache.spark.executor
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.shuffle.sort.RowCountInfo
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
+import org.apache.spark.shuffle.sort.RowCountInfo
 import org.apache.spark.util.{CollectionAccumulator, LongAccumulator}
 
 
