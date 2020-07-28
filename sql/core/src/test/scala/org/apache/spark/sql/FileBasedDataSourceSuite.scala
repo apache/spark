@@ -565,7 +565,7 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-31962 - when modifiedAfter specified " +
-      "before future date") {
+      "with a past date") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
@@ -628,21 +628,6 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-31962 - when modifiedAfter specified " +
-      "with a past date") {
-    withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val df = spark.read
-          .option("modifiedAfter", "1984-05-10T01:11:00")
-          .format("csv")
-          .load(path.toString)
-      assert(df.count() == 1)
-    }
-  }
-
-
-  test("SPARK-31962 - when modifiedAfter specified " +
       "with a past date and pathGlobalFilter returning results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
@@ -675,7 +660,7 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-31962 - when modifiedAfter specified " +
-      "after future date and pathGlobFilter returning results") {
+      "with future date and pathGlobFilter returning results") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
       val file = new File(dir, "file1.csv")
