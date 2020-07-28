@@ -50,9 +50,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
 import org.apache.spark.util.Utils
 
-abstract class AvroSuite extends QueryTest with SharedSparkSession {
+abstract class AvroSuite extends QueryTest with SharedSparkSession with NestedDataSourceSuiteBase {
   import testImplicits._
 
+  override val nestedDataSources = Seq("avro")
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
 
@@ -1798,44 +1799,6 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       val reader = DataFileReader.openReader(avroFiles(0), new GenericDatumReader[GenericRecord]())
       val version = reader.asInstanceOf[DataFileReader[_]].getMetaString(SPARK_VERSION_METADATA_KEY)
       assert(version === SPARK_VERSION_SHORT)
-    }
-  }
-
-  test("SPARK-32431: consistent error for nested and top-level duplicate columns") {
-    Seq(
-      Seq("id AS lowercase", "id + 1 AS camelCase") ->
-        new StructType()
-          .add("LowerCase", LongType)
-          .add("camelcase", LongType)
-          .add("CamelCase", LongType),
-      Seq("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn") ->
-        new StructType().add("StructColumn",
-          new StructType()
-            .add("LowerCase", LongType)
-            .add("camelcase", LongType)
-            .add("CamelCase", LongType))
-    ).foreach { case (selectExpr: Seq[String], caseInsensitiveSchema: StructType) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-        withTempPath { dir =>
-          val path = dir.getCanonicalPath
-          spark
-            .range(1L)
-            .selectExpr(selectExpr: _*)
-            .write.mode("overwrite")
-            .format("avro")
-            .save(path)
-          val e = intercept[AnalysisException] {
-            spark
-              .read
-              .schema(caseInsensitiveSchema)
-              .format("avro")
-              .load(path)
-              .show
-          }
-          assert(e.getMessage.contains(
-            "Found duplicate column(s) in the data schema: `camelcase`"))
-        }
-      }
     }
   }
 }

@@ -43,10 +43,56 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
+trait NestedDataSourceSuiteBase extends QueryTest with SharedSparkSession{
+  protected val nestedDataSources: Seq[String]
+
+  test("SPARK-32431: consistent error for nested and top-level duplicate columns") {
+    Seq(
+      Seq("id AS lowercase", "id + 1 AS camelCase") ->
+        new StructType()
+          .add("LowerCase", LongType)
+          .add("camelcase", LongType)
+          .add("CamelCase", LongType),
+      Seq("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn") ->
+        new StructType().add("StructColumn",
+          new StructType()
+            .add("LowerCase", LongType)
+            .add("camelcase", LongType)
+            .add("CamelCase", LongType))
+    ).foreach { case (selectExpr: Seq[String], caseInsensitiveSchema: StructType) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        nestedDataSources.map { format =>
+          withClue(s"format = $format select = ${selectExpr.mkString(",")}") {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark
+                .range(1L)
+                .selectExpr(selectExpr: _*)
+                .write.mode("overwrite")
+                .format(format)
+                .save(path)
+              val e = intercept[AnalysisException] {
+                spark
+                  .read
+                  .schema(caseInsensitiveSchema)
+                  .format(format)
+                  .load(path)
+                  .show
+              }
+              assert(e.getMessage.contains(
+                "Found duplicate column(s) in the data schema: `camelcase`"))
+            }
+          }
+        }
+      }
+    }
+  }
+}
 
 class FileBasedDataSourceSuite extends QueryTest
   with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+  with AdaptiveSparkPlanHelper
+  with NestedDataSourceSuiteBase {
   import testImplicits._
 
   override def beforeAll(): Unit = {
@@ -62,6 +108,7 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  override val nestedDataSources = Seq("orc", "parquet", "json")
   private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")
   private val nameWithSpecialChars = "sp&cial%c hars"
 
@@ -897,48 +944,6 @@ class FileBasedDataSourceSuite extends QueryTest
             checkAnswer(
               spark.read.schema(rootColumnCaseInsensitiveSchema).format(format).load(path),
               Row(Row(0, 1)))
-          }
-        }
-      }
-    }
-  }
-
-  test("SPARK-32431: consistent error for nested and top-level duplicate columns") {
-    Seq(
-      Seq("id AS lowercase", "id + 1 AS camelCase") ->
-        new StructType()
-          .add("LowerCase", LongType)
-          .add("camelcase", LongType)
-          .add("CamelCase", LongType),
-      Seq("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn") ->
-        new StructType().add("StructColumn",
-          new StructType()
-            .add("LowerCase", LongType)
-            .add("camelcase", LongType)
-            .add("CamelCase", LongType))
-    ).foreach { case (selectExpr: Seq[String], caseInsensitiveSchema: StructType) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-        Seq("parquet", "orc", "json").map { format =>
-          withClue(s"format = $format select = ${selectExpr.mkString(",")}") {
-            withTempPath { dir =>
-              val path = dir.getCanonicalPath
-              spark
-                .range(1L)
-                .selectExpr(selectExpr: _*)
-                .write.mode("overwrite")
-                .format(format)
-                .save(path)
-              val e = intercept[AnalysisException] {
-                spark
-                  .read
-                  .schema(caseInsensitiveSchema)
-                  .format(format)
-                  .load(path)
-                  .show
-              }
-              assert(e.getMessage.contains(
-                "Found duplicate column(s) in the data schema: `camelcase`"))
-            }
           }
         }
       }
