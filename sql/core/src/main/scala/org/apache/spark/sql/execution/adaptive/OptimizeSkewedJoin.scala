@@ -286,7 +286,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     val numPartitions = queryStage.partitionsWithSizes.length
     val medSize = medianSize(queryStage.mapStats)
     val actualSizes = queryStage.partitionsWithSizes.map(_._2)
-    val targetSize = targetSize(actualSizes, medSize, conf)
+    val tgtSize = targetSize(actualSizes, medSize)
     val sizeInfo =
       getSizeInfo(medSize, queryStage.mapStats.bytesByPartitionId)
     logInfo(
@@ -310,7 +310,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         val reducerId = partSpec.startReducerIndex
         val skewSpecs = createSkewPartitionSpecs(
           queryStage.shuffleStage.shuffle.shuffleDependency.shuffleId,
-          reducerId, targetSize)
+          reducerId, tgtSize)
         if (skewSpecs.isDefined) {
           logInfo(s"Skew side partition $partitionIndex " +
             s"(${FileUtils.byteCountToDisplaySize(actualSize)}) is skewed, " +

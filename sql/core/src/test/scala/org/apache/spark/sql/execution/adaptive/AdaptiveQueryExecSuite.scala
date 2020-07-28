@@ -1189,7 +1189,7 @@ class AdaptiveQueryExecSuite
 
       // During execution, the SMJ is changed to Union of SMJ + 10 SMJ of the skewed partition.
       val planAfter = join.queryExecution.executedPlan
-      assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
+      assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
       val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       val smjAfterExecution = adaptivePlan.collect {
         case smj: SortMergeJoinExec => smj
