@@ -674,7 +674,7 @@ Rscript -e 'install.packages("arrow", repos="https://cloud.r-project.org/")'
 Please refer [the official documentation of Apache Arrow](https://arrow.apache.org/docs/r/) for more detials.
 
 Note that you must ensure that Arrow R package is installed and available on all cluster nodes.
-The current supported minimum version is 0.15.1; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
+The current supported minimum version is 1.0.0; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
 
 ## Enabling for Conversion to/from R DataFrame, `dapply` and `gapply`
 

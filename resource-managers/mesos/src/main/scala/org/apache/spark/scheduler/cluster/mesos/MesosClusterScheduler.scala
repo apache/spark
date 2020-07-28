@@ -383,13 +383,13 @@ private[spark] class MesosClusterScheduler(
     taskId.split(s"${RETRY_SEP}").head
   }
 
-  private def adjust[A, B](m: collection.Map[A, B], k: A, default: B)(f: B => B) = {
+  private def adjust[A, B](m: Map[A, B], k: A, default: B)(f: B => B) = {
     m.updated(k, f(m.getOrElse(k, default)))
   }
 
   private def getDriverEnvironment(desc: MesosDriverDescription): Environment = {
     // TODO(mgummelt): Don't do this here.  This should be passed as a --conf
-    val commandEnv = adjust(desc.command.environment, "SPARK_SUBMIT_OPTS", "")(
+    val commandEnv = adjust(desc.command.environment.toMap, "SPARK_SUBMIT_OPTS", "")(
       v => s"$v -D${config.DRIVER_FRAMEWORK_ID.key}=${getDriverFrameworkID(desc)}"
     )
 
@@ -686,14 +686,14 @@ private[spark] class MesosClusterScheduler(
       }
 
       scheduleTasks(
-        copyBuffer(driversToRetry),
+        copyBuffer(driversToRetry).toSeq,
         removeFromPendingRetryDrivers,
         currentOffers,
         tasks)
 
       // Then we walk through the queued drivers and try to schedule them.
       scheduleTasks(
-        copyBuffer(queuedDrivers),
+        copyBuffer(queuedDrivers).toSeq,
         removeFromQueuedDrivers,
         currentOffers,
         tasks)

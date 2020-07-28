@@ -51,8 +51,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
   override protected val excludedOnceBatches: Set[String] =
     Set(
       "PartitionPruning",
-      "Extract Python UDFs",
-      "Push CNF predicate through join")
+      "Extract Python UDFs")
 
   protected def fixedPoint =
     FixedPoint(
@@ -123,8 +122,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
         rulesWithoutInferFiltersFromConstraints: _*) ::
       // Set strategy to Once to avoid pushing filter every time because we do not change the
       // join condition.
-      Batch("Push CNF predicate through join", Once,
-        PushCNFPredicateThroughJoin) :: Nil
+      Batch("Push extra predicate through join", fixedPoint,
+        PushExtraPredicateThroughJoin,
+        PushDownPredicates) :: Nil
     }
 
     val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
@@ -497,8 +497,8 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Note: right now Union means UNION ALL, which does not de-duplicate rows, so it is safe to
     // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
     // pushdown Limit.
-    case LocalLimit(exp, Union(children)) =>
-      LocalLimit(exp, Union(children.map(maybePushLocalLimit(exp, _))))
+    case LocalLimit(exp, u: Union) =>
+      LocalLimit(exp, u.copy(children = u.children.map(maybePushLocalLimit(exp, _))))
     // Add extra limits below OUTER JOIN. For LEFT OUTER and RIGHT OUTER JOIN we push limits to
     // the left and right sides, respectively. It's not safe to push limits below FULL OUTER
     // JOIN in the general case without a more invasive rewrite.
@@ -556,15 +556,15 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
     // Push down deterministic projection through UNION ALL
-    case p @ Project(projectList, Union(children)) =>
-      assert(children.nonEmpty)
+    case p @ Project(projectList, u: Union) =>
+      assert(u.children.nonEmpty)
       if (projectList.forall(_.deterministic)) {
-        val newFirstChild = Project(projectList, children.head)
-        val newOtherChildren = children.tail.map { child =>
-          val rewrites = buildRewrites(children.head, child)
+        val newFirstChild = Project(projectList, u.children.head)
+        val newOtherChildren = u.children.tail.map { child =>
+          val rewrites = buildRewrites(u.children.head, child)
           Project(projectList.map(pushToRight(_, rewrites)), child)
         }
-        Union(newFirstChild +: newOtherChildren)
+        u.copy(children = newFirstChild +: newOtherChildren)
       } else {
         p
       }
@@ -928,19 +928,28 @@ object CombineUnions extends Rule[LogicalPlan] {
   }
 
   private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
+    val topByName = union.byName
+    val topAllowMissingCol = union.allowMissingCol
+
     val stack = mutable.Stack[LogicalPlan](union)
     val flattened = mutable.ArrayBuffer.empty[LogicalPlan]
+    // Note that we should only flatten the unions with same byName and allowMissingCol.
+    // Although we do `UnionCoercion` at analysis phase, we manually run `CombineUnions`
+    // in some places like `Dataset.union`. Flattening unions with different resolution
+    // rules (by position and by name) could cause incorrect results.
     while (stack.nonEmpty) {
       stack.pop() match {
-        case Distinct(Union(children)) if flattenDistinct =>
+        case Distinct(Union(children, byName, allowMissingCol))
+            if flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
-        case Union(children) =>
+        case Union(children, byName, allowMissingCol)
+            if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
         case child =>
           flattened += child
       }
     }
-    Union(flattened.toSeq)
+    union.copy(children = flattened)
   }
 }
 
@@ -966,14 +975,19 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Removes Sort operation. This can happen:
+ * Removes Sort operations if they don't affect the final output ordering.
+ * Note that changes in the final output ordering may affect the file size (SPARK-32318).
+ * This rule handles the following cases:
  * 1) if the sort order is empty or the sort order does not have any reference
  * 2) if the child is already sorted
- * 3) if there is another Sort operator separated by 0...n Project/Filter operators
- * 4) if the Sort operator is within Join separated by 0...n Project/Filter operators only,
- *    and the Join conditions is deterministic
- * 5) if the Sort operator is within GroupBy separated by 0...n Project/Filter operators only,
- *    and the aggregate function is order irrelevant
+ * 3) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
+ *    RepartitionByExpression (with deterministic expressions) operators
+ * 4) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
+ *    RepartitionByExpression (with deterministic expressions) operators only and the Join condition
+ *    is deterministic
+ * 5) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
+ *    RepartitionByExpression (with deterministic expressions) operators only and the aggregate
+ *    function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -999,6 +1013,8 @@ object EliminateSorts extends Rule[LogicalPlan] {
   private def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
+    case r: RepartitionByExpression => r.partitionExpressions.forall(_.deterministic)
+    case _: Repartition => true
     case _ => false
   }
 

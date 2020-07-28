@@ -59,6 +59,8 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   @Since("2.0.0")
   def getK: Int = $(k)
 
+  setDefault(k -> 2, maxIter -> 100, tol -> 0.01, blockSize -> 1)
+
   /**
    * Validates and transforms the input schema.
    *
@@ -328,11 +330,6 @@ class GaussianMixture @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
   extends Estimator[GaussianMixtureModel] with GaussianMixtureParams with DefaultParamsWritable {
 
-  setDefault(
-    k -> 2,
-    maxIter -> 100,
-    tol -> 0.01)
-
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixture = defaultCopy(extra)
 
@@ -392,7 +389,6 @@ class GaussianMixture @Since("2.0.0") (
    */
   @Since("3.1.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
-  setDefault(blockSize -> 1)
 
   /**
    * Number of samples per cluster to use when initializing Gaussians.

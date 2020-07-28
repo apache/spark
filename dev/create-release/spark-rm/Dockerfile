@@ -33,7 +33,10 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 # These arguments are just for reuse and not really meant to be customized.
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
-ARG PIP_PKGS="sphinx==2.3.1 mkdocs==1.0.4 numpy==1.18.1"
+# TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
+#   See also https://github.com/sphinx-doc/sphinx/issues/7551.
+#   We should use the latest Sphinx version once this is fixed.
+ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.0.4 numpy==1.18.1 pydata_sphinx_theme==0.3.1"
 ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
 
 # Install extra needed repos and refresh.

@@ -1196,6 +1196,8 @@ def to_date(col, format=None):
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted. Equivalent to ``col.cast("date")``.
 
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_date(df.t).alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
@@ -1218,6 +1220,8 @@ def to_timestamp(col, format=None):
     using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted. Equivalent to ``col.cast("timestamp")``.
+
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_timestamp(df.t).alias('dt')).collect()
@@ -2068,7 +2072,11 @@ def slice(x, start, length):
     [Row(sliced=[2, 3]), Row(sliced=[5])]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.slice(_to_java_column(x), start, length))
+    return Column(sc._jvm.functions.slice(
+        _to_java_column(x),
+        start._jc if isinstance(start, Column) else start,
+        length._jc if isinstance(length, Column) else length
+    ))
 
 
 @since(2.4)
@@ -3320,6 +3328,118 @@ def map_zip_with(col1, col2, f):
     +---------------------------+
     """
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
+
+
+# ---------------------- Partition transform functions --------------------------------
+
+@since(3.1)
+def years(col):
+    """
+    Partition transform function: A transform for timestamps and dates
+    to partition data into years.
+
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    ...     years("ts")
+    ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.years(_to_java_column(col)))
+
+
+@since(3.1)
+def months(col):
+    """
+    Partition transform function: A transform for timestamps and dates
+    to partition data into months.
+
+    >>> df.writeTo("catalog.db.table").partitionedBy(
+    ...     months("ts")
+    ... ).createOrReplace()  # doctest: +SKIP
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.months(_to_java_column(col)))
+
+
+@since(3.1)
+def days(col):
+    """
+    Partition transform function: A transform for timestamps and dates
+    to partition data into days.
+
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    ...     days("ts")
+    ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.days(_to_java_column(col)))
+
+
+@since(3.1)
+def hours(col):
+    """
+    Partition transform function: A transform for timestamps
+    to partition data into hours.
+
+    >>> df.writeTo("catalog.db.table").partitionedBy(   # doctest: +SKIP
+    ...     hours("ts")
+    ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.hours(_to_java_column(col)))
+
+
+@since(3.1)
+def bucket(numBuckets, col):
+    """
+    Partition transform function: A transform for any type that partitions
+    by a hash of the input column.
+
+    >>> df.writeTo("catalog.db.table").partitionedBy(  # doctest: +SKIP
+    ...     bucket(42, "ts")
+    ... ).createOrReplace()
+
+    .. warning::
+        This function can be used only in combinatiion with
+        :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
+        method of the `DataFrameWriterV2`.
+
+    """
+    if not isinstance(numBuckets, (int, Column)):
+        raise TypeError(
+            "numBuckets should be a Column or and int, got {}".format(type(numBuckets))
+        )
+
+    sc = SparkContext._active_spark_context
+    numBuckets = (
+        _create_column_from_literal(numBuckets)
+        if isinstance(numBuckets, int)
+        else _to_java_column(numBuckets)
+    )
+    return Column(sc._jvm.functions.bucket(numBuckets, _to_java_column(col)))
 
 
 # ---------------------------- User Defined Function ----------------------------------

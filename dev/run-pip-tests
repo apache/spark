@@ -63,10 +63,14 @@ fi
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
-PIP_OPTIONS="--user --upgrade --no-cache-dir --force-reinstall "
+PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall"
 # Test both regular user and edit/dev install modes.
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
 	      "pip install $PIP_OPTIONS -e python/")
+
+# Jenkins has PySpark installed under user sitepackages shared for some reasons.
+# In this test, explicitly exclude user sitepackages to prevent side effects
+export PYTHONNOUSERSITE=1
 
 for python in "${PYTHON_EXECS[@]}"; do
   for install_command in "${PIP_COMMANDS[@]}"; do
@@ -81,7 +85,7 @@ for python in "${PYTHON_EXECS[@]}"; do
         source "$CONDA_PREFIX/etc/profile.d/conda.sh"
       fi
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
-      conda activate "$VIRTUALENV_PATH" || (echo "Falling back to 'source activate'" && source activate "$VIRTUALENV_PATH")
+      source activate "$VIRTUALENV_PATH" || conda activate "$VIRTUALENV_PATH"
     else
       mkdir -p "$VIRTUALENV_PATH"
       virtualenv --python=$python "$VIRTUALENV_PATH"
@@ -96,8 +100,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     cd "$FWDIR"/python
     # Delete the egg info file if it exists, this can cache the setup file.
     rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
-    # Also, delete the symbolic link if exists. It can be left over from the previous editable mode installation.
-    python3 -c "from distutils.sysconfig import get_python_lib; import os; f = os.path.join(get_python_lib(), 'pyspark.egg-link'); os.unlink(f) if os.path.isfile(f) else 0"
     python3 setup.py sdist
 
 
@@ -116,7 +118,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     cd /
 
     echo "Run basic sanity check on pip installed version with spark-submit"
-    export PATH="$(python3 -m site --user-base)/bin:$PATH"
     spark-submit "$FWDIR"/dev/pip-sanity-check.py
     echo "Run basic sanity check with import based"
     python3 "$FWDIR"/dev/pip-sanity-check.py
@@ -127,7 +128,7 @@ for python in "${PYTHON_EXECS[@]}"; do
 
     # conda / virtualenv environments need to be deactivated differently
     if [ -n "$USE_CONDA" ]; then
-      conda deactivate || (echo "Falling back to 'source deactivate'" && source deactivate)
+      source deactivate || conda deactivate
     else
       deactivate
     fi
