@@ -72,10 +72,9 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   def goldenFilePath: String
 
   private def getExistingVariants(name: String): Array[Int] = {
-    val dir = new File(goldenFilePath, s"$name")
+    val dir = new File(goldenFilePath, name)
     // file paths are the form ../q3/2.simplified.txt
-    val rgx =
-      """(\d+).simplified.txt""".r
+    val rgx = """(\d+).simplified.txt""".r
 
     dir.listFiles().filter(_.getName.contains("simplified")).map { file =>
       val rgx(numStr) = file.getName
@@ -93,7 +92,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   }
 
   private def getDirForTest(name: String): File = {
-    new File(goldenFilePath, s"$name")
+    new File(goldenFilePath, name)
   }
 
   private def isApproved(name: String, plan: SparkPlan): Boolean = {
@@ -112,7 +111,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   }
 
   /**
-   * Serialize and save this [[org.apache.spark.sql.execution.SparkPlan]].
+   * Serialize and save this SparkPlan.
    * The resulting file is used by [[checkWithApproved]] to check stability.
    *
    * @param plan    the [[SparkPlan]]
@@ -246,8 +245,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
 
   /**
    * Test a TPC-DS query. Depending of the settings this test will either check if the plan matches
-   * a golden file or it will create a new golden file. It also checks if DynamicPruning expressions
-   * reuse their broadcasts.
+   * a golden file or it will create a new golden file.
    */
   protected def testQuery(tpcdsGroup: String, query: String): Unit = {
     val queryString = resourceToString(s"$tpcdsGroup/$query.sql",
