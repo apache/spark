@@ -1,0 +1,285 @@
+== Parsed Logical Plan ==
+CTE [results, results_rollup]
+:  :- 'SubqueryAlias results
+:  :  +- 'Aggregate ['i_product_name, 'i_brand, 'i_class, 'i_category], ['i_product_name, 'i_brand, 'i_class, 'i_category, 'avg('inv_quantity_on_hand) AS qoh#1]
+:  :     +- 'Filter ((('inv_date_sk = 'd_date_sk) AND ('inv_item_sk = 'i_item_sk)) AND (('inv_warehouse_sk = 'w_warehouse_sk) AND (('d_month_seq >= 1212) AND ('d_month_seq <= (1212 + 11)))))
+:  :        +- 'Join Inner
+:  :           :- 'Join Inner
+:  :           :  :- 'Join Inner
+:  :           :  :  :- 'UnresolvedRelation [inventory]
+:  :           :  :  +- 'UnresolvedRelation [date_dim]
+:  :           :  +- 'UnresolvedRelation [item]
+:  :           +- 'UnresolvedRelation [warehouse]
+:  +- 'SubqueryAlias results_rollup
+:     +- 'Union
+:        :- 'Union
+:        :  :- 'Union
+:        :  :  :- 'Union
+:        :  :  :  :- 'Aggregate ['i_product_name, 'i_brand, 'i_class, 'i_category], ['i_product_name, 'i_brand, 'i_class, 'i_category, 'avg('qoh) AS qoh#2]
+:        :  :  :  :  +- 'UnresolvedRelation [results]
+:        :  :  :  +- 'Aggregate ['i_product_name, 'i_brand, 'i_class], ['i_product_name, 'i_brand, 'i_class, null AS i_category#3, 'avg('qoh) AS qoh#4]
+:        :  :  :     +- 'UnresolvedRelation [results]
+:        :  :  +- 'Aggregate ['i_product_name, 'i_brand], ['i_product_name, 'i_brand, null AS i_class#5, null AS i_category#6, 'avg('qoh) AS qoh#7]
+:        :  :     +- 'UnresolvedRelation [results]
+:        :  +- 'Aggregate ['i_product_name], ['i_product_name, null AS i_brand#8, null AS i_class#9, null AS i_category#10, 'avg('qoh) AS qoh#11]
+:        :     +- 'UnresolvedRelation [results]
+:        +- 'Project [null AS i_product_name#12, null AS i_brand#13, null AS i_class#14, null AS i_category#15, 'avg('qoh) AS qoh#16]
+:           +- 'UnresolvedRelation [results]
++- 'GlobalLimit 100
+   +- 'LocalLimit 100
+      +- 'Sort ['qoh ASC NULLS FIRST, 'i_product_name ASC NULLS FIRST, 'i_brand ASC NULLS FIRST, 'i_class ASC NULLS FIRST, 'i_category ASC NULLS FIRST], true
+         +- 'Project ['i_product_name, 'i_brand, 'i_class, 'i_category, 'qoh]
+            +- 'UnresolvedRelation [results_rollup]
+
+== Analyzed Logical Plan ==
+i_product_name: string, i_brand: string, i_class: string, i_category: string, qoh: double
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [qoh#2 ASC NULLS FIRST, i_product_name#17 ASC NULLS FIRST, i_brand#18 ASC NULLS FIRST, i_class#19 ASC NULLS FIRST, i_category#20 ASC NULLS FIRST], true
+      +- Project [i_product_name#17, i_brand#18, i_class#19, i_category#20, qoh#2]
+         +- SubqueryAlias results_rollup
+            +- Union
+               :- Project [i_product_name#17, i_brand#18, i_class#19, i_category#20, qoh#2]
+               :  +- Union
+               :     :- Project [i_product_name#17, i_brand#18, i_class#19, i_category#20, qoh#2]
+               :     :  +- Union
+               :     :     :- Project [i_product_name#17, i_brand#18, i_class#19, i_category#20, qoh#2]
+               :     :     :  +- Union
+               :     :     :     :- Project [i_product_name#17, i_brand#18, i_class#19, i_category#20, qoh#2]
+               :     :     :     :  +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(qoh#1) AS qoh#2]
+               :     :     :     :     +- SubqueryAlias results
+               :     :     :     :        +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(cast(inv_quantity_on_hand#21 as bigint)) AS qoh#1]
+               :     :     :     :           +- Filter (((inv_date_sk#22 = d_date_sk#23) AND (inv_item_sk#24 = i_item_sk#25)) AND ((inv_warehouse_sk#26 = w_warehouse_sk#27) AND ((d_month_seq#28 >= 1212) AND (d_month_seq#28 <= (1212 + 11)))))
+               :     :     :     :              +- Join Inner
+               :     :     :     :                 :- Join Inner
+               :     :     :     :                 :  :- Join Inner
+               :     :     :     :                 :  :  :- SubqueryAlias spark_catalog.default.inventory
+               :     :     :     :                 :  :  :  +- Relation[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] parquet
+               :     :     :     :                 :  :  +- SubqueryAlias spark_catalog.default.date_dim
+               :     :     :     :                 :  :     +- Relation[d_date_sk#23,d_date_id#29,d_date#30,d_month_seq#28,d_week_seq#31,d_quarter_seq#32,d_year#33,d_dow#34,d_moy#35,d_dom#36,d_qoy#37,d_fy_year#38,d_fy_quarter_seq#39,d_fy_week_seq#40,d_day_name#41,d_quarter_name#42,d_holiday#43,d_weekend#44,d_following_holiday#45,d_first_dom#46,d_last_dom#47,d_same_day_ly#48,d_same_day_lq#49,d_current_day#50,d_current_week#51,d_current_month#52,d_current_quarter#53,d_current_year#54] parquet
+               :     :     :     :                 :  +- SubqueryAlias spark_catalog.default.item
+               :     :     :     :                 :     +- Relation[i_item_sk#25,i_item_id#55,i_rec_start_date#56,i_rec_end_date#57,i_item_desc#58,i_current_price#59,i_wholesale_cost#60,i_brand_id#61,i_brand#18,i_class_id#62,i_class#19,i_category_id#63,i_category#20,i_manufact_id#64,i_manufact#65,i_size#66,i_formulation#67,i_color#68,i_units#69,i_container#70,i_manager_id#71,i_product_name#17] parquet
+               :     :     :     :                 +- SubqueryAlias spark_catalog.default.warehouse
+               :     :     :     :                    +- Relation[w_warehouse_sk#27,w_warehouse_id#72,w_warehouse_name#73,w_warehouse_sq_ft#74,w_street_number#75,w_street_name#76,w_street_type#77,w_suite_number#78,w_city#79,w_county#80,w_state#81,w_zip#82,w_country#83,w_gmt_offset#84] parquet
+               :     :     :     +- Project [i_product_name#17 AS i_product_name#85, i_brand#18 AS i_brand#86, i_class#19 AS i_class#87, i_category#88 AS i_category#89, qoh#4 AS qoh#90]
+               :     :     :        +- Project [i_product_name#17, i_brand#18, i_class#19, cast(i_category#3 as string) AS i_category#88, qoh#4]
+               :     :     :           +- Aggregate [i_product_name#17, i_brand#18, i_class#19], [i_product_name#17, i_brand#18, i_class#19, null AS i_category#3, avg(qoh#1) AS qoh#4]
+               :     :     :              +- SubqueryAlias results
+               :     :     :                 +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(cast(inv_quantity_on_hand#21 as bigint)) AS qoh#1]
+               :     :     :                    +- Filter (((inv_date_sk#22 = d_date_sk#23) AND (inv_item_sk#24 = i_item_sk#25)) AND ((inv_warehouse_sk#26 = w_warehouse_sk#27) AND ((d_month_seq#28 >= 1212) AND (d_month_seq#28 <= (1212 + 11)))))
+               :     :     :                       +- Join Inner
+               :     :     :                          :- Join Inner
+               :     :     :                          :  :- Join Inner
+               :     :     :                          :  :  :- SubqueryAlias spark_catalog.default.inventory
+               :     :     :                          :  :  :  +- Relation[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] parquet
+               :     :     :                          :  :  +- SubqueryAlias spark_catalog.default.date_dim
+               :     :     :                          :  :     +- Relation[d_date_sk#23,d_date_id#29,d_date#30,d_month_seq#28,d_week_seq#31,d_quarter_seq#32,d_year#33,d_dow#34,d_moy#35,d_dom#36,d_qoy#37,d_fy_year#38,d_fy_quarter_seq#39,d_fy_week_seq#40,d_day_name#41,d_quarter_name#42,d_holiday#43,d_weekend#44,d_following_holiday#45,d_first_dom#46,d_last_dom#47,d_same_day_ly#48,d_same_day_lq#49,d_current_day#50,d_current_week#51,d_current_month#52,d_current_quarter#53,d_current_year#54] parquet
+               :     :     :                          :  +- SubqueryAlias spark_catalog.default.item
+               :     :     :                          :     +- Relation[i_item_sk#25,i_item_id#55,i_rec_start_date#56,i_rec_end_date#57,i_item_desc#58,i_current_price#59,i_wholesale_cost#60,i_brand_id#61,i_brand#18,i_class_id#62,i_class#19,i_category_id#63,i_category#20,i_manufact_id#64,i_manufact#65,i_size#66,i_formulation#67,i_color#68,i_units#69,i_container#70,i_manager_id#71,i_product_name#17] parquet
+               :     :     :                          +- SubqueryAlias spark_catalog.default.warehouse
+               :     :     :                             +- Relation[w_warehouse_sk#27,w_warehouse_id#72,w_warehouse_name#73,w_warehouse_sq_ft#74,w_street_number#75,w_street_name#76,w_street_type#77,w_suite_number#78,w_city#79,w_county#80,w_state#81,w_zip#82,w_country#83,w_gmt_offset#84] parquet
+               :     :     +- Project [i_product_name#17 AS i_product_name#91, i_brand#18 AS i_brand#92, i_class#93 AS i_class#94, i_category#95 AS i_category#96, qoh#7 AS qoh#97]
+               :     :        +- Project [i_product_name#17, i_brand#18, cast(i_class#5 as string) AS i_class#93, cast(i_category#6 as string) AS i_category#95, qoh#7]
+               :     :           +- Aggregate [i_product_name#17, i_brand#18], [i_product_name#17, i_brand#18, null AS i_class#5, null AS i_category#6, avg(qoh#1) AS qoh#7]
+               :     :              +- SubqueryAlias results
+               :     :                 +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(cast(inv_quantity_on_hand#21 as bigint)) AS qoh#1]
+               :     :                    +- Filter (((inv_date_sk#22 = d_date_sk#23) AND (inv_item_sk#24 = i_item_sk#25)) AND ((inv_warehouse_sk#26 = w_warehouse_sk#27) AND ((d_month_seq#28 >= 1212) AND (d_month_seq#28 <= (1212 + 11)))))
+               :     :                       +- Join Inner
+               :     :                          :- Join Inner
+               :     :                          :  :- Join Inner
+               :     :                          :  :  :- SubqueryAlias spark_catalog.default.inventory
+               :     :                          :  :  :  +- Relation[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] parquet
+               :     :                          :  :  +- SubqueryAlias spark_catalog.default.date_dim
+               :     :                          :  :     +- Relation[d_date_sk#23,d_date_id#29,d_date#30,d_month_seq#28,d_week_seq#31,d_quarter_seq#32,d_year#33,d_dow#34,d_moy#35,d_dom#36,d_qoy#37,d_fy_year#38,d_fy_quarter_seq#39,d_fy_week_seq#40,d_day_name#41,d_quarter_name#42,d_holiday#43,d_weekend#44,d_following_holiday#45,d_first_dom#46,d_last_dom#47,d_same_day_ly#48,d_same_day_lq#49,d_current_day#50,d_current_week#51,d_current_month#52,d_current_quarter#53,d_current_year#54] parquet
+               :     :                          :  +- SubqueryAlias spark_catalog.default.item
+               :     :                          :     +- Relation[i_item_sk#25,i_item_id#55,i_rec_start_date#56,i_rec_end_date#57,i_item_desc#58,i_current_price#59,i_wholesale_cost#60,i_brand_id#61,i_brand#18,i_class_id#62,i_class#19,i_category_id#63,i_category#20,i_manufact_id#64,i_manufact#65,i_size#66,i_formulation#67,i_color#68,i_units#69,i_container#70,i_manager_id#71,i_product_name#17] parquet
+               :     :                          +- SubqueryAlias spark_catalog.default.warehouse
+               :     :                             +- Relation[w_warehouse_sk#27,w_warehouse_id#72,w_warehouse_name#73,w_warehouse_sq_ft#74,w_street_number#75,w_street_name#76,w_street_type#77,w_suite_number#78,w_city#79,w_county#80,w_state#81,w_zip#82,w_country#83,w_gmt_offset#84] parquet
+               :     +- Project [i_product_name#17 AS i_product_name#98, i_brand#99 AS i_brand#100, i_class#101 AS i_class#102, i_category#103 AS i_category#104, qoh#11 AS qoh#105]
+               :        +- Project [i_product_name#17, cast(i_brand#8 as string) AS i_brand#99, cast(i_class#9 as string) AS i_class#101, cast(i_category#10 as string) AS i_category#103, qoh#11]
+               :           +- Aggregate [i_product_name#17], [i_product_name#17, null AS i_brand#8, null AS i_class#9, null AS i_category#10, avg(qoh#1) AS qoh#11]
+               :              +- SubqueryAlias results
+               :                 +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(cast(inv_quantity_on_hand#21 as bigint)) AS qoh#1]
+               :                    +- Filter (((inv_date_sk#22 = d_date_sk#23) AND (inv_item_sk#24 = i_item_sk#25)) AND ((inv_warehouse_sk#26 = w_warehouse_sk#27) AND ((d_month_seq#28 >= 1212) AND (d_month_seq#28 <= (1212 + 11)))))
+               :                       +- Join Inner
+               :                          :- Join Inner
+               :                          :  :- Join Inner
+               :                          :  :  :- SubqueryAlias spark_catalog.default.inventory
+               :                          :  :  :  +- Relation[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] parquet
+               :                          :  :  +- SubqueryAlias spark_catalog.default.date_dim
+               :                          :  :     +- Relation[d_date_sk#23,d_date_id#29,d_date#30,d_month_seq#28,d_week_seq#31,d_quarter_seq#32,d_year#33,d_dow#34,d_moy#35,d_dom#36,d_qoy#37,d_fy_year#38,d_fy_quarter_seq#39,d_fy_week_seq#40,d_day_name#41,d_quarter_name#42,d_holiday#43,d_weekend#44,d_following_holiday#45,d_first_dom#46,d_last_dom#47,d_same_day_ly#48,d_same_day_lq#49,d_current_day#50,d_current_week#51,d_current_month#52,d_current_quarter#53,d_current_year#54] parquet
+               :                          :  +- SubqueryAlias spark_catalog.default.item
+               :                          :     +- Relation[i_item_sk#25,i_item_id#55,i_rec_start_date#56,i_rec_end_date#57,i_item_desc#58,i_current_price#59,i_wholesale_cost#60,i_brand_id#61,i_brand#18,i_class_id#62,i_class#19,i_category_id#63,i_category#20,i_manufact_id#64,i_manufact#65,i_size#66,i_formulation#67,i_color#68,i_units#69,i_container#70,i_manager_id#71,i_product_name#17] parquet
+               :                          +- SubqueryAlias spark_catalog.default.warehouse
+               :                             +- Relation[w_warehouse_sk#27,w_warehouse_id#72,w_warehouse_name#73,w_warehouse_sq_ft#74,w_street_number#75,w_street_name#76,w_street_type#77,w_suite_number#78,w_city#79,w_county#80,w_state#81,w_zip#82,w_country#83,w_gmt_offset#84] parquet
+               +- Project [cast(i_product_name#12 as string) AS i_product_name#106, cast(i_brand#13 as string) AS i_brand#107, cast(i_class#14 as string) AS i_class#108, cast(i_category#15 as string) AS i_category#109, qoh#16]
+                  +- Aggregate [null AS i_product_name#12, null AS i_brand#13, null AS i_class#14, null AS i_category#15, avg(qoh#1) AS qoh#16]
+                     +- SubqueryAlias results
+                        +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(cast(inv_quantity_on_hand#21 as bigint)) AS qoh#1]
+                           +- Filter (((inv_date_sk#22 = d_date_sk#23) AND (inv_item_sk#24 = i_item_sk#25)) AND ((inv_warehouse_sk#26 = w_warehouse_sk#27) AND ((d_month_seq#28 >= 1212) AND (d_month_seq#28 <= (1212 + 11)))))
+                              +- Join Inner
+                                 :- Join Inner
+                                 :  :- Join Inner
+                                 :  :  :- SubqueryAlias spark_catalog.default.inventory
+                                 :  :  :  +- Relation[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] parquet
+                                 :  :  +- SubqueryAlias spark_catalog.default.date_dim
+                                 :  :     +- Relation[d_date_sk#23,d_date_id#29,d_date#30,d_month_seq#28,d_week_seq#31,d_quarter_seq#32,d_year#33,d_dow#34,d_moy#35,d_dom#36,d_qoy#37,d_fy_year#38,d_fy_quarter_seq#39,d_fy_week_seq#40,d_day_name#41,d_quarter_name#42,d_holiday#43,d_weekend#44,d_following_holiday#45,d_first_dom#46,d_last_dom#47,d_same_day_ly#48,d_same_day_lq#49,d_current_day#50,d_current_week#51,d_current_month#52,d_current_quarter#53,d_current_year#54] parquet
+                                 :  +- SubqueryAlias spark_catalog.default.item
+                                 :     +- Relation[i_item_sk#25,i_item_id#55,i_rec_start_date#56,i_rec_end_date#57,i_item_desc#58,i_current_price#59,i_wholesale_cost#60,i_brand_id#61,i_brand#18,i_class_id#62,i_class#19,i_category_id#63,i_category#20,i_manufact_id#64,i_manufact#65,i_size#66,i_formulation#67,i_color#68,i_units#69,i_container#70,i_manager_id#71,i_product_name#17] parquet
+                                 +- SubqueryAlias spark_catalog.default.warehouse
+                                    +- Relation[w_warehouse_sk#27,w_warehouse_id#72,w_warehouse_name#73,w_warehouse_sq_ft#74,w_street_number#75,w_street_name#76,w_street_type#77,w_suite_number#78,w_city#79,w_county#80,w_state#81,w_zip#82,w_country#83,w_gmt_offset#84] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [qoh#2 ASC NULLS FIRST, i_product_name#17 ASC NULLS FIRST, i_brand#18 ASC NULLS FIRST, i_class#19 ASC NULLS FIRST, i_category#20 ASC NULLS FIRST], true
+      +- Union
+         :- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(qoh#1) AS qoh#2]
+         :  +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(cast(inv_quantity_on_hand#21 as bigint)) AS qoh#1]
+         :     +- Project [inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :        +- Join Inner, (inv_warehouse_sk#26 = w_warehouse_sk#27)
+         :           :- Project [inv_warehouse_sk#26, inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :           :  +- Join Inner, (inv_item_sk#24 = i_item_sk#25)
+         :           :     :- Project [inv_item_sk#24, inv_warehouse_sk#26, inv_quantity_on_hand#21]
+         :           :     :  +- Join Inner, (inv_date_sk#22 = d_date_sk#23)
+         :           :     :     :- Filter ((isnotnull(inv_date_sk#22) AND isnotnull(inv_item_sk#24)) AND isnotnull(inv_warehouse_sk#26))
+         :           :     :     :  +- Relation[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] parquet
+         :           :     :     +- Project [d_date_sk#23]
+         :           :     :        +- Filter (((isnotnull(d_month_seq#28) AND (d_month_seq#28 >= 1212)) AND (d_month_seq#28 <= 1223)) AND isnotnull(d_date_sk#23))
+         :           :     :           +- Relation[d_date_sk#23,d_date_id#29,d_date#30,d_month_seq#28,d_week_seq#31,d_quarter_seq#32,d_year#33,d_dow#34,d_moy#35,d_dom#36,d_qoy#37,d_fy_year#38,d_fy_quarter_seq#39,d_fy_week_seq#40,d_day_name#41,d_quarter_name#42,d_holiday#43,d_weekend#44,d_following_holiday#45,d_first_dom#46,d_last_dom#47,d_same_day_ly#48,d_same_day_lq#49,d_current_day#50,d_current_week#51,d_current_month#52,d_current_quarter#53,d_current_year#54] parquet
+         :           :     +- Project [i_item_sk#25, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :           :        +- Filter isnotnull(i_item_sk#25)
+         :           :           +- Relation[i_item_sk#25,i_item_id#55,i_rec_start_date#56,i_rec_end_date#57,i_item_desc#58,i_current_price#59,i_wholesale_cost#60,i_brand_id#61,i_brand#18,i_class_id#62,i_class#19,i_category_id#63,i_category#20,i_manufact_id#64,i_manufact#65,i_size#66,i_formulation#67,i_color#68,i_units#69,i_container#70,i_manager_id#71,i_product_name#17] parquet
+         :           +- Project [w_warehouse_sk#27]
+         :              +- Filter isnotnull(w_warehouse_sk#27)
+         :                 +- Relation[w_warehouse_sk#27,w_warehouse_id#72,w_warehouse_name#73,w_warehouse_sq_ft#74,w_street_number#75,w_street_name#76,w_street_type#77,w_suite_number#78,w_city#79,w_county#80,w_state#81,w_zip#82,w_country#83,w_gmt_offset#84] parquet
+         :- Aggregate [i_product_name#17, i_brand#18, i_class#19], [i_product_name#17, i_brand#18, i_class#19, null AS i_category#89, avg(qoh#1) AS qoh#90]
+         :  +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, i_brand#18, i_class#19, avg(cast(inv_quantity_on_hand#21 as bigint)) AS qoh#1]
+         :     +- Project [inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :        +- Join Inner, (inv_warehouse_sk#26 = w_warehouse_sk#27)
+         :           :- Project [inv_warehouse_sk#26, inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :           :  +- Join Inner, (inv_item_sk#24 = i_item_sk#25)
+         :           :     :- Project [inv_item_sk#24, inv_warehouse_sk#26, inv_quantity_on_hand#21]
+         :           :     :  +- Join Inner, (inv_date_sk#22 = d_date_sk#23)
+         :           :     :     :- Filter ((isnotnull(inv_date_sk#22) AND isnotnull(inv_item_sk#24)) AND isnotnull(inv_warehouse_sk#26))
+         :           :     :     :  +- Relation[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] parquet
+         :           :     :     +- Project [d_date_sk#23]
+         :           :     :        +- Filter (((isnotnull(d_month_seq#28) AND (d_month_seq#28 >= 1212)) AND (d_month_seq#28 <= 1223)) AND isnotnull(d_date_sk#23))
+         :           :     :           +- Relation[d_date_sk#23,d_date_id#29,d_date#30,d_month_seq#28,d_week_seq#31,d_quarter_seq#32,d_year#33,d_dow#34,d_moy#35,d_dom#36,d_qoy#37,d_fy_year#38,d_fy_quarter_seq#39,d_fy_week_seq#40,d_day_name#41,d_quarter_name#42,d_holiday#43,d_weekend#44,d_following_holiday#45,d_first_dom#46,d_last_dom#47,d_same_day_ly#48,d_same_day_lq#49,d_current_day#50,d_current_week#51,d_current_month#52,d_current_quarter#53,d_current_year#54] parquet
+         :           :     +- Project [i_item_sk#25, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :           :        +- Filter isnotnull(i_item_sk#25)
+         :           :           +- Relation[i_item_sk#25,i_item_id#55,i_rec_start_date#56,i_rec_end_date#57,i_item_desc#58,i_current_price#59,i_wholesale_cost#60,i_brand_id#61,i_brand#18,i_class_id#62,i_class#19,i_category_id#63,i_category#20,i_manufact_id#64,i_manufact#65,i_size#66,i_formulation#67,i_color#68,i_units#69,i_container#70,i_manager_id#71,i_product_name#17] parquet
+         :           +- Project [w_warehouse_sk#27]
+         :              +- Filter isnotnull(w_warehouse_sk#27)
+         :                 +- Relation[w_warehouse_sk#27,w_warehouse_id#72,w_warehouse_name#73,w_warehouse_sq_ft#74,w_street_number#75,w_street_name#76,w_street_type#77,w_suite_number#78,w_city#79,w_county#80,w_state#81,w_zip#82,w_country#83,w_gmt_offset#84] parquet
+         :- Aggregate [i_product_name#17, i_brand#18], [i_product_name#17, i_brand#18, null AS i_class#94, null AS i_category#96, avg(qoh#1) AS qoh#97]
+         :  +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, i_brand#18, avg(cast(inv_quantity_on_hand#21 as bigint)) AS qoh#1]
+         :     +- Project [inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :        +- Join Inner, (inv_warehouse_sk#26 = w_warehouse_sk#27)
+         :           :- Project [inv_warehouse_sk#26, inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :           :  +- Join Inner, (inv_item_sk#24 = i_item_sk#25)
+         :           :     :- Project [inv_item_sk#24, inv_warehouse_sk#26, inv_quantity_on_hand#21]
+         :           :     :  +- Join Inner, (inv_date_sk#22 = d_date_sk#23)
+         :           :     :     :- Filter ((isnotnull(inv_date_sk#22) AND isnotnull(inv_item_sk#24)) AND isnotnull(inv_warehouse_sk#26))
+         :           :     :     :  +- Relation[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] parquet
+         :           :     :     +- Project [d_date_sk#23]
+         :           :     :        +- Filter (((isnotnull(d_month_seq#28) AND (d_month_seq#28 >= 1212)) AND (d_month_seq#28 <= 1223)) AND isnotnull(d_date_sk#23))
+         :           :     :           +- Relation[d_date_sk#23,d_date_id#29,d_date#30,d_month_seq#28,d_week_seq#31,d_quarter_seq#32,d_year#33,d_dow#34,d_moy#35,d_dom#36,d_qoy#37,d_fy_year#38,d_fy_quarter_seq#39,d_fy_week_seq#40,d_day_name#41,d_quarter_name#42,d_holiday#43,d_weekend#44,d_following_holiday#45,d_first_dom#46,d_last_dom#47,d_same_day_ly#48,d_same_day_lq#49,d_current_day#50,d_current_week#51,d_current_month#52,d_current_quarter#53,d_current_year#54] parquet
+         :           :     +- Project [i_item_sk#25, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :           :        +- Filter isnotnull(i_item_sk#25)
+         :           :           +- Relation[i_item_sk#25,i_item_id#55,i_rec_start_date#56,i_rec_end_date#57,i_item_desc#58,i_current_price#59,i_wholesale_cost#60,i_brand_id#61,i_brand#18,i_class_id#62,i_class#19,i_category_id#63,i_category#20,i_manufact_id#64,i_manufact#65,i_size#66,i_formulation#67,i_color#68,i_units#69,i_container#70,i_manager_id#71,i_product_name#17] parquet
+         :           +- Project [w_warehouse_sk#27]
+         :              +- Filter isnotnull(w_warehouse_sk#27)
+         :                 +- Relation[w_warehouse_sk#27,w_warehouse_id#72,w_warehouse_name#73,w_warehouse_sq_ft#74,w_street_number#75,w_street_name#76,w_street_type#77,w_suite_number#78,w_city#79,w_county#80,w_state#81,w_zip#82,w_country#83,w_gmt_offset#84] parquet
+         :- Aggregate [i_product_name#17], [i_product_name#17, null AS i_brand#100, null AS i_class#102, null AS i_category#104, avg(qoh#1) AS qoh#105]
+         :  +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [i_product_name#17, avg(cast(inv_quantity_on_hand#21 as bigint)) AS qoh#1]
+         :     +- Project [inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :        +- Join Inner, (inv_warehouse_sk#26 = w_warehouse_sk#27)
+         :           :- Project [inv_warehouse_sk#26, inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :           :  +- Join Inner, (inv_item_sk#24 = i_item_sk#25)
+         :           :     :- Project [inv_item_sk#24, inv_warehouse_sk#26, inv_quantity_on_hand#21]
+         :           :     :  +- Join Inner, (inv_date_sk#22 = d_date_sk#23)
+         :           :     :     :- Filter ((isnotnull(inv_date_sk#22) AND isnotnull(inv_item_sk#24)) AND isnotnull(inv_warehouse_sk#26))
+         :           :     :     :  +- Relation[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] parquet
+         :           :     :     +- Project [d_date_sk#23]
+         :           :     :        +- Filter (((isnotnull(d_month_seq#28) AND (d_month_seq#28 >= 1212)) AND (d_month_seq#28 <= 1223)) AND isnotnull(d_date_sk#23))
+         :           :     :           +- Relation[d_date_sk#23,d_date_id#29,d_date#30,d_month_seq#28,d_week_seq#31,d_quarter_seq#32,d_year#33,d_dow#34,d_moy#35,d_dom#36,d_qoy#37,d_fy_year#38,d_fy_quarter_seq#39,d_fy_week_seq#40,d_day_name#41,d_quarter_name#42,d_holiday#43,d_weekend#44,d_following_holiday#45,d_first_dom#46,d_last_dom#47,d_same_day_ly#48,d_same_day_lq#49,d_current_day#50,d_current_week#51,d_current_month#52,d_current_quarter#53,d_current_year#54] parquet
+         :           :     +- Project [i_item_sk#25, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+         :           :        +- Filter isnotnull(i_item_sk#25)
+         :           :           +- Relation[i_item_sk#25,i_item_id#55,i_rec_start_date#56,i_rec_end_date#57,i_item_desc#58,i_current_price#59,i_wholesale_cost#60,i_brand_id#61,i_brand#18,i_class_id#62,i_class#19,i_category_id#63,i_category#20,i_manufact_id#64,i_manufact#65,i_size#66,i_formulation#67,i_color#68,i_units#69,i_container#70,i_manager_id#71,i_product_name#17] parquet
+         :           +- Project [w_warehouse_sk#27]
+         :              +- Filter isnotnull(w_warehouse_sk#27)
+         :                 +- Relation[w_warehouse_sk#27,w_warehouse_id#72,w_warehouse_name#73,w_warehouse_sq_ft#74,w_street_number#75,w_street_name#76,w_street_type#77,w_suite_number#78,w_city#79,w_county#80,w_state#81,w_zip#82,w_country#83,w_gmt_offset#84] parquet
+         +- Aggregate [null AS i_product_name#106, null AS i_brand#107, null AS i_class#108, null AS i_category#109, avg(qoh#1) AS qoh#16]
+            +- Aggregate [i_product_name#17, i_brand#18, i_class#19, i_category#20], [avg(cast(inv_quantity_on_hand#21 as bigint)) AS qoh#1]
+               +- Project [inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+                  +- Join Inner, (inv_warehouse_sk#26 = w_warehouse_sk#27)
+                     :- Project [inv_warehouse_sk#26, inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+                     :  +- Join Inner, (inv_item_sk#24 = i_item_sk#25)
+                     :     :- Project [inv_item_sk#24, inv_warehouse_sk#26, inv_quantity_on_hand#21]
+                     :     :  +- Join Inner, (inv_date_sk#22 = d_date_sk#23)
+                     :     :     :- Filter ((isnotnull(inv_date_sk#22) AND isnotnull(inv_item_sk#24)) AND isnotnull(inv_warehouse_sk#26))
+                     :     :     :  +- Relation[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] parquet
+                     :     :     +- Project [d_date_sk#23]
+                     :     :        +- Filter (((isnotnull(d_month_seq#28) AND (d_month_seq#28 >= 1212)) AND (d_month_seq#28 <= 1223)) AND isnotnull(d_date_sk#23))
+                     :     :           +- Relation[d_date_sk#23,d_date_id#29,d_date#30,d_month_seq#28,d_week_seq#31,d_quarter_seq#32,d_year#33,d_dow#34,d_moy#35,d_dom#36,d_qoy#37,d_fy_year#38,d_fy_quarter_seq#39,d_fy_week_seq#40,d_day_name#41,d_quarter_name#42,d_holiday#43,d_weekend#44,d_following_holiday#45,d_first_dom#46,d_last_dom#47,d_same_day_ly#48,d_same_day_lq#49,d_current_day#50,d_current_week#51,d_current_month#52,d_current_quarter#53,d_current_year#54] parquet
+                     :     +- Project [i_item_sk#25, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+                     :        +- Filter isnotnull(i_item_sk#25)
+                     :           +- Relation[i_item_sk#25,i_item_id#55,i_rec_start_date#56,i_rec_end_date#57,i_item_desc#58,i_current_price#59,i_wholesale_cost#60,i_brand_id#61,i_brand#18,i_class_id#62,i_class#19,i_category_id#63,i_category#20,i_manufact_id#64,i_manufact#65,i_size#66,i_formulation#67,i_color#68,i_units#69,i_container#70,i_manager_id#71,i_product_name#17] parquet
+                     +- Project [w_warehouse_sk#27]
+                        +- Filter isnotnull(w_warehouse_sk#27)
+                           +- Relation[w_warehouse_sk#27,w_warehouse_id#72,w_warehouse_name#73,w_warehouse_sq_ft#74,w_street_number#75,w_street_name#76,w_street_type#77,w_suite_number#78,w_city#79,w_county#80,w_state#81,w_zip#82,w_country#83,w_gmt_offset#84] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[qoh#2 ASC NULLS FIRST,i_product_name#17 ASC NULLS FIRST,i_brand#18 ASC NULLS FIRST,i_class#19 ASC NULLS FIRST,i_category#20 ASC NULLS FIRST], output=[i_product_name#17,i_brand#18,i_class#19,i_category#20,qoh#2])
++- Union
+   :- *(5) HashAggregate(keys=[i_product_name#17, i_brand#18, i_class#19, i_category#20], functions=[avg(qoh#1)], output=[i_product_name#17, i_brand#18, i_class#19, i_category#20, qoh#2])
+   :  +- *(5) HashAggregate(keys=[i_product_name#17, i_brand#18, i_class#19, i_category#20], functions=[partial_avg(qoh#1)], output=[i_product_name#17, i_brand#18, i_class#19, i_category#20, sum#110, count#111])
+   :     +- *(5) HashAggregate(keys=[i_product_name#17, i_brand#18, i_class#19, i_category#20], functions=[avg(cast(inv_quantity_on_hand#21 as bigint))], output=[i_product_name#17, i_brand#18, i_class#19, i_category#20, qoh#1])
+   :        +- Exchange hashpartitioning(i_product_name#17, i_brand#18, i_class#19, i_category#20, 5), true, [id=#112]
+   :           +- *(4) HashAggregate(keys=[i_product_name#17, i_brand#18, i_class#19, i_category#20], functions=[partial_avg(cast(inv_quantity_on_hand#21 as bigint))], output=[i_product_name#17, i_brand#18, i_class#19, i_category#20, sum#113, count#114])
+   :              +- *(4) Project [inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+   :                 +- *(4) BroadcastHashJoin [inv_warehouse_sk#26], [w_warehouse_sk#27], Inner, BuildRight
+   :                    :- *(4) Project [inv_warehouse_sk#26, inv_quantity_on_hand#21, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+   :                    :  +- *(4) BroadcastHashJoin [inv_item_sk#24], [i_item_sk#25], Inner, BuildRight
+   :                    :     :- *(4) Project [inv_item_sk#24, inv_warehouse_sk#26, inv_quantity_on_hand#21]
+   :                    :     :  +- *(4) BroadcastHashJoin [inv_date_sk#22], [d_date_sk#23], Inner, BuildRight
+   :                    :     :     :- *(4) Project [inv_date_sk#22, inv_item_sk#24, inv_warehouse_sk#26, inv_quantity_on_hand#21]
+   :                    :     :     :  +- *(4) Filter ((isnotnull(inv_date_sk#22) AND isnotnull(inv_item_sk#24)) AND isnotnull(inv_warehouse_sk#26))
+   :                    :     :     :     +- *(4) ColumnarToRow
+   :                    :     :     :        +- FileScan parquet default.inventory[inv_date_sk#22,inv_item_sk#24,inv_warehouse_sk#26,inv_quantity_on_hand#21] Batched: true, DataFilters: [isnotnull(inv_date_sk#22), isnotnull(inv_item_sk#24), isnotnull(inv_warehouse_sk#26)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(inv_date_sk), IsNotNull(inv_item_sk), IsNotNull(inv_warehouse_sk)], ReadSchema: struct<inv_date_sk:int,inv_item_sk:int,inv_warehouse_sk:int,inv_quantity_on_hand:int>
+   :                    :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#115]
+   :                    :     :        +- *(1) Project [d_date_sk#23]
+   :                    :     :           +- *(1) Filter (((isnotnull(d_month_seq#28) AND (d_month_seq#28 >= 1212)) AND (d_month_seq#28 <= 1223)) AND isnotnull(d_date_sk#23))
+   :                    :     :              +- *(1) ColumnarToRow
+   :                    :     :                 +- FileScan parquet default.date_dim[d_date_sk#23,d_month_seq#28] Batched: true, DataFilters: [isnotnull(d_month_seq#28), (d_month_seq#28 >= 1212), (d_month_seq#28 <= 1223), isnotnull(d..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1212), LessThanOrEqual(d_month_seq,1223),..., ReadSchema: struct<d_date_sk:int,d_month_seq:int>
+   :                    :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#116]
+   :                    :        +- *(2) Project [i_item_sk#25, i_brand#18, i_class#19, i_category#20, i_product_name#17]
+   :                    :           +- *(2) Filter isnotnull(i_item_sk#25)
+   :                    :              +- *(2) ColumnarToRow
+   :                    :                 +- FileScan parquet default.item[i_item_sk#25,i_brand#18,i_class#19,i_category#20,i_product_name#17] Batched: true, DataFilters: [isnotnull(i_item_sk#25)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_item_sk)], ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string,i_product_name:string>
+   :                    +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#117]
+   :                       +- *(3) Project [w_warehouse_sk#27]
+   :                          +- *(3) Filter isnotnull(w_warehouse_sk#27)
+   :                             +- *(3) ColumnarToRow
+   :                                +- FileScan parquet default.warehouse[w_warehouse_sk#27] Batched: true, DataFilters: [isnotnull(w_warehouse_sk#27)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(w_warehouse_sk)], ReadSchema: struct<w_warehouse_sk:int>
+   :- *(11) HashAggregate(keys=[i_product_name#17, i_brand#18, i_class#19], functions=[avg(qoh#1)], output=[i_product_name#17, i_brand#18, i_class#19, i_category#89, qoh#90])
+   :  +- Exchange hashpartitioning(i_product_name#17, i_brand#18, i_class#19, 5), true, [id=#118]
+   :     +- *(10) HashAggregate(keys=[i_product_name#17, i_brand#18, i_class#19], functions=[partial_avg(qoh#1)], output=[i_product_name#17, i_brand#18, i_class#19, sum#119, count#120])
+   :        +- *(10) HashAggregate(keys=[i_product_name#17, i_brand#18, i_class#19, i_category#20], functions=[avg(cast(inv_quantity_on_hand#21 as bigint))], output=[i_product_name#17, i_brand#18, i_class#19, qoh#1])
+   :           +- ReusedExchange [i_product_name#17, i_brand#18, i_class#19, i_category#20, sum#121, count#122], Exchange hashpartitioning(i_product_name#17, i_brand#18, i_class#19, i_category#20, 5), true, [id=#112]
+   :- *(17) HashAggregate(keys=[i_product_name#17, i_brand#18], functions=[avg(qoh#1)], output=[i_product_name#17, i_brand#18, i_class#94, i_category#96, qoh#97])
+   :  +- Exchange hashpartitioning(i_product_name#17, i_brand#18, 5), true, [id=#123]
+   :     +- *(16) HashAggregate(keys=[i_product_name#17, i_brand#18], functions=[partial_avg(qoh#1)], output=[i_product_name#17, i_brand#18, sum#124, count#125])
+   :        +- *(16) HashAggregate(keys=[i_product_name#17, i_brand#18, i_class#19, i_category#20], functions=[avg(cast(inv_quantity_on_hand#21 as bigint))], output=[i_product_name#17, i_brand#18, qoh#1])
+   :           +- ReusedExchange [i_product_name#17, i_brand#18, i_class#19, i_category#20, sum#126, count#127], Exchange hashpartitioning(i_product_name#17, i_brand#18, i_class#19, i_category#20, 5), true, [id=#112]
+   :- *(23) HashAggregate(keys=[i_product_name#17], functions=[avg(qoh#1)], output=[i_product_name#17, i_brand#100, i_class#102, i_category#104, qoh#105])
+   :  +- Exchange hashpartitioning(i_product_name#17, 5), true, [id=#128]
+   :     +- *(22) HashAggregate(keys=[i_product_name#17], functions=[partial_avg(qoh#1)], output=[i_product_name#17, sum#129, count#130])
+   :        +- *(22) HashAggregate(keys=[i_product_name#17, i_brand#18, i_class#19, i_category#20], functions=[avg(cast(inv_quantity_on_hand#21 as bigint))], output=[i_product_name#17, qoh#1])
+   :           +- ReusedExchange [i_product_name#17, i_brand#18, i_class#19, i_category#20, sum#131, count#132], Exchange hashpartitioning(i_product_name#17, i_brand#18, i_class#19, i_category#20, 5), true, [id=#112]
+   +- *(29) HashAggregate(keys=[], functions=[avg(qoh#1)], output=[i_product_name#106, i_brand#107, i_class#108, i_category#109, qoh#16])
+      +- Exchange SinglePartition, true, [id=#133]
+         +- *(28) HashAggregate(keys=[], functions=[partial_avg(qoh#1)], output=[sum#134, count#135])
+            +- *(28) HashAggregate(keys=[i_product_name#17, i_brand#18, i_class#19, i_category#20], functions=[avg(cast(inv_quantity_on_hand#21 as bigint))], output=[qoh#1])
+               +- ReusedExchange [i_product_name#17, i_brand#18, i_class#19, i_category#20, sum#136, count#137], Exchange hashpartitioning(i_product_name#17, i_brand#18, i_class#19, i_category#20, 5), true, [id=#112]

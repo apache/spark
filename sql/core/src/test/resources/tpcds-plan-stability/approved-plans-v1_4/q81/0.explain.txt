@@ -1,0 +1,172 @@
+== Parsed Logical Plan ==
+CTE [customer_total_return]
+:  +- 'SubqueryAlias customer_total_return
+:     +- 'Aggregate ['cr_returning_customer_sk, 'ca_state], ['cr_returning_customer_sk AS ctr_customer_sk#1, 'ca_state AS ctr_state#2, 'sum('cr_return_amt_inc_tax) AS ctr_total_return#3]
+:        +- 'Filter ((('cr_returned_date_sk = 'd_date_sk) AND ('d_year = 2000)) AND ('cr_returning_addr_sk = 'ca_address_sk))
+:           +- 'Join Inner
+:              :- 'Join Inner
+:              :  :- 'UnresolvedRelation [catalog_returns]
+:              :  +- 'UnresolvedRelation [date_dim]
+:              +- 'UnresolvedRelation [customer_address]
++- 'GlobalLimit 100
+   +- 'LocalLimit 100
+      +- 'Sort ['c_customer_id ASC NULLS FIRST, 'c_salutation ASC NULLS FIRST, 'c_first_name ASC NULLS FIRST, 'c_last_name ASC NULLS FIRST, 'ca_street_number ASC NULLS FIRST, 'ca_street_name ASC NULLS FIRST, 'ca_street_type ASC NULLS FIRST, 'ca_suite_number ASC NULLS FIRST, 'ca_city ASC NULLS FIRST, 'ca_county ASC NULLS FIRST, 'ca_state ASC NULLS FIRST, 'ca_zip ASC NULLS FIRST, 'ca_country ASC NULLS FIRST, 'ca_gmt_offset ASC NULLS FIRST, 'ca_location_type ASC NULLS FIRST, 'ctr_total_return ASC NULLS FIRST], true
+         +- 'Project ['c_customer_id, 'c_salutation, 'c_first_name, 'c_last_name, 'ca_street_number, 'ca_street_name, 'ca_street_type, 'ca_suite_number, 'ca_city, 'ca_county, 'ca_state, 'ca_zip, 'ca_country, 'ca_gmt_offset, 'ca_location_type, 'ctr_total_return]
+            +- 'Filter ((('ctr1.ctr_total_return > scalar-subquery#4 []) AND ('ca_address_sk = 'c_current_addr_sk)) AND (('ca_state = GA) AND ('ctr1.ctr_customer_sk = 'c_customer_sk)))
+               :  +- 'Project [unresolvedalias(('avg('ctr_total_return) * 1.2), None)]
+               :     +- 'Filter ('ctr1.ctr_state = 'ctr2.ctr_state)
+               :        +- 'SubqueryAlias ctr2
+               :           +- 'UnresolvedRelation [customer_total_return]
+               +- 'Join Inner
+                  :- 'Join Inner
+                  :  :- 'SubqueryAlias ctr1
+                  :  :  +- 'UnresolvedRelation [customer_total_return]
+                  :  +- 'UnresolvedRelation [customer_address]
+                  +- 'UnresolvedRelation [customer]
+
+== Analyzed Logical Plan ==
+c_customer_id: string, c_salutation: string, c_first_name: string, c_last_name: string, ca_street_number: string, ca_street_name: string, ca_street_type: string, ca_suite_number: string, ca_city: string, ca_county: string, ca_state: string, ca_zip: string, ca_country: string, ca_gmt_offset: decimal(5,2), ca_location_type: string, ctr_total_return: decimal(17,2)
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [c_customer_id#5 ASC NULLS FIRST, c_salutation#6 ASC NULLS FIRST, c_first_name#7 ASC NULLS FIRST, c_last_name#8 ASC NULLS FIRST, ca_street_number#9 ASC NULLS FIRST, ca_street_name#10 ASC NULLS FIRST, ca_street_type#11 ASC NULLS FIRST, ca_suite_number#12 ASC NULLS FIRST, ca_city#13 ASC NULLS FIRST, ca_county#14 ASC NULLS FIRST, ca_state#15 ASC NULLS FIRST, ca_zip#16 ASC NULLS FIRST, ca_country#17 ASC NULLS FIRST, ca_gmt_offset#18 ASC NULLS FIRST, ca_location_type#19 ASC NULLS FIRST, ctr_total_return#3 ASC NULLS FIRST], true
+      +- Project [c_customer_id#5, c_salutation#6, c_first_name#7, c_last_name#8, ca_street_number#9, ca_street_name#10, ca_street_type#11, ca_suite_number#12, ca_city#13, ca_county#14, ca_state#15, ca_zip#16, ca_country#17, ca_gmt_offset#18, ca_location_type#19, ctr_total_return#3]
+         +- Filter (((cast(ctr_total_return#3 as decimal(24,7)) > cast(scalar-subquery#4 [ctr_state#2] as decimal(24,7))) AND (ca_address_sk#20 = c_current_addr_sk#21)) AND ((ca_state#15 = GA) AND (ctr_customer_sk#1 = c_customer_sk#22)))
+            :  +- Aggregate [CheckOverflow((promote_precision(cast(avg(ctr_total_return#3) as decimal(21,6))) * promote_precision(cast(1.2 as decimal(21,6)))), DecimalType(24,7), true) AS (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#23]
+            :     +- Filter (outer(ctr_state#2) = ctr_state#2)
+            :        +- SubqueryAlias ctr2
+            :           +- SubqueryAlias customer_total_return
+            :              +- Aggregate [cr_returning_customer_sk#24, ca_state#15], [cr_returning_customer_sk#24 AS ctr_customer_sk#1, ca_state#15 AS ctr_state#2, sum(cr_return_amt_inc_tax#25) AS ctr_total_return#3]
+            :                 +- Filter (((cr_returned_date_sk#26 = d_date_sk#27) AND (d_year#28 = 2000)) AND (cr_returning_addr_sk#29 = ca_address_sk#20))
+            :                    +- Join Inner
+            :                       :- Join Inner
+            :                       :  :- SubqueryAlias spark_catalog.default.catalog_returns
+            :                       :  :  +- Relation[cr_returned_date_sk#26,cr_returned_time_sk#30,cr_item_sk#31,cr_refunded_customer_sk#32,cr_refunded_cdemo_sk#33,cr_refunded_hdemo_sk#34,cr_refunded_addr_sk#35,cr_returning_customer_sk#24,cr_returning_cdemo_sk#36,cr_returning_hdemo_sk#37,cr_returning_addr_sk#29,cr_call_center_sk#38,cr_catalog_page_sk#39,cr_ship_mode_sk#40,cr_warehouse_sk#41,cr_reason_sk#42,cr_order_number#43,cr_return_quantity#44,cr_return_amount#45,cr_return_tax#46,cr_return_amt_inc_tax#25,cr_fee#47,cr_return_ship_cost#48,cr_refunded_cash#49,cr_reversed_charge#50,cr_store_credit#51,cr_net_loss#52] parquet
+            :                       :  +- SubqueryAlias spark_catalog.default.date_dim
+            :                       :     +- Relation[d_date_sk#27,d_date_id#53,d_date#54,d_month_seq#55,d_week_seq#56,d_quarter_seq#57,d_year#28,d_dow#58,d_moy#59,d_dom#60,d_qoy#61,d_fy_year#62,d_fy_quarter_seq#63,d_fy_week_seq#64,d_day_name#65,d_quarter_name#66,d_holiday#67,d_weekend#68,d_following_holiday#69,d_first_dom#70,d_last_dom#71,d_same_day_ly#72,d_same_day_lq#73,d_current_day#74,d_current_week#75,d_current_month#76,d_current_quarter#77,d_current_year#78] parquet
+            :                       +- SubqueryAlias spark_catalog.default.customer_address
+            :                          +- Relation[ca_address_sk#20,ca_address_id#79,ca_street_number#9,ca_street_name#10,ca_street_type#11,ca_suite_number#12,ca_city#13,ca_county#14,ca_state#15,ca_zip#16,ca_country#17,ca_gmt_offset#18,ca_location_type#19] parquet
+            +- Join Inner
+               :- Join Inner
+               :  :- SubqueryAlias ctr1
+               :  :  +- SubqueryAlias customer_total_return
+               :  :     +- Aggregate [cr_returning_customer_sk#24, ca_state#15], [cr_returning_customer_sk#24 AS ctr_customer_sk#1, ca_state#15 AS ctr_state#2, sum(cr_return_amt_inc_tax#25) AS ctr_total_return#3]
+               :  :        +- Filter (((cr_returned_date_sk#26 = d_date_sk#27) AND (d_year#28 = 2000)) AND (cr_returning_addr_sk#29 = ca_address_sk#20))
+               :  :           +- Join Inner
+               :  :              :- Join Inner
+               :  :              :  :- SubqueryAlias spark_catalog.default.catalog_returns
+               :  :              :  :  +- Relation[cr_returned_date_sk#26,cr_returned_time_sk#30,cr_item_sk#31,cr_refunded_customer_sk#32,cr_refunded_cdemo_sk#33,cr_refunded_hdemo_sk#34,cr_refunded_addr_sk#35,cr_returning_customer_sk#24,cr_returning_cdemo_sk#36,cr_returning_hdemo_sk#37,cr_returning_addr_sk#29,cr_call_center_sk#38,cr_catalog_page_sk#39,cr_ship_mode_sk#40,cr_warehouse_sk#41,cr_reason_sk#42,cr_order_number#43,cr_return_quantity#44,cr_return_amount#45,cr_return_tax#46,cr_return_amt_inc_tax#25,cr_fee#47,cr_return_ship_cost#48,cr_refunded_cash#49,cr_reversed_charge#50,cr_store_credit#51,cr_net_loss#52] parquet
+               :  :              :  +- SubqueryAlias spark_catalog.default.date_dim
+               :  :              :     +- Relation[d_date_sk#27,d_date_id#53,d_date#54,d_month_seq#55,d_week_seq#56,d_quarter_seq#57,d_year#28,d_dow#58,d_moy#59,d_dom#60,d_qoy#61,d_fy_year#62,d_fy_quarter_seq#63,d_fy_week_seq#64,d_day_name#65,d_quarter_name#66,d_holiday#67,d_weekend#68,d_following_holiday#69,d_first_dom#70,d_last_dom#71,d_same_day_ly#72,d_same_day_lq#73,d_current_day#74,d_current_week#75,d_current_month#76,d_current_quarter#77,d_current_year#78] parquet
+               :  :              +- SubqueryAlias spark_catalog.default.customer_address
+               :  :                 +- Relation[ca_address_sk#20,ca_address_id#79,ca_street_number#9,ca_street_name#10,ca_street_type#11,ca_suite_number#12,ca_city#13,ca_county#14,ca_state#15,ca_zip#16,ca_country#17,ca_gmt_offset#18,ca_location_type#19] parquet
+               :  +- SubqueryAlias spark_catalog.default.customer_address
+               :     +- Relation[ca_address_sk#20,ca_address_id#79,ca_street_number#9,ca_street_name#10,ca_street_type#11,ca_suite_number#12,ca_city#13,ca_county#14,ca_state#15,ca_zip#16,ca_country#17,ca_gmt_offset#18,ca_location_type#19] parquet
+               +- SubqueryAlias spark_catalog.default.customer
+                  +- Relation[c_customer_sk#22,c_customer_id#5,c_current_cdemo_sk#80,c_current_hdemo_sk#81,c_current_addr_sk#21,c_first_shipto_date_sk#82,c_first_sales_date_sk#83,c_salutation#6,c_first_name#7,c_last_name#8,c_preferred_cust_flag#84,c_birth_day#85,c_birth_month#86,c_birth_year#87,c_birth_country#88,c_login#89,c_email_address#90,c_last_review_date#91] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [c_customer_id#5 ASC NULLS FIRST, c_salutation#6 ASC NULLS FIRST, c_first_name#7 ASC NULLS FIRST, c_last_name#8 ASC NULLS FIRST, ca_street_number#9 ASC NULLS FIRST, ca_street_name#10 ASC NULLS FIRST, ca_street_type#11 ASC NULLS FIRST, ca_suite_number#12 ASC NULLS FIRST, ca_city#13 ASC NULLS FIRST, ca_county#14 ASC NULLS FIRST, ca_state#15 ASC NULLS FIRST, ca_zip#16 ASC NULLS FIRST, ca_country#17 ASC NULLS FIRST, ca_gmt_offset#18 ASC NULLS FIRST, ca_location_type#19 ASC NULLS FIRST, ctr_total_return#3 ASC NULLS FIRST], true
+      +- Project [c_customer_id#5, c_salutation#6, c_first_name#7, c_last_name#8, ca_street_number#9, ca_street_name#10, ca_street_type#11, ca_suite_number#12, ca_city#13, ca_county#14, ca_state#15, ca_zip#16, ca_country#17, ca_gmt_offset#18, ca_location_type#19, ctr_total_return#3]
+         +- Join Inner, (ca_address_sk#20 = c_current_addr_sk#21)
+            :- Project [ctr_total_return#3, c_customer_id#5, c_current_addr_sk#21, c_salutation#6, c_first_name#7, c_last_name#8]
+            :  +- Join Inner, (ctr_customer_sk#1 = c_customer_sk#22)
+            :     :- Project [ctr_customer_sk#1, ctr_total_return#3]
+            :     :  +- Join Inner, ((cast(ctr_total_return#3 as decimal(24,7)) > (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#23) AND (ctr_state#2 = ctr_state#2#92))
+            :     :     :- Filter isnotnull(ctr_total_return#3)
+            :     :     :  +- Aggregate [cr_returning_customer_sk#24, ca_state#15], [cr_returning_customer_sk#24 AS ctr_customer_sk#1, ca_state#15 AS ctr_state#2, MakeDecimal(sum(UnscaledValue(cr_return_amt_inc_tax#25)),17,2) AS ctr_total_return#3]
+            :     :     :     +- Project [cr_returning_customer_sk#24, cr_return_amt_inc_tax#25, ca_state#15]
+            :     :     :        +- Join Inner, (cr_returning_addr_sk#29 = ca_address_sk#20)
+            :     :     :           :- Project [cr_returning_customer_sk#24, cr_returning_addr_sk#29, cr_return_amt_inc_tax#25]
+            :     :     :           :  +- Join Inner, (cr_returned_date_sk#26 = d_date_sk#27)
+            :     :     :           :     :- Project [cr_returned_date_sk#26, cr_returning_customer_sk#24, cr_returning_addr_sk#29, cr_return_amt_inc_tax#25]
+            :     :     :           :     :  +- Filter ((isnotnull(cr_returned_date_sk#26) AND isnotnull(cr_returning_addr_sk#29)) AND isnotnull(cr_returning_customer_sk#24))
+            :     :     :           :     :     +- Relation[cr_returned_date_sk#26,cr_returned_time_sk#30,cr_item_sk#31,cr_refunded_customer_sk#32,cr_refunded_cdemo_sk#33,cr_refunded_hdemo_sk#34,cr_refunded_addr_sk#35,cr_returning_customer_sk#24,cr_returning_cdemo_sk#36,cr_returning_hdemo_sk#37,cr_returning_addr_sk#29,cr_call_center_sk#38,cr_catalog_page_sk#39,cr_ship_mode_sk#40,cr_warehouse_sk#41,cr_reason_sk#42,cr_order_number#43,cr_return_quantity#44,cr_return_amount#45,cr_return_tax#46,cr_return_amt_inc_tax#25,cr_fee#47,cr_return_ship_cost#48,cr_refunded_cash#49,cr_reversed_charge#50,cr_store_credit#51,cr_net_loss#52] parquet
+            :     :     :           :     +- Project [d_date_sk#27]
+            :     :     :           :        +- Filter ((isnotnull(d_year#28) AND (d_year#28 = 2000)) AND isnotnull(d_date_sk#27))
+            :     :     :           :           +- Relation[d_date_sk#27,d_date_id#53,d_date#54,d_month_seq#55,d_week_seq#56,d_quarter_seq#57,d_year#28,d_dow#58,d_moy#59,d_dom#60,d_qoy#61,d_fy_year#62,d_fy_quarter_seq#63,d_fy_week_seq#64,d_day_name#65,d_quarter_name#66,d_holiday#67,d_weekend#68,d_following_holiday#69,d_first_dom#70,d_last_dom#71,d_same_day_ly#72,d_same_day_lq#73,d_current_day#74,d_current_week#75,d_current_month#76,d_current_quarter#77,d_current_year#78] parquet
+            :     :     :           +- Project [ca_address_sk#20, ca_state#15]
+            :     :     :              +- Filter (isnotnull(ca_address_sk#20) AND isnotnull(ca_state#15))
+            :     :     :                 +- Relation[ca_address_sk#20,ca_address_id#79,ca_street_number#9,ca_street_name#10,ca_street_type#11,ca_suite_number#12,ca_city#13,ca_county#14,ca_state#15,ca_zip#16,ca_country#17,ca_gmt_offset#18,ca_location_type#19] parquet
+            :     :     +- Filter isnotnull((CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#23)
+            :     :        +- Aggregate [ctr_state#2], [CheckOverflow((promote_precision(avg(ctr_total_return#3)) * 1.200000), DecimalType(24,7), true) AS (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#23, ctr_state#2 AS ctr_state#2#92]
+            :     :           +- Aggregate [cr_returning_customer_sk#24, ca_state#15], [ca_state#15 AS ctr_state#2, MakeDecimal(sum(UnscaledValue(cr_return_amt_inc_tax#25)),17,2) AS ctr_total_return#3]
+            :     :              +- Project [cr_returning_customer_sk#24, cr_return_amt_inc_tax#25, ca_state#15]
+            :     :                 +- Join Inner, (cr_returning_addr_sk#29 = ca_address_sk#20)
+            :     :                    :- Project [cr_returning_customer_sk#24, cr_returning_addr_sk#29, cr_return_amt_inc_tax#25]
+            :     :                    :  +- Join Inner, (cr_returned_date_sk#26 = d_date_sk#27)
+            :     :                    :     :- Project [cr_returned_date_sk#26, cr_returning_customer_sk#24, cr_returning_addr_sk#29, cr_return_amt_inc_tax#25]
+            :     :                    :     :  +- Filter (isnotnull(cr_returned_date_sk#26) AND isnotnull(cr_returning_addr_sk#29))
+            :     :                    :     :     +- Relation[cr_returned_date_sk#26,cr_returned_time_sk#30,cr_item_sk#31,cr_refunded_customer_sk#32,cr_refunded_cdemo_sk#33,cr_refunded_hdemo_sk#34,cr_refunded_addr_sk#35,cr_returning_customer_sk#24,cr_returning_cdemo_sk#36,cr_returning_hdemo_sk#37,cr_returning_addr_sk#29,cr_call_center_sk#38,cr_catalog_page_sk#39,cr_ship_mode_sk#40,cr_warehouse_sk#41,cr_reason_sk#42,cr_order_number#43,cr_return_quantity#44,cr_return_amount#45,cr_return_tax#46,cr_return_amt_inc_tax#25,cr_fee#47,cr_return_ship_cost#48,cr_refunded_cash#49,cr_reversed_charge#50,cr_store_credit#51,cr_net_loss#52] parquet
+            :     :                    :     +- Project [d_date_sk#27]
+            :     :                    :        +- Filter ((isnotnull(d_year#28) AND (d_year#28 = 2000)) AND isnotnull(d_date_sk#27))
+            :     :                    :           +- Relation[d_date_sk#27,d_date_id#53,d_date#54,d_month_seq#55,d_week_seq#56,d_quarter_seq#57,d_year#28,d_dow#58,d_moy#59,d_dom#60,d_qoy#61,d_fy_year#62,d_fy_quarter_seq#63,d_fy_week_seq#64,d_day_name#65,d_quarter_name#66,d_holiday#67,d_weekend#68,d_following_holiday#69,d_first_dom#70,d_last_dom#71,d_same_day_ly#72,d_same_day_lq#73,d_current_day#74,d_current_week#75,d_current_month#76,d_current_quarter#77,d_current_year#78] parquet
+            :     :                    +- Project [ca_address_sk#20, ca_state#15]
+            :     :                       +- Filter (isnotnull(ca_address_sk#20) AND isnotnull(ca_state#15))
+            :     :                          +- Relation[ca_address_sk#20,ca_address_id#79,ca_street_number#9,ca_street_name#10,ca_street_type#11,ca_suite_number#12,ca_city#13,ca_county#14,ca_state#15,ca_zip#16,ca_country#17,ca_gmt_offset#18,ca_location_type#19] parquet
+            :     +- Project [c_customer_sk#22, c_customer_id#5, c_current_addr_sk#21, c_salutation#6, c_first_name#7, c_last_name#8]
+            :        +- Filter (isnotnull(c_customer_sk#22) AND isnotnull(c_current_addr_sk#21))
+            :           +- Relation[c_customer_sk#22,c_customer_id#5,c_current_cdemo_sk#80,c_current_hdemo_sk#81,c_current_addr_sk#21,c_first_shipto_date_sk#82,c_first_sales_date_sk#83,c_salutation#6,c_first_name#7,c_last_name#8,c_preferred_cust_flag#84,c_birth_day#85,c_birth_month#86,c_birth_year#87,c_birth_country#88,c_login#89,c_email_address#90,c_last_review_date#91] parquet
+            +- Project [ca_address_sk#20, ca_street_number#9, ca_street_name#10, ca_street_type#11, ca_suite_number#12, ca_city#13, ca_county#14, ca_state#15, ca_zip#16, ca_country#17, ca_gmt_offset#18, ca_location_type#19]
+               +- Filter ((isnotnull(ca_state#15) AND (ca_state#15 = GA)) AND isnotnull(ca_address_sk#20))
+                  +- Relation[ca_address_sk#20,ca_address_id#79,ca_street_number#9,ca_street_name#10,ca_street_type#11,ca_suite_number#12,ca_city#13,ca_county#14,ca_state#15,ca_zip#16,ca_country#17,ca_gmt_offset#18,ca_location_type#19] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[c_customer_id#5 ASC NULLS FIRST,c_salutation#6 ASC NULLS FIRST,c_first_name#7 ASC NULLS FIRST,c_last_name#8 ASC NULLS FIRST,ca_street_number#9 ASC NULLS FIRST,ca_street_name#10 ASC NULLS FIRST,ca_street_type#11 ASC NULLS FIRST,ca_suite_number#12 ASC NULLS FIRST,ca_city#13 ASC NULLS FIRST,ca_county#14 ASC NULLS FIRST,ca_state#15 ASC NULLS FIRST,ca_zip#16 ASC NULLS FIRST,ca_country#17 ASC NULLS FIRST,ca_gmt_offset#18 ASC NULLS FIRST,ca_location_type#19 ASC NULLS FIRST,ctr_total_return#3 ASC NULLS FIRST], output=[c_customer_id#5,c_salutation#6,c_first_name#7,c_last_name#8,ca_street_number#9,ca_street_name#10,ca_street_type#11,ca_suite_number#12,ca_city#13,ca_county#14,ca_state#15,ca_zip#16,ca_country#17,ca_gmt_offset#18,ca_location_type#19,ctr_total_return#3])
++- *(11) Project [c_customer_id#5, c_salutation#6, c_first_name#7, c_last_name#8, ca_street_number#9, ca_street_name#10, ca_street_type#11, ca_suite_number#12, ca_city#13, ca_county#14, ca_state#15, ca_zip#16, ca_country#17, ca_gmt_offset#18, ca_location_type#19, ctr_total_return#3]
+   +- *(11) BroadcastHashJoin [c_current_addr_sk#21], [ca_address_sk#20], Inner, BuildRight
+      :- *(11) Project [ctr_total_return#3, c_customer_id#5, c_current_addr_sk#21, c_salutation#6, c_first_name#7, c_last_name#8]
+      :  +- *(11) BroadcastHashJoin [ctr_customer_sk#1], [c_customer_sk#22], Inner, BuildRight
+      :     :- *(11) Project [ctr_customer_sk#1, ctr_total_return#3]
+      :     :  +- *(11) BroadcastHashJoin [ctr_state#2], [ctr_state#2#92], Inner, BuildRight, (cast(ctr_total_return#3 as decimal(24,7)) > (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#23)
+      :     :     :- *(11) Filter isnotnull(ctr_total_return#3)
+      :     :     :  +- *(11) HashAggregate(keys=[cr_returning_customer_sk#24, ca_state#15], functions=[sum(UnscaledValue(cr_return_amt_inc_tax#25))], output=[ctr_customer_sk#1, ctr_state#2, ctr_total_return#3])
+      :     :     :     +- Exchange hashpartitioning(cr_returning_customer_sk#24, ca_state#15, 5), true, [id=#93]
+      :     :     :        +- *(3) HashAggregate(keys=[cr_returning_customer_sk#24, ca_state#15], functions=[partial_sum(UnscaledValue(cr_return_amt_inc_tax#25))], output=[cr_returning_customer_sk#24, ca_state#15, sum#94])
+      :     :     :           +- *(3) Project [cr_returning_customer_sk#24, cr_return_amt_inc_tax#25, ca_state#15]
+      :     :     :              +- *(3) BroadcastHashJoin [cr_returning_addr_sk#29], [ca_address_sk#20], Inner, BuildRight
+      :     :     :                 :- *(3) Project [cr_returning_customer_sk#24, cr_returning_addr_sk#29, cr_return_amt_inc_tax#25]
+      :     :     :                 :  +- *(3) BroadcastHashJoin [cr_returned_date_sk#26], [d_date_sk#27], Inner, BuildRight
+      :     :     :                 :     :- *(3) Project [cr_returned_date_sk#26, cr_returning_customer_sk#24, cr_returning_addr_sk#29, cr_return_amt_inc_tax#25]
+      :     :     :                 :     :  +- *(3) Filter ((isnotnull(cr_returned_date_sk#26) AND isnotnull(cr_returning_addr_sk#29)) AND isnotnull(cr_returning_customer_sk#24))
+      :     :     :                 :     :     +- *(3) ColumnarToRow
+      :     :     :                 :     :        +- FileScan parquet default.catalog_returns[cr_returned_date_sk#26,cr_returning_customer_sk#24,cr_returning_addr_sk#29,cr_return_amt_inc_tax#25] Batched: true, DataFilters: [isnotnull(cr_returned_date_sk#26), isnotnull(cr_returning_addr_sk#29), isnotnull(cr_returning_..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cr_returned_date_sk), IsNotNull(cr_returning_addr_sk), IsNotNull(cr_returning_customer..., ReadSchema: struct<cr_returned_date_sk:int,cr_returning_customer_sk:int,cr_returning_addr_sk:int,cr_return_am...
+      :     :     :                 :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#95]
+      :     :     :                 :        +- *(1) Project [d_date_sk#27]
+      :     :     :                 :           +- *(1) Filter ((isnotnull(d_year#28) AND (d_year#28 = 2000)) AND isnotnull(d_date_sk#27))
+      :     :     :                 :              +- *(1) ColumnarToRow
+      :     :     :                 :                 +- FileScan parquet default.date_dim[d_date_sk#27,d_year#28] Batched: true, DataFilters: [isnotnull(d_year#28), (d_year#28 = 2000), isnotnull(d_date_sk#27)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_year:int>
+      :     :     :                 +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#96]
+      :     :     :                    +- *(2) Project [ca_address_sk#20, ca_state#15]
+      :     :     :                       +- *(2) Filter (isnotnull(ca_address_sk#20) AND isnotnull(ca_state#15))
+      :     :     :                          +- *(2) ColumnarToRow
+      :     :     :                             +- FileScan parquet default.customer_address[ca_address_sk#20,ca_state#15] Batched: true, DataFilters: [isnotnull(ca_address_sk#20), isnotnull(ca_state#15)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_state)], ReadSchema: struct<ca_address_sk:int,ca_state:string>
+      :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[1, string, true])), [id=#97]
+      :     :        +- *(8) Filter isnotnull((CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#23)
+      :     :           +- *(8) HashAggregate(keys=[ctr_state#2], functions=[avg(ctr_total_return#3)], output=[(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#23, ctr_state#2#92])
+      :     :              +- Exchange hashpartitioning(ctr_state#2, 5), true, [id=#98]
+      :     :                 +- *(7) HashAggregate(keys=[ctr_state#2], functions=[partial_avg(ctr_total_return#3)], output=[ctr_state#2, sum#99, count#100])
+      :     :                    +- *(7) HashAggregate(keys=[cr_returning_customer_sk#24, ca_state#15], functions=[sum(UnscaledValue(cr_return_amt_inc_tax#25))], output=[ctr_state#2, ctr_total_return#3])
+      :     :                       +- Exchange hashpartitioning(cr_returning_customer_sk#24, ca_state#15, 5), true, [id=#101]
+      :     :                          +- *(6) HashAggregate(keys=[cr_returning_customer_sk#24, ca_state#15], functions=[partial_sum(UnscaledValue(cr_return_amt_inc_tax#25))], output=[cr_returning_customer_sk#24, ca_state#15, sum#102])
+      :     :                             +- *(6) Project [cr_returning_customer_sk#24, cr_return_amt_inc_tax#25, ca_state#15]
+      :     :                                +- *(6) BroadcastHashJoin [cr_returning_addr_sk#29], [ca_address_sk#20], Inner, BuildRight
+      :     :                                   :- *(6) Project [cr_returning_customer_sk#24, cr_returning_addr_sk#29, cr_return_amt_inc_tax#25]
+      :     :                                   :  +- *(6) BroadcastHashJoin [cr_returned_date_sk#26], [d_date_sk#27], Inner, BuildRight
+      :     :                                   :     :- *(6) Project [cr_returned_date_sk#26, cr_returning_customer_sk#24, cr_returning_addr_sk#29, cr_return_amt_inc_tax#25]
+      :     :                                   :     :  +- *(6) Filter (isnotnull(cr_returned_date_sk#26) AND isnotnull(cr_returning_addr_sk#29))
+      :     :                                   :     :     +- *(6) ColumnarToRow
+      :     :                                   :     :        +- FileScan parquet default.catalog_returns[cr_returned_date_sk#26,cr_returning_customer_sk#24,cr_returning_addr_sk#29,cr_return_amt_inc_tax#25] Batched: true, DataFilters: [isnotnull(cr_returned_date_sk#26), isnotnull(cr_returning_addr_sk#29)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cr_returned_date_sk), IsNotNull(cr_returning_addr_sk)], ReadSchema: struct<cr_returned_date_sk:int,cr_returning_customer_sk:int,cr_returning_addr_sk:int,cr_return_am...
+      :     :                                   :     +- ReusedExchange [d_date_sk#27], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#95]
+      :     :                                   +- ReusedExchange [ca_address_sk#20, ca_state#15], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#96]
+      :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#103]
+      :        +- *(9) Project [c_customer_sk#22, c_customer_id#5, c_current_addr_sk#21, c_salutation#6, c_first_name#7, c_last_name#8]
+      :           +- *(9) Filter (isnotnull(c_customer_sk#22) AND isnotnull(c_current_addr_sk#21))
+      :              +- *(9) ColumnarToRow
+      :                 +- FileScan parquet default.customer[c_customer_sk#22,c_customer_id#5,c_current_addr_sk#21,c_salutation#6,c_first_name#7,c_last_name#8] Batched: true, DataFilters: [isnotnull(c_customer_sk#22), isnotnull(c_current_addr_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_current_addr_sk)], ReadSchema: struct<c_customer_sk:int,c_customer_id:string,c_current_addr_sk:int,c_salutation:string,c_first_n...
+      +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#104]
+         +- *(10) Project [ca_address_sk#20, ca_street_number#9, ca_street_name#10, ca_street_type#11, ca_suite_number#12, ca_city#13, ca_county#14, ca_state#15, ca_zip#16, ca_country#17, ca_gmt_offset#18, ca_location_type#19]
+            +- *(10) Filter ((isnotnull(ca_state#15) AND (ca_state#15 = GA)) AND isnotnull(ca_address_sk#20))
+               +- *(10) ColumnarToRow
+                  +- FileScan parquet default.customer_address[ca_address_sk#20,ca_street_number#9,ca_street_name#10,ca_street_type#11,ca_suite_number#12,ca_city#13,ca_county#14,ca_state#15,ca_zip#16,ca_country#17,ca_gmt_offset#18,ca_location_type#19] Batched: true, DataFilters: [isnotnull(ca_state#15), (ca_state#15 = GA), isnotnull(ca_address_sk#20)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,GA), IsNotNull(ca_address_sk)], ReadSchema: struct<ca_address_sk:int,ca_street_number:string,ca_street_name:string,ca_street_type:string,ca_s...

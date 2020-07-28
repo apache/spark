@@ -1,0 +1,105 @@
+== Parsed Logical Plan ==
+'GlobalLimit 100
++- 'LocalLimit 100
+   +- 'Sort ['substr('w_warehouse_name, 1, 20) ASC NULLS FIRST, 'sm_type ASC NULLS FIRST, 'web_name ASC NULLS FIRST], true
+      +- 'Aggregate ['substr('w_warehouse_name, 1, 20), 'sm_type, 'web_name], [unresolvedalias('substr('w_warehouse_name, 1, 20), None), 'sm_type, 'web_name, 'sum(CASE WHEN (('ws_ship_date_sk - 'ws_sold_date_sk) <= 30) THEN 1 ELSE 0 END) AS 30 days #1, 'sum(CASE WHEN ((('ws_ship_date_sk - 'ws_sold_date_sk) > 30) AND (('ws_ship_date_sk - 'ws_sold_date_sk) <= 60)) THEN 1 ELSE 0 END) AS 31 - 60 days #2, 'sum(CASE WHEN ((('ws_ship_date_sk - 'ws_sold_date_sk) > 60) AND (('ws_ship_date_sk - 'ws_sold_date_sk) <= 90)) THEN 1 ELSE 0 END) AS 61 - 90 days #3, 'sum(CASE WHEN ((('ws_ship_date_sk - 'ws_sold_date_sk) > 90) AND (('ws_ship_date_sk - 'ws_sold_date_sk) <= 120)) THEN 1 ELSE 0 END) AS 91 - 120 days #4, 'sum(CASE WHEN (('ws_ship_date_sk - 'ws_sold_date_sk) > 120) THEN 1 ELSE 0 END) AS >120 days #5]
+         +- 'Filter ((((('d_month_seq >= 1200) AND ('d_month_seq <= (1200 + 11))) AND ('ws_ship_date_sk = 'd_date_sk)) AND ('ws_warehouse_sk = 'w_warehouse_sk)) AND (('ws_ship_mode_sk = 'sm_ship_mode_sk) AND ('ws_web_site_sk = 'web_site_sk)))
+            +- 'Join Inner
+               :- 'Join Inner
+               :  :- 'Join Inner
+               :  :  :- 'Join Inner
+               :  :  :  :- 'UnresolvedRelation [web_sales]
+               :  :  :  +- 'UnresolvedRelation [warehouse]
+               :  :  +- 'UnresolvedRelation [ship_mode]
+               :  +- 'UnresolvedRelation [web_site]
+               +- 'UnresolvedRelation [date_dim]
+
+== Analyzed Logical Plan ==
+substr(w_warehouse_name, 1, 20): string, sm_type: string, web_name: string, 30 days : bigint, 31 - 60 days : bigint, 61 - 90 days : bigint, 91 - 120 days : bigint, >120 days : bigint
+GlobalLimit 100
++- LocalLimit 100
+   +- Project [substr(w_warehouse_name, 1, 20)#6, sm_type#7, web_name#8, 30 days #9, 31 - 60 days #10, 61 - 90 days #11, 91 - 120 days #12, >120 days #13]
+      +- Sort [substr(w_warehouse_name, 1, 20)#6 ASC NULLS FIRST, sm_type#7 ASC NULLS FIRST, web_name#8 ASC NULLS FIRST], true
+         +- Aggregate [substr(w_warehouse_name#14, 1, 20), sm_type#7, web_name#8], [substr(w_warehouse_name#14, 1, 20) AS substr(w_warehouse_name, 1, 20)#6, sm_type#7, web_name#8, sum(cast(CASE WHEN ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 30) THEN 1 ELSE 0 END as bigint)) AS 30 days #9, sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 30) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 60)) THEN 1 ELSE 0 END as bigint)) AS 31 - 60 days #10, sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 60) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 90)) THEN 1 ELSE 0 END as bigint)) AS 61 - 90 days #11, sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 90) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 120)) THEN 1 ELSE 0 END as bigint)) AS 91 - 120 days #12, sum(cast(CASE WHEN ((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 120) THEN 1 ELSE 0 END as bigint)) AS >120 days #13]
+            +- Filter (((((d_month_seq#17 >= 1200) AND (d_month_seq#17 <= (1200 + 11))) AND (ws_ship_date_sk#15 = d_date_sk#18)) AND (ws_warehouse_sk#19 = w_warehouse_sk#20)) AND ((ws_ship_mode_sk#21 = sm_ship_mode_sk#22) AND (ws_web_site_sk#23 = web_site_sk#24)))
+               +- Join Inner
+                  :- Join Inner
+                  :  :- Join Inner
+                  :  :  :- Join Inner
+                  :  :  :  :- SubqueryAlias spark_catalog.default.web_sales
+                  :  :  :  :  +- Relation[ws_sold_date_sk#16,ws_sold_time_sk#25,ws_ship_date_sk#15,ws_item_sk#26,ws_bill_customer_sk#27,ws_bill_cdemo_sk#28,ws_bill_hdemo_sk#29,ws_bill_addr_sk#30,ws_ship_customer_sk#31,ws_ship_cdemo_sk#32,ws_ship_hdemo_sk#33,ws_ship_addr_sk#34,ws_web_page_sk#35,ws_web_site_sk#23,ws_ship_mode_sk#21,ws_warehouse_sk#19,ws_promo_sk#36,ws_order_number#37,ws_quantity#38,ws_wholesale_cost#39,ws_list_price#40,ws_sales_price#41,ws_ext_discount_amt#42,ws_ext_sales_price#43,ws_ext_wholesale_cost#44,ws_ext_list_price#45,ws_ext_tax#46,ws_coupon_amt#47,ws_ext_ship_cost#48,ws_net_paid#49,ws_net_paid_inc_tax#50,ws_net_paid_inc_ship#51,ws_net_paid_inc_ship_tax#52,ws_net_profit#53] parquet
+                  :  :  :  +- SubqueryAlias spark_catalog.default.warehouse
+                  :  :  :     +- Relation[w_warehouse_sk#20,w_warehouse_id#54,w_warehouse_name#14,w_warehouse_sq_ft#55,w_street_number#56,w_street_name#57,w_street_type#58,w_suite_number#59,w_city#60,w_county#61,w_state#62,w_zip#63,w_country#64,w_gmt_offset#65] parquet
+                  :  :  +- SubqueryAlias spark_catalog.default.ship_mode
+                  :  :     +- Relation[sm_ship_mode_sk#22,sm_ship_mode_id#66,sm_type#7,sm_code#67,sm_carrier#68,sm_contract#69] parquet
+                  :  +- SubqueryAlias spark_catalog.default.web_site
+                  :     +- Relation[web_site_sk#24,web_site_id#70,web_rec_start_date#71,web_rec_end_date#72,web_name#8,web_open_date_sk#73,web_close_date_sk#74,web_class#75,web_manager#76,web_mkt_id#77,web_mkt_class#78,web_mkt_desc#79,web_market_manager#80,web_company_id#81,web_company_name#82,web_street_number#83,web_street_name#84,web_street_type#85,web_suite_number#86,web_city#87,web_county#88,web_state#89,web_zip#90,web_country#91,web_gmt_offset#92,web_tax_percentage#93] parquet
+                  +- SubqueryAlias spark_catalog.default.date_dim
+                     +- Relation[d_date_sk#18,d_date_id#94,d_date#95,d_month_seq#17,d_week_seq#96,d_quarter_seq#97,d_year#98,d_dow#99,d_moy#100,d_dom#101,d_qoy#102,d_fy_year#103,d_fy_quarter_seq#104,d_fy_week_seq#105,d_day_name#106,d_quarter_name#107,d_holiday#108,d_weekend#109,d_following_holiday#110,d_first_dom#111,d_last_dom#112,d_same_day_ly#113,d_same_day_lq#114,d_current_day#115,d_current_week#116,d_current_month#117,d_current_quarter#118,d_current_year#119] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [substr(w_warehouse_name, 1, 20)#6 ASC NULLS FIRST, sm_type#7 ASC NULLS FIRST, web_name#8 ASC NULLS FIRST], true
+      +- Aggregate [substr(w_warehouse_name#14, 1, 20), sm_type#7, web_name#8], [substr(w_warehouse_name#14, 1, 20) AS substr(w_warehouse_name, 1, 20)#6, sm_type#7, web_name#8, sum(cast(CASE WHEN ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 30) THEN 1 ELSE 0 END as bigint)) AS 30 days #9, sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 30) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 60)) THEN 1 ELSE 0 END as bigint)) AS 31 - 60 days #10, sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 60) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 90)) THEN 1 ELSE 0 END as bigint)) AS 61 - 90 days #11, sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 90) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 120)) THEN 1 ELSE 0 END as bigint)) AS 91 - 120 days #12, sum(cast(CASE WHEN ((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 120) THEN 1 ELSE 0 END as bigint)) AS >120 days #13]
+         +- Project [ws_sold_date_sk#16, ws_ship_date_sk#15, w_warehouse_name#14, sm_type#7, web_name#8]
+            +- Join Inner, (ws_ship_date_sk#15 = d_date_sk#18)
+               :- Project [ws_sold_date_sk#16, ws_ship_date_sk#15, w_warehouse_name#14, sm_type#7, web_name#8]
+               :  +- Join Inner, (ws_web_site_sk#23 = web_site_sk#24)
+               :     :- Project [ws_sold_date_sk#16, ws_ship_date_sk#15, ws_web_site_sk#23, w_warehouse_name#14, sm_type#7]
+               :     :  +- Join Inner, (ws_ship_mode_sk#21 = sm_ship_mode_sk#22)
+               :     :     :- Project [ws_sold_date_sk#16, ws_ship_date_sk#15, ws_web_site_sk#23, ws_ship_mode_sk#21, w_warehouse_name#14]
+               :     :     :  +- Join Inner, (ws_warehouse_sk#19 = w_warehouse_sk#20)
+               :     :     :     :- Project [ws_sold_date_sk#16, ws_ship_date_sk#15, ws_web_site_sk#23, ws_ship_mode_sk#21, ws_warehouse_sk#19]
+               :     :     :     :  +- Filter (((isnotnull(ws_warehouse_sk#19) AND isnotnull(ws_ship_mode_sk#21)) AND isnotnull(ws_web_site_sk#23)) AND isnotnull(ws_ship_date_sk#15))
+               :     :     :     :     +- Relation[ws_sold_date_sk#16,ws_sold_time_sk#25,ws_ship_date_sk#15,ws_item_sk#26,ws_bill_customer_sk#27,ws_bill_cdemo_sk#28,ws_bill_hdemo_sk#29,ws_bill_addr_sk#30,ws_ship_customer_sk#31,ws_ship_cdemo_sk#32,ws_ship_hdemo_sk#33,ws_ship_addr_sk#34,ws_web_page_sk#35,ws_web_site_sk#23,ws_ship_mode_sk#21,ws_warehouse_sk#19,ws_promo_sk#36,ws_order_number#37,ws_quantity#38,ws_wholesale_cost#39,ws_list_price#40,ws_sales_price#41,ws_ext_discount_amt#42,ws_ext_sales_price#43,ws_ext_wholesale_cost#44,ws_ext_list_price#45,ws_ext_tax#46,ws_coupon_amt#47,ws_ext_ship_cost#48,ws_net_paid#49,ws_net_paid_inc_tax#50,ws_net_paid_inc_ship#51,ws_net_paid_inc_ship_tax#52,ws_net_profit#53] parquet
+               :     :     :     +- Project [w_warehouse_sk#20, w_warehouse_name#14]
+               :     :     :        +- Filter isnotnull(w_warehouse_sk#20)
+               :     :     :           +- Relation[w_warehouse_sk#20,w_warehouse_id#54,w_warehouse_name#14,w_warehouse_sq_ft#55,w_street_number#56,w_street_name#57,w_street_type#58,w_suite_number#59,w_city#60,w_county#61,w_state#62,w_zip#63,w_country#64,w_gmt_offset#65] parquet
+               :     :     +- Project [sm_ship_mode_sk#22, sm_type#7]
+               :     :        +- Filter isnotnull(sm_ship_mode_sk#22)
+               :     :           +- Relation[sm_ship_mode_sk#22,sm_ship_mode_id#66,sm_type#7,sm_code#67,sm_carrier#68,sm_contract#69] parquet
+               :     +- Project [web_site_sk#24, web_name#8]
+               :        +- Filter isnotnull(web_site_sk#24)
+               :           +- Relation[web_site_sk#24,web_site_id#70,web_rec_start_date#71,web_rec_end_date#72,web_name#8,web_open_date_sk#73,web_close_date_sk#74,web_class#75,web_manager#76,web_mkt_id#77,web_mkt_class#78,web_mkt_desc#79,web_market_manager#80,web_company_id#81,web_company_name#82,web_street_number#83,web_street_name#84,web_street_type#85,web_suite_number#86,web_city#87,web_county#88,web_state#89,web_zip#90,web_country#91,web_gmt_offset#92,web_tax_percentage#93] parquet
+               +- Project [d_date_sk#18]
+                  +- Filter (((isnotnull(d_month_seq#17) AND (d_month_seq#17 >= 1200)) AND (d_month_seq#17 <= 1211)) AND isnotnull(d_date_sk#18))
+                     +- Relation[d_date_sk#18,d_date_id#94,d_date#95,d_month_seq#17,d_week_seq#96,d_quarter_seq#97,d_year#98,d_dow#99,d_moy#100,d_dom#101,d_qoy#102,d_fy_year#103,d_fy_quarter_seq#104,d_fy_week_seq#105,d_day_name#106,d_quarter_name#107,d_holiday#108,d_weekend#109,d_following_holiday#110,d_first_dom#111,d_last_dom#112,d_same_day_ly#113,d_same_day_lq#114,d_current_day#115,d_current_week#116,d_current_month#117,d_current_quarter#118,d_current_year#119] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[substr(w_warehouse_name, 1, 20)#6 ASC NULLS FIRST,sm_type#7 ASC NULLS FIRST,web_name#8 ASC NULLS FIRST], output=[substr(w_warehouse_name, 1, 20)#6,sm_type#7,web_name#8,30 days #9,31 - 60 days #10,61 - 90 days #11,91 - 120 days #12,>120 days #13])
++- *(6) HashAggregate(keys=[substr(w_warehouse_name#14, 1, 20)#120, sm_type#7, web_name#8], functions=[sum(cast(CASE WHEN ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 30) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 30) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 60)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 60) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 90)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 90) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 120)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN ((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 120) THEN 1 ELSE 0 END as bigint))], output=[substr(w_warehouse_name, 1, 20)#6, sm_type#7, web_name#8, 30 days #9, 31 - 60 days #10, 61 - 90 days #11, 91 - 120 days #12, >120 days #13])
+   +- Exchange hashpartitioning(substr(w_warehouse_name#14, 1, 20)#120, sm_type#7, web_name#8, 5), true, [id=#121]
+      +- *(5) HashAggregate(keys=[substr(w_warehouse_name#14, 1, 20) AS substr(w_warehouse_name#14, 1, 20)#120, sm_type#7, web_name#8], functions=[partial_sum(cast(CASE WHEN ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 30) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 30) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 60)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 60) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 90)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 90) AND ((ws_ship_date_sk#15 - ws_sold_date_sk#16) <= 120)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN ((ws_ship_date_sk#15 - ws_sold_date_sk#16) > 120) THEN 1 ELSE 0 END as bigint))], output=[substr(w_warehouse_name#14, 1, 20)#120, sm_type#7, web_name#8, sum#122, sum#123, sum#124, sum#125, sum#126])
+         +- *(5) Project [ws_sold_date_sk#16, ws_ship_date_sk#15, w_warehouse_name#14, sm_type#7, web_name#8]
+            +- *(5) BroadcastHashJoin [ws_ship_date_sk#15], [d_date_sk#18], Inner, BuildRight
+               :- *(5) Project [ws_sold_date_sk#16, ws_ship_date_sk#15, w_warehouse_name#14, sm_type#7, web_name#8]
+               :  +- *(5) BroadcastHashJoin [ws_web_site_sk#23], [web_site_sk#24], Inner, BuildRight
+               :     :- *(5) Project [ws_sold_date_sk#16, ws_ship_date_sk#15, ws_web_site_sk#23, w_warehouse_name#14, sm_type#7]
+               :     :  +- *(5) BroadcastHashJoin [ws_ship_mode_sk#21], [sm_ship_mode_sk#22], Inner, BuildRight
+               :     :     :- *(5) Project [ws_sold_date_sk#16, ws_ship_date_sk#15, ws_web_site_sk#23, ws_ship_mode_sk#21, w_warehouse_name#14]
+               :     :     :  +- *(5) BroadcastHashJoin [ws_warehouse_sk#19], [w_warehouse_sk#20], Inner, BuildRight
+               :     :     :     :- *(5) Project [ws_sold_date_sk#16, ws_ship_date_sk#15, ws_web_site_sk#23, ws_ship_mode_sk#21, ws_warehouse_sk#19]
+               :     :     :     :  +- *(5) Filter (((isnotnull(ws_warehouse_sk#19) AND isnotnull(ws_ship_mode_sk#21)) AND isnotnull(ws_web_site_sk#23)) AND isnotnull(ws_ship_date_sk#15))
+               :     :     :     :     +- *(5) ColumnarToRow
+               :     :     :     :        +- FileScan parquet default.web_sales[ws_sold_date_sk#16,ws_ship_date_sk#15,ws_web_site_sk#23,ws_ship_mode_sk#21,ws_warehouse_sk#19] Batched: true, DataFilters: [isnotnull(ws_warehouse_sk#19), isnotnull(ws_ship_mode_sk#21), isnotnull(ws_web_site_sk#23), i..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_warehouse_sk), IsNotNull(ws_ship_mode_sk), IsNotNull(ws_web_site_sk), IsNotNull(ws_..., ReadSchema: struct<ws_sold_date_sk:int,ws_ship_date_sk:int,ws_web_site_sk:int,ws_ship_mode_sk:int,ws_warehous...
+               :     :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#127]
+               :     :     :        +- *(1) Project [w_warehouse_sk#20, w_warehouse_name#14]
+               :     :     :           +- *(1) Filter isnotnull(w_warehouse_sk#20)
+               :     :     :              +- *(1) ColumnarToRow
+               :     :     :                 +- FileScan parquet default.warehouse[w_warehouse_sk#20,w_warehouse_name#14] Batched: true, DataFilters: [isnotnull(w_warehouse_sk#20)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(w_warehouse_sk)], ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string>
+               :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#128]
+               :     :        +- *(2) Project [sm_ship_mode_sk#22, sm_type#7]
+               :     :           +- *(2) Filter isnotnull(sm_ship_mode_sk#22)
+               :     :              +- *(2) ColumnarToRow
+               :     :                 +- FileScan parquet default.ship_mode[sm_ship_mode_sk#22,sm_type#7] Batched: true, DataFilters: [isnotnull(sm_ship_mode_sk#22)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(sm_ship_mode_sk)], ReadSchema: struct<sm_ship_mode_sk:int,sm_type:string>
+               :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#129]
+               :        +- *(3) Project [web_site_sk#24, web_name#8]
+               :           +- *(3) Filter isnotnull(web_site_sk#24)
+               :              +- *(3) ColumnarToRow
+               :                 +- FileScan parquet default.web_site[web_site_sk#24,web_name#8] Batched: true, DataFilters: [isnotnull(web_site_sk#24)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(web_site_sk)], ReadSchema: struct<web_site_sk:int,web_name:string>
+               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#130]
+                  +- *(4) Project [d_date_sk#18]
+                     +- *(4) Filter (((isnotnull(d_month_seq#17) AND (d_month_seq#17 >= 1200)) AND (d_month_seq#17 <= 1211)) AND isnotnull(d_date_sk#18))
+                        +- *(4) ColumnarToRow
+                           +- FileScan parquet default.date_dim[d_date_sk#18,d_month_seq#17] Batched: true, DataFilters: [isnotnull(d_month_seq#17), (d_month_seq#17 >= 1200), (d_month_seq#17 <= 1211), isnotnull(d_date_..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211),..., ReadSchema: struct<d_date_sk:int,d_month_seq:int>

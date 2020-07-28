@@ -1,0 +1,70 @@
+== Parsed Logical Plan ==
+'GlobalLimit 100
++- 'LocalLimit 100
+   +- 'Sort ['s_store_name ASC NULLS FIRST, 's_store_id ASC NULLS FIRST, 'sun_sales ASC NULLS FIRST, 'mon_sales ASC NULLS FIRST, 'tue_sales ASC NULLS FIRST, 'wed_sales ASC NULLS FIRST, 'thu_sales ASC NULLS FIRST, 'fri_sales ASC NULLS FIRST, 'sat_sales ASC NULLS FIRST], true
+      +- 'Aggregate ['s_store_name, 's_store_id], ['s_store_name, 's_store_id, 'sum(CASE WHEN ('d_day_name = Sunday) THEN 'ss_sales_price ELSE null END) AS sun_sales#1, 'sum(CASE WHEN ('d_day_name = Monday) THEN 'ss_sales_price ELSE null END) AS mon_sales#2, 'sum(CASE WHEN ('d_day_name = Tuesday) THEN 'ss_sales_price ELSE null END) AS tue_sales#3, 'sum(CASE WHEN ('d_day_name = Wednesday) THEN 'ss_sales_price ELSE null END) AS wed_sales#4, 'sum(CASE WHEN ('d_day_name = Thursday) THEN 'ss_sales_price ELSE null END) AS thu_sales#5, 'sum(CASE WHEN ('d_day_name = Friday) THEN 'ss_sales_price ELSE null END) AS fri_sales#6, 'sum(CASE WHEN ('d_day_name = Saturday) THEN 'ss_sales_price ELSE null END) AS sat_sales#7]
+         +- 'Filter (((('d_date_sk = 'ss_sold_date_sk) AND ('s_store_sk = 'ss_store_sk)) AND ('s_gmt_offset = -5)) AND (('d_year = 1998) AND (('ss_sold_date_sk >= 2450816) AND ('ss_sold_date_sk <= 2451179))))
+            +- 'Join Inner
+               :- 'Join Inner
+               :  :- 'UnresolvedRelation [date_dim]
+               :  +- 'UnresolvedRelation [store_sales]
+               +- 'UnresolvedRelation [store]
+
+== Analyzed Logical Plan ==
+s_store_name: string, s_store_id: string, sun_sales: decimal(17,2), mon_sales: decimal(17,2), tue_sales: decimal(17,2), wed_sales: decimal(17,2), thu_sales: decimal(17,2), fri_sales: decimal(17,2), sat_sales: decimal(17,2)
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [s_store_name#8 ASC NULLS FIRST, s_store_id#9 ASC NULLS FIRST, sun_sales#1 ASC NULLS FIRST, mon_sales#2 ASC NULLS FIRST, tue_sales#3 ASC NULLS FIRST, wed_sales#4 ASC NULLS FIRST, thu_sales#5 ASC NULLS FIRST, fri_sales#6 ASC NULLS FIRST, sat_sales#7 ASC NULLS FIRST], true
+      +- Aggregate [s_store_name#8, s_store_id#9], [s_store_name#8, s_store_id#9, sum(CASE WHEN (d_day_name#10 = Sunday) THEN ss_sales_price#11 ELSE cast(null as decimal(7,2)) END) AS sun_sales#1, sum(CASE WHEN (d_day_name#10 = Monday) THEN ss_sales_price#11 ELSE cast(null as decimal(7,2)) END) AS mon_sales#2, sum(CASE WHEN (d_day_name#10 = Tuesday) THEN ss_sales_price#11 ELSE cast(null as decimal(7,2)) END) AS tue_sales#3, sum(CASE WHEN (d_day_name#10 = Wednesday) THEN ss_sales_price#11 ELSE cast(null as decimal(7,2)) END) AS wed_sales#4, sum(CASE WHEN (d_day_name#10 = Thursday) THEN ss_sales_price#11 ELSE cast(null as decimal(7,2)) END) AS thu_sales#5, sum(CASE WHEN (d_day_name#10 = Friday) THEN ss_sales_price#11 ELSE cast(null as decimal(7,2)) END) AS fri_sales#6, sum(CASE WHEN (d_day_name#10 = Saturday) THEN ss_sales_price#11 ELSE cast(null as decimal(7,2)) END) AS sat_sales#7]
+         +- Filter ((((d_date_sk#12 = ss_sold_date_sk#13) AND (s_store_sk#14 = ss_store_sk#15)) AND (cast(s_gmt_offset#16 as decimal(5,2)) = cast(cast(-5 as decimal(1,0)) as decimal(5,2)))) AND ((d_year#17 = 1998) AND ((ss_sold_date_sk#13 >= 2450816) AND (ss_sold_date_sk#13 <= 2451179))))
+            +- Join Inner
+               :- Join Inner
+               :  :- SubqueryAlias spark_catalog.default.date_dim
+               :  :  +- Relation[d_date_sk#12,d_date_id#18,d_date#19,d_month_seq#20,d_week_seq#21,d_quarter_seq#22,d_year#17,d_dow#23,d_moy#24,d_dom#25,d_qoy#26,d_fy_year#27,d_fy_quarter_seq#28,d_fy_week_seq#29,d_day_name#10,d_quarter_name#30,d_holiday#31,d_weekend#32,d_following_holiday#33,d_first_dom#34,d_last_dom#35,d_same_day_ly#36,d_same_day_lq#37,d_current_day#38,d_current_week#39,d_current_month#40,d_current_quarter#41,d_current_year#42] parquet
+               :  +- SubqueryAlias spark_catalog.default.store_sales
+               :     +- Relation[ss_sold_date_sk#13,ss_sold_time_sk#43,ss_item_sk#44,ss_customer_sk#45,ss_cdemo_sk#46,ss_hdemo_sk#47,ss_addr_sk#48,ss_store_sk#15,ss_promo_sk#49,ss_ticket_number#50,ss_quantity#51,ss_wholesale_cost#52,ss_list_price#53,ss_sales_price#11,ss_ext_discount_amt#54,ss_ext_sales_price#55,ss_ext_wholesale_cost#56,ss_ext_list_price#57,ss_ext_tax#58,ss_coupon_amt#59,ss_net_paid#60,ss_net_paid_inc_tax#61,ss_net_profit#62] parquet
+               +- SubqueryAlias spark_catalog.default.store
+                  +- Relation[s_store_sk#14,s_store_id#9,s_rec_start_date#63,s_rec_end_date#64,s_closed_date_sk#65,s_store_name#8,s_number_employees#66,s_floor_space#67,s_hours#68,s_manager#69,s_market_id#70,s_geography_class#71,s_market_desc#72,s_market_manager#73,s_division_id#74,s_division_name#75,s_company_id#76,s_company_name#77,s_street_number#78,s_street_name#79,s_street_type#80,s_suite_number#81,s_city#82,s_county#83,s_state#84,s_zip#85,s_country#86,s_gmt_offset#16,s_tax_percentage#87] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [s_store_name#8 ASC NULLS FIRST, s_store_id#9 ASC NULLS FIRST, sun_sales#1 ASC NULLS FIRST, mon_sales#2 ASC NULLS FIRST, tue_sales#3 ASC NULLS FIRST, wed_sales#4 ASC NULLS FIRST, thu_sales#5 ASC NULLS FIRST, fri_sales#6 ASC NULLS FIRST, sat_sales#7 ASC NULLS FIRST], true
+      +- Aggregate [s_store_name#8, s_store_id#9], [s_store_name#8, s_store_id#9, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#10 = Sunday) THEN ss_sales_price#11 ELSE null END)),17,2) AS sun_sales#1, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#10 = Monday) THEN ss_sales_price#11 ELSE null END)),17,2) AS mon_sales#2, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#10 = Tuesday) THEN ss_sales_price#11 ELSE null END)),17,2) AS tue_sales#3, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#10 = Wednesday) THEN ss_sales_price#11 ELSE null END)),17,2) AS wed_sales#4, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#10 = Thursday) THEN ss_sales_price#11 ELSE null END)),17,2) AS thu_sales#5, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#10 = Friday) THEN ss_sales_price#11 ELSE null END)),17,2) AS fri_sales#6, MakeDecimal(sum(UnscaledValue(CASE WHEN (d_day_name#10 = Saturday) THEN ss_sales_price#11 ELSE null END)),17,2) AS sat_sales#7]
+         +- Project [d_day_name#10, ss_sales_price#11, s_store_id#9, s_store_name#8]
+            +- Join Inner, (s_store_sk#14 = ss_store_sk#15)
+               :- Project [d_day_name#10, ss_store_sk#15, ss_sales_price#11]
+               :  +- Join Inner, (d_date_sk#12 = ss_sold_date_sk#13)
+               :     :- Project [d_date_sk#12, d_day_name#10]
+               :     :  +- Filter ((((isnotnull(d_year#17) AND (d_year#17 = 1998)) AND (d_date_sk#12 >= 2450816)) AND (d_date_sk#12 <= 2451179)) AND isnotnull(d_date_sk#12))
+               :     :     +- Relation[d_date_sk#12,d_date_id#18,d_date#19,d_month_seq#20,d_week_seq#21,d_quarter_seq#22,d_year#17,d_dow#23,d_moy#24,d_dom#25,d_qoy#26,d_fy_year#27,d_fy_quarter_seq#28,d_fy_week_seq#29,d_day_name#10,d_quarter_name#30,d_holiday#31,d_weekend#32,d_following_holiday#33,d_first_dom#34,d_last_dom#35,d_same_day_ly#36,d_same_day_lq#37,d_current_day#38,d_current_week#39,d_current_month#40,d_current_quarter#41,d_current_year#42] parquet
+               :     +- Project [ss_sold_date_sk#13, ss_store_sk#15, ss_sales_price#11]
+               :        +- Filter (((isnotnull(ss_sold_date_sk#13) AND (ss_sold_date_sk#13 >= 2450816)) AND (ss_sold_date_sk#13 <= 2451179)) AND isnotnull(ss_store_sk#15))
+               :           +- Relation[ss_sold_date_sk#13,ss_sold_time_sk#43,ss_item_sk#44,ss_customer_sk#45,ss_cdemo_sk#46,ss_hdemo_sk#47,ss_addr_sk#48,ss_store_sk#15,ss_promo_sk#49,ss_ticket_number#50,ss_quantity#51,ss_wholesale_cost#52,ss_list_price#53,ss_sales_price#11,ss_ext_discount_amt#54,ss_ext_sales_price#55,ss_ext_wholesale_cost#56,ss_ext_list_price#57,ss_ext_tax#58,ss_coupon_amt#59,ss_net_paid#60,ss_net_paid_inc_tax#61,ss_net_profit#62] parquet
+               +- Project [s_store_sk#14, s_store_id#9, s_store_name#8]
+                  +- Filter ((isnotnull(s_gmt_offset#16) AND (s_gmt_offset#16 = -5.00)) AND isnotnull(s_store_sk#14))
+                     +- Relation[s_store_sk#14,s_store_id#9,s_rec_start_date#63,s_rec_end_date#64,s_closed_date_sk#65,s_store_name#8,s_number_employees#66,s_floor_space#67,s_hours#68,s_manager#69,s_market_id#70,s_geography_class#71,s_market_desc#72,s_market_manager#73,s_division_id#74,s_division_name#75,s_company_id#76,s_company_name#77,s_street_number#78,s_street_name#79,s_street_type#80,s_suite_number#81,s_city#82,s_county#83,s_state#84,s_zip#85,s_country#86,s_gmt_offset#16,s_tax_percentage#87] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[s_store_name#8 ASC NULLS FIRST,s_store_id#9 ASC NULLS FIRST,sun_sales#1 ASC NULLS FIRST,mon_sales#2 ASC NULLS FIRST,tue_sales#3 ASC NULLS FIRST,wed_sales#4 ASC NULLS FIRST,thu_sales#5 ASC NULLS FIRST,fri_sales#6 ASC NULLS FIRST,sat_sales#7 ASC NULLS FIRST], output=[s_store_name#8,s_store_id#9,sun_sales#1,mon_sales#2,tue_sales#3,wed_sales#4,thu_sales#5,fri_sales#6,sat_sales#7])
++- *(4) HashAggregate(keys=[s_store_name#8, s_store_id#9], functions=[sum(UnscaledValue(CASE WHEN (d_day_name#10 = Sunday) THEN ss_sales_price#11 ELSE null END)), sum(UnscaledValue(CASE WHEN (d_day_name#10 = Monday) THEN ss_sales_price#11 ELSE null END)), sum(UnscaledValue(CASE WHEN (d_day_name#10 = Tuesday) THEN ss_sales_price#11 ELSE null END)), sum(UnscaledValue(CASE WHEN (d_day_name#10 = Wednesday) THEN ss_sales_price#11 ELSE null END)), sum(UnscaledValue(CASE WHEN (d_day_name#10 = Thursday) THEN ss_sales_price#11 ELSE null END)), sum(UnscaledValue(CASE WHEN (d_day_name#10 = Friday) THEN ss_sales_price#11 ELSE null END)), sum(UnscaledValue(CASE WHEN (d_day_name#10 = Saturday) THEN ss_sales_price#11 ELSE null END))], output=[s_store_name#8, s_store_id#9, sun_sales#1, mon_sales#2, tue_sales#3, wed_sales#4, thu_sales#5, fri_sales#6, sat_sales#7])
+   +- Exchange hashpartitioning(s_store_name#8, s_store_id#9, 5), true, [id=#88]
+      +- *(3) HashAggregate(keys=[s_store_name#8, s_store_id#9], functions=[partial_sum(UnscaledValue(CASE WHEN (d_day_name#10 = Sunday) THEN ss_sales_price#11 ELSE null END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#10 = Monday) THEN ss_sales_price#11 ELSE null END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#10 = Tuesday) THEN ss_sales_price#11 ELSE null END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#10 = Wednesday) THEN ss_sales_price#11 ELSE null END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#10 = Thursday) THEN ss_sales_price#11 ELSE null END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#10 = Friday) THEN ss_sales_price#11 ELSE null END)), partial_sum(UnscaledValue(CASE WHEN (d_day_name#10 = Saturday) THEN ss_sales_price#11 ELSE null END))], output=[s_store_name#8, s_store_id#9, sum#89, sum#90, sum#91, sum#92, sum#93, sum#94, sum#95])
+         +- *(3) Project [d_day_name#10, ss_sales_price#11, s_store_id#9, s_store_name#8]
+            +- *(3) BroadcastHashJoin [ss_store_sk#15], [s_store_sk#14], Inner, BuildRight
+               :- *(3) Project [d_day_name#10, ss_store_sk#15, ss_sales_price#11]
+               :  +- *(3) BroadcastHashJoin [d_date_sk#12], [ss_sold_date_sk#13], Inner, BuildRight
+               :     :- *(3) Project [d_date_sk#12, d_day_name#10]
+               :     :  +- *(3) Filter ((((isnotnull(d_year#17) AND (d_year#17 = 1998)) AND (d_date_sk#12 >= 2450816)) AND (d_date_sk#12 <= 2451179)) AND isnotnull(d_date_sk#12))
+               :     :     +- *(3) ColumnarToRow
+               :     :        +- FileScan parquet default.date_dim[d_date_sk#12,d_year#17,d_day_name#10] Batched: true, DataFilters: [isnotnull(d_year#17), (d_year#17 = 1998), (d_date_sk#12 >= 2450816), (d_date_sk#12 <..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_year), EqualTo(d_year,1998), GreaterThanOrEqual(d_date_sk,2450816), LessThanOrEqual(..., ReadSchema: struct<d_date_sk:int,d_year:int,d_day_name:string>
+               :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#96]
+               :        +- *(1) Project [ss_sold_date_sk#13, ss_store_sk#15, ss_sales_price#11]
+               :           +- *(1) Filter (((isnotnull(ss_sold_date_sk#13) AND (ss_sold_date_sk#13 >= 2450816)) AND (ss_sold_date_sk#13 <= 2451179)) AND isnotnull(ss_store_sk#15))
+               :              +- *(1) ColumnarToRow
+               :                 +- FileScan parquet default.store_sales[ss_sold_date_sk#13,ss_store_sk#15,ss_sales_price#11] Batched: true, DataFilters: [isnotnull(ss_sold_date_sk#13), (ss_sold_date_sk#13 >= 2450816), (ss_sold_date_sk#13 <= ..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_sold_date_sk), GreaterThanOrEqual(ss_sold_date_sk,2450816), LessThanOrEqual(ss_sold..., ReadSchema: struct<ss_sold_date_sk:int,ss_store_sk:int,ss_sales_price:decimal(7,2)>
+               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#97]
+                  +- *(2) Project [s_store_sk#14, s_store_id#9, s_store_name#8]
+                     +- *(2) Filter ((isnotnull(s_gmt_offset#16) AND (s_gmt_offset#16 = -5.00)) AND isnotnull(s_store_sk#14))
+                        +- *(2) ColumnarToRow
+                           +- FileScan parquet default.store[s_store_sk#14,s_store_id#9,s_store_name#8,s_gmt_offset#16] Batched: true, DataFilters: [isnotnull(s_gmt_offset#16), (s_gmt_offset#16 = -5.00), isnotnull(s_store_sk#14)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(s_gmt_offset), EqualTo(s_gmt_offset,-5.00), IsNotNull(s_store_sk)], ReadSchema: struct<s_store_sk:int,s_store_id:string,s_store_name:string,s_gmt_offset:decimal(5,2)>

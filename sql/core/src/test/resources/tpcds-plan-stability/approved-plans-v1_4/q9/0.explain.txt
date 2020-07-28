@@ -1,0 +1,307 @@
+== Parsed Logical Plan ==
+'Project [CASE WHEN (scalar-subquery#1 [] > 62316685) THEN scalar-subquery#2 [] ELSE scalar-subquery#3 [] END AS bucket1#4, CASE WHEN (scalar-subquery#5 [] > 19045798) THEN scalar-subquery#6 [] ELSE scalar-subquery#7 [] END AS bucket2#8, CASE WHEN (scalar-subquery#9 [] > 365541424) THEN scalar-subquery#10 [] ELSE scalar-subquery#11 [] END AS bucket3#12, CASE WHEN (scalar-subquery#13 [] > 216357808) THEN scalar-subquery#14 [] ELSE scalar-subquery#15 [] END AS bucket4#16, CASE WHEN (scalar-subquery#17 [] > 184483884) THEN scalar-subquery#18 [] ELSE scalar-subquery#19 [] END AS bucket5#20]
+:  :- 'Project [unresolvedalias('count(1), None)]
+:  :  +- 'Filter (('ss_quantity >= 1) AND ('ss_quantity <= 20))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('avg('ss_ext_discount_amt), None)]
+:  :  +- 'Filter (('ss_quantity >= 1) AND ('ss_quantity <= 20))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('avg('ss_net_paid), None)]
+:  :  +- 'Filter (('ss_quantity >= 1) AND ('ss_quantity <= 20))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('count(1), None)]
+:  :  +- 'Filter (('ss_quantity >= 21) AND ('ss_quantity <= 40))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('avg('ss_ext_discount_amt), None)]
+:  :  +- 'Filter (('ss_quantity >= 21) AND ('ss_quantity <= 40))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('avg('ss_net_paid), None)]
+:  :  +- 'Filter (('ss_quantity >= 21) AND ('ss_quantity <= 40))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('count(1), None)]
+:  :  +- 'Filter (('ss_quantity >= 41) AND ('ss_quantity <= 60))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('avg('ss_ext_discount_amt), None)]
+:  :  +- 'Filter (('ss_quantity >= 41) AND ('ss_quantity <= 60))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('avg('ss_net_paid), None)]
+:  :  +- 'Filter (('ss_quantity >= 41) AND ('ss_quantity <= 60))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('count(1), None)]
+:  :  +- 'Filter (('ss_quantity >= 61) AND ('ss_quantity <= 80))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('avg('ss_ext_discount_amt), None)]
+:  :  +- 'Filter (('ss_quantity >= 61) AND ('ss_quantity <= 80))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('avg('ss_net_paid), None)]
+:  :  +- 'Filter (('ss_quantity >= 61) AND ('ss_quantity <= 80))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('count(1), None)]
+:  :  +- 'Filter (('ss_quantity >= 81) AND ('ss_quantity <= 100))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  :- 'Project [unresolvedalias('avg('ss_ext_discount_amt), None)]
+:  :  +- 'Filter (('ss_quantity >= 81) AND ('ss_quantity <= 100))
+:  :     +- 'UnresolvedRelation [store_sales]
+:  +- 'Project [unresolvedalias('avg('ss_net_paid), None)]
+:     +- 'Filter (('ss_quantity >= 81) AND ('ss_quantity <= 100))
+:        +- 'UnresolvedRelation [store_sales]
++- 'Filter ('r_reason_sk = 1)
+   +- 'UnresolvedRelation [reason]
+
+== Analyzed Logical Plan ==
+bucket1: decimal(11,6), bucket2: decimal(11,6), bucket3: decimal(11,6), bucket4: decimal(11,6), bucket5: decimal(11,6)
+Project [CASE WHEN (scalar-subquery#1 [] > cast(62316685 as bigint)) THEN scalar-subquery#2 [] ELSE scalar-subquery#3 [] END AS bucket1#4, CASE WHEN (scalar-subquery#5 [] > cast(19045798 as bigint)) THEN scalar-subquery#6 [] ELSE scalar-subquery#7 [] END AS bucket2#8, CASE WHEN (scalar-subquery#9 [] > cast(365541424 as bigint)) THEN scalar-subquery#10 [] ELSE scalar-subquery#11 [] END AS bucket3#12, CASE WHEN (scalar-subquery#13 [] > cast(216357808 as bigint)) THEN scalar-subquery#14 [] ELSE scalar-subquery#15 [] END AS bucket4#16, CASE WHEN (scalar-subquery#17 [] > cast(184483884 as bigint)) THEN scalar-subquery#18 [] ELSE scalar-subquery#19 [] END AS bucket5#20]
+:  :- Aggregate [count(1) AS count(1)#21]
+:  :  +- Filter ((ss_quantity#22 >= 1) AND (ss_quantity#22 <= 20))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [avg(ss_ext_discount_amt#36) AS avg(ss_ext_discount_amt)#45]
+:  :  +- Filter ((ss_quantity#22 >= 1) AND (ss_quantity#22 <= 20))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [avg(ss_net_paid#42) AS avg(ss_net_paid)#46]
+:  :  +- Filter ((ss_quantity#22 >= 1) AND (ss_quantity#22 <= 20))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [count(1) AS count(1)#47]
+:  :  +- Filter ((ss_quantity#22 >= 21) AND (ss_quantity#22 <= 40))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [avg(ss_ext_discount_amt#36) AS avg(ss_ext_discount_amt)#48]
+:  :  +- Filter ((ss_quantity#22 >= 21) AND (ss_quantity#22 <= 40))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [avg(ss_net_paid#42) AS avg(ss_net_paid)#49]
+:  :  +- Filter ((ss_quantity#22 >= 21) AND (ss_quantity#22 <= 40))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [count(1) AS count(1)#50]
+:  :  +- Filter ((ss_quantity#22 >= 41) AND (ss_quantity#22 <= 60))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [avg(ss_ext_discount_amt#36) AS avg(ss_ext_discount_amt)#51]
+:  :  +- Filter ((ss_quantity#22 >= 41) AND (ss_quantity#22 <= 60))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [avg(ss_net_paid#42) AS avg(ss_net_paid)#52]
+:  :  +- Filter ((ss_quantity#22 >= 41) AND (ss_quantity#22 <= 60))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [count(1) AS count(1)#53]
+:  :  +- Filter ((ss_quantity#22 >= 61) AND (ss_quantity#22 <= 80))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [avg(ss_ext_discount_amt#36) AS avg(ss_ext_discount_amt)#54]
+:  :  +- Filter ((ss_quantity#22 >= 61) AND (ss_quantity#22 <= 80))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [avg(ss_net_paid#42) AS avg(ss_net_paid)#55]
+:  :  +- Filter ((ss_quantity#22 >= 61) AND (ss_quantity#22 <= 80))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [count(1) AS count(1)#56]
+:  :  +- Filter ((ss_quantity#22 >= 81) AND (ss_quantity#22 <= 100))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [avg(ss_ext_discount_amt#36) AS avg(ss_ext_discount_amt)#57]
+:  :  +- Filter ((ss_quantity#22 >= 81) AND (ss_quantity#22 <= 100))
+:  :     +- SubqueryAlias spark_catalog.default.store_sales
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  +- Aggregate [avg(ss_net_paid#42) AS avg(ss_net_paid)#58]
+:     +- Filter ((ss_quantity#22 >= 81) AND (ss_quantity#22 <= 100))
+:        +- SubqueryAlias spark_catalog.default.store_sales
+:           +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
++- Filter (r_reason_sk#59 = 1)
+   +- SubqueryAlias spark_catalog.default.reason
+      +- Relation[r_reason_sk#59,r_reason_id#60,r_reason_desc#61] parquet
+
+== Optimized Logical Plan ==
+Project [CASE WHEN (scalar-subquery#1 [] > 62316685) THEN scalar-subquery#2 [] ELSE scalar-subquery#3 [] END AS bucket1#4, CASE WHEN (scalar-subquery#5 [] > 19045798) THEN scalar-subquery#6 [] ELSE scalar-subquery#7 [] END AS bucket2#8, CASE WHEN (scalar-subquery#9 [] > 365541424) THEN scalar-subquery#10 [] ELSE scalar-subquery#11 [] END AS bucket3#12, CASE WHEN (scalar-subquery#13 [] > 216357808) THEN scalar-subquery#14 [] ELSE scalar-subquery#15 [] END AS bucket4#16, CASE WHEN (scalar-subquery#17 [] > 184483884) THEN scalar-subquery#18 [] ELSE scalar-subquery#19 [] END AS bucket5#20]
+:  :- Aggregate [count(1) AS count(1)#21]
+:  :  +- Project
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 1)) AND (ss_quantity#22 <= 20))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [cast((avg(UnscaledValue(ss_ext_discount_amt#36)) / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#45]
+:  :  +- Project [ss_ext_discount_amt#36]
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 1)) AND (ss_quantity#22 <= 20))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [cast((avg(UnscaledValue(ss_net_paid#42)) / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#46]
+:  :  +- Project [ss_net_paid#42]
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 1)) AND (ss_quantity#22 <= 20))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [count(1) AS count(1)#47]
+:  :  +- Project
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 21)) AND (ss_quantity#22 <= 40))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [cast((avg(UnscaledValue(ss_ext_discount_amt#36)) / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#48]
+:  :  +- Project [ss_ext_discount_amt#36]
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 21)) AND (ss_quantity#22 <= 40))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [cast((avg(UnscaledValue(ss_net_paid#42)) / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#49]
+:  :  +- Project [ss_net_paid#42]
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 21)) AND (ss_quantity#22 <= 40))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [count(1) AS count(1)#50]
+:  :  +- Project
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 41)) AND (ss_quantity#22 <= 60))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [cast((avg(UnscaledValue(ss_ext_discount_amt#36)) / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#51]
+:  :  +- Project [ss_ext_discount_amt#36]
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 41)) AND (ss_quantity#22 <= 60))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [cast((avg(UnscaledValue(ss_net_paid#42)) / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#52]
+:  :  +- Project [ss_net_paid#42]
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 41)) AND (ss_quantity#22 <= 60))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [count(1) AS count(1)#53]
+:  :  +- Project
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 61)) AND (ss_quantity#22 <= 80))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [cast((avg(UnscaledValue(ss_ext_discount_amt#36)) / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#54]
+:  :  +- Project [ss_ext_discount_amt#36]
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 61)) AND (ss_quantity#22 <= 80))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [cast((avg(UnscaledValue(ss_net_paid#42)) / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#55]
+:  :  +- Project [ss_net_paid#42]
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 61)) AND (ss_quantity#22 <= 80))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [count(1) AS count(1)#56]
+:  :  +- Project
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 81)) AND (ss_quantity#22 <= 100))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  :- Aggregate [cast((avg(UnscaledValue(ss_ext_discount_amt#36)) / 100.0) as decimal(11,6)) AS avg(ss_ext_discount_amt)#57]
+:  :  +- Project [ss_ext_discount_amt#36]
+:  :     +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 81)) AND (ss_quantity#22 <= 100))
+:  :        +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
+:  +- Aggregate [cast((avg(UnscaledValue(ss_net_paid#42)) / 100.0) as decimal(11,6)) AS avg(ss_net_paid)#58]
+:     +- Project [ss_net_paid#42]
+:        +- Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 81)) AND (ss_quantity#22 <= 100))
+:           +- Relation[ss_sold_date_sk#23,ss_sold_time_sk#24,ss_item_sk#25,ss_customer_sk#26,ss_cdemo_sk#27,ss_hdemo_sk#28,ss_addr_sk#29,ss_store_sk#30,ss_promo_sk#31,ss_ticket_number#32,ss_quantity#22,ss_wholesale_cost#33,ss_list_price#34,ss_sales_price#35,ss_ext_discount_amt#36,ss_ext_sales_price#37,ss_ext_wholesale_cost#38,ss_ext_list_price#39,ss_ext_tax#40,ss_coupon_amt#41,ss_net_paid#42,ss_net_paid_inc_tax#43,ss_net_profit#44] parquet
++- Filter (isnotnull(r_reason_sk#59) AND (r_reason_sk#59 = 1))
+   +- Relation[r_reason_sk#59,r_reason_id#60,r_reason_desc#61] parquet
+
+== Physical Plan ==
+*(1) Project [CASE WHEN (Subquery scalar-subquery#1, [id=#62] > 62316685) THEN Subquery scalar-subquery#2, [id=#63] ELSE Subquery scalar-subquery#3, [id=#64] END AS bucket1#4, CASE WHEN (Subquery scalar-subquery#5, [id=#65] > 19045798) THEN Subquery scalar-subquery#6, [id=#66] ELSE Subquery scalar-subquery#7, [id=#67] END AS bucket2#8, CASE WHEN (Subquery scalar-subquery#9, [id=#68] > 365541424) THEN Subquery scalar-subquery#10, [id=#69] ELSE Subquery scalar-subquery#11, [id=#70] END AS bucket3#12, CASE WHEN (Subquery scalar-subquery#13, [id=#71] > 216357808) THEN Subquery scalar-subquery#14, [id=#72] ELSE Subquery scalar-subquery#15, [id=#73] END AS bucket4#16, CASE WHEN (Subquery scalar-subquery#17, [id=#74] > 184483884) THEN Subquery scalar-subquery#18, [id=#75] ELSE Subquery scalar-subquery#19, [id=#76] END AS bucket5#20]
+:  :- Subquery scalar-subquery#1, [id=#62]
+:  :  +- *(2) HashAggregate(keys=[], functions=[count(1)], output=[count(1)#21])
+:  :     +- Exchange SinglePartition, true, [id=#77]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#78])
+:  :           +- *(1) Project
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 1)) AND (ss_quantity#22 <= 20))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 1), (ss_quantity#22 <= 20)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1), LessThanOrEqual(ss_quantity,20)], ReadSchema: struct<ss_quantity:int>
+:  :- Subquery scalar-subquery#2, [id=#63]
+:  :  +- *(2) HashAggregate(keys=[], functions=[avg(UnscaledValue(ss_ext_discount_amt#36))], output=[avg(ss_ext_discount_amt)#45])
+:  :     +- Exchange SinglePartition, true, [id=#79]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(UnscaledValue(ss_ext_discount_amt#36))], output=[sum#80, count#81])
+:  :           +- *(1) Project [ss_ext_discount_amt#36]
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 1)) AND (ss_quantity#22 <= 20))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22,ss_ext_discount_amt#36] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 1), (ss_quantity#22 <= 20)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1), LessThanOrEqual(ss_quantity,20)], ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
+:  :- Subquery scalar-subquery#3, [id=#64]
+:  :  +- *(2) HashAggregate(keys=[], functions=[avg(UnscaledValue(ss_net_paid#42))], output=[avg(ss_net_paid)#46])
+:  :     +- Exchange SinglePartition, true, [id=#82]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(UnscaledValue(ss_net_paid#42))], output=[sum#83, count#84])
+:  :           +- *(1) Project [ss_net_paid#42]
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 1)) AND (ss_quantity#22 <= 20))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22,ss_net_paid#42] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 1), (ss_quantity#22 <= 20)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1), LessThanOrEqual(ss_quantity,20)], ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
+:  :- Subquery scalar-subquery#5, [id=#65]
+:  :  +- *(2) HashAggregate(keys=[], functions=[count(1)], output=[count(1)#47])
+:  :     +- Exchange SinglePartition, true, [id=#85]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#86])
+:  :           +- *(1) Project
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 21)) AND (ss_quantity#22 <= 40))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 21), (ss_quantity#22 <= 40)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)], ReadSchema: struct<ss_quantity:int>
+:  :- Subquery scalar-subquery#6, [id=#66]
+:  :  +- *(2) HashAggregate(keys=[], functions=[avg(UnscaledValue(ss_ext_discount_amt#36))], output=[avg(ss_ext_discount_amt)#48])
+:  :     +- Exchange SinglePartition, true, [id=#87]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(UnscaledValue(ss_ext_discount_amt#36))], output=[sum#88, count#89])
+:  :           +- *(1) Project [ss_ext_discount_amt#36]
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 21)) AND (ss_quantity#22 <= 40))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22,ss_ext_discount_amt#36] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 21), (ss_quantity#22 <= 40)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)], ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
+:  :- Subquery scalar-subquery#7, [id=#67]
+:  :  +- *(2) HashAggregate(keys=[], functions=[avg(UnscaledValue(ss_net_paid#42))], output=[avg(ss_net_paid)#49])
+:  :     +- Exchange SinglePartition, true, [id=#90]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(UnscaledValue(ss_net_paid#42))], output=[sum#91, count#92])
+:  :           +- *(1) Project [ss_net_paid#42]
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 21)) AND (ss_quantity#22 <= 40))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22,ss_net_paid#42] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 21), (ss_quantity#22 <= 40)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)], ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
+:  :- Subquery scalar-subquery#9, [id=#68]
+:  :  +- *(2) HashAggregate(keys=[], functions=[count(1)], output=[count(1)#50])
+:  :     +- Exchange SinglePartition, true, [id=#93]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#94])
+:  :           +- *(1) Project
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 41)) AND (ss_quantity#22 <= 60))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 41), (ss_quantity#22 <= 60)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)], ReadSchema: struct<ss_quantity:int>
+:  :- Subquery scalar-subquery#10, [id=#69]
+:  :  +- *(2) HashAggregate(keys=[], functions=[avg(UnscaledValue(ss_ext_discount_amt#36))], output=[avg(ss_ext_discount_amt)#51])
+:  :     +- Exchange SinglePartition, true, [id=#95]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(UnscaledValue(ss_ext_discount_amt#36))], output=[sum#96, count#97])
+:  :           +- *(1) Project [ss_ext_discount_amt#36]
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 41)) AND (ss_quantity#22 <= 60))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22,ss_ext_discount_amt#36] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 41), (ss_quantity#22 <= 60)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)], ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
+:  :- Subquery scalar-subquery#11, [id=#70]
+:  :  +- *(2) HashAggregate(keys=[], functions=[avg(UnscaledValue(ss_net_paid#42))], output=[avg(ss_net_paid)#52])
+:  :     +- Exchange SinglePartition, true, [id=#98]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(UnscaledValue(ss_net_paid#42))], output=[sum#99, count#100])
+:  :           +- *(1) Project [ss_net_paid#42]
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 41)) AND (ss_quantity#22 <= 60))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22,ss_net_paid#42] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 41), (ss_quantity#22 <= 60)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)], ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
+:  :- Subquery scalar-subquery#13, [id=#71]
+:  :  +- *(2) HashAggregate(keys=[], functions=[count(1)], output=[count(1)#53])
+:  :     +- Exchange SinglePartition, true, [id=#101]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#102])
+:  :           +- *(1) Project
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 61)) AND (ss_quantity#22 <= 80))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 61), (ss_quantity#22 <= 80)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)], ReadSchema: struct<ss_quantity:int>
+:  :- Subquery scalar-subquery#14, [id=#72]
+:  :  +- *(2) HashAggregate(keys=[], functions=[avg(UnscaledValue(ss_ext_discount_amt#36))], output=[avg(ss_ext_discount_amt)#54])
+:  :     +- Exchange SinglePartition, true, [id=#103]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(UnscaledValue(ss_ext_discount_amt#36))], output=[sum#104, count#105])
+:  :           +- *(1) Project [ss_ext_discount_amt#36]
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 61)) AND (ss_quantity#22 <= 80))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22,ss_ext_discount_amt#36] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 61), (ss_quantity#22 <= 80)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)], ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
+:  :- Subquery scalar-subquery#15, [id=#73]
+:  :  +- *(2) HashAggregate(keys=[], functions=[avg(UnscaledValue(ss_net_paid#42))], output=[avg(ss_net_paid)#55])
+:  :     +- Exchange SinglePartition, true, [id=#106]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(UnscaledValue(ss_net_paid#42))], output=[sum#107, count#108])
+:  :           +- *(1) Project [ss_net_paid#42]
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 61)) AND (ss_quantity#22 <= 80))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22,ss_net_paid#42] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 61), (ss_quantity#22 <= 80)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)], ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
+:  :- Subquery scalar-subquery#17, [id=#74]
+:  :  +- *(2) HashAggregate(keys=[], functions=[count(1)], output=[count(1)#56])
+:  :     +- Exchange SinglePartition, true, [id=#109]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#110])
+:  :           +- *(1) Project
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 81)) AND (ss_quantity#22 <= 100))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 81), (ss_quantity#22 <= 100)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)], ReadSchema: struct<ss_quantity:int>
+:  :- Subquery scalar-subquery#18, [id=#75]
+:  :  +- *(2) HashAggregate(keys=[], functions=[avg(UnscaledValue(ss_ext_discount_amt#36))], output=[avg(ss_ext_discount_amt)#57])
+:  :     +- Exchange SinglePartition, true, [id=#111]
+:  :        +- *(1) HashAggregate(keys=[], functions=[partial_avg(UnscaledValue(ss_ext_discount_amt#36))], output=[sum#112, count#113])
+:  :           +- *(1) Project [ss_ext_discount_amt#36]
+:  :              +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 81)) AND (ss_quantity#22 <= 100))
+:  :                 +- *(1) ColumnarToRow
+:  :                    +- FileScan parquet default.store_sales[ss_quantity#22,ss_ext_discount_amt#36] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 81), (ss_quantity#22 <= 100)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)], ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
+:  +- Subquery scalar-subquery#19, [id=#76]
+:     +- *(2) HashAggregate(keys=[], functions=[avg(UnscaledValue(ss_net_paid#42))], output=[avg(ss_net_paid)#58])
+:        +- Exchange SinglePartition, true, [id=#114]
+:           +- *(1) HashAggregate(keys=[], functions=[partial_avg(UnscaledValue(ss_net_paid#42))], output=[sum#115, count#116])
+:              +- *(1) Project [ss_net_paid#42]
+:                 +- *(1) Filter ((isnotnull(ss_quantity#22) AND (ss_quantity#22 >= 81)) AND (ss_quantity#22 <= 100))
+:                    +- *(1) ColumnarToRow
+:                       +- FileScan parquet default.store_sales[ss_quantity#22,ss_net_paid#42] Batched: true, DataFilters: [isnotnull(ss_quantity#22), (ss_quantity#22 >= 81), (ss_quantity#22 <= 100)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)], ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
++- *(1) Filter (isnotnull(r_reason_sk#59) AND (r_reason_sk#59 = 1))
+   +- *(1) ColumnarToRow
+      +- FileScan parquet default.reason[r_reason_sk#59] Batched: true, DataFilters: [isnotnull(r_reason_sk#59), (r_reason_sk#59 = 1)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(r_reason_sk), EqualTo(r_reason_sk,1)], ReadSchema: struct<r_reason_sk:int>

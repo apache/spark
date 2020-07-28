@@ -1,0 +1,161 @@
+== Parsed Logical Plan ==
+'GlobalLimit 100
++- 'LocalLimit 100
+   +- 'Sort ['am_pm_ratio ASC NULLS FIRST], true
+      +- 'Project [(cast('amc as decimal(15,4)) / cast('pmc as decimal(15,4))) AS am_pm_ratio#1]
+         +- 'Join Inner
+            :- 'SubqueryAlias at
+            :  +- 'Project ['count(1) AS amc#2]
+            :     +- 'Filter (((('ws_sold_time_sk = 'time_dim.t_time_sk) AND ('ws_ship_hdemo_sk = 'household_demographics.hd_demo_sk)) AND ('ws_web_page_sk = 'web_page.wp_web_page_sk)) AND (((('time_dim.t_hour >= 8) AND ('time_dim.t_hour <= (8 + 1))) AND ('household_demographics.hd_dep_count = 6)) AND (('web_page.wp_char_count >= 5000) AND ('web_page.wp_char_count <= 5200))))
+            :        +- 'Join Inner
+            :           :- 'Join Inner
+            :           :  :- 'Join Inner
+            :           :  :  :- 'UnresolvedRelation [web_sales]
+            :           :  :  +- 'UnresolvedRelation [household_demographics]
+            :           :  +- 'UnresolvedRelation [time_dim]
+            :           +- 'UnresolvedRelation [web_page]
+            +- 'SubqueryAlias pt
+               +- 'Project ['count(1) AS pmc#3]
+                  +- 'Filter (((('ws_sold_time_sk = 'time_dim.t_time_sk) AND ('ws_ship_hdemo_sk = 'household_demographics.hd_demo_sk)) AND ('ws_web_page_sk = 'web_page.wp_web_page_sk)) AND (((('time_dim.t_hour >= 19) AND ('time_dim.t_hour <= (19 + 1))) AND ('household_demographics.hd_dep_count = 6)) AND (('web_page.wp_char_count >= 5000) AND ('web_page.wp_char_count <= 5200))))
+                     +- 'Join Inner
+                        :- 'Join Inner
+                        :  :- 'Join Inner
+                        :  :  :- 'UnresolvedRelation [web_sales]
+                        :  :  +- 'UnresolvedRelation [household_demographics]
+                        :  +- 'UnresolvedRelation [time_dim]
+                        +- 'UnresolvedRelation [web_page]
+
+== Analyzed Logical Plan ==
+am_pm_ratio: decimal(35,20)
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [am_pm_ratio#1 ASC NULLS FIRST], true
+      +- Project [CheckOverflow((promote_precision(cast(cast(amc#4 as decimal(15,4)) as decimal(15,4))) / promote_precision(cast(cast(pmc#5 as decimal(15,4)) as decimal(15,4)))), DecimalType(35,20), true) AS am_pm_ratio#1]
+         +- Join Inner
+            :- SubqueryAlias at
+            :  +- Aggregate [count(1) AS amc#4]
+            :     +- Filter ((((ws_sold_time_sk#6 = t_time_sk#7) AND (ws_ship_hdemo_sk#8 = hd_demo_sk#9)) AND (ws_web_page_sk#10 = wp_web_page_sk#11)) AND ((((t_hour#12 >= 8) AND (t_hour#12 <= (8 + 1))) AND (hd_dep_count#13 = 6)) AND ((wp_char_count#14 >= 5000) AND (wp_char_count#14 <= 5200))))
+            :        +- Join Inner
+            :           :- Join Inner
+            :           :  :- Join Inner
+            :           :  :  :- SubqueryAlias spark_catalog.default.web_sales
+            :           :  :  :  +- Relation[ws_sold_date_sk#15,ws_sold_time_sk#6,ws_ship_date_sk#16,ws_item_sk#17,ws_bill_customer_sk#18,ws_bill_cdemo_sk#19,ws_bill_hdemo_sk#20,ws_bill_addr_sk#21,ws_ship_customer_sk#22,ws_ship_cdemo_sk#23,ws_ship_hdemo_sk#8,ws_ship_addr_sk#24,ws_web_page_sk#10,ws_web_site_sk#25,ws_ship_mode_sk#26,ws_warehouse_sk#27,ws_promo_sk#28,ws_order_number#29,ws_quantity#30,ws_wholesale_cost#31,ws_list_price#32,ws_sales_price#33,ws_ext_discount_amt#34,ws_ext_sales_price#35,ws_ext_wholesale_cost#36,ws_ext_list_price#37,ws_ext_tax#38,ws_coupon_amt#39,ws_ext_ship_cost#40,ws_net_paid#41,ws_net_paid_inc_tax#42,ws_net_paid_inc_ship#43,ws_net_paid_inc_ship_tax#44,ws_net_profit#45] parquet
+            :           :  :  +- SubqueryAlias spark_catalog.default.household_demographics
+            :           :  :     +- Relation[hd_demo_sk#9,hd_income_band_sk#46,hd_buy_potential#47,hd_dep_count#13,hd_vehicle_count#48] parquet
+            :           :  +- SubqueryAlias spark_catalog.default.time_dim
+            :           :     +- Relation[t_time_sk#7,t_time_id#49,t_time#50,t_hour#12,t_minute#51,t_second#52,t_am_pm#53,t_shift#54,t_sub_shift#55,t_meal_time#56] parquet
+            :           +- SubqueryAlias spark_catalog.default.web_page
+            :              +- Relation[wp_web_page_sk#11,wp_web_page_id#57,wp_rec_start_date#58,wp_rec_end_date#59,wp_creation_date_sk#60,wp_access_date_sk#61,wp_autogen_flag#62,wp_customer_sk#63,wp_url#64,wp_type#65,wp_char_count#14,wp_link_count#66,wp_image_count#67,wp_max_ad_count#68] parquet
+            +- SubqueryAlias pt
+               +- Aggregate [count(1) AS pmc#5]
+                  +- Filter ((((ws_sold_time_sk#6 = t_time_sk#7) AND (ws_ship_hdemo_sk#8 = hd_demo_sk#9)) AND (ws_web_page_sk#10 = wp_web_page_sk#11)) AND ((((t_hour#12 >= 19) AND (t_hour#12 <= (19 + 1))) AND (hd_dep_count#13 = 6)) AND ((wp_char_count#14 >= 5000) AND (wp_char_count#14 <= 5200))))
+                     +- Join Inner
+                        :- Join Inner
+                        :  :- Join Inner
+                        :  :  :- SubqueryAlias spark_catalog.default.web_sales
+                        :  :  :  +- Relation[ws_sold_date_sk#15,ws_sold_time_sk#6,ws_ship_date_sk#16,ws_item_sk#17,ws_bill_customer_sk#18,ws_bill_cdemo_sk#19,ws_bill_hdemo_sk#20,ws_bill_addr_sk#21,ws_ship_customer_sk#22,ws_ship_cdemo_sk#23,ws_ship_hdemo_sk#8,ws_ship_addr_sk#24,ws_web_page_sk#10,ws_web_site_sk#25,ws_ship_mode_sk#26,ws_warehouse_sk#27,ws_promo_sk#28,ws_order_number#29,ws_quantity#30,ws_wholesale_cost#31,ws_list_price#32,ws_sales_price#33,ws_ext_discount_amt#34,ws_ext_sales_price#35,ws_ext_wholesale_cost#36,ws_ext_list_price#37,ws_ext_tax#38,ws_coupon_amt#39,ws_ext_ship_cost#40,ws_net_paid#41,ws_net_paid_inc_tax#42,ws_net_paid_inc_ship#43,ws_net_paid_inc_ship_tax#44,ws_net_profit#45] parquet
+                        :  :  +- SubqueryAlias spark_catalog.default.household_demographics
+                        :  :     +- Relation[hd_demo_sk#9,hd_income_band_sk#46,hd_buy_potential#47,hd_dep_count#13,hd_vehicle_count#48] parquet
+                        :  +- SubqueryAlias spark_catalog.default.time_dim
+                        :     +- Relation[t_time_sk#7,t_time_id#49,t_time#50,t_hour#12,t_minute#51,t_second#52,t_am_pm#53,t_shift#54,t_sub_shift#55,t_meal_time#56] parquet
+                        +- SubqueryAlias spark_catalog.default.web_page
+                           +- Relation[wp_web_page_sk#11,wp_web_page_id#57,wp_rec_start_date#58,wp_rec_end_date#59,wp_creation_date_sk#60,wp_access_date_sk#61,wp_autogen_flag#62,wp_customer_sk#63,wp_url#64,wp_type#65,wp_char_count#14,wp_link_count#66,wp_image_count#67,wp_max_ad_count#68] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [am_pm_ratio#1 ASC NULLS FIRST], true
+      +- Project [CheckOverflow((promote_precision(cast(amc#4 as decimal(15,4))) / promote_precision(cast(pmc#5 as decimal(15,4)))), DecimalType(35,20), true) AS am_pm_ratio#1]
+         +- Join Inner
+            :- Aggregate [count(1) AS amc#4]
+            :  +- Project
+            :     +- Join Inner, (ws_web_page_sk#10 = wp_web_page_sk#11)
+            :        :- Project [ws_web_page_sk#10]
+            :        :  +- Join Inner, (ws_sold_time_sk#6 = t_time_sk#7)
+            :        :     :- Project [ws_sold_time_sk#6, ws_web_page_sk#10]
+            :        :     :  +- Join Inner, (ws_ship_hdemo_sk#8 = hd_demo_sk#9)
+            :        :     :     :- Project [ws_sold_time_sk#6, ws_ship_hdemo_sk#8, ws_web_page_sk#10]
+            :        :     :     :  +- Filter ((isnotnull(ws_ship_hdemo_sk#8) AND isnotnull(ws_sold_time_sk#6)) AND isnotnull(ws_web_page_sk#10))
+            :        :     :     :     +- Relation[ws_sold_date_sk#15,ws_sold_time_sk#6,ws_ship_date_sk#16,ws_item_sk#17,ws_bill_customer_sk#18,ws_bill_cdemo_sk#19,ws_bill_hdemo_sk#20,ws_bill_addr_sk#21,ws_ship_customer_sk#22,ws_ship_cdemo_sk#23,ws_ship_hdemo_sk#8,ws_ship_addr_sk#24,ws_web_page_sk#10,ws_web_site_sk#25,ws_ship_mode_sk#26,ws_warehouse_sk#27,ws_promo_sk#28,ws_order_number#29,ws_quantity#30,ws_wholesale_cost#31,ws_list_price#32,ws_sales_price#33,ws_ext_discount_amt#34,ws_ext_sales_price#35,ws_ext_wholesale_cost#36,ws_ext_list_price#37,ws_ext_tax#38,ws_coupon_amt#39,ws_ext_ship_cost#40,ws_net_paid#41,ws_net_paid_inc_tax#42,ws_net_paid_inc_ship#43,ws_net_paid_inc_ship_tax#44,ws_net_profit#45] parquet
+            :        :     :     +- Project [hd_demo_sk#9]
+            :        :     :        +- Filter ((isnotnull(hd_dep_count#13) AND (hd_dep_count#13 = 6)) AND isnotnull(hd_demo_sk#9))
+            :        :     :           +- Relation[hd_demo_sk#9,hd_income_band_sk#46,hd_buy_potential#47,hd_dep_count#13,hd_vehicle_count#48] parquet
+            :        :     +- Project [t_time_sk#7]
+            :        :        +- Filter (((isnotnull(t_hour#12) AND (t_hour#12 >= 8)) AND (t_hour#12 <= 9)) AND isnotnull(t_time_sk#7))
+            :        :           +- Relation[t_time_sk#7,t_time_id#49,t_time#50,t_hour#12,t_minute#51,t_second#52,t_am_pm#53,t_shift#54,t_sub_shift#55,t_meal_time#56] parquet
+            :        +- Project [wp_web_page_sk#11]
+            :           +- Filter (((isnotnull(wp_char_count#14) AND (wp_char_count#14 >= 5000)) AND (wp_char_count#14 <= 5200)) AND isnotnull(wp_web_page_sk#11))
+            :              +- Relation[wp_web_page_sk#11,wp_web_page_id#57,wp_rec_start_date#58,wp_rec_end_date#59,wp_creation_date_sk#60,wp_access_date_sk#61,wp_autogen_flag#62,wp_customer_sk#63,wp_url#64,wp_type#65,wp_char_count#14,wp_link_count#66,wp_image_count#67,wp_max_ad_count#68] parquet
+            +- Aggregate [count(1) AS pmc#5]
+               +- Project
+                  +- Join Inner, (ws_web_page_sk#10 = wp_web_page_sk#11)
+                     :- Project [ws_web_page_sk#10]
+                     :  +- Join Inner, (ws_sold_time_sk#6 = t_time_sk#7)
+                     :     :- Project [ws_sold_time_sk#6, ws_web_page_sk#10]
+                     :     :  +- Join Inner, (ws_ship_hdemo_sk#8 = hd_demo_sk#9)
+                     :     :     :- Project [ws_sold_time_sk#6, ws_ship_hdemo_sk#8, ws_web_page_sk#10]
+                     :     :     :  +- Filter ((isnotnull(ws_ship_hdemo_sk#8) AND isnotnull(ws_sold_time_sk#6)) AND isnotnull(ws_web_page_sk#10))
+                     :     :     :     +- Relation[ws_sold_date_sk#15,ws_sold_time_sk#6,ws_ship_date_sk#16,ws_item_sk#17,ws_bill_customer_sk#18,ws_bill_cdemo_sk#19,ws_bill_hdemo_sk#20,ws_bill_addr_sk#21,ws_ship_customer_sk#22,ws_ship_cdemo_sk#23,ws_ship_hdemo_sk#8,ws_ship_addr_sk#24,ws_web_page_sk#10,ws_web_site_sk#25,ws_ship_mode_sk#26,ws_warehouse_sk#27,ws_promo_sk#28,ws_order_number#29,ws_quantity#30,ws_wholesale_cost#31,ws_list_price#32,ws_sales_price#33,ws_ext_discount_amt#34,ws_ext_sales_price#35,ws_ext_wholesale_cost#36,ws_ext_list_price#37,ws_ext_tax#38,ws_coupon_amt#39,ws_ext_ship_cost#40,ws_net_paid#41,ws_net_paid_inc_tax#42,ws_net_paid_inc_ship#43,ws_net_paid_inc_ship_tax#44,ws_net_profit#45] parquet
+                     :     :     +- Project [hd_demo_sk#9]
+                     :     :        +- Filter ((isnotnull(hd_dep_count#13) AND (hd_dep_count#13 = 6)) AND isnotnull(hd_demo_sk#9))
+                     :     :           +- Relation[hd_demo_sk#9,hd_income_band_sk#46,hd_buy_potential#47,hd_dep_count#13,hd_vehicle_count#48] parquet
+                     :     +- Project [t_time_sk#7]
+                     :        +- Filter (((isnotnull(t_hour#12) AND (t_hour#12 >= 19)) AND (t_hour#12 <= 20)) AND isnotnull(t_time_sk#7))
+                     :           +- Relation[t_time_sk#7,t_time_id#49,t_time#50,t_hour#12,t_minute#51,t_second#52,t_am_pm#53,t_shift#54,t_sub_shift#55,t_meal_time#56] parquet
+                     +- Project [wp_web_page_sk#11]
+                        +- Filter (((isnotnull(wp_char_count#14) AND (wp_char_count#14 >= 5000)) AND (wp_char_count#14 <= 5200)) AND isnotnull(wp_web_page_sk#11))
+                           +- Relation[wp_web_page_sk#11,wp_web_page_id#57,wp_rec_start_date#58,wp_rec_end_date#59,wp_creation_date_sk#60,wp_access_date_sk#61,wp_autogen_flag#62,wp_customer_sk#63,wp_url#64,wp_type#65,wp_char_count#14,wp_link_count#66,wp_image_count#67,wp_max_ad_count#68] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[am_pm_ratio#1 ASC NULLS FIRST], output=[am_pm_ratio#1])
++- *(11) Project [CheckOverflow((promote_precision(cast(amc#4 as decimal(15,4))) / promote_precision(cast(pmc#5 as decimal(15,4)))), DecimalType(35,20), true) AS am_pm_ratio#1]
+   +- BroadcastNestedLoopJoin BuildRight, Inner
+      :- *(5) HashAggregate(keys=[], functions=[count(1)], output=[amc#4])
+      :  +- Exchange SinglePartition, true, [id=#69]
+      :     +- *(4) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#70])
+      :        +- *(4) Project
+      :           +- *(4) BroadcastHashJoin [ws_web_page_sk#10], [wp_web_page_sk#11], Inner, BuildRight
+      :              :- *(4) Project [ws_web_page_sk#10]
+      :              :  +- *(4) BroadcastHashJoin [ws_sold_time_sk#6], [t_time_sk#7], Inner, BuildRight
+      :              :     :- *(4) Project [ws_sold_time_sk#6, ws_web_page_sk#10]
+      :              :     :  +- *(4) BroadcastHashJoin [ws_ship_hdemo_sk#8], [hd_demo_sk#9], Inner, BuildRight
+      :              :     :     :- *(4) Project [ws_sold_time_sk#6, ws_ship_hdemo_sk#8, ws_web_page_sk#10]
+      :              :     :     :  +- *(4) Filter ((isnotnull(ws_ship_hdemo_sk#8) AND isnotnull(ws_sold_time_sk#6)) AND isnotnull(ws_web_page_sk#10))
+      :              :     :     :     +- *(4) ColumnarToRow
+      :              :     :     :        +- FileScan parquet default.web_sales[ws_sold_time_sk#6,ws_ship_hdemo_sk#8,ws_web_page_sk#10] Batched: true, DataFilters: [isnotnull(ws_ship_hdemo_sk#8), isnotnull(ws_sold_time_sk#6), isnotnull(ws_web_page_sk#10)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)], ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
+      :              :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#71]
+      :              :     :        +- *(1) Project [hd_demo_sk#9]
+      :              :     :           +- *(1) Filter ((isnotnull(hd_dep_count#13) AND (hd_dep_count#13 = 6)) AND isnotnull(hd_demo_sk#9))
+      :              :     :              +- *(1) ColumnarToRow
+      :              :     :                 +- FileScan parquet default.household_demographics[hd_demo_sk#9,hd_dep_count#13] Batched: true, DataFilters: [isnotnull(hd_dep_count#13), (hd_dep_count#13 = 6), isnotnull(hd_demo_sk#9)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)], ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
+      :              :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#72]
+      :              :        +- *(2) Project [t_time_sk#7]
+      :              :           +- *(2) Filter (((isnotnull(t_hour#12) AND (t_hour#12 >= 8)) AND (t_hour#12 <= 9)) AND isnotnull(t_time_sk#7))
+      :              :              +- *(2) ColumnarToRow
+      :              :                 +- FileScan parquet default.time_dim[t_time_sk#7,t_hour#12] Batched: true, DataFilters: [isnotnull(t_hour#12), (t_hour#12 >= 8), (t_hour#12 <= 9), isnotnull(t_time_sk#7)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9), IsNotNull(t_time_sk)], ReadSchema: struct<t_time_sk:int,t_hour:int>
+      :              +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#73]
+      :                 +- *(3) Project [wp_web_page_sk#11]
+      :                    +- *(3) Filter (((isnotnull(wp_char_count#14) AND (wp_char_count#14 >= 5000)) AND (wp_char_count#14 <= 5200)) AND isnotnull(wp_web_page_sk#11))
+      :                       +- *(3) ColumnarToRow
+      :                          +- FileScan parquet default.web_page[wp_web_page_sk#11,wp_char_count#14] Batched: true, DataFilters: [isnotnull(wp_char_count#14), (wp_char_count#14 >= 5000), (wp_char_count#14 <= 5200), isnot..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,..., ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
+      +- BroadcastExchange IdentityBroadcastMode, [id=#74]
+         +- *(10) HashAggregate(keys=[], functions=[count(1)], output=[pmc#5])
+            +- Exchange SinglePartition, true, [id=#75]
+               +- *(9) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#76])
+                  +- *(9) Project
+                     +- *(9) BroadcastHashJoin [ws_web_page_sk#10], [wp_web_page_sk#11], Inner, BuildRight
+                        :- *(9) Project [ws_web_page_sk#10]
+                        :  +- *(9) BroadcastHashJoin [ws_sold_time_sk#6], [t_time_sk#7], Inner, BuildRight
+                        :     :- *(9) Project [ws_sold_time_sk#6, ws_web_page_sk#10]
+                        :     :  +- *(9) BroadcastHashJoin [ws_ship_hdemo_sk#8], [hd_demo_sk#9], Inner, BuildRight
+                        :     :     :- *(9) Project [ws_sold_time_sk#6, ws_ship_hdemo_sk#8, ws_web_page_sk#10]
+                        :     :     :  +- *(9) Filter ((isnotnull(ws_ship_hdemo_sk#8) AND isnotnull(ws_sold_time_sk#6)) AND isnotnull(ws_web_page_sk#10))
+                        :     :     :     +- *(9) ColumnarToRow
+                        :     :     :        +- FileScan parquet default.web_sales[ws_sold_time_sk#6,ws_ship_hdemo_sk#8,ws_web_page_sk#10] Batched: true, DataFilters: [isnotnull(ws_ship_hdemo_sk#8), isnotnull(ws_sold_time_sk#6), isnotnull(ws_web_page_sk#10)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)], ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
+                        :     :     +- ReusedExchange [hd_demo_sk#9], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#71]
+                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#77]
+                        :        +- *(7) Project [t_time_sk#7]
+                        :           +- *(7) Filter (((isnotnull(t_hour#12) AND (t_hour#12 >= 19)) AND (t_hour#12 <= 20)) AND isnotnull(t_time_sk#7))
+                        :              +- *(7) ColumnarToRow
+                        :                 +- FileScan parquet default.time_dim[t_time_sk#7,t_hour#12] Batched: true, DataFilters: [isnotnull(t_hour#12), (t_hour#12 >= 19), (t_hour#12 <= 20), isnotnull(t_time_sk#7)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)], ReadSchema: struct<t_time_sk:int,t_hour:int>
+                        +- ReusedExchange [wp_web_page_sk#11], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#73]

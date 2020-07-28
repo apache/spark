@@ -1,0 +1,88 @@
+== Parsed Logical Plan ==
+'GlobalLimit 100
++- 'LocalLimit 100
+   +- 'Sort ['count(1) ASC NULLS FIRST], true
+      +- 'Project [unresolvedalias('count(1), None)]
+         +- 'Filter (((('ss_sold_time_sk = 'time_dim.t_time_sk) AND ('ss_hdemo_sk = 'household_demographics.hd_demo_sk)) AND (('ss_store_sk = 's_store_sk) AND ('time_dim.t_hour = 20))) AND ((('time_dim.t_minute >= 30) AND ('household_demographics.hd_dep_count = 7)) AND ('store.s_store_name = ese)))
+            +- 'Join Inner
+               :- 'Join Inner
+               :  :- 'Join Inner
+               :  :  :- 'UnresolvedRelation [store_sales]
+               :  :  +- 'UnresolvedRelation [household_demographics]
+               :  +- 'UnresolvedRelation [time_dim]
+               +- 'UnresolvedRelation [store]
+
+== Analyzed Logical Plan ==
+count(1): bigint
+GlobalLimit 100
++- LocalLimit 100
+   +- Project [count(1)#1]
+      +- Sort [count(1)#1 ASC NULLS FIRST], true
+         +- Aggregate [count(1) AS count(1)#1]
+            +- Filter ((((ss_sold_time_sk#2 = t_time_sk#3) AND (ss_hdemo_sk#4 = hd_demo_sk#5)) AND ((ss_store_sk#6 = s_store_sk#7) AND (t_hour#8 = 20))) AND (((t_minute#9 >= 30) AND (hd_dep_count#10 = 7)) AND (s_store_name#11 = ese)))
+               +- Join Inner
+                  :- Join Inner
+                  :  :- Join Inner
+                  :  :  :- SubqueryAlias spark_catalog.default.store_sales
+                  :  :  :  +- Relation[ss_sold_date_sk#12,ss_sold_time_sk#2,ss_item_sk#13,ss_customer_sk#14,ss_cdemo_sk#15,ss_hdemo_sk#4,ss_addr_sk#16,ss_store_sk#6,ss_promo_sk#17,ss_ticket_number#18,ss_quantity#19,ss_wholesale_cost#20,ss_list_price#21,ss_sales_price#22,ss_ext_discount_amt#23,ss_ext_sales_price#24,ss_ext_wholesale_cost#25,ss_ext_list_price#26,ss_ext_tax#27,ss_coupon_amt#28,ss_net_paid#29,ss_net_paid_inc_tax#30,ss_net_profit#31] parquet
+                  :  :  +- SubqueryAlias spark_catalog.default.household_demographics
+                  :  :     +- Relation[hd_demo_sk#5,hd_income_band_sk#32,hd_buy_potential#33,hd_dep_count#10,hd_vehicle_count#34] parquet
+                  :  +- SubqueryAlias spark_catalog.default.time_dim
+                  :     +- Relation[t_time_sk#3,t_time_id#35,t_time#36,t_hour#8,t_minute#9,t_second#37,t_am_pm#38,t_shift#39,t_sub_shift#40,t_meal_time#41] parquet
+                  +- SubqueryAlias spark_catalog.default.store
+                     +- Relation[s_store_sk#7,s_store_id#42,s_rec_start_date#43,s_rec_end_date#44,s_closed_date_sk#45,s_store_name#11,s_number_employees#46,s_floor_space#47,s_hours#48,s_manager#49,s_market_id#50,s_geography_class#51,s_market_desc#52,s_market_manager#53,s_division_id#54,s_division_name#55,s_company_id#56,s_company_name#57,s_street_number#58,s_street_name#59,s_street_type#60,s_suite_number#61,s_city#62,s_county#63,s_state#64,s_zip#65,s_country#66,s_gmt_offset#67,s_tax_percentage#68] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [count(1)#1 ASC NULLS FIRST], true
+      +- Aggregate [count(1) AS count(1)#1]
+         +- Project
+            +- Join Inner, (ss_store_sk#6 = s_store_sk#7)
+               :- Project [ss_store_sk#6]
+               :  +- Join Inner, (ss_sold_time_sk#2 = t_time_sk#3)
+               :     :- Project [ss_sold_time_sk#2, ss_store_sk#6]
+               :     :  +- Join Inner, (ss_hdemo_sk#4 = hd_demo_sk#5)
+               :     :     :- Project [ss_sold_time_sk#2, ss_hdemo_sk#4, ss_store_sk#6]
+               :     :     :  +- Filter ((isnotnull(ss_hdemo_sk#4) AND isnotnull(ss_sold_time_sk#2)) AND isnotnull(ss_store_sk#6))
+               :     :     :     +- Relation[ss_sold_date_sk#12,ss_sold_time_sk#2,ss_item_sk#13,ss_customer_sk#14,ss_cdemo_sk#15,ss_hdemo_sk#4,ss_addr_sk#16,ss_store_sk#6,ss_promo_sk#17,ss_ticket_number#18,ss_quantity#19,ss_wholesale_cost#20,ss_list_price#21,ss_sales_price#22,ss_ext_discount_amt#23,ss_ext_sales_price#24,ss_ext_wholesale_cost#25,ss_ext_list_price#26,ss_ext_tax#27,ss_coupon_amt#28,ss_net_paid#29,ss_net_paid_inc_tax#30,ss_net_profit#31] parquet
+               :     :     +- Project [hd_demo_sk#5]
+               :     :        +- Filter ((isnotnull(hd_dep_count#10) AND (hd_dep_count#10 = 7)) AND isnotnull(hd_demo_sk#5))
+               :     :           +- Relation[hd_demo_sk#5,hd_income_band_sk#32,hd_buy_potential#33,hd_dep_count#10,hd_vehicle_count#34] parquet
+               :     +- Project [t_time_sk#3]
+               :        +- Filter ((((isnotnull(t_hour#8) AND isnotnull(t_minute#9)) AND (t_hour#8 = 20)) AND (t_minute#9 >= 30)) AND isnotnull(t_time_sk#3))
+               :           +- Relation[t_time_sk#3,t_time_id#35,t_time#36,t_hour#8,t_minute#9,t_second#37,t_am_pm#38,t_shift#39,t_sub_shift#40,t_meal_time#41] parquet
+               +- Project [s_store_sk#7]
+                  +- Filter ((isnotnull(s_store_name#11) AND (s_store_name#11 = ese)) AND isnotnull(s_store_sk#7))
+                     +- Relation[s_store_sk#7,s_store_id#42,s_rec_start_date#43,s_rec_end_date#44,s_closed_date_sk#45,s_store_name#11,s_number_employees#46,s_floor_space#47,s_hours#48,s_manager#49,s_market_id#50,s_geography_class#51,s_market_desc#52,s_market_manager#53,s_division_id#54,s_division_name#55,s_company_id#56,s_company_name#57,s_street_number#58,s_street_name#59,s_street_type#60,s_suite_number#61,s_city#62,s_county#63,s_state#64,s_zip#65,s_country#66,s_gmt_offset#67,s_tax_percentage#68] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[count(1)#1 ASC NULLS FIRST], output=[count(1)#1])
++- *(5) HashAggregate(keys=[], functions=[count(1)], output=[count(1)#1])
+   +- Exchange SinglePartition, true, [id=#69]
+      +- *(4) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#70])
+         +- *(4) Project
+            +- *(4) BroadcastHashJoin [ss_store_sk#6], [s_store_sk#7], Inner, BuildRight
+               :- *(4) Project [ss_store_sk#6]
+               :  +- *(4) BroadcastHashJoin [ss_sold_time_sk#2], [t_time_sk#3], Inner, BuildRight
+               :     :- *(4) Project [ss_sold_time_sk#2, ss_store_sk#6]
+               :     :  +- *(4) BroadcastHashJoin [ss_hdemo_sk#4], [hd_demo_sk#5], Inner, BuildRight
+               :     :     :- *(4) Project [ss_sold_time_sk#2, ss_hdemo_sk#4, ss_store_sk#6]
+               :     :     :  +- *(4) Filter ((isnotnull(ss_hdemo_sk#4) AND isnotnull(ss_sold_time_sk#2)) AND isnotnull(ss_store_sk#6))
+               :     :     :     +- *(4) ColumnarToRow
+               :     :     :        +- FileScan parquet default.store_sales[ss_sold_time_sk#2,ss_hdemo_sk#4,ss_store_sk#6] Batched: true, DataFilters: [isnotnull(ss_hdemo_sk#4), isnotnull(ss_sold_time_sk#2), isnotnull(ss_store_sk#6)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)], ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+               :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#71]
+               :     :        +- *(1) Project [hd_demo_sk#5]
+               :     :           +- *(1) Filter ((isnotnull(hd_dep_count#10) AND (hd_dep_count#10 = 7)) AND isnotnull(hd_demo_sk#5))
+               :     :              +- *(1) ColumnarToRow
+               :     :                 +- FileScan parquet default.household_demographics[hd_demo_sk#5,hd_dep_count#10] Batched: true, DataFilters: [isnotnull(hd_dep_count#10), (hd_dep_count#10 = 7), isnotnull(hd_demo_sk#5)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,7), IsNotNull(hd_demo_sk)], ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
+               :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#72]
+               :        +- *(2) Project [t_time_sk#3]
+               :           +- *(2) Filter ((((isnotnull(t_hour#8) AND isnotnull(t_minute#9)) AND (t_hour#8 = 20)) AND (t_minute#9 >= 30)) AND isnotnull(t_time_sk#3))
+               :              +- *(2) ColumnarToRow
+               :                 +- FileScan parquet default.time_dim[t_time_sk#3,t_hour#8,t_minute#9] Batched: true, DataFilters: [isnotnull(t_hour#8), isnotnull(t_minute#9), (t_hour#8 = 20), (t_minute#9 >= 30), isn..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,20), GreaterThanOrEqual(t_minute,30), IsN..., ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#73]
+                  +- *(3) Project [s_store_sk#7]
+                     +- *(3) Filter ((isnotnull(s_store_name#11) AND (s_store_name#11 = ese)) AND isnotnull(s_store_sk#7))
+                        +- *(3) ColumnarToRow
+                           +- FileScan parquet default.store[s_store_sk#7,s_store_name#11] Batched: true, DataFilters: [isnotnull(s_store_name#11), (s_store_name#11 = ese), isnotnull(s_store_sk#7)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(s_store_name), EqualTo(s_store_name,ese), IsNotNull(s_store_sk)], ReadSchema: struct<s_store_sk:int,s_store_name:string>

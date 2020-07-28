@@ -1,0 +1,94 @@
+== Parsed Logical Plan ==
+'GlobalLimit 100
++- 'LocalLimit 100
+   +- 'Sort ['w_warehouse_name ASC NULLS FIRST, 'i_item_id ASC NULLS FIRST], true
+      +- 'Project [*]
+         +- 'Filter ((CASE WHEN ('inv_before > 0) THEN ('inv_after / 'inv_before) ELSE null END >= (2.0 / 3.0)) AND (CASE WHEN ('inv_before > 0) THEN ('inv_after / 'inv_before) ELSE null END <= (3.0 / 2.0)))
+            +- 'SubqueryAlias x
+               +- 'Aggregate ['w_warehouse_name, 'i_item_id], ['w_warehouse_name, 'i_item_id, 'sum(CASE WHEN (cast('d_date as date) < cast(2000-03-11 as date)) THEN 'inv_quantity_on_hand ELSE 0 END) AS inv_before#1, 'sum(CASE WHEN (cast('d_date as date) >= cast(2000-03-11 as date)) THEN 'inv_quantity_on_hand ELSE 0 END) AS inv_after#2]
+                  +- 'Filter ((((('i_current_price >= 0.99) AND ('i_current_price <= 1.49)) AND ('i_item_sk = 'inv_item_sk)) AND ('inv_warehouse_sk = 'w_warehouse_sk)) AND (('inv_date_sk = 'd_date_sk) AND (('d_date >= (cast(2000-03-11 as date) - 30 days)) AND ('d_date <= (cast(2000-03-11 as date) + 30 days)))))
+                     +- 'Join Inner
+                        :- 'Join Inner
+                        :  :- 'Join Inner
+                        :  :  :- 'UnresolvedRelation [inventory]
+                        :  :  +- 'UnresolvedRelation [warehouse]
+                        :  +- 'UnresolvedRelation [item]
+                        +- 'UnresolvedRelation [date_dim]
+
+== Analyzed Logical Plan ==
+w_warehouse_name: string, i_item_id: string, inv_before: bigint, inv_after: bigint
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [w_warehouse_name#3 ASC NULLS FIRST, i_item_id#4 ASC NULLS FIRST], true
+      +- Project [w_warehouse_name#3, i_item_id#4, inv_before#5, inv_after#6]
+         +- Filter ((CASE WHEN (inv_before#5 > cast(0 as bigint)) THEN (cast(inv_after#6 as double) / cast(inv_before#5 as double)) ELSE cast(null as double) END >= cast(CheckOverflow((promote_precision(cast(2.0 as decimal(2,1))) / promote_precision(cast(3.0 as decimal(2,1)))), DecimalType(8,6), true) as double)) AND (CASE WHEN (inv_before#5 > cast(0 as bigint)) THEN (cast(inv_after#6 as double) / cast(inv_before#5 as double)) ELSE cast(null as double) END <= cast(CheckOverflow((promote_precision(cast(3.0 as decimal(2,1))) / promote_precision(cast(2.0 as decimal(2,1)))), DecimalType(8,6), true) as double)))
+            +- SubqueryAlias x
+               +- Aggregate [w_warehouse_name#3, i_item_id#4], [w_warehouse_name#3, i_item_id#4, sum(cast(CASE WHEN (cast(d_date#7 as date) < cast(2000-03-11 as date)) THEN inv_quantity_on_hand#8 ELSE 0 END as bigint)) AS inv_before#5, sum(cast(CASE WHEN (cast(d_date#7 as date) >= cast(2000-03-11 as date)) THEN inv_quantity_on_hand#8 ELSE 0 END as bigint)) AS inv_after#6]
+                  +- Filter (((((cast(i_current_price#9 as decimal(7,2)) >= cast(0.99 as decimal(7,2))) AND (cast(i_current_price#9 as decimal(7,2)) <= cast(1.49 as decimal(7,2)))) AND (i_item_sk#10 = inv_item_sk#11)) AND (inv_warehouse_sk#12 = w_warehouse_sk#13)) AND ((inv_date_sk#14 = d_date_sk#15) AND ((d_date#7 >= cast(2000-03-11 as date) - 30 days) AND (d_date#7 <= cast(2000-03-11 as date) + 30 days))))
+                     +- Join Inner
+                        :- Join Inner
+                        :  :- Join Inner
+                        :  :  :- SubqueryAlias spark_catalog.default.inventory
+                        :  :  :  +- Relation[inv_date_sk#14,inv_item_sk#11,inv_warehouse_sk#12,inv_quantity_on_hand#8] parquet
+                        :  :  +- SubqueryAlias spark_catalog.default.warehouse
+                        :  :     +- Relation[w_warehouse_sk#13,w_warehouse_id#16,w_warehouse_name#3,w_warehouse_sq_ft#17,w_street_number#18,w_street_name#19,w_street_type#20,w_suite_number#21,w_city#22,w_county#23,w_state#24,w_zip#25,w_country#26,w_gmt_offset#27] parquet
+                        :  +- SubqueryAlias spark_catalog.default.item
+                        :     +- Relation[i_item_sk#10,i_item_id#4,i_rec_start_date#28,i_rec_end_date#29,i_item_desc#30,i_current_price#9,i_wholesale_cost#31,i_brand_id#32,i_brand#33,i_class_id#34,i_class#35,i_category_id#36,i_category#37,i_manufact_id#38,i_manufact#39,i_size#40,i_formulation#41,i_color#42,i_units#43,i_container#44,i_manager_id#45,i_product_name#46] parquet
+                        +- SubqueryAlias spark_catalog.default.date_dim
+                           +- Relation[d_date_sk#15,d_date_id#47,d_date#7,d_month_seq#48,d_week_seq#49,d_quarter_seq#50,d_year#51,d_dow#52,d_moy#53,d_dom#54,d_qoy#55,d_fy_year#56,d_fy_quarter_seq#57,d_fy_week_seq#58,d_day_name#59,d_quarter_name#60,d_holiday#61,d_weekend#62,d_following_holiday#63,d_first_dom#64,d_last_dom#65,d_same_day_ly#66,d_same_day_lq#67,d_current_day#68,d_current_week#69,d_current_month#70,d_current_quarter#71,d_current_year#72] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [w_warehouse_name#3 ASC NULLS FIRST, i_item_id#4 ASC NULLS FIRST], true
+      +- Filter ((CASE WHEN (inv_before#5 > 0) THEN (cast(inv_after#6 as double) / cast(inv_before#5 as double)) ELSE null END >= 0.666667) AND (CASE WHEN (inv_before#5 > 0) THEN (cast(inv_after#6 as double) / cast(inv_before#5 as double)) ELSE null END <= 1.5))
+         +- Aggregate [w_warehouse_name#3, i_item_id#4], [w_warehouse_name#3, i_item_id#4, sum(cast(CASE WHEN (d_date#7 < 11027) THEN inv_quantity_on_hand#8 ELSE 0 END as bigint)) AS inv_before#5, sum(cast(CASE WHEN (d_date#7 >= 11027) THEN inv_quantity_on_hand#8 ELSE 0 END as bigint)) AS inv_after#6]
+            +- Project [inv_quantity_on_hand#8, w_warehouse_name#3, i_item_id#4, d_date#7]
+               +- Join Inner, (inv_date_sk#14 = d_date_sk#15)
+                  :- Project [inv_date_sk#14, inv_quantity_on_hand#8, w_warehouse_name#3, i_item_id#4]
+                  :  +- Join Inner, (i_item_sk#10 = inv_item_sk#11)
+                  :     :- Project [inv_date_sk#14, inv_item_sk#11, inv_quantity_on_hand#8, w_warehouse_name#3]
+                  :     :  +- Join Inner, (inv_warehouse_sk#12 = w_warehouse_sk#13)
+                  :     :     :- Filter ((isnotnull(inv_warehouse_sk#12) AND isnotnull(inv_item_sk#11)) AND isnotnull(inv_date_sk#14))
+                  :     :     :  +- Relation[inv_date_sk#14,inv_item_sk#11,inv_warehouse_sk#12,inv_quantity_on_hand#8] parquet
+                  :     :     +- Project [w_warehouse_sk#13, w_warehouse_name#3]
+                  :     :        +- Filter isnotnull(w_warehouse_sk#13)
+                  :     :           +- Relation[w_warehouse_sk#13,w_warehouse_id#16,w_warehouse_name#3,w_warehouse_sq_ft#17,w_street_number#18,w_street_name#19,w_street_type#20,w_suite_number#21,w_city#22,w_county#23,w_state#24,w_zip#25,w_country#26,w_gmt_offset#27] parquet
+                  :     +- Project [i_item_sk#10, i_item_id#4]
+                  :        +- Filter (((isnotnull(i_current_price#9) AND (i_current_price#9 >= 0.99)) AND (i_current_price#9 <= 1.49)) AND isnotnull(i_item_sk#10))
+                  :           +- Relation[i_item_sk#10,i_item_id#4,i_rec_start_date#28,i_rec_end_date#29,i_item_desc#30,i_current_price#9,i_wholesale_cost#31,i_brand_id#32,i_brand#33,i_class_id#34,i_class#35,i_category_id#36,i_category#37,i_manufact_id#38,i_manufact#39,i_size#40,i_formulation#41,i_color#42,i_units#43,i_container#44,i_manager_id#45,i_product_name#46] parquet
+                  +- Project [d_date_sk#15, d_date#7]
+                     +- Filter (((isnotnull(d_date#7) AND (d_date#7 >= 10997)) AND (d_date#7 <= 11057)) AND isnotnull(d_date_sk#15))
+                        +- Relation[d_date_sk#15,d_date_id#47,d_date#7,d_month_seq#48,d_week_seq#49,d_quarter_seq#50,d_year#51,d_dow#52,d_moy#53,d_dom#54,d_qoy#55,d_fy_year#56,d_fy_quarter_seq#57,d_fy_week_seq#58,d_day_name#59,d_quarter_name#60,d_holiday#61,d_weekend#62,d_following_holiday#63,d_first_dom#64,d_last_dom#65,d_same_day_ly#66,d_same_day_lq#67,d_current_day#68,d_current_week#69,d_current_month#70,d_current_quarter#71,d_current_year#72] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[w_warehouse_name#3 ASC NULLS FIRST,i_item_id#4 ASC NULLS FIRST], output=[w_warehouse_name#3,i_item_id#4,inv_before#5,inv_after#6])
++- *(5) Filter ((CASE WHEN (inv_before#5 > 0) THEN (cast(inv_after#6 as double) / cast(inv_before#5 as double)) ELSE null END >= 0.666667) AND (CASE WHEN (inv_before#5 > 0) THEN (cast(inv_after#6 as double) / cast(inv_before#5 as double)) ELSE null END <= 1.5))
+   +- *(5) HashAggregate(keys=[w_warehouse_name#3, i_item_id#4], functions=[sum(cast(CASE WHEN (d_date#7 < 11027) THEN inv_quantity_on_hand#8 ELSE 0 END as bigint)), sum(cast(CASE WHEN (d_date#7 >= 11027) THEN inv_quantity_on_hand#8 ELSE 0 END as bigint))], output=[w_warehouse_name#3, i_item_id#4, inv_before#5, inv_after#6])
+      +- Exchange hashpartitioning(w_warehouse_name#3, i_item_id#4, 5), true, [id=#73]
+         +- *(4) HashAggregate(keys=[w_warehouse_name#3, i_item_id#4], functions=[partial_sum(cast(CASE WHEN (d_date#7 < 11027) THEN inv_quantity_on_hand#8 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (d_date#7 >= 11027) THEN inv_quantity_on_hand#8 ELSE 0 END as bigint))], output=[w_warehouse_name#3, i_item_id#4, sum#74, sum#75])
+            +- *(4) Project [inv_quantity_on_hand#8, w_warehouse_name#3, i_item_id#4, d_date#7]
+               +- *(4) BroadcastHashJoin [inv_date_sk#14], [d_date_sk#15], Inner, BuildRight
+                  :- *(4) Project [inv_date_sk#14, inv_quantity_on_hand#8, w_warehouse_name#3, i_item_id#4]
+                  :  +- *(4) BroadcastHashJoin [inv_item_sk#11], [i_item_sk#10], Inner, BuildRight
+                  :     :- *(4) Project [inv_date_sk#14, inv_item_sk#11, inv_quantity_on_hand#8, w_warehouse_name#3]
+                  :     :  +- *(4) BroadcastHashJoin [inv_warehouse_sk#12], [w_warehouse_sk#13], Inner, BuildRight
+                  :     :     :- *(4) Project [inv_date_sk#14, inv_item_sk#11, inv_warehouse_sk#12, inv_quantity_on_hand#8]
+                  :     :     :  +- *(4) Filter ((isnotnull(inv_warehouse_sk#12) AND isnotnull(inv_item_sk#11)) AND isnotnull(inv_date_sk#14))
+                  :     :     :     +- *(4) ColumnarToRow
+                  :     :     :        +- FileScan parquet default.inventory[inv_date_sk#14,inv_item_sk#11,inv_warehouse_sk#12,inv_quantity_on_hand#8] Batched: true, DataFilters: [isnotnull(inv_warehouse_sk#12), isnotnull(inv_item_sk#11), isnotnull(inv_date_sk#14)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(inv_warehouse_sk), IsNotNull(inv_item_sk), IsNotNull(inv_date_sk)], ReadSchema: struct<inv_date_sk:int,inv_item_sk:int,inv_warehouse_sk:int,inv_quantity_on_hand:int>
+                  :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#76]
+                  :     :        +- *(1) Project [w_warehouse_sk#13, w_warehouse_name#3]
+                  :     :           +- *(1) Filter isnotnull(w_warehouse_sk#13)
+                  :     :              +- *(1) ColumnarToRow
+                  :     :                 +- FileScan parquet default.warehouse[w_warehouse_sk#13,w_warehouse_name#3] Batched: true, DataFilters: [isnotnull(w_warehouse_sk#13)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(w_warehouse_sk)], ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string>
+                  :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#77]
+                  :        +- *(2) Project [i_item_sk#10, i_item_id#4]
+                  :           +- *(2) Filter (((isnotnull(i_current_price#9) AND (i_current_price#9 >= 0.99)) AND (i_current_price#9 <= 1.49)) AND isnotnull(i_item_sk#10))
+                  :              +- *(2) ColumnarToRow
+                  :                 +- FileScan parquet default.item[i_item_sk#10,i_item_id#4,i_current_price#9] Batched: true, DataFilters: [isnotnull(i_current_price#9), (i_current_price#9 >= 0.99), (i_current_price#9 <= 1.49), is..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,0.99), LessThanOrEqual(i_current_..., ReadSchema: struct<i_item_sk:int,i_item_id:string,i_current_price:decimal(7,2)>
+                  +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#78]
+                     +- *(3) Project [d_date_sk#15, d_date#7]
+                        +- *(3) Filter (((isnotnull(d_date#7) AND (d_date#7 >= 10997)) AND (d_date#7 <= 11057)) AND isnotnull(d_date_sk#15))
+                           +- *(3) ColumnarToRow
+                              +- FileScan parquet default.date_dim[d_date_sk#15,d_date#7] Batched: true, DataFilters: [isnotnull(d_date#7), (d_date#7 >= 10997), (d_date#7 <= 11057), isnotnull(d_date_sk#15)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-10), LessThanOrEqual(d_date,2000-04-10), Is..., ReadSchema: struct<d_date_sk:int,d_date:date>

@@ -1,0 +1,70 @@
+== Parsed Logical Plan ==
+'GlobalLimit 100
++- 'LocalLimit 100
+   +- 'Sort ['ext_price DESC NULLS LAST, 'brand_id ASC NULLS FIRST], true
+      +- 'Aggregate ['i_brand, 'i_brand_id], ['i_brand_id AS brand_id#1, 'i_brand AS brand#2, 'sum('ss_ext_sales_price) AS ext_price#3]
+         +- 'Filter (((('d_date_sk = 'ss_sold_date_sk) AND ('ss_item_sk = 'i_item_sk)) AND ('i_manager_id = 28)) AND (('d_moy = 11) AND ('d_year = 1999)))
+            +- 'Join Inner
+               :- 'Join Inner
+               :  :- 'UnresolvedRelation [date_dim]
+               :  +- 'UnresolvedRelation [store_sales]
+               +- 'UnresolvedRelation [item]
+
+== Analyzed Logical Plan ==
+brand_id: int, brand: string, ext_price: decimal(17,2)
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [ext_price#3 DESC NULLS LAST, brand_id#1 ASC NULLS FIRST], true
+      +- Aggregate [i_brand#4, i_brand_id#5], [i_brand_id#5 AS brand_id#1, i_brand#4 AS brand#2, sum(ss_ext_sales_price#6) AS ext_price#3]
+         +- Filter ((((d_date_sk#7 = ss_sold_date_sk#8) AND (ss_item_sk#9 = i_item_sk#10)) AND (i_manager_id#11 = 28)) AND ((d_moy#12 = 11) AND (d_year#13 = 1999)))
+            +- Join Inner
+               :- Join Inner
+               :  :- SubqueryAlias spark_catalog.default.date_dim
+               :  :  +- Relation[d_date_sk#7,d_date_id#14,d_date#15,d_month_seq#16,d_week_seq#17,d_quarter_seq#18,d_year#13,d_dow#19,d_moy#12,d_dom#20,d_qoy#21,d_fy_year#22,d_fy_quarter_seq#23,d_fy_week_seq#24,d_day_name#25,d_quarter_name#26,d_holiday#27,d_weekend#28,d_following_holiday#29,d_first_dom#30,d_last_dom#31,d_same_day_ly#32,d_same_day_lq#33,d_current_day#34,d_current_week#35,d_current_month#36,d_current_quarter#37,d_current_year#38] parquet
+               :  +- SubqueryAlias spark_catalog.default.store_sales
+               :     +- Relation[ss_sold_date_sk#8,ss_sold_time_sk#39,ss_item_sk#9,ss_customer_sk#40,ss_cdemo_sk#41,ss_hdemo_sk#42,ss_addr_sk#43,ss_store_sk#44,ss_promo_sk#45,ss_ticket_number#46,ss_quantity#47,ss_wholesale_cost#48,ss_list_price#49,ss_sales_price#50,ss_ext_discount_amt#51,ss_ext_sales_price#6,ss_ext_wholesale_cost#52,ss_ext_list_price#53,ss_ext_tax#54,ss_coupon_amt#55,ss_net_paid#56,ss_net_paid_inc_tax#57,ss_net_profit#58] parquet
+               +- SubqueryAlias spark_catalog.default.item
+                  +- Relation[i_item_sk#10,i_item_id#59,i_rec_start_date#60,i_rec_end_date#61,i_item_desc#62,i_current_price#63,i_wholesale_cost#64,i_brand_id#5,i_brand#4,i_class_id#65,i_class#66,i_category_id#67,i_category#68,i_manufact_id#69,i_manufact#70,i_size#71,i_formulation#72,i_color#73,i_units#74,i_container#75,i_manager_id#11,i_product_name#76] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [ext_price#3 DESC NULLS LAST, brand_id#1 ASC NULLS FIRST], true
+      +- Aggregate [i_brand#4, i_brand_id#5], [i_brand_id#5 AS brand_id#1, i_brand#4 AS brand#2, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#6)),17,2) AS ext_price#3]
+         +- Project [ss_ext_sales_price#6, i_brand_id#5, i_brand#4]
+            +- Join Inner, (ss_item_sk#9 = i_item_sk#10)
+               :- Project [ss_item_sk#9, ss_ext_sales_price#6]
+               :  +- Join Inner, (d_date_sk#7 = ss_sold_date_sk#8)
+               :     :- Project [d_date_sk#7]
+               :     :  +- Filter ((((isnotnull(d_moy#12) AND isnotnull(d_year#13)) AND (d_moy#12 = 11)) AND (d_year#13 = 1999)) AND isnotnull(d_date_sk#7))
+               :     :     +- Relation[d_date_sk#7,d_date_id#14,d_date#15,d_month_seq#16,d_week_seq#17,d_quarter_seq#18,d_year#13,d_dow#19,d_moy#12,d_dom#20,d_qoy#21,d_fy_year#22,d_fy_quarter_seq#23,d_fy_week_seq#24,d_day_name#25,d_quarter_name#26,d_holiday#27,d_weekend#28,d_following_holiday#29,d_first_dom#30,d_last_dom#31,d_same_day_ly#32,d_same_day_lq#33,d_current_day#34,d_current_week#35,d_current_month#36,d_current_quarter#37,d_current_year#38] parquet
+               :     +- Project [ss_sold_date_sk#8, ss_item_sk#9, ss_ext_sales_price#6]
+               :        +- Filter (isnotnull(ss_sold_date_sk#8) AND isnotnull(ss_item_sk#9))
+               :           +- Relation[ss_sold_date_sk#8,ss_sold_time_sk#39,ss_item_sk#9,ss_customer_sk#40,ss_cdemo_sk#41,ss_hdemo_sk#42,ss_addr_sk#43,ss_store_sk#44,ss_promo_sk#45,ss_ticket_number#46,ss_quantity#47,ss_wholesale_cost#48,ss_list_price#49,ss_sales_price#50,ss_ext_discount_amt#51,ss_ext_sales_price#6,ss_ext_wholesale_cost#52,ss_ext_list_price#53,ss_ext_tax#54,ss_coupon_amt#55,ss_net_paid#56,ss_net_paid_inc_tax#57,ss_net_profit#58] parquet
+               +- Project [i_item_sk#10, i_brand_id#5, i_brand#4]
+                  +- Filter ((isnotnull(i_manager_id#11) AND (i_manager_id#11 = 28)) AND isnotnull(i_item_sk#10))
+                     +- Relation[i_item_sk#10,i_item_id#59,i_rec_start_date#60,i_rec_end_date#61,i_item_desc#62,i_current_price#63,i_wholesale_cost#64,i_brand_id#5,i_brand#4,i_class_id#65,i_class#66,i_category_id#67,i_category#68,i_manufact_id#69,i_manufact#70,i_size#71,i_formulation#72,i_color#73,i_units#74,i_container#75,i_manager_id#11,i_product_name#76] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[ext_price#3 DESC NULLS LAST,brand_id#1 ASC NULLS FIRST], output=[brand_id#1,brand#2,ext_price#3])
++- *(4) HashAggregate(keys=[i_brand#4, i_brand_id#5], functions=[sum(UnscaledValue(ss_ext_sales_price#6))], output=[brand_id#1, brand#2, ext_price#3])
+   +- Exchange hashpartitioning(i_brand#4, i_brand_id#5, 5), true, [id=#77]
+      +- *(3) HashAggregate(keys=[i_brand#4, i_brand_id#5], functions=[partial_sum(UnscaledValue(ss_ext_sales_price#6))], output=[i_brand#4, i_brand_id#5, sum#78])
+         +- *(3) Project [ss_ext_sales_price#6, i_brand_id#5, i_brand#4]
+            +- *(3) BroadcastHashJoin [ss_item_sk#9], [i_item_sk#10], Inner, BuildRight
+               :- *(3) Project [ss_item_sk#9, ss_ext_sales_price#6]
+               :  +- *(3) BroadcastHashJoin [d_date_sk#7], [ss_sold_date_sk#8], Inner, BuildRight
+               :     :- *(3) Project [d_date_sk#7]
+               :     :  +- *(3) Filter ((((isnotnull(d_moy#12) AND isnotnull(d_year#13)) AND (d_moy#12 = 11)) AND (d_year#13 = 1999)) AND isnotnull(d_date_sk#7))
+               :     :     +- *(3) ColumnarToRow
+               :     :        +- FileScan parquet default.date_dim[d_date_sk#7,d_year#13,d_moy#12] Batched: true, DataFilters: [isnotnull(d_moy#12), isnotnull(d_year#13), (d_moy#12 = 11), (d_year#13 = 1999), isnotnull(d_date..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,11), EqualTo(d_year,1999), IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+               :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#79]
+               :        +- *(1) Project [ss_sold_date_sk#8, ss_item_sk#9, ss_ext_sales_price#6]
+               :           +- *(1) Filter (isnotnull(ss_sold_date_sk#8) AND isnotnull(ss_item_sk#9))
+               :              +- *(1) ColumnarToRow
+               :                 +- FileScan parquet default.store_sales[ss_sold_date_sk#8,ss_item_sk#9,ss_ext_sales_price#6] Batched: true, DataFilters: [isnotnull(ss_sold_date_sk#8), isnotnull(ss_item_sk#9)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_item_sk)], ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
+               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#80]
+                  +- *(2) Project [i_item_sk#10, i_brand_id#5, i_brand#4]
+                     +- *(2) Filter ((isnotnull(i_manager_id#11) AND (i_manager_id#11 = 28)) AND isnotnull(i_item_sk#10))
+                        +- *(2) ColumnarToRow
+                           +- FileScan parquet default.item[i_item_sk#10,i_brand_id#5,i_brand#4,i_manager_id#11] Batched: true, DataFilters: [isnotnull(i_manager_id#11), (i_manager_id#11 = 28), isnotnull(i_item_sk#10)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,28), IsNotNull(i_item_sk)], ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_brand:string,i_manager_id:int>

@@ -1,0 +1,105 @@
+== Parsed Logical Plan ==
+'GlobalLimit 100
++- 'LocalLimit 100
+   +- 'Sort ['substr('w_warehouse_name, 1, 20) ASC NULLS FIRST, 'sm_type ASC NULLS FIRST, 'cc_name ASC NULLS FIRST], true
+      +- 'Aggregate ['substr('w_warehouse_name, 1, 20), 'sm_type, 'cc_name], [unresolvedalias('substr('w_warehouse_name, 1, 20), None), 'sm_type, 'cc_name, 'sum(CASE WHEN (('cs_ship_date_sk - 'cs_sold_date_sk) <= 30) THEN 1 ELSE 0 END) AS 30 days #1, 'sum(CASE WHEN ((('cs_ship_date_sk - 'cs_sold_date_sk) > 30) AND (('cs_ship_date_sk - 'cs_sold_date_sk) <= 60)) THEN 1 ELSE 0 END) AS 31 - 60 days #2, 'sum(CASE WHEN ((('cs_ship_date_sk - 'cs_sold_date_sk) > 60) AND (('cs_ship_date_sk - 'cs_sold_date_sk) <= 90)) THEN 1 ELSE 0 END) AS 61 - 90 days #3, 'sum(CASE WHEN ((('cs_ship_date_sk - 'cs_sold_date_sk) > 90) AND (('cs_ship_date_sk - 'cs_sold_date_sk) <= 120)) THEN 1 ELSE 0 END) AS 91 - 120 days #4, 'sum(CASE WHEN (('cs_ship_date_sk - 'cs_sold_date_sk) > 120) THEN 1 ELSE 0 END) AS >120 days #5]
+         +- 'Filter ((((('d_month_seq >= 1200) AND ('d_month_seq <= (1200 + 11))) AND ('cs_ship_date_sk = 'd_date_sk)) AND ('cs_warehouse_sk = 'w_warehouse_sk)) AND (('cs_ship_mode_sk = 'sm_ship_mode_sk) AND ('cs_call_center_sk = 'cc_call_center_sk)))
+            +- 'Join Inner
+               :- 'Join Inner
+               :  :- 'Join Inner
+               :  :  :- 'Join Inner
+               :  :  :  :- 'UnresolvedRelation [catalog_sales]
+               :  :  :  +- 'UnresolvedRelation [warehouse]
+               :  :  +- 'UnresolvedRelation [ship_mode]
+               :  +- 'UnresolvedRelation [call_center]
+               +- 'UnresolvedRelation [date_dim]
+
+== Analyzed Logical Plan ==
+substr(w_warehouse_name, 1, 20): string, sm_type: string, cc_name: string, 30 days : bigint, 31 - 60 days : bigint, 61 - 90 days : bigint, 91 - 120 days : bigint, >120 days : bigint
+GlobalLimit 100
++- LocalLimit 100
+   +- Project [substr(w_warehouse_name, 1, 20)#6, sm_type#7, cc_name#8, 30 days #9, 31 - 60 days #10, 61 - 90 days #11, 91 - 120 days #12, >120 days #13]
+      +- Sort [substr(w_warehouse_name, 1, 20)#6 ASC NULLS FIRST, sm_type#7 ASC NULLS FIRST, cc_name#8 ASC NULLS FIRST], true
+         +- Aggregate [substr(w_warehouse_name#14, 1, 20), sm_type#7, cc_name#8], [substr(w_warehouse_name#14, 1, 20) AS substr(w_warehouse_name, 1, 20)#6, sm_type#7, cc_name#8, sum(cast(CASE WHEN ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 30) THEN 1 ELSE 0 END as bigint)) AS 30 days #9, sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 30) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 60)) THEN 1 ELSE 0 END as bigint)) AS 31 - 60 days #10, sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 60) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 90)) THEN 1 ELSE 0 END as bigint)) AS 61 - 90 days #11, sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 90) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 120)) THEN 1 ELSE 0 END as bigint)) AS 91 - 120 days #12, sum(cast(CASE WHEN ((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 120) THEN 1 ELSE 0 END as bigint)) AS >120 days #13]
+            +- Filter (((((d_month_seq#17 >= 1200) AND (d_month_seq#17 <= (1200 + 11))) AND (cs_ship_date_sk#15 = d_date_sk#18)) AND (cs_warehouse_sk#19 = w_warehouse_sk#20)) AND ((cs_ship_mode_sk#21 = sm_ship_mode_sk#22) AND (cs_call_center_sk#23 = cc_call_center_sk#24)))
+               +- Join Inner
+                  :- Join Inner
+                  :  :- Join Inner
+                  :  :  :- Join Inner
+                  :  :  :  :- SubqueryAlias spark_catalog.default.catalog_sales
+                  :  :  :  :  +- Relation[cs_sold_date_sk#16,cs_sold_time_sk#25,cs_ship_date_sk#15,cs_bill_customer_sk#26,cs_bill_cdemo_sk#27,cs_bill_hdemo_sk#28,cs_bill_addr_sk#29,cs_ship_customer_sk#30,cs_ship_cdemo_sk#31,cs_ship_hdemo_sk#32,cs_ship_addr_sk#33,cs_call_center_sk#23,cs_catalog_page_sk#34,cs_ship_mode_sk#21,cs_warehouse_sk#19,cs_item_sk#35,cs_promo_sk#36,cs_order_number#37,cs_quantity#38,cs_wholesale_cost#39,cs_list_price#40,cs_sales_price#41,cs_ext_discount_amt#42,cs_ext_sales_price#43,cs_ext_wholesale_cost#44,cs_ext_list_price#45,cs_ext_tax#46,cs_coupon_amt#47,cs_ext_ship_cost#48,cs_net_paid#49,cs_net_paid_inc_tax#50,cs_net_paid_inc_ship#51,cs_net_paid_inc_ship_tax#52,cs_net_profit#53] parquet
+                  :  :  :  +- SubqueryAlias spark_catalog.default.warehouse
+                  :  :  :     +- Relation[w_warehouse_sk#20,w_warehouse_id#54,w_warehouse_name#14,w_warehouse_sq_ft#55,w_street_number#56,w_street_name#57,w_street_type#58,w_suite_number#59,w_city#60,w_county#61,w_state#62,w_zip#63,w_country#64,w_gmt_offset#65] parquet
+                  :  :  +- SubqueryAlias spark_catalog.default.ship_mode
+                  :  :     +- Relation[sm_ship_mode_sk#22,sm_ship_mode_id#66,sm_type#7,sm_code#67,sm_carrier#68,sm_contract#69] parquet
+                  :  +- SubqueryAlias spark_catalog.default.call_center
+                  :     +- Relation[cc_call_center_sk#24,cc_call_center_id#70,cc_rec_start_date#71,cc_rec_end_date#72,cc_closed_date_sk#73,cc_open_date_sk#74,cc_name#8,cc_class#75,cc_employees#76,cc_sq_ft#77,cc_hours#78,cc_manager#79,cc_mkt_id#80,cc_mkt_class#81,cc_mkt_desc#82,cc_market_manager#83,cc_division#84,cc_division_name#85,cc_company#86,cc_company_name#87,cc_street_number#88,cc_street_name#89,cc_street_type#90,cc_suite_number#91,cc_city#92,cc_county#93,cc_state#94,cc_zip#95,cc_country#96,cc_gmt_offset#97,cc_tax_percentage#98] parquet
+                  +- SubqueryAlias spark_catalog.default.date_dim
+                     +- Relation[d_date_sk#18,d_date_id#99,d_date#100,d_month_seq#17,d_week_seq#101,d_quarter_seq#102,d_year#103,d_dow#104,d_moy#105,d_dom#106,d_qoy#107,d_fy_year#108,d_fy_quarter_seq#109,d_fy_week_seq#110,d_day_name#111,d_quarter_name#112,d_holiday#113,d_weekend#114,d_following_holiday#115,d_first_dom#116,d_last_dom#117,d_same_day_ly#118,d_same_day_lq#119,d_current_day#120,d_current_week#121,d_current_month#122,d_current_quarter#123,d_current_year#124] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [substr(w_warehouse_name, 1, 20)#6 ASC NULLS FIRST, sm_type#7 ASC NULLS FIRST, cc_name#8 ASC NULLS FIRST], true
+      +- Aggregate [substr(w_warehouse_name#14, 1, 20), sm_type#7, cc_name#8], [substr(w_warehouse_name#14, 1, 20) AS substr(w_warehouse_name, 1, 20)#6, sm_type#7, cc_name#8, sum(cast(CASE WHEN ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 30) THEN 1 ELSE 0 END as bigint)) AS 30 days #9, sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 30) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 60)) THEN 1 ELSE 0 END as bigint)) AS 31 - 60 days #10, sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 60) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 90)) THEN 1 ELSE 0 END as bigint)) AS 61 - 90 days #11, sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 90) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 120)) THEN 1 ELSE 0 END as bigint)) AS 91 - 120 days #12, sum(cast(CASE WHEN ((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 120) THEN 1 ELSE 0 END as bigint)) AS >120 days #13]
+         +- Project [cs_sold_date_sk#16, cs_ship_date_sk#15, w_warehouse_name#14, sm_type#7, cc_name#8]
+            +- Join Inner, (cs_ship_date_sk#15 = d_date_sk#18)
+               :- Project [cs_sold_date_sk#16, cs_ship_date_sk#15, w_warehouse_name#14, sm_type#7, cc_name#8]
+               :  +- Join Inner, (cs_call_center_sk#23 = cc_call_center_sk#24)
+               :     :- Project [cs_sold_date_sk#16, cs_ship_date_sk#15, cs_call_center_sk#23, w_warehouse_name#14, sm_type#7]
+               :     :  +- Join Inner, (cs_ship_mode_sk#21 = sm_ship_mode_sk#22)
+               :     :     :- Project [cs_sold_date_sk#16, cs_ship_date_sk#15, cs_call_center_sk#23, cs_ship_mode_sk#21, w_warehouse_name#14]
+               :     :     :  +- Join Inner, (cs_warehouse_sk#19 = w_warehouse_sk#20)
+               :     :     :     :- Project [cs_sold_date_sk#16, cs_ship_date_sk#15, cs_call_center_sk#23, cs_ship_mode_sk#21, cs_warehouse_sk#19]
+               :     :     :     :  +- Filter (((isnotnull(cs_warehouse_sk#19) AND isnotnull(cs_ship_mode_sk#21)) AND isnotnull(cs_call_center_sk#23)) AND isnotnull(cs_ship_date_sk#15))
+               :     :     :     :     +- Relation[cs_sold_date_sk#16,cs_sold_time_sk#25,cs_ship_date_sk#15,cs_bill_customer_sk#26,cs_bill_cdemo_sk#27,cs_bill_hdemo_sk#28,cs_bill_addr_sk#29,cs_ship_customer_sk#30,cs_ship_cdemo_sk#31,cs_ship_hdemo_sk#32,cs_ship_addr_sk#33,cs_call_center_sk#23,cs_catalog_page_sk#34,cs_ship_mode_sk#21,cs_warehouse_sk#19,cs_item_sk#35,cs_promo_sk#36,cs_order_number#37,cs_quantity#38,cs_wholesale_cost#39,cs_list_price#40,cs_sales_price#41,cs_ext_discount_amt#42,cs_ext_sales_price#43,cs_ext_wholesale_cost#44,cs_ext_list_price#45,cs_ext_tax#46,cs_coupon_amt#47,cs_ext_ship_cost#48,cs_net_paid#49,cs_net_paid_inc_tax#50,cs_net_paid_inc_ship#51,cs_net_paid_inc_ship_tax#52,cs_net_profit#53] parquet
+               :     :     :     +- Project [w_warehouse_sk#20, w_warehouse_name#14]
+               :     :     :        +- Filter isnotnull(w_warehouse_sk#20)
+               :     :     :           +- Relation[w_warehouse_sk#20,w_warehouse_id#54,w_warehouse_name#14,w_warehouse_sq_ft#55,w_street_number#56,w_street_name#57,w_street_type#58,w_suite_number#59,w_city#60,w_county#61,w_state#62,w_zip#63,w_country#64,w_gmt_offset#65] parquet
+               :     :     +- Project [sm_ship_mode_sk#22, sm_type#7]
+               :     :        +- Filter isnotnull(sm_ship_mode_sk#22)
+               :     :           +- Relation[sm_ship_mode_sk#22,sm_ship_mode_id#66,sm_type#7,sm_code#67,sm_carrier#68,sm_contract#69] parquet
+               :     +- Project [cc_call_center_sk#24, cc_name#8]
+               :        +- Filter isnotnull(cc_call_center_sk#24)
+               :           +- Relation[cc_call_center_sk#24,cc_call_center_id#70,cc_rec_start_date#71,cc_rec_end_date#72,cc_closed_date_sk#73,cc_open_date_sk#74,cc_name#8,cc_class#75,cc_employees#76,cc_sq_ft#77,cc_hours#78,cc_manager#79,cc_mkt_id#80,cc_mkt_class#81,cc_mkt_desc#82,cc_market_manager#83,cc_division#84,cc_division_name#85,cc_company#86,cc_company_name#87,cc_street_number#88,cc_street_name#89,cc_street_type#90,cc_suite_number#91,cc_city#92,cc_county#93,cc_state#94,cc_zip#95,cc_country#96,cc_gmt_offset#97,cc_tax_percentage#98] parquet
+               +- Project [d_date_sk#18]
+                  +- Filter (((isnotnull(d_month_seq#17) AND (d_month_seq#17 >= 1200)) AND (d_month_seq#17 <= 1211)) AND isnotnull(d_date_sk#18))
+                     +- Relation[d_date_sk#18,d_date_id#99,d_date#100,d_month_seq#17,d_week_seq#101,d_quarter_seq#102,d_year#103,d_dow#104,d_moy#105,d_dom#106,d_qoy#107,d_fy_year#108,d_fy_quarter_seq#109,d_fy_week_seq#110,d_day_name#111,d_quarter_name#112,d_holiday#113,d_weekend#114,d_following_holiday#115,d_first_dom#116,d_last_dom#117,d_same_day_ly#118,d_same_day_lq#119,d_current_day#120,d_current_week#121,d_current_month#122,d_current_quarter#123,d_current_year#124] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[substr(w_warehouse_name, 1, 20)#6 ASC NULLS FIRST,sm_type#7 ASC NULLS FIRST,cc_name#8 ASC NULLS FIRST], output=[substr(w_warehouse_name, 1, 20)#6,sm_type#7,cc_name#8,30 days #9,31 - 60 days #10,61 - 90 days #11,91 - 120 days #12,>120 days #13])
++- *(6) HashAggregate(keys=[substr(w_warehouse_name#14, 1, 20)#125, sm_type#7, cc_name#8], functions=[sum(cast(CASE WHEN ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 30) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 30) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 60)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 60) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 90)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 90) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 120)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN ((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 120) THEN 1 ELSE 0 END as bigint))], output=[substr(w_warehouse_name, 1, 20)#6, sm_type#7, cc_name#8, 30 days #9, 31 - 60 days #10, 61 - 90 days #11, 91 - 120 days #12, >120 days #13])
+   +- Exchange hashpartitioning(substr(w_warehouse_name#14, 1, 20)#125, sm_type#7, cc_name#8, 5), true, [id=#126]
+      +- *(5) HashAggregate(keys=[substr(w_warehouse_name#14, 1, 20) AS substr(w_warehouse_name#14, 1, 20)#125, sm_type#7, cc_name#8], functions=[partial_sum(cast(CASE WHEN ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 30) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 30) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 60)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 60) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 90)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 90) AND ((cs_ship_date_sk#15 - cs_sold_date_sk#16) <= 120)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN ((cs_ship_date_sk#15 - cs_sold_date_sk#16) > 120) THEN 1 ELSE 0 END as bigint))], output=[substr(w_warehouse_name#14, 1, 20)#125, sm_type#7, cc_name#8, sum#127, sum#128, sum#129, sum#130, sum#131])
+         +- *(5) Project [cs_sold_date_sk#16, cs_ship_date_sk#15, w_warehouse_name#14, sm_type#7, cc_name#8]
+            +- *(5) BroadcastHashJoin [cs_ship_date_sk#15], [d_date_sk#18], Inner, BuildRight
+               :- *(5) Project [cs_sold_date_sk#16, cs_ship_date_sk#15, w_warehouse_name#14, sm_type#7, cc_name#8]
+               :  +- *(5) BroadcastHashJoin [cs_call_center_sk#23], [cc_call_center_sk#24], Inner, BuildRight
+               :     :- *(5) Project [cs_sold_date_sk#16, cs_ship_date_sk#15, cs_call_center_sk#23, w_warehouse_name#14, sm_type#7]
+               :     :  +- *(5) BroadcastHashJoin [cs_ship_mode_sk#21], [sm_ship_mode_sk#22], Inner, BuildRight
+               :     :     :- *(5) Project [cs_sold_date_sk#16, cs_ship_date_sk#15, cs_call_center_sk#23, cs_ship_mode_sk#21, w_warehouse_name#14]
+               :     :     :  +- *(5) BroadcastHashJoin [cs_warehouse_sk#19], [w_warehouse_sk#20], Inner, BuildRight
+               :     :     :     :- *(5) Project [cs_sold_date_sk#16, cs_ship_date_sk#15, cs_call_center_sk#23, cs_ship_mode_sk#21, cs_warehouse_sk#19]
+               :     :     :     :  +- *(5) Filter (((isnotnull(cs_warehouse_sk#19) AND isnotnull(cs_ship_mode_sk#21)) AND isnotnull(cs_call_center_sk#23)) AND isnotnull(cs_ship_date_sk#15))
+               :     :     :     :     +- *(5) ColumnarToRow
+               :     :     :     :        +- FileScan parquet default.catalog_sales[cs_sold_date_sk#16,cs_ship_date_sk#15,cs_call_center_sk#23,cs_ship_mode_sk#21,cs_warehouse_sk#19] Batched: true, DataFilters: [isnotnull(cs_warehouse_sk#19), isnotnull(cs_ship_mode_sk#21), isnotnull(cs_call_center_sk#23)..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_warehouse_sk), IsNotNull(cs_ship_mode_sk), IsNotNull(cs_call_center_sk), IsNotNull(..., ReadSchema: struct<cs_sold_date_sk:int,cs_ship_date_sk:int,cs_call_center_sk:int,cs_ship_mode_sk:int,cs_wareh...
+               :     :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#132]
+               :     :     :        +- *(1) Project [w_warehouse_sk#20, w_warehouse_name#14]
+               :     :     :           +- *(1) Filter isnotnull(w_warehouse_sk#20)
+               :     :     :              +- *(1) ColumnarToRow
+               :     :     :                 +- FileScan parquet default.warehouse[w_warehouse_sk#20,w_warehouse_name#14] Batched: true, DataFilters: [isnotnull(w_warehouse_sk#20)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(w_warehouse_sk)], ReadSchema: struct<w_warehouse_sk:int,w_warehouse_name:string>
+               :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#133]
+               :     :        +- *(2) Project [sm_ship_mode_sk#22, sm_type#7]
+               :     :           +- *(2) Filter isnotnull(sm_ship_mode_sk#22)
+               :     :              +- *(2) ColumnarToRow
+               :     :                 +- FileScan parquet default.ship_mode[sm_ship_mode_sk#22,sm_type#7] Batched: true, DataFilters: [isnotnull(sm_ship_mode_sk#22)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(sm_ship_mode_sk)], ReadSchema: struct<sm_ship_mode_sk:int,sm_type:string>
+               :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#134]
+               :        +- *(3) Project [cc_call_center_sk#24, cc_name#8]
+               :           +- *(3) Filter isnotnull(cc_call_center_sk#24)
+               :              +- *(3) ColumnarToRow
+               :                 +- FileScan parquet default.call_center[cc_call_center_sk#24,cc_name#8] Batched: true, DataFilters: [isnotnull(cc_call_center_sk#24)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cc_call_center_sk)], ReadSchema: struct<cc_call_center_sk:int,cc_name:string>
+               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#135]
+                  +- *(4) Project [d_date_sk#18]
+                     +- *(4) Filter (((isnotnull(d_month_seq#17) AND (d_month_seq#17 >= 1200)) AND (d_month_seq#17 <= 1211)) AND isnotnull(d_date_sk#18))
+                        +- *(4) ColumnarToRow
+                           +- FileScan parquet default.date_dim[d_date_sk#18,d_month_seq#17] Batched: true, DataFilters: [isnotnull(d_month_seq#17), (d_month_seq#17 >= 1200), (d_month_seq#17 <= 1211), isnotnull(d_date_..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211),..., ReadSchema: struct<d_date_sk:int,d_month_seq:int>

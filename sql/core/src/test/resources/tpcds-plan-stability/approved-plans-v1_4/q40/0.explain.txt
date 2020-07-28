@@ -1,0 +1,105 @@
+== Parsed Logical Plan ==
+'GlobalLimit 100
++- 'LocalLimit 100
+   +- 'Sort ['w_state ASC NULLS FIRST, 'i_item_id ASC NULLS FIRST], true
+      +- 'Aggregate ['w_state, 'i_item_id], ['w_state, 'i_item_id, 'sum(CASE WHEN (cast('d_date as date) < cast(2000-03-11 as date)) THEN ('cs_sales_price - 'coalesce('cr_refunded_cash, 0)) ELSE 0 END) AS sales_before#1, 'sum(CASE WHEN (cast('d_date as date) >= cast(2000-03-11 as date)) THEN ('cs_sales_price - 'coalesce('cr_refunded_cash, 0)) ELSE 0 END) AS sales_after#2]
+         +- 'Filter ((((('i_current_price >= 0.99) AND ('i_current_price <= 1.49)) AND ('i_item_sk = 'cs_item_sk)) AND ('cs_warehouse_sk = 'w_warehouse_sk)) AND (('cs_sold_date_sk = 'd_date_sk) AND (('d_date >= (cast(2000-03-11 as date) - 30 days)) AND ('d_date <= (cast(2000-03-11 as date) + 30 days)))))
+            +- 'Join Inner
+               :- 'Join Inner
+               :  :- 'Join Inner
+               :  :  :- 'Join LeftOuter, (('cs_order_number = 'cr_order_number) AND ('cs_item_sk = 'cr_item_sk))
+               :  :  :  :- 'UnresolvedRelation [catalog_sales]
+               :  :  :  +- 'UnresolvedRelation [catalog_returns]
+               :  :  +- 'UnresolvedRelation [warehouse]
+               :  +- 'UnresolvedRelation [item]
+               +- 'UnresolvedRelation [date_dim]
+
+== Analyzed Logical Plan ==
+w_state: string, i_item_id: string, sales_before: decimal(23,2), sales_after: decimal(23,2)
+GlobalLimit 100
++- LocalLimit 100
+   +- Project [w_state#3, i_item_id#4, sales_before#1, sales_after#2]
+      +- Sort [w_state#3 ASC NULLS FIRST, i_item_id#4 ASC NULLS FIRST], true
+         +- Aggregate [w_state#3, i_item_id#4], [w_state#3, i_item_id#4, sum(CASE WHEN (cast(d_date#5 as date) < cast(2000-03-11 as date)) THEN CheckOverflow((promote_precision(cast(cs_sales_price#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#7 as decimal(12,2)), cast(0 as decimal(12,2))) as decimal(13,2)))), DecimalType(13,2), true) ELSE cast(0 as decimal(13,2)) END) AS sales_before#1, sum(CASE WHEN (cast(d_date#5 as date) >= cast(2000-03-11 as date)) THEN CheckOverflow((promote_precision(cast(cs_sales_price#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#7 as decimal(12,2)), cast(0 as decimal(12,2))) as decimal(13,2)))), DecimalType(13,2), true) ELSE cast(0 as decimal(13,2)) END) AS sales_after#2]
+            +- Filter (((((cast(i_current_price#8 as decimal(7,2)) >= cast(0.99 as decimal(7,2))) AND (cast(i_current_price#8 as decimal(7,2)) <= cast(1.49 as decimal(7,2)))) AND (i_item_sk#9 = cs_item_sk#10)) AND (cs_warehouse_sk#11 = w_warehouse_sk#12)) AND ((cs_sold_date_sk#13 = d_date_sk#14) AND ((d_date#5 >= cast(2000-03-11 as date) - 30 days) AND (d_date#5 <= cast(2000-03-11 as date) + 30 days))))
+               +- Join Inner
+                  :- Join Inner
+                  :  :- Join Inner
+                  :  :  :- Join LeftOuter, ((cs_order_number#15 = cr_order_number#16) AND (cs_item_sk#10 = cr_item_sk#17))
+                  :  :  :  :- SubqueryAlias spark_catalog.default.catalog_sales
+                  :  :  :  :  +- Relation[cs_sold_date_sk#13,cs_sold_time_sk#18,cs_ship_date_sk#19,cs_bill_customer_sk#20,cs_bill_cdemo_sk#21,cs_bill_hdemo_sk#22,cs_bill_addr_sk#23,cs_ship_customer_sk#24,cs_ship_cdemo_sk#25,cs_ship_hdemo_sk#26,cs_ship_addr_sk#27,cs_call_center_sk#28,cs_catalog_page_sk#29,cs_ship_mode_sk#30,cs_warehouse_sk#11,cs_item_sk#10,cs_promo_sk#31,cs_order_number#15,cs_quantity#32,cs_wholesale_cost#33,cs_list_price#34,cs_sales_price#6,cs_ext_discount_amt#35,cs_ext_sales_price#36,cs_ext_wholesale_cost#37,cs_ext_list_price#38,cs_ext_tax#39,cs_coupon_amt#40,cs_ext_ship_cost#41,cs_net_paid#42,cs_net_paid_inc_tax#43,cs_net_paid_inc_ship#44,cs_net_paid_inc_ship_tax#45,cs_net_profit#46] parquet
+                  :  :  :  +- SubqueryAlias spark_catalog.default.catalog_returns
+                  :  :  :     +- Relation[cr_returned_date_sk#47,cr_returned_time_sk#48,cr_item_sk#17,cr_refunded_customer_sk#49,cr_refunded_cdemo_sk#50,cr_refunded_hdemo_sk#51,cr_refunded_addr_sk#52,cr_returning_customer_sk#53,cr_returning_cdemo_sk#54,cr_returning_hdemo_sk#55,cr_returning_addr_sk#56,cr_call_center_sk#57,cr_catalog_page_sk#58,cr_ship_mode_sk#59,cr_warehouse_sk#60,cr_reason_sk#61,cr_order_number#16,cr_return_quantity#62,cr_return_amount#63,cr_return_tax#64,cr_return_amt_inc_tax#65,cr_fee#66,cr_return_ship_cost#67,cr_refunded_cash#7,cr_reversed_charge#68,cr_store_credit#69,cr_net_loss#70] parquet
+                  :  :  +- SubqueryAlias spark_catalog.default.warehouse
+                  :  :     +- Relation[w_warehouse_sk#12,w_warehouse_id#71,w_warehouse_name#72,w_warehouse_sq_ft#73,w_street_number#74,w_street_name#75,w_street_type#76,w_suite_number#77,w_city#78,w_county#79,w_state#3,w_zip#80,w_country#81,w_gmt_offset#82] parquet
+                  :  +- SubqueryAlias spark_catalog.default.item
+                  :     +- Relation[i_item_sk#9,i_item_id#4,i_rec_start_date#83,i_rec_end_date#84,i_item_desc#85,i_current_price#8,i_wholesale_cost#86,i_brand_id#87,i_brand#88,i_class_id#89,i_class#90,i_category_id#91,i_category#92,i_manufact_id#93,i_manufact#94,i_size#95,i_formulation#96,i_color#97,i_units#98,i_container#99,i_manager_id#100,i_product_name#101] parquet
+                  +- SubqueryAlias spark_catalog.default.date_dim
+                     +- Relation[d_date_sk#14,d_date_id#102,d_date#5,d_month_seq#103,d_week_seq#104,d_quarter_seq#105,d_year#106,d_dow#107,d_moy#108,d_dom#109,d_qoy#110,d_fy_year#111,d_fy_quarter_seq#112,d_fy_week_seq#113,d_day_name#114,d_quarter_name#115,d_holiday#116,d_weekend#117,d_following_holiday#118,d_first_dom#119,d_last_dom#120,d_same_day_ly#121,d_same_day_lq#122,d_current_day#123,d_current_week#124,d_current_month#125,d_current_quarter#126,d_current_year#127] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [w_state#3 ASC NULLS FIRST, i_item_id#4 ASC NULLS FIRST], true
+      +- Aggregate [w_state#3, i_item_id#4], [w_state#3, i_item_id#4, sum(CASE WHEN (d_date#5 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#7 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END) AS sales_before#1, sum(CASE WHEN (d_date#5 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#7 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END) AS sales_after#2]
+         +- Project [cs_sales_price#6, cr_refunded_cash#7, w_state#3, i_item_id#4, d_date#5]
+            +- Join Inner, (cs_sold_date_sk#13 = d_date_sk#14)
+               :- Project [cs_sold_date_sk#13, cs_sales_price#6, cr_refunded_cash#7, w_state#3, i_item_id#4]
+               :  +- Join Inner, (i_item_sk#9 = cs_item_sk#10)
+               :     :- Project [cs_sold_date_sk#13, cs_item_sk#10, cs_sales_price#6, cr_refunded_cash#7, w_state#3]
+               :     :  +- Join Inner, (cs_warehouse_sk#11 = w_warehouse_sk#12)
+               :     :     :- Project [cs_sold_date_sk#13, cs_warehouse_sk#11, cs_item_sk#10, cs_sales_price#6, cr_refunded_cash#7]
+               :     :     :  +- Join LeftOuter, ((cs_order_number#15 = cr_order_number#16) AND (cs_item_sk#10 = cr_item_sk#17))
+               :     :     :     :- Project [cs_sold_date_sk#13, cs_warehouse_sk#11, cs_item_sk#10, cs_order_number#15, cs_sales_price#6]
+               :     :     :     :  +- Filter ((isnotnull(cs_warehouse_sk#11) AND isnotnull(cs_item_sk#10)) AND isnotnull(cs_sold_date_sk#13))
+               :     :     :     :     +- Relation[cs_sold_date_sk#13,cs_sold_time_sk#18,cs_ship_date_sk#19,cs_bill_customer_sk#20,cs_bill_cdemo_sk#21,cs_bill_hdemo_sk#22,cs_bill_addr_sk#23,cs_ship_customer_sk#24,cs_ship_cdemo_sk#25,cs_ship_hdemo_sk#26,cs_ship_addr_sk#27,cs_call_center_sk#28,cs_catalog_page_sk#29,cs_ship_mode_sk#30,cs_warehouse_sk#11,cs_item_sk#10,cs_promo_sk#31,cs_order_number#15,cs_quantity#32,cs_wholesale_cost#33,cs_list_price#34,cs_sales_price#6,cs_ext_discount_amt#35,cs_ext_sales_price#36,cs_ext_wholesale_cost#37,cs_ext_list_price#38,cs_ext_tax#39,cs_coupon_amt#40,cs_ext_ship_cost#41,cs_net_paid#42,cs_net_paid_inc_tax#43,cs_net_paid_inc_ship#44,cs_net_paid_inc_ship_tax#45,cs_net_profit#46] parquet
+               :     :     :     +- Project [cr_item_sk#17, cr_order_number#16, cr_refunded_cash#7]
+               :     :     :        +- Filter (isnotnull(cr_order_number#16) AND isnotnull(cr_item_sk#17))
+               :     :     :           +- Relation[cr_returned_date_sk#47,cr_returned_time_sk#48,cr_item_sk#17,cr_refunded_customer_sk#49,cr_refunded_cdemo_sk#50,cr_refunded_hdemo_sk#51,cr_refunded_addr_sk#52,cr_returning_customer_sk#53,cr_returning_cdemo_sk#54,cr_returning_hdemo_sk#55,cr_returning_addr_sk#56,cr_call_center_sk#57,cr_catalog_page_sk#58,cr_ship_mode_sk#59,cr_warehouse_sk#60,cr_reason_sk#61,cr_order_number#16,cr_return_quantity#62,cr_return_amount#63,cr_return_tax#64,cr_return_amt_inc_tax#65,cr_fee#66,cr_return_ship_cost#67,cr_refunded_cash#7,cr_reversed_charge#68,cr_store_credit#69,cr_net_loss#70] parquet
+               :     :     +- Project [w_warehouse_sk#12, w_state#3]
+               :     :        +- Filter isnotnull(w_warehouse_sk#12)
+               :     :           +- Relation[w_warehouse_sk#12,w_warehouse_id#71,w_warehouse_name#72,w_warehouse_sq_ft#73,w_street_number#74,w_street_name#75,w_street_type#76,w_suite_number#77,w_city#78,w_county#79,w_state#3,w_zip#80,w_country#81,w_gmt_offset#82] parquet
+               :     +- Project [i_item_sk#9, i_item_id#4]
+               :        +- Filter (((isnotnull(i_current_price#8) AND (i_current_price#8 >= 0.99)) AND (i_current_price#8 <= 1.49)) AND isnotnull(i_item_sk#9))
+               :           +- Relation[i_item_sk#9,i_item_id#4,i_rec_start_date#83,i_rec_end_date#84,i_item_desc#85,i_current_price#8,i_wholesale_cost#86,i_brand_id#87,i_brand#88,i_class_id#89,i_class#90,i_category_id#91,i_category#92,i_manufact_id#93,i_manufact#94,i_size#95,i_formulation#96,i_color#97,i_units#98,i_container#99,i_manager_id#100,i_product_name#101] parquet
+               +- Project [d_date_sk#14, d_date#5]
+                  +- Filter (((isnotnull(d_date#5) AND (d_date#5 >= 10997)) AND (d_date#5 <= 11057)) AND isnotnull(d_date_sk#14))
+                     +- Relation[d_date_sk#14,d_date_id#102,d_date#5,d_month_seq#103,d_week_seq#104,d_quarter_seq#105,d_year#106,d_dow#107,d_moy#108,d_dom#109,d_qoy#110,d_fy_year#111,d_fy_quarter_seq#112,d_fy_week_seq#113,d_day_name#114,d_quarter_name#115,d_holiday#116,d_weekend#117,d_following_holiday#118,d_first_dom#119,d_last_dom#120,d_same_day_ly#121,d_same_day_lq#122,d_current_day#123,d_current_week#124,d_current_month#125,d_current_quarter#126,d_current_year#127] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[w_state#3 ASC NULLS FIRST,i_item_id#4 ASC NULLS FIRST], output=[w_state#3,i_item_id#4,sales_before#1,sales_after#2])
++- *(6) HashAggregate(keys=[w_state#3, i_item_id#4], functions=[sum(CASE WHEN (d_date#5 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#7 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END), sum(CASE WHEN (d_date#5 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#7 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)], output=[w_state#3, i_item_id#4, sales_before#1, sales_after#2])
+   +- Exchange hashpartitioning(w_state#3, i_item_id#4, 5), true, [id=#128]
+      +- *(5) HashAggregate(keys=[w_state#3, i_item_id#4], functions=[partial_sum(CASE WHEN (d_date#5 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#7 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END), partial_sum(CASE WHEN (d_date#5 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#6 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#7 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)], output=[w_state#3, i_item_id#4, sum#129, isEmpty#130, sum#131, isEmpty#132])
+         +- *(5) Project [cs_sales_price#6, cr_refunded_cash#7, w_state#3, i_item_id#4, d_date#5]
+            +- *(5) BroadcastHashJoin [cs_sold_date_sk#13], [d_date_sk#14], Inner, BuildRight
+               :- *(5) Project [cs_sold_date_sk#13, cs_sales_price#6, cr_refunded_cash#7, w_state#3, i_item_id#4]
+               :  +- *(5) BroadcastHashJoin [cs_item_sk#10], [i_item_sk#9], Inner, BuildRight
+               :     :- *(5) Project [cs_sold_date_sk#13, cs_item_sk#10, cs_sales_price#6, cr_refunded_cash#7, w_state#3]
+               :     :  +- *(5) BroadcastHashJoin [cs_warehouse_sk#11], [w_warehouse_sk#12], Inner, BuildRight
+               :     :     :- *(5) Project [cs_sold_date_sk#13, cs_warehouse_sk#11, cs_item_sk#10, cs_sales_price#6, cr_refunded_cash#7]
+               :     :     :  +- *(5) BroadcastHashJoin [cs_order_number#15, cs_item_sk#10], [cr_order_number#16, cr_item_sk#17], LeftOuter, BuildRight
+               :     :     :     :- *(5) Project [cs_sold_date_sk#13, cs_warehouse_sk#11, cs_item_sk#10, cs_order_number#15, cs_sales_price#6]
+               :     :     :     :  +- *(5) Filter ((isnotnull(cs_warehouse_sk#11) AND isnotnull(cs_item_sk#10)) AND isnotnull(cs_sold_date_sk#13))
+               :     :     :     :     +- *(5) ColumnarToRow
+               :     :     :     :        +- FileScan parquet default.catalog_sales[cs_sold_date_sk#13,cs_warehouse_sk#11,cs_item_sk#10,cs_order_number#15,cs_sales_price#6] Batched: true, DataFilters: [isnotnull(cs_warehouse_sk#11), isnotnull(cs_item_sk#10), isnotnull(cs_sold_date_sk#13)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_warehouse_sk), IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)], ReadSchema: struct<cs_sold_date_sk:int,cs_warehouse_sk:int,cs_item_sk:int,cs_order_number:int,cs_sales_price:...
+               :     :     :     +- BroadcastExchange HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295)))), [id=#133]
+               :     :     :        +- *(1) Project [cr_item_sk#17, cr_order_number#16, cr_refunded_cash#7]
+               :     :     :           +- *(1) Filter (isnotnull(cr_order_number#16) AND isnotnull(cr_item_sk#17))
+               :     :     :              +- *(1) ColumnarToRow
+               :     :     :                 +- FileScan parquet default.catalog_returns[cr_item_sk#17,cr_order_number#16,cr_refunded_cash#7] Batched: true, DataFilters: [isnotnull(cr_order_number#16), isnotnull(cr_item_sk#17)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk)], ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_refunded_cash:decimal(7,2)>
+               :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#134]
+               :     :        +- *(2) Project [w_warehouse_sk#12, w_state#3]
+               :     :           +- *(2) Filter isnotnull(w_warehouse_sk#12)
+               :     :              +- *(2) ColumnarToRow
+               :     :                 +- FileScan parquet default.warehouse[w_warehouse_sk#12,w_state#3] Batched: true, DataFilters: [isnotnull(w_warehouse_sk#12)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(w_warehouse_sk)], ReadSchema: struct<w_warehouse_sk:int,w_state:string>
+               :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#135]
+               :        +- *(3) Project [i_item_sk#9, i_item_id#4]
+               :           +- *(3) Filter (((isnotnull(i_current_price#8) AND (i_current_price#8 >= 0.99)) AND (i_current_price#8 <= 1.49)) AND isnotnull(i_item_sk#9))
+               :              +- *(3) ColumnarToRow
+               :                 +- FileScan parquet default.item[i_item_sk#9,i_item_id#4,i_current_price#8] Batched: true, DataFilters: [isnotnull(i_current_price#8), (i_current_price#8 >= 0.99), (i_current_price#8 <= 1.49), is..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,0.99), LessThanOrEqual(i_current_..., ReadSchema: struct<i_item_sk:int,i_item_id:string,i_current_price:decimal(7,2)>
+               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#136]
+                  +- *(4) Project [d_date_sk#14, d_date#5]
+                     +- *(4) Filter (((isnotnull(d_date#5) AND (d_date#5 >= 10997)) AND (d_date#5 <= 11057)) AND isnotnull(d_date_sk#14))
+                        +- *(4) ColumnarToRow
+                           +- FileScan parquet default.date_dim[d_date_sk#14,d_date#5] Batched: true, DataFilters: [isnotnull(d_date#5), (d_date#5 >= 10997), (d_date#5 <= 11057), isnotnull(d_date_sk#14)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-10), LessThanOrEqual(d_date,2000-04-10), Is..., ReadSchema: struct<d_date_sk:int,d_date:date>

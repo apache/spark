@@ -1,0 +1,187 @@
+== Parsed Logical Plan ==
+CTE [results, results_rollup]
+:  :- 'SubqueryAlias results
+:  :  +- 'Aggregate ['i_category, 'i_class], ['sum('ws_net_paid) AS total_sum#1, 'i_category, 'i_class, 0 AS g_category#2, 0 AS g_class#3]
+:  :     +- 'Filter (((('d1.d_month_seq >= 1212) AND ('d1.d_month_seq <= (1212 + 11))) AND ('d1.d_date_sk = 'ws_sold_date_sk)) AND ('i_item_sk = 'ws_item_sk))
+:  :        +- 'Join Inner
+:  :           :- 'Join Inner
+:  :           :  :- 'UnresolvedRelation [web_sales]
+:  :           :  +- 'SubqueryAlias d1
+:  :           :     +- 'UnresolvedRelation [date_dim]
+:  :           +- 'UnresolvedRelation [item]
+:  +- 'SubqueryAlias results_rollup
+:     +- 'Distinct
+:        +- 'Union
+:           :- 'Distinct
+:           :  +- 'Union
+:           :     :- 'Project ['total_sum, 'i_category, 'i_class, 'g_category, 'g_class, 0 AS lochierarchy#4]
+:           :     :  +- 'UnresolvedRelation [results]
+:           :     +- 'Aggregate ['i_category], ['sum('total_sum) AS total_sum#5, 'i_category, null AS i_class#6, 0 AS g_category#7, 1 AS g_class#8, 1 AS lochierarchy#9]
+:           :        +- 'UnresolvedRelation [results]
+:           +- 'Project ['sum('total_sum) AS total_sum#10, null AS i_category#11, null AS i_class#12, 1 AS g_category#13, 1 AS g_class#14, 2 AS lochierarchy#15]
+:              +- 'UnresolvedRelation [results]
++- 'GlobalLimit 100
+   +- 'LocalLimit 100
+      +- 'Sort ['lochierarchy DESC NULLS LAST, CASE WHEN ('lochierarchy = 0) THEN 'i_category END ASC NULLS FIRST, 'rank_within_parent ASC NULLS FIRST], true
+         +- 'Project ['total_sum, 'i_category, 'i_class, 'lochierarchy, 'rank() windowspecdefinition('lochierarchy, CASE WHEN ('g_class = 0) THEN 'i_category END, 'total_sum DESC NULLS LAST, unspecifiedframe$()) AS rank_within_parent#16]
+            +- 'UnresolvedRelation [results_rollup]
+
+== Analyzed Logical Plan ==
+total_sum: decimal(27,2), i_category: string, i_class: string, lochierarchy: int, rank_within_parent: int
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [lochierarchy#4 DESC NULLS LAST, CASE WHEN (lochierarchy#4 = 0) THEN i_category#17 END ASC NULLS FIRST, rank_within_parent#16 ASC NULLS FIRST], true
+      +- Project [total_sum#18, i_category#17, i_class#19, lochierarchy#4, rank_within_parent#16]
+         +- Project [total_sum#18, i_category#17, i_class#19, lochierarchy#4, _w0#20, rank_within_parent#16, rank_within_parent#16]
+            +- Window [rank(total_sum#18) windowspecdefinition(lochierarchy#4, _w0#20, total_sum#18 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#16], [lochierarchy#4, _w0#20], [total_sum#18 DESC NULLS LAST]
+               +- Project [total_sum#18, i_category#17, i_class#19, lochierarchy#4, CASE WHEN (g_class#3 = 0) THEN i_category#17 END AS _w0#20]
+                  +- SubqueryAlias results_rollup
+                     +- Distinct
+                        +- Union
+                           :- Project [total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4]
+                           :  +- Distinct
+                           :     +- Union
+                           :        :- Project [cast(total_sum#1 as decimal(27,2)) AS total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4]
+                           :        :  +- Project [total_sum#1, i_category#17, i_class#19, g_category#2, g_class#3, 0 AS lochierarchy#4]
+                           :        :     +- SubqueryAlias results
+                           :        :        +- Aggregate [i_category#17, i_class#19], [sum(ws_net_paid#21) AS total_sum#1, i_category#17, i_class#19, 0 AS g_category#2, 0 AS g_class#3]
+                           :        :           +- Filter ((((d_month_seq#22 >= 1212) AND (d_month_seq#22 <= (1212 + 11))) AND (d_date_sk#23 = ws_sold_date_sk#24)) AND (i_item_sk#25 = ws_item_sk#26))
+                           :        :              +- Join Inner
+                           :        :                 :- Join Inner
+                           :        :                 :  :- SubqueryAlias spark_catalog.default.web_sales
+                           :        :                 :  :  +- Relation[ws_sold_date_sk#24,ws_sold_time_sk#27,ws_ship_date_sk#28,ws_item_sk#26,ws_bill_customer_sk#29,ws_bill_cdemo_sk#30,ws_bill_hdemo_sk#31,ws_bill_addr_sk#32,ws_ship_customer_sk#33,ws_ship_cdemo_sk#34,ws_ship_hdemo_sk#35,ws_ship_addr_sk#36,ws_web_page_sk#37,ws_web_site_sk#38,ws_ship_mode_sk#39,ws_warehouse_sk#40,ws_promo_sk#41,ws_order_number#42,ws_quantity#43,ws_wholesale_cost#44,ws_list_price#45,ws_sales_price#46,ws_ext_discount_amt#47,ws_ext_sales_price#48,ws_ext_wholesale_cost#49,ws_ext_list_price#50,ws_ext_tax#51,ws_coupon_amt#52,ws_ext_ship_cost#53,ws_net_paid#21,ws_net_paid_inc_tax#54,ws_net_paid_inc_ship#55,ws_net_paid_inc_ship_tax#56,ws_net_profit#57] parquet
+                           :        :                 :  +- SubqueryAlias d1
+                           :        :                 :     +- SubqueryAlias spark_catalog.default.date_dim
+                           :        :                 :        +- Relation[d_date_sk#23,d_date_id#58,d_date#59,d_month_seq#22,d_week_seq#60,d_quarter_seq#61,d_year#62,d_dow#63,d_moy#64,d_dom#65,d_qoy#66,d_fy_year#67,d_fy_quarter_seq#68,d_fy_week_seq#69,d_day_name#70,d_quarter_name#71,d_holiday#72,d_weekend#73,d_following_holiday#74,d_first_dom#75,d_last_dom#76,d_same_day_ly#77,d_same_day_lq#78,d_current_day#79,d_current_week#80,d_current_month#81,d_current_quarter#82,d_current_year#83] parquet
+                           :        :                 +- SubqueryAlias spark_catalog.default.item
+                           :        :                    +- Relation[i_item_sk#25,i_item_id#84,i_rec_start_date#85,i_rec_end_date#86,i_item_desc#87,i_current_price#88,i_wholesale_cost#89,i_brand_id#90,i_brand#91,i_class_id#92,i_class#19,i_category_id#93,i_category#17,i_manufact_id#94,i_manufact#95,i_size#96,i_formulation#97,i_color#98,i_units#99,i_container#100,i_manager_id#101,i_product_name#102] parquet
+                           :        +- Project [total_sum#5 AS total_sum#103, i_category#17 AS i_category#104, i_class#105 AS i_class#106, g_category#7 AS g_category#107, g_class#8 AS g_class#108, lochierarchy#9 AS lochierarchy#109]
+                           :           +- Project [total_sum#5, i_category#17, cast(i_class#6 as string) AS i_class#105, g_category#7, g_class#8, lochierarchy#9]
+                           :              +- Aggregate [i_category#17], [sum(total_sum#1) AS total_sum#5, i_category#17, null AS i_class#6, 0 AS g_category#7, 1 AS g_class#8, 1 AS lochierarchy#9]
+                           :                 +- SubqueryAlias results
+                           :                    +- Aggregate [i_category#17, i_class#19], [sum(ws_net_paid#21) AS total_sum#1, i_category#17, i_class#19, 0 AS g_category#2, 0 AS g_class#3]
+                           :                       +- Filter ((((d_month_seq#22 >= 1212) AND (d_month_seq#22 <= (1212 + 11))) AND (d_date_sk#23 = ws_sold_date_sk#24)) AND (i_item_sk#25 = ws_item_sk#26))
+                           :                          +- Join Inner
+                           :                             :- Join Inner
+                           :                             :  :- SubqueryAlias spark_catalog.default.web_sales
+                           :                             :  :  +- Relation[ws_sold_date_sk#24,ws_sold_time_sk#27,ws_ship_date_sk#28,ws_item_sk#26,ws_bill_customer_sk#29,ws_bill_cdemo_sk#30,ws_bill_hdemo_sk#31,ws_bill_addr_sk#32,ws_ship_customer_sk#33,ws_ship_cdemo_sk#34,ws_ship_hdemo_sk#35,ws_ship_addr_sk#36,ws_web_page_sk#37,ws_web_site_sk#38,ws_ship_mode_sk#39,ws_warehouse_sk#40,ws_promo_sk#41,ws_order_number#42,ws_quantity#43,ws_wholesale_cost#44,ws_list_price#45,ws_sales_price#46,ws_ext_discount_amt#47,ws_ext_sales_price#48,ws_ext_wholesale_cost#49,ws_ext_list_price#50,ws_ext_tax#51,ws_coupon_amt#52,ws_ext_ship_cost#53,ws_net_paid#21,ws_net_paid_inc_tax#54,ws_net_paid_inc_ship#55,ws_net_paid_inc_ship_tax#56,ws_net_profit#57] parquet
+                           :                             :  +- SubqueryAlias d1
+                           :                             :     +- SubqueryAlias spark_catalog.default.date_dim
+                           :                             :        +- Relation[d_date_sk#23,d_date_id#58,d_date#59,d_month_seq#22,d_week_seq#60,d_quarter_seq#61,d_year#62,d_dow#63,d_moy#64,d_dom#65,d_qoy#66,d_fy_year#67,d_fy_quarter_seq#68,d_fy_week_seq#69,d_day_name#70,d_quarter_name#71,d_holiday#72,d_weekend#73,d_following_holiday#74,d_first_dom#75,d_last_dom#76,d_same_day_ly#77,d_same_day_lq#78,d_current_day#79,d_current_week#80,d_current_month#81,d_current_quarter#82,d_current_year#83] parquet
+                           :                             +- SubqueryAlias spark_catalog.default.item
+                           :                                +- Relation[i_item_sk#25,i_item_id#84,i_rec_start_date#85,i_rec_end_date#86,i_item_desc#87,i_current_price#88,i_wholesale_cost#89,i_brand_id#90,i_brand#91,i_class_id#92,i_class#19,i_category_id#93,i_category#17,i_manufact_id#94,i_manufact#95,i_size#96,i_formulation#97,i_color#98,i_units#99,i_container#100,i_manager_id#101,i_product_name#102] parquet
+                           +- Project [total_sum#10, cast(i_category#11 as string) AS i_category#110, cast(i_class#12 as string) AS i_class#111, g_category#13, g_class#14, lochierarchy#15]
+                              +- Aggregate [sum(total_sum#1) AS total_sum#10, null AS i_category#11, null AS i_class#12, 1 AS g_category#13, 1 AS g_class#14, 2 AS lochierarchy#15]
+                                 +- SubqueryAlias results
+                                    +- Aggregate [i_category#17, i_class#19], [sum(ws_net_paid#21) AS total_sum#1, i_category#17, i_class#19, 0 AS g_category#2, 0 AS g_class#3]
+                                       +- Filter ((((d_month_seq#22 >= 1212) AND (d_month_seq#22 <= (1212 + 11))) AND (d_date_sk#23 = ws_sold_date_sk#24)) AND (i_item_sk#25 = ws_item_sk#26))
+                                          +- Join Inner
+                                             :- Join Inner
+                                             :  :- SubqueryAlias spark_catalog.default.web_sales
+                                             :  :  +- Relation[ws_sold_date_sk#24,ws_sold_time_sk#27,ws_ship_date_sk#28,ws_item_sk#26,ws_bill_customer_sk#29,ws_bill_cdemo_sk#30,ws_bill_hdemo_sk#31,ws_bill_addr_sk#32,ws_ship_customer_sk#33,ws_ship_cdemo_sk#34,ws_ship_hdemo_sk#35,ws_ship_addr_sk#36,ws_web_page_sk#37,ws_web_site_sk#38,ws_ship_mode_sk#39,ws_warehouse_sk#40,ws_promo_sk#41,ws_order_number#42,ws_quantity#43,ws_wholesale_cost#44,ws_list_price#45,ws_sales_price#46,ws_ext_discount_amt#47,ws_ext_sales_price#48,ws_ext_wholesale_cost#49,ws_ext_list_price#50,ws_ext_tax#51,ws_coupon_amt#52,ws_ext_ship_cost#53,ws_net_paid#21,ws_net_paid_inc_tax#54,ws_net_paid_inc_ship#55,ws_net_paid_inc_ship_tax#56,ws_net_profit#57] parquet
+                                             :  +- SubqueryAlias d1
+                                             :     +- SubqueryAlias spark_catalog.default.date_dim
+                                             :        +- Relation[d_date_sk#23,d_date_id#58,d_date#59,d_month_seq#22,d_week_seq#60,d_quarter_seq#61,d_year#62,d_dow#63,d_moy#64,d_dom#65,d_qoy#66,d_fy_year#67,d_fy_quarter_seq#68,d_fy_week_seq#69,d_day_name#70,d_quarter_name#71,d_holiday#72,d_weekend#73,d_following_holiday#74,d_first_dom#75,d_last_dom#76,d_same_day_ly#77,d_same_day_lq#78,d_current_day#79,d_current_week#80,d_current_month#81,d_current_quarter#82,d_current_year#83] parquet
+                                             +- SubqueryAlias spark_catalog.default.item
+                                                +- Relation[i_item_sk#25,i_item_id#84,i_rec_start_date#85,i_rec_end_date#86,i_item_desc#87,i_current_price#88,i_wholesale_cost#89,i_brand_id#90,i_brand#91,i_class_id#92,i_class#19,i_category_id#93,i_category#17,i_manufact_id#94,i_manufact#95,i_size#96,i_formulation#97,i_color#98,i_units#99,i_container#100,i_manager_id#101,i_product_name#102] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [lochierarchy#4 DESC NULLS LAST, CASE WHEN (lochierarchy#4 = 0) THEN i_category#17 END ASC NULLS FIRST, rank_within_parent#16 ASC NULLS FIRST], true
+      +- Project [total_sum#18, i_category#17, i_class#19, lochierarchy#4, rank_within_parent#16]
+         +- Window [rank(total_sum#18) windowspecdefinition(lochierarchy#4, _w0#20, total_sum#18 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#16], [lochierarchy#4, _w0#20], [total_sum#18 DESC NULLS LAST]
+            +- Aggregate [total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4], [total_sum#18, i_category#17, i_class#19, lochierarchy#4, CASE WHEN (g_class#3 = 0) THEN i_category#17 END AS _w0#20]
+               +- Union
+                  :- Aggregate [total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4], [total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4]
+                  :  +- Union
+                  :     :- Aggregate [i_category#17, i_class#19], [cast(MakeDecimal(sum(UnscaledValue(ws_net_paid#21)),17,2) as decimal(27,2)) AS total_sum#18, i_category#17, i_class#19, 0 AS g_category#2, 0 AS g_class#3, 0 AS lochierarchy#4]
+                  :     :  +- Project [ws_net_paid#21, i_class#19, i_category#17]
+                  :     :     +- Join Inner, (i_item_sk#25 = ws_item_sk#26)
+                  :     :        :- Project [ws_item_sk#26, ws_net_paid#21]
+                  :     :        :  +- Join Inner, (d_date_sk#23 = ws_sold_date_sk#24)
+                  :     :        :     :- Project [ws_sold_date_sk#24, ws_item_sk#26, ws_net_paid#21]
+                  :     :        :     :  +- Filter (isnotnull(ws_sold_date_sk#24) AND isnotnull(ws_item_sk#26))
+                  :     :        :     :     +- Relation[ws_sold_date_sk#24,ws_sold_time_sk#27,ws_ship_date_sk#28,ws_item_sk#26,ws_bill_customer_sk#29,ws_bill_cdemo_sk#30,ws_bill_hdemo_sk#31,ws_bill_addr_sk#32,ws_ship_customer_sk#33,ws_ship_cdemo_sk#34,ws_ship_hdemo_sk#35,ws_ship_addr_sk#36,ws_web_page_sk#37,ws_web_site_sk#38,ws_ship_mode_sk#39,ws_warehouse_sk#40,ws_promo_sk#41,ws_order_number#42,ws_quantity#43,ws_wholesale_cost#44,ws_list_price#45,ws_sales_price#46,ws_ext_discount_amt#47,ws_ext_sales_price#48,ws_ext_wholesale_cost#49,ws_ext_list_price#50,ws_ext_tax#51,ws_coupon_amt#52,ws_ext_ship_cost#53,ws_net_paid#21,ws_net_paid_inc_tax#54,ws_net_paid_inc_ship#55,ws_net_paid_inc_ship_tax#56,ws_net_profit#57] parquet
+                  :     :        :     +- Project [d_date_sk#23]
+                  :     :        :        +- Filter (((isnotnull(d_month_seq#22) AND (d_month_seq#22 >= 1212)) AND (d_month_seq#22 <= 1223)) AND isnotnull(d_date_sk#23))
+                  :     :        :           +- Relation[d_date_sk#23,d_date_id#58,d_date#59,d_month_seq#22,d_week_seq#60,d_quarter_seq#61,d_year#62,d_dow#63,d_moy#64,d_dom#65,d_qoy#66,d_fy_year#67,d_fy_quarter_seq#68,d_fy_week_seq#69,d_day_name#70,d_quarter_name#71,d_holiday#72,d_weekend#73,d_following_holiday#74,d_first_dom#75,d_last_dom#76,d_same_day_ly#77,d_same_day_lq#78,d_current_day#79,d_current_week#80,d_current_month#81,d_current_quarter#82,d_current_year#83] parquet
+                  :     :        +- Project [i_item_sk#25, i_class#19, i_category#17]
+                  :     :           +- Filter isnotnull(i_item_sk#25)
+                  :     :              +- Relation[i_item_sk#25,i_item_id#84,i_rec_start_date#85,i_rec_end_date#86,i_item_desc#87,i_current_price#88,i_wholesale_cost#89,i_brand_id#90,i_brand#91,i_class_id#92,i_class#19,i_category_id#93,i_category#17,i_manufact_id#94,i_manufact#95,i_size#96,i_formulation#97,i_color#98,i_units#99,i_container#100,i_manager_id#101,i_product_name#102] parquet
+                  :     +- Aggregate [i_category#17], [sum(total_sum#1) AS total_sum#103, i_category#17, null AS i_class#106, 0 AS g_category#107, 1 AS g_class#108, 1 AS lochierarchy#109]
+                  :        +- Aggregate [i_category#17, i_class#19], [MakeDecimal(sum(UnscaledValue(ws_net_paid#21)),17,2) AS total_sum#1, i_category#17]
+                  :           +- Project [ws_net_paid#21, i_class#19, i_category#17]
+                  :              +- Join Inner, (i_item_sk#25 = ws_item_sk#26)
+                  :                 :- Project [ws_item_sk#26, ws_net_paid#21]
+                  :                 :  +- Join Inner, (d_date_sk#23 = ws_sold_date_sk#24)
+                  :                 :     :- Project [ws_sold_date_sk#24, ws_item_sk#26, ws_net_paid#21]
+                  :                 :     :  +- Filter (isnotnull(ws_sold_date_sk#24) AND isnotnull(ws_item_sk#26))
+                  :                 :     :     +- Relation[ws_sold_date_sk#24,ws_sold_time_sk#27,ws_ship_date_sk#28,ws_item_sk#26,ws_bill_customer_sk#29,ws_bill_cdemo_sk#30,ws_bill_hdemo_sk#31,ws_bill_addr_sk#32,ws_ship_customer_sk#33,ws_ship_cdemo_sk#34,ws_ship_hdemo_sk#35,ws_ship_addr_sk#36,ws_web_page_sk#37,ws_web_site_sk#38,ws_ship_mode_sk#39,ws_warehouse_sk#40,ws_promo_sk#41,ws_order_number#42,ws_quantity#43,ws_wholesale_cost#44,ws_list_price#45,ws_sales_price#46,ws_ext_discount_amt#47,ws_ext_sales_price#48,ws_ext_wholesale_cost#49,ws_ext_list_price#50,ws_ext_tax#51,ws_coupon_amt#52,ws_ext_ship_cost#53,ws_net_paid#21,ws_net_paid_inc_tax#54,ws_net_paid_inc_ship#55,ws_net_paid_inc_ship_tax#56,ws_net_profit#57] parquet
+                  :                 :     +- Project [d_date_sk#23]
+                  :                 :        +- Filter (((isnotnull(d_month_seq#22) AND (d_month_seq#22 >= 1212)) AND (d_month_seq#22 <= 1223)) AND isnotnull(d_date_sk#23))
+                  :                 :           +- Relation[d_date_sk#23,d_date_id#58,d_date#59,d_month_seq#22,d_week_seq#60,d_quarter_seq#61,d_year#62,d_dow#63,d_moy#64,d_dom#65,d_qoy#66,d_fy_year#67,d_fy_quarter_seq#68,d_fy_week_seq#69,d_day_name#70,d_quarter_name#71,d_holiday#72,d_weekend#73,d_following_holiday#74,d_first_dom#75,d_last_dom#76,d_same_day_ly#77,d_same_day_lq#78,d_current_day#79,d_current_week#80,d_current_month#81,d_current_quarter#82,d_current_year#83] parquet
+                  :                 +- Project [i_item_sk#25, i_class#19, i_category#17]
+                  :                    +- Filter isnotnull(i_item_sk#25)
+                  :                       +- Relation[i_item_sk#25,i_item_id#84,i_rec_start_date#85,i_rec_end_date#86,i_item_desc#87,i_current_price#88,i_wholesale_cost#89,i_brand_id#90,i_brand#91,i_class_id#92,i_class#19,i_category_id#93,i_category#17,i_manufact_id#94,i_manufact#95,i_size#96,i_formulation#97,i_color#98,i_units#99,i_container#100,i_manager_id#101,i_product_name#102] parquet
+                  +- Aggregate [sum(total_sum#1) AS total_sum#10, null AS i_category#110, null AS i_class#111, 1 AS g_category#13, 1 AS g_class#14, 2 AS lochierarchy#15]
+                     +- Aggregate [i_category#17, i_class#19], [MakeDecimal(sum(UnscaledValue(ws_net_paid#21)),17,2) AS total_sum#1]
+                        +- Project [ws_net_paid#21, i_class#19, i_category#17]
+                           +- Join Inner, (i_item_sk#25 = ws_item_sk#26)
+                              :- Project [ws_item_sk#26, ws_net_paid#21]
+                              :  +- Join Inner, (d_date_sk#23 = ws_sold_date_sk#24)
+                              :     :- Project [ws_sold_date_sk#24, ws_item_sk#26, ws_net_paid#21]
+                              :     :  +- Filter (isnotnull(ws_sold_date_sk#24) AND isnotnull(ws_item_sk#26))
+                              :     :     +- Relation[ws_sold_date_sk#24,ws_sold_time_sk#27,ws_ship_date_sk#28,ws_item_sk#26,ws_bill_customer_sk#29,ws_bill_cdemo_sk#30,ws_bill_hdemo_sk#31,ws_bill_addr_sk#32,ws_ship_customer_sk#33,ws_ship_cdemo_sk#34,ws_ship_hdemo_sk#35,ws_ship_addr_sk#36,ws_web_page_sk#37,ws_web_site_sk#38,ws_ship_mode_sk#39,ws_warehouse_sk#40,ws_promo_sk#41,ws_order_number#42,ws_quantity#43,ws_wholesale_cost#44,ws_list_price#45,ws_sales_price#46,ws_ext_discount_amt#47,ws_ext_sales_price#48,ws_ext_wholesale_cost#49,ws_ext_list_price#50,ws_ext_tax#51,ws_coupon_amt#52,ws_ext_ship_cost#53,ws_net_paid#21,ws_net_paid_inc_tax#54,ws_net_paid_inc_ship#55,ws_net_paid_inc_ship_tax#56,ws_net_profit#57] parquet
+                              :     +- Project [d_date_sk#23]
+                              :        +- Filter (((isnotnull(d_month_seq#22) AND (d_month_seq#22 >= 1212)) AND (d_month_seq#22 <= 1223)) AND isnotnull(d_date_sk#23))
+                              :           +- Relation[d_date_sk#23,d_date_id#58,d_date#59,d_month_seq#22,d_week_seq#60,d_quarter_seq#61,d_year#62,d_dow#63,d_moy#64,d_dom#65,d_qoy#66,d_fy_year#67,d_fy_quarter_seq#68,d_fy_week_seq#69,d_day_name#70,d_quarter_name#71,d_holiday#72,d_weekend#73,d_following_holiday#74,d_first_dom#75,d_last_dom#76,d_same_day_ly#77,d_same_day_lq#78,d_current_day#79,d_current_week#80,d_current_month#81,d_current_quarter#82,d_current_year#83] parquet
+                              +- Project [i_item_sk#25, i_class#19, i_category#17]
+                                 +- Filter isnotnull(i_item_sk#25)
+                                    +- Relation[i_item_sk#25,i_item_id#84,i_rec_start_date#85,i_rec_end_date#86,i_item_desc#87,i_current_price#88,i_wholesale_cost#89,i_brand_id#90,i_brand#91,i_class_id#92,i_class#19,i_category_id#93,i_category#17,i_manufact_id#94,i_manufact#95,i_size#96,i_formulation#97,i_color#98,i_units#99,i_container#100,i_manager_id#101,i_product_name#102] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[lochierarchy#4 DESC NULLS LAST,CASE WHEN (lochierarchy#4 = 0) THEN i_category#17 END ASC NULLS FIRST,rank_within_parent#16 ASC NULLS FIRST], output=[total_sum#18,i_category#17,i_class#19,lochierarchy#4,rank_within_parent#16])
++- *(20) Project [total_sum#18, i_category#17, i_class#19, lochierarchy#4, rank_within_parent#16]
+   +- Window [rank(total_sum#18) windowspecdefinition(lochierarchy#4, _w0#20, total_sum#18 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#16], [lochierarchy#4, _w0#20], [total_sum#18 DESC NULLS LAST]
+      +- *(19) Sort [lochierarchy#4 ASC NULLS FIRST, _w0#20 ASC NULLS FIRST, total_sum#18 DESC NULLS LAST], false, 0
+         +- Exchange hashpartitioning(lochierarchy#4, _w0#20, 5), true, [id=#112]
+            +- *(18) HashAggregate(keys=[total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4], functions=[], output=[total_sum#18, i_category#17, i_class#19, lochierarchy#4, _w0#20])
+               +- Exchange hashpartitioning(total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4, 5), true, [id=#113]
+                  +- *(17) HashAggregate(keys=[total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4], functions=[], output=[total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4])
+                     +- Union
+                        :- *(11) HashAggregate(keys=[total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4], functions=[], output=[total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4])
+                        :  +- Exchange hashpartitioning(total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4, 5), true, [id=#114]
+                        :     +- *(10) HashAggregate(keys=[total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4], functions=[], output=[total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4])
+                        :        +- Union
+                        :           :- *(4) HashAggregate(keys=[i_category#17, i_class#19], functions=[sum(UnscaledValue(ws_net_paid#21))], output=[total_sum#18, i_category#17, i_class#19, g_category#2, g_class#3, lochierarchy#4])
+                        :           :  +- Exchange hashpartitioning(i_category#17, i_class#19, 5), true, [id=#115]
+                        :           :     +- *(3) HashAggregate(keys=[i_category#17, i_class#19], functions=[partial_sum(UnscaledValue(ws_net_paid#21))], output=[i_category#17, i_class#19, sum#116])
+                        :           :        +- *(3) Project [ws_net_paid#21, i_class#19, i_category#17]
+                        :           :           +- *(3) BroadcastHashJoin [ws_item_sk#26], [i_item_sk#25], Inner, BuildRight
+                        :           :              :- *(3) Project [ws_item_sk#26, ws_net_paid#21]
+                        :           :              :  +- *(3) BroadcastHashJoin [ws_sold_date_sk#24], [d_date_sk#23], Inner, BuildRight
+                        :           :              :     :- *(3) Project [ws_sold_date_sk#24, ws_item_sk#26, ws_net_paid#21]
+                        :           :              :     :  +- *(3) Filter (isnotnull(ws_sold_date_sk#24) AND isnotnull(ws_item_sk#26))
+                        :           :              :     :     +- *(3) ColumnarToRow
+                        :           :              :     :        +- FileScan parquet default.web_sales[ws_sold_date_sk#24,ws_item_sk#26,ws_net_paid#21] Batched: true, DataFilters: [isnotnull(ws_sold_date_sk#24), isnotnull(ws_item_sk#26)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_sold_date_sk), IsNotNull(ws_item_sk)], ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_net_paid:decimal(7,2)>
+                        :           :              :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#117]
+                        :           :              :        +- *(1) Project [d_date_sk#23]
+                        :           :              :           +- *(1) Filter (((isnotnull(d_month_seq#22) AND (d_month_seq#22 >= 1212)) AND (d_month_seq#22 <= 1223)) AND isnotnull(d_date_sk#23))
+                        :           :              :              +- *(1) ColumnarToRow
+                        :           :              :                 +- FileScan parquet default.date_dim[d_date_sk#23,d_month_seq#22] Batched: true, DataFilters: [isnotnull(d_month_seq#22), (d_month_seq#22 >= 1212), (d_month_seq#22 <= 1223), isnotnull(d..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1212), LessThanOrEqual(d_month_seq,1223),..., ReadSchema: struct<d_date_sk:int,d_month_seq:int>
+                        :           :              +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))), [id=#118]
+                        :           :                 +- *(2) Project [i_item_sk#25, i_class#19, i_category#17]
+                        :           :                    +- *(2) Filter isnotnull(i_item_sk#25)
+                        :           :                       +- *(2) ColumnarToRow
+                        :           :                          +- FileScan parquet default.item[i_item_sk#25,i_class#19,i_category#17] Batched: true, DataFilters: [isnotnull(i_item_sk#25)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_item_sk)], ReadSchema: struct<i_item_sk:int,i_class:string,i_category:string>
+                        :           +- *(9) HashAggregate(keys=[i_category#17], functions=[sum(total_sum#1)], output=[total_sum#103, i_category#17, i_class#106, g_category#107, g_class#108, lochierarchy#109])
+                        :              +- Exchange hashpartitioning(i_category#17, 5), true, [id=#119]
+                        :                 +- *(8) HashAggregate(keys=[i_category#17], functions=[partial_sum(total_sum#1)], output=[i_category#17, sum#120, isEmpty#121])
+                        :                    +- *(8) HashAggregate(keys=[i_category#17, i_class#19], functions=[sum(UnscaledValue(ws_net_paid#21))], output=[total_sum#1, i_category#17])
+                        :                       +- ReusedExchange [i_category#17, i_class#19, sum#122], Exchange hashpartitioning(i_category#17, i_class#19, 5), true, [id=#115]
+                        +- *(16) HashAggregate(keys=[], functions=[sum(total_sum#1)], output=[total_sum#10, i_category#110, i_class#111, g_category#13, g_class#14, lochierarchy#15])
+                           +- Exchange SinglePartition, true, [id=#123]
+                              +- *(15) HashAggregate(keys=[], functions=[partial_sum(total_sum#1)], output=[sum#124, isEmpty#125])
+                                 +- *(15) HashAggregate(keys=[i_category#17, i_class#19], functions=[sum(UnscaledValue(ws_net_paid#21))], output=[total_sum#1])
+                                    +- ReusedExchange [i_category#17, i_class#19, sum#126], Exchange hashpartitioning(i_category#17, i_class#19, 5), true, [id=#115]
