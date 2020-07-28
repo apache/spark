@@ -59,7 +59,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
   private def normalizeConfigString(s: String) =
-    s.replaceAll("`", "").replaceAll("\"", "").replaceAll("'", "")
+    s.replaceAll("\"", "").replaceAll("'", "")
 
   /**
    * Create a [[SetCommand]] logical plan.
