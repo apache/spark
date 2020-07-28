@@ -18,8 +18,9 @@
 package org.apache.spark.executor
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.shuffle.sort.RowCountInfo
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
-import org.apache.spark.util.LongAccumulator
+import org.apache.spark.util.{CollectionAccumulator, LongAccumulator}
 
 
 /**
@@ -32,6 +33,7 @@ class ShuffleWriteMetrics private[spark] () extends ShuffleWriteMetricsReporter 
   private[executor] val _bytesWritten = new LongAccumulator
   private[executor] val _recordsWritten = new LongAccumulator
   private[executor] val _writeTime = new LongAccumulator
+  private[executor] val _rowCountInfo = new CollectionAccumulator[RowCountInfo]
 
   /**
    * Number of bytes written for the shuffle by this task.
@@ -48,6 +50,8 @@ class ShuffleWriteMetrics private[spark] () extends ShuffleWriteMetricsReporter 
    */
   def writeTime: Long = _writeTime.sum
 
+  def mapRowCountInfo: java.util.List[RowCountInfo] = _rowCountInfo.value
+
   private[spark] override def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
   private[spark] override def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
   private[spark] override def incWriteTime(v: Long): Unit = _writeTime.add(v)
@@ -57,4 +61,5 @@ class ShuffleWriteMetrics private[spark] () extends ShuffleWriteMetricsReporter 
   private[spark] override def decRecordsWritten(v: Long): Unit = {
     _recordsWritten.setValue(recordsWritten - v)
   }
+  private[spark] override def addMapRowCountInfo(v: RowCountInfo): Unit = _rowCountInfo.add(v)
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle
 
+import org.apache.spark.shuffle.sort.RowCountInfo
+
 /**
  * An interface for reporting shuffle read metrics, for each shuffle. This interface assumes
  * all the methods are called on a single-threaded, i.e. concrete implementations would not need
@@ -49,4 +51,5 @@ private[spark] trait ShuffleWriteMetricsReporter {
   private[spark] def incWriteTime(v: Long): Unit
   private[spark] def decBytesWritten(v: Long): Unit
   private[spark] def decRecordsWritten(v: Long): Unit
+  private[spark] def addMapRowCountInfo(v: RowCountInfo): Unit
 }

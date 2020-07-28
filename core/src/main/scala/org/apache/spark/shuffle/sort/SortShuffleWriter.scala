@@ -59,7 +59,10 @@ private[spark] class SortShuffleWriter[K, V, C](
       new ExternalSorter[K, V, V](
         context, aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
     }
-    sorter.insertAll(records)
+
+    val numPartitions = dep.partitioner.numPartitions
+    val rowCountInfo = sorter.insertAll(records, numPartitions)
+    writeMetrics.addMapRowCountInfo(new RowCountInfo(mapId, rowCountInfo))
 
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately

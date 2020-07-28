@@ -65,9 +65,14 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
    * partition size * ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR and also larger than
    * ADVISORY_PARTITION_SIZE_IN_BYTES.
    */
-  private def isSkewed(size: Long, medianSize: Long): Boolean = {
+  private def isSizeSkewed(size: Long, medianSize: Long): Boolean = {
     size > medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR) &&
       size > conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD)
+  }
+
+  private def isRowCountSkewed(rowCount: Long, medianRowCount: Long): Boolean = {
+    rowCount > medianRowCount * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR) &&
+      rowCount > conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_ROW_COUNT_THRESHOLD)
   }
 
   private def medianSize(stats: MapOutputStatistics): Long = {
@@ -80,6 +85,17 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
     }
   }
 
+  private def medianRowCount(rowCounts: Array[Long]): Long = {
+    val numPartitions = rowCounts.length
+    val sortedRowCounts = rowCounts.sorted
+    numPartitions match {
+      case _ if (numPartitions % 2 == 0) =>
+        math.max((sortedRowCounts(numPartitions / 2) +
+          sortedRowCounts(numPartitions / 2 - 1)) / 2, 1)
+      case _ => math.max(sortedRowCounts(numPartitions / 2), 1)
+    }
+  }
+
   /**
    * The goal of skew join optimization is to make the data distribution more even. The target size
    * to split skewed partitions is the average size of non-skewed partition, or the
@@ -87,7 +103,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
    */
   private def targetSize(sizes: Seq[Long], medianSize: Long): Long = {
     val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-    val nonSkewSizes = sizes.filterNot(isSkewed(_, medianSize))
+    val nonSkewSizes = sizes.filterNot(isSizeSkewed(_, medianSize))
     if (nonSkewSizes.isEmpty) {
       advisorySize
     } else {
@@ -144,6 +160,11 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       sizes.sum / sizes.length
   }
 
+  private def getRowCountInfo(medianRowCount: Long, rowCounts: Seq[Long]): String = {
+    s"median row count: $medianRowCount, max row count: ${rowCounts.max}," +
+      s" min row count: ${rowCounts.min}, avg row count: " + rowCounts.sum / rowCounts.length
+  }
+
   /*
    * This method aim to optimize the skewed join with the following steps:
    * 1. Check whether the shuffle partition is skewed based on the median size
@@ -163,7 +184,13 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         if supportedJoinTypes.contains(joinType) =>
       assert(left.partitionsWithSizes.length == right.partitionsWithSizes.length)
       val numPartitions = left.partitionsWithSizes.length
-      // We use the median size of the original shuffle partitions to detect skewed partitions.
+      // We use the median size and row count of the original shuffle
+      // partitions to detect skewed partitions.
+      val leftRowCounts = left.shuffleStage.computeRowCount
+      val rightRowCounts = right.shuffleStage.computeRowCount
+      val leftMedRowCount = medianRowCount(leftRowCounts)
+      val rightMedRowCount = medianRowCount(rightRowCounts)
+
       val leftMedSize = medianSize(left.mapStats)
       val rightMedSize = medianSize(right.mapStats)
       logDebug(
@@ -173,6 +200,10 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
           |${getSizeInfo(leftMedSize, left.mapStats.bytesByPartitionId)}
           |Right side partitions size info:
           |${getSizeInfo(rightMedSize, right.mapStats.bytesByPartitionId)}
+          |Left side partitions row count info:
+          |${getRowCountInfo(leftMedRowCount, leftRowCounts)}
+          |Right side partitions row count info:
+          |${getRowCountInfo(rightMedRowCount, rightRowCounts)}
         """.stripMargin)
       val canSplitLeft = canSplitLeftSide(joinType)
       val canSplitRight = canSplitRightSide(joinType)
@@ -189,12 +220,16 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       var numSkewedRight = 0
       for (partitionIndex <- 0 until numPartitions) {
         val leftActualSize = leftActualSizes(partitionIndex)
-        val isLeftSkew = isSkewed(leftActualSize, leftMedSize) && canSplitLeft
+        val leftRowCount = leftRowCounts(partitionIndex)
+        val isLeftSkew = (isSizeSkewed(leftActualSize, leftMedSize) ||
+          isRowCountSkewed(leftRowCount, leftMedRowCount)) && canSplitLeft
         val leftPartSpec = left.partitionsWithSizes(partitionIndex)._1
         val isLeftCoalesced = leftPartSpec.startReducerIndex + 1 < leftPartSpec.endReducerIndex
 
         val rightActualSize = rightActualSizes(partitionIndex)
-        val isRightSkew = isSkewed(rightActualSize, rightMedSize) && canSplitRight
+        val rightRowCount = rightRowCounts(partitionIndex)
+        val isRightSkew = (isSizeSkewed(rightActualSize, rightMedSize) ||
+          isRowCountSkewed(rightRowCount, rightMedRowCount)) && canSplitRight
         val rightPartSpec = right.partitionsWithSizes(partitionIndex)._1
         val isRightCoalesced = rightPartSpec.startReducerIndex + 1 < rightPartSpec.endReducerIndex
 

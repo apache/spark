@@ -173,10 +173,22 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // We do this rather than a standard try/catch/re-throw to handle
     // generic throwables.
     boolean success = false;
+
+    int numPartitions = partitioner.numPartitions();
+    long[] rowCountInfo = new long[numPartitions];
+
     try {
       while (records.hasNext()) {
-        insertRecordIntoSorter(records.next());
+        final Product2<K, V> record = records.next();
+        final K key = record._1();
+        int partitionId = partitioner.getPartition(key);
+
+        rowCountInfo[partitionId] += 1;
+        insertRecordIntoSorter(record);
+
       }
+
+      writeMetrics.addMapRowCountInfo(new RowCountInfo(mapId, rowCountInfo));
       closeAndWriteOutput();
       success = true;
     } finally {

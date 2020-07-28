@@ -179,6 +179,22 @@ case class ShuffleQueryStageExec(
     }
   }
 
+  def computeRowCount: Array[Long] = {
+    val rowCountList = shuffle.rowCountMetric.value
+    val numPartitions = shuffle.shuffleDependency.partitioner.numPartitions
+    val result: Array[Long] = new Array[Long](numPartitions)
+
+    val length = rowCountList.size()
+    for(i <- 0 until length) {
+      val rowCounts = rowCountList.get(i).getRowCountInfo
+      rowCounts.zipWithIndex.foreach {
+        case (count, index) =>
+          result(index) += count
+      }
+    }
+    result
+  }
+
   /**
    * Returns the Option[MapOutputStatistics]. If the shuffle map stage has no partition,
    * this method returns None, as there is no map statistics.

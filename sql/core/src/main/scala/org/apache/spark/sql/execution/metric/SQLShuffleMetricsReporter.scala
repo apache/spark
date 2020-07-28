@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.metric
 import org.apache.spark.SparkContext
 import org.apache.spark.executor.TempShuffleReadMetrics
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
+import org.apache.spark.shuffle.sort.RowCountInfo
+import org.apache.spark.util.CollectionAccumulator
 
 /**
  * A shuffle metrics reporter for SQL exchange operators.
@@ -83,6 +85,7 @@ object SQLShuffleReadMetricsReporter {
   val LOCAL_BYTES_READ = "localBytesRead"
   val FETCH_WAIT_TIME = "fetchWaitTime"
   val RECORDS_READ = "recordsRead"
+  val ROW_COUNT_INFO = "rowCountInfo"
 
   /**
    * Create all shuffle read relative metrics and return the Map.
@@ -104,13 +107,15 @@ object SQLShuffleReadMetricsReporter {
  */
 class SQLShuffleWriteMetricsReporter(
     metricsReporter: ShuffleWriteMetricsReporter,
-    metrics: Map[String, SQLMetric]) extends ShuffleWriteMetricsReporter {
+    metrics: Map[String, SQLMetric],
+    rowCountMetric: CollectionAccumulator[RowCountInfo]) extends ShuffleWriteMetricsReporter {
   private[this] val _bytesWritten =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_BYTES_WRITTEN)
   private[this] val _recordsWritten =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN)
   private[this] val _writeTime =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_WRITE_TIME)
+  private[this] val _rowCountInfo = rowCountMetric
 
   override def incBytesWritten(v: Long): Unit = {
     metricsReporter.incBytesWritten(v)
@@ -131,6 +136,11 @@ class SQLShuffleWriteMetricsReporter(
   override def decBytesWritten(v: Long): Unit = {
     metricsReporter.decBytesWritten(v)
     _bytesWritten.set(_bytesWritten.value - v)
+  }
+
+  override def addMapRowCountInfo(v: RowCountInfo): Unit = {
+    metricsReporter.addMapRowCountInfo(v)
+    _rowCountInfo.add(v)
   }
 }
 
