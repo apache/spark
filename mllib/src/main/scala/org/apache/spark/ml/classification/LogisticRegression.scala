@@ -1098,19 +1098,14 @@ class LogisticRegressionModel private[spark] (
     _intercept
   }
 
-  private lazy val _intercept = interceptVector.toArray.head
-
+  private lazy val _intercept = interceptVector(0)
   private lazy val _interceptVector = interceptVector.toDense
-
   private var _threshold = Double.NaN
-
   private var _rawThreshold = Double.NaN
 
-  {
-    updateThreshold()
-  }
+  updateBinaryThreshold()
 
-  private def updateThreshold(): Unit = {
+  private def updateBinaryThreshold(): Unit = {
     if (!isMultinomial) {
       _threshold = getThreshold
       if (_threshold == 0.0) {
@@ -1126,7 +1121,7 @@ class LogisticRegressionModel private[spark] (
   @Since("1.5.0")
   override def setThreshold(value: Double): this.type = {
     super.setThreshold(value)
-    updateThreshold()
+    updateBinaryThreshold()
     this
   }
 
@@ -1136,7 +1131,7 @@ class LogisticRegressionModel private[spark] (
   @Since("1.5.0")
   override def setThresholds(value: Array[Double]): this.type = {
     super.setThresholds(value)
-    updateThreshold()
+    updateBinaryThreshold()
     this
   }
 
