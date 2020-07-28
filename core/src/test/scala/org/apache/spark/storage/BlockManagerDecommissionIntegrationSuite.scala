@@ -38,20 +38,33 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
   val numParts = 3
 
   test(s"verify that an already running task which is going to cache data succeeds " +
+    s"on a decommissioned executor after task start") {
+    runDecomTest(true, false, true, 1)
+  }
+
+  test(s"verify that an already running task which is going to cache data succeeds " +
+    s"on a decommissioned executor after iterator start") {
+    runDecomTest(true, false, true, 2)
+  }
+
+  test(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor") {
-    runDecomTest(true, false, true)
+    runDecomTest(true, false, true, 0)
   }
 
   test(s"verify that shuffle blocks are migrated") {
-    runDecomTest(false, true, false)
+    runDecomTest(false, true, false, 0)
   }
 
   test(s"verify that both migrations can work at the same time.") {
-    runDecomTest(true, true, false)
+    runDecomTest(true, true, false, 0)
   }
 
-  private def runDecomTest(persist: Boolean, shuffle: Boolean, migrateDuring: Boolean) = {
-
+  private def runDecomTest(
+      persist: Boolean,
+      shuffle: Boolean,
+      migrateDuring: Boolean,
+      afterStart: Int) = {
     val master = s"local-cluster[${numExecs}, 1, 1024]"
     val conf = new SparkConf().setAppName("test").setMaster(master)
       .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
@@ -70,16 +83,15 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       timeout = 60000) // 60s
 
     val input = sc.parallelize(1 to numParts, numParts)
-    val accum = sc.longAccumulator("mapperRunAccumulator")
-    input.count()
+    val accum = sc.collectionAccumulator[String]("mapperRunAccumulator")
 
     // Create a new RDD where we have sleep in each partition, we are also increasing
     // the value of accumulator in each partition
     val baseRdd = input.mapPartitions { x =>
+      accum.add(SparkEnv.get.executorId)
       if (migrateDuring) {
         Thread.sleep(1000)
       }
-      accum.add(1)
       x.map(y => (y, y))
     }
     val testRdd = shuffle match {
@@ -90,14 +102,23 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     // Listen for the job & block updates
     val executorRemovedSem = new Semaphore(0)
     val taskEndEvents = new ConcurrentLinkedQueue[SparkListenerTaskEnd]()
+    val taskStartEvents = new ConcurrentLinkedQueue[SparkListenerTaskStart]()
     val blocksUpdated = ArrayBuffer.empty[SparkListenerBlockUpdated]
 
-    def getExecutorIdOfAnySuccessfulTask(): Option[String] =
-      taskEndEvents.asScala.filter(_.taskInfo.successful).map(_.taskInfo.executorId).headOption
+    def getCandidateExecutorToDecom: Option[String] = afterStart match {
+      case 1 => taskStartEvents.asScala.map(_.taskInfo.executorId).headOption
+      case 2 => accum.value.asScala.headOption
+      case _ =>
+        taskEndEvents.asScala.filter(_.taskInfo.successful).map(_.taskInfo.executorId).headOption
+    }
 
     sc.addSparkListener(new SparkListener {
       override def onExecutorRemoved(execRemoved: SparkListenerExecutorRemoved): Unit = {
         executorRemovedSem.release()
+      }
+
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        taskStartEvents.add(taskStart)
       }
 
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
@@ -108,7 +129,6 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
         blocksUpdated.append(blockUpdated)
       }
     })
-
 
     // Cache the RDD lazily
     if (persist) {
@@ -123,8 +143,13 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       // Wait for one of the tasks to succeed and finish writing its blocks.
       // This way we know that this executor had real data to migrate when it is subsequently
       // decommissioned below.
-      eventually(timeout(3.seconds), interval(10.milliseconds)) {
-        assert(getExecutorIdOfAnySuccessfulTask().isDefined)
+      val intervalMs = if (afterStart == 0) {
+        10.milliseconds
+      } else {
+        1.milliseconds
+      }
+      eventually(timeout(6.seconds), interval(intervalMs)) {
+        assert(getCandidateExecutorToDecom.isDefined)
       }
     } else {
       ThreadUtils.awaitResult(asyncCount, 15.seconds)
@@ -133,10 +158,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     // Decommission one of the executors.
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
 
-    // When `migrateDuring=true`, we have already waited for a successful task.
-    // When `migrateDuring=false`, then we know the job is finished, so there
-    // must be a successful executor. Thus the '.get' should succeed in either case.
-    val execToDecommission = getExecutorIdOfAnySuccessfulTask().get
+    val execToDecommission = getCandidateExecutorToDecom.get
     logInfo(s"Decommissioning executor ${execToDecommission}")
     sched.decommissionExecutor(execToDecommission, ExecutorDecommissionInfo("", false))
 
@@ -144,7 +166,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 15.seconds)
     assert(asyncCountResult === numParts)
     // All tasks finished, so accum should have been increased numParts times.
-    assert(accum.value === numParts)
+    assert(accum.value.size() === numParts)
 
     sc.listenerBus.waitUntilEmpty()
     if (shuffle) {
@@ -192,7 +214,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     // cached data. Original RDD partitions should not be recomputed i.e. accum
     // should have same value like before
     assert(testRdd.count() === numParts)
-    assert(accum.value === numParts)
+    assert(accum.value.size() === numParts)
 
     val storageStatus = sc.env.blockManager.master.getStorageStatus
     val execIdToBlocksMapping = storageStatus.map(
@@ -215,7 +237,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     // cached data. Original RDD partitions should not be recomputed i.e. accum
     // should have same value like before
     assert(testRdd.count() === numParts)
-    assert(accum.value === numParts)
+    assert(accum.value.size() === numParts)
 
   }
 }
