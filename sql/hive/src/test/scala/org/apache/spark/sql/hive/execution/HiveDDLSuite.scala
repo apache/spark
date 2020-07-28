@@ -2855,14 +2855,14 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-32445: Make NullType.sql as VOID to support hive") {
+  test("SPARK-32445: Make NullType.simpleString as void to support hive") {
     withView("v1") {
       sql("create view v1 as select null as c")
       val df = sql("select * from v1")
       assert(df.schema.fields.head.dataType == NullType)
       checkAnswer(
         df,
-        Row("NULL")
+        Row("null")
       )
 
       sql("alter view v1 as select null as c1, 1 as c2")
@@ -2870,7 +2870,7 @@ class HiveDDLSuite
       assert(df2.schema.fields.head.dataType == NullType)
       checkAnswer(
         df2,
-        Row("NULL", 1)
+        Row("null", 1)
       )
     }
   }
