@@ -790,7 +790,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
   }
 
-  test("SPARK-32459: WrappedArray") {
+  test("SPARK-32459: UDF should not fail on WrappedArray") {
     val myUdf = udf((a: WrappedArray[Int]) =>
       WrappedArray.make[Int](Array(a.head + 99)))
     checkAnswer(Seq(Array(1))
