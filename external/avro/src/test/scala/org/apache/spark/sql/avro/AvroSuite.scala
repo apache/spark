@@ -1801,7 +1801,7 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  ignore("SPARK-32431: consistent error for nested and top-level duplicate columns") {
+  test("SPARK-32431: consistent error for nested and top-level duplicate columns") {
     Seq(
       Seq("id AS lowercase", "id + 1 AS camelCase") ->
         new StructType()

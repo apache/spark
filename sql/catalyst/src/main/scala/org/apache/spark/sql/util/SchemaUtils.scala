@@ -54,6 +54,19 @@ private[spark] object SchemaUtils {
     } while (queue.nonEmpty)
   }
 
+  /**
+   * Checks if an input schema has duplicate column names. This throws an exception if the
+   * duplication exists.
+   *
+   * @param schema schema to check
+   * @param colType column type name, used in an exception message
+   * @param resolver resolver used to determine if two identifiers are equal
+   */
+  def checkSchemaColumnNameDuplication(
+      schema: StructType, colType: String, resolver: Resolver): Unit = {
+    checkSchemaColumnNameDuplication(schema, colType, isCaseSensitiveAnalysis(resolver))
+  }
+
   // Returns true if a given resolver is case-sensitive
   private def isCaseSensitiveAnalysis(resolver: Resolver): Boolean = {
     if (resolver == caseSensitiveResolution) {
