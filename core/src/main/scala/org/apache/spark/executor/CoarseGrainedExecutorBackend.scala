@@ -321,10 +321,13 @@ private[spark] class CoarseGrainedExecutorBackend(
               lastTaskRunningTime = System.nanoTime()
             }
           }
-        }.setDaemon(true)
-        logInfo("Will exit when finished decommissioning")
-        // Return true since we are handling a signal
-        true
+        }
+      }.setDaemon(true)
+      shutdownThread.start()
+
+      logInfo("Will exit when finished decommissioning")
+      // Return true since we are handling a signal
+      true
     } catch {
       case e: Exception =>
         logError("Unexpected error while decommissioning self", e)
