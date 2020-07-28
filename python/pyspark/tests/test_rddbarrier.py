@@ -40,6 +40,8 @@ class RDDBarrierTests(ReusedPySparkTestCase):
 
 if __name__ == "__main__":
     import unittest
+    from pyspark.tests.test_rddbarrier import *  # noqa: F401
+
     try:
         import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)

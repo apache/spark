@@ -182,6 +182,8 @@ class DimensionalityReductionTests(MLlibTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.mllib.tests.test_feature import *  # noqa: F401
+
     try:
         import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)

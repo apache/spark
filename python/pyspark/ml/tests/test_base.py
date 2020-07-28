@@ -67,6 +67,8 @@ class EstimatorTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.ml.tests.test_base import *  # noqa: F401
+
     try:
         import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)

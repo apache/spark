@@ -304,6 +304,8 @@ class OutputFormatTests(ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.tests.test_readwrite import *  # noqa: F401
+
     try:
         import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)

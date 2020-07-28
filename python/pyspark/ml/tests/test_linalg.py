@@ -378,6 +378,8 @@ class MatrixUDTTests(MLlibTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.ml.tests.test_linalg import *  # noqa: F401
+
     try:
         import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
