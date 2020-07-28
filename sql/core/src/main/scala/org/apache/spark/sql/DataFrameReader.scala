@@ -425,6 +425,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`allowUnquotedControlChars` (default `false`): allows JSON Strings to contain unquoted
    * control characters (ASCII characters with value less than 32, including tab and line feed
    * characters) or not.</li>
+   * <li>`allowNonNumericNumbers` (default `true`): allows parser to recognize set of
+   * "Not-a-Number" (NaN) tokens as legal floating number values:
+   *   <ul>
+   *     <li>`+INF` (for positive infinity), as well as alias of `+Infinity` and `Infinity`
+   *     <li>`-INF` (for negative infinity), alias `-Infinity`
+   *     <li>`NaN` (for other not-a-numbers, like result of division by zero)
+   *   </ul>
+   * </li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.
    *   <ul>
