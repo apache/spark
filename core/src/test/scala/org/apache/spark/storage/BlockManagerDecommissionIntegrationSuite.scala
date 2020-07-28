@@ -87,8 +87,22 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     // the value of accumulator in each partition
     val baseRdd = input.mapPartitions { x =>
       accum.add(SparkEnv.get.executorId)
-      if (migrateDuring) {
-        Thread.sleep(1000)
+      val sleepIntervalMs = whenToDecom match {
+        // Increase the window of time b/w task started and ended so that we can decom within that.
+        case TaskStarted => 2000
+        // Make one task take a really short time so that we can decommission right after it is
+        // done but before its peers are done.
+        case TaskEnded =>
+          if (TaskContext.getPartitionId() == 0) {
+            100
+          } else {
+            1000
+          }
+        // No sleep otherwise
+        case _ => 0
+      }
+      if (sleepIntervalMs > 0) {
+        Thread.sleep(sleepIntervalMs)
       }
       x.map(y => (y, y))
     }
