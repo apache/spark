@@ -323,7 +323,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           }
         }
       }.setDaemon(true)
-      // shutdownThread.start()
+      shutdownThread.start()
 
       logInfo("Will exit when finished decommissioning")
       // Return true since we are handling a signal
