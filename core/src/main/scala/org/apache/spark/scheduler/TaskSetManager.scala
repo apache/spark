@@ -71,6 +71,7 @@ private[spark] class TaskSetManager(
   val ser = env.closureSerializer.newInstance()
 
   val tasks = taskSet.tasks
+  private val isShuffleMapTasks = tasks(0).isInstanceOf[ShuffleMapTask]
   private[scheduler] val partitionToIndex = tasks.zipWithIndex
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
@@ -695,7 +696,7 @@ private[spark] class TaskSetManager(
   def canFetchMoreResults(size: Long): Boolean = sched.synchronized {
     totalResultSize += size
     calculatedTasks += 1
-    if (maxResultSize > 0 && totalResultSize > maxResultSize) {
+    if (!isShuffleMapTasks && maxResultSize > 0 && totalResultSize > maxResultSize) {
       val msg = s"Total size of serialized results of ${calculatedTasks} tasks " +
         s"(${Utils.bytesToString(totalResultSize)}) is bigger than ${config.MAX_RESULT_SIZE.key} " +
         s"(${Utils.bytesToString(maxResultSize)})"
@@ -962,8 +963,7 @@ private[spark] class TaskSetManager(
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
     // so we would need to rerun these tasks on other executors.
-    if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled
-        && !isZombie) {
+    if (isShuffleMapTasks && !env.blockManager.externalShuffleServiceEnabled && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
         // We may have a running task whose partition has been marked as successful,
