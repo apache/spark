@@ -758,7 +758,6 @@ case class MapObjects private(
     case Some(cls) if classOf[WrappedArray[_]].isAssignableFrom(cls) =>
       // Scala WrappedArray
       inputCollection => WrappedArray.make(executeFuncOnCollection(inputCollection).toArray)
-
     case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
       executeFuncOnCollection(_).toSeq
@@ -930,7 +929,6 @@ case class MapObjects private(
               s"MODULE$$.make(((${classOf[ArrayBuffer[_]].getName})$builder" +
               s".result()).toArray(scala.reflect.ClassTag$$.MODULE$$.Object()));"
           )
-
         case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) ||
           classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
           // Scala sequence or set
