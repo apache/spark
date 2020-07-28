@@ -563,203 +563,228 @@ class FileBasedDataSourceSuite extends QueryTest
       }
     }
   }
+
   test("SPARK-31962 - when modifiedAfter specified " +
       "with a future date") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file2.csv")
-      stringToFile(file, "text")
-      file.setLastModified(DateTimeUtils.currentTimestamp())
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedAfter", "2050-05-01T01:00:00")
-            .format("csv")
-            .load(path.toString)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file2.csv")
+        stringToFile(file, "text")
+        file.setLastModified(DateTimeUtils.currentTimestamp())
+        val msg = intercept[AnalysisException] {
+          spark.read
+              .option("modifiedAfter", "2050-05-01T01:00:00")
+              .format("csv")
+              .load(path.toString)
+        }.getMessage
+        assert(msg.contains("Unable to infer schema for CSV"))
+      }
     }
   }
-  
+
   test("SPARK-31962 - when modifiedAfter specified " +
       "with a past date") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      file.setLastModified(DateTimeUtils.currentTimestamp())
-      val df = spark.read
-          .option("modifiedAfter", "2019-05-10T01:11:00")
-          .format("csv")
-          .load(path.toString)
-      assert(df.count() == 1)
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        file.setLastModified(DateTimeUtils.currentTimestamp())
+        val df = spark.read
+            .option("modifiedAfter", "2019-05-10T01:11:00")
+            .format("csv")
+            .load(path.toString)
+        assert(df.count() == 1)
+      }
     }
   }
 
   test("SPARK-31962 - when modifiedBefore specified " +
       "with a future date") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val df = spark.read
-          .option("modifiedBefore", "2090-05-10T01:11:00")
-          .format("csv")
-          .load(path.toString)
-      assert(df.count() == 1)
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        val df = spark.read
+            .option("modifiedBefore", "2090-05-10T01:11:00")
+            .format("csv")
+            .load(path.toString)
+        assert(df.count() == 1)
+      }
     }
   }
 
   test("SPARK-31962 - when modifiedBefore specified " +
       "with a past date") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      file.setLastModified(DateTimeUtils.currentTimestamp())
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedBefore", "1984-05-01T01:00:00")
-            .format("csv")
-            .load(path.toString)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        file.setLastModified(DateTimeUtils.currentTimestamp())
+        val msg = intercept[AnalysisException] {
+          spark.read
+              .option("modifiedBefore", "1984-05-01T01:00:00")
+              .format("csv")
+              .load(path.toString)
+        }.getMessage
+        assert(msg.contains("Unable to infer schema for CSV"))
+      }
     }
   }
 
   test("SPARK-31962 - when modifiedAfter specified " +
       "with a past date and pathGlobalFilter returning results") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val df = spark.read
-          .option("modifiedAfter", "1984-05-10T01:11:00")
-          .option("pathGlobFilter", "*.csv")
-          .format("csv")
-          .load(path.toString)
-      assert(df.count() == 1)
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        val df = spark.read
+            .option("modifiedAfter", "1984-05-10T01:11:00")
+            .option("pathGlobFilter", "*.csv")
+            .format("csv")
+            .load(path.toString)
+        assert(df.count() == 1)
+      }
     }
   }
 
   test("SPARK-31962 - when modifiedAfter specified " +
       "with past date and pathGlobFilter filtering results") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedAfter", "1984-05-01T01:00:00")
-            .option("pathGlobFilter", "*.txt")
-            .format("csv")
-            .load(path.toString)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        val msg = intercept[AnalysisException] {
+          spark.read
+              .option("modifiedAfter", "1984-05-01T01:00:00")
+              .option("pathGlobFilter", "*.txt")
+              .format("csv")
+              .load(path.toString)
+        }.getMessage
+        assert(msg.contains("Unable to infer schema for CSV"))
+      }
     }
   }
 
   test("SPARK-31962 - when modifiedAfter specified " +
       "with future date and pathGlobFilter returning results") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedAfter", "2050-05-01T01:00:00")
-            .option("pathGlobFilter", "*.csv")
-            .format("csv")
-            .load(path.toString)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        val msg = intercept[AnalysisException] {
+          spark.read
+              .option("modifiedAfter", "2050-05-01T01:00:00")
+              .option("pathGlobFilter", "*.csv")
+              .format("csv")
+              .load(path.toString)
+        }.getMessage
+        assert(msg.contains("Unable to infer schema for CSV"))
+      }
     }
   }
 
   test("SPARK-31962 - when modifiedAfter specified " +
       "with future date and pathGlobFilter filtering results") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedAfter", "2050-05-01T01:00:00")
-            .option("pathGlobFilter", "*.txt")
-            .format("csv")
-            .load(path.toString)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        val msg = intercept[AnalysisException] {
+          spark.read
+              .option("modifiedAfter", "2050-05-01T01:00:00")
+              .option("pathGlobFilter", "*.txt")
+              .format("csv")
+              .load(path.toString)
+        }.getMessage
+        assert(msg.contains("Unable to infer schema for CSV"))
+      }
     }
   }
 
   test("SPARK-31962 - when modifiedBefore and modifiedAfter" +
       "are specified out of range and pathGlobFilter returning results") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedAfter", "2050-05-01T01:00:00")
-            .option("modifiedBefore", "2050-05-01T01:00:00")
-            .option("pathGlobFilter", "*.csv")
-            .format("csv")
-            .load(path.toString)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        val msg = intercept[AnalysisException] {
+          spark.read
+              .option("modifiedAfter", "2050-05-01T01:00:00")
+              .option("modifiedBefore", "2050-05-01T01:00:00")
+              .option("pathGlobFilter", "*.csv")
+              .format("csv")
+              .load(path.toString)
+        }.getMessage
+        assert(msg.contains("Unable to infer schema for CSV"))
+      }
     }
   }
 
   test("SPARK-31962 - when modifiedBefore and modifiedAfter" +
       "are specified in range and pathGlobFilter returning results") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val df = spark.read
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        val df = spark.read
             .option("modifiedAfter", "2019-05-01T01:00:00")
             .option("modifiedBefore", "2025-05-01T01:00:00")
             .option("pathGlobFilter", "*.csv")
             .format("csv")
             .load(path.toString)
-      assert(df.count() == 1)
+        assert(df.count() == 1)
+      }
     }
   }
 
   test("SPARK-31962 - when modifiedBefore and modifiedAfter" +
       "are specified in range and pathGlobFilter filtering results") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedAfter", "2019-05-01T01:00:00")
-            .option("modifiedBefore", "2025-05-01T01:00:00")
-            .option("pathGlobFilter", "*.txt")
-            .format("csv")
-            .load(path.toString)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
+        val msg = intercept[AnalysisException] {
+          spark.read
+              .option("modifiedAfter", "2019-05-01T01:00:00")
+              .option("modifiedBefore", "2025-05-01T01:00:00")
+              .option("pathGlobFilter", "*.txt")
+              .format("csv")
+              .load(path.toString)
+        }.getMessage
+        assert(msg.contains("Unable to infer schema for CSV"))
+      }
     }
   }
 
   test("SPARK-31962 - when modifiedAfter is specified" +
       " with invalid date") {
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
-      stringToFile(file, "text")
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val path = new Path(dir.getCanonicalPath)
+        val file = new File(dir, "file1.csv")
+        stringToFile(file, "text")
 
-      val msg = intercept[AnalysisException] {
-        spark.read
-            .option("modifiedAfter", "2024-05+1 01:00:00")
-            .format("csv")
-            .load(path.toString)
-      }.getMessage
-      assert(msg.contains("The timestamp provided")
-      && msg.contains("modifiedafter")
-      && msg.contains("2024-05+1 01:00:00"))
+        val msg = intercept[AnalysisException] {
+          spark.read
+              .option("modifiedAfter", "2024-05+1 01:00:00")
+              .format("csv")
+              .load(path.toString)
+        }.getMessage
+        assert(msg.contains("The timestamp provided")
+            && msg.contains("modifiedafter")
+            && msg.contains("2024-05+1 01:00:00"))
+      }
     }
   }
 
@@ -849,6 +874,7 @@ class FileBasedDataSourceSuite extends QueryTest
   test("SPARK-31962 - modifiedAfter filter takes into account local " +
       "timezone when specified as an option.  After UTC.") {
     withTempDir { dir =>
+
       val file = new File(dir, "file1.csv")
       stringToFile(file, "text")
 
