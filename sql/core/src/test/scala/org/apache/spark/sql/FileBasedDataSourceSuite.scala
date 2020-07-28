@@ -563,7 +563,7 @@ class FileBasedDataSourceSuite extends QueryTest
       }
     }
   }
-  
+
   test("SPARK-31962 - when modifiedAfter specified " +
       "with a past date") {
     withTempDir { dir =>
