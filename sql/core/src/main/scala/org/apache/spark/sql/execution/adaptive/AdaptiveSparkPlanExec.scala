@@ -386,7 +386,7 @@ case class AdaptiveSparkPlanExec(
         val newShuffle = applyPhysicalRules(
           s.withNewChildren(Seq(optimizedPlan)), postStageCreationRules)
         ShuffleQueryStageExec(currentStageId, newShuffle)
-      case b: BroadcastExchangeExec =>
+      case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
           b.withNewChildren(Seq(optimizedPlan)), postStageCreationRules)
         BroadcastQueryStageExec(currentStageId, newBroadcast)

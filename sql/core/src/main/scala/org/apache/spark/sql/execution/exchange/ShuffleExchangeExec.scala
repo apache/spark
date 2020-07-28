@@ -47,6 +47,11 @@ import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordCo
 trait ShuffleExchangeLike extends Exchange {
 
   /**
+   * Returns the number of mappers of this shuffle.
+   */
+  def numMappers: Int
+
+  /**
    * Returns the shuffle partition number.
    */
   def numPartitions: Int
@@ -103,6 +108,8 @@ case class ShuffleExchangeExec(
       sparkContext.submitMapStage(shuffleDependency)
     }
   }
+
+  override def numMappers: Int = shuffleDependency.rdd.getNumPartitions
 
   override def numPartitions: Int = shuffleDependency.partitioner.numPartitions
 
