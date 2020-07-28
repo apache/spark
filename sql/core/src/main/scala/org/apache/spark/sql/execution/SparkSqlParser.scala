@@ -79,7 +79,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         case s if s.isEmpty => SetCommand(None)
         case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
           "'SET key=value'. If you want to include special characters in key and value, " +
-          "please use quotes or string literal, e.g., SET \"ke y\"=value.", ctx)
+          "please use quotes, e.g., SET `ke y`=value.", ctx)
       }
     }
   }
@@ -101,7 +101,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         case s if s.isEmpty => ResetCommand(None)
         case _ => throw new ParseException("Expected format is 'RESET' or 'RESET key'. " +
           "If you want to include special characters in key, " +
-          "please use quotes or string literal, e.g., RESET \"ke y\".", ctx)
+          "please use quotes, e.g., RESET `ke y`.", ctx)
       }
     }
   }
