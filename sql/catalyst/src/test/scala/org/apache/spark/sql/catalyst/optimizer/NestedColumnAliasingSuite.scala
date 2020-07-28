@@ -145,9 +145,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val ops = Seq(
       (input: LogicalPlan) => input.distribute('name)(1),
       (input: LogicalPlan) => input.orderBy('name.asc),
-      (input: LogicalPlan) => input.orderBy($"name.middle".asc),
       (input: LogicalPlan) => input.sortBy('name.asc),
-      (input: LogicalPlan) => input.sortBy($"name.middle".asc),
       (input: LogicalPlan) => input.union(input)
     )
 
@@ -491,6 +489,144 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val expected3 = contact.select($"id", $"name")
       .groupBy($"id")(first($"name"), first($"name.first").as("first")).analyze
     comparePlans(optimized3, expected3)
+  }
+
+  test("Nested field pruning for Window") {
+    val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(RowNumber(), spec)
+    val query = contact
+      .select($"name.first", winExpr.as('window))
+      .orderBy($"name.last".asc)
+      .analyze
+    val optimized = Optimize.execute(query)
+    val aliases = collectGeneratedAliases(optimized)
+    val expected = contact
+      .select($"name.first", $"address", $"id", $"name.last".as(aliases(1)))
+      .window(Seq(winExpr.as("window")), Seq($"address"), Seq($"id".asc))
+      .select($"first", $"window", $"${aliases(1)}".as(aliases(0)))
+      .orderBy($"${aliases(0)}".asc)
+      .select($"first", $"window")
+      .analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("Nested field pruning for Filter with other supported operators") {
+    val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(RowNumber(), spec)
+    val query1 = contact.select($"name.first", winExpr.as('window))
+      .where($"window" === 1 && $"name.first" === "a")
+      .analyze
+    val optimized1 = Optimize.execute(query1)
+    val aliases1 = collectGeneratedAliases(optimized1)
+    val expected1 = contact
+      .select($"name.first", $"address", $"id", $"name.first".as(aliases1(1)))
+      .window(Seq(winExpr.as("window")), Seq($"address"), Seq($"id".asc))
+      .select($"first", $"${aliases1(1)}".as(aliases1(0)), $"window")
+      .where($"window" === 1 && $"${aliases1(0)}" === "a")
+      .select($"first", $"window")
+      .analyze
+    comparePlans(optimized1, expected1)
+
+    val query2 = contact.sortBy($"name.first".asc)
+      .where($"name.first" === "a")
+      .select($"name.first")
+      .analyze
+    val optimized2 = Optimize.execute(query2)
+    val aliases2 = collectGeneratedAliases(optimized2)
+    val expected2 = contact
+      .select($"name.first".as(aliases2(1)))
+      .sortBy($"${aliases2(1)}".asc)
+      .select($"${aliases2(1)}".as(aliases2(0)))
+      .where($"${aliases2(0)}" === "a")
+      .select($"${aliases2(0)}".as("first"))
+      .analyze
+    comparePlans(optimized2, expected2)
+
+    val query3 = contact.distribute($"name.first")(100)
+      .where($"name.first" === "a")
+      .select($"name.first")
+      .analyze
+    val optimized3 = Optimize.execute(query3)
+    val aliases3 = collectGeneratedAliases(optimized3)
+    val expected3 = contact
+      .select($"name.first".as(aliases3(1)))
+      .distribute($"${aliases3(1)}")(100)
+      .select($"${aliases3(1)}".as(aliases3(0)))
+      .where($"${aliases3(0)}" === "a")
+      .select($"${aliases3(0)}".as("first"))
+      .analyze
+    comparePlans(optimized3, expected3)
+
+    val department = LocalRelation(
+      'depID.int,
+      'personID.string)
+    val query4 = contact.join(department, condition = Some($"id" === $"depID"))
+      .where($"name.first" === "a")
+      .select($"name.first")
+      .analyze
+    val optimized4 = Optimize.execute(query4)
+    val aliases4 = collectGeneratedAliases(optimized4)
+    val expected4 = contact
+      .select($"id", $"name.first".as(aliases4(1)))
+      .join(department.select('depID), condition = Some($"id" === $"depID"))
+      .select($"${aliases4(1)}".as(aliases4(0)))
+      .where($"${aliases4(0)}" === "a")
+      .select($"${aliases4(0)}".as("first"))
+      .analyze
+    comparePlans(optimized4, expected4)
+
+    def runTest(basePlan: LogicalPlan => LogicalPlan): Unit = {
+      val query = basePlan(contact)
+        .where($"name.first" === "a")
+        .select($"name.first")
+        .analyze
+      val optimized = Optimize.execute(query)
+      val aliases = collectGeneratedAliases(optimized)
+      val expected = basePlan(contact
+        .select($"name.first".as(aliases(0))))
+        .where($"${aliases(0)}" === "a")
+        .select($"${aliases(0)}".as("first"))
+        .analyze
+      comparePlans(optimized, expected)
+    }
+    Seq(
+      (plan: LogicalPlan) => plan.limit(100),
+      (plan: LogicalPlan) => plan.repartition(100),
+      (plan: LogicalPlan) => Sample(0.0, 0.6, false, 11L, plan)).foreach {  base =>
+        runTest(base)
+      }
+  }
+
+  test("Nested field pruning for Sort") {
+    val query1 = contact.select($"name.first", $"name.last")
+      .sortBy($"name.first".asc, $"name.last".asc)
+      .analyze
+    val optimized1 = Optimize.execute(query1)
+    val aliases1 = collectGeneratedAliases(optimized1)
+    val expected1 = contact
+      .select($"name.first",
+        $"name.last",
+        $"name.first".as(aliases1(0)),
+        $"name.last".as(aliases1(1)))
+      .sortBy($"${aliases1(0)}".asc, $"${aliases1(1)}".asc)
+      .select($"first", $"last")
+      .analyze
+    comparePlans(optimized1, expected1)
+
+    val query2 = contact.select($"name.first", $"name.last")
+      .orderBy($"name.first".asc, $"name.last".asc)
+      .analyze
+    val optimized2 = Optimize.execute(query2)
+    val aliases2 = collectGeneratedAliases(optimized2)
+    val expected2 = contact
+      .select($"name.first",
+        $"name.last",
+        $"name.first".as(aliases2(0)),
+        $"name.last".as(aliases2(1)))
+      .orderBy($"${aliases2(0)}".asc, $"${aliases2(1)}".asc)
+      .select($"first", $"last")
+      .analyze
+    comparePlans(optimized2, expected2)
   }
 
   test("Nested field pruning for Expand") {
