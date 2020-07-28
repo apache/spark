@@ -201,6 +201,7 @@ class ParquetFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(
       ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
@@ -228,6 +229,10 @@ class ParquetFileFormat
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
 
+    hadoopConf.set(
+      SQLConf.PARQUET_ROW_CONVERSION_MODE.key,
+      parquetOptions.conversionMode.toString)
+
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
@@ -252,8 +257,6 @@ class ParquetFileFormat
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-    val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
-    val conversionMode = parquetOptions.conversionMode
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
@@ -270,11 +273,16 @@ class ParquetFileFormat
 
       val sharedConf = broadcastedHadoopConf.value.value
 
-      lazy val footerFileMetaData =
+      val footerFileMetaData =
         ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+      val parquetSchema = footerFileMetaData.getSchema
+      // Check whether the parquet file fields can be converted with the spark schema
+      // in the current conversion mode.
+      val schemaChecker =
+        new SparkParquetSchemaChecker(sharedConf)
+      schemaChecker.checkSchema(requiredSchema, parquetSchema)
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
-        val parquetSchema = footerFileMetaData.getSchema
         val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
           pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
         filters
