@@ -549,5 +549,5 @@ case class ShowFunctions(
     userScope: Boolean,
     systemScope: Boolean,
     pattern: Option[String]) extends Command {
-  override def children: Seq[LogicalPlan] = if (child.isDefined) { child.get :: Nil } else { Nil }
+  override def children: Seq[LogicalPlan] = child.toSeq
 }
