@@ -57,14 +57,16 @@ abstract class ModifiedDateFilter(sparkSession: SparkSession,
   /* Implicitly defaults to UTC if unable to parse */
   lazy val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId)
   lazy val timeString: UTF8String = UTF8String.fromString(options.apply(strategy()))
-  lazy val thresholdTime: Long =
-    DateTimeUtils
-      .stringToTimestamp(timeString, timeZone.toZoneId)
-      .getOrElse(throw new AnalysisException(
-        s"The timestamp provided for the '${strategy()}'" +
-          s" option is invalid.  The expected format is 'YYYY-MM-DDTHH:mm:ss'. " +
-          s" Provided timestamp:  " +
-          s"${options.apply(strategy())}"))
+
+  def thresholdTime(): Long = {
+      DateTimeUtils
+      .stringToTimestamp (timeString, timeZone.toZoneId)
+      .getOrElse (throw new AnalysisException (
+      s"The timestamp provided for the '${strategy ()}'" +
+      s" option is invalid.  The expected format is 'YYYY-MM-DDTHH:mm:ss'. " +
+      s" Provided timestamp:  " +
+      s"${options.apply (strategy () )}") )
+  }
 
   def localTime(micros: Long): Long =
     DateTimeUtils.fromUTCTime(micros, timeZoneId)
