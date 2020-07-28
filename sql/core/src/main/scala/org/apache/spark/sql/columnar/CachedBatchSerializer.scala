@@ -125,7 +125,7 @@ trait CachedBatchSerializer extends Serializable {
 
   /**
    * Convert the cached data into a ColumnarBatch. This currently is only used if
-   * `supportsColumnar()` returned true for the associated schema, but there are other checks
+   * `supportsColumnar()` returns true for the associated schema, but there are other checks
    * that can force row based output. One of the main advantages of doing columnar output over row
    * based output is that the code generation is more standard and can be combined with code
    * generation for downstream operations.
@@ -169,16 +169,24 @@ trait CachedBatchSerializer extends Serializable {
 @Since("3.1.0")
 trait SimpleMetricsCachedBatch extends CachedBatch {
   /**
-   * Holds the same as ColumnStats.
-   * upperBound (optional), lowerBound (Optional), nullCount: Int, rowCount: Int, sizeInBytes: Long
-   * Which is repeated for each column in the original data.
+   * Holds stats for each cached column. The optional `upperBound` and `lowerBound` should be
+   * of the same type as the original column. If they are null, then it is assumed that they
+   * are not provided, and will not be used for filtering.
+   * <ul>
+   *   <li>`upperBound` (optional)<\li>
+   *   <li>`lowerBound` (Optional)<\li>
+   *   <li>`nullCount`: `Int`<\li>
+   *   <li>`rowCount`: `Int`</li>
+   *   <li>`sizeInBytes`: `Long`</li>
+   * <ul>
+   * These are repeated for each column in the original cached data.
    */
   val stats: InternalRow
   override def sizeInBytes: Long =
     Range.apply(4, stats.numFields, 5).map(stats.getLong).sum
 }
 
-// Currently, only use statistics from atomic types except binary type only.
+// Currently, uses statistics for all atomic types that are not `BinaryType`.
 private object ExtractableLiteral {
   def unapply(expr: Expression): Option[Literal] = expr match {
     case lit: Literal => lit.dataType match {
