@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.objects
 import java.lang.reflect.{Method, Modifier}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, Builder, WrappedArray}
+import scala.collection.mutable.{Builder, IndexedSeq, WrappedArray}
 import scala.reflect.ClassTag
 import scala.util.Try
 
@@ -926,7 +926,7 @@ case class MapObjects private(
              """,
             (genValue: String) => s"$builder.$$plus$$eq($genValue);",
             s"(${cls.getName}) ${classOf[WrappedArray[_]].getName}$$." +
-              s"MODULE$$.make(((${classOf[ArrayBuffer[_]].getName})$builder" +
+              s"MODULE$$.make(((${classOf[IndexedSeq[_]].getName})$builder" +
               s".result()).toArray(scala.reflect.ClassTag$$.MODULE$$.Object()));"
           )
         case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) ||
