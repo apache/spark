@@ -254,8 +254,12 @@ statement
     ;
 
 configureKey
-    : IDENTIFIER (('.' | ':') IDENTIFIER)*
+    : configureIdentifier (('.' | ':') configureIdentifier)*
     | quotedIdentifier
+    ;
+
+configureIdentifier
+    : IDENTIFIER | nonReserved | strictNonReserved
     ;
 
 unsupportedHiveNativeCommands
