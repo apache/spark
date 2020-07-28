@@ -611,10 +611,10 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-31962 - when modifiedAfter specified " +
-      "with a future  date") {
+      "with a future date") {
     withTempDir { dir =>
       val path = new Path(dir.getCanonicalPath)
-      val file = new File(dir, "file1.csv")
+      val file = new File(dir, "file2.csv")
       stringToFile(file, "text")
       file.setLastModified(DateTimeUtils.currentTimestamp())
       val msg = intercept[AnalysisException] {
@@ -759,7 +759,7 @@ class FileBasedDataSourceSuite extends QueryTest
             .load(path.toString)
       }.getMessage
       assert(msg.contains("The timestamp provided")
-      && msg.contains("modifiedAfter")
+      && msg.contains("modifiedafter")
       && msg.contains("2024-05+1 01:00:00"))
     }
   }
@@ -824,7 +824,7 @@ class FileBasedDataSourceSuite extends QueryTest
             .load(path.toString)
       }.getMessage
       assert(msg.contains("The timestamp provided for")
-      && msg.contains("modifiedBefore")
+      && msg.contains("modifiedbefore")
       )
     }
   }
@@ -842,7 +842,7 @@ class FileBasedDataSourceSuite extends QueryTest
             .load(path.toString)
       }.getMessage
       assert(msg.contains("The timestamp provided for")
-          && msg.contains("modifiedAfter")
+          && msg.contains("modifiedafter")
       )
     }
   }

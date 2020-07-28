@@ -46,7 +46,7 @@ case class ModifiedAfterFilter(sparkSession: SparkSession,
         - thresholdTime > 0)
 
   override def accept(path: Path): Boolean = true
-  override def strategy(): String = "modifiedAfter"
+  override def strategy(): String = "modifiedafter"
 }
 
 case object ModifiedAfterFilter extends PathFilterObject {

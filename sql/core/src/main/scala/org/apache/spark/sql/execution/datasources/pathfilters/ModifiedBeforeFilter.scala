@@ -46,7 +46,7 @@ class ModifiedBeforeFilter(sparkSession: SparkSession,
         .millisToMicros(fileStatus.getModificationTime)) > 0
 
   override def accept(path: Path): Boolean = true
-  override def strategy(): String = "modifiedBefore"
+  override def strategy(): String = "modifiedbefore"
 }
 case object ModifiedBeforeFilter extends PathFilterObject {
   def get(sparkSession: SparkSession,
