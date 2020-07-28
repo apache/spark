@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.vectorized._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 case class InMemoryTableScanExec(
@@ -69,11 +68,14 @@ case class InMemoryTableScanExec(
   private lazy val columnarInputRDD: RDD[ColumnarBatch] = {
     val numOutputRows = longMetric("numOutputRows")
     val buffers = filteredCachedBatches()
-    relation.cacheBuilder.serializer.decompressColumnar(buffers, relation.output, attributes, conf)
-      .map { cb =>
-        numOutputRows += cb.numRows()
-        cb
-      }
+    relation.cacheBuilder.serializer.convertFromCacheColumnar(
+      buffers,
+      relation.output,
+      attributes,
+      conf).map { cb =>
+      numOutputRows += cb.numRows()
+      cb
+    }
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
@@ -89,18 +91,15 @@ case class InMemoryTableScanExec(
     val serializer = relation.cacheBuilder.serializer
 
     // update SQL metrics
-    val withMetrics = if (enableAccumulatorsForTest) {
+    val withMetrics =
       filteredCachedBatches().map{ batch =>
-        readBatches.add(1)
+        if (enableAccumulatorsForTest) {
+          readBatches.add(1)
+        }
+        numOutputRows += batch.numRows
         batch
       }
-    } else {
-      filteredCachedBatches()
-    }.map{ batch =>
-      numOutputRows += batch.numRows
-      batch
-    }
-    val decompressedRows = serializer.decompressToRows(withMetrics, relOutput, attributes, conf)
+    val rows = serializer.convertFromCache(withMetrics, relOutput, attributes, conf)
     if (enableAccumulatorsForTest) {
       def incParts(index: Int, iter: Iterator[InternalRow]): Iterator[InternalRow] = {
         if (iter.hasNext) {
@@ -108,9 +107,9 @@ case class InMemoryTableScanExec(
         }
         iter
       }
-      decompressedRows.mapPartitionsWithIndexInternal(incParts)
+      rows.mapPartitionsWithIndexInternal(incParts)
     } else {
-      decompressedRows
+      rows
     }
   }
 

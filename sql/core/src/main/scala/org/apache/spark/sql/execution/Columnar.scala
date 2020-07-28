@@ -50,7 +50,9 @@ class ColumnarRule {
 }
 
 /**
- * A trait that is used as a tag to indicate a transition from columns to rows.
+ * A trait that is used as a tag to indicate a transition from columns to rows. This allows plugins
+ * to replace the current [[ColumnarToRowExec]] with an optimized version and still have operations
+ * that walk a spark plan looking for this type of transition properly match it.
  */
 trait ColumnarToRowTransition extends UnaryExecNode
 

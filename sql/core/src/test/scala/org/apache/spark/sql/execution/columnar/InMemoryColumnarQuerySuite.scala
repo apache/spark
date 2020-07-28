@@ -23,17 +23,15 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, In}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer}
+import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{ColumnarToRowExec, FilterExec, InputAdapter, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel._
 
@@ -46,78 +44,6 @@ class TestCachedBatchSerializer(
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] = {
     convertForCacheInternal(input, schema, batchSize, useCompression)
-  }
-}
-
-case class SingleIntCachedBatch(data: Array[Int]) extends CachedBatch {
-  override def numRows: Int = data.length
-  override def sizeInBytes: Long = 4 * data.length
-}
-
-/**
- * Very simple serializer that only supports a single int column, but does support columnar.
- */
-class TestSingleIntColumnarCachedBatchSerializer extends CachedBatchSerializer {
-  override def supportsColumnarInput(schema: Seq[Attribute]): Boolean = true
-
-  override def convertForCache(
-      input: RDD[InternalRow],
-      schema: Seq[Attribute],
-      storageLevel: StorageLevel,
-      conf: SQLConf): RDD[CachedBatch] = {
-    throw new IllegalStateException("This does not work. This is only for testing")
-  }
-
-  override def convertForCacheColumnar(
-      input: RDD[ColumnarBatch],
-      schema: Seq[Attribute],
-      storageLevel: StorageLevel,
-      conf: SQLConf): RDD[CachedBatch] = {
-    if (schema.length != 1 || schema.head.dataType != IntegerType) {
-      throw new IllegalArgumentException("Only a single column of non-nullable ints works. " +
-          s"This is for testing $schema")
-    }
-    input.map { cb =>
-      val column = cb.column(0)
-      val data = column.getInts(0, cb.numRows())
-      SingleIntCachedBatch(data)
-    }
-  }
-
-  override def supportsColumnarOutput(schema: StructType): Boolean = true
-
-  override def decompressColumnar(
-      input: RDD[CachedBatch],
-      cacheAttributes: Seq[Attribute],
-      selectedAttributes: Seq[Attribute],
-      conf: SQLConf): RDD[ColumnarBatch] = {
-    if (selectedAttributes.length != 1 ||
-        selectedAttributes.head.dataType != IntegerType) {
-      throw new IllegalArgumentException("Only a single column of non-nullable ints works. " +
-          "This is for testing")
-    }
-    input.map { cached =>
-      val single = cached.asInstanceOf[SingleIntCachedBatch]
-      val cv = OnHeapColumnVector.allocateColumns(single.numRows, selectedAttributes.toStructType)
-      val data = single.data
-      cv(0).putInts(0, data.length, data, 0)
-      new ColumnarBatch(cv.toArray, single.numRows)
-    }
-  }
-
-  override def decompressToRows(
-      input: RDD[CachedBatch],
-      cacheAttributes: Seq[Attribute],
-      selectedAttributes: Seq[Attribute],
-      conf: SQLConf): RDD[InternalRow] = {
-    throw new IllegalStateException("This does not work. This is only for testing")
-  }
-
-  override def buildFilter(
-      predicates: Seq[Expression],
-      cachedAttributes: Seq[Attribute]): (Int, Iterator[CachedBatch]) => Iterator[CachedBatch] = {
-    def ret(index: Int, cb: Iterator[CachedBatch]): Iterator[CachedBatch] = cb
-    ret
   }
 }
 
@@ -635,25 +561,6 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
           }
         }
       }
-    }
-  }
-
-  test("Columnar Cache Plugin Plan") {
-    withTempPath { workDir =>
-      val workDirPath = workDir.getAbsolutePath
-      val input = Seq(100, 200).toDF("count")
-      input.write.parquet(workDirPath)
-      val data = spark.read.parquet(workDirPath)
-      data.createOrReplaceTempView(s"testDataInt")
-      val storageLevel = MEMORY_ONLY
-      val plan = InMemoryRelation.convertToColumnarIfPossible(
-        spark.sessionState.executePlan(data.logicalPlan).executedPlan)
-      val inMemoryRelation = InMemoryRelation(
-        new TestSingleIntColumnarCachedBatchSerializer,
-        storageLevel, plan, None, data.logicalPlan)
-
-      assert(inMemoryRelation.cacheBuilder.cachedColumnBuffers.getStorageLevel == storageLevel)
-      checkAnswer(inMemoryRelation, data.collect().toSeq)
     }
   }
 }

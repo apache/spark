@@ -124,35 +124,35 @@ trait CachedBatchSerializer extends Serializable {
   def vectorTypes(attributes: Seq[Attribute], conf: SQLConf): Option[Seq[String]] = None
 
   /**
-   * Decompress the cached data into a ColumnarBatch. This currently is only used if
+   * Convert the cached data into a ColumnarBatch. This currently is only used if
    * `supportsColumnar()` returned true for the associated schema, but there are other checks
    * that can force row based output. One of the main advantages of doing columnar output over row
    * based output is that the code generation is more standard and can be combined with code
    * generation for downstream operations.
-   * @param input the cached batches that should be decompressed.
+   * @param input the cached batches that should be converted.
    * @param cacheAttributes the attributes of the data in the batch.
    * @param selectedAttributes the fields that should be loaded from the data and the order they
    *                           should appear in the output batch.
    * @param conf the configuration for the job.
    * @return an RDD of the input cached batches transformed into the ColumnarBatch format.
    */
-  def decompressColumnar(
+  def convertFromCacheColumnar(
       input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[ColumnarBatch]
 
   /**
-   * Decompress the cached batch into `InternalRow`. If you want this to be performant, code
+   * Convert the cached batch into `InternalRow`s. If you want this to be performant, code
    * generation is advised.
-   * @param input the cached batches that should be decompressed.
+   * @param input the cached batches that should be converted.
    * @param cacheAttributes the attributes of the data in the batch.
    * @param selectedAttributes the field that should be loaded from the data and the order they
    *                           should appear in the output rows.
    * @param conf the configuration for the job.
    * @return RDD of the rows that were stored in the cached batches.
    */
-  def decompressToRows(
+  def convertFromCache(
       input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
@@ -204,10 +204,9 @@ private object ExtractableLiteral {
 @DeveloperApi
 @Since("3.1.0")
 abstract class SimpleMetricsCachedBatchSerializer extends CachedBatchSerializer with Logging {
-  override def buildFilter(predicates: Seq[Expression],
+  override def buildFilter(
+      predicates: Seq[Expression],
       cachedAttributes: Seq[Attribute]): (Int, Iterator[CachedBatch]) => Iterator[CachedBatch] = {
-    // Most of this code originally came from `InMemoryTableScanExec.filteredCachedBatches()` and
-    // `InMemoryTableScanExec.buildFilter`
     val stats = new PartitionStatistics(cachedAttributes)
     val statsSchema = stats.schema
 

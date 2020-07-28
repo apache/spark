@@ -51,6 +51,15 @@ case class DefaultCachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: 
  * The default implementation of CachedBatchSerializer.
  */
 class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
+  override def supportsColumnarInput(schema: Seq[Attribute]): Boolean = false
+
+  override def convertForCacheColumnar(
+      input: RDD[ColumnarBatch],
+      schema: Seq[Attribute],
+      storageLevel: StorageLevel,
+      conf: SQLConf): RDD[CachedBatch] =
+    throw new IllegalStateException("Columnar input is not supported")
+
   override def convertForCache(input: RDD[InternalRow],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
@@ -64,7 +73,6 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       output: Seq[Attribute],
       batchSize: Int,
       useCompression: Boolean): RDD[CachedBatch] = {
-    // Most of this code originally came from `CachedRDDBuilder.buildBuffers()`
     input.mapPartitionsInternal { rowIterator =>
       new Iterator[DefaultCachedBatch] {
         def next(): DefaultCachedBatch = {
@@ -111,7 +119,6 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
   }
 
   override def supportsColumnarOutput(schema: StructType): Boolean = schema.fields.forall(f =>
-      // This code originally came from `InMemoryTableScanExec.supportsColumnar`
     f.dataType match {
         // More types can be supported, but this is to match the original implementation that
         // only supported primitive types "for ease of review"
@@ -129,12 +136,11 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       }
     ))
 
-  override def decompressColumnar(
+  override def convertFromCacheColumnar(
       input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[ColumnarBatch] = {
-    // Most of this code originally came from `InMemoryTableScanExec.createAndDecompressColumn`
     val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
     val outputSchema = StructType.fromAttributes(selectedAttributes)
     val columnIndices =
@@ -165,7 +171,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     input.map(createAndDecompressColumn)
   }
 
-  override def decompressToRows(input: RDD[CachedBatch],
+  override def convertFromCache(input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {
@@ -188,15 +194,6 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       columnarIterator
     }
   }
-
-  override def supportsColumnarInput(schema: Seq[Attribute]): Boolean = false
-
-  override def convertForCacheColumnar(
-      input: RDD[ColumnarBatch],
-      schema: Seq[Attribute],
-      storageLevel: StorageLevel,
-      conf: SQLConf): RDD[CachedBatch] =
-    throw new IllegalStateException("Columnar input is not Supported")
 }
 
 private[sql]
@@ -242,12 +239,14 @@ case class CachedRDDBuilder(
 
   private def buildBuffers(): RDD[CachedBatch] = {
     val cb = if (cachedPlan.supportsColumnar) {
-      serializer.convertForCacheColumnar(cachedPlan.executeColumnar(),
+      serializer.convertForCacheColumnar(
+        cachedPlan.executeColumnar(),
         cachedPlan.output,
         storageLevel,
         cachedPlan.conf)
     } else {
-      serializer.convertForCache(cachedPlan.execute(),
+      serializer.convertForCache(
+        cachedPlan.execute(),
         cachedPlan.output,
         storageLevel,
         cachedPlan.conf)
@@ -283,6 +282,8 @@ object InMemoryRelation {
       }
       case _ => plan
     }
+    case c2r: ColumnarToRowTransition => // This matches when whole stage code gen is disabled.
+      c2r.child
     case _ => plan
   }
 
