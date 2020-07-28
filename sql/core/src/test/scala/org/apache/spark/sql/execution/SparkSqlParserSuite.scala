@@ -66,8 +66,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("SET -v", SetCommand(Some("-v", None)))
     assertEqual("SET spark.sql.key", SetCommand(Some("spark.sql.key" -> None)))
     assertEqual("SET spark:sql:key=false", SetCommand(Some("spark:sql:key" -> Some("false"))))
-    assertEqual("SET spark.sql.    key=value",
-      SetCommand(Some("spark.sql.key" -> Some("value"))))
     assertEqual("SET 'spark.sql.    key'=value",
       SetCommand(Some("spark.sql.    key" -> Some("value"))))
     assertEqual("SET \"spark.sql.    key\"=value",
@@ -79,6 +77,7 @@ class SparkSqlParserSuite extends AnalysisTest {
       "'SET key=value'. If you want to include special characters in key and value, " +
       "please use quotes or string literal, e.g., SET \"ke y\"=value."
     intercept("SET spark.sql.key value", expectedErrMsg)
+    intercept("SET spark.sql.    key", expectedErrMsg)
     intercept("SET spark.sql.key   'value'", expectedErrMsg)
     intercept("SET    spark.sql.key \"value\" ", expectedErrMsg)
     intercept("SET spark.sql.key value1 value2", expectedErrMsg)
@@ -87,7 +86,6 @@ class SparkSqlParserSuite extends AnalysisTest {
   test("Report Error for invalid usage of RESET command") {
     assertEqual("RESET", ResetCommand(None))
     assertEqual("RESET spark.sql.key", ResetCommand(Some("spark.sql.key")))
-    assertEqual("RESET spark.sql.    key", ResetCommand(Some("spark.sql.key")))
     assertEqual("RESET 'spark.sql.    key'", ResetCommand(Some("spark.sql.    key")))
     assertEqual("RESET \"spark.sql.    key\"", ResetCommand(Some("spark.sql.    key")))
     assertEqual("RESET `spark.sql.    key`", ResetCommand(Some("spark.sql.    key")))
@@ -96,6 +94,7 @@ class SparkSqlParserSuite extends AnalysisTest {
       "If you want to include special characters in key, " +
       "please use quotes or string literal, e.g., RESET \"ke y\"."
     intercept("RESET spark.sql.key1 key2", expectedErrMsg)
+    intercept("RESET spark.  sql.key", expectedErrMsg)
     intercept("RESET spark.  sql.key1 key2", expectedErrMsg)
     intercept("RESET spark.sql.key1 key2 key3", expectedErrMsg)
   }
