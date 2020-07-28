@@ -187,6 +187,12 @@
                   url: sql-ref-syntax-qry-select-tvf.html
                 - text: Window Function
                   url: sql-ref-syntax-qry-select-window.html
+                - text: CASE Clause
+                  url: sql-ref-syntax-qry-select-case.html
+                - text: LATERAL VIEW Clause
+                  url: sql-ref-syntax-qry-select-lateral-view.html
+                - text: PIVOT Clause
+                  url: sql-ref-syntax-qry-select-pivot.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements

@@ -1323,7 +1323,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         :param n: int, default 1. Number of rows to return.
         :return: If n is greater than 1, return a list of :class:`Row`.
-            If n is 1, return a single Row.
+            If n is 1, return a single Row if it exists. Otherwise, we will return an
+            empty list to match the behavior of `head(1)` when the dataframe is empty.
 
         >>> df.head()
         Row(age=2, name='Alice')
@@ -1332,7 +1333,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if n is None:
             rs = self.head(1)
-            return rs[0] if rs else None
+            return rs[0] if rs else []
         return self.take(n)
 
     @since(1.3)

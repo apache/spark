@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
+import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{joins, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 
 /**
@@ -47,6 +48,11 @@ object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
       val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
       Seq(BroadcastHashJoinExec(
         leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
+
+    case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
+        if isBroadcastStage(j.right) =>
+      Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+        None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
     case j @ Join(left, right, joinType, condition, _)
         if isBroadcastStage(left) || isBroadcastStage(right) =>

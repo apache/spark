@@ -31,7 +31,7 @@ import org.scalatest.Assertions._
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark._
+import org.apache.spark.{FakeSchedulerBackend => _, _}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.SKIP_VALIDATE_CORES_TESTING

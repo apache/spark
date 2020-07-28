@@ -2672,6 +2672,17 @@ object SQLConf {
       .checkValue(_ >= 0, "The value must be non-negative.")
       .createWithDefault(8)
 
+  val OPTIMIZE_NULL_AWARE_ANTI_JOIN =
+    buildConf("spark.sql.optimizeNullAwareAntiJoin")
+      .internal()
+      .doc("When true, NULL-aware anti join execution will be planed into " +
+        "BroadcastHashJoinExec with flag isNullAwareAntiJoin enabled, " +
+        "optimized from O(M*N) calculation into O(M) calculation " +
+        "using Hash lookup instead of Looping lookup." +
+        "Only support for singleColumn NAAJ for now.")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3276,6 +3287,9 @@ class SQLConf extends Serializable with Logging {
 
   def coalesceBucketsInJoinMaxBucketRatio: Int =
     getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
+
+  def optimizeNullAwareAntiJoin: Boolean =
+    getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
 
   /** ********************** SQLConf functionality methods ************ */
 
