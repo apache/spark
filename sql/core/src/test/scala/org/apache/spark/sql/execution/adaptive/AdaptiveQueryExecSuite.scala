@@ -1148,4 +1148,62 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("adaptive skewed join, and there is only one ShuffleQueryStage in the join's children") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_ENABLED.key -> "true",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "600",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "600") {
+      spark
+        .range(0, 10, 1, 2)
+        .selectExpr("id % 5 as key1", "id as value1")
+        .write.bucketBy(5, "key1")
+        .format("parquet").saveAsTable("tbl1")
+
+      val df2 =
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+
+      val join = spark.table("tbl1")
+        .join(df2, col("key1") === col("key2"))
+        .select(col("key1"), col("value2"))
+
+      // Before Execution, there is one SortMergeJoin
+      val smjBeforeExecution = join.queryExecution.sparkPlan.collect {
+        case smj: SortMergeJoinExec => smj
+      }
+      assert(smjBeforeExecution.length === 1)
+
+      // Check the answer.
+      val expectedAnswer =
+        spark
+          .range(0, 1000)
+          .selectExpr("0 as key", "id as value")
+          .union(spark.range(0, 1000).selectExpr("0 as key", "id as value"))
+      checkAnswer(
+        join,
+        expectedAnswer.collect())
+
+      // During execution, the SMJ is changed to Union of SMJ + 10 SMJ of the skewed partition.
+      val planAfter = join.queryExecution.executedPlan
+      assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
+      val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      val smjAfterExecution = adaptivePlan.collect {
+        case smj: SortMergeJoinExec => smj
+      }
+
+      assert(smjAfterExecution.length === 1 && smjAfterExecution.head.isSkewJoin)
+      assert(smjAfterExecution.head.collect {
+        case r: CustomShuffleReaderExec => r
+      }.length == 1)
+
+      val queryStages = adaptivePlan.collect {
+        case q: ShuffleQueryStageExec => q
+      }
+      assert(queryStages.length === 1)
+    }
+  }
 }
