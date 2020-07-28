@@ -253,7 +253,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
   def optimizeSingleStageSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
     case smj @ SortMergeJoinExec(_, _, joinType, _,
-    sort @ SortExec(_, _, ShuffleStage(qs: ShuffleStageInfo), _), right, _) =>
+        sort @ SortExec(_, _, ShuffleStage(qs: ShuffleStageInfo), _), right, _) =>
       if (qs.shuffleStage.shuffle.canChangeNumPartitions && canSplitLeftSide(joinType)) {
         val (numSkewed, splitPartitions, partitionIndexes) = handleSkewed(qs)
         if (numSkewed > 0) {
@@ -269,7 +269,7 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       }
 
     case smj @ SortMergeJoinExec(_, _, _, _, left,
-    sort @ SortExec(_, _, ShuffleStage(qs: ShuffleStageInfo), _), _) =>
+        sort @ SortExec(_, _, ShuffleStage(qs: ShuffleStageInfo), _), _) =>
       val (numSkewed, splitPartitions, partitionIndexes) = handleSkewed(qs)
       if (numSkewed > 0) {
         logInfo(s"number of skewed partitions $numSkewed")
@@ -281,8 +281,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       } else smj
   }
 
-  private def handleSkewed(queryStage: ShuffleStageInfo):
-  (Int, Seq[ShufflePartitionSpec], Seq[Int]) = {
+  private def handleSkewed(
+      queryStage: ShuffleStageInfo): (Int, Seq[ShufflePartitionSpec], Seq[Int]) = {
     val numPartitions = queryStage.partitionsWithSizes.length
     val medSize = medianSize(queryStage.mapStats)
     val actualSizes = queryStage.partitionsWithSizes.map(_._2)

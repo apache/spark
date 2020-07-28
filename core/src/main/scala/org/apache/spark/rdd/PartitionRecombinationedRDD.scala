@@ -25,8 +25,9 @@ import org.apache.spark.{Dependency, NarrowDependency, Partition, TaskContext}
  * A RDD that just redistribute the dependency RDD's partitions.
  * It provides the capability to reorder, remove, duplicate... any RDD partition level operation.
  */
-class RecombinationedRDD[T: ClassTag](prev: RDD[T],
-                                      f: (Seq[Int] => Seq[Int])) extends RDD[T](prev) {
+class RecombinationedRDD[T: ClassTag](
+    prev: RDD[T],
+    f: (Seq[Int] => Seq[Int])) extends RDD[T](prev) {
   private val recombinationed = {
     val partitionIndexes = prev.partitions.indices
     f(partitionIndexes)

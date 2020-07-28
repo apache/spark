@@ -1156,16 +1156,14 @@ class AdaptiveQueryExecSuite
       SQLConf.SKEW_JOIN_ENABLED.key -> "true",
       SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "600",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "600") {
-      spark
-        .range(0, 10, 1, 2)
+      spark.range(0, 10, 1, 2)
         .selectExpr("id % 5 as key1", "id as value1")
         .write.bucketBy(5, "key1")
-        .format("parquet").saveAsTable("tbl1")
+        .format("parquet")
+        .saveAsTable("tbl1")
 
-      val df2 =
-        spark
-          .range(0, 1000, 1, 10)
-          .selectExpr("id % 1 as key2", "id as value2")
+      val df2 = spark.range(0, 1000, 1, 10)
+        .selectExpr("id % 1 as key2", "id as value2")
 
       val join = spark.table("tbl1")
         .join(df2, col("key1") === col("key2"))
@@ -1179,8 +1177,7 @@ class AdaptiveQueryExecSuite
 
       // Check the answer.
       val expectedAnswer =
-        spark
-          .range(0, 1000)
+        spark.range(0, 1000)
           .selectExpr("0 as key", "id as value")
           .union(spark.range(0, 1000).selectExpr("0 as key", "id as value"))
       checkAnswer(

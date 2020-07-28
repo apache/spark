@@ -33,8 +33,10 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartit
  * @param child Child plan
  */
 
-case class PartitionRecombinationExec(f: (Seq[Int] => Seq[Int]), targetPartitionNum: Int,
-  child: SparkPlan) extends SparkPlan {
+case class PartitionRecombinationExec(
+    f: (Seq[Int] => Seq[Int]),
+    targetPartitionNum: Int,
+    child: SparkPlan) extends SparkPlan {
 
   override protected def doExecute(): RDD[InternalRow] = {
     new RecombinationedRDD[InternalRow](child.execute(), f)

@@ -21,7 +21,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class PartitionRecombinationSuite extends QueryTest with SharedSparkSession {
-  import testImplicits._
   test("test operator PartitionDistributionExec") {
     withTable("tbl1") {
       withSQLConf(
