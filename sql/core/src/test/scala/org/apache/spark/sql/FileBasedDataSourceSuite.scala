@@ -576,7 +576,6 @@ class FileBasedDataSourceSuite extends QueryTest
             .option("modifiedAfter", "2019-05-10T01:11:00")
             .format("csv")
             .load(path.toString)
-        
         assert(df.count() == 1)
       }
     }
