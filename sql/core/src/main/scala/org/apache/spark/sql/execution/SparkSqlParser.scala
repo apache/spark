@@ -58,9 +58,6 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
 class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
-  private def normalizeConfigString(s: String) =
-    s.replaceAll("\"", "").replaceAll("'", "")
-
   /**
    * Create a [[SetCommand]] logical plan.
    *
@@ -69,8 +66,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.configKey() != null) {
-      val keyStr = normalizeConfigString(ctx.configKey().getText)
+    if (ctx.configureKey() != null) {
+      val keyStr = ctx.configureKey().getText
       if (ctx.value != null) {
         SetCommand(Some(keyStr -> Option(ctx.value.getText)))
       } else {
@@ -97,8 +94,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.configKey() != null) {
-      ResetCommand(Some(normalizeConfigString(ctx.configKey().getText)))
+    if (ctx.configureKey() != null) {
+      ResetCommand(Some(ctx.configureKey().getText))
     } else {
       remainder(ctx.RESET().getSymbol).trim match {
         case s if s.isEmpty => ResetCommand(None)

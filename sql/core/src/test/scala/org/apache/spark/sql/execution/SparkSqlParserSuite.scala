@@ -68,10 +68,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("SET spark:sql:key=false", SetCommand(Some("spark:sql:key" -> Some("false"))))
     assertEqual("SET spark.sql.    key=value",
       SetCommand(Some("spark.sql.key" -> Some("value"))))
-    assertEqual("SET 'spark.sql.    key'=value",
-      SetCommand(Some("spark.sql.    key" -> Some("value"))))
-    assertEqual("SET \"spark.sql.    key\"=value",
-      SetCommand(Some("spark.sql.    key" -> Some("value"))))
     assertEqual("SET `spark.sql.    key`=value",
       SetCommand(Some("spark.sql.    key" -> Some("value"))))
 
@@ -88,8 +84,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("RESET", ResetCommand(None))
     assertEqual("RESET spark.sql.key", ResetCommand(Some("spark.sql.key")))
     assertEqual("RESET spark.sql.    key", ResetCommand(Some("spark.sql.key")))
-    assertEqual("RESET 'spark.sql.    key'", ResetCommand(Some("spark.sql.    key")))
-    assertEqual("RESET \"spark.sql.    key\"", ResetCommand(Some("spark.sql.    key")))
     assertEqual("RESET `spark.sql.    key`", ResetCommand(Some("spark.sql.    key")))
 
     val expectedErrMsg = "Expected format is 'RESET' or 'RESET key'. " +

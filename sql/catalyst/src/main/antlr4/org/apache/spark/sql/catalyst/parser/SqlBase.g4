@@ -246,17 +246,16 @@ statement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
-    | SET configKey (EQ value=.+)?                                     #setConfiguration
+    | SET configureKey (EQ value=.+)?                                  #setConfiguration
     | SET .*?                                                          #setConfiguration
-    | RESET configKey?                                                 #resetConfiguration
+    | RESET configureKey?                                              #resetConfiguration
     | RESET .*?                                                        #resetConfiguration
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
-configKey
+configureKey
     : IDENTIFIER (('.' | ':') IDENTIFIER)*
     | quotedIdentifier
-    | STRING
     ;
 
 unsupportedHiveNativeCommands
