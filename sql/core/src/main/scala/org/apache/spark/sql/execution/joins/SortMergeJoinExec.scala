@@ -514,42 +514,6 @@ case class SortMergeJoinExec(
   }
 
   /**
-   * Creates variables and declarations for left part of result row.
-   *
-   * In order to defer the access after condition and also only access once in the loop,
-   * the variables should be declared separately from accessing the columns, we can't use the
-   * codegen of BoundReference here.
-   */
-  private def createLeftVars(ctx: CodegenContext, leftRow: String): (Seq[ExprCode], Seq[String]) = {
-    ctx.INPUT_ROW = leftRow
-    left.output.zipWithIndex.map { case (a, i) =>
-      val value = ctx.freshName("value")
-      val valueCode = CodeGenerator.getValue(leftRow, a.dataType, i.toString)
-      val javaType = CodeGenerator.javaType(a.dataType)
-      val defaultValue = CodeGenerator.defaultValue(a.dataType)
-      if (a.nullable) {
-        val isNull = ctx.freshName("isNull")
-        val code =
-          code"""
-             |$isNull = $leftRow.isNullAt($i);
-             |$value = $isNull ? $defaultValue : ($valueCode);
-           """.stripMargin
-        val leftVarsDecl =
-          s"""
-             |boolean $isNull = false;
-             |$javaType $value = $defaultValue;
-           """.stripMargin
-        (ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType)),
-          leftVarsDecl)
-      } else {
-        val code = code"$value = $valueCode;"
-        val leftVarsDecl = s"""$javaType $value = $defaultValue;"""
-        (ExprCode(code, FalseLiteral, JavaCode.variable(value, a.dataType)), leftVarsDecl)
-      }
-    }.unzip
-  }
-
-  /**
    * Creates the variables for right part of result row, using BoundReference, since the right
    * part are accessed inside the loop.
    */
@@ -595,7 +559,7 @@ case class SortMergeJoinExec(
     val (leftRow, matches) = genScanner(ctx)
 
     // Create variables for row from both sides.
-    val (leftVars, leftVarDecl) = createLeftVars(ctx, leftRow)
+    val (leftVars, leftVarDecl) = createVars(ctx, leftRow, left.output)
     val rightRow = ctx.freshName("rightRow")
     val rightVars = createRightVar(ctx, rightRow)
 

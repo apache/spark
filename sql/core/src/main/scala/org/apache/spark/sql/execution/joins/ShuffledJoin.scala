@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.{FullOuter, InnerLike, LeftExistence, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution, Partitioning, PartitioningCollection, UnknownPartitioning}
 
@@ -39,5 +42,44 @@ trait ShuffledJoin extends BaseJoinExec {
     case x =>
       throw new IllegalArgumentException(
         s"ShuffledJoin should not take $x as the JoinType")
+  }
+
+  /**
+   * Creates variables and declarations for attributes in row.
+   *
+   * In order to defer the access after condition and also only access once in the loop,
+   * the variables should be declared separately from accessing the columns, we can't use the
+   * codegen of BoundReference here.
+   */
+  protected def createVars(
+      ctx: CodegenContext,
+      row: String,
+      attributes: Seq[Attribute]): (Seq[ExprCode], Seq[String]) = {
+    ctx.INPUT_ROW = row
+    attributes.zipWithIndex.map { case (a, i) =>
+      val value = ctx.freshName("value")
+      val valueCode = CodeGenerator.getValue(row, a.dataType, i.toString)
+      val javaType = CodeGenerator.javaType(a.dataType)
+      val defaultValue = CodeGenerator.defaultValue(a.dataType)
+      if (a.nullable) {
+        val isNull = ctx.freshName("isNull")
+        val code =
+          code"""
+             |$isNull = $row.isNullAt($i);
+             |$value = $isNull ? $defaultValue : ($valueCode);
+           """.stripMargin
+        val leftVarsDecl =
+          s"""
+             |boolean $isNull = false;
+             |$javaType $value = $defaultValue;
+           """.stripMargin
+        (ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType)),
+          leftVarsDecl)
+      } else {
+        val code = code"$value = $valueCode;"
+        val leftVarsDecl = s"""$javaType $value = $defaultValue;"""
+        (ExprCode(code, FalseLiteral, JavaCode.variable(value, a.dataType)), leftVarsDecl)
+      }
+    }.unzip
   }
 }
