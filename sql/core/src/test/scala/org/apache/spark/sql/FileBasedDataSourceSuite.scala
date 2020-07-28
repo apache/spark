@@ -563,26 +563,7 @@ class FileBasedDataSourceSuite extends QueryTest
       }
     }
   }
-
-  test("SPARK-31962 - when modifiedAfter specified " +
-      "with a future date") {
-    withTempDir { dir =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        val path = new Path(dir.getCanonicalPath)
-        val file = new File(dir, "file2.csv")
-        stringToFile(file, "text")
-        file.setLastModified(DateTimeUtils.currentTimestamp())
-        val msg = intercept[AnalysisException] {
-          spark.read
-              .option("modifiedAfter", "2050-05-01T01:00:00")
-              .format("csv")
-              .load(path.toString)
-        }.getMessage
-        assert(msg.contains("Unable to infer schema for CSV"))
-      }
-    }
-  }
-
+  
   test("SPARK-31962 - when modifiedAfter specified " +
       "with a past date") {
     withTempDir { dir =>
