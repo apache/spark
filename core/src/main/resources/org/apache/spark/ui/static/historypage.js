@@ -166,7 +166,7 @@ $(document).ready(function() {
         var durationColumnName = 'duration';
         var conf = {
           "columns": [
-          	{name: 'version'},
+            {name: 'version'},
             {name: 'appId', type: "appid-numeric"},
             {name: 'appName'},
             {name: attemptIdColumnName},
