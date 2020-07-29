@@ -44,14 +44,12 @@ private[spark] object SchemaUtils {
    */
   def checkSchemaColumnNameDuplication(
       schema: StructType, colType: String, caseSensitiveAnalysis: Boolean = false): Unit = {
-    val queue = new Queue[StructType]()
-    queue.enqueue(schema)
-    do {
-      val struct = queue.dequeue()
-      checkColumnNameDuplication(struct.map(_.name), colType, caseSensitiveAnalysis)
-      val nestedStructs = struct.map(_.dataType).collect { case st: StructType => st }
-      queue.enqueue(nestedStructs: _*)
-    } while (queue.nonEmpty)
+    val fields = schema.fields
+    checkColumnNameDuplication(fields.map(_.name), colType, caseSensitiveAnalysis)
+    fields.map(_.dataType).foreach {
+      case st: StructType => checkSchemaColumnNameDuplication(st, colType, caseSensitiveAnalysis)
+      case _ =>
+    }
   }
 
   /**
