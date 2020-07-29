@@ -68,17 +68,17 @@ trait ShuffledJoin extends BaseJoinExec {
              |$isNull = $row.isNullAt($i);
              |$value = $isNull ? $defaultValue : ($valueCode);
            """.stripMargin
-        val leftVarsDecl =
+        val varDecl =
           s"""
              |boolean $isNull = false;
              |$javaType $value = $defaultValue;
            """.stripMargin
         (ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType)),
-          leftVarsDecl)
+          varDecl)
       } else {
         val code = code"$value = $valueCode;"
-        val leftVarsDecl = s"""$javaType $value = $defaultValue;"""
-        (ExprCode(code, FalseLiteral, JavaCode.variable(value, a.dataType)), leftVarsDecl)
+        val varDecl = s"""$javaType $value = $defaultValue;"""
+        (ExprCode(code, FalseLiteral, JavaCode.variable(value, a.dataType)), varDecl)
       }
     }.unzip
   }
