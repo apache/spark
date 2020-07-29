@@ -57,6 +57,19 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
 
+  private var originalMaxToStringFields = conf.maxToStringFields
+
+  override def beforeAll(): Unit = {
+    conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, 100)
+    super.beforeAll()
+
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, originalMaxToStringFields)
+  }
+
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   protected val baseResourcePath = {
@@ -269,9 +282,7 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
 
   tpcdsQueries.foreach { q =>
     test(s"check simplified (tpcds-v1.4/$q)") {
-      withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "100") {
-        testQuery("tpcds", q)
-      }
+      testQuery("tpcds", q)
     }
   }
 }
@@ -282,9 +293,7 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
 
   tpcdsQueriesV2_7_0.foreach { q =>
     test(s"check simplified (tpcds-v2.7.0/$q)") {
-      withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "100") {
-        testQuery("tpcds-v2.7.0", q)
-      }
+      testQuery("tpcds-v2.7.0", q)
     }
   }
 }
@@ -295,9 +304,7 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
 
   modifiedTPCDSQueries.foreach { q =>
     test(s"check simplified (tpcds-modifiedQueries/$q)") {
-      withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "100") {
-        testQuery("tpcds-modifiedQueries", q)
-      }
+      testQuery("tpcds-modifiedQueries", q)
     }
   }
 }
