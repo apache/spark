@@ -68,7 +68,7 @@ trait ResourceAllocator {
   private[spark] def assignedAddrs: Seq[String] = addressAvailabilityMap
     .flatMap { case (addr, available) =>
       (0 until slotsPerAddress - available).map(_ => addr)
-    }.toSeq
+    }.toSeq.sorted
 
   /**
    * Acquire a sequence of resource addresses (to a launched task), these addresses must be
