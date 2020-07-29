@@ -39,8 +39,8 @@ class SorterSuite extends SparkFunSuite with Logging {
     new Sorter(new KeyReuseIntArraySortDataFormat)
       .sort(data2, 0, data2.length, Ordering[IntWrapper])
 
-    assert(data0.sameElements(data1))
-    assert(data0.sameElements(data2))
+    assert(data0 === data1)
+    assert(data0 === data2)
   }
 
   test("KVArraySorter") {
