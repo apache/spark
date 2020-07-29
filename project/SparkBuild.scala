@@ -28,13 +28,14 @@ import scala.collection.mutable.Stack
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
-import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
 import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
+import sbtassembly.AssemblyPlugin.autoImport._
+import sbtunidoc.GenJavadocPlugin.autoImport._
 
 import spray.revolver.RevolverPlugin._
 
@@ -83,6 +84,7 @@ object BuildCommons {
 object SparkBuild extends PomBuild {
 
   import BuildCommons._
+  import sbtunidoc.ScalaUnidocPlugin
   import scala.collection.mutable.Map
 
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
@@ -204,7 +206,6 @@ object SparkBuild extends PomBuild {
     javaHome := sys.env.get("JAVA_HOME")
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
-    incOptions := incOptions.value.withNameHashing(true),
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.16",
 
@@ -219,8 +220,10 @@ object SparkBuild extends PomBuild {
     ),
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
-    publishLocalConfiguration in MavenCompile :=
-      new PublishConfiguration(None, "dotM2", packagedArtifacts.value, Seq(), ivyLoggingLevel.value),
+    publishLocalConfiguration in MavenCompile := PublishConfiguration()
+        .withResolverName("dotM2")
+        .withArtifacts(packagedArtifacts.value.toVector)
+        .withLogging(ivyLoggingLevel.value),
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile := publishTask(publishLocalConfiguration in MavenCompile, deliverLocal).value,
     publishLocalBoth := Seq(publishLocal in MavenCompile, publishLocal).dependOn.value,
@@ -273,14 +276,15 @@ object SparkBuild extends PomBuild {
       val out = streams.value
 
       def logProblem(l: (=> String) => Unit, f: File, p: xsbti.Problem) = {
-        l(f.toString + ":" + p.position.line.fold("")(_ + ":") + " " + p.message)
+        val jmap = new java.util.function.Function[Integer, String]() {override def apply(i: Integer): String = {i.toString}}
+        l(f.toString + ":" + p.position.line.map[String](jmap.apply).map(_ + ":").orElse("") + " " + p.message)
         l(p.position.lineContent)
         l("")
       }
 
       var failed = 0
-      analysis.infos.allInfos.foreach { case (k, i) =>
-        i.reportedProblems foreach { p =>
+      analysis.asInstanceOf[sbt.internal.inc.Analysis].infos.allInfos.foreach { case (k, i) =>
+        i.getReportedProblems foreach { p =>
           val deprecation = p.message.contains("deprecated")
 
           if (!deprecation) {
@@ -485,12 +489,12 @@ object SparkParallelTestGrouping {
     testGrouping in Test := {
       val tests: Seq[TestDefinition] = (definedTests in Test).value
       val defaultForkOptions = ForkOptions(
-        bootJars = Nil,
         javaHome = javaHome.value,
-        connectInput = connectInput.value,
         outputStrategy = outputStrategy.value,
-        runJVMOptions = (javaOptions in Test).value,
+        bootJars = Vector.empty[java.io.File],
         workingDirectory = Some(baseDirectory.value),
+        runJVMOptions = (javaOptions in Test).value.toVector,
+        connectInput = connectInput.value,
         envVars = (envVars in Test).value
       )
       tests.groupBy(test => testNameToTestGroup(test.name)).map { case (groupName, groupTests) =>
@@ -498,7 +502,7 @@ object SparkParallelTestGrouping {
           if (groupName == DEFAULT_TEST_GROUP) {
             defaultForkOptions
           } else {
-            defaultForkOptions.copy(runJVMOptions = defaultForkOptions.runJVMOptions ++
+            defaultForkOptions.withRunJVMOptions(defaultForkOptions.runJVMOptions ++
               Seq(s"-Djava.io.tmpdir=${baseDirectory.value}/target/tmp/$groupName"))
           }
         }
@@ -512,6 +516,7 @@ object SparkParallelTestGrouping {
 }
 
 object Core {
+  import scala.sys.process.Process
   lazy val settings = Seq(
     resourceGenerators in Compile += Def.task {
       val buildScript = baseDirectory.value + "/../build/spark-build-info"
@@ -557,6 +562,7 @@ object DockerIntegrationTests {
  */
 object KubernetesIntegrationTests {
   import BuildCommons._
+  import scala.sys.process.Process
 
   val dockerBuild = TaskKey[Unit]("docker-imgs", "Build the docker images for ITs.")
   val runITs = TaskKey[Unit]("run-its", "Only run ITs, skip image build.")
@@ -634,7 +640,9 @@ object ExcludedDependencies {
  */
 object OldDeps {
 
-  lazy val project = Project("oldDeps", file("dev"), settings = oldDepsSettings)
+  lazy val project = Project("oldDeps", file("dev"))
+    .settings(oldDepsSettings)
+    .disablePlugins(com.typesafe.sbt.pom.PomReaderPlugin)
 
   lazy val allPreviousArtifactKeys = Def.settingDyn[Seq[Set[ModuleID]]] {
     SparkBuild.mimaProjects
@@ -650,7 +658,10 @@ object OldDeps {
 }
 
 object Catalyst {
-  lazy val settings = antlr4Settings ++ Seq(
+  import com.simplytyped.Antlr4Plugin
+  import com.simplytyped.Antlr4Plugin.autoImport._
+
+  lazy val settings = Antlr4Plugin.projectSettings ++ Seq(
     antlr4Version in Antlr4 := SbtPomKeys.effectivePom.value.getProperties.get("antlr4.version").asInstanceOf[String],
     antlr4PackageName in Antlr4 := Some("org.apache.spark.sql.catalyst.parser"),
     antlr4GenListener in Antlr4 := true,
@@ -721,27 +732,27 @@ object Hive {
 
 object Assembly {
   import sbtassembly.AssemblyUtils._
-  import sbtassembly.Plugin._
-  import AssemblyKeys._
+  import sbtassembly.AssemblyPlugin.autoImport._
 
   val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
 
-  lazy val settings = assemblySettings ++ Seq(
+  lazy val settings = baseAssemblySettings ++ Seq(
     test in assembly := {},
     hadoopVersion := {
       sys.props.get("hadoop.version")
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
-    jarName in assembly := {
+    assemblyJarName in assembly := {
+      lazy val hdpVersion = hadoopVersion.value
       if (moduleName.value.contains("streaming-kafka-0-10-assembly")
         || moduleName.value.contains("streaming-kinesis-asl-assembly")) {
         s"${moduleName.value}-${version.value}.jar"
       } else {
-        s"${moduleName.value}-${version.value}-hadoop${hadoopVersion.value}.jar"
+        s"${moduleName.value}-${version.value}-hadoop${hdpVersion}.jar"
       }
     },
-    jarName in (Test, assembly) := s"${moduleName.value}-test-${version.value}.jar",
-    mergeStrategy in assembly := {
+    assemblyJarName in (Test, assembly) := s"${moduleName.value}-test-${version.value}.jar",
+    assemblyMergeStrategy in assembly := {
       case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf")
                                                                => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$")
@@ -756,8 +767,7 @@ object Assembly {
 }
 
 object PySparkAssembly {
-  import sbtassembly.Plugin._
-  import AssemblyKeys._
+  import sbtassembly.AssemblyPlugin.autoImport._
   import java.util.zip.{ZipOutputStream, ZipEntry}
 
   lazy val settings = Seq(
@@ -807,8 +817,13 @@ object PySparkAssembly {
 object Unidoc {
 
   import BuildCommons._
-  import sbtunidoc.Plugin._
-  import UnidocKeys._
+  import sbtunidoc.BaseUnidocPlugin
+  import sbtunidoc.JavaUnidocPlugin
+  import sbtunidoc.ScalaUnidocPlugin
+  import sbtunidoc.BaseUnidocPlugin.autoImport._
+  import sbtunidoc.GenJavadocPlugin.autoImport._
+  import sbtunidoc.JavaUnidocPlugin.autoImport._
+  import sbtunidoc.ScalaUnidocPlugin.autoImport._
 
   private def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
     packages
@@ -848,7 +863,10 @@ object Unidoc {
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
 
-  lazy val settings = scalaJavaUnidocSettings ++ Seq (
+  lazy val settings = BaseUnidocPlugin.projectSettings ++
+                      ScalaUnidocPlugin.projectSettings ++
+                      JavaUnidocPlugin.projectSettings ++
+                      Seq (
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
