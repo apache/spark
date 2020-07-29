@@ -333,7 +333,7 @@ private[spark] object JsonProtocol {
   def accumulablesToJson(accumulables: Iterable[AccumulableInfo]): JArray = {
     JArray(accumulables
         .filterNot(_.name.exists(accumulableExcludeList.contains))
-        .toList.map(accumulableInfoToJson))
+        .toList.sortBy(_.id).map(accumulableInfoToJson))
   }
 
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
