@@ -19,6 +19,11 @@
 <table id="history-summary-table" class="table table-striped compact">
   <thead>
     <tr>
+    	<th>
+        <span data-toggle="tooltip" data-placement="top" title="Spark version of this application.">
+          Version
+        </span>
+      </th>
       <th>
         <span data-toggle="tooltip" data-placement="top" title="ID of this application.">
           App ID
@@ -73,6 +78,7 @@
   {{#applications}}
     <tr>
       {{#attempts}}
+      <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}>{{version}}</td>
       <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}><span title="{{id}}"><a href="{{uiroot}}/history/{{id}}{{#hasAttemptId}}/{{attemptId}}{{/hasAttemptId}}/jobs/">{{id}}</a></span></td>
       <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}>{{name}}</td>
       {{#hasMultipleAttempts}}
