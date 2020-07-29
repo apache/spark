@@ -750,7 +750,7 @@ class TaskSetManagerSuite
     assert(thrown2.getMessage().contains("bigger than spark.driver.maxResultSize"))
   }
 
-  test("do not check total size of intermediate stages") {
+  test("SPARK-32470: do not check total size of intermediate stages") {
     val conf = new SparkConf().set(config.MAX_RESULT_SIZE.key, "20k")
     sc = new SparkContext("local", "test", conf)
     // final result is below limit.

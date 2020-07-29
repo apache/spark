@@ -691,7 +691,8 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Check whether has enough quota to fetch the result with `size` bytes
+   * Check whether has enough quota to fetch the result with `size` bytes.
+   * This check does not apply to shuffle map tasks as they return map status and metrics updates.
    */
   def canFetchMoreResults(size: Long): Boolean = sched.synchronized {
     totalResultSize += size
