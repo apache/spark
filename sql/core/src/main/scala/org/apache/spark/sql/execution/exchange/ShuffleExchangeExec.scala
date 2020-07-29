@@ -62,7 +62,7 @@ trait ShuffleExchangeLike extends Exchange {
   def canChangeNumPartitions: Boolean
 
   /**
-   * The asynchronous job that prepares the materializes the shuffle.
+   * The asynchronous job that materializes the shuffle.
    */
   def mapOutputStatisticsFuture: Future[MapOutputStatistics]
 
