@@ -73,6 +73,20 @@ grammar SqlBase;
       return false;
     }
   }
+
+  /**
+   * Returns true if the next token is put on the hidden channel.
+   * For example, this method can be used to respect 'WS' between tokens
+   * (See the syntax 'configKey').
+   */
+  public boolean isHidden() {
+    if (_input instanceof TokenStream) {
+      Token token = ((TokenStream) _input).get(_input.index() + 1);
+      return token.getChannel() == token.HIDDEN_CHANNEL;
+    } else {
+      return false;
+    }
+  }
 }
 
 singleStatement
@@ -246,7 +260,7 @@ statement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
-    | SET configKey (EQ value=.+)?                                     #setConfiguration
+    | SET configKey (EQ configValue)?                                  #setConfiguration
     | SET .*?                                                          #setConfiguration
     | RESET configKey?                                                 #resetConfiguration
     | RESET .*?                                                        #resetConfiguration
@@ -254,12 +268,18 @@ statement
     ;
 
 configKey
-    : configIdentifier (('.' | ':') configIdentifier)*
+    : configIdentifier ({!isHidden()}? ('.' | ':') {!isHidden()}? configIdentifier)*
     | quotedIdentifier
     ;
 
+configValue
+    : MINUS? vaule=.*?
+    ;
+
 configIdentifier
-    : IDENTIFIER | nonReserved | strictNonReserved
+    : IDENTIFIER
+    | nonReserved
+    | strictNonReserved
     ;
 
 unsupportedHiveNativeCommands

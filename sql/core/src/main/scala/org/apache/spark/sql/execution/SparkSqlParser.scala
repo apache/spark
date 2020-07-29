@@ -68,8 +68,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.configKey() != null) {
       val keyStr = ctx.configKey().getText
-      if (ctx.value != null) {
-        SetCommand(Some(keyStr -> Option(ctx.value.getText)))
+      if (ctx.configValue() != null) {
+        SetCommand(Some(keyStr -> Option(ctx.configValue().getText)))
       } else {
         SetCommand(Some(keyStr -> None))
       }
