@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, Semaphore}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, Semaphore, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -274,7 +274,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
 
     // Wait for the executor to be removed automatically after migration.
-    executorRemovedSem.acquire(1)
+    assert(executorRemovedSem.tryAcquire(1, 5L, TimeUnit.MINUTES))
 
     // Since the RDD is cached or shuffled so further usage of same RDD should use the
     // cached data. Original RDD partitions should not be recomputed i.e. accum
