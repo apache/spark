@@ -56,7 +56,7 @@ trait ResourceAllocator {
   def availableAddrs: Seq[String] = addressAvailabilityMap
     .flatMap { case (addr, available) =>
       (0 until available).map(_ => addr)
-    }.toSeq
+    }.toSeq.sorted
 
   /**
    * Sequence of currently assigned resource addresses.
