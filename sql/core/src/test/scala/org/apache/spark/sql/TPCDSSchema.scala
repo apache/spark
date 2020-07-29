@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.test.SharedSparkSession
 
-trait TPCDSSchema extends  SharedSparkSession {
+trait TPCDSSchema extends SharedSparkSession {
 
   private val tableColumns = Map(
     "store_sales" ->
