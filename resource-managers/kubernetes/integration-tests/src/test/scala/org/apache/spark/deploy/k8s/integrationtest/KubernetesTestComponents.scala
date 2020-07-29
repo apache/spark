@@ -63,7 +63,7 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
       .set("spark.master", s"k8s://${kubernetesClient.getMasterUrl}")
       .set("spark.kubernetes.namespace", namespace)
       .set("spark.executor.cores", "1")
-      .set("spark.executors.instances", "1")
+      .set("spark.executor.instances", "1")
       .set("spark.app.name", "spark-test-app")
       .set("spark.ui.enabled", "true")
       .set("spark.testing", "false")
