@@ -26,7 +26,7 @@ class SortingSuite extends SparkFunSuite with SharedSparkContext with Matchers w
 
   test("sortByKey") {
     val pairs = sc.parallelize(Seq((1, 0), (2, 0), (0, 0), (3, 0)), 2)
-    assert(pairs.sortByKey().collect() === Array((2, 0), (1, 0), (2, 0), (3, 0)))
+    assert(pairs.sortByKey().collect() === Array((0, 0), (1, 0), (2, 0), (3, 0)))
   }
 
   test("large array") {

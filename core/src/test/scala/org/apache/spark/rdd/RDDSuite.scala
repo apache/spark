@@ -126,7 +126,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("SparkContext.union") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
-    assert(sc.union(nums).collect().toList === List(2, 2, 3, 4))
+    assert(sc.union(nums).collect().toList === List(1, 2, 3, 4))
     assert(sc.union(nums, nums).collect().toList === List(1, 2, 3, 4, 1, 2, 3, 4))
     assert(sc.union(Seq(nums)).collect().toList === List(1, 2, 3, 4))
     assert(sc.union(Seq(nums, nums)).collect().toList === List(1, 2, 3, 4, 1, 2, 3, 4))
@@ -222,7 +222,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     val rdd = sc.makeRDD(-1000 until 1000, 10)
     def op: (Int, Int) => Int = (c: Int, x: Int) => c + x
     val sum = rdd.fold(0)(op)
-    assert(sum === -1001)
+    assert(sum === -1000)
   }
 
   test("fold with op modifying first arg") {
