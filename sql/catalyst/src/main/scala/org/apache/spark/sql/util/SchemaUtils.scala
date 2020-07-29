@@ -41,11 +41,21 @@ private[spark] object SchemaUtils {
    * @param caseSensitiveAnalysis whether duplication checks should be case sensitive or not
    */
   def checkSchemaColumnNameDuplication(
-      schema: StructType, colType: String, caseSensitiveAnalysis: Boolean = false): Unit = {
-    val fields = schema.fields
-    checkColumnNameDuplication(fields.map(_.name), colType, caseSensitiveAnalysis)
-    fields.map(_.dataType).foreach {
-      case st: StructType => checkSchemaColumnNameDuplication(st, colType, caseSensitiveAnalysis)
+      schema: DataType,
+      colType: String,
+      caseSensitiveAnalysis: Boolean = false): Unit = {
+    schema match {
+      case ArrayType(elementType, _) =>
+        checkSchemaColumnNameDuplication(elementType, colType, caseSensitiveAnalysis)
+      case MapType(keyType, valueType, _) =>
+        checkSchemaColumnNameDuplication(keyType, colType, caseSensitiveAnalysis)
+        checkSchemaColumnNameDuplication(valueType, colType, caseSensitiveAnalysis)
+      case structType: StructType =>
+        val fields = structType.fields
+        checkColumnNameDuplication(fields.map(_.name), colType, caseSensitiveAnalysis)
+        fields.foreach { field =>
+          checkSchemaColumnNameDuplication(field.dataType, colType, caseSensitiveAnalysis)
+        }
       case _ =>
     }
   }

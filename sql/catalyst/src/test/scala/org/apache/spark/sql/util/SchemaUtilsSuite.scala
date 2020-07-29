@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.{ArrayType, LongType, MapType, StructType}
 
 class SchemaUtilsSuite extends SparkFunSuite {
 
@@ -94,7 +94,11 @@ class SchemaUtilsSuite extends SparkFunSuite {
     val schemaC = new StructType()
       .add("f2", LongType)
       .add("StructColumn2", schemaB)
-    Seq(schemaA, schemaB, schemaC).foreach { schema =>
+    val schemaD = new StructType()
+      .add("f3", ArrayType(schemaC))
+    val schemaE = MapType(LongType, schemaD)
+    val schemaF = MapType(schemaD, LongType)
+    Seq(schemaA, schemaB, schemaC, schemaD, schemaE, schemaF).foreach { schema =>
       val msg = intercept[AnalysisException] {
         SchemaUtils.checkSchemaColumnNameDuplication(
           schema, "in SchemaUtilsSuite", caseSensitiveAnalysis = false)
