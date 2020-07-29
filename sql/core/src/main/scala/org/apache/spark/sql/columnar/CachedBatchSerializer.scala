@@ -173,12 +173,12 @@ trait SimpleMetricsCachedBatch extends CachedBatch {
    * of the same type as the original column. If they are null, then it is assumed that they
    * are not provided, and will not be used for filtering.
    * <ul>
-   *   <li>`upperBound` (optional)<\li>
-   *   <li>`lowerBound` (Optional)<\li>
-   *   <li>`nullCount`: `Int`<\li>
+   *   <li>`upperBound` (optional)</li>
+   *   <li>`lowerBound` (Optional)</li>
+   *   <li>`nullCount`: `Int`</li>
    *   <li>`rowCount`: `Int`</li>
    *   <li>`sizeInBytes`: `Long`</li>
-   * <ul>
+   * </ul>
    * These are repeated for each column in the original cached data.
    */
   val stats: InternalRow
