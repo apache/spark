@@ -322,7 +322,8 @@ private[spark] class CoarseGrainedExecutorBackend(
             }
           }
         }
-      }.setDaemon(true)
+      }
+      shutdownThread.setDaemon(true)
       shutdownThread.start()
 
       logInfo("Will exit when finished decommissioning")
