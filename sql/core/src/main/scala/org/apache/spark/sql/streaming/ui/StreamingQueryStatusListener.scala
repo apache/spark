@@ -54,8 +54,8 @@ private[sql] class StreamingQueryStatusListener(
       return
     }
 
-    val view = store.view(classOf[StreamingQuerySummary]).index("startTimestamp").first(0L)
-    val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt)(_.isActive == false)
+    val view = store.view(classOf[StreamingQuerySummary]).index("active").first(false).last(false)
+    val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt)(_ => true)
     toDelete.foreach { e =>
       store.delete(e.getClass, e.runId)
       store.removeAllByIndexValues(
@@ -88,7 +88,6 @@ private[sql] class StreamingQueryStatusListener(
       val uniqueId = progressIds.dequeue
       store.delete(classOf[StreamingQueryProgressWrapper], uniqueId)
     }
-    store.delete(classOf[StreamingQuerySummary], runId)
     store.write(new StreamingQuerySummary(
       querySummary.name,
       querySummary.id,
@@ -103,7 +102,6 @@ private[sql] class StreamingQueryStatusListener(
   override def onQueryTerminated(
       event: StreamingQueryListener.QueryTerminatedEvent): Unit = synchronized {
     val querySummary = store.read(classOf[StreamingQuerySummary], event.runId)
-    store.delete(classOf[StreamingQuerySummary], event.runId)
     store.write(new StreamingQuerySummary(
       querySummary.name,
       querySummary.id,
@@ -124,6 +122,8 @@ private[sql] class StreamingQuerySummary(
     val startTimestamp: Long,
     val isActive: Boolean,
     val exception: Option[String]) {
+  @JsonIgnore @KVIndex("active")
+  private def activeIndex: Boolean = isActive
   @JsonIgnore @KVIndex("startTimestamp")
   private def startTimestampIndex: Long = startTimestamp
 }
@@ -147,7 +147,7 @@ private[sql] class StreamingQueryProgressWrapper(val progress: StreamingQueryPro
 private[sql] object StreamingQueryProgressWrapper {
   /**
    * Adding `timestamp` into unique id to support reporting `empty` query progress
-   * when no data comes.
+   * in which no data comes but with the same batchId.
    */
   def getUniqueId(
       runId: UUID,

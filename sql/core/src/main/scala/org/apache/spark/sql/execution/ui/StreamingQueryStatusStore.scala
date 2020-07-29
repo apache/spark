@@ -35,12 +35,16 @@ class StreamingQueryStatusStore(store: KVStore) {
 
   // Visible for testing.
   private[sql] def activeQueryUIData(): Seq[StreamingQueryUIData] = {
-    allQueryUIData.filter(_.summary.isActive)
+    val view = store.view(classOf[StreamingQuerySummary]).index("active")
+      .first(true).last(true).index("startTimestamp").first(0L)
+    KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(makeUIData)
   }
 
   // Visible for testing.
   private[sql] def inactiveQueryUIData(): Seq[StreamingQueryUIData] = {
-    allQueryUIData.filter(!_.summary.isActive)
+    val view = store.view(classOf[StreamingQuerySummary]).index("active")
+      .first(false).last(false).index("startTimestamp").first(0L)
+    KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(makeUIData)
   }
 
   private def makeUIData(summary: StreamingQuerySummary): StreamingQueryUIData = {
