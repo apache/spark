@@ -551,17 +551,6 @@ class KafkaTestUtils(
     }
   }
 
-  private def consumerConfiguration: Properties = {
-    val props = new Properties()
-    props.put("bootstrap.servers", brokerAddress)
-    props.put("group.id", "group-KafkaTestUtils-" + Random.nextInt)
-    props.put("value.deserializer", classOf[StringDeserializer].getName)
-    props.put("key.deserializer", classOf[StringDeserializer].getName)
-    props.put("enable.auto.commit", "false")
-    setAuthenticationConfigIfNeeded(props)
-    props
-  }
-
   private def setAuthenticationConfigIfNeeded(props: Properties): Unit = {
     if (secure) {
       val jaasParams = KafkaTokenUtil.getKeytabJaasParams(
