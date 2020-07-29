@@ -22,7 +22,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
 
 // Datasource tests for nested schemas
-trait NestedDataSourceSuiteBase extends QueryTest with SharedSparkSession{
+trait NestedDataSourceSuiteBase extends QueryTest with SharedSparkSession {
   protected val nestedDataSources: Seq[String] = Seq("orc", "parquet", "json")
 
   test("SPARK-32431: consistent error for nested and top-level duplicate columns") {
