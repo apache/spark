@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.nio.charset.{Charset, StandardCharsets}
 
 import scala.collection.mutable
 
@@ -104,7 +105,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       val actual = getSimplifiedPlan(plan)
       existingVariants.exists { variant =>
         val file = new File(dir, s"$variant.simplified.txt")
-        val approved = FileUtils.readFileToString(file)
+        val approved = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
         approved == actual
       }
     }
@@ -137,9 +138,9 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       val simplified = getSimplifiedPlan(plan)
       val nextVariant = getNextVariantNumber(name)
       val file = new File(dir, s"$nextVariant.simplified.txt")
-      FileUtils.writeStringToFile(file, simplified)
+      FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
       val fileOriginalPlan = new File(dir, s"$nextVariant.explain.txt")
-      FileUtils.writeStringToFile(fileOriginalPlan, explain)
+      FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
       logWarning(s"APPROVED: ${file} ${fileOriginalPlan}")
     }
   }
