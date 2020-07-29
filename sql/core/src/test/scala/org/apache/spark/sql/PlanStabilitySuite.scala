@@ -172,11 +172,11 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       val actualSimplifiedFile = new File(tempDir, s"${name}.actual.simplified.txt")
       val actualExplainFile = new File(tempDir, s"${name}.actual.explain.txt")
 
-      val approved = FileUtils.readFileToString(approvedSimplifiedFile)
+      val approved = FileUtils.readFileToString(approvedSimplifiedFile, StandardCharsets.UTF_8)
       // write out for debugging
       val actual = getSimplifiedPlan(plan)
-      FileUtils.writeStringToFile(actualSimplifiedFile, actual)
-      FileUtils.writeStringToFile(actualExplainFile, explain)
+      FileUtils.writeStringToFile(actualSimplifiedFile, actual, StandardCharsets.UTF_8)
+      FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
 
       val header =
         s"""
