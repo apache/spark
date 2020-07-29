@@ -308,7 +308,7 @@ class HadoopTableReader(
 
   /**
    * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
-   * applied locally on each slave.
+   * applied locally on each executor.
    */
   private def createOldHadoopRDD(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
@@ -330,7 +330,7 @@ class HadoopTableReader(
 
   /**
    * Creates a NewHadoopRDD based on the broadcasted HiveConf and other job properties that will be
-   * applied locally on each slave.
+   * applied locally on each executor.
    */
   private def createNewHadoopRDD(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val newJobConf = new JobConf(hadoopConf)
@@ -486,13 +486,19 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
       var i = 0
       val length = fieldRefs.length
       while (i < length) {
-        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-        if (fieldValue == null) {
-          mutableRow.setNullAt(fieldOrdinals(i))
-        } else {
-          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+        try {
+          val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+          if (fieldValue == null) {
+            mutableRow.setNullAt(fieldOrdinals(i))
+          } else {
+            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          }
+          i += 1
+        } catch {
+          case ex: Throwable =>
+            logError(s"Exception thrown in field <${fieldRefs(i).getFieldName}>")
+            throw ex
         }
-        i += 1
       }
 
       mutableRow: InternalRow

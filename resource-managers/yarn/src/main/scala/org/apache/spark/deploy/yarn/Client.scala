@@ -553,7 +553,7 @@ private[spark] class Client(
           }
 
           // Propagate the local URIs to the containers using the configuration.
-          sparkConf.set(SPARK_JARS, localJars)
+          sparkConf.set(SPARK_JARS, localJars.toSeq)
 
         case None =>
           // No configuration, so fall back to uploading local jar files.
@@ -628,14 +628,19 @@ private[spark] class Client(
       }
     }
     if (cachedSecondaryJarLinks.nonEmpty) {
-      sparkConf.set(SECONDARY_JARS, cachedSecondaryJarLinks)
+      sparkConf.set(SECONDARY_JARS, cachedSecondaryJarLinks.toSeq)
     }
 
     if (isClusterMode && args.primaryPyFile != null) {
       distribute(args.primaryPyFile, appMasterOnly = true)
     }
 
-    pySparkArchives.foreach { f => distribute(f) }
+    pySparkArchives.foreach { f =>
+      val uri = Utils.resolveURI(f)
+      if (uri.getScheme != Utils.LOCAL_SCHEME) {
+        distribute(f)
+      }
+    }
 
     // The python files list needs to be treated especially. All files that are not an
     // archive need to be placed in a subdirectory that will be added to PYTHONPATH.

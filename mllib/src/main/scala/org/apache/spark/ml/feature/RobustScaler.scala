@@ -201,7 +201,7 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
           }
           Iterator.tabulate(numFeatures)(i => (i, summaries(i).compress))
         } else Iterator.empty
-      }.reduceByKey { case (s1, s2) => s1.merge(s2) }
+      }.reduceByKey { (s1, s2) => s1.merge(s2) }
     } else {
       val scale = math.max(math.ceil(math.sqrt(vectors.getNumPartitions)).toInt, 2)
       vectors.mapPartitionsWithIndex { case (pid, iter) =>
@@ -214,7 +214,7 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
         seqOp = (s, v) => s.insert(v),
         combOp = (s1, s2) => s1.compress.merge(s2.compress)
       ).map { case ((_, i), s) => (i, s)
-      }.reduceByKey { case (s1, s2) => s1.compress.merge(s2.compress) }
+      }.reduceByKey { (s1, s2) => s1.compress.merge(s2.compress) }
     }
   }
 

@@ -327,6 +327,17 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
+  test("SPARK-32124: FetchFailed Map Index backwards compatibility") {
+    // FetchFailed in Spark 2.4.0 does not have "Map Index" property.
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L, 18, 19,
+      "ignored")
+    val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
+      .removeField({ _._1 == "Map Index" })
+    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L,
+      Int.MinValue, 19, "ignored")
+    assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
   test("ShuffleReadMetrics: Local bytes read backwards compatibility") {
     // Metrics about local shuffle bytes read were added in 1.3.1.
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
@@ -505,6 +516,54 @@ class JsonProtocolSuite extends SparkFunSuite {
     // For anything else, we just cast the value to a string
     testAccumValue(Some("anything"), blocks, JString(blocks.toString))
     testAccumValue(Some("anything"), 123, JString("123"))
+  }
+
+  /** Create an AccumulableInfo and verify we can serialize and deserialize it. */
+  private def testAccumulableInfo(
+      name: String,
+      value: Option[Any],
+      expectedValue: Option[Any]): Unit = {
+    val isInternal = name.startsWith(InternalAccumulator.METRICS_PREFIX)
+    val accum = AccumulableInfo(
+      123L,
+      Some(name),
+      update = value,
+      value = value,
+      internal = isInternal,
+      countFailedValues = false)
+    val json = JsonProtocol.accumulableInfoToJson(accum)
+    val newAccum = JsonProtocol.accumulableInfoFromJson(json)
+    assert(newAccum == accum.copy(update = expectedValue, value = expectedValue))
+  }
+
+  test("SPARK-31923: unexpected value type of internal accumulator") {
+    // Because a user may use `METRICS_PREFIX` in an accumulator name, we should test unexpected
+    // types to make sure we don't crash.
+    import InternalAccumulator.METRICS_PREFIX
+    testAccumulableInfo(
+      METRICS_PREFIX + "fooString",
+      value = Some("foo"),
+      expectedValue = None)
+    testAccumulableInfo(
+      METRICS_PREFIX + "fooList",
+      value = Some(java.util.Arrays.asList("string")),
+      expectedValue = Some(java.util.Collections.emptyList())
+    )
+    val blocks = Seq(
+      (TestBlockId("block1"), BlockStatus(StorageLevel.MEMORY_ONLY, 1L, 2L)),
+      (TestBlockId("block2"), BlockStatus(StorageLevel.DISK_ONLY, 3L, 4L)))
+    testAccumulableInfo(
+      METRICS_PREFIX + "fooList",
+      value = Some(java.util.Arrays.asList(
+        "string",
+        blocks(0),
+        blocks(1))),
+      expectedValue = Some(blocks.asJava)
+    )
+    testAccumulableInfo(
+      METRICS_PREFIX + "fooSet",
+      value = Some(Set("foo")),
+      expectedValue = None)
   }
 
   test("SPARK-30936: forwards compatibility - ignore unknown fields") {

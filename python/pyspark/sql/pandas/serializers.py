@@ -19,13 +19,6 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
-import sys
-if sys.version < '3':
-    from itertools import izip as zip
-else:
-    basestring = unicode = str
-    xrange = range
-
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
 
 
@@ -67,7 +60,7 @@ class ArrowCollectSerializer(Serializer):
             raise RuntimeError("An error occurred while calling "
                                "ArrowCollectSerializer.load_stream: {}".format(error_msg))
         batch_order = []
-        for i in xrange(num):
+        for i in range(num):
             index = read_int(stream)
             batch_order.append(index)
         yield batch_order
@@ -143,6 +136,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         import pandas as pd
         import pyarrow as pa
         from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal
+        from pandas.api.types import is_categorical
         # Make input conform to [(series1, type1), (series2, type2), ...]
         if not isinstance(series, (list, tuple)) or \
                 (len(series) == 2 and isinstance(series[1], pa.DataType)):
@@ -154,7 +148,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
-            elif type(s.dtype) == pd.CategoricalDtype:
+            elif is_categorical(s.dtype):
                 # Note: This can be removed once minimum pyarrow version is >= 0.16.1
                 s = s.astype(s.dtypes.categories.dtype)
             try:
@@ -179,7 +173,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 if len(s) == 0 and len(s.columns) == 0:
                     arrs_names = [(pa.array([], type=field.type), field.name) for field in t]
                 # Assign result columns by schema name if user labeled with strings
-                elif self._assign_cols_by_name and any(isinstance(name, basestring)
+                elif self._assign_cols_by_name and any(isinstance(name, str)
                                                        for name in s.columns):
                     arrs_names = [(create_array(s[field.name], field.type), field.name)
                                   for field in t]
@@ -193,7 +187,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             else:
                 arrs.append(create_array(s, t))
 
-        return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
+        return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
     def dump_stream(self, iterator, stream):
         """

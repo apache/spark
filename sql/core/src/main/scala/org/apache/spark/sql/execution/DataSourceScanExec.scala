@@ -155,7 +155,8 @@ case class RowDataSourceScanExec(
  * @param output Output attributes of the scan, including data attributes and partition attributes.
  * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
  * @param partitionFilters Predicates to use for partition pruning.
- * @param optionalBucketSet Bucket ids for bucket pruning
+ * @param optionalBucketSet Bucket ids for bucket pruning.
+ * @param optionalNumCoalescedBuckets Number of coalesced buckets.
  * @param dataFilters Filters on non-partition columns.
  * @param tableIdentifier identifier for the table in the metastore.
  */
@@ -165,6 +166,7 @@ case class FileSourceScanExec(
     requiredSchema: StructType,
     partitionFilters: Seq[Expression],
     optionalBucketSet: Option[BitSet],
+    optionalNumCoalescedBuckets: Option[Int],
     dataFilters: Seq[Expression],
     tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
@@ -205,7 +207,7 @@ case class FileSourceScanExec(
   private def isDynamicPruningFilter(e: Expression): Boolean =
     e.find(_.isInstanceOf[PlanExpression[_]]).isDefined
 
-  @transient private lazy val selectedPartitions: Array[PartitionDirectory] = {
+  @transient lazy val selectedPartitions: Array[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret =
@@ -291,7 +293,8 @@ case class FileSourceScanExec(
       // above
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
-      val partitioning = HashPartitioning(bucketColumns, spec.numBuckets)
+      val numPartitions = optionalNumCoalescedBuckets.getOrElse(spec.numBuckets)
+      val partitioning = HashPartitioning(bucketColumns, numPartitions)
       val sortColumns =
         spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
       val shouldCalculateSortOrder =
@@ -311,7 +314,8 @@ case class FileSourceScanExec(
           files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
         val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
 
-        if (singleFilePartitions) {
+        // TODO SPARK-24528 Sort order is currently ignored if buckets are coalesced.
+        if (singleFilePartitions && optionalNumCoalescedBuckets.isEmpty) {
           // TODO Currently Spark does not support writing columns sorting in descending order
           // so using Ascending order. This can be fixed in future
           sortColumns.map(attribute => SortOrder(attribute, Ascending))
@@ -356,7 +360,8 @@ case class FileSourceScanExec(
         spec.numBuckets
       }
       metadata + ("SelectedBucketsCount" ->
-        s"$numSelectedBuckets out of ${spec.numBuckets}")
+        (s"$numSelectedBuckets out of ${spec.numBuckets}" +
+          optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
     } getOrElse {
       metadata
     }
@@ -544,8 +549,19 @@ case class FileSourceScanExec(
       filesGroupedToBuckets
     }
 
-    val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
+    val filePartitions = optionalNumCoalescedBuckets.map { numCoalescedBuckets =>
+      logInfo(s"Coalescing to ${numCoalescedBuckets} buckets")
+      val coalescedBuckets = prunedFilesGroupedToBuckets.groupBy(_._1 % numCoalescedBuckets)
+      Seq.tabulate(numCoalescedBuckets) { bucketId =>
+        val partitionedFiles = coalescedBuckets.get(bucketId).map {
+          _.values.flatten.toArray
+        }.getOrElse(Array.empty)
+        FilePartition(bucketId, partitionedFiles)
+      }
+    }.getOrElse {
+      Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
+        FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
+      }
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
@@ -599,6 +615,7 @@ case class FileSourceScanExec(
       requiredSchema,
       QueryPlan.normalizePredicates(partitionFilters, output),
       optionalBucketSet,
+      optionalNumCoalescedBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
       None)
   }
