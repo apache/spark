@@ -109,18 +109,12 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     new File(goldenFilePath, name)
   }
 
-  private def isApproved(name: String, plan: SparkPlan): Boolean = {
-    val dir = getDirForTest(name)
-    if (!dir.exists()) {
-      false
-    } else {
-      val existingVariants = getExistingVariants(name)
-      val actual = getSimplifiedPlan(plan)
-      existingVariants.exists { variant =>
-        val file = new File(dir, s"$variant.simplified.txt")
-        val approved = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
-        approved == actual
-      }
+  private def isApproved(name: String, dir: File, actualSimplifiedPlan: String): Boolean = {
+    val existingVariants = getExistingVariants(name)
+    existingVariants.exists { variant =>
+      val file = new File(dir, s"$variant.simplified.txt")
+      val approved = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
+      approved == actualSimplifiedPlan
     }
   }
 
@@ -140,21 +134,21 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       name: String,
       variant: Boolean,
       explain: String): Unit = {
-    val foundMatch = isApproved(name, plan)
     val dir = getDirForTest(name)
-
-    if (!foundMatch) {
-      if (!variant) {
-        FileUtils.deleteDirectory(dir)
-        assert(dir.mkdirs())
-      }
+    if (!dir.exists()) {
       val simplified = getSimplifiedPlan(plan)
-      val nextVariant = getNextVariantNumber(name)
-      val file = new File(dir, s"$nextVariant.simplified.txt")
-      FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
-      val fileOriginalPlan = new File(dir, s"$nextVariant.explain.txt")
-      FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
-      logInfo(s"APPROVED: ${file} ${fileOriginalPlan}")
+      if (!isApproved(name, dir, simplified)) {
+        if (!variant) {
+          FileUtils.deleteDirectory(dir)
+          assert(dir.mkdirs())
+        }
+        val nextVariant = getNextVariantNumber(name)
+        val file = new File(dir, s"$nextVariant.simplified.txt")
+        FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
+        val fileOriginalPlan = new File(dir, s"$nextVariant.explain.txt")
+        FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
+        logInfo(s"APPROVED: ${file} ${fileOriginalPlan}")
+      }
     }
   }
 
@@ -162,7 +156,8 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     val dir = getDirForTest(name)
     val tempDir = FileUtils.getTempDirectory
     val existingVariants = getExistingVariants(name)
-    val foundMatch = isApproved(name, plan)
+    val actualSimplified = getSimplifiedPlan(plan)
+    val foundMatch = isApproved(name, dir, actualSimplified)
 
     if (!foundMatch) {
       // show diff with last approved
@@ -172,10 +167,10 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       val actualSimplifiedFile = new File(tempDir, s"${name}.actual.simplified.txt")
       val actualExplainFile = new File(tempDir, s"${name}.actual.explain.txt")
 
-      val approved = FileUtils.readFileToString(approvedSimplifiedFile, StandardCharsets.UTF_8)
+      val approvedSimplified = FileUtils.readFileToString(
+        approvedSimplifiedFile, StandardCharsets.UTF_8)
       // write out for debugging
-      val actual = getSimplifiedPlan(plan)
-      FileUtils.writeStringToFile(actualSimplifiedFile, actual, StandardCharsets.UTF_8)
+      FileUtils.writeStringToFile(actualSimplifiedFile, actualSimplified, StandardCharsets.UTF_8)
       FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
 
       val header =
@@ -189,7 +184,8 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       val msg =
         s"""
            |$header
-           |${sideBySide(approved.linesIterator.toSeq, actual.linesIterator.toSeq).mkString("\n")}
+           |${sideBySide(approvedSimplified.linesIterator.toSeq, actualSimplified.linesIterator.toSeq)
+          .mkString("\n")}
          """.stripMargin
       fail(msg)
     }
