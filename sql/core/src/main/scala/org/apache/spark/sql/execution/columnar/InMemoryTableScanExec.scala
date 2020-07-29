@@ -68,7 +68,7 @@ case class InMemoryTableScanExec(
   private lazy val columnarInputRDD: RDD[ColumnarBatch] = {
     val numOutputRows = longMetric("numOutputRows")
     val buffers = filteredCachedBatches()
-    relation.cacheBuilder.serializer.convertFromCacheColumnar(
+    relation.cacheBuilder.serializer.convertCachedBatchToColumnarBatch(
       buffers,
       relation.output,
       attributes,
@@ -99,7 +99,7 @@ case class InMemoryTableScanExec(
         numOutputRows += batch.numRows
         batch
       }
-    val rows = serializer.convertFromCache(withMetrics, relOutput, attributes, conf)
+    val rows = serializer.convertCachedBatchToInternalRow(withMetrics, relOutput, attributes, conf)
     if (enableAccumulatorsForTest) {
       def incParts(index: Int, iter: Iterator[InternalRow]): Iterator[InternalRow] = {
         if (iter.hasNext) {

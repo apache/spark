@@ -41,7 +41,7 @@ case class SingleIntCachedBatch(data: Array[Int]) extends CachedBatch {
 class TestSingleIntColumnarCachedBatchSerializer extends CachedBatchSerializer {
   override def supportsColumnarInput(schema: Seq[Attribute]): Boolean = true
 
-  override def convertForCache(
+  override def convertInternalRowToCachedBatch(
       input: RDD[InternalRow],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
@@ -49,7 +49,7 @@ class TestSingleIntColumnarCachedBatchSerializer extends CachedBatchSerializer {
     throw new IllegalStateException("This does not work. This is only for testing")
   }
 
-  override def convertForCacheColumnar(
+  override def convertColumnarBatchToCachedBatch(
       input: RDD[ColumnarBatch],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
@@ -69,7 +69,7 @@ class TestSingleIntColumnarCachedBatchSerializer extends CachedBatchSerializer {
   override def vectorTypes(attributes: Seq[Attribute], conf: SQLConf): Option[Seq[String]] =
     Some(attributes.map(_ => classOf[OnHeapColumnVector].getName))
 
-  override def convertFromCacheColumnar(
+  override def convertCachedBatchToColumnarBatch(
       input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
@@ -95,7 +95,7 @@ class TestSingleIntColumnarCachedBatchSerializer extends CachedBatchSerializer {
     }
   }
 
-  override def convertFromCache(
+  override def convertCachedBatchToInternalRow(
       input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],

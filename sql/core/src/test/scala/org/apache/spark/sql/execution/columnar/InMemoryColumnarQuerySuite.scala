@@ -39,7 +39,7 @@ class TestCachedBatchSerializer(
     useCompression: Boolean,
     batchSize: Int) extends DefaultCachedBatchSerializer {
 
-  override def convertForCache(input: RDD[InternalRow],
+  override def convertInternalRowToCachedBatch(input: RDD[InternalRow],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] = {

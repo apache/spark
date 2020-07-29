@@ -45,7 +45,7 @@ import org.apache.spark.util.{LongAccumulator, Utils}
  * @param stats The stat of columns
  */
 case class DefaultCachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
-    extends SimpleMetricsCachedBatch
+  extends SimpleMetricsCachedBatch
 
 /**
  * The default implementation of CachedBatchSerializer.
@@ -53,14 +53,14 @@ case class DefaultCachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: 
 class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
   override def supportsColumnarInput(schema: Seq[Attribute]): Boolean = false
 
-  override def convertForCacheColumnar(
+  override def convertColumnarBatchToCachedBatch(
       input: RDD[ColumnarBatch],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] =
     throw new IllegalStateException("Columnar input is not supported")
 
-  override def convertForCache(input: RDD[InternalRow],
+  override def convertInternalRowToCachedBatch(input: RDD[InternalRow],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] = {
@@ -120,8 +120,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
 
   override def supportsColumnarOutput(schema: StructType): Boolean = schema.fields.forall(f =>
     f.dataType match {
-        // More types can be supported, but this is to match the original implementation that
-        // only supported primitive types "for ease of review"
+      // More types can be supported, but this is to match the original implementation that
+      // only supported primitive types "for ease of review"
       case BooleanType | ByteType | ShortType | IntegerType | LongType |
            FloatType | DoubleType => true
       case _ => false
@@ -136,7 +136,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       }
     ))
 
-  override def convertFromCacheColumnar(
+  override def convertCachedBatchToColumnarBatch(
       input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
@@ -171,7 +171,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     input.map(createAndDecompressColumn)
   }
 
-  override def convertFromCache(input: RDD[CachedBatch],
+  override def convertCachedBatchToInternalRow(input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {
@@ -239,13 +239,13 @@ case class CachedRDDBuilder(
 
   private def buildBuffers(): RDD[CachedBatch] = {
     val cb = if (cachedPlan.supportsColumnar) {
-      serializer.convertForCacheColumnar(
+      serializer.convertColumnarBatchToCachedBatch(
         cachedPlan.executeColumnar(),
         cachedPlan.output,
         storageLevel,
         cachedPlan.conf)
     } else {
-      serializer.convertForCache(
+      serializer.convertInternalRowToCachedBatch(
         cachedPlan.execute(),
         cachedPlan.output,
         storageLevel,

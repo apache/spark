@@ -48,11 +48,11 @@ trait CachedBatch {
 @Since("3.1.0")
 trait CachedBatchSerializer extends Serializable {
   /**
-   * Can `convertForCacheColumnar()` be called instead of `convertForCache()` for this given
-   * schema? True if it can and false if it cannot. Columnar input is only supported if the
-   * plan could produce columnar output. Currently this is mostly supported by input formats
-   * like parquet and orc, but more operations are likely to be supported soon.
-   *
+   * Can `convertColumnarBatchToCachedBatch()` be called instead of
+   * `convertInternalRowToCachedBatch()` for this given schema? True if it can and false if it
+   * cannot. Columnar input is only supported if the plan could produce columnar output. Currently
+   * this is mostly supported by input formats like parquet and orc, but more operations are likely
+   * to be supported soon.
    * @param schema the schema of the data being stored.
    * @return True if columnar input can be supported, else false.
    */
@@ -66,7 +66,7 @@ trait CachedBatchSerializer extends Serializable {
    * @param conf the config for the query.
    * @return The data converted into a format more suitable for caching.
    */
-  def convertForCache(
+  def convertInternalRowToCachedBatch(
       input: RDD[InternalRow],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
@@ -82,7 +82,7 @@ trait CachedBatchSerializer extends Serializable {
    * @param conf the config for the query.
    * @return The data converted into a format more suitable for caching.
    */
-  def convertForCacheColumnar(
+  def convertColumnarBatchToCachedBatch(
       input: RDD[ColumnarBatch],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
@@ -106,10 +106,11 @@ trait CachedBatchSerializer extends Serializable {
       cachedAttributes: Seq[Attribute]): (Int, Iterator[CachedBatch]) => Iterator[CachedBatch]
 
   /**
-   * Can `decompressColumnar()` be called instead of `decompressToRows()` for this given
-   * schema? True if it can and false if it cannot. Columnar output is typically preferred
-   * because it is more efficient. Note that `decompressToRows()` must always be supported
-   * as there are other checks that can force row based output.
+   * Can `convertCachedBatchToColumnarBatch()` be called instead of
+   * `convertCachedBatchToInternalRow()` for this given schema? True if it can and false if it
+   * cannot. Columnar output is typically preferred because it is more efficient. Note that
+   * `convertCachedBatchToInternalRow()` must always be supported as there are other checks that
+   * can force row based output.
    * @param schema the schema of the data being checked.
    * @return true if columnar output should be used for this schema, else false.
    */
@@ -136,7 +137,7 @@ trait CachedBatchSerializer extends Serializable {
    * @param conf the configuration for the job.
    * @return an RDD of the input cached batches transformed into the ColumnarBatch format.
    */
-  def convertFromCacheColumnar(
+  def convertCachedBatchToColumnarBatch(
       input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
@@ -152,7 +153,7 @@ trait CachedBatchSerializer extends Serializable {
    * @param conf the configuration for the job.
    * @return RDD of the rows that were stored in the cached batches.
    */
-  def convertFromCache(
+  def convertCachedBatchToInternalRow(
       input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
