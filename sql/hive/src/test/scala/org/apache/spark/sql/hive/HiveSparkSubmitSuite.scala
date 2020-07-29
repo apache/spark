@@ -23,8 +23,9 @@ import scala.util.Properties
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
-import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.Assertions._
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging

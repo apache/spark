@@ -31,14 +31,29 @@ if __name__ == "__main__":
         .appName("PyMemoryTest") \
         .getOrCreate()
     sc = spark._sc
-    rdd = sc.parallelize(range(10))
+    acc = sc.accumulator(0)
+
+    def addToAcc(x):
+        acc.add(1)
+        return x
+
+    initialRdd = sc.parallelize(range(100), 5)
+    accRdd = initialRdd.map(addToAcc)
+    # Trigger a shuffle so there are shuffle blocks to migrate
+    rdd = accRdd.map(lambda x: (x, x)).groupByKey()
     rdd.collect()
-    print("Waiting to give nodes time to finish.")
-    time.sleep(5)
+    print("1st accumulator value is: " + str(acc.value))
+    print("Waiting to give nodes time to finish migration, decom exec 1.")
+    print("...")
+    time.sleep(30)
+    rdd.count()
+    print("Waiting some more, please kill exec 1.")
+    print("...")
+    time.sleep(30)
+    print("Executor node should be deleted now")
+    rdd.count()
     rdd.collect()
-    print("Waiting some more....")
-    time.sleep(10)
-    rdd.collect()
+    print("Final accumulator value is: " + str(acc.value))
     print("Finished waiting, stopping Spark.")
     spark.stop()
     print("Done, exiting Python")

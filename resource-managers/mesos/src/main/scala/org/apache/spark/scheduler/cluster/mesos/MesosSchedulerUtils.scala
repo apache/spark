@@ -379,7 +379,7 @@ trait MesosSchedulerUtils extends Logging {
           } else {
             v.split(',').toSet
           }
-        )
+        ).toMap
       } catch {
         case NonFatal(e) =>
           throw new IllegalArgumentException(s"Bad constraint string: $constraintsVal", e)

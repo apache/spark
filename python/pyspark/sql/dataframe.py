@@ -29,7 +29,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
-from pyspark.sql.readwriter import DataFrameWriter
+from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import *
 from pyspark.sql.pandas.conversion import PandasConversionMixin
@@ -1323,7 +1323,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         :param n: int, default 1. Number of rows to return.
         :return: If n is greater than 1, return a list of :class:`Row`.
-            If n is 1, return a single Row.
+            If n is 1, return a single Row if it exists. Otherwise, we will return an
+            empty list to match the behavior of `head(1)` when the dataframe is empty.
 
         >>> df.head()
         Row(age=2, name='Alice')
@@ -1332,7 +1333,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if n is None:
             rs = self.head(1)
-            return rs[0] if rs else None
+            return rs[0] if rs else []
         return self.take(n)
 
     @since(1.3)
@@ -2239,6 +2240,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         dropDuplicates,
         sinceversion=1.4,
         doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.")
+
+    @since(3.1)
+    def writeTo(self, table):
+        """
+        Create a write configuration builder for v2 sources.
+
+        This builder is used to configure and execute write operations.
+
+        For example, to append or create or replace existing tables.
+
+        >>> df.writeTo("catalog.db.table").append()  # doctest: +SKIP
+        >>> df.writeTo(                              # doctest: +SKIP
+        ...     "catalog.db.table"
+        ... ).partitionedBy("col").createOrReplace()
+        """
+        return DataFrameWriterV2(self, table)
 
 
 def _to_scala_map(sc, jm):
