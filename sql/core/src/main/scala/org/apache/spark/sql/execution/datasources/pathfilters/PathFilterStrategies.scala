@@ -20,12 +20,11 @@ package org.apache.spark.sql.execution.datasources.pathfilters
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 trait PathFilterObject {
   def get(sparkSession: SparkSession,
           configuration: Configuration,
-          options: CaseInsensitiveMap[String]): FileIndexFilter
+          options: Map[String, String]): FileIndexFilter
   def strategy(): String
 }
 
@@ -34,7 +33,7 @@ case object PathFilterStrategies {
 
   def get(sparkSession: SparkSession,
           conf: Configuration,
-          options: CaseInsensitiveMap[String]): Iterable[FileIndexFilter] =
+          options: Map[String, String]): Iterable[FileIndexFilter] =
     (options.keys)
       .map(option => {
         cache

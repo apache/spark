@@ -477,6 +477,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <code>2020-06-01T13:00:00</code>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
+   * <li>`allowNonNumericNumbers` (default `true`): allows JSON parser to recognize set of
+   * "Not-a-Number" (NaN) tokens as legal floating number values:
+   *   <ul>
+   *     <li>`+INF` for positive infinity, as well as alias of `+Infinity` and `Infinity`.
+   *     <li>`-INF` for negative infinity), alias `-Infinity`.
+   *     <li>`NaN` for other not-a-numbers, like result of division by zero.
+   *   </ul>
+   * </li>
    * </ul>
    *
    * @since 2.0.0

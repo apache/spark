@@ -396,7 +396,7 @@ abstract class DynamicPartitionPruningSuiteBase
        """.stripMargin)
 
       val found = df.queryExecution.executedPlan.find {
-        case BroadcastHashJoinExec(_, _, p: ExistenceJoin, _, _, _, _) => true
+        case BroadcastHashJoinExec(_, _, p: ExistenceJoin, _, _, _, _, _) => true
         case _ => false
       }
 

@@ -22,11 +22,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, GlobFilter}
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 class PathGlobFilter(sparkSession: SparkSession,
                      conf: Configuration,
-                     options: CaseInsensitiveMap[String])
+                     options: Map[String, String])
     extends GlobFilter(options.get("pathGlobFilter").get)
     with FileIndexFilter {
 
@@ -37,8 +36,8 @@ class PathGlobFilter(sparkSession: SparkSession,
 case object PathGlobFilter extends PathFilterObject {
   def get(sparkSession: SparkSession,
           configuration: Configuration,
-          options: CaseInsensitiveMap[String]): PathGlobFilter = {
+          options: Map[String, String]): PathGlobFilter = {
     new PathGlobFilter(sparkSession, configuration, options)
   }
-  def strategy(): String = "pathglobfilter"
+  def strategy(): String = "pathGlobFilter"
 }

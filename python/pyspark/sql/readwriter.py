@@ -200,7 +200,12 @@ class DataFrameReader(OptionUtils):
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
              dropFieldIfAllNull=None, encoding=None, locale=None, pathGlobFilter=None,
+<<<<<<< HEAD
              recursiveFileLookup=None, modifiedBefore=None, modifiedAfter=None):
+=======
+             recursiveFileLookup=None, modifiedBefore=None, modifiedAfter=None,
+             recursiveFileLookup=None, allowNonNumericNumbers=None):
+>>>>>>> parent of 9979b962c7... Merge branch 'master' of https://github.com/cchighman/spark
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 

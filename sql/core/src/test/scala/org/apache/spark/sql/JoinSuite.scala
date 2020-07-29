@@ -89,6 +89,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     if (operators.head.getClass != c) {
       fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
+    operators.head
   }
 
   test("join operator selection") {
@@ -1102,6 +1103,89 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         // No extra shuffle before aggregate
         assert(plan.collect { case _: ShuffleExchangeExec => true }.size === 2)
       })
+    }
+  }
+
+  test("SPARK-32383: Preserve hash join (BHJ and SHJ) stream side ordering") {
+    val df1 = spark.range(100).select($"id".as("k1"))
+    val df2 = spark.range(100).select($"id".as("k2"))
+    val df3 = spark.range(3).select($"id".as("k3"))
+    val df4 = spark.range(100).select($"id".as("k4"))
+
+    // Test broadcast hash join
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50") {
+      Seq("inner", "left_outer").foreach(joinType => {
+        val plan = df1.join(df2, $"k1" === $"k2", joinType)
+          .join(df3, $"k1" === $"k3", joinType)
+          .join(df4, $"k1" === $"k4", joinType)
+          .queryExecution
+          .executedPlan
+        assert(plan.collect { case _: SortMergeJoinExec => true }.size === 2)
+        assert(plan.collect { case _: BroadcastHashJoinExec => true }.size === 1)
+        // No extra sort before last sort merge join
+        assert(plan.collect { case _: SortExec => true }.size === 3)
+      })
+    }
+
+    // Test shuffled hash join
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      val df3 = spark.range(10).select($"id".as("k3"))
+
+      Seq("inner", "left_outer").foreach(joinType => {
+        val plan = df1.join(df2, $"k1" === $"k2", joinType)
+          .join(df3, $"k1" === $"k3", joinType)
+          .join(df4, $"k1" === $"k4", joinType)
+          .queryExecution
+          .executedPlan
+        assert(plan.collect { case _: SortMergeJoinExec => true }.size === 2)
+        assert(plan.collect { case _: ShuffledHashJoinExec => true }.size === 1)
+        // No extra sort before last sort merge join
+        assert(plan.collect { case _: SortExec => true }.size === 3)
+      })
+    }
+  }
+
+  test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize") {
+    withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      // positive not in subquery case
+      var joinExec = assertJoin((
+        "select * from testData where key not in (select a from testData2)",
+        classOf[BroadcastHashJoinExec]))
+      assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+
+      // negative not in subquery case since multi-column is not supported
+      assertJoin((
+        "select * from testData where (key, key + 1) not in (select * from testData2)",
+        classOf[BroadcastNestedLoopJoinExec]))
+
+      // positive hand-written left anti join
+      // testData.key nullable false
+      // testData3.b nullable true
+      joinExec = assertJoin((
+        "select * from testData left anti join testData3 ON key = b or isnull(key = b)",
+        classOf[BroadcastHashJoinExec]))
+      assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+
+      // negative hand-written left anti join
+      // testData.key nullable false
+      // testData2.a nullable false
+      // isnull(key = a) will be optimized to true literal and removed
+      joinExec = assertJoin((
+        "select * from testData left anti join testData2 ON key = a or isnull(key = a)",
+        classOf[BroadcastHashJoinExec]))
+      assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+
+      // negative hand-written left anti join
+      // not match pattern Or(EqualTo(a=b), IsNull(EqualTo(a=b))
+      assertJoin((
+        "select * from testData2 left anti join testData3 ON testData2.a = testData3.b or " +
+          "isnull(testData2.b = testData3.b)",
+        classOf[BroadcastNestedLoopJoinExec]))
     }
   }
 }

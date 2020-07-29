@@ -48,8 +48,8 @@ class UnsafeMapSuite extends SparkFunSuite {
     val ser = new JavaSerializer(new SparkConf).newInstance()
     val mapDataSer = ser.deserialize[UnsafeMapData](ser.serialize(unsafeMapData))
     assert(mapDataSer.numElements() == 1)
-    assert(mapDataSer.keyArray().getInt(0) == 19285)
-    assert(mapDataSer.valueArray().getInt(0) == 19286)
+    assert(mapDataSer.keyArray().getLong(0) == 19285)
+    assert(mapDataSer.valueArray().getLong(0) == 19286)
     assert(mapDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
   }
 
@@ -57,8 +57,8 @@ class UnsafeMapSuite extends SparkFunSuite {
     val ser = new KryoSerializer(new SparkConf).newInstance()
     val mapDataSer = ser.deserialize[UnsafeMapData](ser.serialize(unsafeMapData))
     assert(mapDataSer.numElements() == 1)
-    assert(mapDataSer.keyArray().getInt(0) == 19285)
-    assert(mapDataSer.valueArray().getInt(0) == 19286)
+    assert(mapDataSer.keyArray().getLong(0) == 19285)
+    assert(mapDataSer.valueArray().getLong(0) == 19286)
     assert(mapDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
   }
 }
