@@ -75,13 +75,13 @@ grammar SqlBase;
   }
 
   /**
-   * Returns true if the next token is put on the hidden channel.
+   * Returns true if a token at the given relative offset is put on the hidden channel.
    * For example, this method can be used to respect 'WS' between tokens
    * (See the syntax 'configKey').
    */
-  public boolean isHidden() {
+  public boolean isHidden(int indexOffset) {
     if (_input instanceof TokenStream) {
-      Token token = ((TokenStream) _input).get(_input.index() + 1);
+      Token token = ((TokenStream) _input).get(_input.index() + indexOffset);
       return token.getChannel() == token.HIDDEN_CHANNEL;
     } else {
       return false;
@@ -268,7 +268,10 @@ statement
     ;
 
 configKey
-    : configIdentifier ({!isHidden()}? ('.' | ':') {!isHidden()}? configIdentifier)*
+    : configIdentifier (('.' | ':') configIdentifier
+        // The two semantic predicates make sure that no token on the hidden channel
+        // (e.g., spaces) exists between the config separator ('.' or ':').
+        {!isHidden(-3)}? {!isHidden(-2)}?)*
     | quotedIdentifier
     ;
 

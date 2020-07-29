@@ -96,9 +96,10 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("SET    spark.sql.key \"value\" ", expectedErrMsg)
     intercept("SET spark.sql.key value1 value2", expectedErrMsg)
 
-    intercept("SET spark.sql.   key=value", "no viable alternative at input '.'")
-    intercept("SET spark.sql   :key=value", "rule configKey failed predicate")
-    intercept("SET spark.sql .  key=value", "rule configKey failed predicate")
+    // TODO: Needs to make the error message more meaningful for users
+    intercept("SET spark.sql.   key=value", "failed predicate")
+    intercept("SET spark.sql   :key=value", "failed predicate")
+    intercept("SET spark.sql .  key=value", "failed predicate")
   }
 
   test("Report Error for invalid usage of RESET command") {
@@ -114,9 +115,10 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("RESET spark.  sql.key1 key2", expectedErrMsg)
     intercept("RESET spark.sql.key1 key2 key3", expectedErrMsg)
 
-    intercept("RESET spark.sql:    key", "no viable alternative at input ':'")
-    intercept("RESET spark.sql    .key", "rule configKey failed predicate")
-    intercept("RESET spark.sql :   key", "rule configKey failed predicate")
+    // TODO: Needs to make the error message more meaningful for users
+    intercept("RESET spark.sql:    key", "failed predicate")
+    intercept("RESET spark.sql    .key", "failed predicate")
+    intercept("RESET spark.sql :   key", "failed predicate")
   }
 
   test("refresh resource") {
