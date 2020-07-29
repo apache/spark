@@ -18,11 +18,12 @@
 import sys
 import unittest
 
-from pyspark.ml.classification import BinaryLogisticRegressionSummary, FMClassifier, \
+from pyspark.ml.classification import BinaryLogisticRegressionSummary, \
+    BinaryRandomForestClassificationSummary, FMClassifier, \
     FMClassificationSummary, LinearSVC, LinearSVCSummary,  \
-    BinaryRandomForestClassificationSummary, LogisticRegression, \
-    LogisticRegressionSummary, RandomForestClassificationSummary, \
-    RandomForestClassifier
+    LogisticRegression, LogisticRegressionSummary, \
+    MultilayerPerceptronClassifier, MultilayerPerceptronClassificationSummary, \
+    RandomForestClassificationSummary, RandomForestClassifier
 from pyspark.ml.clustering import BisectingKMeans, GaussianMixture, KMeans
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.regression import GeneralizedLinearRegression, LinearRegression
@@ -353,6 +354,42 @@ class TrainingSummaryTest(SparkSessionTestCase):
         sameSummary = model.evaluate(df)
         self.assertTrue(isinstance(sameSummary, FMClassificationSummary))
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
+
+    def test_mlp_classification_summary(self):
+        df = self.spark.createDataFrame([(0.0, Vectors.dense([0.0, 0.0])),
+                                         (1.0, Vectors.dense([0.0, 1.0])),
+                                         (1.0, Vectors.dense([1.0, 0.0])),
+                                         (0.0, Vectors.dense([1.0, 1.0]))
+                                         ],
+                                        ["label", "features"])
+        mlp = MultilayerPerceptronClassifier(layers=[2, 2, 2], seed=123)
+        model = mlp.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary()
+        # test that api is callable and returns expected types
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.labels, list))
+        self.assertTrue(isinstance(s.truePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
+        self.assertTrue(isinstance(s.precisionByLabel, list))
+        self.assertTrue(isinstance(s.recallByLabel, list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(), list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(1.0), list))
+        self.assertAlmostEqual(s.accuracy, 1.0, 2)
+        self.assertAlmostEqual(s.weightedTruePositiveRate, 1.0, 2)
+        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.0, 2)
+        self.assertAlmostEqual(s.weightedRecall, 1.0, 2)
+        self.assertAlmostEqual(s.weightedPrecision, 1.0, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(), 1.0, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(1.0), 1.0, 2)
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertTrue(isinstance(sameSummary, MultilayerPerceptronClassificationSummary))
+        self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
 
     def test_gaussian_mixture_summary(self):
         data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),
