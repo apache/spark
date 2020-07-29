@@ -761,6 +761,7 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
  * whether AQE is enabled.
  */
 case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleExchangeLike {
+  override def numMappers: Int = delegate.numMappers
   override def numPartitions: Int = delegate.numPartitions
   override def canChangeNumPartitions: Boolean = delegate.canChangeNumPartitions
   override def mapOutputStatisticsFuture: Future[MapOutputStatistics] =

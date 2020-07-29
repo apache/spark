@@ -385,10 +385,18 @@ case class AdaptiveSparkPlanExec(
       case s: ShuffleExchangeLike =>
         val newShuffle = applyPhysicalRules(
           s.withNewChildren(Seq(optimizedPlan)), postStageCreationRules)
+        if (!newShuffle.isInstanceOf[ShuffleExchangeLike]) {
+          throw new IllegalStateException(
+            "Custom columnar rules cannot transform shuffle node to something else.")
+        }
         ShuffleQueryStageExec(currentStageId, newShuffle)
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
           b.withNewChildren(Seq(optimizedPlan)), postStageCreationRules)
+        if (!newBroadcast.isInstanceOf[BroadcastExchangeLike]) {
+          throw new IllegalStateException(
+            "Custom columnar rules cannot transform broadcast node to something else.")
+        }
         BroadcastQueryStageExec(currentStageId, newBroadcast)
     }
     currentStageId += 1
