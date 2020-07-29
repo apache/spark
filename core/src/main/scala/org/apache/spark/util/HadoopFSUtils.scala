@@ -29,6 +29,8 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.source.HiveCatalogMetrics
+
 
 private[spark] object HadoopFSUtils extends Logging {
   /**
@@ -44,6 +46,7 @@ private[spark] object HadoopFSUtils extends Logging {
     filter: PathFilter, areSQLRootPaths: Boolean, ignoreMissingFiles: Boolean,
     ignoreLocality: Boolean, maxParallelism: Int,
     filterFun: Option[String => Boolean] = None): Seq[(Path, Seq[FileStatus])] = {
+    HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
     val serializedPaths = paths.map(_.toString)
@@ -77,8 +80,8 @@ private[spark] object HadoopFSUtils extends Logging {
               ignoreLocality = ignoreLocality,
               isSQLRootPath = areSQLRootPaths,
               filterFun = filterFun,
-              parallelScanCallBack = None  // Can't execute parallel scans on workers
-            )
+              parallelismThreshold = Int.MaxValue,
+              maxParallelism = 0)
             (path, leafFiles)
           }.iterator
         }.collect() // TODO(holden): should we use local itr here?
@@ -105,10 +108,9 @@ private[spark] object HadoopFSUtils extends Logging {
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
       isSQLRootPath: Boolean,
-      parallelScanCallBack: Option[() => Unit],
       filterFun: Option[String => Boolean],
-      parallelismThreshold: Int = 1,
-      maxParallelism: Int = 1): Seq[FileStatus] = {
+      parallelismThreshold: Int,
+      maxParallelism: Int): Seq[FileStatus] = {
     // scalastyle:on argcount
 
     logTrace(s"Listing $path")
@@ -128,7 +130,7 @@ private[spark] object HadoopFSUtils extends Logging {
             def next(): LocatedFileStatus = remoteIter.next
             def hasNext(): Boolean = remoteIter.hasNext
           }.toArray
-        case _ =>
+        case _ if !ignoreLocality =>
           // Try and use the accelerated code path even if it isn't known
           // to support it, and fall back.
           try {
@@ -141,6 +143,8 @@ private[spark] object HadoopFSUtils extends Logging {
             case e: FileNotFoundException =>
               fs.listStatus(path)
           }
+        case _ =>
+          fs.listStatus(path)
       }
     } catch {
       // If we are listing a root path for SQL (e.g. a top level directory of a table), we need to
@@ -178,7 +182,6 @@ private[spark] object HadoopFSUtils extends Logging {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
       val nestedFiles: Seq[FileStatus] = contextOpt match {
         case Some(context) if dirs.size > parallelismThreshold =>
-          parallelScanCallBack.foreach(f => f())
           parallelListLeafFiles(
             context,
             dirs.map(_.getPath),
@@ -200,8 +203,9 @@ private[spark] object HadoopFSUtils extends Logging {
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
               isSQLRootPath = false,
-              parallelScanCallBack = parallelScanCallBack,
-              filterFun = filterFun)
+              filterFun = filterFun,
+              parallelismThreshold = parallelismThreshold,
+              maxParallelism = maxParallelism)
           }
       }
       val allFiles = topLevelFiles ++ nestedFiles
