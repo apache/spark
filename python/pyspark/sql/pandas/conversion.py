@@ -407,7 +407,7 @@ class SparkConversionMixin(object):
         length = len(pdf)
         num_slices = self.sparkContext.defaultParallelism
         pdf_slices = (pdf.iloc[i * length // num_slices: (i + 1) * length // num_slices]
-                      for i in xrange(0, num_slices))
+                      for i in range(0, num_slices))
 
         # Create list of Arrow (columns, type) for serializer dump_stream
         arrow_data = [[(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)]
