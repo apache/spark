@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.pathfilters
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -48,22 +48,25 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 abstract class ModifiedDateFilter(sparkSession: SparkSession,
                                   hadoopConf: Configuration,
-                                  options: Map[String, String])
+                                  options: CaseInsensitiveMap[String])
     extends PathFilterStrategy(sparkSession, hadoopConf, options) {
-  val timeZoneId: String = options.getOrElse(DateTimeUtils.TIMEZONE_OPTION,
-                                             SQLConf.get.sessionLocalTimeZone)
+  lazy val timeZoneId: String = options.getOrElse(
+      DateTimeUtils.TIMEZONE_OPTION.toLowerCase(Locale.ROOT),
+      SQLConf.get.sessionLocalTimeZone)
 
   /* Implicitly defaults to UTC if unable to parse */
-  val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId)
-  val timeString: UTF8String = UTF8String.fromString(options.apply(strategy()))
-  val thresholdTime: Long =
-    DateTimeUtils
-      .stringToTimestamp(timeString, timeZone.toZoneId)
-      .getOrElse(throw new AnalysisException(
-        s"The timestamp provided for the '${strategy()}'" +
-          s" option is invalid.  The expected format is 'YYYY-MM-DDTHH:mm:ss'. " +
-          s" Provided timestamp:  " +
-          s"${options.apply(strategy())}"))
+  lazy val timeZone: TimeZone = DateTimeUtils.getTimeZone(timeZoneId)
+  lazy val timeString: UTF8String = UTF8String.fromString(options.apply(strategy()))
+
+  def thresholdTime(): Long = {
+      DateTimeUtils
+      .stringToTimestamp (timeString, timeZone.toZoneId)
+      .getOrElse (throw new AnalysisException (
+      s"The timestamp provided for the '${strategy ()}'" +
+      s" option is invalid.  The expected format is 'YYYY-MM-DDTHH:mm:ss'. " +
+      s" Provided timestamp:  " +
+      s"${options.apply (strategy () )}") )
+  }
 
   def localTime(micros: Long): Long =
     DateTimeUtils.fromUTCTime(micros, timeZoneId)
