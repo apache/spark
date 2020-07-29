@@ -59,7 +59,9 @@ private[spark] object SchemaUtils {
    * @param resolver resolver used to determine if two identifiers are equal
    */
   def checkSchemaColumnNameDuplication(
-      schema: StructType, colType: String, resolver: Resolver): Unit = {
+      schema: StructType,
+      colType: String,
+      resolver: Resolver): Unit = {
     checkSchemaColumnNameDuplication(schema, colType, isCaseSensitiveAnalysis(resolver))
   }
 
