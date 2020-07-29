@@ -119,8 +119,10 @@ class SparkContext(object):
             ...
         ValueError:...
         """
-        # In order to prevent SparkContext from being created in executors.
-        SparkContext._assert_on_driver()
+        if (conf is not None and
+                conf.get("spark.python.allowSparkContextInExecutors", "true").lower() != "true"):
+            # In order to prevent SparkContext from being created in executors.
+            SparkContext._assert_on_driver()
 
         self._callsite = first_spark_call() or CallSite(None, None, None)
         if gateway is not None and gateway.gateway_parameters.auth_token is None:

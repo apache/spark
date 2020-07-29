@@ -1814,4 +1814,10 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
+  private[spark] val ALLOW_SPARK_CONTEXT_IN_EXECUTORS =
+    ConfigBuilder("spark.driver.allowSparkContextInExecutors")
+      .doc("If set to true, SparkContext can be created in executors.")
+      .version("3.0.1")
+      .booleanConf
+      .createWithDefault(true)
 }
