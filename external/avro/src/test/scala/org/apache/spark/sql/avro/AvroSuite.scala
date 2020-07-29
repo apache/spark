@@ -1920,6 +1920,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
            |Format: avro
            |Location: InMemoryFileIndex\\[.*\\]
            |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
+           |PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
            |ReadSchema: struct\\<value:bigint\\>
            |""".stripMargin.trim
       spark.range(10)
@@ -1933,7 +1934,38 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
         .format("avro")
         .load(basePath).where($"id" > 1 && $"value" > 2)
       val normalizedOutput = getNormalizedExplain(df, FormattedMode)
-      assert(expected_plan_fragment.r.findAllMatchIn(normalizedOutput).length == 1)
+      assert(expected_plan_fragment.r.findAllMatchIn(normalizedOutput).length == 1,
+        normalizedOutput)
+    }
+  }
+
+  test("SPARK-32346: filters pushdown to Avro datasource v2") {
+    Seq(true, false).foreach { filtersPushdown =>
+      withSQLConf(SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> filtersPushdown.toString) {
+        withTempPath { dir =>
+          Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
+            .toDF("value", "p1", "p2")
+            .write
+            .format("avro")
+            .save(dir.getCanonicalPath)
+          val df = spark
+            .read
+            .format("avro")
+            .load(dir.getCanonicalPath)
+            .where("value = 'a'")
+
+          val fileScan = df.queryExecution.executedPlan collectFirst {
+            case BatchScanExec(_, f: AvroScan) => f
+          }
+          assert(fileScan.nonEmpty)
+          if (filtersPushdown) {
+            assert(fileScan.get.pushedFilters.nonEmpty)
+          } else {
+            assert(fileScan.get.pushedFilters.isEmpty)
+          }
+          checkAnswer(df, Row("a", 1, 2))
+        }
+      }
     }
   }
 }
