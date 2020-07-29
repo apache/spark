@@ -184,8 +184,8 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       val msg =
         s"""
            |$header
-           |${sideBySide(approvedSimplified.linesIterator.toSeq, actualSimplified.linesIterator.toSeq)
-          .mkString("\n")}
+           |${sideBySide(approvedSimplified.linesIterator.toSeq,
+          actualSimplified.linesIterator.toSeq).mkString("\n")}
          """.stripMargin
       fail(msg)
     }
