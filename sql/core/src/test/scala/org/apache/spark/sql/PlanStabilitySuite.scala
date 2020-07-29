@@ -135,20 +135,20 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       variant: Boolean,
       explain: String): Unit = {
     val dir = getDirForTest(name)
-    if (!dir.exists()) {
-      val simplified = getSimplifiedPlan(plan)
-      if (!isApproved(name, dir, simplified)) {
-        if (!variant) {
-          FileUtils.deleteDirectory(dir)
-          assert(dir.mkdirs())
-        }
-        val nextVariant = getNextVariantNumber(name)
-        val file = new File(dir, s"$nextVariant.simplified.txt")
-        FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
-        val fileOriginalPlan = new File(dir, s"$nextVariant.explain.txt")
-        FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
-        logInfo(s"APPROVED: ${file} ${fileOriginalPlan}")
+    val simplified = getSimplifiedPlan(plan)
+    val foundMatch = dir.exists() && isApproved(name, dir, simplified)
+
+    if (!foundMatch) {
+      if (!variant) {
+        FileUtils.deleteDirectory(dir)
+        assert(dir.mkdirs())
       }
+      val nextVariant = getNextVariantNumber(name)
+      val file = new File(dir, s"$nextVariant.simplified.txt")
+      FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
+      val fileOriginalPlan = new File(dir, s"$nextVariant.explain.txt")
+      FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
+      logInfo(s"APPROVED: ${file} ${fileOriginalPlan}")
     }
   }
 
