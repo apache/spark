@@ -14,11 +14,23 @@
 
 import sys
 import os
+import shutil
+import errno
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('.'))
+
+# Remove previously generated rst files. Ignore errors just in case it stops
+# generating whole docs.
+shutil.rmtree(
+    "%s/reference/api" % os.path.dirname(os.path.abspath(__file__)), ignore_errors=True)
+try:
+    os.mkdir("%s/reference/api" % os.path.dirname(os.path.abspath(__file__)))
+except OSError as e:
+    if e.errno != errno.EEXIST:
+        raise
 
 # -- General configuration ------------------------------------------------
 
@@ -32,6 +44,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.viewcode',
     'sphinx.ext.mathjax',
+    'sphinx.ext.autosummary',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -47,8 +60,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'PySpark'
-copyright = u''
+project = 'PySpark'
+copyright = ''
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -101,12 +114,13 @@ pygments_style = 'sphinx'
 
 # Look at the first line of the docstring for function and method signatures.
 autodoc_docstring_signature = True
+autosummary_generate = True
 
 # -- Options for HTML output ----------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'nature'
+html_theme = 'pydata_sphinx_theme'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -125,7 +139,7 @@ html_theme = 'nature'
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = "../../docs/img/spark-logo-hd.png"
+html_logo = "../../../docs/img/spark-logo-reverse.png"
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
@@ -136,6 +150,10 @@ html_logo = "../../docs/img/spark-logo-hd.png"
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+html_css_files = [
+    'css/pyspark.css',
+]
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
@@ -204,8 +222,8 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  ('index', 'pyspark.tex', u'pyspark Documentation',
-   u'Author', 'manual'),
+  ('index', 'pyspark.tex', 'pyspark Documentation',
+   'Author', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -234,8 +252,8 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'pyspark', u'pyspark Documentation',
-     [u'Author'], 1)
+    ('index', 'pyspark', 'pyspark Documentation',
+     ['Author'], 1)
 ]
 
 # If true, show URL addresses after external links.
@@ -248,8 +266,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-  ('index', 'pyspark', u'pyspark Documentation',
-   u'Author', 'pyspark', 'One line description of project.',
+  ('index', 'pyspark', 'pyspark Documentation',
+   'Author', 'pyspark', 'One line description of project.',
    'Miscellaneous'),
 ]
 
@@ -269,13 +287,13 @@ texinfo_documents = [
 # -- Options for Epub output ----------------------------------------------
 
 # Bibliographic Dublin Core info.
-epub_title = u'pyspark'
-epub_author = u'Author'
-epub_publisher = u'Author'
-epub_copyright = u'2014, Author'
+epub_title = 'pyspark'
+epub_author = 'Author'
+epub_publisher = 'Author'
+epub_copyright = '2014, Author'
 
 # The basename for the epub file. It defaults to the project name.
-#epub_basename = u'pyspark'
+#epub_basename = 'pyspark'
 
 # The HTML theme for the epub output. Since the default themes are not optimized
 # for small screen space, using the same theme for HTML and epub output is
@@ -335,7 +353,8 @@ epub_exclude_files = ['search.html']
 # If false, no index is generated.
 #epub_use_index = True
 def setup(app):
-    app.add_javascript('copybutton.js')
+    # The app.add_javascript() is deprecated.
+    getattr(app, "add_js_file", getattr(app, "add_javascript"))('copybutton.js')
 
 # Skip sample endpoint link (not expected to resolve)
 linkcheck_ignore = [r'https://kinesis.us-east-1.amazonaws.com']
