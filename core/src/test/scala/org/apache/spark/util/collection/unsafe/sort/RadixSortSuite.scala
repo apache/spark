@@ -194,7 +194,6 @@ class RadixSortSuite extends SparkFunSuite with Logging {
         sortType.descending, sortType.signed)
       val res1 = collectToArray(buf1, 0, N * 2)
       val res2 = collectToArray(buf2, outOffset, N * 2)
-      res1.view
       assert(res1.sameElements(res2))
     }
   }
