@@ -161,16 +161,10 @@ object InMemoryFileIndex extends Logging {
       sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism
     val sc = sparkSession.sparkContext
 
-    def parallelScanCallBack(): Unit = {
-      logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
-        s" The first several paths are: ${paths.take(10).mkString(", ")}.")
-      HiveCatalogMetrics.incrementParallelListingJobCount(1)
-    }
-
     // Short-circuits parallel listing when serial listing is likely to be faster.
     val threshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold
-    if (paths.size <= threshold) {
-      return paths.map { path =>
+    val result = if (paths.size <= threshold) {
+      paths.map { path =>
         val leafFiles = HadoopFSUtils.listLeafFiles(
           path = path,
           hadoopConf = hadoopConf,
@@ -179,19 +173,18 @@ object InMemoryFileIndex extends Logging {
           ignoreMissingFiles = ignoreMissingFiles,
           ignoreLocality = ignoreLocality,
           isSQLRootPath = areRootPaths,
-          parallelScanCallBack = Some(parallelScanCallBack _),
           filterFun = Some(shouldFilterOut _),
           parallelismThreshold = threshold,
           maxParallelism = parallelPartitionDiscoveryParallelism)
         (path, leafFiles)
       }
+    } else {
+      HadoopFSUtils.parallelListLeafFiles(sparkSession.sparkContext, paths, hadoopConf, filter,
+        areSQLRootPaths = areRootPaths, ignoreMissingFiles = ignoreMissingFiles,
+        ignoreLocality = ignoreLocality, parallelPartitionDiscoveryParallelism,
+        Some(shouldFilterOut _))
     }
-
-    parallelScanCallBack()
-    HadoopFSUtils.parallelListLeafFiles(sparkSession.sparkContext, paths, hadoopConf, filter,
-      areSQLRootPaths = areRootPaths, ignoreMissingFiles = ignoreMissingFiles,
-      ignoreLocality = ignoreLocality, parallelPartitionDiscoveryParallelism,
-      Some(shouldFilterOut _))
+    result
   }
 
   /** Checks if we should filter out this path name. */
