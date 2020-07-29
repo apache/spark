@@ -144,7 +144,6 @@ class HashedRelationSuite extends SharedSparkSession {
     }
 
     val longRelation2 = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
-        .asInstanceOf[LongHashedRelation]
     assert(!longRelation2.keyIsUnique)
     (0 until 100).foreach { i =>
       val rows = longRelation2.get(i).toArray

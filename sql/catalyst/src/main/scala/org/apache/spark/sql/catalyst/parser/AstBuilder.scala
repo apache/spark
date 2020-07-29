@@ -3600,7 +3600,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       } else {
         Seq(describeFuncName.getText)
       }
-    DescribeFunction(UnresolvedFunc(functionName), EXTENDED != null)
+    DescribeFunctionStatement(functionName, EXTENDED != null)
   }
 
   /**
@@ -3615,10 +3615,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case Some(x) => throw new ParseException(s"SHOW $x FUNCTIONS not supported", ctx)
     }
     val pattern = Option(ctx.pattern).map(string(_))
-    val unresolvedFuncOpt = Option(ctx.multipartIdentifier)
-      .map(visitMultipartIdentifier)
-      .map(UnresolvedFunc(_))
-    ShowFunctions(unresolvedFuncOpt, userScope, systemScope, pattern)
+    val functionName = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    ShowFunctionsStatement(userScope, systemScope, pattern, functionName)
   }
 
   /**
@@ -3631,8 +3629,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
     val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    DropFunction(
-      UnresolvedFunc(functionName),
+    DropFunctionStatement(
+      functionName,
       ctx.EXISTS != null,
       ctx.TEMPORARY != null)
   }

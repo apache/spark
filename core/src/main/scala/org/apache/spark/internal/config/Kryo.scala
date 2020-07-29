@@ -29,8 +29,7 @@ private[spark] object Kryo {
   val KRYO_USER_REGISTRATORS = ConfigBuilder("spark.kryo.registrator")
     .version("0.5.0")
     .stringConf
-    .toSequence
-    .createWithDefault(Nil)
+    .createOptional
 
   val KRYO_CLASSES_TO_REGISTER = ConfigBuilder("spark.kryo.classesToRegister")
     .version("1.2.0")

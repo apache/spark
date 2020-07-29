@@ -24,6 +24,7 @@ import java.time.format.{DateTimeFormatter, DateTimeParseException}
 import java.time.temporal.ChronoField.MICRO_OF_SECOND
 import java.time.temporal.TemporalQueries
 import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
+import java.util.concurrent.TimeUnit.SECONDS
 
 import org.apache.commons.lang3.time.FastDateFormat
 
@@ -82,7 +83,7 @@ class Iso8601TimestampFormatter(
         val epochSeconds = zonedDateTime.toEpochSecond
         val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
-        Math.addExact(Math.multiplyExact(epochSeconds, MICROS_PER_SECOND), microsOfSecond)
+        Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
       } catch checkParsedDiff(s, legacyFormatter.parse)
     }
   }

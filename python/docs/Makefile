@@ -3,8 +3,8 @@
 # You can set these variables from the command line.
 SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
-SOURCEDIR     ?= source
-BUILDDIR      ?= build
+SOURCEDIR     ?= .
+BUILDDIR      ?= _build
 
 export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.9-src.zip)
 

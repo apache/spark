@@ -201,7 +201,7 @@ class DataFrameReader(OptionUtils):
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
              dropFieldIfAllNull=None, encoding=None, locale=None, pathGlobFilter=None,
              recursiveFileLookup=None, modifiedBefore=None, modifiedAfter=None,
-             recursiveFileLookup=None, allowNonNumericNumbers=None):
+             allowNonNumericNumbers=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 

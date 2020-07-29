@@ -57,13 +57,8 @@ Note: Other versions of roxygen2 might work in SparkR documentation generation b
 
 To generate API docs for any language, you'll need to install these libraries:
 
-<!--
-TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
-See also https://github.com/sphinx-doc/sphinx/issues/7551.
--->
-
 ```sh
-$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme
+$ sudo pip install sphinx mkdocs numpy
 ```
 
 ## Generating the Documentation HTML

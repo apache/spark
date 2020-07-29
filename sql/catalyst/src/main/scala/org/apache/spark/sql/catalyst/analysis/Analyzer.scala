@@ -1939,7 +1939,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Resolve functions with concrete relations from v2 catalog.
       case UnresolvedFunc(multipartIdent) =>
-        val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent)
+        val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent, "function lookup")
         ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
 
       case q: LogicalPlan =>

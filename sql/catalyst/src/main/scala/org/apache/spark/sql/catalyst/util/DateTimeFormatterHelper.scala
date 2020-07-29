@@ -296,9 +296,7 @@ private object DateTimeFormatterHelper {
       // unchecked `ArrayIndexOutOfBoundsException` by the `NumberPrinterParser` for formatting. It
       // makes the call side difficult to handle exceptions and easily leads to silent data change
       // because of the exceptions being suppressed.
-      // SPARK-32424: The max year that we can actually handle is 6 digits, otherwise, it will
-      // overflow
-      Seq("y").map(_ * 7)
+      Seq("y").map(_ * 11)
   }.toSet
 
   /**
