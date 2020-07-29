@@ -108,7 +108,7 @@ case class BroadcastExchangeExec(
             longMetric("dataSize") += dataSize
             if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
               throw new SparkException(
-                s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
+                s"Cannot broadcast the table that is larger than ${MAX_BROADCAST_TABLE_BYTES >> 30} GB: ${dataSize >> 30} GB")
             }
 
             val beforeBroadcast = System.nanoTime()
