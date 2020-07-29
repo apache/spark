@@ -22,11 +22,9 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
 import scala.collection.JavaConverters.asScalaBufferConverter
-import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.fs.{FileStatus, LocatedFileStatus, Path, PathFilter}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred.JobConf
@@ -41,7 +39,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{HadoopFSUtils, SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Utils}
 
 
 private[spark] class NewHadoopPartition(
@@ -97,14 +95,6 @@ class NewHadoopRDD[K, V](
   private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
 
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
-
-  private val listingParallelismThreshold = 2
-
-  private val accelerateListing = true
-
-  private val ignoreLocality = true
-
-  private val maxListingParallelism = 100
 
   def getConf: Configuration = {
     val conf: Configuration = confBroadcast.value.value
@@ -169,10 +159,6 @@ class NewHadoopRDD[K, V](
     }
   }
 
-  /**
-   * If configured and the format supports it, uses acceleratedGetSplits, otherwise
-   * asks the InputFormat directly for it's splits.
-   */
   private def getSplits(): Seq[InputSplit] = {
     val inputFormat = inputFormatClass.getConstructor().newInstance()
     inputFormat match {
@@ -181,145 +167,6 @@ class NewHadoopRDD[K, V](
       case _ =>
     }
 
-    if (accelerateListing) {
-      inputFormat match {
-        case fileFormat: FileInputFormat[K, V] =>
-          acceleratedGetSplits(fileFormat)
-        case _ =>
-          delegateGetSplits()
-      }
-    }
-    delegateGetSplits()
-  }
-
-  /**
-   * A version of get partitions which can use jobs on multiple workers,
-   * like in SQL. This does not delegate to getSplits, so any file
-   * format with custom getSplits logic should not be used.
-   * Only enable skipLocation if you know that location information is not
-   * used in split calculation.
-   */
-  private final def acceleratedGetSplits(fileFormat: FileInputFormat[K, V]):
-      Seq[InputSplit] = {
-
-    val jobContext = new JobContextImpl(_conf, jobId)
-    val conf = getConf
-
-    // Get the file statuses
-    def listStatus(): Seq[FileStatus] = {
-      // The hiddenFileFilter is private but we want it, but it's final so
-      // we can recreate it safely.
-      val filter = new PathFilter() {
-        val parentFilter = FileInputFormat.getInputPathFilter(jobContext)
-        override def accept(p: Path): Boolean = {
-          val name = p.getName()
-          !name.startsWith("_") && !name.startsWith(".") && parentFilter.accept(p)
-        }
-      }
-
-      val recursive = conf.getBoolean("mapred.input.dir.recursive", false)
-      val dirs = FileInputFormat.getInputPaths(jobContext)
-
-      if (dirs.size < listingParallelismThreshold) {
-        dirs.flatMap{dir =>
-          HadoopFSUtils.listLeafFiles(
-            path = dir,
-            hadoopConf = conf,
-            filter = filter,
-            contextOpt = Some(sc),
-            ignoreMissingFiles = ignoreMissingFiles,
-            isSQLRootPath = false,
-            ignoreLocality = ignoreLocality,
-            parallelScanCallBack = None,
-            filterFun = None,
-            parallelismThreshold = listingParallelismThreshold,
-            maxParallelism = maxListingParallelism)
-        }
-      } else {
-        HadoopFSUtils.parallelListLeafFiles(
-          sc = sc,
-          paths = dirs,
-          hadoopConf = conf,
-          filter = filter,
-          areSQLRootPaths = false,
-          ignoreMissingFiles = ignoreMissingFiles,
-          ignoreLocality = ignoreLocality,
-          maxParallelism = maxListingParallelism,
-          filterFun = None).flatMap(_._2)
-      }
-    }
-
-    val files = listStatus()
-    val totalSize = files.map(_.getLen()).sum
-    val minSize = Math.max(1, FileInputFormat.getMinSplitSize(jobContext))
-    val maxSize = FileInputFormat.getMaxSplitSize(jobContext)
-    val ret = new mutable.ArrayBuilder.ofRef[FileSplit]()
-
-    files.foreach { file =>
-      val path = file.getPath()
-      file.getLen() match {
-        // Empty files are easier
-        case 0 =>
-          ret += new FileSplit(file.getPath(), 0, 0, null)
-        case length =>
-          lazy val blockLocations = file match {
-            case located: LocatedFileStatus =>
-              located.getBlockLocations()
-            case _ =>
-              val fs = path.getFileSystem(jobContext.getConfiguration())
-              fs.getFileBlockLocations(file, 0, length);
-          }
-
-          def blockHosts(idx: Int) = {
-            ignoreLocality match {
-              case true => null
-              case false => blockLocations(idx).getHosts()
-            }
-          }
-          def getBlockIndex(offset: Long): Int = {
-            ignoreLocality match {
-              case true => 0
-              case false =>
-                val loc = blockLocations.indexWhere{loc =>
-                  (loc.getOffset() <= offset) && (offset <= loc.getOffset() + loc.getLength())
-                }
-                if (loc == -1) {
-                  throw new IllegalArgumentException(
-                    s"Offset ${offset} is outside of file")
-                }
-                loc
-            }
-          }
-          val blockSize = file.getBlockSize()
-          val splitSize = Math.max(minSize, Math.min(blockSize, maxSize))
-
-          var bytesRemaining = length
-
-          while ((bytesRemaining.toDouble) / splitSize > 1.1) {
-            val blkIndex = getBlockIndex(length-bytesRemaining)
-            ret += (new FileSplit(file.getPath(), length-bytesRemaining,
-              bytesRemaining, blockHosts(blkIndex)))
-          }
-          // If we've got any bytes remaining one last split
-          if (bytesRemaining != 0) {
-            val blkIndex = getBlockIndex(length-bytesRemaining)
-            ret += (new FileSplit(file.getPath(), length-bytesRemaining,
-              bytesRemaining, blockHosts(blkIndex)))
-          }
-      }
-    }
-    ret.result()
-  }
-
-
-
-  private def delegateGetSplits(): Seq[InputSplit] = {
-    val inputFormat = inputFormatClass.getConstructor().newInstance()
-    inputFormat match {
-      case configurable: Configurable =>
-        configurable.setConf(_conf)
-      case _ =>
-    }
     inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
   }
 
@@ -495,6 +342,7 @@ class NewHadoopRDD[K, V](
     }
     super.persist(storageLevel)
   }
+
 }
 
 private[spark] object NewHadoopRDD {
