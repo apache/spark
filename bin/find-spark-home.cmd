@@ -20,8 +20,8 @@ rem
 rem Path to Python script finding SPARK_HOME
 set FIND_SPARK_HOME_PYTHON_SCRIPT=%~dp0find_spark_home.py
 
-rem Default to standard python interpreter unless told otherwise
-set PYTHON_RUNNER=python
+rem Default to standard python3 interpreter unless told otherwise
+set PYTHON_RUNNER=python3
 rem If PYSPARK_DRIVER_PYTHON is set, it overwrites the python version
 if not "x%PYSPARK_DRIVER_PYTHON%"=="x" (
   set PYTHON_RUNNER=%PYSPARK_DRIVER_PYTHON%

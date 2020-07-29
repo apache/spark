@@ -22,7 +22,9 @@ import javax.servlet.http.HttpServletRequest
 import org.eclipse.jetty.proxy.ProxyServlet
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.openqa.selenium.WebDriver
-import org.scalatest._
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
@@ -146,7 +148,9 @@ abstract class RealBrowserUIHistoryServerSuite(val driverProp: String)
       // there are at least some URL links that were generated via javascript,
       // and they all contain the spark.ui.proxyBase (uiRoot)
       links.length should be > 4
-      all(links) should startWith(url + uiRoot)
+      for (link <- links) {
+        link should startWith(url + uiRoot)
+      }
     } finally {
       contextHandler.stop()
       quit()

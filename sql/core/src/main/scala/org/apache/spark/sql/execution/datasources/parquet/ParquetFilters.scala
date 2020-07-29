@@ -68,14 +68,14 @@ class ParquetFilters(
         // When g is a `Map`, `g.getOriginalType` is `MAP`.
         // When g is a `List`, `g.getOriginalType` is `LIST`.
         case g: GroupType if g.getOriginalType == null =>
-          getPrimitiveFields(g.getFields.asScala, parentFieldNames :+ g.getName)
+          getPrimitiveFields(g.getFields.asScala.toSeq, parentFieldNames :+ g.getName)
         // Parquet only supports push-down for primitive types; as a result, Map and List types
         // are removed.
         case _ => None
       }
     }
 
-    val primitiveFields = getPrimitiveFields(schema.getFields.asScala).map { field =>
+    val primitiveFields = getPrimitiveFields(schema.getFields.asScala.toSeq).map { field =>
       import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
       (field.fieldNames.toSeq.quoted, field)
     }
@@ -90,7 +90,7 @@ class ParquetFilters(
         .groupBy(_._1.toLowerCase(Locale.ROOT))
         .filter(_._2.size == 1)
         .mapValues(_.head._2)
-      CaseInsensitiveMap(dedupPrimitiveFields)
+      CaseInsensitiveMap(dedupPrimitiveFields.toMap)
     }
   }
 
