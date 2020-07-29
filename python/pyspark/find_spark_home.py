@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -20,7 +20,6 @@
 # This script attempt to determine the correct setting for SPARK_HOME given
 # that Spark may have been installed on the system with pip.
 
-from __future__ import print_function
 import os
 import sys
 
@@ -41,26 +40,15 @@ def _find_spark_home():
 
     # Add the path of the PySpark module if it exists
     import_error_raised = False
-    if sys.version < "3":
-        import imp
-        try:
-            module_home = imp.find_module("pyspark")[1]
-            paths.append(module_home)
-            # If we are installed in edit mode also look two dirs up
-            paths.append(os.path.join(module_home, "../../"))
-        except ImportError:
-            # Not pip installed no worries
-            import_error_raised = True
-    else:
-        from importlib.util import find_spec
-        try:
-            module_home = os.path.dirname(find_spec("pyspark").origin)
-            paths.append(module_home)
-            # If we are installed in edit mode also look two dirs up
-            paths.append(os.path.join(module_home, "../../"))
-        except ImportError:
-            # Not pip installed no worries
-            import_error_raised = True
+    from importlib.util import find_spec
+    try:
+        module_home = os.path.dirname(find_spec("pyspark").origin)
+        paths.append(module_home)
+        # If we are installed in edit mode also look two dirs up
+        paths.append(os.path.join(module_home, "../../"))
+    except ImportError:
+        # Not pip installed no worries
+        import_error_raised = True
 
     # Normalize the paths
     paths = [os.path.abspath(p) for p in paths]
@@ -83,6 +71,7 @@ def _find_spark_home():
                 "PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON environment variables, for example,\n"
                 "'PYSPARK_PYTHON=python3 pyspark'.\n", file=sys.stderr)
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     print(_find_spark_home())

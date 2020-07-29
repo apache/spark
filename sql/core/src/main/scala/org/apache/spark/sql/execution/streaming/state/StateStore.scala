@@ -27,9 +27,10 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -144,6 +145,16 @@ case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateS
 case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric
 
 /**
+ * An exception thrown when an invalid UnsafeRow is detected in state store.
+ */
+class InvalidUnsafeRowException
+  extends RuntimeException("The streaming query failed by state format invalidation. " +
+    "The following reasons may cause this: 1. An old Spark version wrote the checkpoint that is " +
+    "incompatible with the current one; 2. Broken checkpoint files; 3. The query is changed " +
+    "among restart. For the first case, you can try to restart the application without " +
+    "checkpoint or use the legacy Spark version to process the streaming state.", null)
+
+/**
  * Trait representing a provider that provide [[StateStore]] instances representing
  * versions of state data.
  *
@@ -229,6 +240,26 @@ object StateStoreProvider {
     val provider = create(storeConf.providerClass)
     provider.init(stateStoreId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
     provider
+  }
+
+  /**
+   * Use the expected schema to check whether the UnsafeRow is valid.
+   */
+  def validateStateRowFormat(
+      keyRow: UnsafeRow,
+      keySchema: StructType,
+      valueRow: UnsafeRow,
+      valueSchema: StructType,
+      conf: StateStoreConf): Unit = {
+    if (conf.formatValidationEnabled) {
+      if (!UnsafeRowUtils.validateStructuralIntegrity(keyRow, keySchema)) {
+        throw new InvalidUnsafeRowException
+      }
+      if (conf.formatValidationCheckValue &&
+          !UnsafeRowUtils.validateStructuralIntegrity(valueRow, valueSchema)) {
+        throw new InvalidUnsafeRowException
+      }
+    }
   }
 }
 

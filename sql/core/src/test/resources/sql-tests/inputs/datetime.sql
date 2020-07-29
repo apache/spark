@@ -2,13 +2,18 @@
 
 -- [SPARK-31710] TIMESTAMP_SECONDS, TIMESTAMP_MILLISECONDS and TIMESTAMP_MICROSECONDS to timestamp transfer
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null);
+select TIMESTAMP_SECONDS(1.23), TIMESTAMP_SECONDS(1.23d), TIMESTAMP_SECONDS(FLOAT(1.23));
 select TIMESTAMP_MILLIS(1230219000123),TIMESTAMP_MILLIS(-1230219000123),TIMESTAMP_MILLIS(null);
 select TIMESTAMP_MICROS(1230219000123123),TIMESTAMP_MICROS(-1230219000123123),TIMESTAMP_MICROS(null);
--- overflow exception:
+-- overflow exception
 select TIMESTAMP_SECONDS(1230219000123123);
 select TIMESTAMP_SECONDS(-1230219000123123);
 select TIMESTAMP_MILLIS(92233720368547758);
 select TIMESTAMP_MILLIS(-92233720368547758);
+-- truncate exception
+select TIMESTAMP_SECONDS(0.1234567);
+-- truncation is OK for float/double
+select TIMESTAMP_SECONDS(0.1234567d), TIMESTAMP_SECONDS(FLOAT(0.1234567));
 
 -- [SPARK-16836] current_date and current_timestamp literals
 select current_date = current_date(), current_timestamp = current_timestamp();
@@ -138,25 +143,11 @@ select to_timestamp("2019 40", "yyyy mm");
 select to_timestamp("2019 10:10:10", "yyyy hh:mm:ss");
 
 -- Unsupported narrow text style
-select date_format(date '2020-05-23', 'GGGGG');
-select date_format(date '2020-05-23', 'MMMMM');
-select date_format(date '2020-05-23', 'LLLLL');
-select date_format(timestamp '2020-05-23', 'EEEEE');
-select date_format(timestamp '2020-05-23', 'uuuuu');
-select date_format('2020-05-23', 'QQQQQ');
-select date_format('2020-05-23', 'qqqqq');
 select to_timestamp('2019-10-06 A', 'yyyy-MM-dd GGGGG');
 select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEEE');
 select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE');
 select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE');
-select from_unixtime(12345, 'MMMMM');
-select from_unixtime(54321, 'QQQQQ');
-select from_unixtime(23456, 'aaaaa');
 select from_json('{"time":"26/October/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
-
-select from_unixtime(1, 'yyyyyyyyyyy-MM-dd');
-select date_format(timestamp '2018-11-17 13:33:33', 'yyyyyyyyyy-MM-dd HH:mm:ss');
-select date_format(date '2018-11-17', 'yyyyyyyyyyy-MM-dd');

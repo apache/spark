@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 from py4j.java_gateway import java_import, is_instance_of
 
 from pyspark import RDD, SparkConf

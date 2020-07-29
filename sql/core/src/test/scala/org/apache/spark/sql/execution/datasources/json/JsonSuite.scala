@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
-import java.time.LocalDate
+import java.time.{LocalDate, ZoneId}
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -35,12 +35,14 @@ import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, NoopCache}
+import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.TestUDT.{MyDenseVector, MyDenseVectorUDT}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 class TestFileFilter extends PathFilter {
@@ -125,7 +127,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssXXX")))
 
     val ISO8601Date = "1970-01-01"
-    checkTypePromotion(DateTimeUtils.microsToDays(32400000000L),
+    checkTypePromotion(DateTimeUtils.microsToDays(32400000000L, ZoneId.systemDefault),
       enforceCorrectType(ISO8601Date, DateType))
   }
 
@@ -2488,7 +2490,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
           .json(testFile("test-data/utf16LE.json"))
           .count()
       }
-      assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
+      assert(exception.getMessage.contains("encoding must not be included in the denyList"))
     }
   }
 
@@ -2610,7 +2612,9 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
   }
 
   test("inferring timestamp type") {
-    def schemaOf(jsons: String*): StructType = spark.read.json(jsons.toDS).schema
+    def schemaOf(jsons: String*): StructType = {
+      spark.read.option("inferTimestamp", true).json(jsons.toDS).schema
+    }
 
     assert(schemaOf(
       """{"a":"2018-12-17T10:11:12.123-01:00"}""",
@@ -2633,6 +2637,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.json"
       val timestampsWithFormat = spark.read
         .option("timestampFormat", "dd/MM/yyyy HH:mm")
+        .option("inferTimestamp", true)
         .json(datesRecords)
       assert(timestampsWithFormat.schema === customSchema)
 
@@ -2645,6 +2650,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       val readBack = spark.read
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
         .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+        .option("inferTimestamp", true)
         .json(timestampsWithFormatPath)
 
       assert(readBack.schema === customSchema)
@@ -2684,6 +2690,122 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
       checkAnswer(json, Row(null))
     }
   }
+
+  test("filters push down") {
+    withTempPath { path =>
+      val t = "2019-12-17 00:01:02"
+      Seq(
+        """{"c0": "abc", "c1": {"c2": 1, "c3": "2019-11-14 20:35:30"}}""",
+        s"""{"c0": "def", "c1": {"c2": 2, "c3": "$t"}}""",
+        s"""{"c0": "defa", "c1": {"c2": 3, "c3": "$t"}}""",
+        s"""{"c0": "define", "c1": {"c2": 2, "c3": "$t"}}""").toDF("data")
+        .repartition(1)
+        .write.text(path.getAbsolutePath)
+      Seq(true, false).foreach { filterPushdown =>
+        withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
+          Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST").foreach { mode =>
+            val readback = spark.read
+              .option("mode", mode)
+              .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
+              .schema("c0 string, c1 struct<c2:integer,c3:timestamp>")
+              .json(path.getAbsolutePath)
+              .where($"c1.c2" === 2 && $"c0".startsWith("def"))
+              .select($"c1.c3")
+            assert(readback.count() === 2)
+            checkAnswer(readback, Seq(Row(Timestamp.valueOf(t)), Row(Timestamp.valueOf(t))))
+          }
+        }
+      }
+    }
+  }
+
+  test("apply filters to malformed rows") {
+    withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { path =>
+        Seq(
+          "{}",
+          """{"invalid": 0}""",
+          """{"i":}""",
+          """{"i": 0}""",
+          """{"i": 1, "t": "2020-01-28 01:00:00"}""",
+          """{"t": "2020-01-28 02:00:00"}""",
+          """{"i": "abc", "t": "2020-01-28 03:00:00"}""",
+          """{"i": 2, "t": "2020-01-28 04:00:00", "d": 3.14}""").toDF("data")
+          .repartition(1)
+          .write.text(path.getAbsolutePath)
+        val schema = "i INTEGER, t TIMESTAMP"
+        val readback = spark.read
+          .schema(schema)
+          .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
+          .json(path.getAbsolutePath)
+        // readback:
+        // +----+-------------------+
+        // |i   |t                  |
+        // +----+-------------------+
+        // |null|null               |
+        // |null|null               |
+        // |null|null               |
+        // |0   |null               |
+        // |1   |2020-01-28 01:00:00|
+        // |null|2020-01-28 02:00:00|
+        // |null|2020-01-28 03:00:00|
+        // |2   |2020-01-28 04:00:00|
+        // +----+-------------------+
+        checkAnswer(
+          readback.where($"i".isNull && $"t".isNotNull),
+          Seq(
+            Row(null, Timestamp.valueOf("2020-01-28 02:00:00")),
+            Row(null, Timestamp.valueOf("2020-01-28 03:00:00"))))
+        checkAnswer(
+          readback.where($"i" >= 0 && $"t" > "2020-01-28 00:00:00"),
+          Seq(
+            Row(1, Timestamp.valueOf("2020-01-28 01:00:00")),
+            Row(2, Timestamp.valueOf("2020-01-28 04:00:00"))))
+        checkAnswer(
+          readback.where($"t".isNull).select($"i"),
+          Seq(Row(null), Row(null), Row(null), Row(0)))
+      }
+    }
+  }
+
+  test("case sensitivity of filters references") {
+    Seq(true, false).foreach { filterPushdown =>
+      withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
+        withTempPath { path =>
+          Seq(
+            """{"aaa": 0, "BBB": 1}""",
+            """{"AAA": 2, "bbb": 3}""").toDF().write.text(path.getCanonicalPath)
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+            val readback = spark.read.schema("aaa integer, BBB integer")
+              .json(path.getCanonicalPath)
+            checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
+            checkAnswer(readback.filter($"AAA" === 0 && $"bbb" === 1), Seq(Row(0, 1)))
+            checkAnswer(readback.filter($"AAA" === 2 && $"bbb" === 3), Seq())
+            // Schema inferring
+            val errorMsg = intercept[AnalysisException] {
+              spark.read.json(path.getCanonicalPath).collect()
+            }.getMessage
+            assert(errorMsg.contains("Found duplicate column(s) in the data schema"))
+          }
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+            val readback = spark.read.schema("aaa integer, BBB integer")
+              .json(path.getCanonicalPath)
+            checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
+            val errorMsg = intercept[AnalysisException] {
+              readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
+            }.getMessage
+            assert(errorMsg.contains("cannot resolve '`AAA`'"))
+            // Schema inferring
+            val readback2 = spark.read.json(path.getCanonicalPath)
+            checkAnswer(
+              readback2.filter($"AAA" === 2).select($"AAA", $"bbb"),
+              Seq(Row(2, 3)))
+            checkAnswer(readback2.filter($"aaa" === 2).select($"AAA", $"bbb"), Seq())
+          }
+        }
+      }
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
@@ -2698,6 +2820,37 @@ class JsonV2Suite extends JsonSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  test("get pushed filters") {
+    val attr = "col"
+    def getBuilder(path: String): JsonScanBuilder = {
+      val fileIndex = new InMemoryFileIndex(
+        spark,
+        Seq(new org.apache.hadoop.fs.Path(path, "file.json")),
+        Map.empty,
+        None,
+        NoopCache)
+      val schema = new StructType().add(attr, IntegerType)
+      val options = CaseInsensitiveStringMap.empty()
+      new JsonScanBuilder(spark, fileIndex, schema, schema, options)
+    }
+    val filters: Array[sources.Filter] = Array(sources.IsNotNull(attr))
+    withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { file =>
+        val scanBuilder = getBuilder(file.getCanonicalPath)
+        assert(scanBuilder.pushFilters(filters) === filters)
+        assert(scanBuilder.pushedFilters() === filters)
+      }
+    }
+
+    withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+      withTempPath { file =>
+        val scanBuilder = getBuilder(file.getCanonicalPath)
+        assert(scanBuilder.pushFilters(filters) === filters)
+        assert(scanBuilder.pushedFilters() === Array.empty[sources.Filter])
+      }
+    }
+  }
 }
 
 class JsonLegacyTimeParserSuite extends JsonSuite {

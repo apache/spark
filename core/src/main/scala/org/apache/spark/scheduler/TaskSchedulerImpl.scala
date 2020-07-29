@@ -137,7 +137,7 @@ private[spark] class TaskSchedulerImpl(
   private val executorIdToRunningTaskIds = new HashMap[String, HashSet[Long]]
 
   def runningTasksByExecutors: Map[String, Int] = synchronized {
-    executorIdToRunningTaskIds.toMap.mapValues(_.size)
+    executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
   }
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
@@ -526,14 +526,14 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /**
-   * Called by cluster manager to offer resources on slaves. We respond by asking our active task
+   * Called by cluster manager to offer resources on workers. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
    */
   def resourceOffers(
       offers: IndexedSeq[WorkerOffer],
       isAllFreeResources: Boolean = true): Seq[Seq[TaskDescription]] = synchronized {
-    // Mark each slave as alive and remember its hostname
+    // Mark each worker as alive and remember its hostname
     // Also track if new executor is added
     var newExecAvail = false
     for (o <- offers) {
@@ -637,10 +637,9 @@ private[spark] class TaskSchedulerImpl(
         if (!launchedAnyTask) {
           taskSet.getCompletelyBlacklistedTaskIfAny(hostToExecutors).foreach { taskIndex =>
               // If the taskSet is unschedulable we try to find an existing idle blacklisted
-              // executor. If we cannot find one, we abort immediately. Else we kill the idle
-              // executor and kick off an abortTimer which if it doesn't schedule a task within the
-              // the timeout will abort the taskSet if we were unable to schedule any task from the
-              // taskSet.
+              // executor and kill the idle executor and kick off an abortTimer which if it doesn't
+              // schedule a task within the the timeout will abort the taskSet if we were unable to
+              // schedule any task from the taskSet.
               // Note 1: We keep track of schedulability on a per taskSet basis rather than on a per
               // task basis.
               // Note 2: The taskSet can still be aborted when there are more than one idle
@@ -648,22 +647,33 @@ private[spark] class TaskSchedulerImpl(
               // idle executor isn't replaced in time by ExecutorAllocationManager as it relies on
               // pending tasks and doesn't kill executors on idle timeouts, resulting in the abort
               // timer to expire and abort the taskSet.
+              //
+              // If there are no idle executors and dynamic allocation is enabled, then we would
+              // notify ExecutorAllocationManager to allocate more executors to schedule the
+              // unschedulable tasks else we will abort immediately.
               executorIdToRunningTaskIds.find(x => !isExecutorBusy(x._1)) match {
                 case Some ((executorId, _)) =>
                   if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
                     blacklistTrackerOpt.foreach(blt => blt.killBlacklistedIdleExecutor(executorId))
-
-                    val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
-                    unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
-                    logInfo(s"Waiting for $timeout ms for completely "
-                      + s"blacklisted task to be schedulable again before aborting $taskSet.")
-                    abortTimer.schedule(
-                      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
+                    updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
                   }
-                case None => // Abort Immediately
-                  logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
-                    s" executors can be found to kill. Aborting $taskSet." )
-                  taskSet.abortSinceCompletelyBlacklisted(taskIndex)
+                case None =>
+                  //  Notify ExecutorAllocationManager about the unschedulable task set,
+                  // in order to provision more executors to make them schedulable
+                  if (Utils.isDynamicAllocationEnabled(conf)) {
+                    if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
+                      logInfo(s"Notifying ExecutorAllocationManager to allocate more executors to" +
+                        s" schedule the unschedulable task before aborting $taskSet.")
+                      dagScheduler.unschedulableTaskSetAdded(taskSet.taskSet.stageId,
+                        taskSet.taskSet.stageAttemptId)
+                      updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
+                    }
+                  } else {
+                    // Abort Immediately
+                    logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
+                      s" executors can be found to kill. Aborting $taskSet.")
+                    taskSet.abortSinceCompletelyBlacklisted(taskIndex)
+                  }
               }
           }
         } else {
@@ -676,6 +686,10 @@ private[spark] class TaskSchedulerImpl(
           if (unschedulableTaskSetToExpiryTime.nonEmpty) {
             logInfo("Clearing the expiry times for all unschedulable taskSets as a task was " +
               "recently scheduled.")
+            // Notify ExecutorAllocationManager as well as other subscribers that a task now
+            // recently becomes schedulable
+            dagScheduler.unschedulableTaskSetRemoved(taskSet.taskSet.stageId,
+              taskSet.taskSet.stageAttemptId)
             unschedulableTaskSetToExpiryTime.clear()
           }
         }
@@ -719,7 +733,18 @@ private[spark] class TaskSchedulerImpl(
     if (tasks.nonEmpty) {
       hasLaunchedTask = true
     }
-    return tasks
+    return tasks.map(_.toSeq)
+  }
+
+  private def updateUnschedulableTaskSetTimeoutAndStartAbortTimer(
+      taskSet: TaskSetManager,
+      taskIndex: Int): Unit = {
+    val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
+    unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
+    logInfo(s"Waiting for $timeout ms for completely " +
+      s"blacklisted task to be schedulable again before aborting $taskSet.")
+    abortTimer.schedule(
+      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
   }
 
   private def createUnschedulableTaskSetAbortTimer(
@@ -765,7 +790,8 @@ private[spark] class TaskSchedulerImpl(
               })
               if (executorIdToRunningTaskIds.contains(execId)) {
                 reason = Some(
-                  SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
+                  ExecutorProcessLost(
+                    s"Task $tid was lost, so marking the executor as lost as well."))
                 removeExecutor(execId, reason.get)
                 failedExecutor = Some(execId)
               }
@@ -911,7 +937,8 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def executorDecommission(executorId: String): Unit = {
+  override def executorDecommission(
+      executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
     rootPool.executorDecommission(executorId)
     backend.reviveOffers()
   }
@@ -936,7 +963,7 @@ private[spark] class TaskSchedulerImpl(
 
           case None =>
             // We may get multiple executorLost() calls with different loss reasons. For example,
-            // one may be triggered by a dropped connection from the slave while another may be a
+            // one may be triggered by a dropped connection from the worker while another may be a
             // report of executor termination from Mesos. We produce log messages for both so we
             // eventually report the termination reason.
             logError(s"Lost an executor $executorId (already removed): $reason")

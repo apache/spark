@@ -122,7 +122,7 @@ case class FlatMapGroupsWithStateExec(
           // If timeout is based on event time, then filter late data based on watermark
           val filteredIter = watermarkPredicateForData match {
             case Some(predicate) if timeoutConf == EventTimeTimeout =>
-              iter.filter(row => !predicate.eval(row))
+              applyRemovingRowsOlderThanWatermark(iter, predicate)
             case _ =>
               iter
           }

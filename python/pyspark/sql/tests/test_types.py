@@ -56,7 +56,7 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(10, df3.count())
 
     def test_apply_schema_to_dict_and_rows(self):
-        schema = StructType().add("b", StringType()).add("a", IntegerType())
+        schema = StructType().add("a", IntegerType()).add("b", StringType())
         input = [{"a": 1}, {"b": "coffee"}]
         rdd = self.sc.parallelize(input)
         for verify in [False, True]:
@@ -72,7 +72,6 @@ class TypesTests(ReusedSQLTestCase):
             self.assertEqual(10, df4.count())
 
     def test_create_dataframe_schema_mismatch(self):
-        input = [Row(a=1)]
         rdd = self.sc.parallelize(range(3)).map(lambda i: Row(a=i))
         schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
         df = self.spark.createDataFrame(rdd, schema)
@@ -540,7 +539,6 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())
 
-    @unittest.skipIf(sys.version < "3", "only Python 3 infers bytes as binary type")
     def test_infer_binary_type(self):
         binaryrow = [Row(f1='a', f2=b"abcd")]
         df = self.sc.parallelize(binaryrow).toDF()
@@ -665,10 +663,6 @@ class TypesTests(ReusedSQLTestCase):
             supported_string_types += ['u']
             # test unicode
             assertCollectSuccess('u', u'a')
-        if sys.version_info[0] < 3:
-            supported_string_types += ['c']
-            # test string
-            assertCollectSuccess('c', 'a')
 
         # supported float and double
         #
@@ -721,11 +715,8 @@ class TypesTests(ReusedSQLTestCase):
         #
         # Keys in _array_type_mappings is a complete list of all supported types,
         # and types not in _array_type_mappings are considered unsupported.
-        # `array.typecodes` are not supported in python 2.
-        if sys.version_info[0] < 3:
-            all_types = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
-        else:
-            all_types = set(array.typecodes)
+        # PyPy seems not having array.typecodes.
+        all_types = set(['b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'q', 'Q', 'f', 'd'])
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
@@ -766,10 +757,7 @@ class DataTypeTests(unittest.TestCase):
         self.assertEqual(repr(row), "<Row('Alice', 11)>")
 
         # test __repr__ with unicode values
-        if sys.version_info.major >= 3:
-            self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
-        else:
-            self.assertEqual(repr(Row(u"数", u"量")), r"<Row(u'\u6570', u'\u91cf')>")
+        self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
 
     def test_empty_row(self):
         row = Row()
@@ -887,7 +875,6 @@ class DataTypeVerificationTests(unittest.TestCase):
             ({"s": "a", "f": 1.0}, schema),
             (Row(s="a", i=1), schema),
             (Row(s="a", i=None), schema),
-            (Row(s="a", i=1, f=1.0), schema),
             (["a", 1], schema),
             (["a", None], schema),
             (("a", 1), schema),
@@ -972,18 +959,13 @@ class DataTypeVerificationTests(unittest.TestCase):
             with self.assertRaises(exp, msg=msg):
                 _make_type_verifier(data_type, nullable=False)(obj)
 
-    @unittest.skipIf(sys.version_info[:2] < (3, 6), "Create Row without sorting fields")
     def test_row_without_field_sorting(self):
-        sorting_enabled_tmp = Row._row_field_sorting_enabled
-        Row._row_field_sorting_enabled = False
-
         r = Row(b=1, a=2)
         TestRow = Row("b", "a")
         expected = TestRow(1, 2)
 
         self.assertEqual(r, expected)
         self.assertEqual(repr(r), "Row(b=1, a=2)")
-        Row._row_field_sorting_enabled = sorting_enabled_tmp
 
 
 if __name__ == "__main__":

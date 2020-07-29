@@ -204,13 +204,18 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-28344: don't fail as ambiguous self join when there is no join") {
+  test("SPARK-28344: don't fail if there is no ambiguous self join") {
     withSQLConf(
       SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true") {
       val df = Seq(1, 1, 2, 2).toDF("a")
       val w = Window.partitionBy(df("a"))
       checkAnswer(
         df.select(df("a").alias("x"), sum(df("a")).over(w)),
+        Seq((1, 2), (1, 2), (2, 4), (2, 4)).map(Row.fromTuple))
+
+      val joined = df.join(spark.range(1)).select($"a")
+      checkAnswer(
+        joined.select(joined("a").alias("x"), sum(joined("a")).over(w)),
         Seq((1, 2), (1, 2), (2, 4), (2, 4)).map(Row.fromTuple))
     }
   }

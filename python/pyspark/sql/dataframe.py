@@ -17,28 +17,19 @@
 
 import sys
 import random
-
-if sys.version >= '3':
-    basestring = unicode = str
-    long = int
-    from functools import reduce
-    from html import escape as html_escape
-else:
-    from itertools import imap as map
-    from cgi import escape as html_escape
-
 import warnings
+from functools import reduce
+from html import escape as html_escape
 
 from pyspark import copy_func, since, _NoValue
-from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket, \
-    ignore_unicode_prefix
+from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket
 from pyspark.serializers import BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
-from pyspark.sql.readwriter import DataFrameWriter
+from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import *
 from pyspark.sql.pandas.conversion import PandasConversionMixin
@@ -109,7 +100,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameStatFunctions(self)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def toJSON(self, use_unicode=True):
         """Converts a :class:`DataFrame` into a :class:`RDD` of string.
@@ -117,7 +107,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Each row is turned into a JSON document as one element in the returned RDD.
 
         >>> df.toJSON().first()
-        u'{"age":2,"name":"Alice"}'
+        '{"age":2,"name":"Alice"}'
         """
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
@@ -330,11 +320,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         # For the case when extended is mode:
         #   df.explain("formatted")
-        is_extended_as_mode = isinstance(extended, basestring) and mode is None
+        is_extended_as_mode = isinstance(extended, str) and mode is None
 
         # For the mode specified:
         #   df.explain(mode="formatted")
-        is_mode_case = extended is None and isinstance(mode, basestring)
+        is_mode_case = extended is None and isinstance(mode, str)
 
         if not (is_no_argument or is_extended_case or is_extended_as_mode or is_mode_case):
             argtypes = [
@@ -534,7 +524,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. note:: Evolving
 
-        >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
+        >>> from pyspark.sql.functions import timestamp_seconds
+        >>> sdf.select(
+        ...    'name',
+        ...    timestamp_seconds(sdf.time).alias('time')).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
         """
         if not eventTime or type(eventTime) is not str:
@@ -565,7 +558,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not isinstance(name, str):
             raise TypeError("name should be provided as str, got {0}".format(type(name)))
 
-        allowed_types = (basestring, list, float, int)
+        allowed_types = (str, list, float, int)
         for p in parameters:
             if not isinstance(p, allowed_types):
                 raise TypeError(
@@ -584,19 +577,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return int(self._jdf.count())
 
-    @ignore_unicode_prefix
     @since(1.3)
     def collect(self):
         """Returns all the records as a list of :class:`Row`.
 
         >>> df.collect()
-        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.collectToPython()
         return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
 
-    @ignore_unicode_prefix
     @since(2.0)
     def toLocalIterator(self, prefetchPartitions=False):
         """
@@ -609,36 +600,33 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                                    before it is needed.
 
         >>> list(df.toLocalIterator())
-        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.toPythonIterator(prefetchPartitions)
         return _local_iterator_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
-    @ignore_unicode_prefix
     @since(1.3)
     def limit(self, num):
         """Limits the result count to the number specified.
 
         >>> df.limit(1).collect()
-        [Row(age=2, name=u'Alice')]
+        [Row(age=2, name='Alice')]
         >>> df.limit(0).collect()
         []
         """
         jdf = self._jdf.limit(num)
         return DataFrame(jdf, self.sql_ctx)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def take(self, num):
         """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
 
         >>> df.take(2)
-        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         """
         return self.limit(num).collect()
 
-    @ignore_unicode_prefix
     @since(3.0)
     def tail(self, num):
         """
@@ -648,7 +636,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         a very large ``num`` can crash the driver process with OutOfMemoryError.
 
         >>> df.tail(1)
-        [Row(age=5, name=u'Bob')]
+        [Row(age=5, name='Bob')]
         """
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.tailToPython(num)
@@ -815,7 +803,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             else:
                 return DataFrame(
                     self._jdf.repartition(numPartitions, self._jcols(*cols)), self.sql_ctx)
-        elif isinstance(numPartitions, (basestring, Column)):
+        elif isinstance(numPartitions, (str, Column)):
             cols = (numPartitions, ) + cols
             return DataFrame(self._jdf.repartition(self._jcols(*cols)), self.sql_ctx)
         else:
@@ -866,7 +854,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             else:
                 return DataFrame(
                     self._jdf.repartitionByRange(numPartitions, self._jcols(*cols)), self.sql_ctx)
-        elif isinstance(numPartitions, (basestring, Column)):
+        elif isinstance(numPartitions, (str, Column)):
             cols = (numPartitions,) + cols
             return DataFrame(self._jdf.repartitionByRange(self._jcols(*cols)), self.sql_ctx)
         else:
@@ -941,7 +929,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             fraction = withReplacement
             withReplacement = None
 
-        seed = long(seed) if seed is not None else None
+        seed = int(seed) if seed is not None else None
         args = [arg for arg in [withReplacement, fraction, seed] if arg is not None]
         jdf = self._jdf.sample(*args)
         return DataFrame(jdf, self.sql_ctx)
@@ -975,15 +963,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.0
            Added sampling by a column of :class:`Column`
         """
-        if isinstance(col, basestring):
+        if isinstance(col, str):
             col = Column(col)
         elif not isinstance(col, Column):
             raise ValueError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):
             raise ValueError("fractions must be a dict but got %r" % type(fractions))
         for k, v in fractions.items():
-            if not isinstance(k, (float, int, long, basestring)):
-                raise ValueError("key must be float, int, long, or string, but got %r" % type(k))
+            if not isinstance(k, (float, int, str)):
+                raise ValueError("key must be float, int, or string, but got %r" % type(k))
             fractions[k] = float(v)
         col = col._jc
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
@@ -1008,7 +996,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             if w < 0.0:
                 raise ValueError("Weights must be positive. Found weight value: %s" % w)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        rdd_array = self._jdf.randomSplit(_to_list(self.sql_ctx._sc, weights), long(seed))
+        rdd_array = self._jdf.randomSplit(_to_list(self.sql_ctx._sc, weights), int(seed))
         return [DataFrame(rdd, self.sql_ctx) for rdd in rdd_array]
 
     @property
@@ -1049,12 +1037,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   3|
         +----+
         """
-        if not isinstance(colName, basestring):
+        if not isinstance(colName, str):
             raise ValueError("colName should be provided as string")
         jc = self._jdf.colRegex(colName)
         return Column(jc)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
@@ -1067,12 +1054,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
         >>> joined_df.select("df_as1.name", "df_as2.name", "df_as2.age") \
                 .sort(desc("df_as1.name")).collect()
-        [Row(name=u'Bob', name=u'Bob', age=5), Row(name=u'Alice', name=u'Alice', age=2)]
+        [Row(name='Bob', name='Bob', age=5), Row(name='Alice', name='Alice', age=2)]
         """
-        assert isinstance(alias, basestring), "alias should be a string"
+        assert isinstance(alias, str), "alias should be a string"
         return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
 
-    @ignore_unicode_prefix
     @since(2.1)
     def crossJoin(self, other):
         """Returns the cartesian product with another :class:`DataFrame`.
@@ -1080,18 +1066,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :param other: Right side of the cartesian product.
 
         >>> df.select("age", "name").collect()
-        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         >>> df2.select("name", "height").collect()
-        [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85)]
+        [Row(name='Tom', height=80), Row(name='Bob', height=85)]
         >>> df.crossJoin(df2.select("height")).select("age", "name", "height").collect()
-        [Row(age=2, name=u'Alice', height=80), Row(age=2, name=u'Alice', height=85),
-         Row(age=5, name=u'Bob', height=80), Row(age=5, name=u'Bob', height=85)]
+        [Row(age=2, name='Alice', height=80), Row(age=2, name='Alice', height=85),
+         Row(age=5, name='Bob', height=80), Row(age=5, name='Bob', height=85)]
         """
 
         jdf = self._jdf.crossJoin(other._jdf)
         return DataFrame(jdf, self.sql_ctx)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
@@ -1110,27 +1095,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> from pyspark.sql.functions import desc
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height) \
                 .sort(desc("name")).collect()
-        [Row(name=u'Bob', height=85), Row(name=u'Alice', height=None), Row(name=None, height=80)]
+        [Row(name='Bob', height=85), Row(name='Alice', height=None), Row(name=None, height=80)]
 
         >>> df.join(df2, 'name', 'outer').select('name', 'height').sort(desc("name")).collect()
-        [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
+        [Row(name='Tom', height=80), Row(name='Bob', height=85), Row(name='Alice', height=None)]
 
         >>> cond = [df.name == df3.name, df.age == df3.age]
         >>> df.join(df3, cond, 'outer').select(df.name, df3.age).collect()
-        [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
+        [Row(name='Alice', age=2), Row(name='Bob', age=5)]
 
         >>> df.join(df2, 'name').select(df.name, df2.height).collect()
-        [Row(name=u'Bob', height=85)]
+        [Row(name='Bob', height=85)]
 
         >>> df.join(df4, ['name', 'age']).select(df.name, df.age).collect()
-        [Row(name=u'Bob', age=5)]
+        [Row(name='Bob', age=5)]
         """
 
         if on is not None and not isinstance(on, list):
             on = [on]
 
         if on is not None:
-            if isinstance(on[0], basestring):
+            if isinstance(on[0], str):
                 on = self._jseq(on)
             else:
                 assert isinstance(on[0], Column), "on should be Column or list of Column"
@@ -1144,7 +1129,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 how = "inner"
             if on is None:
                 on = self._jseq([])
-            assert isinstance(how, basestring), "how should be basestring"
+            assert isinstance(how, str), "how should be a string"
             jdf = self._jdf.join(other._jdf, on, how)
         return DataFrame(jdf, self.sql_ctx)
 
@@ -1168,7 +1153,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.sortWithinPartitions(self._sort_cols(cols, kwargs))
         return DataFrame(jdf, self.sql_ctx)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def sort(self, *cols, **kwargs):
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
@@ -1179,18 +1163,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             If a list is specified, length of the list must equal length of the `cols`.
 
         >>> df.sort(df.age.desc()).collect()
-        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        [Row(age=5, name='Bob'), Row(age=2, name='Alice')]
         >>> df.sort("age", ascending=False).collect()
-        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        [Row(age=5, name='Bob'), Row(age=2, name='Alice')]
         >>> df.orderBy(df.age.desc()).collect()
-        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        [Row(age=5, name='Bob'), Row(age=2, name='Alice')]
         >>> from pyspark.sql.functions import *
         >>> df.sort(asc("age")).collect()
-        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         >>> df.orderBy(desc("age"), "name").collect()
-        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        [Row(age=5, name='Bob'), Row(age=2, name='Alice')]
         >>> df.orderBy(["age", "name"], ascending=[0, 1]).collect()
-        [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
+        [Row(age=5, name='Bob'), Row(age=2, name='Alice')]
         """
         jdf = self._jdf.sort(self._sort_cols(cols, kwargs))
         return DataFrame(jdf, self.sql_ctx)
@@ -1330,7 +1314,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.summary(self._jseq(statistics))
         return DataFrame(jdf, self.sql_ctx)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def head(self, n=None):
         """Returns the first ``n`` rows.
@@ -1343,26 +1326,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             If n is 1, return a single Row.
 
         >>> df.head()
-        Row(age=2, name=u'Alice')
+        Row(age=2, name='Alice')
         >>> df.head(1)
-        [Row(age=2, name=u'Alice')]
+        [Row(age=2, name='Alice')]
         """
         if n is None:
             rs = self.head(1)
             return rs[0] if rs else None
         return self.take(n)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def first(self):
         """Returns the first row as a :class:`Row`.
 
         >>> df.first()
-        Row(age=2, name=u'Alice')
+        Row(age=2, name='Alice')
         """
         return self.head()
 
-    @ignore_unicode_prefix
     @since(1.3)
     def __getitem__(self, item):
         """Returns the column as a :class:`Column`.
@@ -1370,13 +1351,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.select(df['age']).collect()
         [Row(age=2), Row(age=5)]
         >>> df[ ["name", "age"]].collect()
-        [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
+        [Row(name='Alice', age=2), Row(name='Bob', age=5)]
         >>> df[ df.age > 3 ].collect()
-        [Row(age=5, name=u'Bob')]
+        [Row(age=5, name='Bob')]
         >>> df[df[0] > 3].collect()
-        [Row(age=5, name=u'Bob')]
+        [Row(age=5, name='Bob')]
         """
-        if isinstance(item, basestring):
+        if isinstance(item, str):
             jc = self._jdf.apply(item)
             return Column(jc)
         elif isinstance(item, Column):
@@ -1402,7 +1383,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jc = self._jdf.apply(name)
         return Column(jc)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def select(self, *cols):
         """Projects a set of expressions and returns a new :class:`DataFrame`.
@@ -1412,11 +1392,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             in the current :class:`DataFrame`.
 
         >>> df.select('*').collect()
-        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         >>> df.select('name', 'age').collect()
-        [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
+        [Row(name='Alice', age=2), Row(name='Bob', age=5)]
         >>> df.select(df.name, (df.age + 10).alias('age')).collect()
-        [Row(name=u'Alice', age=12), Row(name=u'Bob', age=15)]
+        [Row(name='Alice', age=12), Row(name='Bob', age=15)]
         """
         jdf = self._jdf.select(self._jcols(*cols))
         return DataFrame(jdf, self.sql_ctx)
@@ -1435,7 +1415,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.selectExpr(self._jseq(expr))
         return DataFrame(jdf, self.sql_ctx)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def filter(self, condition):
         """Filters rows using the given condition.
@@ -1446,16 +1425,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             or a string of SQL expression.
 
         >>> df.filter(df.age > 3).collect()
-        [Row(age=5, name=u'Bob')]
+        [Row(age=5, name='Bob')]
         >>> df.where(df.age == 2).collect()
-        [Row(age=2, name=u'Alice')]
+        [Row(age=2, name='Alice')]
 
         >>> df.filter("age > 3").collect()
-        [Row(age=5, name=u'Bob')]
+        [Row(age=5, name='Bob')]
         >>> df.where("age = 2").collect()
-        [Row(age=2, name=u'Alice')]
+        [Row(age=2, name='Alice')]
         """
-        if isinstance(condition, basestring):
+        if isinstance(condition, str):
             jdf = self._jdf.filter(condition)
         elif isinstance(condition, Column):
             jdf = self._jdf.filter(condition._jc)
@@ -1463,7 +1442,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             raise TypeError("condition should be string or Column")
         return DataFrame(jdf, self.sql_ctx)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def groupBy(self, *cols):
         """Groups the :class:`DataFrame` using the specified columns,
@@ -1478,11 +1456,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.groupBy().avg().collect()
         [Row(avg(age)=3.5)]
         >>> sorted(df.groupBy('name').agg({'age': 'mean'}).collect())
-        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
+        [Row(name='Alice', avg(age)=2.0), Row(name='Bob', avg(age)=5.0)]
         >>> sorted(df.groupBy(df.name).avg().collect())
-        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
+        [Row(name='Alice', avg(age)=2.0), Row(name='Bob', avg(age)=5.0)]
         >>> sorted(df.groupBy(['name', df.age]).count().collect())
-        [Row(name=u'Alice', age=2, count=1), Row(name=u'Bob', age=5, count=1)]
+        [Row(name='Alice', age=2, count=1), Row(name='Bob', age=5, count=1)]
         """
         jgd = self._jdf.groupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
@@ -1652,19 +1630,19 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     Row(name='Alice', age=5, height=80), \\
         ...     Row(name='Alice', age=10, height=80)]).toDF()
         >>> df.dropDuplicates().show()
-        +---+------+-----+
-        |age|height| name|
-        +---+------+-----+
-        |  5|    80|Alice|
-        | 10|    80|Alice|
-        +---+------+-----+
+        +-----+---+------+
+        | name|age|height|
+        +-----+---+------+
+        |Alice|  5|    80|
+        |Alice| 10|    80|
+        +-----+---+------+
 
         >>> df.dropDuplicates(['name', 'height']).show()
-        +---+------+-----+
-        |age|height| name|
-        +---+------+-----+
-        |  5|    80|Alice|
-        +---+------+-----+
+        +-----+---+------+
+        | name|age|height|
+        +-----+---+------+
+        |Alice|  5|    80|
+        +-----+---+------+
         """
         if subset is None:
             jdf = self._jdf.dropDuplicates()
@@ -1697,7 +1675,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         if subset is None:
             subset = self.columns
-        elif isinstance(subset, basestring):
+        elif isinstance(subset, str):
             subset = [subset]
         elif not isinstance(subset, (list, tuple)):
             raise ValueError("subset should be a list or tuple of column names")
@@ -1712,11 +1690,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Replace null values, alias for ``na.fill()``.
         :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
 
-        :param value: int, long, float, string, bool or dict.
+        :param value: int, float, string, bool or dict.
             Value to replace null values with.
             If the value is a dict, then `subset` is ignored and `value` must be a mapping
             from column name (string) to replacement value. The replacement value must be
-            an int, long, float, boolean, or string.
+            an int, float, boolean, or string.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
@@ -1751,13 +1729,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 50|  null|unknown|
         +---+------+-------+
         """
-        if not isinstance(value, (float, int, long, basestring, bool, dict)):
-            raise ValueError("value should be a float, int, long, string, bool or dict")
+        if not isinstance(value, (float, int, str, bool, dict)):
+            raise ValueError("value should be a float, int, string, bool or dict")
 
         # Note that bool validates isinstance(int), but we don't want to
         # convert bools to floats
 
-        if not isinstance(value, bool) and isinstance(value, (int, long)):
+        if not isinstance(value, bool) and isinstance(value, int):
             value = float(value)
 
         if isinstance(value, dict):
@@ -1765,7 +1743,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         elif subset is None:
             return DataFrame(self._jdf.na().fill(value), self.sql_ctx)
         else:
-            if isinstance(subset, basestring):
+            if isinstance(subset, str):
                 subset = [subset]
             elif not isinstance(subset, (list, tuple)):
                 raise ValueError("subset should be a list or tuple of column names")
@@ -1784,12 +1762,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         floating point representation. In case of conflicts (for example with `{42: -1, 42.0: 1}`)
         and arbitrary replacement will be used.
 
-        :param to_replace: bool, int, long, float, string, list or dict.
+        :param to_replace: bool, int, float, string, list or dict.
             Value to be replaced.
             If the value is a dict, then `value` is ignored or can be omitted, and `to_replace`
             must be a mapping between a value and a replacement.
-        :param value: bool, int, long, float, string, list or None.
-            The replacement value must be a bool, int, long, float, string or None. If `value` is a
+        :param value: bool, int, float, string, list or None.
+            The replacement value must be a bool, int, float, string or None. If `value` is a
             list, `value` should be of the same length and type as `to_replace`.
             If `value` is a scalar and `to_replace` is a sequence, then `value` is
             used as a replacement for each item in `to_replace`.
@@ -1851,7 +1829,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
             >>> all_of(bool)([True, False])
             True
-            >>> all_of(basestring)(["a", 1])
+            >>> all_of(str)(["a", 1])
             False
             """
             def all_of_(xs):
@@ -1859,20 +1837,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return all_of_
 
         all_of_bool = all_of(bool)
-        all_of_str = all_of(basestring)
-        all_of_numeric = all_of((float, int, long))
+        all_of_str = all_of(str)
+        all_of_numeric = all_of((float, int))
 
         # Validate input types
-        valid_types = (bool, float, int, long, basestring, list, tuple)
+        valid_types = (bool, float, int, str, list, tuple)
         if not isinstance(to_replace, valid_types + (dict, )):
             raise ValueError(
-                "to_replace should be a bool, float, int, long, string, list, tuple, or dict. "
+                "to_replace should be a bool, float, int, string, list, tuple, or dict. "
                 "Got {0}".format(type(to_replace)))
 
         if not isinstance(value, valid_types) and value is not None \
                 and not isinstance(to_replace, dict):
             raise ValueError("If to_replace is not a dict, value should be "
-                             "a bool, float, int, long, string, list, tuple or None. "
+                             "a bool, float, int, string, list, tuple or None. "
                              "Got {0}".format(type(value)))
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
@@ -1880,12 +1858,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 raise ValueError("to_replace and value lists should be of the same length. "
                                  "Got {0} and {1}".format(len(to_replace), len(value)))
 
-        if not (subset is None or isinstance(subset, (list, tuple, basestring))):
+        if not (subset is None or isinstance(subset, (list, tuple, str))):
             raise ValueError("subset should be a list or tuple of column names, "
                              "column name or None. Got {0}".format(type(subset)))
 
         # Reshape input arguments if necessary
-        if isinstance(to_replace, (float, int, long, basestring)):
+        if isinstance(to_replace, (float, int, str)):
             to_replace = [to_replace]
 
         if isinstance(to_replace, dict):
@@ -1893,11 +1871,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             if value is not None:
                 warnings.warn("to_replace is a dict and value is not None. value will be ignored.")
         else:
-            if isinstance(value, (float, int, long, basestring)) or value is None:
+            if isinstance(value, (float, int, str)) or value is None:
                 value = [value for _ in range(len(to_replace))]
             rep_dict = dict(zip(to_replace, value))
 
-        if isinstance(subset, basestring):
+        if isinstance(subset, str):
             subset = [subset]
 
         # Verify we were not passed in mixed type generics.
@@ -1954,10 +1932,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
            Added support for multiple columns.
         """
 
-        if not isinstance(col, (basestring, list, tuple)):
+        if not isinstance(col, (str, list, tuple)):
             raise ValueError("col should be a string, list or tuple, but got %r" % type(col))
 
-        isStr = isinstance(col, basestring)
+        isStr = isinstance(col, str)
 
         if isinstance(col, tuple):
             col = list(col)
@@ -1965,7 +1943,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             col = [col]
 
         for c in col:
-            if not isinstance(c, basestring):
+            if not isinstance(c, str):
                 raise ValueError("columns should be strings, but got %r" % type(c))
         col = _to_list(self._sc, col)
 
@@ -1974,12 +1952,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if isinstance(probabilities, tuple):
             probabilities = list(probabilities)
         for p in probabilities:
-            if not isinstance(p, (float, int, long)) or p < 0 or p > 1:
-                raise ValueError("probabilities should be numerical (float, int, long) in [0,1].")
+            if not isinstance(p, (float, int)) or p < 0 or p > 1:
+                raise ValueError("probabilities should be numerical (float, int) in [0,1].")
         probabilities = _to_list(self._sc, probabilities)
 
-        if not isinstance(relativeError, (float, int, long)) or relativeError < 0:
-            raise ValueError("relativeError should be numerical (float, int, long) >= 0.")
+        if not isinstance(relativeError, (float, int)) or relativeError < 0:
+            raise ValueError("relativeError should be numerical (float, int) >= 0.")
         relativeError = float(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
@@ -1997,9 +1975,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :param col2: The name of the second column
         :param method: The correlation method. Currently only supports "pearson"
         """
-        if not isinstance(col1, basestring):
+        if not isinstance(col1, str):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, basestring):
+        if not isinstance(col2, str):
             raise ValueError("col2 should be a string.")
         if not method:
             method = "pearson"
@@ -2017,9 +1995,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :param col1: The name of the first column
         :param col2: The name of the second column
         """
-        if not isinstance(col1, basestring):
+        if not isinstance(col1, str):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, basestring):
+        if not isinstance(col2, str):
             raise ValueError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
@@ -2039,9 +2017,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :param col2: The name of the second column. Distinct items will make the column names
             of the :class:`DataFrame`.
         """
-        if not isinstance(col1, basestring):
+        if not isinstance(col1, str):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, basestring):
+        if not isinstance(col2, str):
             raise ValueError("col2 should be a string.")
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 
@@ -2070,7 +2048,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             support = 0.01
         return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def withColumn(self, colName, col):
         """
@@ -2089,13 +2066,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             To avoid this, use :func:`select` with the multiple columns at once.
 
         >>> df.withColumn('age2', df.age + 2).collect()
-        [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
+        [Row(age=2, name='Alice', age2=4), Row(age=5, name='Bob', age2=7)]
 
         """
         assert isinstance(col, Column), "col should be Column"
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def withColumnRenamed(self, existing, new):
         """Returns a new :class:`DataFrame` by renaming an existing column.
@@ -2105,12 +2081,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :param new: string, new name of the column.
 
         >>> df.withColumnRenamed('age', 'age2').collect()
-        [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
+        [Row(age2=2, name='Alice'), Row(age2=5, name='Bob')]
         """
         return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sql_ctx)
 
     @since(1.4)
-    @ignore_unicode_prefix
     def drop(self, *cols):
         """Returns a new :class:`DataFrame` that drops the specified column.
         This is a no-op if schema doesn't contain the given column name(s).
@@ -2119,23 +2094,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             :class:`Column` to drop, or a list of string name of the columns to drop.
 
         >>> df.drop('age').collect()
-        [Row(name=u'Alice'), Row(name=u'Bob')]
+        [Row(name='Alice'), Row(name='Bob')]
 
         >>> df.drop(df.age).collect()
-        [Row(name=u'Alice'), Row(name=u'Bob')]
+        [Row(name='Alice'), Row(name='Bob')]
 
         >>> df.join(df2, df.name == df2.name, 'inner').drop(df.name).collect()
-        [Row(age=5, height=85, name=u'Bob')]
+        [Row(age=5, height=85, name='Bob')]
 
         >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
-        [Row(age=5, name=u'Bob', height=85)]
+        [Row(age=5, name='Bob', height=85)]
 
         >>> df.join(df2, 'name', 'inner').drop('age', 'height').collect()
-        [Row(name=u'Bob')]
+        [Row(name='Bob')]
         """
         if len(cols) == 1:
             col = cols[0]
-            if isinstance(col, basestring):
+            if isinstance(col, str):
                 jdf = self._jdf.drop(col)
             elif isinstance(col, Column):
                 jdf = self._jdf.drop(col._jc)
@@ -2143,20 +2118,19 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 raise TypeError("col should be a string or a Column")
         else:
             for col in cols:
-                if not isinstance(col, basestring):
+                if not isinstance(col, str):
                     raise TypeError("each col in the param list should be a string")
             jdf = self._jdf.drop(self._jseq(cols))
 
         return DataFrame(jdf, self.sql_ctx)
 
-    @ignore_unicode_prefix
     def toDF(self, *cols):
         """Returns a new :class:`DataFrame` that with new specified column names
 
         :param cols: list of new column names (string)
 
         >>> df.toDF('f1', 'f2').collect()
-        [Row(f1=2, f2=u'Alice'), Row(f1=5, f2=u'Bob')]
+        [Row(f1=2, f2='Alice'), Row(f1=5, f2='Bob')]
         """
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
@@ -2266,6 +2240,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         sinceversion=1.4,
         doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.")
 
+    @since(3.1)
+    def writeTo(self, table):
+        """
+        Create a write configuration builder for v2 sources.
+
+        This builder is used to configure and execute write operations.
+
+        For example, to append or create or replace existing tables.
+
+        >>> df.writeTo("catalog.db.table").append()  # doctest: +SKIP
+        >>> df.writeTo(                              # doctest: +SKIP
+        ...     "catalog.db.table"
+        ... ).partitionedBy("col").createOrReplace()
+        """
+        return DataFrameWriterV2(self, table)
+
 
 def _to_scala_map(sc, jm):
     """
@@ -2344,7 +2334,6 @@ def _test():
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext, SparkSession
     import pyspark.sql.dataframe
-    from pyspark.sql.functions import from_unixtime
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
@@ -2353,16 +2342,16 @@ def _test():
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')])\
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
-    globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
-    globs['df3'] = sc.parallelize([Row(name='Alice', age=2),
-                                   Row(name='Bob', age=5)]).toDF()
-    globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
-                                   Row(name='Bob', age=5, height=None),
-                                   Row(name='Tom', age=None, height=None),
-                                   Row(name=None, age=None, height=None)]).toDF()
-    globs['df5'] = sc.parallelize([Row(name='Alice', spy=False, age=10),
-                                   Row(name='Bob', spy=None, age=5),
-                                   Row(name='Mallory', spy=True, age=None)]).toDF()
+    globs['df2'] = sc.parallelize([Row(height=80, name='Tom'), Row(height=85, name='Bob')]).toDF()
+    globs['df3'] = sc.parallelize([Row(age=2, name='Alice'),
+                                   Row(age=5, name='Bob')]).toDF()
+    globs['df4'] = sc.parallelize([Row(age=10, height=80, name='Alice'),
+                                   Row(age=5, height=None, name='Bob'),
+                                   Row(age=None, height=None, name='Tom'),
+                                   Row(age=None, height=None, name=None)]).toDF()
+    globs['df5'] = sc.parallelize([Row(age=10, name='Alice', spy=False),
+                                   Row(age=5, name='Bob', spy=None),
+                                   Row(age=None, name='Mallory', spy=True)]).toDF()
     globs['sdf'] = sc.parallelize([Row(name='Tom', time=1479441846),
                                    Row(name='Bob', time=1479442946)]).toDF()
 

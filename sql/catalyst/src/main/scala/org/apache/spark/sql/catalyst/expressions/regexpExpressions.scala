@@ -412,7 +412,9 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
 object RegExpExtract {
   def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
-    if (groupCount < groupIndex) {
+    if (groupIndex < 0) {
+      throw new IllegalArgumentException("The specified group index cannot be less than zero")
+    } else if (groupCount < groupIndex) {
       throw new IllegalArgumentException(
         s"Regex group count is $groupCount, but the specified group index is $groupIndex")
     }
@@ -426,6 +428,14 @@ object RegExpExtract {
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
+  arguments = """
+    Arguments:
+      * str - a string expression.
+      * regexp - a string representing a regular expression.
+          The regex string should be a Java regular expression.
+      * idx - an integer expression that representing the group index. The group index should be
+          non-negative. If `idx` is not specified, the default group index value is 1.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);

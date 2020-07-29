@@ -420,6 +420,29 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.enabled")
+      .doc("Whether to transfer shuffle blocks during block manager decommissioning. Requires " +
+        "a migratable shuffle resolver (like sort based shuffe)")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxThreads")
+      .doc("Maximum number of threads to use in migrating shuffle files.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ > 0, "The maximum number of threads should be positive")
+      .createWithDefault(8)
+
+  private[spark] val STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED =
+    ConfigBuilder("spark.storage.decommission.rddBlocks.enabled")
+      .doc("Whether to transfer RDD blocks during block manager decommissioning.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
     ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
       .internal()
@@ -459,9 +482,10 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
-  private[spark] val STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT =
-    ConfigBuilder("spark.storage.blockManagerSlaveTimeoutMs")
+  private[spark] val STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT =
+    ConfigBuilder("spark.storage.blockManagerHeartbeatTimeoutMs")
       .version("0.7.0")
+      .withAlternative("spark.storage.blockManagerSlaveTimeoutMs")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString(Network.NETWORK_TIMEOUT.defaultValueString)
 
@@ -1842,6 +1866,17 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
+  private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
+    ConfigBuilder("spark.executor.decommission.killInterval")
+      .doc("Duration after which a decommissioned executor will be killed forcefully." +
+        "This config is useful for cloud environments where we know in advance when " +
+        "an executor is going to go down after decommissioning signal i.e. around 2 mins " +
+        "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
+        "used to decide what tasks running on decommission executors to speculate.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createOptional
+
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
     .version("2.0.0")
@@ -1861,6 +1896,15 @@ package object config {
         "Spark chooses the maximum of each resource and creates a new ResourceProfile. The " +
         "default of false results in Spark throwing an exception if multiple different " +
         "ResourceProfiles are found in RDDs going into the same stage.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STANDALONE_SUBMIT_WAIT_APP_COMPLETION =
+    ConfigBuilder("spark.standalone.submit.waitAppCompletion")
+      .doc("In standalone cluster mode, controls whether the client waits to exit until the " +
+        "application completes. If set to true, the client process will stay alive polling " +
+        "the driver's status. Otherwise, the client process will exit after submission.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
