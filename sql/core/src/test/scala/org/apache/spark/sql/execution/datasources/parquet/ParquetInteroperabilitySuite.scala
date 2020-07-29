@@ -124,12 +124,11 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       FileUtils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
 
       Seq(false, true).foreach { int96TimestampConversion =>
-        Seq(false, true).foreach { vectorized =>
+        withAllParquetReaders {
           withSQLConf(
               (SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
                 SQLConf.ParquetOutputTimestampType.INT96.toString),
-              (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString()),
-              (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
+              (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString())
           ) {
             val readBack = spark.read.parquet(tableDir.getAbsolutePath).collect()
             assert(readBack.size === 6)
@@ -149,7 +148,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
             val fullExpectations = (ts ++ impalaExpectations).map(_.toString).sorted.toArray
             val actual = readBack.map(_.getTimestamp(0).toString).sorted
             withClue(
-              s"int96TimestampConversion = $int96TimestampConversion; vectorized = $vectorized") {
+              s"int96TimestampConversion = $int96TimestampConversion; " +
+              s"vectorized = ${SQLConf.get.parquetVectorizedReaderEnabled}") {
               assert(fullExpectations === actual)
 
               // Now test that the behavior is still correct even with a filter which could get

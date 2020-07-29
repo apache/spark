@@ -208,6 +208,7 @@ object FileSourceStrategy extends Strategy with Logging {
           outputSchema,
           partitionKeyFilters.toSeq,
           bucketSet,
+          None,
           dataFilters,
           table.map(_.identifier))
 

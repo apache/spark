@@ -88,12 +88,8 @@ object DateTimeTestUtils {
   def days(
       year: Int,
       month: Byte = 1,
-      day: Byte = 1,
-      hour: Byte = 0,
-      minute: Byte = 0,
-      sec: Byte = 0): Int = {
-    val micros = date(year, month, day, hour, minute, sec)
-    TimeUnit.MICROSECONDS.toDays(micros).toInt
+      day: Byte = 1): Int = {
+    LocalDate.of(year, month, day).toEpochDay.toInt
   }
 
   // Returns microseconds since epoch for current date and give time

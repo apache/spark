@@ -24,35 +24,37 @@ import org.apache.spark.util.Utils
 
 private[spark] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
-  // Messages from the master to slaves.
+  // Messages from the master to storage endpoints.
   //////////////////////////////////////////////////////////////////////////////////
-  sealed trait ToBlockManagerSlave
+  sealed trait ToBlockManagerMasterStorageEndpoint
 
-  // Remove a block from the slaves that have it. This can only be used to remove
+  // Remove a block from the storage endpoints that have it. This can only be used to remove
   // blocks that the master knows about.
-  case class RemoveBlock(blockId: BlockId) extends ToBlockManagerSlave
+  case class RemoveBlock(blockId: BlockId) extends ToBlockManagerMasterStorageEndpoint
 
   // Replicate blocks that were lost due to executor failure
   case class ReplicateBlock(blockId: BlockId, replicas: Seq[BlockManagerId], maxReplicas: Int)
-    extends ToBlockManagerSlave
+    extends ToBlockManagerMasterStorageEndpoint
+
+  case object DecommissionBlockManager extends ToBlockManagerMasterStorageEndpoint
 
   // Remove all blocks belonging to a specific RDD.
-  case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave
+  case class RemoveRdd(rddId: Int) extends ToBlockManagerMasterStorageEndpoint
 
   // Remove all blocks belonging to a specific shuffle.
-  case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerSlave
+  case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerMasterStorageEndpoint
 
   // Remove all blocks belonging to a specific broadcast.
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
-    extends ToBlockManagerSlave
+    extends ToBlockManagerMasterStorageEndpoint
 
   /**
    * Driver to Executor message to trigger a thread dump.
    */
-  case object TriggerThreadDump extends ToBlockManagerSlave
+  case object TriggerThreadDump extends ToBlockManagerMasterStorageEndpoint
 
   //////////////////////////////////////////////////////////////////////////////////
-  // Messages from slaves to the master.
+  // Messages from storage endpoints to the master.
   //////////////////////////////////////////////////////////////////////////////////
   sealed trait ToBlockManagerMaster
 
@@ -125,10 +127,15 @@ private[spark] object BlockManagerMessages {
 
   case object GetStorageStatus extends ToBlockManagerMaster
 
-  case class GetBlockStatus(blockId: BlockId, askSlaves: Boolean = true)
+  case class DecommissionBlockManagers(executorIds: Seq[String]) extends ToBlockManagerMaster
+
+  case class GetReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId)
     extends ToBlockManagerMaster
 
-  case class GetMatchingBlockIds(filter: BlockId => Boolean, askSlaves: Boolean = true)
+  case class GetBlockStatus(blockId: BlockId, askStorageEndpoints: Boolean = true)
+    extends ToBlockManagerMaster
+
+  case class GetMatchingBlockIds(filter: BlockId => Boolean, askStorageEndpoints: Boolean = true)
     extends ToBlockManagerMaster
 
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster

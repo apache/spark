@@ -26,13 +26,16 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalog, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.hive.client.hive._
 
 
 /**
@@ -243,9 +246,12 @@ case class InsertIntoHiveTable(
                 ExternalCatalogUtils.unescapePathName(splitPart(1))
             }.toMap
 
+            val caseInsensitiveDpMap = CaseInsensitiveMap(dpMap)
+
             val updatedPartitionSpec = partition.map {
               case (key, Some(value)) => key -> value
-              case (key, None) if dpMap.contains(key) => key -> dpMap(key)
+              case (key, None) if caseInsensitiveDpMap.contains(key) =>
+                key -> caseInsensitiveDpMap(key)
               case (key, _) =>
                 throw new SparkException(s"Dynamic partition key $key is not among " +
                   "written partition paths.")
@@ -289,6 +295,21 @@ case class InsertIntoHiveTable(
           oldPart.flatMap(_.storage.locationUri.map(uri => new Path(uri)))
         }
 
+\
+        // SPARK-29295: When insert overwrite to a Hive external table partition, if the
+        // partition does not exist, Hive will not check if the external partition directory
+        // exists or not before copying files. So if users drop the partition, and then do
+        // insert overwrite to the same partition, the partition will have both old and new
+        // data. We construct partition path. If the path exists, we delete it manually.
+        val partitionPath = if (oldPart.isEmpty && overwrite
+            && table.tableType == CatalogTableType.EXTERNAL) {
+          val partitionColumnNames = table.partitionColumnNames
+          val tablePath = new Path(table.location)
+          Some(ExternalCatalogUtils.generatePartitionPath(partitionSpec,
+            partitionColumnNames, tablePath))
+        } else {
+          oldPart.flatMap(_.storage.locationUri.map(uri => new Path(uri)))
+        }
         // SPARK-18107: Insert overwrite runs much slower than hive-client.
         // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
         // version and we may not want to catch up new Hive version every time. We delete the

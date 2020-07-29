@@ -19,50 +19,8 @@
 import re
 import sys
 import traceback
-import os
-import warnings
-import inspect
-from py4j.protocol import Py4JJavaError
 
 __all__ = []
-
-
-def _exception_message(excp):
-    """Return the message from an exception as either a str or unicode object.  Supports both
-    Python 2 and Python 3.
-
-    >>> msg = "Exception message"
-    >>> excp = Exception(msg)
-    >>> msg == _exception_message(excp)
-    True
-
-    >>> msg = u"unicöde"
-    >>> excp = Exception(msg)
-    >>> msg == _exception_message(excp)
-    True
-    """
-    if isinstance(excp, Py4JJavaError):
-        # 'Py4JJavaError' doesn't contain the stack trace available on the Java side in 'message'
-        # attribute in Python 2. We should call 'str' function on this exception in general but
-        # 'Py4JJavaError' has an issue about addressing non-ascii strings. So, here we work
-        # around by the direct call, '__str__()'. Please see SPARK-23517.
-        return excp.__str__()
-    if hasattr(excp, "message"):
-        return excp.message
-    return str(excp)
-
-
-def _get_argspec(f):
-    """
-    Get argspec of a function. Supports both Python 2 and Python 3.
-    """
-    if sys.version_info[0] < 3:
-        argspec = inspect.getargspec(f)
-    else:
-        # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
-        # See SPARK-23569.
-        argspec = inspect.getfullargspec(f)
-    return argspec
 
 
 def print_exec(stream):
@@ -112,33 +70,6 @@ def fail_on_stopiteration(f):
             )
 
     return wrapper
-
-
-def _warn_pin_thread(name):
-    if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
-        msg = (
-            "PYSPARK_PIN_THREAD feature is enabled. "
-            "However, note that it cannot inherit the local properties from the parent thread "
-            "although it isolates each thread on PVM and JVM with its own local properties. "
-            "\n"
-            "To work around this, you should manually copy and set the local properties from "
-            "the parent thread to the child thread when you create another thread.")
-    else:
-        msg = (
-            "Currently, '%s' (set to local properties) with multiple threads does "
-            "not properly work. "
-            "\n"
-            "Internally threads on PVM and JVM are not synced, and JVM thread can be reused "
-            "for multiple threads on PVM, which fails to isolate local properties for each "
-            "thread on PVM. "
-            "\n"
-            "To work around this, you can set PYSPARK_PIN_THREAD to true (see SPARK-22340). "
-            "However, note that it cannot inherit the local properties from the parent thread "
-            "although it isolates each thread on PVM and JVM with its own local properties. "
-            "\n"
-            "To work around this, you should manually copy and set the local properties from "
-            "the parent thread to the child thread when you create another thread." % name)
-    warnings.warn(msg, UserWarning)
 
 
 def _print_missing_jar(lib_name, pkg_name, jar_name, spark_version):

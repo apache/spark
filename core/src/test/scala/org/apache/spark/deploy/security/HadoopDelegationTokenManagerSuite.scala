@@ -103,7 +103,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
       // The workaround here is to periodically repeat this process with a timeout , since we are
       // using Hadoop 2.7.4 as default.
       // https://issues.apache.org/jira/browse/SPARK-31631
-      eventually(timeout(10.seconds), interval(1.second)) {
+      eventually(timeout(60.seconds), interval(1.second)) {
         try {
           kdc = new MiniKdc(kdcConf, kdcDir)
           kdc.start()

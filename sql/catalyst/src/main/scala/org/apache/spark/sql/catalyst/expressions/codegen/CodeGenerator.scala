@@ -27,8 +27,9 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
+import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
+import org.codehaus.commons.compiler.util.reflect.ByteArrayClassLoader
+import org.codehaus.janino.{ClassBodyEvaluator, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{TaskContext, TaskKilledException}
@@ -374,7 +375,7 @@ class CodegenContext extends Logging {
 
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
-    splitExpressions(expressions = initCodes, funcName = "init", arguments = Nil)
+    splitExpressions(expressions = initCodes.toSeq, funcName = "init", arguments = Nil)
   }
 
   /**
@@ -926,6 +927,7 @@ class CodegenContext extends Logging {
       length += CodeFormatter.stripExtraNewLinesAndComments(code).length
     }
     blocks += blockBuilder.toString()
+    blocks.toSeq
   }
 
   /**
@@ -1001,7 +1003,7 @@ class CodegenContext extends Logging {
   def subexprFunctionsCode: String = {
     // Whole-stage codegen's subexpression elimination is handled in another code path
     assert(currentVars == null || subexprFunctions.isEmpty)
-    splitExpressions(subexprFunctions, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
+    splitExpressions(subexprFunctions.toSeq, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
   }
 
   /**
@@ -1419,9 +1421,10 @@ object CodeGenerator extends Logging {
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
     val classes = {
-      val resultField = classOf[SimpleCompiler].getDeclaredField("result")
-      resultField.setAccessible(true)
-      val loader = resultField.get(evaluator).asInstanceOf[ByteArrayClassLoader]
+      val scField = classOf[ClassBodyEvaluator].getDeclaredField("sc")
+      scField.setAccessible(true)
+      val compiler = scField.get(evaluator).asInstanceOf[SimpleCompiler]
+      val loader = compiler.getClassLoader.asInstanceOf[ByteArrayClassLoader]
       val classesField = loader.getClass.getDeclaredField("classes")
       classesField.setAccessible(true)
       classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala

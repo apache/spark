@@ -141,8 +141,9 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-31387 - listener update methods should not throw exception with unknown input") {
-    val (statusStore: HiveThriftServer2AppStatusStore,
-    listener: HiveThriftServer2Listener) = createAppStatusStore(true)
+    val (statusStore: HiveThriftServer2AppStatusStore, listener: HiveThriftServer2Listener) =
+      createAppStatusStore(true)
+
     val unknownSession = "unknown_session"
     val unknownOperation = "unknown_operation"
     listener.onOtherEvent(SparkListenerThriftServerSessionClosed(unknownSession, 0))

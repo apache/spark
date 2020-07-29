@@ -571,14 +571,10 @@ trait Row extends Serializable {
       case (s: String, _) => JString(s)
       case (b: Array[Byte], BinaryType) =>
         JString(Base64.getEncoder.encodeToString(b))
-      case (d: LocalDate, _) =>
-        JString(dateFormatter.format(DateTimeUtils.localDateToDays(d)))
-      case (d: Date, _) =>
-        JString(dateFormatter.format(DateTimeUtils.fromJavaDate(d)))
-      case (i: Instant, _) =>
-        JString(timestampFormatter.format(DateTimeUtils.instantToMicros(i)))
-      case (t: Timestamp, _) =>
-        JString(timestampFormatter.format(DateTimeUtils.fromJavaTimestamp(t)))
+      case (d: LocalDate, _) => JString(dateFormatter.format(d))
+      case (d: Date, _) => JString(dateFormatter.format(d))
+      case (i: Instant, _) => JString(timestampFormatter.format(i))
+      case (t: Timestamp, _) => JString(timestampFormatter.format(t))
       case (i: CalendarInterval, _) => JString(i.toString)
       case (a: Array[_], ArrayType(elementType, _)) =>
         iteratorToJsonArray(a.iterator, elementType)

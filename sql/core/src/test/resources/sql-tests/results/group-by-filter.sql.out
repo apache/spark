@@ -272,7 +272,7 @@ struct<foo:string,approx_count_distinct(a) FILTER (WHERE (b >= 0)):bigint>
 -- !query
 SELECT 'foo', MAX(STRUCT(a)) FILTER (WHERE b >= 1) FROM testData WHERE a = 0 GROUP BY 1
 -- !query schema
-struct<foo:string,max(named_struct(a, a)) FILTER (WHERE (b >= 1)):struct<a:int>>
+struct<foo:string,max(struct(a)) FILTER (WHERE (b >= 1)):struct<a:int>>
 -- !query output
 
 

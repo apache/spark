@@ -22,7 +22,9 @@ import java.util.{Date, Locale}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable
 import scala.util.Random
+import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}
@@ -525,6 +527,13 @@ private[deploy] class Master(
     case KillExecutors(appId, executorIds) =>
       val formattedExecutorIds = formatExecutorIds(executorIds)
       context.reply(handleKillExecutors(appId, formattedExecutorIds))
+
+    case DecommissionWorkersOnHosts(hostnames) =>
+      if (state != RecoveryState.STANDBY) {
+        context.reply(decommissionWorkersOnHosts(hostnames))
+      } else {
+        context.reply(0)
+      }
   }
 
   override def onDisconnected(address: RpcAddress): Unit = {
@@ -715,7 +724,9 @@ private[deploy] class Master(
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(canLaunchExecutor(_, app.desc))
           .sortBy(_.coresFree).reverse
-        if (waitingApps.length == 1 && usableWorkers.isEmpty) {
+        val appMayHang = waitingApps.length == 1 &&
+          waitingApps.head.executors.isEmpty && usableWorkers.isEmpty
+        if (appMayHang) {
           logWarning(s"App ${app.id} requires more resource than any of Workers could have.")
         }
         val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
@@ -861,6 +872,34 @@ private[deploy] class Master(
     true
   }
 
+  /**
+   * Decommission all workers that are active on any of the given hostnames. The decommissioning is
+   * asynchronously done by enqueueing WorkerDecommission messages to self. No checks are done about
+   * the prior state of the worker. So an already decommissioned worker will match as well.
+   *
+   * @param hostnames: A list of hostnames without the ports. Like "localhost", "foo.bar.com" etc
+   *
+   * Returns the number of workers that matched the hostnames.
+   */
+  private def decommissionWorkersOnHosts(hostnames: Seq[String]): Integer = {
+    val hostnamesSet = hostnames.map(_.toLowerCase(Locale.ROOT)).toSet
+    val workersToRemove = addressToWorker
+      .filterKeys(addr => hostnamesSet.contains(addr.host.toLowerCase(Locale.ROOT)))
+      .values
+
+    val workersToRemoveHostPorts = workersToRemove.map(_.hostPort)
+    logInfo(s"Decommissioning the workers with host:ports ${workersToRemoveHostPorts}")
+
+    // The workers are removed async to avoid blocking the receive loop for the entire batch
+    workersToRemove.foreach(wi => {
+      logInfo(s"Sending the worker decommission to ${wi.id} and ${wi.endpoint}")
+      self.send(WorkerDecommission(wi.id, wi.endpoint))
+    })
+
+    // Return the count of workers actually removed
+    workersToRemove.size
+  }
+
   private def decommissionWorker(worker: WorkerInfo): Unit = {
     if (worker.state != WorkerState.DECOMMISSIONED) {
       logInfo("Decommissioning worker %s on %s:%d".format(worker.id, worker.host, worker.port))
@@ -869,7 +908,10 @@ private[deploy] class Master(
         logInfo("Telling app of decommission executors")
         exec.application.driver.send(ExecutorUpdated(
           exec.id, ExecutorState.DECOMMISSIONED,
-          Some("worker decommissioned"), None, workerLost = false))
+          Some("worker decommissioned"), None,
+          // workerLost is being set to true here to let the driver know that the host (aka. worker)
+          // is also being decommissioned.
+          workerLost = true))
         exec.state = ExecutorState.DECOMMISSIONED
         exec.application.removeExecutor(exec)
       }

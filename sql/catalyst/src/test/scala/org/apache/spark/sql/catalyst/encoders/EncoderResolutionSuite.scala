@@ -22,9 +22,9 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -245,6 +245,13 @@ class EncoderResolutionSuite extends PlanTest {
          |- root class: "org.apache.spark.sql.catalyst.encoders.ComplexClass"
          |You can either add an explicit cast to the input data or choose a higher precision type
        """.stripMargin.trim + " of the field in the target object")
+  }
+
+  test("SPARK-31750: eliminate UpCast if child's dataType is DecimalType") {
+    val encoder = ExpressionEncoder[Seq[BigDecimal]]
+    val attr = Seq(AttributeReference("a", ArrayType(DecimalType(38, 0)))())
+    // Before SPARK-31750, it will fail because Decimal(38, 0) can not be casted to Decimal(38, 18)
+    testFromRow(encoder, attr, InternalRow(ArrayData.toArrayData(Array(Decimal(1.0)))))
   }
 
   // test for leaf types

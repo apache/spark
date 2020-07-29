@@ -25,7 +25,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.SECONDS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
+import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
 
 object DateTime extends Enumeration {
   type DateTime = Value
@@ -117,12 +117,12 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
   private def caseName(
       modernDates: Boolean,
       dateTime: DateTime,
-      rebase: Option[Boolean] = None,
+      mode: Option[LegacyBehaviorPolicy.Value] = None,
       vec: Option[Boolean] = None): String = {
     val period = if (modernDates) "after" else "before"
     val year = if (dateTime == DATE) 1582 else 1900
     val vecFlag = vec.map(flagToStr).map(flag => s", vec $flag").getOrElse("")
-    val rebaseFlag = rebase.map(flagToStr).map(flag => s", rebase $flag").getOrElse("")
+    val rebaseFlag = mode.map(_.toString).map(m => s", rebase $m").getOrElse("")
     s"$period $year$vecFlag$rebaseFlag"
   }
 
@@ -130,10 +130,10 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
       basePath: File,
       dateTime: DateTime,
       modernDates: Boolean,
-      rebase: Option[Boolean] = None): String = {
+      mode: Option[LegacyBehaviorPolicy.Value] = None): String = {
     val period = if (modernDates) "after" else "before"
     val year = if (dateTime == DATE) 1582 else 1900
-    val rebaseFlag = rebase.map(flagToStr).map(flag => s"_$flag").getOrElse("")
+    val rebaseFlag = mode.map(_.toString).map(m => s"_$m").getOrElse("")
     basePath.getAbsolutePath + s"/${dateTime}_${period}_$year$rebaseFlag"
   }
 
@@ -159,16 +159,18 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
                 output = output)
               benchmarkInputs(benchmark, rowsNum, dateTime)
               Seq(true, false).foreach { modernDates =>
-                Seq(false, true).foreach { rebase =>
-                  benchmark.addCase(caseName(modernDates, dateTime, Some(rebase)), 1) { _ =>
+                LegacyBehaviorPolicy.values
+                  .filterNot(v => !modernDates && v == LegacyBehaviorPolicy.EXCEPTION)
+                  .foreach { mode =>
+                  benchmark.addCase(caseName(modernDates, dateTime, Some(mode)), 1) { _ =>
                     withSQLConf(
                       SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> getOutputType(dateTime),
-                      SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_WRITE.key -> rebase.toString) {
+                      SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> mode.toString) {
                       genDF(rowsNum, dateTime, modernDates)
                         .write
                         .mode("overwrite")
                         .format("parquet")
-                        .save(getPath(path, dateTime, modernDates, Some(rebase)))
+                        .save(getPath(path, dateTime, modernDates, Some(mode)))
                     }
                   }
                 }
@@ -179,13 +181,15 @@ object DateTimeRebaseBenchmark extends SqlBasedBenchmark {
                 s"Load $dateTime from parquet", rowsNum, output = output)
               Seq(true, false).foreach { modernDates =>
                 Seq(false, true).foreach { vec =>
-                  Seq(false, true).foreach { rebase =>
-                    val name = caseName(modernDates, dateTime, Some(rebase), Some(vec))
+                  LegacyBehaviorPolicy.values
+                    .filterNot(v => !modernDates && v == LegacyBehaviorPolicy.EXCEPTION)
+                    .foreach { mode =>
+                    val name = caseName(modernDates, dateTime, Some(mode), Some(vec))
                     benchmark2.addCase(name, 3) { _ =>
                       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vec.toString) {
                         spark.read
                           .format("parquet")
-                          .load(getPath(path, dateTime, modernDates, Some(rebase)))
+                          .load(getPath(path, dateTime, modernDates, Some(mode)))
                           .noop()
                       }
                     }

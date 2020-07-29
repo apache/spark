@@ -540,11 +540,12 @@ case class UnresolvedOrdinal(ordinal: Int)
 }
 
 /**
- * Represents unresolved aggregate with having clause, it is turned by the analyzer into a Filter.
+ * Represents unresolved having clause, the child for it can be Aggregate, GroupingSets, Rollup
+ * and Cube. It is turned by the analyzer into a Filter.
  */
-case class AggregateWithHaving(
+case class UnresolvedHaving(
     havingCondition: Expression,
-    child: Aggregate)
+    child: LogicalPlan)
   extends UnaryNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output

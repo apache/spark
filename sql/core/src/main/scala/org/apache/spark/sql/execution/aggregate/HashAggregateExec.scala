@@ -57,10 +57,6 @@ case class HashAggregateExec(
     with BlockingOperatorWithCodegen
     with AliasAwareOutputPartitioning {
 
-  private[this] val aggregateBufferAttributes = {
-    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-  }
-
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
   override lazy val allAttributes: AttributeSeq =
@@ -78,11 +74,6 @@ case class HashAggregateExec(
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
   override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
-
-  override def producedAttributes: AttributeSet =
-    AttributeSet(aggregateAttributes) ++
-    AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
-    AttributeSet(aggregateBufferAttributes)
 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
@@ -129,7 +120,7 @@ case class HashAggregateExec(
             resultExpressions,
             (expressions, inputSchema) =>
               MutableProjection.create(expressions, inputSchema),
-            child.output,
+            inputAttributes,
             iter,
             testFallbackStartsAt,
             numOutputRows,
@@ -334,7 +325,7 @@ case class HashAggregateExec(
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ child.output
+    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ inputAttributes
     // To individually generate code for each aggregate function, an element in `updateExprs` holds
     // all the expressions for the buffer of an aggregation function.
     val updateExprs = aggregateExpressions.map { e =>
@@ -931,7 +922,7 @@ case class HashAggregateExec(
       }
     }
 
-    val inputAttr = aggregateBufferAttributes ++ child.output
+    val inputAttr = aggregateBufferAttributes ++ inputAttributes
     // Here we set `currentVars(0)` to `currentVars(numBufferSlots)` to null, so that when
     // generating code for buffer columns, we use `INPUT_ROW`(will be the buffer row), while
     // generating input columns, we use `currentVars`.

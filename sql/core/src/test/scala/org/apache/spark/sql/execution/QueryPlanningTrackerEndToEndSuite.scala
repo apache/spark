@@ -58,4 +58,13 @@ class QueryPlanningTrackerEndToEndSuite extends StreamTest {
       StopStream)
   }
 
+  test("The start times should be in order: parsing <= analysis <= optimization <= planning") {
+    val df = spark.sql("select count(*) from range(1)")
+    df.queryExecution.executedPlan
+    val phases = df.queryExecution.tracker.phases
+    assert(phases("parsing").startTimeMs <= phases("analysis").startTimeMs)
+    assert(phases("analysis").startTimeMs <= phases("optimization").startTimeMs)
+    assert(phases("optimization").startTimeMs <= phases("planning").startTimeMs)
+  }
+
 }

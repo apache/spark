@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.dynamicpruning
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, DynamicPruningExpression, DynamicPruningSubquery, Expression, ListQuery, Literal, PredicateHelper}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -58,9 +59,9 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
         val canReuseExchange = SQLConf.get.exchangeReuseEnabled && buildKeys.nonEmpty &&
           plan.find {
-            case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _) =>
+            case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
               left.sameResult(sparkPlan)
-            case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right) =>
+            case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>
               right.sameResult(sparkPlan)
             case _ => false
           }.isDefined

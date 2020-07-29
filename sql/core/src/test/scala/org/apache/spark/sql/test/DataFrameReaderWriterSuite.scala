@@ -224,6 +224,28 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(LastOptions.parameters("opt3") == "3")
   }
 
+  test("SPARK-32364: path argument of load function should override all existing options") {
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .load("5")
+    assert(LastOptions.parameters("path") == "5")
+  }
+
+  test("SPARK-32364: path argument of save function should override all existing options") {
+    Seq(1).toDF.write
+      .format("org.apache.spark.sql.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .save("5")
+    assert(LastOptions.parameters("path") == "5")
+  }
+
   test("pass partitionBy as options") {
     Seq(1).toDF.write
       .format("org.apache.spark.sql.test")
@@ -333,7 +355,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         var msg = intercept[AnalysisException] {
           Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
 
         // Insert into table successfully.
         Seq((1, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
@@ -354,14 +376,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         var msg = intercept[AnalysisException] {
           Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': string to int") &&
+          msg.contains("Cannot safely cast 'd': string to double"))
 
         msg = intercept[AnalysisException] {
           Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
+          msg.contains("Cannot safely cast 'd': boolean to double"))
       }
     }
   }

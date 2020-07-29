@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -151,7 +152,10 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
               Seq(false)
             }
             java8ApiConfValues.foreach { java8Api =>
-              withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+              withSQLConf(
+                SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+                SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
+                SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
                 val dataGenerator = RandomDataGenerator.forType(
                   dataType = dataType,
                   nullable = true,

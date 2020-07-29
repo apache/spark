@@ -300,10 +300,9 @@ class ParquetFileFormat
           None
         }
 
-      val rebaseDateTime = DataSourceUtils.needRebaseDateTime(
-        footerFileMetaData.getKeyValueMetaData.get).getOrElse {
-        SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_DATETIME_IN_READ)
-      }
+      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+        footerFileMetaData.getKeyValueMetaData.get,
+        SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ))
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =
@@ -318,7 +317,7 @@ class ParquetFileFormat
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
           convertTz.orNull,
-          rebaseDateTime,
+          datetimeRebaseMode.toString,
           enableOffHeapColumnVector && taskContext.isDefined,
           capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
@@ -337,7 +336,7 @@ class ParquetFileFormat
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns InternalRow
         val readSupport = new ParquetReadSupport(
-          convertTz, enableVectorizedReader = false, rebaseDateTime)
+          convertTz, enableVectorizedReader = false, datetimeRebaseMode)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
           new ParquetRecordReader[InternalRow](readSupport, parquetFilter)
@@ -476,6 +475,7 @@ object ParquetFileFormat extends Logging {
    *     S3 nodes).
    */
   def mergeSchemasInParallel(
+      parameters: Map[String, String],
       filesToTouch: Seq[FileStatus],
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
@@ -491,7 +491,7 @@ object ParquetFileFormat extends Logging {
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
     }
 
-    SchemaMergeUtils.mergeSchemasInParallel(sparkSession, filesToTouch, reader)
+    SchemaMergeUtils.mergeSchemasInParallel(sparkSession, parameters, filesToTouch, reader)
   }
 
   /**

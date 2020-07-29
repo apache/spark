@@ -17,20 +17,13 @@
 
 import sys
 import array as pyarray
-import warnings
-
-if sys.version > '3':
-    xrange = range
-    basestring = str
-
 from math import exp, log
+from collections import namedtuple
 
 from numpy import array, random, tile
 
-from collections import namedtuple
-
 from pyspark import SparkContext, since
-from pyspark.rdd import RDD, ignore_unicode_prefix
+from pyspark.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
 from pyspark.mllib.stat.distribution import MultivariateGaussian
@@ -257,7 +250,7 @@ class KMeansModel(Saveable, Loader):
             return x.map(self.predict)
 
         x = _convert_to_vector(x)
-        for i in xrange(len(self.centers)):
+        for i in range(len(self.centers)):
             distance = x.squared_distance(self.centers[i])
             if distance < best_distance:
                 best = i
@@ -708,7 +701,7 @@ class StreamingKMeansModel(KMeansModel):
     >>> stkm = StreamingKMeansModel(initCenters, initWeights)
     >>> data = sc.parallelize([[-0.1, -0.1], [0.1, 0.1],
     ...                        [0.9, 0.9], [1.1, 1.1]])
-    >>> stkm = stkm.update(data, 1.0, u"batches")
+    >>> stkm = stkm.update(data, 1.0, "batches")
     >>> stkm.centers
     array([[ 0.,  0.],
            [ 1.,  1.]])
@@ -720,7 +713,7 @@ class StreamingKMeansModel(KMeansModel):
     [3.0, 3.0]
     >>> decayFactor = 0.0
     >>> data = sc.parallelize([DenseVector([1.5, 1.5]), DenseVector([0.2, 0.2])])
-    >>> stkm = stkm.update(data, 0.0, u"batches")
+    >>> stkm = stkm.update(data, 0.0, "batches")
     >>> stkm.centers
     array([[ 0.2,  0.2],
            [ 1.5,  1.5]])
@@ -743,7 +736,6 @@ class StreamingKMeansModel(KMeansModel):
         """Return the cluster weights."""
         return self._clusterWeights
 
-    @ignore_unicode_prefix
     @since('1.5.0')
     def update(self, data, decayFactor, timeUnit):
         """Update the centroids, according to data
@@ -979,8 +971,8 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
         """
         if not isinstance(sc, SparkContext):
             raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
-        if not isinstance(path, basestring):
-            raise TypeError("path should be a basestring, got type %s" % type(path))
+        if not isinstance(path, str):
+            raise TypeError("path should be a string, got type %s" % type(path))
         model = callMLlibFunc("loadLDAModel", sc, path)
         return LDAModel(model)
 

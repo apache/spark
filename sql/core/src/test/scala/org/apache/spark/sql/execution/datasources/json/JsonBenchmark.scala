@@ -20,9 +20,10 @@ import java.io.File
 import java.time.{Instant, LocalDate}
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.{Column, Dataset, Row}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -430,7 +431,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
       }
 
       readBench.addCase("infer timestamps from files", numIters) { _ =>
-        spark.read.json(timestampDir).noop()
+        spark.read.option("inferTimestamp", true).json(timestampDir).noop()
       }
 
       val dateSchema = new StructType().add("date", DateType)
@@ -460,7 +461,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
       }
 
       readBench.addCase("infer timestamps from Dataset[String]", numIters) { _ =>
-        spark.read.json(timestampStr).noop()
+        spark.read.option("inferTimestamp", true).json(timestampStr).noop()
       }
 
       def dateStr: Dataset[String] = {
@@ -495,6 +496,45 @@ object JsonBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def filtersPushdownBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark("Filters pushdown", rowsNum, output = output)
+    val colsNum = 100
+    val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", TimestampType))
+    val schema = StructType(StructField("key", IntegerType) +: fields)
+    def columns(): Seq[Column] = {
+      val ts = Seq.tabulate(colsNum) { i =>
+        lit(Instant.ofEpochSecond(i * 12345678)).as(s"col$i")
+      }
+      ($"id" % 1000).as("key") +: ts
+    }
+    withTempPath { path =>
+      spark.range(rowsNum).select(columns(): _*).write.json(path.getAbsolutePath)
+      def readback = {
+        spark.read.schema(schema).json(path.getAbsolutePath)
+      }
+
+      benchmark.addCase("w/o filters", numIters) { _ =>
+        readback.noop()
+      }
+
+      def withFilter(configEnabled: Boolean): Unit = {
+        withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
+          readback.filter($"key" === 0).noop()
+        }
+      }
+
+      benchmark.addCase("pushdown disabled", numIters) { _ =>
+        withFilter(configEnabled = false)
+      }
+
+      benchmark.addCase("w/ filters", numIters) { _ =>
+        withFilter(configEnabled = true)
+      }
+
+      benchmark.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
     runBenchmark("Benchmark for performance of JSON parsing") {
@@ -508,6 +548,9 @@ object JsonBenchmark extends SqlBasedBenchmark {
       jsonInDS(50 * 1000 * 1000, numIters)
       jsonInFile(50 * 1000 * 1000, numIters)
       datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
+      // Benchmark pushdown filters that refer to top-level columns.
+      // TODO (SPARK-32325): Add benchmarks for filters with nested column attributes.
+      filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
     }
   }
 }

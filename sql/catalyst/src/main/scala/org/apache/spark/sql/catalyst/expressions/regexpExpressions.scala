@@ -283,7 +283,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   """,
   since = "1.5.0")
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = ArrayType(StringType)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
@@ -325,7 +325,7 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   // last regex in string, we will update the pattern iff regexp value changed.
   @transient private var lastRegex: UTF8String = _
@@ -412,7 +412,9 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
 object RegExpExtract {
   def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
-    if (groupCount < groupIndex) {
+    if (groupIndex < 0) {
+      throw new IllegalArgumentException("The specified group index cannot be less than zero")
+    } else if (groupCount < groupIndex) {
       throw new IllegalArgumentException(
         s"Regex group count is $groupCount, but the specified group index is $groupIndex")
     }
@@ -426,6 +428,14 @@ object RegExpExtract {
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
+  arguments = """
+    Arguments:
+      * str - a string expression.
+      * regexp - a string representing a regular expression.
+          The regex string should be a Java regular expression.
+      * idx - an integer expression that representing the group index. The group index should be
+          non-negative. If `idx` is not specified, the default group index value is 1.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
@@ -433,7 +443,7 @@ object RegExpExtract {
   """,
   since = "1.5.0")
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
 
   // last regex in string, we will update the pattern iff regexp value changed.

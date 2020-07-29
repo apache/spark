@@ -61,6 +61,7 @@ object TypeCoercion {
       IfCoercion ::
       StackCoercion ::
       Division ::
+      IntegralDivision ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
@@ -340,10 +341,10 @@ object TypeCoercion {
         assert(newChildren.length == 2)
         Intersect(newChildren.head, newChildren.last, isAll)
 
-      case s: Union if s.childrenResolved &&
+      case s: Union if s.childrenResolved && !s.byName &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
-        s.makeCopy(Array(newChildren))
+        s.copy(children = newChildren)
     }
 
     /** Build new children with the widest types for each attribute among all the children */
@@ -681,6 +682,23 @@ object TypeCoercion {
     private def isNumericOrNull(ex: Expression): Boolean = {
       // We need to handle null types in case a query contains null literals.
       ex.dataType.isInstanceOf[NumericType] || ex.dataType == NullType
+    }
+  }
+
+  /**
+   * The DIV operator always returns long-type value.
+   * This rule cast the integral inputs to long type, to avoid overflow during calculation.
+   */
+  object IntegralDivision extends TypeCoercionRule {
+    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case e if !e.childrenResolved => e
+      case d @ IntegralDivide(left, right) =>
+        IntegralDivide(mayCastToLong(left), mayCastToLong(right))
+    }
+
+    private def mayCastToLong(expr: Expression): Expression = expr.dataType match {
+      case _: ByteType | _: ShortType | _: IntegerType => Cast(expr, LongType)
+      case _ => expr
     }
   }
 
