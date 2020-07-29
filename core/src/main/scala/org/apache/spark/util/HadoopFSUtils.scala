@@ -62,7 +62,7 @@ private[spark] object HadoopFSUtils extends Logging {
         case s =>
           s"Listing leaf files and directories for $s paths:<br/>${paths(0)}, ..."
       }
-      sc.setJobDescription(description)
+      sc.setJobDescription(description) // TODO(holden): should we use jobgroup?
       sc
         .parallelize(serializedPaths, numParallelism)
         .mapPartitions { pathStrings =>
@@ -81,53 +81,12 @@ private[spark] object HadoopFSUtils extends Logging {
             )
             (path, leafFiles)
           }.iterator
-        }.map { case (path, statuses) =>
-        val serializableStatuses = statuses.map { status =>
-          // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
-          val blockLocations = status match {
-            case f: LocatedFileStatus =>
-              f.getBlockLocations.map { loc =>
-                SerializableBlockLocation(
-                  loc.getNames,
-                  loc.getHosts,
-                  loc.getOffset,
-                  loc.getLength)
-              }
-
-            case _ =>
-              Array.empty[SerializableBlockLocation]
-          }
-
-          SerializableFileStatus(
-            status.getPath.toString,
-            status.getLen,
-            status.isDirectory,
-            status.getReplication,
-            status.getBlockSize,
-            status.getModificationTime,
-            status.getAccessTime,
-            blockLocations)
-        }
-        (path.toString, serializableStatuses)
-      }.collect()
+        }.collect() // TODO(holden): should we use local itr here?
     } finally {
       sc.setJobDescription(previousJobDescription)
     }
 
-    // turn SerializableFileStatus back to Status
-    statusMap.map { case (path, serializableStatuses) =>
-      val statuses = serializableStatuses.map { f =>
-        val blockLocations = f.blockLocations.map { loc =>
-          new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
-        }
-        new LocatedFileStatus(
-          new FileStatus(
-            f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime,
-            new Path(f.path)),
-          blockLocations)
-      }
-      (new Path(path), statuses)
-    }
+    statusMap.toSeq
   }
   /**
    * Lists a single filesystem path recursively. If a Sparkcontext object is specified, this
@@ -169,7 +128,19 @@ private[spark] object HadoopFSUtils extends Logging {
             def next(): LocatedFileStatus = remoteIter.next
             def hasNext(): Boolean = remoteIter.hasNext
           }.toArray
-        case _ => fs.listStatus(path)
+        case _ =>
+          // Try and use the accelerated code path even if it isn't known
+          // to support it, and fall back.
+          try {
+            val remoteIter = fs.listLocatedStatus(path)
+            new Iterator[LocatedFileStatus]() {
+              def next(): LocatedFileStatus = remoteIter.next
+              def hasNext(): Boolean = remoteIter.hasNext
+            }.toArray
+          } catch {
+            case e: FileNotFoundException =>
+              fs.listStatus(path)
+          }
       }
     } catch {
       // If we are listing a root path for SQL (e.g. a top level directory of a table), we need to
@@ -291,24 +262,6 @@ private[spark] object HadoopFSUtils extends Logging {
         s"the following files were missing during file scan:\n  ${missingFiles.mkString("\n  ")}")
     }
 
-    resolvedLeafStatuses
+    resolvedLeafStatuses.toSeq
   }
-
-  /** A serializable variant of HDFS's BlockLocation. */
-  private case class SerializableBlockLocation(
-      names: Array[String],
-      hosts: Array[String],
-      offset: Long,
-      length: Long)
-
-  /** A serializable variant of HDFS's FileStatus. */
-  private case class SerializableFileStatus(
-      path: String,
-      length: Long,
-      isDir: Boolean,
-      blockReplication: Short,
-      blockSize: Long,
-      modificationTime: Long,
-      accessTime: Long,
-      blockLocations: Array[SerializableBlockLocation])
 }
