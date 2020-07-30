@@ -148,7 +148,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
       val fileOriginalPlan = new File(dir, s"$nextVariant.explain.txt")
       FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
-      logInfo(s"APPROVED: ${file} ${fileOriginalPlan}")
+      logInfo(s"APPROVED: $file $fileOriginalPlan")
     }
   }
 
@@ -164,8 +164,8 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
       val approvedSimplifiedFile = new File(dir, s"${existingVariants.max}.simplified.txt")
       val approvedExplainFile = new File(dir, s"${existingVariants.max}.explain.txt")
 
-      val actualSimplifiedFile = new File(tempDir, s"${name}.actual.simplified.txt")
-      val actualExplainFile = new File(tempDir, s"${name}.actual.explain.txt")
+      val actualSimplifiedFile = new File(tempDir, s"$name.actual.simplified.txt")
+      val actualExplainFile = new File(tempDir, s"$name.actual.explain.txt")
 
       val approvedSimplified = FileUtils.readFileToString(
         approvedSimplifiedFile, StandardCharsets.UTF_8)
