@@ -421,18 +421,18 @@ case class DataSource(
 
     relation match {
       case hs: HadoopFsRelation =>
-        SchemaUtils.checkColumnNameDuplication(
-          hs.dataSchema.map(_.name),
+        SchemaUtils.checkSchemaColumnNameDuplication(
+          hs.dataSchema,
           "in the data schema",
           equality)
-        SchemaUtils.checkColumnNameDuplication(
-          hs.partitionSchema.map(_.name),
+        SchemaUtils.checkSchemaColumnNameDuplication(
+          hs.partitionSchema,
           "in the partition schema",
           equality)
         DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema)
       case _ =>
-        SchemaUtils.checkColumnNameDuplication(
-          relation.schema.map(_.name),
+        SchemaUtils.checkSchemaColumnNameDuplication(
+          relation.schema,
           "in the data schema",
           equality)
     }
@@ -811,7 +811,7 @@ object DataSource extends Logging {
     val path = CaseInsensitiveMap(options).get("path")
     val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
     CatalogStorageFormat.empty.copy(
-      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath)
+      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath.toMap)
   }
 
   /**

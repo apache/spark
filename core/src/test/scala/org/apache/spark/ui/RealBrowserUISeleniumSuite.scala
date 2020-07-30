@@ -18,8 +18,10 @@
 package org.apache.spark.ui
 
 import org.openqa.selenium.{By, WebDriver}
-import org.scalatest._
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 

@@ -166,15 +166,21 @@ object SetCommand {
  * via [[SetCommand]] will get reset to default value. Command that runs
  * {{{
  *   reset;
+ *   reset spark.sql.session.timeZone;
  * }}}
  */
-case object ResetCommand extends RunnableCommand with IgnoreCachedData {
+case class ResetCommand(config: Option[String]) extends RunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val conf = sparkSession.sessionState.conf
-    conf.clear()
-    sparkSession.sparkContext.conf.getAll.foreach { case (k, v) =>
-      conf.setConfString(k, v)
+    val defaults = sparkSession.sparkContext.conf
+    config match {
+      case Some(key) =>
+        conf.unsetConf(key)
+        defaults.getOption(key).foreach(conf.setConfString(key, _))
+      case None =>
+        conf.clear()
+        defaults.getAll.foreach { case (k, v) => conf.setConfString(k, v) }
     }
     Seq.empty[Row]
   }
