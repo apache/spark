@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.nio.charset.{Charset, StandardCharsets}
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
 
