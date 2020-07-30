@@ -19,7 +19,7 @@
 
 # Start all spark daemons.
 # Starts the master on this node.
-# Starts a worker on each node specified in conf/slaves
+# Starts a worker on each node specified in conf/workers
 
 if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
@@ -32,4 +32,4 @@ fi
 "${SPARK_HOME}/sbin"/start-master.sh
 
 # Start Workers
-"${SPARK_HOME}/sbin"/start-slaves.sh
+"${SPARK_HOME}/sbin"/start-workers.sh

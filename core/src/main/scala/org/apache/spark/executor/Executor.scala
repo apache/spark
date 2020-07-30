@@ -154,11 +154,6 @@ private[spark] class Executor(
   // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
-  // Plugins need to load using a class loader that includes the executor's user classpath
-  private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
-    PluginContainer(env, resources.asJava)
-  }
-
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
   private val maxDirectResultSize = Math.min(
@@ -224,6 +219,13 @@ private[spark] class Executor(
   private var decommissioned = false
 
   heartbeater.start()
+
+  // Plugins need to load using a class loader that includes the executor's user classpath.
+  // Plugins also needs to be initialized after the heartbeater started
+  // to avoid blocking to send heartbeat (see SPARK-32175).
+  private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
+    PluginContainer(env, resources.asJava)
+  }
 
   metricsPoller.start()
 
@@ -606,7 +608,8 @@ private[spark] class Executor(
           // Here and below, put task metric peaks in a WrappedArray to expose them as a Seq
           // without requiring a copy.
           val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
-          val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates, accums, metricPeaks))
+          val serializedTK = ser.serialize(
+            TaskKilled(t.reason, accUpdates, accums, metricPeaks.toSeq))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case _: InterruptedException | NonFatal(_) if
@@ -616,7 +619,8 @@ private[spark] class Executor(
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
           val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
-          val serializedTK = ser.serialize(TaskKilled(killReason, accUpdates, accums, metricPeaks))
+          val serializedTK = ser.serialize(
+            TaskKilled(killReason, accUpdates, accums, metricPeaks.toSeq))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
@@ -661,13 +665,13 @@ private[spark] class Executor(
             val serializedTaskEndReason = {
               try {
                 val ef = new ExceptionFailure(t, accUpdates).withAccums(accums)
-                  .withMetricPeaks(metricPeaks)
+                  .withMetricPeaks(metricPeaks.toSeq)
                 ser.serialize(ef)
               } catch {
                 case _: NotSerializableException =>
                   // t is not serializable so just send the stacktrace
                   val ef = new ExceptionFailure(t, accUpdates, false).withAccums(accums)
-                    .withMetricPeaks(metricPeaks)
+                    .withMetricPeaks(metricPeaks.toSeq)
                   ser.serialize(ef)
               }
             }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, File, ObjectInput, ObjectOutput}
 import java.lang.Thread.UncaughtExceptionHandler
 import java.nio.ByteBuffer
 import java.util.Properties
@@ -41,6 +41,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.deploy.{SimpleApplicationTest, SparkSubmitSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.memory.TestMemoryManager
@@ -52,7 +53,7 @@ import org.apache.spark.scheduler.{DirectTaskResult, FakeTask, ResultTask, Task,
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManager, BlockManagerId}
-import org.apache.spark.util.{LongAccumulator, UninterruptibleThread}
+import org.apache.spark.util.{LongAccumulator, UninterruptibleThread, Utils}
 
 class ExecutorSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
@@ -400,6 +401,73 @@ class ExecutorSuite extends SparkFunSuite
     val metrics = taskFailedReason.asInstanceOf[ExceptionFailure].metricPeaks.toArray
     val taskMetrics = new ExecutorMetrics(metrics)
     assert(taskMetrics.getMetricValue("JVMHeapMemory") > 0)
+  }
+
+  test("SPARK-32175: Plugin initialization should start after heartbeater started") {
+    withTempDir { tempDir =>
+      val sparkPluginCodeBody =
+        """
+          |@Override
+          |public org.apache.spark.api.plugin.ExecutorPlugin executorPlugin() {
+          |  return new TestExecutorPlugin();
+          |}
+          |
+          |@Override
+          |public org.apache.spark.api.plugin.DriverPlugin driverPlugin() { return null; }
+        """.stripMargin
+      val executorPluginBody =
+        """
+          |@Override
+          |public void init(
+          |    org.apache.spark.api.plugin.PluginContext ctx,
+          |    java.util.Map<String, String> extraConf) {
+          |  try {
+          |    Thread.sleep(8 * 1000);
+          |  } catch (InterruptedException e) {
+          |    throw new RuntimeException(e);
+          |  }
+          |}
+        """.stripMargin
+
+      val compiledExecutorPlugin = TestUtils.createCompiledClass(
+        "TestExecutorPlugin",
+        tempDir,
+        "",
+        null,
+        Seq.empty,
+        Seq("org.apache.spark.api.plugin.ExecutorPlugin"),
+        executorPluginBody)
+
+      val thisClassPath =
+        sys.props("java.class.path").split(File.pathSeparator).map(p => new File(p).toURI.toURL)
+      val compiledSparkPlugin = TestUtils.createCompiledClass(
+        "TestSparkPlugin",
+        tempDir,
+        "",
+        null,
+        Seq(tempDir.toURI.toURL) ++ thisClassPath,
+        Seq("org.apache.spark.api.plugin.SparkPlugin"),
+        sparkPluginCodeBody)
+
+      val jarUrl = TestUtils.createJar(
+        Seq(compiledSparkPlugin, compiledExecutorPlugin),
+        new File(tempDir, "testPlugin.jar"))
+
+      val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+      val args = Seq(
+        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local-cluster[1,1,1024]",
+        "--conf", "spark.plugins=TestSparkPlugin",
+        "--conf", "spark.storage.blockManagerSlaveTimeoutMs=" + 5 * 1000,
+        "--conf", "spark.network.timeoutInterval=" + 1000,
+        "--conf", "spark.executor.heartbeatInterval=" + 1000,
+        "--conf", "spark.executor.extraClassPath=" + jarUrl.toString,
+        "--conf", "spark.driver.extraClassPath=" + jarUrl.toString,
+        "--conf", "spark.ui.enabled=false",
+        unusedJar.toString)
+      SparkSubmitSuite.runSparkSubmit(args, timeout = 30.seconds)
+    }
   }
 
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {

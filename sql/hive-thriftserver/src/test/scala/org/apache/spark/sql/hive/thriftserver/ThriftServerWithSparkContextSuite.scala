@@ -17,7 +17,15 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-class ThriftServerWithSparkContextSuite extends SharedThriftServer {
+import java.sql.SQLException
+
+import org.apache.hive.service.cli.HiveSQLException
+
+trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
+
+  test("the scratch dir will be deleted during server start but recreated with new operation") {
+    assert(tempScratchDir.exists())
+  }
 
   test("SPARK-29911: Uncache cached tables when session closed") {
     val cacheManager = spark.sharedState.cacheManager
@@ -41,4 +49,43 @@ class ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(cacheManager.isEmpty)
     }
   }
+
+  test("Full stack traces as error message for jdbc or thrift client") {
+    val sql = "select date_sub(date'2011-11-11', '1.2')"
+    withCLIServiceClient { client =>
+      val sessionHandle = client.openSession(user, "")
+
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val e = intercept[HiveSQLException] {
+        client.executeStatement(
+          sessionHandle,
+          sql,
+          confOverlay)
+      }
+
+      assert(e.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(!e.getMessage.contains("" +
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+    }
+
+    withJdbcStatement { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery(sql)
+      }
+      assert(e.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(e.getMessage.contains("" +
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+    }
+  }
+}
+
+
+class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {
+  override def mode: ServerMode.Value = ServerMode.binary
+}
+
+class ThriftServerWithSparkContextInHttpSuite extends ThriftServerWithSparkContextSuite {
+  override def mode: ServerMode.Value = ServerMode.http
 }

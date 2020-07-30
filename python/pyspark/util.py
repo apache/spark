@@ -16,53 +16,14 @@
 # limitations under the License.
 #
 
+import threading
 import re
 import sys
 import traceback
-import os
-import warnings
-import inspect
-from py4j.protocol import Py4JJavaError
+
+from py4j.clientserver import ClientServer
 
 __all__ = []
-
-
-def _exception_message(excp):
-    """Return the message from an exception as either a str or unicode object.  Supports both
-    Python 2 and Python 3.
-
-    >>> msg = "Exception message"
-    >>> excp = Exception(msg)
-    >>> msg == _exception_message(excp)
-    True
-
-    >>> msg = u"unicöde"
-    >>> excp = Exception(msg)
-    >>> msg == _exception_message(excp)
-    True
-    """
-    if isinstance(excp, Py4JJavaError):
-        # 'Py4JJavaError' doesn't contain the stack trace available on the Java side in 'message'
-        # attribute in Python 2. We should call 'str' function on this exception in general but
-        # 'Py4JJavaError' has an issue about addressing non-ascii strings. So, here we work
-        # around by the direct call, '__str__()'. Please see SPARK-23517.
-        return excp.__str__()
-    if hasattr(excp, "message"):
-        return excp.message
-    return str(excp)
-
-
-def _get_argspec(f):
-    """
-    Get argspec of a function. Supports both Python 2 and Python 3.
-    """
-    if sys.version_info[0] < 3:
-        argspec = inspect.getargspec(f)
-    else:
-        # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
-        # See SPARK-23569.
-        argspec = inspect.getfullargspec(f)
-    return argspec
 
 
 def print_exec(stream):
@@ -114,33 +75,6 @@ def fail_on_stopiteration(f):
     return wrapper
 
 
-def _warn_pin_thread(name):
-    if os.environ.get("PYSPARK_PIN_THREAD", "false").lower() == "true":
-        msg = (
-            "PYSPARK_PIN_THREAD feature is enabled. "
-            "However, note that it cannot inherit the local properties from the parent thread "
-            "although it isolates each thread on PVM and JVM with its own local properties. "
-            "\n"
-            "To work around this, you should manually copy and set the local properties from "
-            "the parent thread to the child thread when you create another thread.")
-    else:
-        msg = (
-            "Currently, '%s' (set to local properties) with multiple threads does "
-            "not properly work. "
-            "\n"
-            "Internally threads on PVM and JVM are not synced, and JVM thread can be reused "
-            "for multiple threads on PVM, which fails to isolate local properties for each "
-            "thread on PVM. "
-            "\n"
-            "To work around this, you can set PYSPARK_PIN_THREAD to true (see SPARK-22340). "
-            "However, note that it cannot inherit the local properties from the parent thread "
-            "although it isolates each thread on PVM and JVM with its own local properties. "
-            "\n"
-            "To work around this, you should manually copy and set the local properties from "
-            "the parent thread to the child thread when you create another thread." % name)
-    warnings.warn(msg, UserWarning)
-
-
 def _print_missing_jar(lib_name, pkg_name, jar_name, spark_version):
     print("""
 ________________________________________________________________________________________________
@@ -182,6 +116,64 @@ def _parse_memory(s):
     if s[-1].lower() not in units:
         raise ValueError("invalid format: " + s)
     return int(float(s[:-1]) * units[s[-1].lower()])
+
+
+class InheritableThread(threading.Thread):
+    """
+    Thread that is recommended to be used in PySpark instead of :class:`threading.Thread`
+    when the pinned thread mode is enabled. The usage of this class is exactly same as
+    :class:`threading.Thread` but correctly inherits the inheritable properties specific
+    to JVM thread such as ``InheritableThreadLocal``.
+
+    Also, note that pinned thread mode does not close the connection from Python
+    to JVM when the thread is finished in the Python side. With this class, Python
+    garbage-collects the Python thread instance and also closes the connection
+    which finishes JVM thread correctly.
+
+    When the pinned thread mode is off, this works as :class:`threading.Thread`.
+
+    .. note:: Experimental
+
+    .. versionadded:: 3.1.0
+    """
+    def __init__(self, target, *args, **kwargs):
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+
+        if isinstance(sc._gateway, ClientServer):
+            # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+            properties = sc._jsc.sc().getLocalProperties().clone()
+            self._sc = sc
+
+            def copy_local_properties(*a, **k):
+                sc._jsc.sc().setLocalProperties(properties)
+                return target(*a, **k)
+
+            super(InheritableThread, self).__init__(
+                target=copy_local_properties, *args, **kwargs)
+        else:
+            super(InheritableThread, self).__init__(target=target, *args, **kwargs)
+
+    def __del__(self):
+        from pyspark import SparkContext
+
+        if isinstance(SparkContext._gateway, ClientServer):
+            thread_connection = self._sc._jvm._gateway_client.thread_connection.connection()
+            if thread_connection is not None:
+                connections = self._sc._jvm._gateway_client.deque
+
+                # Reuse the lock for Py4J in PySpark
+                with SparkContext._lock:
+                    for i in range(len(connections)):
+                        if connections[i] is thread_connection:
+                            connections[i].close()
+                            del connections[i]
+                            break
+                    else:
+                        # Just in case the connection was not closed but removed from the queue.
+                        thread_connection.close()
+
 
 if __name__ == "__main__":
     import doctest

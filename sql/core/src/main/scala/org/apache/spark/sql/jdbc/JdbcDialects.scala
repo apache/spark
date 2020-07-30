@@ -180,6 +180,19 @@ abstract class JdbcDialect extends Serializable {
    * None: The behavior of TRUNCATE TABLE is unknown (default).
    */
   def isCascadingTruncateTable(): Option[Boolean] = None
+
+  /**
+   * Rename an existing table.
+   *
+   * TODO (SPARK-32382): Override this method in the dialects that don't support such syntax.
+   *
+   * @param oldTable The existing table.
+   * @param newTable New name of the table.
+   * @return The SQL statement to use for renaming the table.
+   */
+  def renameTable(oldTable: String, newTable: String): String = {
+    s"ALTER TABLE $oldTable RENAME TO $newTable"
+  }
 }
 
 /**

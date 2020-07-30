@@ -15,19 +15,19 @@
 # limitations under the License.
 #
 import itertools
-import sys
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
 
-from pyspark import since, keyword_only
+from pyspark import keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.common import _py2java, _java2py
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams
-from pyspark.sql.functions import rand
+from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
+from pyspark.sql.types import BooleanType
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
            'TrainValidationSplitModel']
@@ -200,12 +200,25 @@ class _CrossValidatorParams(_ValidatorParams):
     numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
                      typeConverter=TypeConverters.toInt)
 
+    foldCol = Param(Params._dummy(), "foldCol", "Param for the column name of user " +
+                    "specified fold number. Once this is specified, :py:class:`CrossValidator` " +
+                    "won't do random k-fold split. Note that this column should be integer type " +
+                    "with range [0, numFolds) and Spark will throw exception on out-of-range " +
+                    "fold numbers.", typeConverter=TypeConverters.toString)
+
     @since("1.4.0")
     def getNumFolds(self):
         """
         Gets the value of numFolds or its default value.
         """
         return self.getOrDefault(self.numFolds)
+
+    @since("3.1.0")
+    def getFoldCol(self):
+        """
+        Gets the value of foldCol or its default value.
+        """
+        return self.getOrDefault(self.foldCol)
 
 
 class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollectSubModels,
@@ -255,23 +268,23 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
-                 seed=None, parallelism=1, collectSubModels=False):
+                 seed=None, parallelism=1, collectSubModels=False, foldCol=""):
         """
         __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                 seed=None, parallelism=1, collectSubModels=False)
+                 seed=None, parallelism=1, collectSubModels=False, foldCol="")
         """
         super(CrossValidator, self).__init__()
-        self._setDefault(numFolds=3, parallelism=1)
+        self._setDefault(numFolds=3, parallelism=1, foldCol="")
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @keyword_only
     @since("1.4.0")
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
-                  seed=None, parallelism=1, collectSubModels=False):
+                  seed=None, parallelism=1, collectSubModels=False, foldCol=""):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                  seed=None, parallelism=1, collectSubModels=False):
+                  seed=None, parallelism=1, collectSubModels=False, foldCol=""):
         Sets params for cross validator.
         """
         kwargs = self._input_kwargs
@@ -305,6 +318,13 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         """
         return self._set(numFolds=value)
 
+    @since("3.1.0")
+    def setFoldCol(self, value):
+        """
+        Sets the value of :py:attr:`foldCol`.
+        """
+        return self._set(foldCol=value)
+
     def setSeed(self, value):
         """
         Sets the value of :py:attr:`seed`.
@@ -329,10 +349,6 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         numModels = len(epm)
         eva = self.getOrDefault(self.evaluator)
         nFolds = self.getOrDefault(self.numFolds)
-        seed = self.getOrDefault(self.seed)
-        h = 1.0 / nFolds
-        randCol = self.uid + "_rand"
-        df = dataset.select("*", rand(seed).alias(randCol))
         metrics = [0.0] * numModels
 
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
@@ -341,12 +357,10 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         if collectSubModelsParam:
             subModels = [[None for j in range(numModels)] for i in range(nFolds)]
 
+        datasets = self._kFold(dataset)
         for i in range(nFolds):
-            validateLB = i * h
-            validateUB = (i + 1) * h
-            condition = (df[randCol] >= validateLB) & (df[randCol] < validateUB)
-            validation = df.filter(condition).cache()
-            train = df.filter(~condition).cache()
+            validation = datasets[i][1].cache()
+            train = datasets[i][0].cache()
 
             tasks = _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam)
             for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
@@ -363,6 +377,45 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
         return self._copyValues(CrossValidatorModel(bestModel, metrics, subModels))
+
+    def _kFold(self, dataset):
+        nFolds = self.getOrDefault(self.numFolds)
+        foldCol = self.getOrDefault(self.foldCol)
+
+        datasets = []
+        if not foldCol:
+            # Do random k-fold split.
+            seed = self.getOrDefault(self.seed)
+            h = 1.0 / nFolds
+            randCol = self.uid + "_rand"
+            df = dataset.select("*", rand(seed).alias(randCol))
+            for i in range(nFolds):
+                validateLB = i * h
+                validateUB = (i + 1) * h
+                condition = (df[randCol] >= validateLB) & (df[randCol] < validateUB)
+                validation = df.filter(condition)
+                train = df.filter(~condition)
+                datasets.append((train, validation))
+        else:
+            # Use user-specified fold numbers.
+            def checker(foldNum):
+                if foldNum < 0 or foldNum >= nFolds:
+                    raise ValueError(
+                        "Fold number must be in range [0, %s), but got %s." % (nFolds, foldNum))
+                return True
+
+            checker_udf = UserDefinedFunction(checker, BooleanType())
+            for i in range(nFolds):
+                training = dataset.filter(checker_udf(dataset[foldCol]) & (col(foldCol) != lit(i)))
+                validation = dataset.filter(
+                    checker_udf(dataset[foldCol]) & (col(foldCol) == lit(i)))
+                if training.rdd.getNumPartitions() == 0 or len(training.take(1)) == 0:
+                    raise ValueError("The training data at fold %s is empty." % i)
+                if validation.rdd.getNumPartitions() == 0 or len(validation.take(1)) == 0:
+                    raise ValueError("The validation data at fold %s is empty." % i)
+                datasets.append((training, validation))
+
+        return datasets
 
     @since("1.4.0")
     def copy(self, extra=None):
@@ -407,10 +460,11 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         seed = java_stage.getSeed()
         parallelism = java_stage.getParallelism()
         collectSubModels = java_stage.getCollectSubModels()
+        foldCol = java_stage.getFoldCol()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
                        numFolds=numFolds, seed=seed, parallelism=parallelism,
-                       collectSubModels=collectSubModels)
+                       collectSubModels=collectSubModels, foldCol=foldCol)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -431,6 +485,7 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         _java_obj.setNumFolds(self.getNumFolds())
         _java_obj.setParallelism(self.getParallelism())
         _java_obj.setCollectSubModels(self.getCollectSubModels())
+        _java_obj.setFoldCol(self.getFoldCol())
 
         return _java_obj
 

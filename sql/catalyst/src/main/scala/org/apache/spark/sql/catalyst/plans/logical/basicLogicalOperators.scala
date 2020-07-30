@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
@@ -219,8 +220,18 @@ object Union {
 
 /**
  * Logical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * @param byName          Whether resolves columns in the children by column names.
+ * @param allowMissingCol Allows missing columns in children query plans. If it is true,
+ *                        this function allows different set of column names between two Datasets.
+ *                        This can be set to true only if `byName` is true.
  */
-case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
+case class Union(
+    children: Seq[LogicalPlan],
+    byName: Boolean = false,
+    allowMissingCol: Boolean = false) extends LogicalPlan {
+  assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
+
   override def maxRows: Option[Long] = {
     if (children.exists(_.maxRows.isEmpty)) {
       None
@@ -270,7 +281,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
         child.output.zip(children.head.output).forall {
           case (l, r) => l.dataType.sameType(r.dataType)
         })
-    children.length > 1 && childrenResolved && allChildrenCompatible
+    children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
   }
 
   /**
@@ -953,16 +964,18 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 }
 
 /**
- * This method repartitions data using [[Expression]]s into `numPartitions`, and receives
+ * This method repartitions data using [[Expression]]s into `optNumPartitions`, and receives
  * information about the number of partitions during execution. Used when a specific ordering or
  * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
- * `coalesce` and `repartition`.
+ * `coalesce` and `repartition`. If no `optNumPartitions` is given, by default it partitions data
+ * into `numShufflePartitions` defined in `SQLConf`, and could be coalesced by AQE.
  */
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    numPartitions: Int) extends RepartitionOperation {
+    optNumPartitions: Option[Int]) extends RepartitionOperation {
 
+  val numPartitions = optNumPartitions.getOrElse(SQLConf.get.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   val partitioning: Partitioning = {
@@ -988,6 +1001,15 @@ case class RepartitionByExpression(
 
   override def maxRows: Option[Long] = child.maxRows
   override def shuffle: Boolean = true
+}
+
+object RepartitionByExpression {
+  def apply(
+      partitionExpressions: Seq[Expression],
+      child: LogicalPlan,
+      numPartitions: Int): RepartitionByExpression = {
+    RepartitionByExpression(partitionExpressions, child, Some(numPartitions))
+  }
 }
 
 /**
@@ -1016,7 +1038,7 @@ case class Deduplicate(
 
 /**
  * A trait to represent the commands that support subqueries.
- * This is used to whitelist such commands in the subquery-related checks.
+ * This is used to allow such commands in the subquery-related checks.
  */
 trait SupportsSubquery extends LogicalPlan
 
