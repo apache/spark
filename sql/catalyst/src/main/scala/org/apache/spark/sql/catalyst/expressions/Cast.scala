@@ -330,7 +330,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case MapType(kt, vt, _) =>
       buildCast[MapData](_, map => {
         val builder = new UTF8StringBuilder
-        builder.append("[")
+        builder.append("{")
         if (map.numElements > 0) {
           val keyArray = map.keyArray()
           val valueArray = map.valueArray()
@@ -355,13 +355,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             i += 1
           }
         }
-        builder.append("]")
+        builder.append("}")
         builder.build()
       })
     case StructType(fields) =>
       buildCast[InternalRow](_, row => {
         val builder = new UTF8StringBuilder
-        builder.append("[")
+        builder.append("{")
         if (row.numFields > 0) {
           val st = fields.map(_.dataType)
           val toUTF8StringFuncs = st.map(castToString)
@@ -378,7 +378,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             i += 1
           }
         }
-        builder.append("]")
+        builder.append("}")
         builder.build()
       })
     case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
