@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
@@ -63,16 +64,17 @@ class SparkSqlParserSuite extends AnalysisTest {
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
 
-  test("Checks if SET/RESET can accept all the configurations") {
+  test("Checks if SET/RESET can parse all the configurations") {
     // Force to build static SQL configurations
     StaticSQLConf
-    SQLConf.sqlConfEntries.values.asScala.foreach { e =>
-      assertEqual(s"SET ${e.key}", SetCommand(Some(e.key -> None)))
-      if (e.defaultValue.isDefined) {
-        assertEqual(s"SET ${e.key}=${e.defaultValueString}",
-          SetCommand(Some(e.key -> Some(e.defaultValueString))))
+    (SQLConf.sqlConfEntries.values.asScala ++ ConfigEntry.knownConfigs.values.asScala)
+        .foreach { config =>
+      assertEqual(s"SET ${config.key}", SetCommand(Some(config.key -> None)))
+      if (config.defaultValue.isDefined) {
+        assertEqual(s"SET ${config.key}=${config.defaultValueString}",
+          SetCommand(Some(config.key -> Some(config.defaultValueString))))
       }
-      assertEqual(s"RESET ${e.key}", ResetCommand(Some(e.key)))
+      assertEqual(s"RESET ${config.key}", ResetCommand(Some(config.key)))
     }
   }
 
@@ -85,6 +87,12 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("SET spark:sql:key=  ", SetCommand(Some("spark:sql:key" -> Some(""))))
     assertEqual("SET spark:sql:key=-1 ", SetCommand(Some("spark:sql:key" -> Some("-1"))))
     assertEqual("SET spark:sql:key = -1", SetCommand(Some("spark:sql:key" -> Some("-1"))))
+    assertEqual("SET 1.2.key=value",
+      SetCommand(Some("1.2.key" -> Some("value"))))
+    assertEqual("SET spark.sql.3=value",
+      SetCommand(Some("spark.sql.3" -> Some("value"))))
+    assertEqual("SET spark:sql:key = va l u  e ",
+      SetCommand(Some("spark:sql:key" -> Some("va l u  e"))))
     assertEqual("SET `spark.sql.    key`=value",
       SetCommand(Some("spark.sql.    key" -> Some("value"))))
 
@@ -97,6 +105,9 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("SET spark.sql.key value1 value2", expectedErrMsg)
 
     // TODO: Needs to make the error message more meaningful for users
+    intercept("SET spark.   sql.key=value", "failed predicate")
+    intercept("SET spark   :sql:key=value", "failed predicate")
+    intercept("SET spark .  sql.key=value", "failed predicate")
     intercept("SET spark.sql.   key=value", "failed predicate")
     intercept("SET spark.sql   :key=value", "failed predicate")
     intercept("SET spark.sql .  key=value", "failed predicate")
@@ -106,6 +117,8 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("RESET", ResetCommand(None))
     assertEqual("RESET spark.sql.key", ResetCommand(Some("spark.sql.key")))
     assertEqual("RESET spark.sql.key ", ResetCommand(Some("spark.sql.key")))
+    assertEqual("RESET 1.2.key", ResetCommand(Some("1.2.key")))
+    assertEqual("RESET spark.sql.3", ResetCommand(Some("spark.sql.3")))
     assertEqual("RESET `spark.sql.    key`", ResetCommand(Some("spark.sql.    key")))
 
     val expectedErrMsg = "Expected format is 'RESET' or 'RESET key'. " +
@@ -116,6 +129,9 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("RESET spark.sql.key1 key2 key3", expectedErrMsg)
 
     // TODO: Needs to make the error message more meaningful for users
+    intercept("RESET spark:   sql:key", "failed predicate")
+    intercept("RESET spark   .sql.key", "failed predicate")
+    intercept("RESET spark :  sql:key", "failed predicate")
     intercept("RESET spark.sql:    key", "failed predicate")
     intercept("RESET spark.sql    .key", "failed predicate")
     intercept("RESET spark.sql :   key", "failed predicate")

@@ -276,13 +276,14 @@ configKey
     ;
 
 configValue
-    : vaule=.*?
+    : vaule=.*
     ;
 
 configIdentifier
     : IDENTIFIER
     | nonReserved
     | strictNonReserved
+    | INTEGER_VALUE
     ;
 
 unsupportedHiveNativeCommands
