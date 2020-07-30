@@ -151,7 +151,7 @@ import org.apache.spark.sql.types.IntegerType
  *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
  *   Aggregate(
  *      key = ['key, 'cat1, 'cat2, 'gid]
- *      functions = [max('cond1), max('cond2), sum('value) FILTER (WHERE 'id > 1)]
+ *      functions = [max('cond1), max('cond2), sum('value) FILTER (WHERE 'id > 3)]
  *      output = ['key, 'cat1, 'cat2, 'gid, 'max_cond1, 'max_cond2, 'total])
  *     Expand(
  *        projections = [('key, null, null, 0, null, null, cast('value as bigint), 'id),
