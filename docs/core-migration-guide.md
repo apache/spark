@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Core 3.0 to 3.1
 
-- In Spark 3.0 and below, `SparkContext` can be created in executors. Since Spark 3.1, an exception will be thrown when creating `SparkContext` in executors. If you need to create `SparkContext` in executors, you can allow it by setting the configuration `spark.driver.allowSparkContextInExecutors` in Scala/Java executors or `spark.python.allowSparkContextInExecutors` in PySpark executors.
+- In Spark 3.0 and below, `SparkContext` can be created in executors. Since Spark 3.1, an exception will be thrown when creating `SparkContext` in executors. You can allow it by setting the configuration `spark.driver.allowSparkContextInExecutors` when creating `SparkContext` in executors.
 
 ## Upgrading from Core 2.4 to 3.0
 
