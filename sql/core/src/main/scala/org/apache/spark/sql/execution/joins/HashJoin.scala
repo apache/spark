@@ -715,6 +715,11 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     }
   }
 
+  /**
+   * Returns a tuple of variable name for HashedRelation,
+   * and a boolean to indicate whether keys of HashedRelation
+   * known to be unique in code-gen time.
+   */
   protected def prepareRelation(ctx: CodegenContext): (String, Boolean)
 }
 

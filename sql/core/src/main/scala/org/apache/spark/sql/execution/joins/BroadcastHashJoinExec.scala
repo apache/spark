@@ -213,10 +213,6 @@ case class BroadcastHashJoinExec(
     (broadcastRelation, relationTerm)
   }
 
-  /**
-   * Returns a tuple of variable name for broadcast HashedRelation,
-   * and a boolean to indicate whether keys of HashedRelation to be unique.
-   */
   protected override def prepareRelation(ctx: CodegenContext): (String, Boolean) = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     (relationTerm, broadcastRelation.value.keyIsUnique)

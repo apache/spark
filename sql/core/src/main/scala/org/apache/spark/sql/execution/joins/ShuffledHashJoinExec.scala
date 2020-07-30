@@ -81,10 +81,6 @@ case class ShuffledHashJoinExec(
 
   override def needCopyResult: Boolean = true
 
-  /**
-   * Returns a tuple of variable name for HashedRelation,
-   * and boolean false to indicate key not to be known unique in code-gen time.
-   */
   protected override def prepareRelation(ctx: CodegenContext): (String, Boolean) = {
     val thisPlan = ctx.addReferenceObj("plan", this)
     val clsName = classOf[HashedRelation].getName

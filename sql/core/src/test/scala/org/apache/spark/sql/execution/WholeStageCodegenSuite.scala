@@ -76,11 +76,21 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       val df1 = spark.range(5).select($"id".as("k1"))
       val df2 = spark.range(15).select($"id".as("k2"))
-      val df = df1.join(df2, $"k1" === $"k2")
-      assert(df.queryExecution.executedPlan.find(p =>
-        p.isInstanceOf[WholeStageCodegenExec] &&
-          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[ShuffledHashJoinExec]).isDefined)
-      checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4)))
+      val df3 = spark.range(6).select($"id".as("k3"))
+
+      // One shuffled hash join
+      val oneJoinDF = df1.join(df2, $"k1" === $"k2")
+      assert(oneJoinDF.queryExecution.executedPlan.collect {
+        case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
+      }.size === 1)
+      checkAnswer(oneJoinDF, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4)))
+
+      val twoJoinsDF = df1.join(df2, $"k1" === $"k2").join(df3, $"k1" === $"k3")
+      assert(twoJoinsDF.queryExecution.executedPlan.collect {
+        case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
+      }.size === 2)
+      checkAnswer(twoJoinsDF,
+        Seq(Row(0, 0, 0), Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
     }
   }
 
