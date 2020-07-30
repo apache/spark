@@ -78,13 +78,14 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       val df2 = spark.range(15).select($"id".as("k2"))
       val df3 = spark.range(6).select($"id".as("k3"))
 
-      // One shuffled hash join
+      // test one shuffled hash join
       val oneJoinDF = df1.join(df2, $"k1" === $"k2")
       assert(oneJoinDF.queryExecution.executedPlan.collect {
         case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
       }.size === 1)
       checkAnswer(oneJoinDF, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4)))
 
+      // test two shuffled hash joins
       val twoJoinsDF = df1.join(df2, $"k1" === $"k2").join(df3, $"k1" === $"k3")
       assert(twoJoinsDF.queryExecution.executedPlan.collect {
         case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
