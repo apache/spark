@@ -33,7 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Check that TPCDS SparkPlans don't change.
- * If there is a regression, the error message looks like this:
+ * If there are plan differences, the error message looks like this:
  *   Plans did not match:
  *   last approved plan: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/0.simplified.txt
  *   last explain: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/0.explain.txt
