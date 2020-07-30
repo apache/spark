@@ -591,6 +591,15 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes / 8);
   }
 
+  public boolean allNull() {
+    for (int i = 0; i < numFields; i++) {
+      if (!BitSetMethods.isSet(baseObject, baseOffset, i)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /**
    * Writes the content of this row into a memory address, identified by an object and an offset.
    * The target memory address must already been allocated, and have enough space to hold all the

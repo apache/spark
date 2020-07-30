@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -393,33 +395,42 @@ object PhysicalWindow {
 
 object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with PredicateHelper {
 
-  // TODO support multi column NULL-aware anti join in future.
-  // See. http://www.vldb.org/pvldb/vol2/vldb09-423.pdf Section 6
-  // multi-column null aware anti join is much more complicated than single column ones.
-
   // streamedSideKeys, buildSideKeys
   private type ReturnType = (Seq[Expression], Seq[Expression])
 
-  /**
-   * See. [SPARK-32290]
-   * LeftAnti(condition: Or(EqualTo(a=b), IsNull(EqualTo(a=b)))
-   * will almost certainly be planned as a Broadcast Nested Loop join,
-   * which is very time consuming because it's an O(M*N) calculation.
-   * But if it's a single column case O(M*N) calculation could be optimized into O(M)
-   * using hash lookup instead of loop lookup.
-   */
   def unapply(join: Join): Option[ReturnType] = join match {
-    case Join(left, right, LeftAnti,
-      Some(Or(e @ EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
-        IsNull(e2 @ EqualTo(_, _)))), _)
-        if SQLConf.get.optimizeNullAwareAntiJoin &&
-          e.semanticEquals(e2) =>
-      if (canEvaluate(leftAttr, left) && canEvaluate(rightAttr, right)) {
-        Some(Seq(leftAttr), Seq(rightAttr))
-      } else if (canEvaluate(leftAttr, right) && canEvaluate(rightAttr, left)) {
-        Some(Seq(rightAttr), Seq(leftAttr))
-      } else {
+    case Join(left, right, LeftAnti, condition, _) if SQLConf.get.optimizeNullAwareAntiJoin =>
+      val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
+      if (predicates.isEmpty ||
+        predicates.length > SQLConf.get.optimizeNullAwareAntiJoinMaxNumKeys) {
         None
+      } else {
+        val leftKeys = ArrayBuffer[Expression]()
+        val rightKeys = ArrayBuffer[Expression]()
+
+        // all predicate must match pattern condition: Or(EqualTo(a=b), IsNull(EqualTo(a=b)))
+        val allMatch = predicates.forall {
+          case Or(e @ EqualTo(leftExpr: Expression, rightExpr: Expression),
+              IsNull(e2 @ EqualTo(_, _))) if e.semanticEquals(e2) =>
+            if (canEvaluate(leftExpr, left) && canEvaluate(rightExpr, right)) {
+              leftKeys += leftExpr
+              rightKeys += rightExpr
+              true
+            } else if (canEvaluate(leftExpr, right) && canEvaluate(rightExpr, left)) {
+              leftKeys += rightExpr
+              rightKeys += leftExpr
+              true
+            } else {
+              false
+            }
+          case _ => false
+        }
+
+        if (allMatch) {
+          Some(leftKeys, rightKeys)
+        } else {
+          None
+        }
       }
     case _ => None
   }

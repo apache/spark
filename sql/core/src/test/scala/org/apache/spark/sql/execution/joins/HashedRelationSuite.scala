@@ -580,4 +580,100 @@ class HashedRelationSuite extends SharedSparkSession {
       assert(proj(packedKeys).get(0, dt) == -i - 1)
     }
   }
+
+  test("NullAwareHashedRelation") {
+    val singleKey = Seq(BoundReference(0, LongType, true))
+    val multiKey = Seq(BoundReference(0, IntegerType, true),
+      BoundReference(1, LongType, true),
+      BoundReference(2, StringType, true)
+    )
+
+    val singleProjection = UnsafeProjection.create(singleKey)
+    val multiProjection = UnsafeProjection.create(multiKey)
+
+    var hashedRelation: HashedRelation = null
+
+    // singleKey EmptyHashedRelation
+    hashedRelation = HashedRelation(
+      Seq.empty[InternalRow].iterator,
+      singleKey, taskMemoryManager = mm, isNullAware = true)
+    assert(hashedRelation == EmptyHashedRelation)
+
+    // multiKey EmptyHashedRelation
+    hashedRelation = HashedRelation(
+      Seq.empty[InternalRow].iterator,
+      multiKey, taskMemoryManager = mm, isNullAware = true)
+    assert(hashedRelation == EmptyHashedRelation)
+
+    // singleKey EmptyHashedRelationWithAllNullKeys
+    val data1 = Seq(
+      Seq(1L),
+      Seq(null),
+      Seq(2L)
+    )
+
+    hashedRelation = HashedRelation(
+      data1.map(InternalRow.fromSeq).map(row => singleProjection(row).copy()).iterator,
+      singleKey, taskMemoryManager = mm, isNullAware = true)
+    assert(hashedRelation == EmptyHashedRelationWithAllNullKeys)
+
+    // multiKey EmptyHashedRelationWithAllNullKeys
+    val data2 = Seq(
+      Seq(1, 1L, UTF8String.fromString("1")),
+      Seq(null, null, null),
+      Seq(2, 2L, UTF8String.fromString("2"))
+    )
+
+    hashedRelation = HashedRelation(
+      data2.map(InternalRow.fromSeq).map(row => multiProjection(row).copy()).iterator,
+      multiKey, taskMemoryManager = mm, isNullAware = true)
+    assert(hashedRelation == EmptyHashedRelationWithAllNullKeys)
+
+    // singleKey AllNullKeys not exists
+    val data3 = Seq(
+      Seq(1L),
+      Seq(2L)
+    )
+    hashedRelation = HashedRelation(
+      data3.map(InternalRow.fromSeq).map(row => singleProjection(row).copy()).iterator,
+      singleKey, taskMemoryManager = mm, isNullAware = true)
+    assert(hashedRelation.isInstanceOf[LongHashedRelation])
+    assert(hashedRelation.keys().length == 2)
+
+    // multiKey AllNullKeys not exists
+    val data4 = Seq(
+      Seq(1, null, UTF8String.fromString("1")),
+      Seq(null, 5L, null),
+      Seq(2, 2L, UTF8String.fromString("2"))
+    )
+    hashedRelation = HashedRelation(
+      data4.map(InternalRow.fromSeq).map(row => multiProjection(row).copy()).iterator,
+      multiKey, taskMemoryManager = mm, isNullAware = true)
+    assert(hashedRelation.isInstanceOf[UnsafeHashedRelation])
+    // Original 3 Records will be expanded into 7X
+    // which is 21 in total
+    assert(hashedRelation.asInstanceOf[UnsafeHashedRelation].keys().length == 21)
+
+    // key verification after distinct
+    val data5 = Seq(
+      Seq(1, null, UTF8String.fromString("1")),
+      Seq(null, null, UTF8String.fromString("1")),
+      Seq(1, null, null),
+      Seq(null, null, null),
+      Seq(null, 5L, null),
+      Seq(2, 2L, UTF8String.fromString("2")),
+      Seq(null, 2L, UTF8String.fromString("2")),
+      Seq(2, null, UTF8String.fromString("2")),
+      Seq(2, 2L, null),
+      Seq(null, null, UTF8String.fromString("2")),
+      Seq(null, 2L, null),
+      Seq(2, null, null)
+    )
+
+    assert(
+      data5.map(InternalRow.fromSeq)
+        .map(row => multiProjection(row).copy())
+        .forall(row => hashedRelation.get(row) != null)
+    )
+  }
 }
