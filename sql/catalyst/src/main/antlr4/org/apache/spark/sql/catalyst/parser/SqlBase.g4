@@ -266,7 +266,7 @@ statement
 configKey
     : configIdentifier (('.' | ':') configIdentifier
         // The two semantic predicates make sure that no token on the hidden channel
-        // (e.g., spaces) exists between the config separator ('.' or ':').
+        // (e.g., spaces) exists before/after the config separator ('.' or ':').
         {!isHidden(-3)}? {!isHidden(-2)}?)*
     | quotedIdentifier
     ;
