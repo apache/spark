@@ -167,19 +167,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Seq("100", "300"), Seq("200", "400")) ::
         Row(Seq("101", "301"), Seq("201", "401")) ::
         Row(Seq("102", "302"), Seq("202", "402")) :: Nil)
-
-    // for testing the mutable state of the expression in code gen.
-    // This is a hack way to enable the codegen, thus the codegen is enable by default,
-    // it will still use the interpretProjection if projection followed by a LocalRelation,
-    // hence we add a filter operator.
-    // See the optimizer rule `ConvertToLocalRelation`
-    checkAnswer(
-      df.filter("isnotnull(a)").selectExpr(
-        "regexp_extract_all(a, b, 0)",
-        "regexp_extract_all(a, b, 1)"),
-      Row(Seq("100-200", "300-400"), Seq("100", "300")) ::
-        Row(Seq("101-201", "301-401"), Seq("101", "301")) ::
-        Row(Seq("102", "202", "302", "402"), Seq("102", "202", "302", "402")) :: Nil)
   }
 
   test("non-matching optional group") {

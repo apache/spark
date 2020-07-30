@@ -438,7 +438,7 @@ abstract class RegExpExtractBase
   override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
 
   protected def getLastMatcher(s: Any, p: Any): Matcher = {
-    if (!p.equals(lastRegex)) {
+    if (p != lastRegex) {
       // regex value changed
       lastRegex = p.asInstanceOf[UTF8String].clone()
       pattern = Pattern.compile(lastRegex.toString)
@@ -472,10 +472,9 @@ abstract class RegExpExtractBase
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
       * idx - an integer expression that representing the group index. The regex maybe contains
           multiple groups. `idx` indicates which regex group to extract. The group index should
-          be non-negative. If `idx` is not specified, the default group index value is 1. The
-          `idx` parameter is the Java regex Matcher group() method index. See
-          docs/api/java/util/regex/Matcher.html for more information on the `idx` or Java regex
-          group() method.
+          be non-negative. The minimum value of `idx` is 0, which means matching the entire
+          regular expression. If `idx` is not specified, the default group index value is 1. The
+          `idx` parameter is the Java regex Matcher group() method index.
   """,
   examples = """
     Examples:
@@ -521,6 +520,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     } else {
       ""
     }
+
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
       if (!$regexp.equals($termLastRegex)) {
@@ -572,17 +572,16 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
       * idx - an integer expression that representing the group index. The regex may contains
           multiple groups. `idx` indicates which regex group to extract. The group index should
-          be non-negative. If `idx` is not specified, the default group index value is 1. The
-          `idx` parameter is the Java regex Matcher group() method index. See
-          docs/api/java/util/regex/Matcher.html for more information on the `idx` or Java regex
-          group() method.
+          be non-negative. The minimum value of `idx` is 0, which means matching the entire
+          regular expression. If `idx` is not specified, the default group index value is 1. The
+          `idx` parameter is the Java regex Matcher group() method index.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('100-200, 300-400', '(\\d+)-(\\d+)', 1);
        ["100","300"]
   """,
-  since = "3.0.0")
+  since = "3.1.0")
 case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expression)
   extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))

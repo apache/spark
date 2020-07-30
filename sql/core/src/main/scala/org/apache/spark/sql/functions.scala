@@ -2495,7 +2495,7 @@ object functions {
    * will be thrown.
    *
    * @group string_funcs
-   * @since 3.0.0
+   * @since 3.1.0
    */
   def regexp_extract_all(e: Column, exp: String, groupIdx: Int): Column = withExpr {
     RegExpExtractAll(e.expr, lit(exp).expr, lit(groupIdx).expr)
