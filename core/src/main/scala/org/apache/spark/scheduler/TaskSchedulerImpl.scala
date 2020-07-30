@@ -662,9 +662,9 @@ private[spark] class TaskSchedulerImpl(
                   // in order to provision more executors to make them schedulable
                   if (Utils.isDynamicAllocationEnabled(conf)) {
                     if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
-                      logInfo(s"Notifying ExecutorAllocationManager to allocate more executors to" +
-                        s" schedule the unschedulable task before aborting" +
-                        s" stage ${taskSet.stageId}.")
+                      logInfo("Notifying ExecutorAllocationManager to allocate more executors to" +
+                        " schedule the unschedulable task before aborting" +
+                        " stage ${taskSet.stageId}.")
                       dagScheduler.unschedulableTaskSetAdded(taskSet.taskSet.stageId,
                         taskSet.taskSet.stageAttemptId)
                       updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
