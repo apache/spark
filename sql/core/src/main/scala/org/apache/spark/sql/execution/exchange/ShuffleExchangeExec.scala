@@ -83,7 +83,12 @@ trait ShuffleExchangeLike extends Exchange {
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    canChangeNumPartitions: Boolean = true) extends ShuffleExchangeLike {
+    isUserSpecifiedNumPartitions: Boolean = false) extends ShuffleExchangeLike {
+
+  // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
+  // For `SinglePartition`, it requires exactly one partition and we can't change it either.
+  override def canChangeNumPartitions: Boolean =
+    !isUserSpecifiedNumPartitions && outputPartitioning != SinglePartition
 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
