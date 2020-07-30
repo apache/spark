@@ -96,17 +96,12 @@ case class InMemoryTableScanExec(
         if (enableAccumulatorsForTest && iter.hasNext) {
           readPartitions.add(1)
         }
-        new Iterator[CachedBatch] {
-          override def hasNext: Boolean = iter.hasNext
-
-          override def next(): CachedBatch = {
-            val batch = iter.next
-            if (enableAccumulatorsForTest) {
-              readBatches.add(1)
-            }
-            numOutputRows += batch.numRows
-            batch
+        iter.map { batch =>
+          if (enableAccumulatorsForTest) {
+            readBatches.add(1)
           }
+          numOutputRows += batch.numRows
+          batch
         }
       }
     serializer.convertCachedBatchToInternalRow(withMetrics, relOutput, attributes, conf)
