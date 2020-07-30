@@ -108,7 +108,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
   }
 
-  var cases = Seq(
+  val cases = Seq(
     "application list json" -> "applications",
     "completed app list json" -> "applications?status=completed",
     "running app list json" -> "applications?status=running",
@@ -201,7 +201,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       import org.json4s._
       import org.json4s.jackson.JsonMethods._
       val jsonAst = parse(clearLastUpdated(jsonOpt.get))
-      val c = jsonAst.children
       val expAst = parse(exp)
       assertValidDataInJson(jsonAst, expAst)
     }
