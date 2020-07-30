@@ -189,34 +189,20 @@ class OrcSerializer(dataSchema: StructType) {
       val orcSchema = schemaConverter(dataType)
       // Need to put all converted values to a list, can't reuse object.
       val elementConverter = newConverter(elementType, false)
-      val baseArrayConverter: (OrcList[WritableComparable[_]], SpecializedGetters, Int) => Unit = {
-        (result, getter, ordinal) => {
-          val array = getter.getArray(ordinal)
-          var i = 0
-          while (i < array.numElements()) {
-            if (array.isNullAt(i)) {
-              result.add(null)
-            } else {
-              result.add(elementConverter(array, i))
-            }
-            i += 1
+      (getter, ordinal) => {
+        val array = getter.getArray(ordinal)
+        val length = array.numElements()
+        val result = new OrcList[WritableComparable[_]](orcSchema, length)
+        var i = 0
+        while (i < length) {
+          if (array.isNullAt(i)) {
+            result.add(null)
+          } else {
+            result.add(elementConverter(array, i))
           }
+          i += 1
         }
-      }
-
-      if (reuseObj) {
-        val result = new OrcList[WritableComparable[_]](orcSchema)
-        (getter, ordinal) => {
-          result.clear()
-          baseArrayConverter.apply(result, getter, ordinal)
-          result
-        }
-      } else {
-        (getter, ordinal) => {
-          val result = new OrcList[WritableComparable[_]](orcSchema)
-          baseArrayConverter.apply(result, getter, ordinal)
-          result
-        }
+        result
       }
 
     case MapType(keyType, valueType, _) =>
