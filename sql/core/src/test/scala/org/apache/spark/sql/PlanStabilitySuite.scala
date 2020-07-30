@@ -57,7 +57,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
 
-  private var originalMaxToStringFields = conf.maxToStringFields
+  private val originalMaxToStringFields = conf.maxToStringFields
 
   override def beforeAll(): Unit = {
     conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, 100)
