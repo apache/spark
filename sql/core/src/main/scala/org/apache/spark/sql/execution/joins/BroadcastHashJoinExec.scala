@@ -51,8 +51,6 @@ case class BroadcastHashJoinExec(
   extends HashJoin with CodegenSupport {
 
   if (isNullAwareAntiJoin) {
-    require(leftKeys.length == 1, "leftKeys length should be 1")
-    require(rightKeys.length == 1, "rightKeys length should be 1")
     require(joinType == LeftAnti, "joinType must be LeftAnti.")
     require(buildSide == BuildRight, "buildSide must be BuildRight.")
     require(condition.isEmpty, "null aware anti join optimize condition should be empty.")
@@ -158,7 +156,7 @@ case class BroadcastHashJoinExec(
           )
           streamedIter.filter(row => {
             val lookupKey: UnsafeRow = keyGenerator(row)
-            if (lookupKey.anyNull()) {
+            if (lookupKey.allNull()) {
               false
             } else {
               // Anti Join: Drop the row on the streamed side if it is a match on the build
@@ -491,6 +489,7 @@ case class BroadcastHashJoinExec(
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     if (isNullAwareAntiJoin) {
+      val isLongHashedRelation = broadcastRelation.value.isInstanceOf[LongHashedRelation]
       if (broadcastRelation.value == EmptyHashedRelation) {
         return s"""
                   |// If the right side is empty, NAAJ simply returns the left side.
@@ -507,7 +506,7 @@ case class BroadcastHashJoinExec(
                   |boolean $found = false;
                   |// generate join key for stream side
                   |${keyEv.code}
-                  |if ($anyNull) {
+                  |if (${ if (isLongHashedRelation) s"$anyNull" else s"${keyEv.value}.allNull()"}) {
                   |  $found = true;
                   |} else {
                   |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});

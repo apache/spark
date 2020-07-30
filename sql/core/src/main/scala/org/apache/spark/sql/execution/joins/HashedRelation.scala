@@ -327,11 +327,29 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
+    val nullPaddingCombinations: Seq[UnsafeProjection] = if (isNullAware) {
+      // C(numKeys, 0), C(numKeys, 1) ... C(numKeys, numKeys - 1)
+      // In total 2^numKeys - 1 records will be appended.
+      key.indices.flatMap(n => {
+        key.indices.combinations(n)
+          .map(combination => {
+            // combination is Seq[Int] indicates which key should be replaced to null padding.
+            UnsafeProjection.create(
+              key.indices.map(index => {
+                if (combination.contains(index)) {
+                  Literal.create(null, key(index).dataType)
+                } else {
+                  key(index)
+                }
+              })
+            )
+          })
+      })
+    } else {
+      Seq.empty
+    }
     while (input.hasNext) {
-      val row = input.next().asInstanceOf[UnsafeRow]
-      numFields = row.numFields()
-      val key = keyGenerator(row)
-      if (!key.anyNull) {
+      def append(key: UnsafeRow, row: UnsafeRow): Unit = {
         val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
         val success = loc.append(
           key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
@@ -342,8 +360,19 @@ private[joins] object UnsafeHashedRelation {
           throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
           // scalastyle:on throwerror
         }
-      } else if (isNullAware) {
-        return EmptyHashedRelationWithAllNullKeys
+      }
+
+      val row = input.next().asInstanceOf[UnsafeRow]
+      numFields = row.numFields()
+      val key = keyGenerator(row)
+      if (isNullAware) {
+        // fast stop when all null column key found.
+        if (key.allNull()) {
+          return EmptyHashedRelationWithAllNullKeys
+        }
+        nullPaddingCombinations.foreach(project => append(project(row).copy(), row))
+      } else if (!key.anyNull) {
+        append(key, row)
       }
     }
 
