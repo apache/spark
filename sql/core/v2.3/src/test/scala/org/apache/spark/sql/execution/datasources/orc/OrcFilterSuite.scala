@@ -26,12 +26,10 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.NestedColumnPredicateTest
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
@@ -45,7 +43,7 @@ import org.apache.spark.sql.types._
  * - OrcFilterSuite uses 'org.apache.orc.storage.ql.io.sarg' package.
  * - HiveOrcFilterSuite uses 'org.apache.hadoop.hive.ql.io.sarg' package.
  */
-class OrcFilterSuite extends OrcTest with NestedColumnPredicateTest with SharedSparkSession {
+class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
   override protected def sparkConf: SparkConf =
     super
@@ -94,208 +92,200 @@ class OrcFilterSuite extends OrcTest with NestedColumnPredicateTest with SharedS
   }
 
   test("filter pushdown - integer") {
-    import testImplicits._
-    withNestedDataFrame(
-      (1 to 4).map(i => Tuple1(Option(i))).toDF("i")) { case (inputDF, colName, _) =>
-      withOrcDataFrame(inputDF) { implicit df =>
-        val intAttr = df(colName).expr
-        assert(df(colName).expr.dataType === IntegerType)
+    withNestedOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { case (inputDF, colName, _) =>
+      implicit val df: DataFrame = inputDF
 
-        checkFilterPredicate(intAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      val intAttr = df(colName).expr
+      assert(df(colName).expr.dataType === IntegerType)
 
-        checkFilterPredicate(intAttr === 1, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(intAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(intAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-        checkFilterPredicate(intAttr < 2, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(intAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(intAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(intAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(intAttr === 1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(intAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-        checkFilterPredicate(Literal(1) === intAttr, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(Literal(1) <=> intAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-        checkFilterPredicate(Literal(2) > intAttr, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(Literal(3) < intAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(1) >= intAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(4) <= intAttr, PredicateLeaf.Operator.LESS_THAN)
-      }
+      checkFilterPredicate(intAttr < 2, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(intAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(intAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(intAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(1) === intAttr, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(1) <=> intAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(2) > intAttr, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(3) < intAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(1) >= intAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(4) <= intAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - long") {
-    import testImplicits._
-    withNestedDataFrame(
-      (1 to 4).map(i => Tuple1(Option(i.toLong))).toDF) { case (inputDF, colName, _) =>
-      withOrcDataFrame(inputDF) { implicit df =>
-        val longAttr = df(colName).expr
-        assert(df(colName).expr.dataType === LongType)
+    withNestedOrcDataFrame(
+        (1 to 4).map(i => Tuple1(Option(i.toLong)))) { case (inputDF, colName, _) =>
+      implicit val df: DataFrame = inputDF
 
-        checkFilterPredicate(longAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      val longAttr = df(colName).expr
+      assert(df(colName).expr.dataType === LongType)
 
-        checkFilterPredicate(longAttr === 1, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(longAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(longAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-        checkFilterPredicate(longAttr < 2, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(longAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(longAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(longAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(longAttr === 1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(longAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-        checkFilterPredicate(Literal(1) === longAttr, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(Literal(1) <=> longAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-        checkFilterPredicate(Literal(2) > longAttr, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(Literal(3) < longAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(1) >= longAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(4) <= longAttr, PredicateLeaf.Operator.LESS_THAN)
-      }
+      checkFilterPredicate(longAttr < 2, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(longAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(longAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(longAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(1) === longAttr, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(1) <=> longAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(2) > longAttr, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(3) < longAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(1) >= longAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(4) <= longAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - float") {
-    import testImplicits._
-    withNestedDataFrame(
-      (1 to 4).map(i => Tuple1(Option(i.toFloat))).toDF) { case (inputDF, colName, _) =>
-      withOrcDataFrame(inputDF) { implicit df =>
-        val floatAttr = df(colName).expr
-        assert(df(colName).expr.dataType === FloatType)
+    withNestedOrcDataFrame(
+        (1 to 4).map(i => Tuple1(Option(i.toFloat)))) { case (inputDF, colName, _) =>
+      implicit val df: DataFrame = inputDF
 
-        checkFilterPredicate(floatAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      val floatAttr = df(colName).expr
+      assert(df(colName).expr.dataType === FloatType)
 
-        checkFilterPredicate(floatAttr === 1, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(floatAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(floatAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-        checkFilterPredicate(floatAttr < 2, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(floatAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(floatAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(floatAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(floatAttr === 1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(floatAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-        checkFilterPredicate(Literal(1) === floatAttr, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(Literal(1) <=> floatAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-        checkFilterPredicate(Literal(2) > floatAttr, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(Literal(3) < floatAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(1) >= floatAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(4) <= floatAttr, PredicateLeaf.Operator.LESS_THAN)
-      }
+      checkFilterPredicate(floatAttr < 2, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(floatAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(floatAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(floatAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(1) === floatAttr, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(1) <=> floatAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(2) > floatAttr, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(3) < floatAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(1) >= floatAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(4) <= floatAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - double") {
-    import testImplicits._
-    withNestedDataFrame(
-      (1 to 4).map(i => Tuple1(Option(i.toDouble))).toDF) { case (inputDF, colName, _) =>
-      withOrcDataFrame(inputDF) { implicit df =>
-        val doubleAttr = df(colName).expr
-        assert(df(colName).expr.dataType === DoubleType)
+    withNestedOrcDataFrame(
+      (1 to 4).map(i => Tuple1(Option(i.toDouble)))) { case (inputDF, colName, _) =>
+      implicit val df: DataFrame = inputDF
 
-        checkFilterPredicate(doubleAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      val doubleAttr = df(colName).expr
+      assert(df(colName).expr.dataType === DoubleType)
 
-        checkFilterPredicate(doubleAttr === 1, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(doubleAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(doubleAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-        checkFilterPredicate(doubleAttr < 2, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(doubleAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(doubleAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(doubleAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(doubleAttr === 1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(doubleAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-        checkFilterPredicate(Literal(1) === doubleAttr, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(Literal(1) <=> doubleAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-        checkFilterPredicate(Literal(2) > doubleAttr, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(Literal(3) < doubleAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(1) >= doubleAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(4) <= doubleAttr, PredicateLeaf.Operator.LESS_THAN)
-      }
+      checkFilterPredicate(doubleAttr < 2, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(doubleAttr > 3, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(doubleAttr <= 1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(doubleAttr >= 4, PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(1) === doubleAttr, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(1) <=> doubleAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(2) > doubleAttr, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(3) < doubleAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(1) >= doubleAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(4) <= doubleAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - string") {
-    import testImplicits._
-    withNestedDataFrame(
-      (1 to 4).map(i => Tuple1(i.toString)).toDF) { case (inputDF, colName, _) =>
-      withOrcDataFrame(inputDF) { implicit df =>
-        val strAttr = df(colName).expr
-        assert(df(colName).expr.dataType === StringType)
+    withNestedOrcDataFrame(
+        (1 to 4).map(i => Tuple1(i.toString))) { case (inputDF, colName, _) =>
+      implicit val df: DataFrame = inputDF
 
-        checkFilterPredicate(strAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      val strAttr = df(colName).expr
+      assert(df(colName).expr.dataType === StringType)
 
-        checkFilterPredicate(strAttr === "1", PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(strAttr <=> "1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(strAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-        checkFilterPredicate(strAttr < "2", PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(strAttr > "3", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(strAttr <= "1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(strAttr >= "4", PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(strAttr === "1", PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(strAttr <=> "1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-        checkFilterPredicate(Literal("1") === strAttr, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(Literal("1") <=> strAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-        checkFilterPredicate(Literal("2") > strAttr, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(Literal("3") < strAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal("1") >= strAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal("4") <= strAttr, PredicateLeaf.Operator.LESS_THAN)
-      }
+      checkFilterPredicate(strAttr < "2", PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(strAttr > "3", PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(strAttr <= "1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(strAttr >= "4", PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal("1") === strAttr, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal("1") <=> strAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal("2") > strAttr, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal("3") < strAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal("1") >= strAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal("4") <= strAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - boolean") {
-    import testImplicits._
-    withNestedDataFrame(
-      (true :: false :: Nil).map(b => Tuple1.apply(Option(b))).toDF) { case (inputDF, colName, _) =>
-      withOrcDataFrame(inputDF) { implicit df =>
-        val booleanAttr = df(colName).expr
-        assert(df(colName).expr.dataType === BooleanType)
+    withNestedOrcDataFrame(
+        (true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { case (inputDF, colName, _) =>
+      implicit val df: DataFrame = inputDF
 
-        checkFilterPredicate(booleanAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      val booleanAttr = df(colName).expr
+      assert(df(colName).expr.dataType === BooleanType)
 
-        checkFilterPredicate(booleanAttr === true, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(booleanAttr <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(booleanAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-        checkFilterPredicate(booleanAttr < true, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(booleanAttr > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(booleanAttr <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(booleanAttr >= false, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(booleanAttr === true, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(booleanAttr <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-        checkFilterPredicate(Literal(false) === booleanAttr, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(Literal(false) <=> booleanAttr,
-          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-        checkFilterPredicate(Literal(false) > booleanAttr, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(Literal(true) < booleanAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(true) >= booleanAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(Literal(true) <= booleanAttr, PredicateLeaf.Operator.LESS_THAN)
-      }
+      checkFilterPredicate(booleanAttr < true, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(booleanAttr > false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(booleanAttr <= false, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(booleanAttr >= false, PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(false) === booleanAttr, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(false) <=> booleanAttr,
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(false) > booleanAttr, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(true) < booleanAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) >= booleanAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(true) <= booleanAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
   test("filter pushdown - decimal") {
-    import testImplicits._
-    withNestedDataFrame((1 to 4)
-      .map(i => Tuple1.apply(BigDecimal.valueOf(i))).toDF) { case (inputDF, colName, _) =>
-      withOrcDataFrame(inputDF) { implicit df =>
-        val decimalAttr = df(colName).expr
-        assert(df(colName).expr.dataType === DecimalType(38, 18))
+    withNestedOrcDataFrame((1 to 4)
+      .map(i => Tuple1.apply(BigDecimal.valueOf(i)))) { case (inputDF, colName, _) =>
+      implicit val df: DataFrame = inputDF
 
-        checkFilterPredicate(decimalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      val decimalAttr = df(colName).expr
+      assert(df(colName).expr.dataType === DecimalType(38, 18))
 
-        checkFilterPredicate(decimalAttr === BigDecimal.valueOf(1), PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(decimalAttr <=> BigDecimal.valueOf(1),
-          PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(decimalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
 
-        checkFilterPredicate(decimalAttr < BigDecimal.valueOf(2), PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(decimalAttr > BigDecimal.valueOf(3),
-          PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(decimalAttr <= BigDecimal.valueOf(1),
-          PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(decimalAttr >= BigDecimal.valueOf(4), PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(decimalAttr === BigDecimal.valueOf(1), PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(decimalAttr <=> BigDecimal.valueOf(1),
+        PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-        checkFilterPredicate(
-          Literal(BigDecimal.valueOf(1)) === decimalAttr, PredicateLeaf.Operator.EQUALS)
-        checkFilterPredicate(
-          Literal(BigDecimal.valueOf(1)) <=> decimalAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-        checkFilterPredicate(
-          Literal(BigDecimal.valueOf(2)) > decimalAttr, PredicateLeaf.Operator.LESS_THAN)
-        checkFilterPredicate(
-          Literal(BigDecimal.valueOf(3)) < decimalAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(
-          Literal(BigDecimal.valueOf(1)) >= decimalAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
-        checkFilterPredicate(
-          Literal(BigDecimal.valueOf(4)) <= decimalAttr, PredicateLeaf.Operator.LESS_THAN)
-      }
+      checkFilterPredicate(decimalAttr < BigDecimal.valueOf(2), PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(decimalAttr > BigDecimal.valueOf(3),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(decimalAttr <= BigDecimal.valueOf(1),
+        PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(decimalAttr >= BigDecimal.valueOf(4), PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(1)) === decimalAttr, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(1)) <=> decimalAttr, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(2)) > decimalAttr, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(3)) < decimalAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(1)) >= decimalAttr, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(4)) <= decimalAttr, PredicateLeaf.Operator.LESS_THAN)
     }
   }
 
@@ -339,28 +329,26 @@ class OrcFilterSuite extends OrcTest with NestedColumnPredicateTest with SharedS
   }
 
   test("filter pushdown - combinations with logical operators") {
-    import testImplicits._
-
-    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i))).toDF) { implicit df =>
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
       checkFilterPredicate(
-        UnresolvedAttribute("_1").isNotNull,
+        $"_1".isNotNull,
         "leaf-0 = (IS_NULL _1), expr = (not leaf-0)"
       )
       checkFilterPredicate(
-        UnresolvedAttribute("_1") =!= 1,
+        $"_1" =!= 1,
         "leaf-0 = (IS_NULL _1), leaf-1 = (EQUALS _1 1), expr = (and (not leaf-0) (not leaf-1))"
       )
       checkFilterPredicate(
-        !(UnresolvedAttribute("_1") < 4),
+        !($"_1" < 4),
         "leaf-0 = (IS_NULL _1), leaf-1 = (LESS_THAN _1 4), expr = (and (not leaf-0) (not leaf-1))"
       )
       checkFilterPredicate(
-        UnresolvedAttribute("_1") < 2 || UnresolvedAttribute("_1") > 3,
+        $"_1" < 2 || $"_1" > 3,
         "leaf-0 = (LESS_THAN _1 2), leaf-1 = (LESS_THAN_EQUALS _1 3), " +
           "expr = (or leaf-0 (not leaf-1))"
       )
       checkFilterPredicate(
-        UnresolvedAttribute("_1") < 2 && UnresolvedAttribute("_1") > 3,
+        $"_1" < 2 && $"_1" > 3,
         "leaf-0 = (IS_NULL _1), leaf-1 = (LESS_THAN _1 2), leaf-2 = (LESS_THAN_EQUALS _1 3), " +
           "expr = (and (not leaf-0) leaf-1 (not leaf-2))"
       )
@@ -399,22 +387,20 @@ class OrcFilterSuite extends OrcTest with NestedColumnPredicateTest with SharedS
   }
 
   test("no filter pushdown - non-supported types") {
-    import testImplicits._
-
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
     }
     // ArrayType
-    withOrcDataFrame((1 to 4).map(i => Tuple1(Array(i))).toDF) { implicit df =>
-      checkNoFilterPredicate(UnresolvedAttribute("_1").isNull, noneSupported = true)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Array(i)))) { implicit df =>
+      checkNoFilterPredicate($"_1".isNull, noneSupported = true)
     }
     // BinaryType
-    withOrcDataFrame((1 to 4).map(i => Tuple1(i.b)).toDF) { implicit df =>
-      checkNoFilterPredicate(UnresolvedAttribute("_1") <=> 1.b, noneSupported = true)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(i.b))) { implicit df =>
+      checkNoFilterPredicate($"_1" <=> 1.b, noneSupported = true)
     }
     // MapType
-    withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i))).toDF) { implicit df =>
-      checkNoFilterPredicate(UnresolvedAttribute("_1").isNotNull, noneSupported = true)
+    withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i)))) { implicit df =>
+      checkNoFilterPredicate($"_1".isNotNull, noneSupported = true)
     }
   }
 

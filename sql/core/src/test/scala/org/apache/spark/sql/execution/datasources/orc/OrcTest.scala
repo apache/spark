@@ -78,16 +78,12 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
       (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
   /**
-   * Writes `df` dataframe to a Orc file and reads it back as a `DataFrame`,
+   * Writes `date` dataframe to a Orc file and reads it back as a `DataFrame`,
    * which is then passed to `f`. The Orc file will be deleted after `f` returns.
    */
-  protected def withOrcDataFrame(df: DataFrame, testVectorized: Boolean = true)
-      (f: DataFrame => Unit): Unit = {
-    withTempPath { file =>
-      df.write.format(dataSourceName).save(file.getCanonicalPath)
-      readFile(file.getCanonicalPath, testVectorized)(f)
-    }
-  }
+  protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
+      (data: Seq[T], testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = withDataSourceDataFrame(data, testVectorized)(f)
 
   /**
    * Writes `data` to a Orc file, reads it back as a `DataFrame` and registers it as a
@@ -146,5 +142,27 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
     file.deleteOnExit();
     FileUtils.copyURLToFile(url, file)
     spark.read.orc(file.getAbsolutePath)
+  }
+
+  /**
+   * Takes a sequence of products `data` to generate multi-level nested
+   * dataframes as new test data. It tests both non-nested and nested dataframes
+   * which are written and read back with Orc datasource.
+   *
+   * This is different from [[OrcTest.withOrcDataFrame]] which does not
+   * test nested cases.
+   */
+  protected def withNestedOrcDataFrame[T <: Product: ClassTag: TypeTag](data: Seq[T])
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit =
+    withNestedOrcDataFrame(spark.createDataFrame(data))(runTest)
+
+  protected def withNestedOrcDataFrame(inputDF: DataFrame)
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit = {
+    withNestedDataFrame(inputDF).foreach { case (newDF, colName, resultFun) =>
+      withTempPath { file =>
+        newDF.write.format(dataSourceName).save(file.getCanonicalPath)
+        readFile(file.getCanonicalPath, true) { df => runTest(df, colName, resultFun) }
+      }
+    }
   }
 }
