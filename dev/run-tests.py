@@ -610,8 +610,14 @@ def main():
 
     # Install SparkR
     should_only_test_modules = opts.modules is not None
-    if not should_only_test_modules:
+    test_modules = []
+    if should_only_test_modules:
+        str_test_modules = [m.strip() for m in opts.modules.split(",")]
+        test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
+
+    if not should_only_test_modules or modules.sparkr in test_modules:
         # If tests modules are specified, we will not run R linter.
+        # SparkR needs the manual SparkR installation.
         if which("R"):
             run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
         else:
@@ -642,15 +648,11 @@ def main():
           "and Hive profile", hive_version, "under environment", test_env)
     extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version)
 
-    changed_modules = None
-    test_modules = None
-    changed_files = None
+    changed_modules = []
+    changed_files = []
     included_tags = []
     excluded_tags = []
     if should_only_test_modules:
-        str_test_modules = [m.strip() for m in opts.modules.split(",")]
-        test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
-
         # If we're running the tests in Github Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
