@@ -17,24 +17,24 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.scalatest.Matchers._
+import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.broadcast
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
-class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase {
+
+  override def format: String = "parquet"
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("PruneFileSourcePartitions", Once, PruneFileSourcePartitions) :: Nil
@@ -107,5 +107,11 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
         qe.sparkPlan.collect { case j: BroadcastHashJoinExec => j } should have size 1
       }
     }
+  }
+
+  override def getScanExecPartitionSize(plan: SparkPlan): Long = {
+    plan.collectFirst {
+      case p: FileSourceScanExec => p
+    }.get.selectedPartitions.length
   }
 }

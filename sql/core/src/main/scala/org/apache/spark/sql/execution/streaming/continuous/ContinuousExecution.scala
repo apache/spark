@@ -206,9 +206,6 @@ class ContinuousExecution(
     currentEpochCoordinatorId = epochCoordinatorId
     sparkSessionForQuery.sparkContext.setLocalProperty(
       ContinuousExecution.EPOCH_COORDINATOR_ID_KEY, epochCoordinatorId)
-    sparkSessionForQuery.sparkContext.setLocalProperty(
-      ContinuousExecution.EPOCH_INTERVAL_KEY,
-      trigger.asInstanceOf[ContinuousTrigger].intervalMs.toString)
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint = EpochCoordinatorRef.create(
@@ -436,5 +433,4 @@ class ContinuousExecution(
 object ContinuousExecution {
   val START_EPOCH_KEY = "__continuous_start_epoch"
   val EPOCH_COORDINATOR_ID_KEY = "__epoch_coordinator_id"
-  val EPOCH_INTERVAL_KEY = "__continuous_epoch_interval"
 }

@@ -201,6 +201,14 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     Seq(Row(2, 1.0), Row(2, 1.0), Row(3, 3.0), Row(6, null)))
 
   testExistenceJoin(
+    "test single unique condition (equal) for left semi join",
+    LeftSemi,
+    left,
+    right.select(right.col("c")).distinct(), /* Trigger BHJs and SHJs unique key code path! */
+    singleConditionEQ,
+    Seq(Row(2, 1.0), Row(2, 1.0), Row(3, 3.0), Row(6, null)))
+
+  testExistenceJoin(
     "test composed condition (equal & non-equal) for left semi join",
     LeftSemi,
     left,
@@ -229,7 +237,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     "test single unique condition (equal) for left Anti join",
     LeftAnti,
     left,
-    right.select(right.col("c")).distinct(), /* Trigger BHJs unique key code path! */
+    right.select(right.col("c")).distinct(), /* Trigger BHJs and SHJs unique key code path! */
     singleConditionEQ,
     Seq(Row(1, 2.0), Row(1, 2.0), Row(null, null), Row(null, 5.0)))
 
