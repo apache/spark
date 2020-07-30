@@ -90,7 +90,7 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
   override def hashCode(): Int = getClass.hashCode()
 
   override def equals(other: Any): Boolean = other match {
-    case that: UserDefinedType[_] => this.acceptsType(that)
+    case that: UserDefinedType[_] => this.getClass == that.getClass
     case _ => false
   }
 

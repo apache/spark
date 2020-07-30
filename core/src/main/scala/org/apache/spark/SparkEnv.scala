@@ -321,7 +321,7 @@ object SparkEnv extends Logging {
     val mapOutputTracker = if (isDriver) {
       new MapOutputTrackerMaster(
         conf,
-        shuffleDataIo.getOrCreateDriverComponents().shuffleOutputTracker(),
+        shuffleDataIo.driver().shuffleOutputTracker(),
         broadcastManager,
         isLocal)
     } else {
@@ -373,7 +373,8 @@ object SparkEnv extends Logging {
             externalShuffleClient
           } else {
             None
-          }, blockManagerInfo)),
+          }, blockManagerInfo,
+          mapOutputTracker.asInstanceOf[MapOutputTrackerMaster])),
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
         new BlockManagerMasterHeartbeatEndpoint(rpcEnv, isLocal, blockManagerInfo)),

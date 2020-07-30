@@ -16,11 +16,6 @@
 #
 import sys
 import warnings
-if sys.version >= '3':
-    basestring = unicode = str
-    xrange = range
-else:
-    from itertools import izip as zip
 from collections import Counter
 
 from pyspark import since
@@ -29,7 +24,6 @@ from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import IntegralType
 from pyspark.sql.types import *
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.util import _exception_message
 
 
 class PandasConversionMixin(object):
@@ -84,7 +78,7 @@ class PandasConversionMixin(object):
                         "failed by the reason below:\n  %s\n"
                         "Attempting non-optimization as "
                         "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
-                        "true." % _exception_message(e))
+                        "true." % str(e))
                     warnings.warn(msg)
                     use_arrow = False
                 else:
@@ -93,7 +87,7 @@ class PandasConversionMixin(object):
                         "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
                         "reached the error below and will not continue because automatic fallback "
                         "with 'spark.sql.execution.arrow.pyspark.fallback.enabled' has been set to "
-                        "false.\n  %s" % _exception_message(e))
+                        "false.\n  %s" % str(e))
                     warnings.warn(msg)
                     raise
 
@@ -130,7 +124,7 @@ class PandasConversionMixin(object):
                         "reached the error below and can not continue. Note that "
                         "'spark.sql.execution.arrow.pyspark.fallback.enabled' does not have an "
                         "effect on failures in the middle of "
-                        "computation.\n  %s" % _exception_message(e))
+                        "computation.\n  %s" % str(e))
                     warnings.warn(msg)
                     raise
 
@@ -268,7 +262,7 @@ class SparkConversionMixin(object):
 
         # If no schema supplied by user then get the names of columns only
         if schema is None:
-            schema = [str(x) if not isinstance(x, basestring) else
+            schema = [str(x) if not isinstance(x, str) else
                       (x.encode('utf-8') if not isinstance(x, str) else x)
                       for x in data.columns]
 
@@ -276,8 +270,6 @@ class SparkConversionMixin(object):
             try:
                 return self._create_from_pandas_with_arrow(data, schema, timezone)
             except Exception as e:
-                from pyspark.util import _exception_message
-
                 if self._wrapped._conf.arrowPySparkFallbackEnabled():
                     msg = (
                         "createDataFrame attempted Arrow optimization because "
@@ -285,7 +277,7 @@ class SparkConversionMixin(object):
                         "failed by the reason below:\n  %s\n"
                         "Attempting non-optimization as "
                         "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
-                        "true." % _exception_message(e))
+                        "true." % str(e))
                     warnings.warn(msg)
                 else:
                     msg = (
@@ -293,7 +285,7 @@ class SparkConversionMixin(object):
                         "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
                         "reached the error below and will not continue because automatic "
                         "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
-                        "has been set to false.\n  %s" % _exception_message(e))
+                        "has been set to false.\n  %s" % str(e))
                     warnings.warn(msg)
                     raise
         data = self._convert_from_pandas(data, schema, timezone)
@@ -358,7 +350,7 @@ class SparkConversionMixin(object):
         col_names = cur_dtypes.names
         record_type_list = []
         has_rec_fix = False
-        for i in xrange(len(cur_dtypes)):
+        for i in range(len(cur_dtypes)):
             curr_type = cur_dtypes[i]
             # If type is a datetime64 timestamp, convert to microseconds
             # NOTE: if dtype is datetime[ns] then np.record.tolist() will output values as longs,
@@ -413,7 +405,7 @@ class SparkConversionMixin(object):
 
         # Slice the DataFrame to be batched
         step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
-        pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
+        pdf_slices = (pdf.iloc[start:start + step] for start in range(0, len(pdf), step))
 
         # Create list of Arrow (columns, type) for serializer dump_stream
         arrow_data = [[(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)]

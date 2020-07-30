@@ -447,30 +447,6 @@ case class ShowColumnsStatement(
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
 
 /**
- * A DESCRIBE FUNCTION statement, as parsed from SQL
- */
-case class DescribeFunctionStatement(
-    functionName: Seq[String],
-    isExtended: Boolean) extends ParsedStatement
-
-/**
- *  SHOW FUNCTIONS statement, as parsed from SQL
- */
-case class ShowFunctionsStatement(
-    userScope: Boolean,
-    systemScope: Boolean,
-    pattern: Option[String],
-    functionName: Option[Seq[String]]) extends ParsedStatement
-
-/**
- *  DROP FUNCTION statement, as parsed from SQL
- */
-case class DropFunctionStatement(
-    functionName: Seq[String],
-    ifExists: Boolean,
-    isTemp: Boolean) extends ParsedStatement
-
-/**
  *  CREATE FUNCTION statement, as parsed from SQL
  */
 case class CreateFunctionStatement(

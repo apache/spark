@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.util.Random
 
-import org.scalatest.Matchers.the
+import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -31,7 +31,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -1028,4 +1027,23 @@ class DataFrameAggregateSuite extends QueryTest
       checkAnswer(df, Row("abellina", 2) :: Row("mithunr", 1) :: Nil)
     }
   }
+
+  test("SPARK-32136: NormalizeFloatingNumbers should work on null struct") {
+    val df = Seq(
+      A(None),
+      A(Some(B(None))),
+      A(Some(B(Some(1.0))))).toDF
+    val groupBy = df.groupBy("b").agg(count("*"))
+    checkAnswer(groupBy, Row(null, 1) :: Row(Row(null), 1) :: Row(Row(1.0), 1) :: Nil)
+  }
+
+  test("SPARK-32344: Unevaluable's set to FIRST/LAST ignoreNullsExpr in distinct aggregates") {
+    val queryTemplate = (agg: String) =>
+      s"SELECT $agg(DISTINCT v) FROM (SELECT v FROM VALUES 1, 2, 3 t(v) ORDER BY v)"
+    checkAnswer(sql(queryTemplate("FIRST")), Row(1))
+    checkAnswer(sql(queryTemplate("LAST")), Row(3))
+  }
 }
+
+case class B(c: Option[Double])
+case class A(b: Option[B])

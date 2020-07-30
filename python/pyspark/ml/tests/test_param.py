@@ -35,10 +35,6 @@ from pyspark.ml.wrapper import JavaParams
 from pyspark.testing.mlutils import check_params, PySparkTestCase, SparkSessionTestCase
 
 
-if sys.version > '3':
-    xrange = range
-
-
 class ParamTypeConversionTests(PySparkTestCase):
     """
     Test that param type conversion happens.
@@ -67,14 +63,14 @@ class ParamTypeConversionTests(PySparkTestCase):
     def test_list(self):
         l = [0, 1]
         for lst_like in [l, np.array(l), DenseVector(l), SparseVector(len(l), range(len(l)), l),
-                         pyarray.array('l', l), xrange(2), tuple(l)]:
+                         pyarray.array('l', l), range(2), tuple(l)]:
             converted = TypeConverters.toList(lst_like)
             self.assertEqual(type(converted), list)
             self.assertListEqual(converted, l)
 
     def test_list_int(self):
         for indices in [[1.0, 2.0], np.array([1.0, 2.0]), DenseVector([1.0, 2.0]),
-                        SparseVector(2, {0: 1.0, 1: 2.0}), xrange(1, 3), (1.0, 2.0),
+                        SparseVector(2, {0: 1.0, 1: 2.0}), range(1, 3), (1.0, 2.0),
                         pyarray.array('d', [1.0, 2.0])]:
             vs = VectorSlicer(indices=indices)
             self.assertListEqual(vs.getIndices(), [1, 2])
@@ -200,12 +196,7 @@ class ParamTests(SparkSessionTestCase):
         self.assertEqual(testParams._resolveParam("maxIter"), testParams.maxIter)
 
         self.assertEqual(testParams._resolveParam(u"maxIter"), testParams.maxIter)
-        if sys.version_info[0] >= 3:
-            # In Python 3, it is allowed to get/set attributes with non-ascii characters.
-            e_cls = AttributeError
-        else:
-            e_cls = UnicodeEncodeError
-        self.assertRaises(e_cls, lambda: testParams._resolveParam(u"아"))
+        self.assertRaises(AttributeError, lambda: testParams._resolveParam(u"아"))
 
     def test_params(self):
         testParams = TestParams()

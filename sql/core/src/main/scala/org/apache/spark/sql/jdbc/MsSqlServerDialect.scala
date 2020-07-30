@@ -57,4 +57,11 @@ private object MsSqlServerDialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // scalastyle:off line.size.limit
+  // See https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-rename-transact-sql?view=sql-server-ver15
+  // scalastyle:on line.size.limit
+  override def renameTable(oldTable: String, newTable: String): String = {
+    s"EXEC sp_rename $oldTable, $newTable"
+  }
 }

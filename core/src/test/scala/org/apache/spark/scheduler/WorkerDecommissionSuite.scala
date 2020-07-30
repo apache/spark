@@ -58,7 +58,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     })
     TestUtils.waitUntilExecutorsUp(sc = sc,
       numExecutors = 2,
-      timeout = 10000) // 10s
+      timeout = 30000) // 30s
     val sleepyRdd = input.mapPartitions{ x =>
       Thread.sleep(5000) // 5s
       x
@@ -73,7 +73,7 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     // decom.sh message passing is tested manually.
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
-    execs.foreach(execId => sched.decommissionExecutor(execId))
+    execs.foreach(execId => sched.decommissionExecutor(execId, ExecutorDecommissionInfo("", false)))
     val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 20.seconds)
     assert(asyncCountResult === 10)
     // Try and launch task after decommissioning, this should fail

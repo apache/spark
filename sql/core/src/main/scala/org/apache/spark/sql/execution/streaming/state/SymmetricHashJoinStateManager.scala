@@ -451,10 +451,25 @@ class SymmetricHashJoinStateManager(
   }
 
   private trait KeyWithIndexToValueRowConverter {
+    /** Defines the schema of the value row (the value side of K-V in state store). */
     def valueAttributes: Seq[Attribute]
 
+    /**
+     * Convert the value row to (actual value, match) pair.
+     *
+     * NOTE: implementations should ensure the result row is NOT reused during execution, so
+     * that caller can safely read the value in any time.
+     */
     def convertValue(value: UnsafeRow): ValueAndMatchPair
 
+    /**
+     * Build the value row from (actual value, match) pair. This is expected to be called just
+     * before storing to the state store.
+     *
+     * NOTE: depending on the implementation, the result row "may" be reused during execution
+     * (to avoid initialization of object), so the caller should ensure that the logic doesn't
+     * affect by such behavior. Call copy() against the result row if needed.
+     */
     def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow
   }
 
@@ -493,7 +508,7 @@ class SymmetricHashJoinStateManager(
 
     override def convertValue(value: UnsafeRow): ValueAndMatchPair = {
       if (value != null) {
-        ValueAndMatchPair(valueRowGenerator(value),
+        ValueAndMatchPair(valueRowGenerator(value).copy(),
           value.getBoolean(indexOrdinalInValueWithMatchedRow))
       } else {
         null

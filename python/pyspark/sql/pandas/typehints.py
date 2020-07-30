@@ -98,8 +98,8 @@ def infer_eval_type(sig):
                 a,
                 parameter_check_func=lambda ua: ua == pd.Series or ua == pd.DataFrame)
             for a in parameters_sig) and (
-            # It's tricky to whitelist which types pd.Series constructor can take.
-            # Simply blacklist common types used here for now (which becomes object
+            # It's tricky to include only types which pd.Series constructor can take.
+            # Simply exclude common types used here for now (which becomes object
             # types Spark can't recognize).
             return_annotation != pd.Series and
             return_annotation != pd.DataFrame and

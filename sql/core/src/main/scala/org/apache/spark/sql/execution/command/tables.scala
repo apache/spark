@@ -657,7 +657,7 @@ case class DescribeTableCommand(
       }
     }
 
-    result
+    result.toSeq
   }
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -740,7 +740,7 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
     val result = new ArrayBuffer[Row]
     val queryExecution = sparkSession.sessionState.executePlan(plan)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
-    result
+    result.toSeq
   }
 }
 
@@ -815,7 +815,7 @@ case class DescribeColumnCommand(
       } yield histogramDescription(hist)
       buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
     }
-    buffer
+    buffer.toSeq
   }
 
   private def histogramDescription(histogram: Histogram): Seq[Row] = {

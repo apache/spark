@@ -158,6 +158,11 @@ trait CheckAnalysis extends PredicateHelper {
           case g: GroupingID =>
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
+          case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
+              !e.isInstanceOf[WindowExpression] =>
+            val w = e.children.find(_.isInstanceOf[WindowFunction]).get
+            failAnalysis(s"Window function $w requires an OVER clause.")
+
           case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
@@ -337,7 +342,8 @@ trait CheckAnalysis extends PredicateHelper {
             def ordinalNumber(i: Int): String = i match {
               case 0 => "first"
               case 1 => "second"
-              case i => s"${i}th"
+              case 2 => "third"
+              case i => s"${i + 1}th"
             }
             val ref = dataTypes(operator.children.head)
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
@@ -861,7 +867,7 @@ trait CheckAnalysis extends PredicateHelper {
 
     // Simplify the predicates before validating any unsupported correlation patterns in the plan.
     AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
-      // Whitelist operators allowed in a correlated subquery
+      // Approve operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,
       //    by definition of the operators, they either do not contain

@@ -19,6 +19,7 @@ package org.apache.spark.shuffle
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents, ShuffleExecutorComponents}
 
 /**
@@ -29,23 +30,16 @@ import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents, Shu
  * and then reuses them throughout the lifetime of the SparkEnv.
  */
 class MemoizingShuffleDataIO(delegate: ShuffleDataIO) {
-  private var _driver: ShuffleDriverComponents = _
-  private var _executor: ShuffleExecutorComponents = _
-
-  def getOrCreateDriverComponents(): ShuffleDriverComponents = synchronized {
-    if (_driver == null) {
-      _driver = delegate.initializeShuffleDriverComponents()
-    }
-    _driver
+  private lazy val _driver = delegate.initializeShuffleDriverComponents()
+  private lazy val _executor = {
+    val env = SparkEnv.get
+    delegate.initializeShuffleExecutorComponents(
+      env.conf.getAppId,
+      env.executorId,
+      env.conf.getAllWithPrefix(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX).toMap.asJava)
   }
 
-  def getOrCreateExecutorComponents(
-      appId: String,
-      execId: String,
-      extraConfigs: Map[String, String]): ShuffleExecutorComponents = synchronized {
-    if (_executor == null) {
-      _executor = delegate.initializeShuffleExecutorComponents(appId, execId, extraConfigs.asJava)
-    }
-    _executor
-  }
+  def driver(): ShuffleDriverComponents = _driver
+
+  def executor(): ShuffleExecutorComponents = _executor
 }
