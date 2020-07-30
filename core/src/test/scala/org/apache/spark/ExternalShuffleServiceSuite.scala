@@ -19,6 +19,7 @@ package org.apache.spark
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.config
@@ -72,12 +73,12 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
 
-    // In a slow machine, one slave may register hundreds of milliseconds ahead of the other one.
-    // If we don't wait for all slaves, it's possible that only one executor runs all jobs. Then
+    // In a slow machine, one executor may register hundreds of milliseconds ahead of the other one.
+    // If we don't wait for all executors, it's possible that only one executor runs all jobs. Then
     // all shuffle blocks will be in this executor, ShuffleBlockFetcherIterator will directly fetch
     // local blocks from the local BlockManager and won't send requests to ExternalShuffleService.
     // In this case, we won't receive FetchFailed. And it will make this test fail.
-    // Therefore, we should wait until all slaves are up
+    // Therefore, we should wait until all executors are up
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     val rdd = sc.parallelize(0 until 1000, 10)
@@ -109,12 +110,12 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     sc.env.blockManager.hostLocalDirManager.isDefined should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
 
-    // In a slow machine, one slave may register hundreds of milliseconds ahead of the other one.
-    // If we don't wait for all slaves, it's possible that only one executor runs all jobs. Then
+    // In a slow machine, one executor may register hundreds of milliseconds ahead of the other one.
+    // If we don't wait for all executors, it's possible that only one executor runs all jobs. Then
     // all shuffle blocks will be in this executor, ShuffleBlockFetcherIterator will directly fetch
     // local blocks from the local BlockManager and won't send requests to ExternalShuffleService.
     // In this case, we won't receive FetchFailed. And it will make this test fail.
-    // Therefore, we should wait until all slaves are up
+    // Therefore, we should wait until all executors are up
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
     val rdd = sc.parallelize(0 until 1000, 10)

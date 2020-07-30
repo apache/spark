@@ -2612,10 +2612,17 @@ object Sequence {
       val stepDays = step.days
       val stepMicros = step.microseconds
 
+      if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
+        throw new IllegalArgumentException(
+          "sequence step must be a day interval if start and end values are dates")
+      }
+
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
+        // Adding pure days to date start/end
         backedSequenceImpl.eval(start, stop, fromLong(stepDays))
 
       } else if (stepMonths == 0 && stepDays == 0 && scale == 1) {
+        // Adding pure microseconds to timestamp start/end
         backedSequenceImpl.eval(start, stop, fromLong(stepMicros))
 
       } else {
@@ -2628,7 +2635,7 @@ object Sequence {
         val maxEstimatedArrayLength =
           getSequenceLength(startMicros, stopMicros, intervalStepInMicros)
 
-        val stepSign = if (stopMicros > startMicros) +1 else -1
+        val stepSign = if (stopMicros >= startMicros) +1 else -1
         val exclusiveItem = stopMicros + stepSign
         val arr = new Array[T](maxEstimatedArrayLength)
         var t = startMicros
@@ -2674,10 +2681,23 @@ object Sequence {
            |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
           """.stripMargin
 
+      val check = if (scale == MICROS_PER_DAY) {
+        s"""
+           |if ($stepMonths == 0 && $stepDays == 0) {
+           |  throw new IllegalArgumentException(
+           |    "sequence step must be a day interval if start and end values are dates");
+           |}
+          """.stripMargin
+        } else {
+          ""
+        }
+
       s"""
          |final int $stepMonths = $step.months;
          |final int $stepDays = $step.days;
          |final long $stepMicros = $step.microseconds;
+         |
+         |$check
          |
          |if ($stepMonths == 0 && $stepMicros == 0 && ${scale}L == ${MICROS_PER_DAY}L) {
          |  ${backedSequenceImpl.genCode(ctx, start, stop, stepDays, arr, elemType)};
@@ -2690,7 +2710,7 @@ object Sequence {
          |
          |  $sequenceLengthCode
          |
-         |  final int $stepSign = $stopMicros > $startMicros ? +1 : -1;
+         |  final int $stepSign = $stopMicros >= $startMicros ? +1 : -1;
          |  final long $exclusiveItem = $stopMicros + $stepSign;
          |
          |  $arr = new $elemType[$arrLength];

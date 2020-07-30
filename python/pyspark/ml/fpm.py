@@ -15,8 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark import keyword_only, since
-from pyspark.rdd import ignore_unicode_prefix
+from pyspark import keyword_only
 from pyspark.sql import DataFrame
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
@@ -55,6 +54,11 @@ class _FPGrowthParams(HasPredictionCol):
         "minConfidence will not affect the mining for frequent itemsets, " +
         "but will affect the association rules generation.",
         typeConverter=TypeConverters.toFloat)
+
+    def __init__(self):
+        super(_FPGrowthParams, self).__init__()
+        self._setDefault(minSupport=0.3, minConfidence=0.8,
+                         itemsCol="items", predictionCol="prediction")
 
     def getItemsCol(self):
         """
@@ -132,7 +136,6 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
         return self._call_java("associationRules")
 
 
-@ignore_unicode_prefix
 class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     r"""
     A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
@@ -180,20 +183,20 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     only showing top 5 rows
     ...
     >>> fpm.associationRules.show(5)
-    +----------+----------+----------+----+
-    |antecedent|consequent|confidence|lift|
-    +----------+----------+----------+----+
-    |    [t, s]|       [y]|       1.0| 2.0|
-    |    [t, s]|       [x]|       1.0| 1.5|
-    |    [t, s]|       [z]|       1.0| 1.2|
-    |       [p]|       [r]|       1.0| 2.0|
-    |       [p]|       [z]|       1.0| 1.2|
-    +----------+----------+----------+----+
+    +----------+----------+----------+----+------------------+
+    |antecedent|consequent|confidence|lift|           support|
+    +----------+----------+----------+----+------------------+
+    |    [t, s]|       [y]|       1.0| 2.0|0.3333333333333333|
+    |    [t, s]|       [x]|       1.0| 1.5|0.3333333333333333|
+    |    [t, s]|       [z]|       1.0| 1.2|0.3333333333333333|
+    |       [p]|       [r]|       1.0| 2.0|0.3333333333333333|
+    |       [p]|       [z]|       1.0| 1.2|0.3333333333333333|
+    +----------+----------+----------+----+------------------+
     only showing top 5 rows
     ...
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().newPrediction)
-    [u'x', u'y', u'z']
+    ['x', 'y', 'z']
 
     .. versionadded:: 2.2.0
     """
@@ -206,8 +209,6 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
         """
         super(FPGrowth, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.FPGrowth", self.uid)
-        self._setDefault(minSupport=0.3, minConfidence=0.8,
-                         itemsCol="items", predictionCol="prediction")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 

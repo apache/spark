@@ -35,8 +35,10 @@ import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito._
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatestplus.selenium.WebBrowser
 
@@ -154,6 +156,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       "applications/local-1430917381534/stages/0/0/taskList?sortBy=-runtime",
     "stage task list w/ sortBy short names: runtime" ->
       "applications/local-1430917381534/stages/0/0/taskList?sortBy=runtime",
+    "stage task list w/ status" ->
+      "applications/app-20161115172038-0000/stages/0/0/taskList?status=failed",
+    "stage task list w/ status & offset & length" ->
+      "applications/local-1430917381534/stages/0/0/taskList?status=success&offset=1&length=2",
+    "stage task list w/ status & sortBy short names: runtime" ->
+      "applications/local-1430917381534/stages/0/0/taskList?status=success&sortBy=runtime",
 
     "stage list with accumulable json" -> "applications/local-1426533911241/1/stages",
     "stage with accumulable json" -> "applications/local-1426533911241/1/stages/0/0",
@@ -303,18 +311,21 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     val urlsThroughKnox = responseThroughKnox \\ "@href" map (_.toString)
     val siteRelativeLinksThroughKnox = urlsThroughKnox filter (_.startsWith("/"))
-    all (siteRelativeLinksThroughKnox) should startWith (knoxBaseUrl)
+    for (link <- siteRelativeLinksThroughKnox) {
+      link should startWith (knoxBaseUrl)
+    }
 
     val directRequest = mock[HttpServletRequest]
     val directResponse = page.render(directRequest)
 
     val directUrls = directResponse \\ "@href" map (_.toString)
     val directSiteRelativeLinks = directUrls filter (_.startsWith("/"))
-    all (directSiteRelativeLinks) should not startWith (knoxBaseUrl)
+    for (link <- directSiteRelativeLinks) {
+      link should not startWith (knoxBaseUrl)
+    }
   }
 
-  // TODO (SPARK-31723): re-enable it
-  ignore("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
+  test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
     val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
     val page = new HistoryPage(server)
     val request = mock[HttpServletRequest]
@@ -326,7 +337,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // then
     val urls = response \\ "@href" map (_.toString)
     val siteRelativeLinks = urls filter (_.startsWith("/"))
-    all (siteRelativeLinks) should startWith (uiRoot)
+    for (link <- siteRelativeLinks) {
+      link should startWith (uiRoot)
+    }
   }
 
   test("/version api endpoint") {
@@ -643,6 +656,19 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val expectedContentType = "text/html;charset=utf-8"
     val actualContentType = conn.getContentType
     assert(actualContentType === expectedContentType)
+  }
+
+  test("Redirect to the root page when accessed to /history/") {
+    val port = server.boundPort
+    val url = new URL(s"http://localhost:$port/history/")
+    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+    conn.setRequestMethod("GET")
+    conn.setUseCaches(false)
+    conn.setDefaultUseCaches(false)
+    conn.setInstanceFollowRedirects(false)
+    conn.connect()
+    assert(conn.getResponseCode === 302)
+    assert(conn.getHeaderField("Location") === s"http://localhost:$port/")
   }
 }
 

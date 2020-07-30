@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.StringUtils._
+import org.apache.spark.sql.internal.SQLConf
 
-class StringUtilsSuite extends SparkFunSuite {
+class StringUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("escapeLikeRegex") {
     val expectedEscapedStrOne = "(?s)\\Qa\\E\\Qb\\E\\Qd\\E\\Qe\\E\\Qf\\E"
@@ -97,5 +99,33 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(!checkLimit("under"))
     assert(checkLimit("1234567"))
     assert(checkLimit("1234567890"))
+  }
+
+  test("SPARK-31916: StringConcat doesn't overflow on many inputs") {
+    val concat = new StringConcat(maxLength = 100)
+    val stringToAppend = "Test internal index of StringConcat does not overflow with many " +
+      "append calls"
+    0.to((Integer.MAX_VALUE / stringToAppend.length) + 1).foreach { _ =>
+      concat.append(stringToAppend)
+    }
+    assert(concat.toString.length === 100)
+  }
+
+  test("SPARK-31916: verify that PlanStringConcat's output shows the actual length of the plan") {
+    withSQLConf(SQLConf.MAX_PLAN_STRING_LENGTH.key -> "0") {
+      val concat = new PlanStringConcat()
+      0.to(3).foreach { i =>
+        concat.append(s"plan fragment $i")
+      }
+      assert(concat.toString === "Truncated plan of 60 characters")
+    }
+
+    withSQLConf(SQLConf.MAX_PLAN_STRING_LENGTH.key -> "60") {
+      val concat = new PlanStringConcat()
+      0.to(2).foreach { i =>
+        concat.append(s"plan fragment $i")
+      }
+      assert(concat.toString === "plan fragment 0plan fragment 1... 15 more characters")
+    }
   }
 }

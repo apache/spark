@@ -146,7 +146,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     val resources = taskInfo.getResourcesList
     assert(scheduler.getResource(resources, "cpus") == 1.5)
     assert(scheduler.getResource(resources, "mem") == 1200)
-    val resourcesSeq: Seq[Resource] = resources.asScala
+    val resourcesSeq: Seq[Resource] = resources.asScala.toSeq
     val cpus = resourcesSeq.filter(_.getName == "cpus").toList
     assert(cpus.size == 2)
     assert(cpus.exists(_.getRole() == "role2"))
@@ -413,7 +413,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       new MesosDriverDescription("d1", "jar", 100, 1, true, command,
         Map((config.EXECUTOR_HOME.key, "test"), ("spark.app.name", "test")), "s1", new Date()))
     assert(response.success)
-    val slaveId = SlaveID.newBuilder().setValue("s1").build()
+    val agentId = SlaveID.newBuilder().setValue("s1").build()
     val offer = Offer.newBuilder()
       .addResources(
         Resource.newBuilder().setRole("*")
@@ -425,7 +425,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
           .setType(Type.SCALAR))
       .setId(OfferID.newBuilder().setValue("o1").build())
       .setFrameworkId(FrameworkID.newBuilder().setValue("f1").build())
-      .setSlaveId(slaveId)
+      .setSlaveId(agentId)
       .setHostname("host1")
       .build()
     // Offer the resource to launch the submitted driver
@@ -438,7 +438,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     val taskStatus = TaskStatus.newBuilder()
       .setTaskId(TaskID.newBuilder().setValue(response.submissionId).build())
-      .setSlaveId(slaveId)
+      .setSlaveId(agentId)
       .setState(MesosTaskState.TASK_KILLED)
       .build()
     // Update the status of the killed task

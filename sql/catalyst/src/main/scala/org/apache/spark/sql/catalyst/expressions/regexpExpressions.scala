@@ -414,7 +414,9 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
 object RegExpExtractBase {
   def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
-    if (groupCount < groupIndex) {
+    if (groupIndex < 0) {
+      throw new IllegalArgumentException("The specified group index cannot be less than zero")
+    } else if (groupCount < groupIndex) {
       throw new IllegalArgumentException(
         s"Regex group count is $groupCount, but the specified group index is $groupIndex")
     }
@@ -457,8 +459,9 @@ abstract class RegExpExtractBase
   """,
   arguments = """
     Arguments:
-      * str - a string expression of the input string.
-      * regexp - a string expression of the regex string.
+      * str - a string expression.
+      * regexp - a string representing a regular expression. The regex string should be a
+          Java regular expression.
 
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
@@ -467,10 +470,12 @@ abstract class RegExpExtractBase
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
-      * idx - an int expression of the regex group index. The regex maybe contains multiple
-          groups. `idx` indicates which regex group to extract. The `idx` parameter is the
-          Java regex Matcher group() method index. See docs/api/java/util/regex/Matcher.html
-          for more information on the `idx` or Java regex group() method.
+      * idx - an integer expression that representing the group index. The regex maybe contains
+          multiple groups. `idx` indicates which regex group to extract. The group index should
+          be non-negative. If `idx` is not specified, the default group index value is 1. The
+          `idx` parameter is the Java regex Matcher group() method index. See
+          docs/api/java/util/regex/Matcher.html for more information on the `idx` or Java regex
+          group() method.
   """,
   examples = """
     Examples:
@@ -554,8 +559,9 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   """,
   arguments = """
     Arguments:
-      * str - a string expression of the input string.
-      * regexp - a string expression of the regex string.
+      * str - a string expression.
+      * regexp - a string representing a regular expression. The regex string should be a
+          Java regular expression.
 
           Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
           parser. For example, to match "\abc", a regular expression for `regexp` can be
@@ -564,10 +570,12 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
           There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
           fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
           if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
-      * idx - an int expression of the regex group index. The regex may contains multiple
-          groups. `idx` indicates which regex group to extract. The `idx` parameter is the
-          Java regex Matcher group() method index. See docs/api/java/util/regex/Matcher.html
-          for more information on the `idx` or Java regex group() method.
+      * idx - an integer expression that representing the group index. The regex may contains
+          multiple groups. `idx` indicates which regex group to extract. The group index should
+          be non-negative. If `idx` is not specified, the default group index value is 1. The
+          `idx` parameter is the Java regex Matcher group() method index. See
+          docs/api/java/util/regex/Matcher.html for more information on the `idx` or Java regex
+          group() method.
   """,
   examples = """
     Examples:
