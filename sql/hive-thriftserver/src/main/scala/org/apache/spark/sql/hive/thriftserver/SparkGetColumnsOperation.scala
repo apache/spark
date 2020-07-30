@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.UUID
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
 import org.apache.hive.service.cli._
@@ -34,7 +32,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.toJavaSQLType
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 /**
  * Spark's own SparkGetColumnsOperation
@@ -126,12 +124,47 @@ private[hive] class SparkGetColumnsOperation(
     HiveThriftServer2.eventManager.onStatementFinish(statementId)
   }
 
+  private def getColumnSize(typ: DataType): Option[Int] = typ match {
+    case StringType | BinaryType => None
+    case ArrayType(et, _) => getColumnSize(et)
+    case MapType(kt, vt, _) =>
+      val kSize = getColumnSize(kt)
+      val vSize = getColumnSize(vt)
+      if (kSize.isEmpty || vSize.isEmpty) {
+        None
+      } else {
+        Some(kSize.get + vSize.get)
+      }
+    case StructType(fields) =>
+      val sizeArr = fields.map(f => getColumnSize(f.dataType))
+      if (sizeArr.contains(None)) {
+        None
+      } else {
+        Some(sizeArr.map(_.get).sum)
+      }
+    case other => Some(other.defaultSize)
+  }
+
+  private def getDecimalDigits(typ: DataType): Option[Int] = typ match {
+    case BooleanType | _: IntegerType => Some(0)
+    case FloatType => Some(7)
+    case DoubleType => Some(15)
+    case d: DecimalType => Some(d.scale)
+    case TimestampType => Some(9)
+    case _ => None
+  }
+
+  private def getNumPrecRadix(typ: DataType): Option[Int] = typ match {
+    case _: NumericType => Some(10)
+    case _ => None
+  }
+
   private def addToRowSet(
       columnPattern: Pattern,
       dbName: String,
       tableName: String,
       schema: StructType): Unit = {
-    schema.foreach { column =>
+    schema.zipWithIndex.foreach { case (column, pos) =>
       if (columnPattern != null && !columnPattern.matcher(column.name).matches()) {
       } else {
         val rowData = Array[AnyRef](
@@ -141,17 +174,17 @@ private[hive] class SparkGetColumnsOperation(
           column.name, // COLUMN_NAME
           toJavaSQLType(column.dataType.sql).asInstanceOf[AnyRef], // DATA_TYPE
           column.dataType.sql, // TYPE_NAME
-          null, // COLUMN_SIZE
+          getColumnSize(column.dataType).map(_.asInstanceOf[AnyRef]).orNull, // COLUMN_SIZE
           null, // BUFFER_LENGTH, unused
-          null, // DECIMAL_DIGITS
-          null, // NUM_PREC_RADIX
+          getDecimalDigits(column.dataType).map(_.asInstanceOf[AnyRef]).orNull, // DECIMAL_DIGITS
+          getNumPrecRadix(column.dataType).map(_.asInstanceOf[AnyRef]).orNull, // NUM_PREC_RADIX
           (if (column.nullable) 1 else 0).asInstanceOf[AnyRef], // NULLABLE
           column.getComment().getOrElse(""), // REMARKS
           null, // COLUMN_DEF
           null, // SQL_DATA_TYPE
           null, // SQL_DATETIME_SUB
           null, // CHAR_OCTET_LENGTH
-          null, // ORDINAL_POSITION
+          pos.asInstanceOf[AnyRef], // ORDINAL_POSITION
           "YES", // IS_NULLABLE
           null, // SCOPE_CATALOG
           null, // SCOPE_SCHEMA

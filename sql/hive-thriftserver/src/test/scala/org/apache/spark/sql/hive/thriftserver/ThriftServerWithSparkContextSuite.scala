@@ -19,9 +19,12 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.SQLException
 
+import scala.collection.JavaConverters._
+
 import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.types.{ByteType, DecimalType, DoubleType, LongType, ShortType}
 
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
@@ -100,6 +103,81 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
         }
       }
     }
+  }
+
+  test("SparkGetColumnsOperation") {
+    val schemaName = "default"
+    val tableName = "spark_get_col_operation"
+    val decimalType = DecimalType(10, 2)
+    val ddl =
+      s"""
+         |CREATE TABLE $schemaName.$tableName
+         |  (
+         |    a boolean comment '0',
+         |    b int comment '1',
+         |    c float comment '2',
+         |    d ${decimalType.sql} comment '3',
+         |    e array<long> comment '4',
+         |    f array<string> comment '5',
+         |    g map<smallint, tinyint> comment '6',
+         |    h date comment '7',
+         |    i timestamp comment '8',
+         |    j struct<X: bigint,Y: double> comment '9'
+         |  ) using parquet""".stripMargin
+
+    withCLIServiceClient { client =>
+      val sessionHandle = client.openSession(user, "")
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val opHandle = client.executeStatement(sessionHandle, ddl, confOverlay)
+      var status = client.getOperationStatus(opHandle)
+      while (!status.getState.isTerminal) {
+        Thread.sleep(10)
+        status = client.getOperationStatus(opHandle)
+      }
+      val getCol = client.getColumns(sessionHandle, "", schemaName, tableName, null)
+      val rowSet = client.fetchResults(getCol)
+      val columns = rowSet.toTRowSet.getColumns
+      assert(columns.get(0).getStringVal.getValues.asScala.forall(_.isEmpty),
+        "catalog name mismatches")
+
+      assert(columns.get(1).getStringVal.getValues.asScala.forall(_ == schemaName),
+        "schema name mismatches")
+
+      assert(columns.get(2).getStringVal.getValues.asScala.forall(_ == tableName),
+        "table name mismatches")
+
+      // column name
+      columns.get(3).getStringVal.getValues.asScala.zipWithIndex.foreach {
+        case (v, i) => assert(v === ('a' + i).toChar.toString, "column name mismatches")
+      }
+
+      val javaTypes = columns.get(4).getI32Val.getValues
+      assert(javaTypes.get(3).intValue() === java.sql.Types.DECIMAL)
+      assert(javaTypes.get(6).intValue() === java.sql.Types.JAVA_OBJECT)
+
+      val typeNames = columns.get(5).getStringVal.getValues
+      assert(typeNames.get(3) === decimalType.sql)
+
+      val colSize = columns.get(6).getI32Val.getValues
+      assert(colSize.get(3).intValue() === decimalType.defaultSize)
+      assert(colSize.get(6).intValue() === ByteType.defaultSize + ShortType.defaultSize,
+        "map column size mismatches")
+      assert(colSize.get(9).intValue() === LongType.defaultSize + DoubleType.defaultSize,
+        "struct column size mismatches")
+
+      val decimalDigits = columns.get(8).getI32Val.getValues
+      assert(decimalDigits.get(1).intValue() === 0)
+      assert(decimalDigits.get(2).intValue() === 7)
+      assert(decimalDigits.get(3).intValue() === decimalType.scale)
+      assert(decimalDigits.get(8).intValue() === 9,
+        "timestamp support 9 digits for second fraction")
+
+      val positions = columns.get(16).getI32Val.getValues
+      positions.asScala.zipWithIndex.foreach { case (pos, idx) =>
+        assert(pos === idx, "the client columns disorder")
+      }
+    }
+
   }
 }
 
