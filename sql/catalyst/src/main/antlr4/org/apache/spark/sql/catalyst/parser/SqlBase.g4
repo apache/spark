@@ -277,6 +277,7 @@ configValue
 
 configIdentifier
     : IDENTIFIER
+    | INTEGER_VALUE
     | nonReserved
     | strictNonReserved
     ;

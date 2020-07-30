@@ -962,8 +962,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SET commands semantics using sql()") {
     spark.sessionState.conf.clear()
-    val testKey = "test.key.0"
-    val testVal = "test.val.0"
+    val testKey = "test.key.k0"
+    val testVal = "test.val.v0"
     val nonexistentKey = "nonexistent"
 
     // "set" itself returns all config variables currently specified in SQLConf.
