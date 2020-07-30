@@ -55,9 +55,7 @@ class InMemoryPartitionTable(
     if (memoryTablePartitions.containsKey(ident)) {
       throw new PartitionAlreadyExistsException(name, ident, partCols)
     } else {
-      val tablePartitions =
-        memoryTablePartitions.getOrDefault(ident, Map.empty[String, String].asJava)
-      memoryTablePartitions.put(ident, tablePartitions)
+      memoryTablePartitions.put(ident, properties)
     }
   }
 
@@ -84,17 +82,17 @@ class InMemoryPartitionTable(
 
   def replacePartitionMetadata(ident: InternalRow, properties: util.Map[String, String]): Unit = {
     if (memoryTablePartitions.containsKey(ident)) {
-      throw new PartitionAlreadyExistsException(name, ident, partCols)
-    } else {
       memoryTablePartitions.put(ident, properties)
+    } else {
+      throw new NoSuchPartitionException(name, ident, partCols)
     }
   }
 
   def getPartitionMetadata(ident: InternalRow): util.Map[String, String] = {
     if (memoryTablePartitions.containsKey(ident)) {
-      throw new PartitionAlreadyExistsException(name, ident, partCols)
-    } else {
       memoryTablePartitions.get(ident)
+    } else {
+      throw new NoSuchPartitionException(name, ident, partCols)
     }
   }
 
@@ -105,4 +103,6 @@ class InMemoryPartitionTable(
     memoryTablePartitions.keySet().asScala
       .filter(_.toSeq(partCols).startsWith(prefixPart)).toArray
   }
+
+  def partitionExists(ident: InternalRow): Boolean = memoryTablePartitions.containsKey(ident)
 }
