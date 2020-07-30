@@ -48,13 +48,12 @@ def determine_modules_for_files(filenames):
     ['pyspark-core', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
-    >>> [x.name for x in determine_modules_for_files( \
-            [".github/workflows/master.yml", "appveyor.yml"])]
+    >>> [x.name for x in determine_modules_for_files(["appveyor.yml"])]
     []
     """
     changed_modules = set()
     for filename in filenames:
-        if filename in (".github/workflows/master.yml", "appveyor.yml"):
+        if filename in ("appveyor.yml",):
             continue
         matched_at_least_one_module = False
         for module in modules.all_modules:
