@@ -962,7 +962,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     val getMapKeyArray = CodeGenerator.getValue(mapKeyArray, kt, loopIndex)
     val getMapValueArray = CodeGenerator.getValue(mapValueArray, vt, loopIndex)
     code"""
-       |$buffer.append("[");
+       |$buffer.append("{");
        |if ($map.numElements() > 0) {
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
        |  $buffer.append(" ->");
@@ -980,7 +980,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |    }
        |  }
        |}
-       |$buffer.append("]");
+       |$buffer.append("}");
      """.stripMargin
   }
 
@@ -1015,9 +1015,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (classOf[UTF8StringBuilder].getName, buffer.code) :: Nil)
 
     code"""
-       |$buffer.append("[");
+       |$buffer.append("{");
        |$writeStructCode
-       |$buffer.append("]");
+       |$buffer.append("}");
      """.stripMargin
   }
 
