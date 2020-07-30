@@ -21,7 +21,6 @@ import java.util.{Locale, UUID}
 import scala.concurrent.Future
 
 import org.apache.spark.{MapOutputStatistics, SparkFunSuite, TaskContext}
-
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
