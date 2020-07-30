@@ -64,8 +64,7 @@ private class ClientEndpoint(
 
    private val lostMasters = new HashSet[RpcAddress]
    private var activeMasterEndpoint: RpcEndpointRef = null
-   private val waitAppCompletion = conf.getBoolean("spark.standalone.submit.waitAppCompletion",
-     false)
+   private val waitAppCompletion = conf.get(config.STANDALONE_SUBMIT_WAIT_APP_COMPLETION)
    private val REPORT_DRIVER_STATUS_INTERVAL = 10000
    private var submittedDriverID = ""
    private var driverStatusReported = false

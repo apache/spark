@@ -19,14 +19,14 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.util.Locale
-import java.util.regex.Pattern
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
@@ -124,7 +124,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
  */
 @ExtendedSQLTest
-class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
+class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper {
 
   import IntegratedUDFTestUtils._
 
@@ -134,12 +134,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     // We use a path based on Spark home for 2 reasons:
     //   1. Maven can't get correct resource directory when resources in other jars.
     //   2. We test subclasses in the hive-thriftserver module.
-    val sparkHome = {
-      assert(sys.props.contains("spark.test.home") ||
-        sys.env.contains("SPARK_HOME"), "spark.test.home or SPARK_HOME is not set.")
-      sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
-    }
-
     java.nio.file.Paths.get(sparkHome,
       "sql", "core", "src", "test", "resources", "sql-tests").toFile
   }
@@ -159,8 +153,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
   /** List of test cases to ignore, in lower cases. */
-  protected def blackList: Set[String] = Set(
-    "blacklist.sql"   // Do NOT remove this one. It is here to test the blacklist functionality.
+  protected def ignoreList: Set[String] = Set(
+    "ignored.sql"   // Do NOT remove this one. It is here to test the ignore functionality.
   )
 
   // Create all the test cases.
@@ -228,7 +222,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
-    if (blackList.exists(t =>
+    if (ignoreList.exists(t =>
         testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }

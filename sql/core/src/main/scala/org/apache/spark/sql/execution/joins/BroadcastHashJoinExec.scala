@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable
+
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -26,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioning, Partitioning, PartitioningCollection, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.{BooleanType, LongType}
@@ -44,14 +46,23 @@ case class BroadcastHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan)
+    right: SparkPlan,
+    isNullAwareAntiJoin: Boolean = false)
   extends HashJoin with CodegenSupport {
+
+  if (isNullAwareAntiJoin) {
+    require(leftKeys.length == 1, "leftKeys length should be 1")
+    require(rightKeys.length == 1, "rightKeys length should be 1")
+    require(joinType == LeftAnti, "joinType must be LeftAnti.")
+    require(buildSide == BuildRight, "buildSide must be BuildRight.")
+    require(condition.isEmpty, "null aware anti join optimize condition should be empty.")
+  }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = HashedRelationBroadcastMode(buildKeys)
+    val mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAwareAntiJoin)
     buildSide match {
       case BuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
@@ -60,14 +71,108 @@ case class BroadcastHashJoinExec(
     }
   }
 
+  override lazy val outputPartitioning: Partitioning = {
+    joinType match {
+      case _: InnerLike if sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
+        streamedPlan.outputPartitioning match {
+          case h: HashPartitioning => expandOutputPartitioning(h)
+          case c: PartitioningCollection => expandOutputPartitioning(c)
+          case other => other
+        }
+      case _ => streamedPlan.outputPartitioning
+    }
+  }
+
+  // An one-to-many mapping from a streamed key to build keys.
+  private lazy val streamedKeyToBuildKeyMapping = {
+    val mapping = mutable.Map.empty[Expression, Seq[Expression]]
+    streamedKeys.zip(buildKeys).foreach {
+      case (streamedKey, buildKey) =>
+        val key = streamedKey.canonicalized
+        mapping.get(key) match {
+          case Some(v) => mapping.put(key, v :+ buildKey)
+          case None => mapping.put(key, Seq(buildKey))
+        }
+    }
+    mapping.toMap
+  }
+
+  // Expands the given partitioning collection recursively.
+  private def expandOutputPartitioning(
+      partitioning: PartitioningCollection): PartitioningCollection = {
+    PartitioningCollection(partitioning.partitionings.flatMap {
+      case h: HashPartitioning => expandOutputPartitioning(h).partitionings
+      case c: PartitioningCollection => Seq(expandOutputPartitioning(c))
+      case other => Seq(other)
+    })
+  }
+
+  // Expands the given hash partitioning by substituting streamed keys with build keys.
+  // For example, if the expressions for the given partitioning are Seq("a", "b", "c")
+  // where the streamed keys are Seq("b", "c") and the build keys are Seq("x", "y"),
+  // the expanded partitioning will have the following expressions:
+  // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
+  // The expanded expressions are returned as PartitioningCollection.
+  private def expandOutputPartitioning(partitioning: HashPartitioning): PartitioningCollection = {
+    val maxNumCombinations = sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit
+    var currentNumCombinations = 0
+
+    def generateExprCombinations(
+        current: Seq[Expression],
+        accumulated: Seq[Expression]): Seq[Seq[Expression]] = {
+      if (currentNumCombinations >= maxNumCombinations) {
+        Nil
+      } else if (current.isEmpty) {
+        currentNumCombinations += 1
+        Seq(accumulated)
+      } else {
+        val buildKeysOpt = streamedKeyToBuildKeyMapping.get(current.head.canonicalized)
+        generateExprCombinations(current.tail, accumulated :+ current.head) ++
+          buildKeysOpt.map(_.flatMap(b => generateExprCombinations(current.tail, accumulated :+ b)))
+            .getOrElse(Nil)
+      }
+    }
+
+    PartitioningCollection(
+      generateExprCombinations(partitioning.expressions, Nil)
+        .map(HashPartitioning(_, partitioning.numPartitions)))
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
-    streamedPlan.execute().mapPartitions { streamedIter =>
-      val hashed = broadcastRelation.value.asReadOnlyCopy()
-      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-      join(streamedIter, hashed, numOutputRows)
+    if (isNullAwareAntiJoin) {
+      streamedPlan.execute().mapPartitionsInternal { streamedIter =>
+        val hashed = broadcastRelation.value.asReadOnlyCopy()
+        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
+        if (hashed == EmptyHashedRelation) {
+          streamedIter
+        } else if (hashed == EmptyHashedRelationWithAllNullKeys) {
+          Iterator.empty
+        } else {
+          val keyGenerator = UnsafeProjection.create(
+            BindReferences.bindReferences[Expression](
+              leftKeys,
+              AttributeSeq(left.output))
+          )
+          streamedIter.filter(row => {
+            val lookupKey: UnsafeRow = keyGenerator(row)
+            if (lookupKey.anyNull()) {
+              false
+            } else {
+              // Anti Join: Drop the row on the streamed side if it is a match on the build
+              hashed.get(lookupKey) == null
+            }
+          })
+        }
+      }
+    } else {
+      streamedPlan.execute().mapPartitions { streamedIter =>
+        val hashed = broadcastRelation.value.asReadOnlyCopy()
+        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
+        join(streamedIter, hashed, numOutputRows)
+      }
     }
   }
 
@@ -135,13 +240,13 @@ case class BroadcastHashJoinExec(
       ctx: CodegenContext,
       input: Seq[ExprCode]): (ExprCode, String) = {
     ctx.currentVars = input
-    if (streamedKeys.length == 1 && streamedKeys.head.dataType == LongType) {
+    if (streamedBoundKeys.length == 1 && streamedBoundKeys.head.dataType == LongType) {
       // generate the join key as Long
-      val ev = streamedKeys.head.genCode(ctx)
+      val ev = streamedBoundKeys.head.genCode(ctx)
       (ev, ev.isNull)
     } else {
       // generate the join key as UnsafeRow
-      val ev = GenerateUnsafeProjection.createCode(ctx, streamedKeys)
+      val ev = GenerateUnsafeProjection.createCode(ctx, streamedBoundKeys)
       (ev, s"${ev.value}.anyNull()")
     }
   }
@@ -384,6 +489,40 @@ case class BroadcastHashJoinExec(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
+
+    if (isNullAwareAntiJoin) {
+      if (broadcastRelation.value == EmptyHashedRelation) {
+        return s"""
+                  |// If the right side is empty, NAAJ simply returns the left side.
+                  |$numOutput.add(1);
+                  |${consume(ctx, input)}
+            """.stripMargin
+      } else if (broadcastRelation.value == EmptyHashedRelationWithAllNullKeys) {
+        return s"""
+                  |// If the right side contains any all-null key, NAAJ simply returns Nothing.
+            """.stripMargin
+      } else {
+        val found = ctx.freshName("found")
+        return s"""
+                  |boolean $found = false;
+                  |// generate join key for stream side
+                  |${keyEv.code}
+                  |if ($anyNull) {
+                  |  $found = true;
+                  |} else {
+                  |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+                  |  if ($matched != null) {
+                  |    $found = true;
+                  |  }
+                  |}
+                  |
+                  |if (!$found) {
+                  |  $numOutput.add(1);
+                  |  ${consume(ctx, input)}
+                  |}
+            """.stripMargin
+      }
+    }
 
     if (uniqueKeyCodePath) {
       val found = ctx.freshName("found")

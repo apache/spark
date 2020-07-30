@@ -1675,6 +1675,15 @@ Any of the stateful operation(s) after any of below stateful operations can have
 As Spark cannot check the state function of `mapGroupsWithState`/`flatMapGroupsWithState`, Spark assumes that the state function
 emits late rows if the operator uses Append mode.
 
+Spark provides two ways to check the number of late rows on stateful operators which would help you identify the issue:
+
+1. On Spark UI: check the metrics in stateful operator nodes in query execution details page in SQL tab
+2. On Streaming Query Listener: check "numRowsDroppedByWatermark" in "stateOperators" in QueryProcessEvent.
+
+Please note that "numRowsDroppedByWatermark" represents the number of "dropped" rows by watermark, which is not always same as the count of "late input rows" for the operator.
+It depends on the implementation of the operator - e.g. streaming aggregation does pre-aggregate input rows and checks the late inputs against pre-aggregated inputs,
+hence the number is not same as the number of original input rows. You'd like to just check the fact whether the value is zero or non-zero.
+
 There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
 end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 

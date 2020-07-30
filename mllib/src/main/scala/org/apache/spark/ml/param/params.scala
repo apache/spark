@@ -937,7 +937,7 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
 
   /** Put param pairs with a `java.util.List` of values for Python. */
   private[ml] def put(paramPairs: JList[ParamPair[_]]): this.type = {
-    put(paramPairs.asScala: _*)
+    put(paramPairs.asScala.toSeq: _*)
   }
 
   /**

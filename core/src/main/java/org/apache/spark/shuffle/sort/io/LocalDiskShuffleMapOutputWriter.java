@@ -35,6 +35,7 @@ import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
+import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
 import org.apache.spark.util.Utils;
 
 /**
@@ -97,7 +98,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   @Override
-  public long[] commitAllPartitions() throws IOException {
+  public MapOutputCommitMessage commitAllPartitions() throws IOException {
     // Check the position after transferTo loop to see if it is in the right position and raise a
     // exception if it is incorrect. The position will not be increased to the expected length
     // after calling transferTo in kernel version 2.6.32. This issue is described at
@@ -113,7 +114,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
     blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
-    return partitionLengths;
+    return MapOutputCommitMessage.of(partitionLengths);
   }
 
   @Override

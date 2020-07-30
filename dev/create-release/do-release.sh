@@ -17,8 +17,6 @@
 # limitations under the License.
 #
 
-set -e
-
 SELF=$(cd $(dirname $0) && pwd)
 . "$SELF/release-util.sh"
 
@@ -54,6 +52,9 @@ function should_build {
 if should_build "tag" && [ $SKIP_TAG = 0 ]; then
   run_silent "Creating release tag $RELEASE_TAG..." "tag.log" \
     "$SELF/release-tag.sh"
+  echo "It may take some time for the tag to be synchronized to github."
+  echo "Press enter when you've verified that the new tag ($RELEASE_TAG) is available."
+  read
 else
   echo "Skipping tag creation for $RELEASE_TAG."
 fi
@@ -77,13 +78,4 @@ if should_build "publish"; then
     "$SELF/release-build.sh" publish-release
 else
   echo "Skipping publish step."
-fi
-
-if should_build "tag" && [ $SKIP_TAG = 0 ]; then
-  git push origin $RELEASE_TAG
-  if [[ $RELEASE_TAG != *"preview"* ]]; then
-    git push origin HEAD:$GIT_BRANCH
-  else
-    echo "It's preview release. We only push $RELEASE_TAG to remote."
-  fi
 fi

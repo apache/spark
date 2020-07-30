@@ -240,4 +240,21 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532-2")
     assert(session.conf.get(WAREHOUSE_PATH) === "SPARK-31532-db-2")
   }
+
+  test("SPARK-32062: reset listenerRegistered in SparkSession") {
+    (1 to 2).foreach { i =>
+      val conf = new SparkConf()
+        .setMaster("local")
+        .setAppName(s"test-SPARK-32062-$i")
+      val context = new SparkContext(conf)
+      val beforeListenerSize = context.listenerBus.listeners.size()
+      SparkSession
+        .builder()
+        .sparkContext(context)
+        .getOrCreate()
+      val afterListenerSize = context.listenerBus.listeners.size()
+      assert(beforeListenerSize + 1 == afterListenerSize)
+      context.stop()
+    }
+  }
 }

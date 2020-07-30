@@ -566,7 +566,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       if (opException != null) {
         resp.setSqlState(opException.getSQLState());
         resp.setErrorCode(opException.getErrorCode());
-        resp.setErrorMessage(opException.getMessage());
+        resp.setErrorMessage(org.apache.hadoop.util.StringUtils
+            .stringifyException(opException));
       }
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {
@@ -647,7 +648,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       resp.setOperationHandle(opHandle.toTOperationHandle());
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {
-     LOG.warn("Error getting functions: ", e);
+     LOG.warn("Error getting primary keys: ", e);
      resp.setStatus(HiveSQLException.toTStatus(e));
     }
     return resp;
@@ -665,7 +666,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
           resp.setOperationHandle(opHandle.toTOperationHandle());
           resp.setStatus(OK_STATUS);
     } catch (Exception e) {
-      LOG.warn("Error getting functions: ", e);
+      LOG.warn("Error getting cross reference: ", e);
       resp.setStatus(HiveSQLException.toTStatus(e));
     }
     return resp;

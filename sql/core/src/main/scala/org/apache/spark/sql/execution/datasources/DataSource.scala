@@ -811,7 +811,7 @@ object DataSource extends Logging {
     val path = CaseInsensitiveMap(options).get("path")
     val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
     CatalogStorageFormat.empty.copy(
-      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath)
+      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath.toMap)
   }
 
   /**

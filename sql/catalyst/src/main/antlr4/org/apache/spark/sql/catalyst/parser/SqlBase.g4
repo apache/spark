@@ -229,6 +229,7 @@ statement
         comment=(STRING | NULL)                                        #commentNamespace
     | COMMENT ON TABLE multipartIdentifier IS comment=(STRING | NULL)  #commentTable
     | REFRESH TABLE multipartIdentifier                                #refreshTable
+    | REFRESH FUNCTION multipartIdentifier                             #refreshFunction
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE multipartIdentifier
         (OPTIONS options=tablePropertyList)? (AS? query)?              #cacheTable
@@ -240,8 +241,11 @@ statement
     | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
     | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
+    | SET TIME ZONE interval                                           #setTimeZone
+    | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
+    | SET TIME ZONE .*?                                                #setTimeZone
     | SET .*?                                                          #setConfiguration
-    | RESET                                                            #resetConfiguration
+    | RESET .*?                                                        #resetConfiguration
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -989,6 +993,7 @@ number
     | MINUS? SMALLINT_LITERAL         #smallIntLiteral
     | MINUS? TINYINT_LITERAL          #tinyIntLiteral
     | MINUS? DOUBLE_LITERAL           #doubleLiteral
+    | MINUS? FLOAT_LITERAL            #floatLiteral
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
@@ -1010,10 +1015,12 @@ alterColumnAction
 // You can find the full keywords list by searching "Start of the keywords list" in this file.
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
+//--ANSI-NON-RESERVED-START
     : ADD
     | AFTER
     | ALTER
     | ANALYZE
+    | ANTI
     | ARCHIVE
     | ARRAY
     | ASC
@@ -1146,10 +1153,12 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SEMI
     | SEPARATED
     | SERDE
     | SERDEPROPERTIES
     | SET
+    | SETMINUS
     | SETS
     | SHOW
     | SKEWED
@@ -1174,6 +1183,7 @@ ansiNonReserved
     | TRIM
     | TRUE
     | TRUNCATE
+    | TYPE
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
@@ -1185,6 +1195,8 @@ ansiNonReserved
     | VIEW
     | VIEWS
     | WINDOW
+    | ZONE
+//--ANSI-NON-RESERVED-END
     ;
 
 // When `SQL_standard_keyword_behavior=false`, there are 2 kinds of keywords in Spark SQL.
@@ -1215,6 +1227,7 @@ strictNonReserved
     ;
 
 nonReserved
+//--DEFAULT-NON-RESERVED-START
     : ADD
     | AFTER
     | ALL
@@ -1426,6 +1439,7 @@ nonReserved
     | TEMPORARY
     | TERMINATED
     | THEN
+    | TIME
     | TO
     | TOUCH
     | TRAILING
@@ -1454,15 +1468,17 @@ nonReserved
     | WINDOW
     | WITH
     | YEAR
+    | ZONE
+//--DEFAULT-NON-RESERVED-END
     ;
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
-// in `docs/sql-keywords.md`. If the token is a non-reserved keyword,
-// please update `ansiNonReserved` and `nonReserved` as well.
+// and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`.
 
 //============================
 // Start of the keywords list
 //============================
+//--SPARK-KEYWORD-LIST-START
 ADD: 'ADD';
 AFTER: 'AFTER';
 ALL: 'ALL';
@@ -1527,6 +1543,7 @@ DIRECTORIES: 'DIRECTORIES';
 DIRECTORY: 'DIRECTORY';
 DISTINCT: 'DISTINCT';
 DISTRIBUTE: 'DISTRIBUTE';
+DIV: 'DIV';
 DROP: 'DROP';
 ELSE: 'ELSE';
 END: 'END';
@@ -1686,6 +1703,7 @@ TBLPROPERTIES: 'TBLPROPERTIES';
 TEMPORARY: 'TEMPORARY' | 'TEMP';
 TERMINATED: 'TERMINATED';
 THEN: 'THEN';
+TIME: 'TIME';
 TO: 'TO';
 TOUCH: 'TOUCH';
 TRAILING: 'TRAILING';
@@ -1716,6 +1734,8 @@ WHERE: 'WHERE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
 YEAR: 'YEAR';
+ZONE: 'ZONE';
+//--SPARK-KEYWORD-LIST-END
 //============================
 // End of the keywords list
 //============================
@@ -1734,7 +1754,6 @@ MINUS: '-';
 ASTERISK: '*';
 SLASH: '/';
 PERCENT: '%';
-DIV: 'DIV';
 TILDE: '~';
 AMPERSAND: '&';
 PIPE: '|';
@@ -1769,6 +1788,11 @@ EXPONENT_VALUE
 
 DECIMAL_VALUE
     : DECIMAL_DIGITS {isValidDecimal()}?
+    ;
+
+FLOAT_LITERAL
+    : DIGIT+ EXPONENT? 'F'
+    | DECIMAL_DIGITS EXPONENT? 'F' {isValidDecimal()}?
     ;
 
 DOUBLE_LITERAL
