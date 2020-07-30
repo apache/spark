@@ -33,8 +33,8 @@ import org.apache.spark.util.Utils
 
 class SQLConfSuite extends QueryTest with SharedSparkSession {
 
-  private val testKey = "test.key.0"
-  private val testVal = "test.val.0"
+  private val testKey = "test.key.k0"
+  private val testVal = "test.val.v0"
 
   test("propagate from spark conf") {
     // We create a new context here to avoid order dependence with other tests that might call

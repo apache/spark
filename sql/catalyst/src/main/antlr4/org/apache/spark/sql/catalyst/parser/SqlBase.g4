@@ -33,6 +33,16 @@ grammar SqlBase;
    * When true, the behavior of keywords follows ANSI SQL standard.
    */
   public boolean SQL_standard_keyword_behavior = false;
+
+  /**
+   * Returns true if a token at the given relative offset is put on the hidden channel.
+   * For example, this method can be used to respect 'WS' between tokens
+   * (See the syntax 'configKey').
+   */
+  public boolean isHidden(int indexOffset) {
+    Token token = _input.get(_input.index() + indexOffset);
+    return token.getChannel() == token.HIDDEN_CHANNEL;
+  }
 }
 
 @lexer::members {
@@ -69,20 +79,6 @@ grammar SqlBase;
     int nextChar = _input.LA(1);
     if (nextChar == '+') {
       return true;
-    } else {
-      return false;
-    }
-  }
-
-  /**
-   * Returns true if a token at the given relative offset is put on the hidden channel.
-   * For example, this method can be used to respect 'WS' between tokens
-   * (See the syntax 'configKey').
-   */
-  public boolean isHidden(int indexOffset) {
-    if (_input instanceof TokenStream) {
-      Token token = ((TokenStream) _input).get(_input.index() + indexOffset);
-      return token.getChannel() == token.HIDDEN_CHANNEL;
     } else {
       return false;
     }
@@ -283,7 +279,6 @@ configIdentifier
     : IDENTIFIER
     | nonReserved
     | strictNonReserved
-    | INTEGER_VALUE
     ;
 
 unsupportedHiveNativeCommands

@@ -69,7 +69,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     if (ctx.configKey() != null) {
       val keyStr = ctx.configKey().getText
       if (ctx.configValue() != null) {
-        SetCommand(Some(keyStr -> Option(ctx.configValue().getText)))
+        SetCommand(Some(keyStr -> Option(remainder(ctx.EQ().getSymbol).trim)))
       } else {
         SetCommand(Some(keyStr -> None))
       }
