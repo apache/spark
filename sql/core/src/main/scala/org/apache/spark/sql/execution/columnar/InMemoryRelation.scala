@@ -60,7 +60,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       conf: SQLConf): RDD[CachedBatch] =
     throw new IllegalStateException("Columnar input is not supported")
 
-  override def convertInternalRowToCachedBatch(input: RDD[InternalRow],
+  override def convertInternalRowToCachedBatch(
+      input: RDD[InternalRow],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] = {
@@ -69,7 +70,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     convertForCacheInternal(input, schema, batchSize, useCompression)
   }
 
-  def convertForCacheInternal(input: RDD[InternalRow],
+  def convertForCacheInternal(
+      input: RDD[InternalRow],
       output: Seq[Attribute],
       batchSize: Int,
       useCompression: Boolean): RDD[CachedBatch] = {
@@ -171,7 +173,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     input.map(createAndDecompressColumn)
   }
 
-  override def convertCachedBatchToInternalRow(input: RDD[CachedBatch],
+  override def convertCachedBatchToInternalRow(
+      input: RDD[CachedBatch],
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {

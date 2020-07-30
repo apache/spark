@@ -92,25 +92,24 @@ case class InMemoryTableScanExec(
 
     // update SQL metrics
     val withMetrics =
-      filteredCachedBatches().map{ batch =>
-        if (enableAccumulatorsForTest) {
-          readBatches.add(1)
-        }
-        numOutputRows += batch.numRows
-        batch
-      }
-    val rows = serializer.convertCachedBatchToInternalRow(withMetrics, relOutput, attributes, conf)
-    if (enableAccumulatorsForTest) {
-      def incParts(index: Int, iter: Iterator[InternalRow]): Iterator[InternalRow] = {
-        if (iter.hasNext) {
+      filteredCachedBatches().mapPartitionsInternal { iter =>
+        if (enableAccumulatorsForTest && iter.hasNext) {
           readPartitions.add(1)
         }
-        iter
+        new Iterator[CachedBatch] {
+          override def hasNext: Boolean = iter.hasNext
+
+          override def next(): CachedBatch = {
+            val batch = iter.next
+            if (enableAccumulatorsForTest) {
+              readBatches.add(1)
+            }
+            numOutputRows += batch.numRows
+            batch
+          }
+        }
       }
-      rows.mapPartitionsWithIndexInternal(incParts)
-    } else {
-      rows
-    }
+    serializer.convertCachedBatchToInternalRow(withMetrics, relOutput, attributes, conf)
   }
 
   override def output: Seq[Attribute] = attributes

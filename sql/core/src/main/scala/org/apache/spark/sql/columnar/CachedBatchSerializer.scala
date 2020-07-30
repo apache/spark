@@ -41,8 +41,7 @@ trait CachedBatch {
 }
 
 /**
- * Provides APIs for compressing, filtering, and decompressing SQL data that will be
- * persisted/cached.
+ * Provides APIs that handle transformations of SQL data associated with the cache/persist APIs.
  */
 @DeveloperApi
 @Since("3.1.0")
