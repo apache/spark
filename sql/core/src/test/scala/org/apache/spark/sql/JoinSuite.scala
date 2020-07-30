@@ -1184,7 +1184,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("SPARK-32474: NullAwareAntiJoin multi-column support") {
+  test("SPARK-32494: Null Aware Anti Join Optimize Support Multi-Column") {
     withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       // positive not in subquery case

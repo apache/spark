@@ -1749,7 +1749,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-32474: NullAwareAntiJoin multi-column support") {
+  test("SPARK-32494: Null Aware Anti Join Optimize Support Multi-Column") {
     Seq(true, false).foreach { enableNAAJ =>
       Seq(true, false).foreach { enableAQE =>
         Seq(true, false).foreach { enableCodegen =>
