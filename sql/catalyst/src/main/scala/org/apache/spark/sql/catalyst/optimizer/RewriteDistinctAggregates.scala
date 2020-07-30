@@ -199,7 +199,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // clause for this rule because aggregation strategy can handle a single distinct aggregate
     // group without filter clause.
     // This check can produce false-positives, e.g., SUM(DISTINCT a) & COUNT(DISTINCT a).
-    distinctAggs.size > 1 || (distinctAggs.size == 1 && aggExpressions.exists(_.filter.isDefined))
+    distinctAggs.size > 1 || distinctAggs.exists(_.filter.isDefined)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -209,6 +209,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
   def rewrite(a: Aggregate): Aggregate = {
 
     val aggExpressions = collectAggregateExprs(a)
+    val distinctAggs = aggExpressions.filter(_.isDistinct)
 
     // Extract distinct aggregate expressions.
     val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>
@@ -228,7 +229,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     }
 
     // Aggregation strategy can handle queries with a single distinct group without filter clause.
-    if (distinctAggGroups.size > 1 || aggExpressions.exists(_.filter.isDefined)) {
+    if (distinctAggGroups.size > 1 || distinctAggs.exists(_.filter.isDefined)) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = AttributeReference("gid", IntegerType, nullable = false)()
       val groupByMap = a.groupingExpressions.collect {
@@ -259,21 +260,16 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       // Setup all the filters in distinct aggregate.
       val distinctAggExprs = aggExpressions
         .filter(e => e.isDistinct && e.children.exists(!_.foldable))
-      val distinctAggFilterAttrMap = distinctAggExprs.collect {
+      val (distinctAggFilters, distinctAggFilterAttrs, maxCond) = distinctAggExprs.collect {
         case AggregateExpression(_, _, _, filter, _) if filter.isDefined =>
           val (e, attr) = expressionAttributePair(filter.get)
           val aggregateExp = AggregateExpression(Max(attr), Partial, false)
           (e, attr, Alias(aggregateExp, attr.name)())
-      }
-      val distinctAggFilters = distinctAggFilterAttrMap.map(_._1)
-      val distinctAggFilterAttrs = distinctAggFilterAttrMap.map(_._2)
-      val boolOrs = distinctAggFilterAttrMap.map(_._3)
+      }.unzip3
 
       // Setup expand & aggregate operators for distinct aggregate expressions.
       val distinctAggChildAttrLookup = distinctAggChildAttrMap.toMap
-      val distinctAggFilterAttrLookup = distinctAggFilterAttrMap.map { tuple3 =>
-        tuple3._1 -> tuple3._3.toAttribute
-      }.toMap
+      val distinctAggFilterAttrLookup = distinctAggFilters.zip(maxCond.map(_.toAttribute)).toMap
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
           val id = Literal(i + 1)
@@ -383,7 +379,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val firstAggregateGroupBy = groupByAttrs ++ distinctAggChildAttrs :+ gid
       val firstAggregate = Aggregate(
         firstAggregateGroupBy,
-        firstAggregateGroupBy ++ boolOrs ++ regularAggOperatorMap.map(_._2),
+        firstAggregateGroupBy ++ maxCond ++ regularAggOperatorMap.map(_._2),
         expand)
 
       // Construct the second aggregate
