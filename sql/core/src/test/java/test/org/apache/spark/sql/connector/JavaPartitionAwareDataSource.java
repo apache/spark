@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.read.*;
 import org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution;
 import org.apache.spark.sql.connector.read.partitioning.Distribution;
+import org.apache.spark.sql.connector.read.partitioning.HashClusteredDistribution;
 import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -81,6 +82,11 @@ public class JavaPartitionAwareDataSource implements TestingV2Source {
     public boolean satisfy(Distribution distribution) {
       if (distribution instanceof ClusteredDistribution) {
         String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
+        return Arrays.asList(clusteredCols).contains("i");
+      }
+
+      if (distribution instanceof HashClusteredDistribution) {
+        String[] clusteredCols = ((HashClusteredDistribution) distribution).clusteredColumns;
         return Arrays.asList(clusteredCols).contains("i");
       }
 

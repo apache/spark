@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.OptionalInt
+
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Partitioning}
+import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, HashClusteredDistribution, Partitioning}
 
 /**
  * An adapter from public data source partitioning to catalyst internal `Partitioning`.
@@ -34,17 +36,25 @@ class DataSourcePartitioning(
     super.satisfies0(required) || {
       required match {
         case d: physical.ClusteredDistribution if isCandidate(d.clustering) =>
-          val attrs = d.clustering.map(_.asInstanceOf[Attribute])
           partitioning.satisfy(
-            new ClusteredDistribution(attrs.map { a =>
-              val name = colNames.get(a)
-              assert(name.isDefined, s"Attribute ${a.name} is not found in the data source output")
-              name.get
-            }.toArray))
+            new ClusteredDistribution(exprsToColArray(d.clustering)))
+        case d: physical.HashClusteredDistribution => partitioning.satisfy(
+          new HashClusteredDistribution(
+            exprsToColArray(d.expressions),
+            d.requiredNumPartitions.map(java.util.OptionalInt.of).getOrElse(OptionalInt.empty())))
 
         case _ => false
       }
     }
+  }
+
+  def exprsToColArray(exprs: Seq[Expression]): Array[String] = {
+    val attrs = exprs.map(_.asInstanceOf[Attribute])
+    attrs.map { a =>
+      val name = colNames.get(a)
+      assert(name.isDefined, s"Attribute ${a.name} is not found in the data source output")
+      name.get
+    }.toArray
   }
 
   private def isCandidate(clustering: Seq[Expression]): Boolean = {

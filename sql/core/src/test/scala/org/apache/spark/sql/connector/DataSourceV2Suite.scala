@@ -22,9 +22,7 @@ import java.util
 import java.util.OptionalLong
 
 import scala.collection.JavaConverters._
-
 import test.org.apache.spark.sql.connector._
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapabil
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, HashClusteredDistribution, Partitioning}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
@@ -162,6 +160,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
+        val df2 = spark.read.format(cls.getName).load()
         checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
 
         val groupByColA = df.groupBy('i).agg(sum('j))
@@ -185,6 +184,16 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val groupByAPlusB = df.groupBy('i + 'j).agg(count("*"))
         checkAnswer(groupByAPlusB, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
         assert(collectFirst(groupByAPlusB.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => e
+        }.isDefined)
+
+        val joinWithColA = df.join(df2, "i")
+        assert(collectFirst(joinWithColA.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => e
+        }.isEmpty)
+
+        val joinWithColB = df.join(df2, "j")
+        assert(collectFirst(joinWithColB.queryExecution.executedPlan) {
           case e: ShuffleExchangeExec => e
         }.isDefined)
       }
@@ -704,6 +713,7 @@ class PartitionAwareDataSource extends TestingV2Source {
 
     override def satisfy(distribution: Distribution): Boolean = distribution match {
       case c: ClusteredDistribution => c.clusteredColumns.contains("i")
+      case h: HashClusteredDistribution => h.clusteredColumns.contains("i")
       case _ => false
     }
   }
