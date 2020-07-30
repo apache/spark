@@ -38,7 +38,7 @@ class ShuffleStoragePluginSuite extends SortShuffleSuite {
     val outputTracker = SparkEnv
       .get
       .shuffleDataIO
-      .getOrCreateDriverComponents()
+      .driver()
       .shuffleOutputTracker()
       .asInstanceOf[MockAsyncBackupShuffleOutputTracker]
     val backupManager = outputTracker.backupManager
