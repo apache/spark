@@ -222,14 +222,14 @@ class Summarizer(object):
     +-----------------------------------+
     |aggregate_metrics(features, weight)|
     +-----------------------------------+
-    |[[1.0,1.0,1.0], 1]                 |
+    |{[1.0,1.0,1.0], 1}                 |
     +-----------------------------------+
     <BLANKLINE>
     >>> df.select(summarizer.summary(df.features)).show(truncate=False)
     +--------------------------------+
     |aggregate_metrics(features, 1.0)|
     +--------------------------------+
-    |[[1.0,1.5,2.0], 2]              |
+    |{[1.0,1.5,2.0], 2}              |
     +--------------------------------+
     <BLANKLINE>
     >>> df.select(Summarizer.mean(df.features, df.weight)).show(truncate=False)
