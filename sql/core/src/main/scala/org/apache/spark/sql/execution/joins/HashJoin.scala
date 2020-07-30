@@ -319,6 +319,23 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     }
   }
 
+  override def doProduce(ctx: CodegenContext): String = {
+    streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    joinType match {
+      case _: InnerLike => codegenInner(ctx, input)
+      case LeftOuter | RightOuter => codegenOuter(ctx, input)
+      case LeftSemi => codegenSemi(ctx, input)
+      case LeftAnti => codegenAnti(ctx, input)
+      case _: ExistenceJoin => codegenExistence(ctx, input)
+      case x =>
+        throw new IllegalArgumentException(
+          s"HashJoin should not take $x as the JoinType")
+    }
+  }
+
   /**
    * Returns the code for generating join key for stream side, and expression of whether the key
    * has any null in it or not.

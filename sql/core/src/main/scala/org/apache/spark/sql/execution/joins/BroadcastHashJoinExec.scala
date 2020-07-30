@@ -195,23 +195,6 @@ case class BroadcastHashJoinExec(
   override def needCopyResult: Boolean =
     streamedPlan.asInstanceOf[CodegenSupport].needCopyResult || multipleOutputForOneInput
 
-  override def doProduce(ctx: CodegenContext): String = {
-    streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)
-  }
-
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    joinType match {
-      case _: InnerLike => codegenInner(ctx, input)
-      case LeftOuter | RightOuter => codegenOuter(ctx, input)
-      case LeftSemi => codegenSemi(ctx, input)
-      case LeftAnti => codegenAnti(ctx, input)
-      case _: ExistenceJoin => codegenExistence(ctx, input)
-      case x =>
-        throw new IllegalArgumentException(
-          s"BroadcastHashJoin should not take $x as the JoinType")
-    }
-  }
-
   /**
    * Returns a tuple of Broadcast of HashedRelation and the variable name for it.
    */

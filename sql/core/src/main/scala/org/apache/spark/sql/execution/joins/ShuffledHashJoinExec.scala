@@ -81,36 +81,6 @@ case class ShuffledHashJoinExec(
 
   override def needCopyResult: Boolean = true
 
-  override protected def doProduce(ctx: CodegenContext): String = {
-    // inline mutable state since not many join operations in a task
-    val streamedInput = ctx.addMutableState(
-      "scala.collection.Iterator", "streamedInput", v => s"$v = inputs[0];", forceInline = true)
-    val streamedRow = ctx.addMutableState(
-      "InternalRow", "streamedRow", forceInline = true)
-    val (streamInputVar, streamInputVarDecl) = createVars(ctx, streamedRow, streamedPlan.output)
-
-    val join = joinType match {
-      case _: InnerLike => codegenInner(ctx, streamInputVar)
-      case LeftOuter | RightOuter => codegenOuter(ctx, streamInputVar)
-      case LeftSemi => codegenSemi(ctx, streamInputVar)
-      case LeftAnti => codegenAnti(ctx, streamInputVar)
-      case _: ExistenceJoin => codegenExistence(ctx, streamInputVar)
-      case x =>
-        throw new IllegalArgumentException(
-          s"ShuffledHashJoin should not take $x as the JoinType")
-    }
-
-    s"""
-       |while ($streamedInput.hasNext()) {
-       |  $streamedRow = (InternalRow) $streamedInput.next();
-       |  ${streamInputVarDecl.mkString("\n")}
-       |  $join
-       |
-       |  if (shouldStop()) return;
-       |}
-     """.stripMargin
-  }
-
   /**
    * Returns a tuple of variable name for HashedRelation,
    * and boolean false to indicate key not to be known unique in code-gen time.
