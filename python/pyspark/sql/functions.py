@@ -1996,7 +1996,7 @@ def map_from_arrays(col1, col2):
     +----------------+
     |             map|
     +----------------+
-    |[2 -> a, 5 -> b]|
+    |{2 -> a, 5 -> b}|
     +----------------+
     """
     sc = SparkContext._active_spark_context
@@ -2316,9 +2316,9 @@ def explode_outer(col):
     +---+----------+----+
     | id|     a_map| col|
     +---+----------+----+
-    |  1|[x -> 1.0]| foo|
-    |  1|[x -> 1.0]| bar|
-    |  2|        []|null|
+    |  1|{x -> 1.0}| foo|
+    |  1|{x -> 1.0}| bar|
+    |  2|        {}|null|
     |  3|      null|null|
     +---+----------+----+
     """
@@ -2351,9 +2351,9 @@ def posexplode_outer(col):
     +---+----------+----+----+
     | id|     a_map| pos| col|
     +---+----------+----+----+
-    |  1|[x -> 1.0]|   0| foo|
-    |  1|[x -> 1.0]|   1| bar|
-    |  2|        []|null|null|
+    |  1|{x -> 1.0}|   0| foo|
+    |  1|{x -> 1.0}|   1| bar|
+    |  2|        {}|null|null|
     |  3|      null|null|null|
     +---+----------+----+----+
     """
@@ -2750,7 +2750,7 @@ def map_entries(col):
     +----------------+
     |         entries|
     +----------------+
-    |[[1, a], [2, b]]|
+    |[{1, a}, {2, b}]|
     +----------------+
     """
     sc = SparkContext._active_spark_context
@@ -2770,7 +2770,7 @@ def map_from_entries(col):
     +----------------+
     |             map|
     +----------------+
-    |[1 -> a, 2 -> b]|
+    |{1 -> a, 2 -> b}|
     +----------------+
     """
     sc = SparkContext._active_spark_context
@@ -2822,7 +2822,7 @@ def map_concat(*cols):
     +------------------------+
     |map3                    |
     +------------------------+
-    |[1 -> a, 2 -> b, 3 -> c]|
+    |{1 -> a, 2 -> b, 3 -> c}|
     +------------------------+
     """
     sc = SparkContext._active_spark_context
@@ -3241,7 +3241,7 @@ def transform_keys(col, f):
     +-------------------------+
     |data_upper               |
     +-------------------------+
-    |[BAR -> 2.0, FOO -> -2.0]|
+    |{BAR -> 2.0, FOO -> -2.0}|
     +-------------------------+
     """
     return _invoke_higher_order_function("TransformKeys", [col], [f])
@@ -3268,7 +3268,7 @@ def transform_values(col, f):
     +---------------------------------------+
     |new_data                               |
     +---------------------------------------+
-    |[OPS -> 34.0, IT -> 20.0, SALES -> 2.0]|
+    |{OPS -> 34.0, IT -> 20.0, SALES -> 2.0}|
     +---------------------------------------+
     """
     return _invoke_higher_order_function("TransformValues", [col], [f])
@@ -3294,7 +3294,7 @@ def map_filter(col, f):
     +--------------------------+
     |data_filtered             |
     +--------------------------+
-    |[baz -> 32.0, foo -> 42.0]|
+    |{baz -> 32.0, foo -> 42.0}|
     +--------------------------+
     """
     return _invoke_higher_order_function("MapFilter", [col], [f])
@@ -3324,7 +3324,7 @@ def map_zip_with(col1, col2, f):
     +---------------------------+
     |updated_data               |
     +---------------------------+
-    |[SALES -> 16.8, IT -> 48.0]|
+    |{SALES -> 16.8, IT -> 48.0}|
     +---------------------------+
     """
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
