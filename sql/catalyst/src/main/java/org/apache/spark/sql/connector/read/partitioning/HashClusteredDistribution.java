@@ -6,8 +6,7 @@ import java.util.OptionalInt;
 
 /**
  * A concrete implementation of {@link Distribution}.
- * Represents data where tuples have been clustered according to the hash of the given
- * `expressions`.
+ * Represents data where tuples have been clustered according to the hash of the given columns.
  *
  * This is a strictly stronger guarantee than [[ClusteredDistribution]]. Given a tuple and the
  * number of partitions, this distribution strictly requires which partition the tuple should be in.
