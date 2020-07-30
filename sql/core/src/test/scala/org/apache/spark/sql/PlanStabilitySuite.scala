@@ -73,14 +73,8 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   protected val baseResourcePath = {
-    // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
-    // relative path. Otherwise, we use classloader's getResource to find the location.
-    if (regenerateGoldenFiles) {
-      java.nio.file.Paths.get("src", "test", "resources", "tpcds-plan-stability").toFile
-    } else {
-      val res = getClass.getClassLoader.getResource("tpcds-plan-stability")
-      new File(res.getFile)
-    }
+    // use the same way as `SQLQueryTestSuite` to get the resource path
+    java.nio.file.Paths.get("src", "test", "resources", "tpcds-plan-stability").toFile
   }
 
   def goldenFilePath: String
