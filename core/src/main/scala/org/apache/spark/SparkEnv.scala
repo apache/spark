@@ -321,7 +321,7 @@ object SparkEnv extends Logging {
     val mapOutputTracker = if (isDriver) {
       new MapOutputTrackerMaster(
         conf,
-        shuffleDataIo.getOrCreateDriverComponents().shuffleOutputTracker(),
+        shuffleDataIo.driver().shuffleOutputTracker(),
         broadcastManager,
         isLocal)
     } else {

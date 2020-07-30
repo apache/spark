@@ -70,7 +70,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   val streamId = 1
   val securityMgr = new SecurityManager(conf, encryptionKey)
   val broadcastManager = new BroadcastManager(true, conf, securityMgr)
-  val mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
+  val mapOutputTracker = new MapOutputTrackerMaster(conf, null, broadcastManager, true)
   val shuffleManager = new SortShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
   var serializerManager = new SerializerManager(serializer, conf, encryptionKey)

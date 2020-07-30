@@ -515,7 +515,7 @@ class SparkContext(config: SparkConf) extends Logging {
     executorEnvs("SPARK_USER") = sparkUser
 
     _env.shuffleDataIO
-      .getOrCreateDriverComponents()
+      .driver()
       .getAddedExecutorSparkConf()
       .asScala
       .foreach { case (k, v) =>
@@ -2002,7 +2002,7 @@ class SparkContext(config: SparkConf) extends Logging {
       _heartbeater = null
     }
     Utils.tryLogNonFatalError {
-      env.shuffleDataIO.getOrCreateDriverComponents().cleanupApplication()
+      env.shuffleDataIO.driver().cleanupApplication()
     }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {

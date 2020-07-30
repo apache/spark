@@ -86,7 +86,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
    */
   private[this] val taskIdMapsForShuffle = new ConcurrentHashMap[Int, OpenHashSet[Long]]()
 
-  private lazy val shuffleExecutorComponents = loadShuffleExecutorComponents(conf)
+  private lazy val shuffleExecutorComponents = SparkEnv.get.shuffleDataIO.executor()
 
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
 
@@ -247,16 +247,6 @@ private[spark] object SortShuffleManager extends Logging {
       log.debug(s"Can use serialized shuffle for shuffle $shufId")
       true
     }
-  }
-
-  private def loadShuffleExecutorComponents(conf: SparkConf): ShuffleExecutorComponents = {
-    val env = SparkEnv.get
-    val extraConfigs = conf.getAllWithPrefix(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX)
-      .toMap
-    env.shuffleDataIO.getOrCreateExecutorComponents(
-      conf.getAppId,
-      env.executorId,
-      extraConfigs)
   }
 }
 
