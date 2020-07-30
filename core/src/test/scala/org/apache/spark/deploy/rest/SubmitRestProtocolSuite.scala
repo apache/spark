@@ -275,7 +275,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
       |    "spark.driver.extraLibraryPath" : "pickle.jar",
       |    "spark.jars" : "mayonnaise.jar,ketchup.jar",
       |    "spark.driver.supervise" : "false",
-      |    "spark.driver.memory" : "1024m",
+      |    "spark.driver.memory" : "${Utils.DEFAULT_DRIVER_MEM_MB}m",
       |    "spark.files" : "fireball.png",
       |    "spark.driver.cores" : "180",
       |    "spark.driver.extraJavaOptions" : " -Dslices=5 -Dcolor=mostly_red",
