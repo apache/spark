@@ -85,16 +85,8 @@ case class ShuffledHashJoinExec(
     // inline mutable state since not many join operations in a task
     val streamedInput = ctx.addMutableState(
       "scala.collection.Iterator", "streamedInput", v => s"$v = inputs[0];", forceInline = true)
-    val buildInput = ctx.addMutableState(
-      "scala.collection.Iterator", "buildInput", v => s"$v = inputs[1];", forceInline = true)
-    val initRelation = ctx.addMutableState(
-      CodeGenerator.JAVA_BOOLEAN, "initRelation", v => s"$v = false;", forceInline = true)
     val streamedRow = ctx.addMutableState(
       "InternalRow", "streamedRow", forceInline = true)
-
-    val thisPlan = ctx.addReferenceObj("plan", this)
-    val (relationTerm, _) = prepareRelation(ctx)
-    val buildRelation = s"$relationTerm = $thisPlan.buildHashedRelation($buildInput);"
     val (streamInputVar, streamInputVarDecl) = createVars(ctx, streamedRow, streamedPlan.output)
 
     val join = joinType match {
@@ -109,12 +101,6 @@ case class ShuffledHashJoinExec(
     }
 
     s"""
-       |// construct hash map for shuffled hash join build side
-       |if (!$initRelation) {
-       |  $buildRelation
-       |  $initRelation = true;
-       |}
-       |
        |while ($streamedInput.hasNext()) {
        |  $streamedRow = (InternalRow) $streamedInput.next();
        |  ${streamInputVarDecl.mkString("\n")}
@@ -130,13 +116,12 @@ case class ShuffledHashJoinExec(
    * and boolean false to indicate key not to be known unique in code-gen time.
    */
   protected override def prepareRelation(ctx: CodegenContext): (String, Boolean) = {
-    if (relationTerm == null) {
-      // Inline mutable state since not many join operations in a task
-      relationTerm = ctx.addMutableState(
-        "org.apache.spark.sql.execution.joins.HashedRelation", "relation", forceInline = true)
-    }
+    val thisPlan = ctx.addReferenceObj("plan", this)
+    val clsName = classOf[HashedRelation].getName
+
+    // Inline mutable state since not many join operations in a task
+    val relationTerm = ctx.addMutableState(clsName, "relation",
+      v => s"$v = $thisPlan.buildHashedRelation(inputs[1]);", forceInline = true)
     (relationTerm, false)
   }
-
-  private var relationTerm: String = _
 }

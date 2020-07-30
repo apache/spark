@@ -400,7 +400,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for Inner join.
    */
   protected def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (relationTerm, keyIsKnownUnique) = prepareRelation(ctx)
+    val (relationTerm, keyIsUnique) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
@@ -410,7 +410,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
       case BuildRight => input ++ buildVars
     }
 
-    if (keyIsKnownUnique) {
+    if (keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -450,7 +450,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for left or right outer join.
    */
   protected def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (relationTerm, keyIsKnownUnique) = prepareRelation(ctx)
+    val (relationTerm, keyIsUnique) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
@@ -482,7 +482,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
       case BuildRight => input ++ buildVars
     }
 
-    if (keyIsKnownUnique) {
+    if (keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -527,12 +527,12 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for left semi join.
    */
   protected def codegenSemi(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (relationTerm, keyIsKnownUnique) = prepareRelation(ctx)
+    val (relationTerm, keyIsUnique) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    if (keyIsKnownUnique) {
+    if (keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -576,12 +576,12 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for anti join.
    */
   protected def codegenAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (relationTerm, keyIsKnownUnique) = prepareRelation(ctx)
+    val (relationTerm, keyIsUnique) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    if (keyIsKnownUnique) {
+    if (keyIsUnique) {
       val found = ctx.freshName("found")
       s"""
          |boolean $found = false;
@@ -637,7 +637,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for existence join.
    */
   protected def codegenExistence(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (relationTerm, keyIsKnownUnique) = prepareRelation(ctx)
+    val (relationTerm, keyIsUnique) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
     val existsVar = ctx.freshName("exists")
@@ -664,7 +664,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val resultVar = input ++ Seq(ExprCode.forNonNullValue(
       JavaCode.variable(existsVar, BooleanType)))
 
-    if (keyIsKnownUnique) {
+    if (keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
