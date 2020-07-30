@@ -47,9 +47,8 @@ jsonFormatter.min.js
 .*json
 .*data
 .*log
-pyspark-coverage-site/
-cloudpickle.py
-heapq3.py
+pyspark-coverage-site/*
+cloudpickle/*
 join.py
 SparkExprTyper.scala
 SparkILoop.scala

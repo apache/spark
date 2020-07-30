@@ -18,10 +18,6 @@
 import sys
 import numpy as np
 
-if sys.version > '3':
-    xrange = range
-    basestring = str
-
 from pyspark import SparkContext, since
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
@@ -46,7 +42,7 @@ class MLUtils(object):
         nnz = len(items) - 1
         indices = np.zeros(nnz, dtype=np.int32)
         values = np.zeros(nnz)
-        for i in xrange(nnz):
+        for i in range(nnz):
             index, value = items[1 + i].split(":")
             indices[i] = int(index) - 1
             values[i] = float(value)
@@ -61,10 +57,10 @@ class MLUtils(object):
         v = _convert_to_vector(p.features)
         if isinstance(v, SparseVector):
             nnz = len(v.indices)
-            for i in xrange(nnz):
+            for i in range(nnz):
                 items.append(str(v.indices[i] + 1) + ":" + str(v.values[i]))
         else:
-            for i in xrange(len(v)):
+            for i in range(len(v)):
                 items.append(str(i + 1) + ":" + str(v[i]))
         return " ".join(items)
 
@@ -396,8 +392,8 @@ class JavaSaveable(Saveable):
         """Save this model to the given path."""
         if not isinstance(sc, SparkContext):
             raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
-        if not isinstance(path, basestring):
-            raise TypeError("path should be a basestring, got type %s" % type(path))
+        if not isinstance(path, str):
+            raise TypeError("path should be a string, got type %s" % type(path))
         self._java_model.save(sc._jsc.sc(), path)
 
 

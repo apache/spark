@@ -202,95 +202,50 @@ trait PredicateHelper extends Logging {
   }
 
   /**
-   * Convert an expression into conjunctive normal form.
-   * Definition and algorithm: https://en.wikipedia.org/wiki/Conjunctive_normal_form
-   * CNF can explode exponentially in the size of the input expression when converting [[Or]]
-   * clauses. Use a configuration [[SQLConf.MAX_CNF_NODE_COUNT]] to prevent such cases.
-   *
-   * @param condition to be converted into CNF.
-   * @return the CNF result as sequence of disjunctive expressions. If the number of expressions
-   *         exceeds threshold on converting `Or`, `Seq.empty` is returned.
+   * Returns a filter that its reference is a subset of `outputSet` and it contains the maximum
+   * constraints from `condition`. This is used for predicate pushdown.
+   * When there is no such filter, `None` is returned.
    */
-  protected def conjunctiveNormalForm(condition: Expression): Seq[Expression] = {
-    val postOrderNodes = postOrderTraversal(condition)
-    val resultStack = new mutable.Stack[Seq[Expression]]
-    val maxCnfNodeCount = SQLConf.get.maxCnfNodeCount
-    // Bottom up approach to get CNF of sub-expressions
-    while (postOrderNodes.nonEmpty) {
-      val cnf = postOrderNodes.pop() match {
-        case _: And =>
-          val right = resultStack.pop()
-          val left = resultStack.pop()
-          left ++ right
-        case _: Or =>
-          // For each side, there is no need to expand predicates of the same references.
-          // So here we can aggregate predicates of the same qualifier as one single predicate,
-          // for reducing the size of pushed down predicates and corresponding codegen.
-          val right = groupExpressionsByQualifier(resultStack.pop())
-          val left = groupExpressionsByQualifier(resultStack.pop())
-          // Stop the loop whenever the result exceeds the `maxCnfNodeCount`
-          if (left.size * right.size > maxCnfNodeCount) {
-            logInfo(s"As the result size exceeds the threshold $maxCnfNodeCount. " +
-              "The CNF conversion is skipped and returning Seq.empty now. To avoid this, you can " +
-              s"raise the limit ${SQLConf.MAX_CNF_NODE_COUNT.key}.")
-            return Seq.empty
-          } else {
-            for { x <- left; y <- right } yield Or(x, y)
-          }
-        case other => other :: Nil
+  protected def extractPredicatesWithinOutputSet(
+      condition: Expression,
+      outputSet: AttributeSet): Option[Expression] = condition match {
+    case And(left, right) =>
+      val leftResultOptional = extractPredicatesWithinOutputSet(left, outputSet)
+      val rightResultOptional = extractPredicatesWithinOutputSet(right, outputSet)
+      (leftResultOptional, rightResultOptional) match {
+        case (Some(leftResult), Some(rightResult)) => Some(And(leftResult, rightResult))
+        case (Some(leftResult), None) => Some(leftResult)
+        case (None, Some(rightResult)) => Some(rightResult)
+        case _ => None
       }
-      resultStack.push(cnf)
-    }
-    if (resultStack.length != 1) {
-      logWarning("The length of CNF conversion result stack is supposed to be 1. There might " +
-        "be something wrong with CNF conversion.")
-      return Seq.empty
-    }
-    resultStack.top
-  }
 
-  private def groupExpressionsByQualifier(expressions: Seq[Expression]): Seq[Expression] = {
-    expressions.groupBy(_.references.map(_.qualifier)).map(_._2.reduceLeft(And)).toSeq
-  }
+    // The Or predicate is convertible when both of its children can be pushed down.
+    // That is to say, if one/both of the children can be partially pushed down, the Or
+    // predicate can be partially pushed down as well.
+    //
+    // Here is an example used to explain the reason.
+    // Let's say we have
+    // condition: (a1 AND a2) OR (b1 AND b2),
+    // outputSet: AttributeSet(a1, b1)
+    // a1 and b1 is convertible, while a2 and b2 is not.
+    // The predicate can be converted as
+    // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
+    // As per the logical in And predicate, we can push down (a1 OR b1).
+    case Or(left, right) =>
+      for {
+        lhs <- extractPredicatesWithinOutputSet(left, outputSet)
+        rhs <- extractPredicatesWithinOutputSet(right, outputSet)
+      } yield Or(lhs, rhs)
 
-  /**
-   * Iterative post order traversal over a binary tree built by And/Or clauses with two stacks.
-   * For example, a condition `(a And b) Or c`, the postorder traversal is
-   * (`a`,`b`, `And`, `c`, `Or`).
-   * Following is the complete algorithm. After step 2, we get the postorder traversal in
-   * the second stack.
-   * 1. Push root to first stack.
-   * 2. Loop while first stack is not empty
-   *    2.1 Pop a node from first stack and push it to second stack
-   *    2.2 Push the children of the popped node to first stack
-   *
-   * @param condition to be traversed as binary tree
-   * @return sub-expressions in post order traversal as a stack.
-   *         The first element of result stack is the leftmost node.
-   */
-  private def postOrderTraversal(condition: Expression): mutable.Stack[Expression] = {
-    val stack = new mutable.Stack[Expression]
-    val result = new mutable.Stack[Expression]
-    stack.push(condition)
-    while (stack.nonEmpty) {
-      val node = stack.pop()
-      node match {
-        case Not(a And b) => stack.push(Or(Not(a), Not(b)))
-        case Not(a Or b) => stack.push(And(Not(a), Not(b)))
-        case Not(Not(a)) => stack.push(a)
-        case a And b =>
-          result.push(node)
-          stack.push(a)
-          stack.push(b)
-        case a Or b =>
-          result.push(node)
-          stack.push(a)
-          stack.push(b)
-        case _ =>
-          result.push(node)
+    // Here we assume all the `Not` operators is already below all the `And` and `Or` operators
+    // after the optimization rule `BooleanSimplification`, so that we don't need to handle the
+    // `Not` operators here.
+    case other =>
+      if (other.references.subsetOf(outputSet)) {
+        Some(other)
+      } else {
+        None
       }
-    }
-    result
   }
 }
 

@@ -475,6 +475,7 @@ object ParquetFileFormat extends Logging {
    *     S3 nodes).
    */
   def mergeSchemasInParallel(
+      parameters: Map[String, String],
       filesToTouch: Seq[FileStatus],
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
@@ -490,7 +491,7 @@ object ParquetFileFormat extends Logging {
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
     }
 
-    SchemaMergeUtils.mergeSchemasInParallel(sparkSession, filesToTouch, reader)
+    SchemaMergeUtils.mergeSchemasInParallel(sparkSession, parameters, filesToTouch, reader)
   }
 
   /**

@@ -45,10 +45,10 @@ object ElementwiseProductExample {
     // $example off$
 
     println("transformedData: ")
-    transformedData.foreach(x => println(x))
+    transformedData.collect.foreach(x => println(x))
 
     println("transformedData2: ")
-    transformedData2.foreach(x => println(x))
+    transformedData2.collect.foreach(x => println(x))
 
     sc.stop()
   }

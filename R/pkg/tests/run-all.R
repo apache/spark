@@ -35,8 +35,8 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   install.spark(overwrite = TRUE)
 
   sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
-  sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
-  invisible(lapply(sparkRWhitelistSQLDirs,
+  sparkRAllowedSQLDirs <- c("spark-warehouse", "metastore_db")
+  invisible(lapply(sparkRAllowedSQLDirs,
                    function(x) { unlink(file.path(sparkRDir, x), recursive = TRUE, force = TRUE)}))
   sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 
