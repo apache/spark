@@ -684,7 +684,7 @@ via `dapply(...)` and when applying an R native function to grouped data via `ga
 To use Arrow when executing these, users need to set the Spark configuration ‘spark.sql.execution.arrow.sparkr.enabled’
 to ‘true’ first. This is disabled by default.
 
-Whether the optimization is enabled or not, SparkR produces the same results. This is also because the conversion
+Whether the optimization is enabled or not, SparkR produces the same results. In addition, the conversion
 between Spark DataFrame and R DataFrame falls back automatically to non-Arrow optimization implementation
 when the optimization fails for any reasons before the actual computation.
 
