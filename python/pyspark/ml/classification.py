@@ -51,6 +51,8 @@ __all__ = ['LinearSVC', 'LinearSVCModel',
            'BinaryRandomForestClassificationTrainingSummary',
            'NaiveBayes', 'NaiveBayesModel',
            'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel',
+           'MultilayerPerceptronClassificationSummary',
+           'MultilayerPerceptronClassificationTrainingSummary',
            'OneVsRest', 'OneVsRestModel',
            'FMClassifier', 'FMClassificationModel', 'FMClassificationSummary',
            'FMClassificationTrainingSummary']
@@ -2622,7 +2624,7 @@ class MultilayerPerceptronClassifier(_JavaProbabilisticClassifier, _MultilayerPe
 
 class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationModel,
                                               _MultilayerPerceptronParams, JavaMLWritable,
-                                              JavaMLReadable):
+                                              JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by MultilayerPerceptronClassifier.
 
@@ -2636,6 +2638,51 @@ class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationMo
         the weights of layers.
         """
         return self._call_java("weights")
+
+    @since("3.1.0")
+    def summary(self):
+        """
+        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
+        """
+        if self.hasSummary:
+            return MultilayerPerceptronClassificationTrainingSummary(
+                super(MultilayerPerceptronClassificationModel, self).summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
+
+    @since("3.1.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+
+        :param dataset:
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+        java_mlp_summary = self._call_java("evaluate", dataset)
+        return MultilayerPerceptronClassificationSummary(java_mlp_summary)
+
+
+class MultilayerPerceptronClassificationSummary(_ClassificationSummary):
+    """
+    Abstraction for MultilayerPerceptronClassifier Results for a given model.
+    .. versionadded:: 3.1.0
+    """
+    pass
+
+
+@inherit_doc
+class MultilayerPerceptronClassificationTrainingSummary(MultilayerPerceptronClassificationSummary,
+                                                        _TrainingSummary):
+    """
+    Abstraction for MultilayerPerceptronClassifier Training results.
+    .. versionadded:: 3.1.0
+    """
+    pass
 
 
 class _OneVsRestParams(_ClassifierParams, HasWeightCol):

@@ -96,7 +96,8 @@ private[execution] object HashedRelation {
       input: Iterator[InternalRow],
       key: Seq[Expression],
       sizeEstimate: Int = 64,
-      taskMemoryManager: TaskMemoryManager = null): HashedRelation = {
+      taskMemoryManager: TaskMemoryManager = null,
+      isNullAware: Boolean = false): HashedRelation = {
     val mm = Option(taskMemoryManager).getOrElse {
       new TaskMemoryManager(
         new UnifiedMemoryManager(
@@ -107,10 +108,12 @@ private[execution] object HashedRelation {
         0)
     }
 
-    if (key.length == 1 && key.head.dataType == LongType) {
-      LongHashedRelation(input, key, sizeEstimate, mm)
+    if (isNullAware && !input.hasNext) {
+      EmptyHashedRelation
+    } else if (key.length == 1 && key.head.dataType == LongType) {
+      LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     } else {
-      UnsafeHashedRelation(input, key, sizeEstimate, mm)
+      UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     }
   }
 }
@@ -310,7 +313,8 @@ private[joins] object UnsafeHashedRelation {
       input: Iterator[InternalRow],
       key: Seq[Expression],
       sizeEstimate: Int,
-      taskMemoryManager: TaskMemoryManager): HashedRelation = {
+      taskMemoryManager: TaskMemoryManager,
+      isNullAware: Boolean = false): HashedRelation = {
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
@@ -338,6 +342,8 @@ private[joins] object UnsafeHashedRelation {
           throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
           // scalastyle:on throwerror
         }
+      } else if (isNullAware) {
+        return EmptyHashedRelationWithAllNullKeys
       }
     }
 
@@ -889,7 +895,8 @@ private[joins] object LongHashedRelation {
       input: Iterator[InternalRow],
       key: Seq[Expression],
       sizeEstimate: Int,
-      taskMemoryManager: TaskMemoryManager): LongHashedRelation = {
+      taskMemoryManager: TaskMemoryManager,
+      isNullAware: Boolean = false): HashedRelation = {
 
     val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)
@@ -903,6 +910,8 @@ private[joins] object LongHashedRelation {
       if (!rowKey.isNullAt(0)) {
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
+      } else if (isNullAware) {
+        return EmptyHashedRelationWithAllNullKeys
       }
     }
     map.optimize()
@@ -910,8 +919,52 @@ private[joins] object LongHashedRelation {
   }
 }
 
+/**
+ * Common trait with dummy implementation for NAAJ special HashedRelation
+ * EmptyHashedRelation
+ * EmptyHashedRelationWithAllNullKeys
+ */
+trait NullAwareHashedRelation extends HashedRelation with Externalizable {
+  override def get(key: InternalRow): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def getValue(key: InternalRow): InternalRow = {
+    throw new UnsupportedOperationException
+  }
+
+  override def keyIsUnique: Boolean = true
+
+  override def keys(): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def close(): Unit = {}
+
+  override def writeExternal(out: ObjectOutput): Unit = {}
+
+  override def readExternal(in: ObjectInput): Unit = {}
+
+  override def estimatedSize: Long = 0
+}
+
+/**
+ * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
+ */
+object EmptyHashedRelation extends NullAwareHashedRelation {
+  override def asReadOnlyCopy(): EmptyHashedRelation.type = this
+}
+
+/**
+ * A special HashedRelation indicates it built from a non-empty input:Iterator[InternalRow],
+ * which contains all null columns key.
+ */
+object EmptyHashedRelationWithAllNullKeys extends NullAwareHashedRelation {
+  override def asReadOnlyCopy(): EmptyHashedRelationWithAllNullKeys.type = this
+}
+
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
-case class HashedRelationBroadcastMode(key: Seq[Expression])
+case class HashedRelationBroadcastMode(key: Seq[Expression], isNullAware: Boolean = false)
   extends BroadcastMode {
 
   override def transform(rows: Array[InternalRow]): HashedRelation = {
@@ -923,9 +976,9 @@ case class HashedRelationBroadcastMode(key: Seq[Expression])
       sizeHint: Option[Long]): HashedRelation = {
     sizeHint match {
       case Some(numRows) =>
-        HashedRelation(rows, canonicalized.key, numRows.toInt)
+        HashedRelation(rows, canonicalized.key, numRows.toInt, isNullAware = isNullAware)
       case None =>
-        HashedRelation(rows, canonicalized.key)
+        HashedRelation(rows, canonicalized.key, isNullAware = isNullAware)
     }
   }
 

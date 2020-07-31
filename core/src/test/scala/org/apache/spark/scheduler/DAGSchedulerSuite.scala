@@ -178,6 +178,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     override def executorDecommission(
       executorId: String,
       decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+    override def getExecutorDecommissionInfo(
+      executorId: String): Option[ExecutorDecommissionInfo] = None
   }
 
   /**
@@ -785,6 +787,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       override def executorDecommission(
         executorId: String,
         decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+      override def getExecutorDecommissionInfo(
+        executorId: String): Option[ExecutorDecommissionInfo] = None
     }
     val noKillScheduler = new DAGScheduler(
       sc,

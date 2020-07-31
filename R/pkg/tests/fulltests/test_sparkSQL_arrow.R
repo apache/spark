@@ -312,4 +312,22 @@ test_that("Arrow optimization - unsupported types", {
   })
 })
 
+test_that("SPARK-32478: gapply() Arrow optimization - error message for schema mismatch", {
+  skip_if_not_installed("arrow")
+  df <- createDataFrame(list(list(a = 1L, b = "a")))
+
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
+  tryCatch({
+    expect_error(
+    count(gapply(df, "a", function(key, group) { group }, structType("a int, b int"))),
+    "expected IntegerType, IntegerType, got IntegerType, StringType")
+  },
+  finally = {
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
+  })
+})
+
 sparkR.session.stop()
