@@ -120,7 +120,7 @@ class SupportsPartitionsSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
   }
 
-  test("listPartitionNames") {
+  test("listPartitionIdentifiers") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
