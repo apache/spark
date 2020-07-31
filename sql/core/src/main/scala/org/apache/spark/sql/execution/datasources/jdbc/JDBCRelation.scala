@@ -225,7 +225,7 @@ private[sql] object JDBCRelation extends Logging {
   def getSchema(resolver: Resolver, jdbcOptions: JDBCOptions): StructType = {
     val tableSchema = JDBCRDD.resolveTable(jdbcOptions)
     jdbcOptions.customSchema match {
-      case Some(customSchema) => JdbcUtils.getCustomSchema(
+      case Some(customSchema) => JDBCUtils.getCustomSchema(
         tableSchema, customSchema, resolver)
       case None => tableSchema
     }

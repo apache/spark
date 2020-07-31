@@ -44,7 +44,7 @@ import org.apache.spark.util.NextIterator
 /**
  * Util functions for JDBC tables.
  */
-object JdbcUtils extends Logging {
+object JDBCUtils extends Logging {
   /**
    * Returns a factory for creating connections to the given JDBC URL.
    *

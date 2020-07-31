@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JDBCUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -1138,7 +1138,7 @@ class JDBCSuite extends QueryTest
   test("SPARK-16625: General data types to be mapped to Oracle") {
 
     def getJdbcType(dialect: JdbcDialect, dt: DataType): String = {
-      dialect.getJDBCType(dt).orElse(JdbcUtils.getCommonJDBCType(dt)).
+      dialect.getJDBCType(dt).orElse(JDBCUtils.getCommonJDBCType(dt)).
         map(_.databaseTypeDefinition).get
     }
 
@@ -1184,7 +1184,7 @@ class JDBCSuite extends QueryTest
 
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
-    val schema = JdbcUtils.schemaString(
+    val schema = JDBCUtils.schemaString(
       df.schema,
       df.sqlContext.conf.caseSensitiveAnalysis,
       "jdbc:mysql://localhost:3306/temp")

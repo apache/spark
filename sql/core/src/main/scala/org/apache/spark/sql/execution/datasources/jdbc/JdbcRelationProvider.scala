@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCUtils._
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
 class JdbcRelationProvider extends CreatableRelationProvider
@@ -45,16 +45,16 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val options = new JdbcOptionsInWrite(parameters)
     val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
 
-    val conn = JdbcUtils.createConnectionFactory(options)()
+    val conn = JDBCUtils.createConnectionFactory(options)()
     try {
-      val tableExists = JdbcUtils.tableExists(conn, options)
+      val tableExists = JDBCUtils.tableExists(conn, options)
       if (tableExists) {
         mode match {
           case SaveMode.Overwrite =>
             if (options.isTruncate && isCascadingTruncateTable(options.url) == Some(false)) {
               // In this case, we should truncate table and then load.
               truncateTable(conn, options)
-              val tableSchema = JdbcUtils.getSchemaOption(conn, options)
+              val tableSchema = JDBCUtils.getSchemaOption(conn, options)
               saveTable(df, tableSchema, isCaseSensitive, options)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
@@ -64,7 +64,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             }
 
           case SaveMode.Append =>
-            val tableSchema = JdbcUtils.getSchemaOption(conn, options)
+            val tableSchema = JDBCUtils.getSchemaOption(conn, options)
             saveTable(df, tableSchema, isCaseSensitive, options)
 
           case SaveMode.ErrorIfExists =>

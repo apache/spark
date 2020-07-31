@@ -53,14 +53,14 @@ object JDBCRDD extends Logging {
     val url = options.url
     val table = options.tableOrQuery
     val dialect = JdbcDialects.get(url)
-    val conn: Connection = JdbcUtils.createConnectionFactory(options)()
+    val conn: Connection = JDBCUtils.createConnectionFactory(options)()
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
       try {
         statement.setQueryTimeout(options.queryTimeout)
         val rs = statement.executeQuery()
         try {
-          JdbcUtils.getSchema(rs, dialect, alwaysNullable = true)
+          JDBCUtils.getSchema(rs, dialect, alwaysNullable = true)
         } finally {
           rs.close()
         }
@@ -158,7 +158,7 @@ object JDBCRDD extends Logging {
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
-      JdbcUtils.createConnectionFactory(options),
+      JDBCUtils.createConnectionFactory(options),
       pruneSchema(schema, requiredColumns),
       quotedColumns,
       filters,
@@ -302,7 +302,7 @@ private[jdbc] class JDBCRDD(
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
     rs = stmt.executeQuery()
-    val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
+    val rowsIterator = JDBCUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())

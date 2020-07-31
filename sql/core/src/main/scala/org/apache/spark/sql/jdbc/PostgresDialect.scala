@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Types}
 import java.util.Locale
 
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCUtils}
 import org.apache.spark.sql.types._
 
 
@@ -80,7 +80,7 @@ private object PostgresDialect extends JdbcDialect {
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>
       getJDBCType(et).map(_.databaseTypeDefinition)
-        .orElse(JdbcUtils.getCommonJDBCType(et).map(_.databaseTypeDefinition))
+        .orElse(JDBCUtils.getCommonJDBCType(et).map(_.databaseTypeDefinition))
         .map(typeName => JdbcType(s"$typeName[]", java.sql.Types.ARRAY))
     case _ => None
   }

@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JDBCUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types.StructType
@@ -70,14 +70,14 @@ class JDBCTableCatalog extends TableCatalog with Logging {
     checkNamespace(ident.namespace())
     val writeOptions = new JdbcOptionsInWrite(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    withConnection(JdbcUtils.tableExists(_, writeOptions))
+    withConnection(JDBCUtils.tableExists(_, writeOptions))
   }
 
   override def dropTable(ident: Identifier): Boolean = {
     checkNamespace(ident.namespace())
     withConnection { conn =>
       try {
-        JdbcUtils.dropTable(conn, getTableName(ident), options)
+        JDBCUtils.dropTable(conn, getTableName(ident), options)
         true
       } catch {
         case _: SQLException => false
@@ -88,7 +88,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     checkNamespace(oldIdent.namespace())
     withConnection { conn =>
-      JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
+      JDBCUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
     }
   }
 
@@ -123,7 +123,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     withConnection { conn =>
-      JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
+      JDBCUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
     }
 
     JDBCTable(ident, schema, writeOptions)
@@ -144,7 +144,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
   }
 
   private def withConnection[T](f: Connection => T): T = {
-    val conn = JdbcUtils.createConnectionFactory(options)()
+    val conn = JDBCUtils.createConnectionFactory(options)()
     try {
       f(conn)
     } finally {
