@@ -428,9 +428,9 @@ queries. Currently, it contains the following metrics.
 The tracked operations are listed as follows.
     * addBatch: Time taken to read the micro-batch's input data from the sources, process it, and write the batch's output to the sink. This should take the bulk of the micro-batch's time.
     * getBatch: Time taken to prepare the logical query to read the input of the current micro-batch from the sources.
-    * latestOffset: Time taken to query the sources whether they have new input data.
-    * queryPlanning: Generates the execution plan.
-    * walCommit: Writes the offsets to the metadata log.
+    * getOffset: Time taken to query the maximum available offset for this source.
+    * queryPlanning: Time taken to generates the execution plan.
+    * walCommit: Time taken to write the offsets to the metadata log.
     
 As an early-release version, the statistics page is still under development and will be improved in
 future releases.
