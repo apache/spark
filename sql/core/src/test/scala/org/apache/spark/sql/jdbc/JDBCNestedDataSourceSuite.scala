@@ -21,7 +21,7 @@ import org.apache.spark.sql.NestedDataSourceSuiteBase
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-class JdbcNestedDataSourceSuite extends NestedDataSourceSuiteBase {
+class JDBCNestedDataSourceSuite extends NestedDataSourceSuiteBase {
   override val nestedDataSources: Seq[String] = Seq("jdbc")
   private val tempDir = Utils.createTempDir()
   private val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
