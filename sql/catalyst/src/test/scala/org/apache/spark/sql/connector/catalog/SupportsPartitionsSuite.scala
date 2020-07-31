@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.connector.{InMemoryPartitionTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -82,27 +81,6 @@ class SupportsPartitionsSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
   }
 
-  test("renamePartition") {
-    val table = catalog.loadTable(ident)
-    val partTable = new InMemoryPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
-
-    val partIdent = InternalRow.apply("3")
-    partTable.createPartition(partIdent, new util.HashMap[String, String]())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
-    assert(partTable.partitionExists(partIdent))
-
-    val newPartIdent = InternalRow.apply("4")
-    partTable.renamePartition(partIdent, newPartIdent)
-    assert(partTable.partitionExists(newPartIdent))
-    assertThrows[NoSuchPartitionException](
-      partTable.getPartitionMetadata(partIdent))
-
-    partTable.dropPartition(newPartIdent)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
-  }
-
   test("replacePartitionMetadata") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
@@ -113,19 +91,19 @@ class SupportsPartitionsSuite extends SparkFunSuite {
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
     assert(partTable.partitionExists(partIdent))
-    assert(partTable.getPartitionMetadata(partIdent).isEmpty)
+    assert(partTable.loadPartitionMetadata(partIdent).isEmpty)
 
     partTable.replacePartitionMetadata(partIdent, Map("paramKey" -> "paramValue").asJava)
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
     assert(partTable.partitionExists(partIdent))
-    assert(!partTable.getPartitionMetadata(partIdent).isEmpty)
-    assert(partTable.getPartitionMetadata(partIdent).get("paramKey") == "paramValue")
+    assert(!partTable.loadPartitionMetadata(partIdent).isEmpty)
+    assert(partTable.loadPartitionMetadata(partIdent).get("paramKey") == "paramValue")
 
     partTable.dropPartition(partIdent)
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
   }
 
-  test("getPartitionMetadata") {
+  test("loadPartitionMetadata") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
@@ -135,8 +113,8 @@ class SupportsPartitionsSuite extends SparkFunSuite {
     partTable.createPartition(partIdent, Map("paramKey" -> "paramValue").asJava)
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
     assert(partTable.partitionExists(partIdent))
-    assert(!partTable.getPartitionMetadata(partIdent).isEmpty)
-    assert(partTable.getPartitionMetadata(partIdent).get("paramKey") == "paramValue")
+    assert(!partTable.loadPartitionMetadata(partIdent).isEmpty)
+    assert(partTable.loadPartitionMetadata(partIdent).get("paramKey") == "paramValue")
 
     partTable.dropPartition(partIdent)
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)

@@ -22,14 +22,21 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
 import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
+import org.apache.spark.sql.types.StructType;
 
 /**
  * A partition interface of {@link Table}.
  * A partition is composed of identifier and properties,
  * and properties contains metadata information of the partition.
  * <p>
- * These APIs are used to modify table partition identifier or partition metadata,
- * in some cases, they will change actual value of table data as well.
+ * These APIs are used to modify table partition identifier or partition metadata.
+ * In some cases, they will change the table data as well.
+ * ${@link #createPartition}:
+ *     add a partition and any data that its location contains to the table
+ * ${@link #dropPartition}:
+ *     remove a partition and any data it contains from the table
+ * ${@link #replacePartitionMetadata}:
+ *     point a partition to a new location, which will swap one location's data for the other
  *
  * @since 3.0.0
  */
@@ -37,15 +44,22 @@ import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
 public interface SupportsPartitions extends Table {
 
     /**
+     * @return the partition schema of table
+     */
+    StructType partitionSchema();
+
+    /**
      * Create a partition in table.
      *
      * @param ident a new partition identifier
      * @param properties the metadata of a partition
      * @throws PartitionAlreadyExistsException If a partition already exists for the identifier
+     * @throws UnsupportedOperationException If partition property is not supported
      */
     void createPartition(
-            InternalRow ident,
-            Map<String, String> properties) throws PartitionAlreadyExistsException;
+        InternalRow ident,
+        Map<String, String> properties)
+        throws PartitionAlreadyExistsException, UnsupportedOperationException;
 
     /**
      * Drop a partition from table.
@@ -53,19 +67,7 @@ public interface SupportsPartitions extends Table {
      * @param ident a partition identifier
      * @return true if a partition was deleted, false if no partition exists for the identifier
      */
-    Boolean dropPartition(InternalRow ident);
-
-    /**
-     * Rename a Partition from old identifier to new identifier with no metadata changed.
-     *
-     * @param oldIdent the partition identifier of the existing partition
-     * @param newIdent the new partition identifier of the partition
-     * @throws NoSuchPartitionException If the partition identifier to rename doesn't exist
-     * @throws PartitionAlreadyExistsException If the new partition identifier already exists
-     */
-    void renamePartition(
-            InternalRow oldIdent,
-            InternalRow newIdent) throws NoSuchPartitionException, PartitionAlreadyExistsException;
+    boolean dropPartition(InternalRow ident);
 
     /**
      * Replace the partition metadata of the existing partition.
@@ -73,18 +75,22 @@ public interface SupportsPartitions extends Table {
      * @param ident the partition identifier of the existing partition
      * @param properties the new metadata of the partition
      * @throws NoSuchPartitionException If the partition identifier to rename doesn't exist
+     * @throws UnsupportedOperationException If partition property is not supported
      */
     void replacePartitionMetadata(
-            InternalRow ident,
-            Map<String, String> properties) throws NoSuchPartitionException;
+        InternalRow ident,
+        Map<String, String> properties)
+        throws NoSuchPartitionException, UnsupportedOperationException;
 
     /**
      * Retrieve the partition metadata of the existing partition.
      *
      * @param ident a partition identifier
      * @return the metadata of the partition
+     * @throws UnsupportedOperationException If partition property is not supported
      */
-    Map<String, String> getPartitionMetadata(InternalRow ident);
+    Map<String, String> loadPartitionMetadata(InternalRow ident)
+        throws UnsupportedOperationException;
 
     /**
      * List the identifiers of all partitions that contains the ident in a table.
