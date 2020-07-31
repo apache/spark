@@ -543,8 +543,8 @@ private[spark] class MapOutputTrackerMaster(
   def unregisterShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
+      shuffleOutputTracker.unregisterShuffle(shuffleId, blocking)
     }
-    shuffleOutputTracker.unregisterShuffle(shuffleId, blocking)
   }
 
   /**
