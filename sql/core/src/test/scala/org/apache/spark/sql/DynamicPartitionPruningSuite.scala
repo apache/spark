@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expr
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1251,9 +1251,10 @@ abstract class DynamicPartitionPruningSuiteBase
             | SELECT * FROM view1 v1 join view1 v2 WHERE v1.store_id = v2.store_id
           """.stripMargin)
 
-        val executedPlan = df.queryExecution.executedPlan
         checkPartitionPruningPredicate(df, false, false)
-        val reuseExchangeNodes = executedPlan.collect { case se: ReusedExchangeExec => se }
+        val reuseExchangeNodes = df.queryExecution.executedPlan.collect {
+          case se: ReusedExchangeExec => se
+        }
         assert(reuseExchangeNodes.size == 1, "Expected plan to contain 1 ReusedExchangeExec " +
           s"nodes. Found ${reuseExchangeNodes.size}")
 
