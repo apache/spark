@@ -318,6 +318,9 @@ private[spark] class CoarseGrainedExecutorBackend(
               logInfo("Blocked from shutdown by running ${executor.numRunningtasks} tasks")
               // If there is a running task it could store blocks, so make sure we wait for a
               // migration loop to complete after the last task is done.
+              // Note: this is only advanced if there is a running task, if there
+              // is no running task but the blocks are not done migrating this does not
+              // move forward.
               lastTaskRunningTime = System.nanoTime()
             }
           }

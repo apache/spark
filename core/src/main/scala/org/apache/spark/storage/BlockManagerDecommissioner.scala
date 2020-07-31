@@ -357,23 +357,26 @@ private[storage] class BlockManagerDecommissioner(
 
   /*
    *  Returns the last migration time and a boolean for if all blocks have been migrated.
-   *  If there are any tasks running since that time the boolean may be incorrect.
+   *  The last migration time is calculated to be the minimum of the last migration of any
+   *  running migration (and if there are now current running migrations it is set to current).
+   *  This provides a timeStamp which, if there have been no tasks running since that time
+   *  we can know that all potential blocks that can be have been migrated off.
    */
   private[storage] def lastMigrationInfo(): (Long, Boolean) = {
     if (stopped || (stoppedRDD && stoppedShuffle)) {
       (System.nanoTime(), true)
     } else {
-      // Chose the min of the running times.
-      val lastMigrationTime = if (
-        conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED) &&
-        conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)) {
+      // Chose the min of the active times. See the function description for more information.
+      val lastMigrationTime = if (!stoppedRDD && !stoppedShuffle) {
         Math.min(lastRDDMigrationTime, lastShuffleMigrationTime)
-      } else if (conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
+      } else if (!stoppedShuffle) {
         lastShuffleMigrationTime
       } else {
         lastRDDMigrationTime
       }
 
+      // Technically we could have blocks left if we encountered an error, but those blocks will
+      // never be migrated, so we don't care about them.
       val blocksMigrated = (!shuffleBlocksLeft || stoppedShuffle) && (!rddBlocksLeft || stoppedRDD)
       (lastMigrationTime, blocksMigrated)
     }
