@@ -125,7 +125,7 @@ trait CachedBatchSerializer extends Serializable {
 
   /**
    * Convert the cached data into a ColumnarBatch. This currently is only used if
-   * `supportsColumnar()` returns true for the associated schema, but there are other checks
+   * `supportsColumnarOutput()` returns true for the associated schema, but there are other checks
    * that can force row based output. One of the main advantages of doing columnar output over row
    * based output is that the code generation is more standard and can be combined with code
    * generation for downstream operations.
