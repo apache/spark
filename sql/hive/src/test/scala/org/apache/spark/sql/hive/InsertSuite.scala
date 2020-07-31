@@ -848,7 +848,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  test("SPARK-32508 Disallow empty part col values in partition spec before static partition writing") {
+  test("SPARK-32508 " +
+    "Disallow empty part col values in partition spec before static partition writing") {
     withTable("t1") {
       spark.sql(
         """
