@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{Path, Trash}
 import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
@@ -309,9 +309,23 @@ case class InsertIntoHiveTable(
             partitionPath.foreach { path =>
               val fs = path.getFileSystem(hadoopConf)
               if (fs.exists(path)) {
-                if (!fs.delete(path, true)) {
-                  throw new RuntimeException(
-                    s"Cannot remove partition directory '$path'")
+                val isTrashEnabled = sparkSession.sessionState.conf.trashEnabled
+                if (!isTrashEnabled) {
+                  if (!fs.delete(path, true)) {
+                    throw new RuntimeException(
+                      s"Cannot remove partition directory '$path'")
+                  }
+                } else {
+                  logDebug(s"Try to move data ${path.toString} to trash")
+                  val isSuccess = Trash.moveToAppropriateTrash(fs, path, hadoopConf)
+                  if (!isSuccess) {
+                    logWarning(s"Failed to move data ${path.toString} to trash " +
+                      "fallback to hard deletion")
+                    if (!fs.delete(path, true)) {
+                      throw new RuntimeException(
+                        s"Cannot remove partition directory '$path'")
+                    }
+                  }
                 }
                 // Don't let Hive do overwrite operation since it is slower.
                 doHiveOverwrite = false

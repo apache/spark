@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.Utils
 
 /**
  * Command for writing the results of `query` to file system.
@@ -108,8 +109,11 @@ case class InsertIntoHiveDirCommand(
         outputLocation = tmpPath.toString)
 
       if (overwrite && fs.exists(writeToPath)) {
+        val isTrashEnabled = sparkSession.sessionState.conf.trashEnabled
         fs.listStatus(writeToPath).foreach { existFile =>
-          if (Option(existFile.getPath) != createdTempDir) fs.delete(existFile.getPath, true)
+          if (Option(existFile.getPath) != createdTempDir) {
+            Utils.moveToTrashOrDelete(fs, existFile.getPath, isTrashEnabled, hadoopConf)
+          }
         }
       }
 

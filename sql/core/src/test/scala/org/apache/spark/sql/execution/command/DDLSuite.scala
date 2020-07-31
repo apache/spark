@@ -3105,7 +3105,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("SPARK-32481 Move data to trash on truncate table if enabled") {
     val trashIntervalKey = "fs.trash.interval"
     withTable("tab1") {
-      withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.TRASH_ENABLED.key -> "true") {
         sql("CREATE TABLE tab1 (col INT) USING parquet")
         sql("INSERT INTO tab1 SELECT 1")
         // scalastyle:off hadoopconfiguration
@@ -3134,7 +3134,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("SPARK-32481 delete data permanently on truncate table if trash interval is non-positive") {
     val trashIntervalKey = "fs.trash.interval"
     withTable("tab1") {
-      withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.TRASH_ENABLED.key -> "true") {
         sql("CREATE TABLE tab1 (col INT) USING parquet")
         sql("INSERT INTO tab1 SELECT 1")
         // scalastyle:off hadoopconfiguration
@@ -3161,7 +3161,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-32481 Do not move data to trash on truncate table if disabled") {
     withTable("tab1") {
-      withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.TRASH_ENABLED.key -> "false") {
         sql("CREATE TABLE tab1 (col INT) USING parquet")
         sql("INSERT INTO tab1 SELECT 1")
         val hadoopConf = spark.sessionState.newHadoopConf()

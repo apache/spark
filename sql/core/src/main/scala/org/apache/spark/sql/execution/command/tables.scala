@@ -490,7 +490,7 @@ case class TruncateTableCommand(
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
     val ignorePermissionAcl = SQLConf.get.truncateTableIgnorePermissionAcl
-    val isTrashEnabled = SQLConf.get.truncateTrashEnabled
+    val isTrashEnabled = SQLConf.get.trashEnabled
     locations.foreach { location =>
       if (location.isDefined) {
         val path = new Path(location.get)
