@@ -134,78 +134,80 @@ private[thriftserver] class HiveThriftServer2Listener(
 
   private def onSessionClosed(e: SparkListenerThriftServerSessionClosed): Unit =
     Option(sessionList.get(e.sessionId)) match {
-      case None => logWarning(s"onSessionClosed called with unknown session id: ${e.sessionId}")
       case Some(sessionData) =>
-        val session = sessionData
-        session.finishTimestamp = e.finishTime
-        updateStoreWithTriggerEnabled(session)
+        sessionData.finishTimestamp = e.finishTime
+        updateStoreWithTriggerEnabled(sessionData)
         sessionList.remove(e.sessionId)
+      case None => logWarning(s"onSessionClosed called with unknown session id: ${e.sessionId}")
     }
 
-  private def onOperationStart(e: SparkListenerThriftServerOperationStart): Unit =
+  private def onOperationStart(e: SparkListenerThriftServerOperationStart): Unit = {
+    val executionData = getOrCreateExecution(
+      e.id,
+      e.statement,
+      e.sessionId,
+      e.startTime,
+      e.userName)
+
+    executionData.state = ExecutionState.STARTED
+    executionList.put(e.id, executionData)
+    executionData.groupId = e.groupId
+    updateLiveStore(executionData)
+
     Option(sessionList.get(e.sessionId)) match {
-      case None => logWarning(s"onOperationStart called with unknown session id: ${e.sessionId}")
       case Some(sessionData) =>
-        val info = getOrCreateExecution(
-          e.id,
-          e.statement,
-          e.sessionId,
-          e.startTime,
-          e.userName)
-
-        info.state = ExecutionState.STARTED
-        executionList.put(e.id, info)
         sessionData.totalExecution += 1
-        executionList.get(e.id).groupId = e.groupId
-        updateLiveStore(executionList.get(e.id))
         updateLiveStore(sessionData)
+      case None => logWarning(s"onOperationStart called with unknown session id: ${e.sessionId}." +
+        s"Regardless, the operation has been registered.")
     }
+  }
 
   private def onOperationParsed(e: SparkListenerThriftServerOperationParsed): Unit =
     Option(executionList.get(e.id)) match {
-      case None => logWarning(s"onOperationParsed called with unknown operation id: ${e.id}")
       case Some(executionData) =>
         executionData.executePlan = e.executionPlan
         executionData.state = ExecutionState.COMPILED
         updateLiveStore(executionData)
+      case None => logWarning(s"onOperationParsed called with unknown operation id: ${e.id}")
     }
 
   private def onOperationCanceled(e: SparkListenerThriftServerOperationCanceled): Unit =
     Option(executionList.get(e.id)) match {
-      case None => logWarning(s"onOperationCanceled called with unknown operation id: ${e.id}")
       case Some(executionData) =>
         executionData.finishTimestamp = e.finishTime
         executionData.state = ExecutionState.CANCELED
         updateLiveStore(executionData)
+      case None => logWarning(s"onOperationCanceled called with unknown operation id: ${e.id}")
     }
 
   private def onOperationError(e: SparkListenerThriftServerOperationError): Unit =
     Option(executionList.get(e.id)) match {
-      case None => logWarning(s"onOperationError called with unknown operation id: ${e.id}")
       case Some(executionData) =>
         executionData.finishTimestamp = e.finishTime
         executionData.detail = e.errorMsg
         executionData.state = ExecutionState.FAILED
         updateLiveStore(executionData)
+      case None => logWarning(s"onOperationError called with unknown operation id: ${e.id}")
     }
 
   private def onOperationFinished(e: SparkListenerThriftServerOperationFinish): Unit =
     Option(executionList.get(e.id)) match {
-      case None => logWarning(s"onOperationFinished called with unknown operation id: ${e.id}")
       case Some(executionData) =>
         executionData.finishTimestamp = e.finishTime
         executionData.state = ExecutionState.FINISHED
         updateLiveStore(executionData)
+      case None => logWarning(s"onOperationFinished called with unknown operation id: ${e.id}")
     }
 
   private def onOperationClosed(e: SparkListenerThriftServerOperationClosed): Unit =
     Option(executionList.get(e.id)) match {
-      case None => logWarning(s"onOperationClosed called with unknown operation id: ${e.id}")
       case Some(executionData) =>
         executionData.closeTimestamp = e.closeTime
         executionData.state = ExecutionState.CLOSED
         updateStoreWithTriggerEnabled(executionData)
         executionList.remove(e.id)
+      case None => logWarning(s"onOperationClosed called with unknown operation id: ${e.id}")
     }
 
   // Update both live and history stores. Trigger is enabled by default, hence

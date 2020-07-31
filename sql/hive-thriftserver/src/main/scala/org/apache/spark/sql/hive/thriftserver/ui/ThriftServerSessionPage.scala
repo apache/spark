@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.thriftserver.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.xml.Node
 
 import org.apache.spark.internal.Logging
@@ -77,26 +76,8 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
       val sqlTableTag = "sqlsessionstat"
 
-      val parameterOtherTable = request.getParameterMap().asScala
-        .filterNot(_._1.startsWith(sqlTableTag))
-        .map { case (name, vals) =>
-          name + "=" + vals(0)
-        }
-
-      val parameterSqlTablePage = request.getParameter(s"$sqlTableTag.page")
-      val parameterSqlTableSortColumn = request.getParameter(s"$sqlTableTag.sort")
-      val parameterSqlTableSortDesc = request.getParameter(s"$sqlTableTag.desc")
-      val parameterSqlPageSize = request.getParameter(s"$sqlTableTag.pageSize")
-
-      val sqlTablePage = Option(parameterSqlTablePage).map(_.toInt).getOrElse(1)
-      val sqlTableSortColumn = Option(parameterSqlTableSortColumn).map { sortColumn =>
-        UIUtils.decodeURLParameter(sortColumn)
-      }.getOrElse("Start Time")
-      val sqlTableSortDesc = Option(parameterSqlTableSortDesc).map(_.toBoolean).getOrElse(
-        // New executions should be shown above old executions by default.
-        sqlTableSortColumn == "Start Time"
-      )
-      val sqlTablePageSize = Option(parameterSqlPageSize).map(_.toInt).getOrElse(100)
+      val sqlTablePage =
+        Option(request.getParameter(s"$sqlTableTag.page")).map(_.toInt).getOrElse(1)
 
       try {
         Some(new SqlStatsPagedTable(
@@ -105,11 +86,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
           executionList,
           "sqlserver/session",
           UIUtils.prependBaseUri(request, parent.basePath),
-          parameterOtherTable,
-          sqlTableTag,
-          pageSize = sqlTablePageSize,
-          sortColumn = sqlTableSortColumn,
-          desc = sqlTableSortDesc
+          sqlTableTag
         ).table(sqlTablePage))
       } catch {
         case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>

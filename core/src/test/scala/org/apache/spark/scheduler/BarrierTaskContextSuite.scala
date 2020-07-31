@@ -25,6 +25,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 
 class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
@@ -37,6 +38,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
       .setAppName("test-cluster")
       .set(TEST_NO_STAGE_RETRY, true)
     sc = new SparkContext(conf)
+    TestUtils.waitUntilExecutorsUp(sc, numWorker, 60000)
   }
 
   test("global sync by barrier() call") {
@@ -56,10 +58,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
   }
 
   test("share messages with allGather() call") {
-    val conf = new SparkConf()
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+    initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -68,19 +67,16 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
       // Pass partitionId message in
       val message: String = context.partitionId().toString
       val messages: Array[String] = context.allGather(message)
-      messages.toList.iterator
+      Iterator.single(messages.toList)
     }
-    // Take a sorted list of all the partitionId messages
-    val messages = rdd2.collect().head
-    // All the task partitionIds are shared
-    for((x, i) <- messages.view.zipWithIndex) assert(x.toString == i.toString)
+    val messages = rdd2.collect()
+    // All the task partitionIds are shared across all tasks
+    assert(messages.length === 4)
+    assert(messages.forall(_ == List("0", "1", "2", "3")))
   }
 
   test("throw exception if we attempt to synchronize with different blocking calls") {
-    val conf = new SparkConf()
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+    initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -95,17 +91,11 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     val error = intercept[SparkException] {
       rdd2.collect()
     }.getMessage
-    assert(
-      error.contains("does not match the current synchronized requestMethod") ||
-      error.contains("not properly killed")
-    )
+    assert(error.contains("Different barrier sync types found"))
   }
 
   test("successively sync with allGather and barrier") {
-    val conf = new SparkConf()
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+    initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -286,11 +276,12 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
 
   test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
     initLocalClusterSparkContext(2)
+    val id = sc.getExecutorIds().head
     val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
     val dep = new OneToOneDependency[Int](rdd0)
-    // set up a barrier stage with 2 tasks and both tasks prefer executor 0 (only 1 core) for
+    // set up a barrier stage with 2 tasks and both tasks prefer the same executor (only 1 core) for
     // scheduling. So, one of tasks won't be scheduled in one round of resource offer.
-    val rdd = new MyRDD(sc, 2, List(dep), Seq(Seq("executor_h_0"), Seq("executor_h_0")))
+    val rdd = new MyRDD(sc, 2, List(dep), Seq(Seq(s"executor_h_$id"), Seq(s"executor_h_$id")))
     val errorMsg = intercept[SparkException] {
       rdd.barrier().mapPartitions { iter =>
         BarrierTaskContext.get().barrier()

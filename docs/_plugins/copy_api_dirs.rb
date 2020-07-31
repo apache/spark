@@ -126,8 +126,8 @@ if not (ENV['SKIP_API'] == '1')
     puts "Making directory api/python"
     mkdir_p "api/python"
 
-    puts "cp -r ../python/docs/_build/html/. api/python"
-    cp_r("../python/docs/_build/html/.", "api/python")
+    puts "cp -r ../python/docs/build/html/. api/python"
+    cp_r("../python/docs/build/html/.", "api/python")
   end
 
   if not (ENV['SKIP_RDOC'] == '1')

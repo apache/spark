@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapabi
 import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.streaming.Sink
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdate
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -53,7 +54,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    new WriteBuilder with SupportsTruncate {
+    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdate {
       private var needTruncate: Boolean = false
       private val inputSchema: StructType = info.schema()
 
@@ -61,6 +62,9 @@ class MemorySink extends Table with SupportsWrite with Logging {
         this.needTruncate = true
         this
       }
+
+      // The in-memory sink treats update as append.
+      override def update(): WriteBuilder = this
 
       override def buildForStreaming(): StreamingWrite = {
         new MemoryStreamingWrite(MemorySink.this, inputSchema, needTruncate)
@@ -76,7 +80,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
 
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {
-    batches.flatMap(_.data)
+    batches.flatMap(_.data).toSeq
   }
 
   def latestBatchId: Option[Long] = synchronized {
@@ -88,7 +92,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
   }
 
   def dataSinceBatch(sinceBatchId: Long): Seq[Row] = synchronized {
-    batches.filter(_.batchId > sinceBatchId).flatMap(_.data)
+    batches.filter(_.batchId > sinceBatchId).flatMap(_.data).toSeq
   }
 
   def toDebugString: String = synchronized {
@@ -179,7 +183,7 @@ class MemoryDataWriter(partition: Int, schema: StructType)
   }
 
   override def commit(): MemoryWriterCommitMessage = {
-    val msg = MemoryWriterCommitMessage(partition, data.clone())
+    val msg = MemoryWriterCommitMessage(partition, data.clone().toSeq)
     data.clear()
     msg
   }

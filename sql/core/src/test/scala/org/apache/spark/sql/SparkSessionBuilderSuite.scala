@@ -169,6 +169,31 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
   }
 
+  test("SPARK-31354: SparkContext only register one SparkSession ApplicationEnd listener") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-app-SPARK-31354-1")
+    val context = new SparkContext(conf)
+    SparkSession
+      .builder()
+      .sparkContext(context)
+      .master("local")
+      .getOrCreate()
+    val postFirstCreation = context.listenerBus.listeners.size()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+
+    SparkSession
+      .builder()
+      .sparkContext(context)
+      .master("local")
+      .getOrCreate()
+    val postSecondCreation = context.listenerBus.listeners.size()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    assert(postFirstCreation == postSecondCreation)
+  }
+
   test("SPARK-31532: should not propagate static sql configs to the existing" +
     " active/default SparkSession") {
     val session = SparkSession.builder()
@@ -214,5 +239,22 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session.conf.get("spark.app.name") === "test-app-SPARK-31532-2")
     assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532-2")
     assert(session.conf.get(WAREHOUSE_PATH) === "SPARK-31532-db-2")
+  }
+
+  test("SPARK-32062: reset listenerRegistered in SparkSession") {
+    (1 to 2).foreach { i =>
+      val conf = new SparkConf()
+        .setMaster("local")
+        .setAppName(s"test-SPARK-32062-$i")
+      val context = new SparkContext(conf)
+      val beforeListenerSize = context.listenerBus.listeners.size()
+      SparkSession
+        .builder()
+        .sparkContext(context)
+        .getOrCreate()
+      val afterListenerSize = context.listenerBus.listeners.size()
+      assert(beforeListenerSize + 1 == afterListenerSize)
+      context.stop()
+    }
   }
 }

@@ -43,13 +43,11 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     var html = renderStreamingQueryPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (1)"))
-    assert(html.contains("completed streaming queries (0)"))
 
     when(streamQuery.isActive).thenReturn(false)
     when(streamQuery.exception).thenReturn(None)
     html = renderStreamingQueryPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
-    assert(html.contains("active streaming queries (0)"))
     assert(html.contains("completed streaming queries (1)"))
     assert(html.contains("finished"))
 
@@ -57,7 +55,6 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(streamQuery.exception).thenReturn(Option("exception in query"))
     html = renderStreamingQueryPage(request, tab)
       .toString().toLowerCase(Locale.ROOT)
-    assert(html.contains("active streaming queries (0)"))
     assert(html.contains("completed streaming queries (1)"))
     assert(html.contains("failed"))
     assert(html.contains("exception in query"))

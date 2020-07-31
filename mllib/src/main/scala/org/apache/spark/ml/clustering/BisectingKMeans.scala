@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -70,6 +71,8 @@ private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
   /** @group expertGetParam */
   @Since("2.0.0")
   def getMinDivisibleClusterSize: Double = $(minDivisibleClusterSize)
+
+  setDefault(k -> 4, maxIter -> 20, minDivisibleClusterSize -> 1.0)
 
   /**
    * Validates and transforms the input schema.
@@ -225,11 +228,6 @@ class BisectingKMeans @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
   extends Estimator[BisectingKMeansModel] with BisectingKMeansParams with DefaultParamsWritable {
 
-  setDefault(
-    k -> 4,
-    maxIter -> 20,
-    minDivisibleClusterSize -> 1.0)
-
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeans = defaultCopy(extra)
 
@@ -280,7 +278,7 @@ class BisectingKMeans @Since("2.0.0") (
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
     } else {
       lit(1.0)
     }

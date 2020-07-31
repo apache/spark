@@ -246,29 +246,41 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
   }
 
   test("filter pushdown - timestamp") {
-    val timeString = "2015-08-20 14:57:00"
-    val timestamps = (1 to 4).map { i =>
-      val milliseconds = Timestamp.valueOf(timeString).getTime + i * 3600
-      new Timestamp(milliseconds)
-    }
-    withOrcDataFrame(timestamps.map(Tuple1(_))) { implicit df =>
-      checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+    val input = Seq(
+      "1000-01-01 01:02:03",
+      "1582-10-01 00:11:22",
+      "1900-01-01 23:59:59",
+      "2020-05-25 10:11:12").map(Timestamp.valueOf)
 
-      checkFilterPredicate($"_1" === timestamps(0), PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate($"_1" <=> timestamps(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+    withOrcFile(input.map(Tuple1(_))) { path =>
+      Seq(false, true).foreach { java8Api =>
+        withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+          readFile(path) { implicit df =>
+            val timestamps = input.map(Literal(_))
+            checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
 
-      checkFilterPredicate($"_1" < timestamps(1), PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate($"_1" > timestamps(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" <= timestamps(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate($"_1" >= timestamps(3), PredicateLeaf.Operator.LESS_THAN)
+            checkFilterPredicate($"_1" === timestamps(0), PredicateLeaf.Operator.EQUALS)
+            checkFilterPredicate($"_1" <=> timestamps(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
 
-      checkFilterPredicate(Literal(timestamps(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
-      checkFilterPredicate(
-        Literal(timestamps(0)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
-      checkFilterPredicate(Literal(timestamps(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
-      checkFilterPredicate(Literal(timestamps(2)) < $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(timestamps(0)) >= $"_1", PredicateLeaf.Operator.LESS_THAN_EQUALS)
-      checkFilterPredicate(Literal(timestamps(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+            checkFilterPredicate($"_1" < timestamps(1), PredicateLeaf.Operator.LESS_THAN)
+            checkFilterPredicate($"_1" > timestamps(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+            checkFilterPredicate($"_1" <= timestamps(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+            checkFilterPredicate($"_1" >= timestamps(3), PredicateLeaf.Operator.LESS_THAN)
+
+            checkFilterPredicate(Literal(timestamps(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
+            checkFilterPredicate(
+              Literal(timestamps(0)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+            checkFilterPredicate(Literal(timestamps(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
+            checkFilterPredicate(
+              Literal(timestamps(2)) < $"_1",
+              PredicateLeaf.Operator.LESS_THAN_EQUALS)
+            checkFilterPredicate(
+              Literal(timestamps(0)) >= $"_1",
+              PredicateLeaf.Operator.LESS_THAN_EQUALS)
+            checkFilterPredicate(Literal(timestamps(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+          }
+        }
+      }
     }
   }
 

@@ -35,8 +35,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.RebaseDateTime._
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 
 /**
@@ -46,16 +47,23 @@ class AvroSerializer(
     rootCatalystType: DataType,
     rootAvroType: Schema,
     nullable: Boolean,
-    rebaseDateTime: Boolean) extends Logging {
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value) extends Logging {
 
   def this(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) {
     this(rootCatalystType, rootAvroType, nullable,
-      SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_WRITE))
+      LegacyBehaviorPolicy.withName(SQLConf.get.getConf(
+        SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE)))
   }
 
   def serialize(catalystData: Any): Any = {
     converter.apply(catalystData)
   }
+
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInWrite(
+    datetimeRebaseMode, "Avro")
+
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+    datetimeRebaseMode, "Avro")
 
   private val converter: Any => Any = {
     val actualAvroType = resolveNullableType(rootAvroType, nullable)
@@ -146,24 +154,16 @@ class AvroSerializer(
       case (BinaryType, BYTES) =>
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
 
-      case (DateType, INT) if rebaseDateTime =>
-        (getter, ordinal) => rebaseGregorianToJulianDays(getter.getInt(ordinal))
-
       case (DateType, INT) =>
-        (getter, ordinal) => getter.getInt(ordinal)
+        (getter, ordinal) => dateRebaseFunc(getter.getInt(ordinal))
 
       case (TimestampType, LONG) => avroType.getLogicalType match {
           // For backward compatibility, if the Avro type is Long and it is not logical type
           // (the `null` case), output the timestamp value as with millisecond precision.
-          case null | _: TimestampMillis if rebaseDateTime => (getter, ordinal) =>
-            val micros = getter.getLong(ordinal)
-            val rebasedMicros = rebaseGregorianToJulianMicros(micros)
-            DateTimeUtils.microsToMillis(rebasedMicros)
           case null | _: TimestampMillis => (getter, ordinal) =>
-            DateTimeUtils.microsToMillis(getter.getLong(ordinal))
-          case _: TimestampMicros if rebaseDateTime => (getter, ordinal) =>
-            rebaseGregorianToJulianMicros(getter.getLong(ordinal))
-          case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
+            DateTimeUtils.microsToMillis(timestampRebaseFunc(getter.getLong(ordinal)))
+          case _: TimestampMicros => (getter, ordinal) =>
+            timestampRebaseFunc(getter.getLong(ordinal))
           case other => throw new IncompatibleSchemaException(
             s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
         }

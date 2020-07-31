@@ -167,10 +167,6 @@ class FunctionsTests(ReusedSQLTestCase):
             TypeError,
             "must be the same type",
             lambda: df.select(col('name').substr(0, lit(1))))
-        if sys.version_info.major == 2:
-            self.assertRaises(
-                TypeError,
-                lambda: df.select(col('name').substr(long(0), long(1))))
 
         for name in _string_functions.keys():
             self.assertEqual(
@@ -295,6 +291,16 @@ class FunctionsTests(ReusedSQLTestCase):
         # empty string rather than the file read in the last job.
         for result in results:
             self.assertEqual(result[0], '')
+
+    def test_slice(self):
+        from pyspark.sql.functions import slice, lit
+
+        df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
+
+        self.assertEquals(
+            df.select(slice(df.x, 2, 2).alias("sliced")).collect(),
+            df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect(),
+        )
 
     def test_array_repeat(self):
         from pyspark.sql.functions import array_repeat, lit

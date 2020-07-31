@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, Collect
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -240,7 +239,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1.5, "1.5")
 
     checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
-    checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
   }
 
   test("cast from string") {
@@ -268,13 +266,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     for (tz <- ALL_TIMEZONES) {
       val timeZoneId = Option(tz.getId)
-      var c = Calendar.getInstance(TimeZoneGMT)
+      var c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
         millisToMicros(c.getTimeInMillis))
-      c = Calendar.getInstance(TimeZoneGMT)
+      c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
@@ -291,7 +289,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
       cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
-      DateTimeUtils.fromJavaTimestamp(ts))
+      fromJavaTimestamp(ts))
 
     // all convert to string type to check
     checkEvaluation(
@@ -306,6 +304,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(cast(cast(
       cast(cast("5", ByteType), ShortType), IntegerType), FloatType), DoubleType), LongType),
       5.toLong)
+
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
         DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
@@ -377,12 +376,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, LongType), 15.toLong)
     checkEvaluation(cast(ts, FloatType), 15.003f)
     checkEvaluation(cast(ts, DoubleType), 15.003)
+
     checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(
       cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
       millis.toFloat / MILLIS_PER_SECOND)
@@ -1027,6 +1027,7 @@ class CastSuite extends CastSuiteBase {
 
   test("cast from int 2") {
     checkEvaluation(cast(1, LongType), 1.toLong)
+
     checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
     checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
 
@@ -1299,6 +1300,32 @@ class CastSuite extends CastSuiteBase {
       }
     }
   }
+
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
+    withDefaultTimeZone(UTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
+      checkEvaluation(cast(negativeTs, ByteType), expectedSecs.toByte)
+      checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
+      checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
+    }
+  }
+
+  test("SPARK-31710: fail casting from numeric to timestamp if it is forbidden") {
+    Seq(true, false).foreach { enable =>
+      withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> enable.toString) {
+        assert(cast(2.toByte, TimestampType).resolved == enable)
+        assert(cast(10.toShort, TimestampType).resolved == enable)
+        assert(cast(3, TimestampType).resolved == enable)
+        assert(cast(10L, TimestampType).resolved == enable)
+        assert(cast(Decimal(1.2), TimestampType).resolved == enable)
+        assert(cast(1.7f, TimestampType).resolved == enable)
+        assert(cast(2.3d, TimestampType).resolved == enable)
+      }
+    }
+  }
 }
 
 /**
@@ -1339,6 +1366,19 @@ class AnsiCastSuite extends CastSuiteBase {
         cast("123.000.00", dataType), "invalid input")
       checkExceptionInExpression[NumberFormatException](
         cast("abc.com", dataType), "invalid input")
+    }
+  }
+
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
+    def errMsg(t: String): String = s"Casting -2198208303900000 to $t causes overflow"
+    withDefaultTimeZone(UTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
+      checkExceptionInExpression[ArithmeticException](cast(negativeTs, ByteType), errMsg("byte"))
+      checkExceptionInExpression[ArithmeticException](cast(negativeTs, ShortType), errMsg("short"))
+      checkExceptionInExpression[ArithmeticException](cast(negativeTs, IntegerType), errMsg("int"))
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }
 }

@@ -66,7 +66,7 @@ object SparkPlanGraph {
     val edges = mutable.ArrayBuffer[SparkPlanGraphEdge]()
     val exchanges = mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]()
     buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, null, null, exchanges)
-    new SparkPlanGraph(nodes, edges)
+    new SparkPlanGraph(nodes.toSeq, edges.toSeq)
   }
 
   private def buildSparkPlanGraphNode(
@@ -153,7 +153,7 @@ object SparkPlanGraph {
  * @param name the name of this SparkPlan node
  * @param metrics metrics that this SparkPlan node will track
  */
-private[ui] class SparkPlanGraphNode(
+class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
@@ -193,7 +193,7 @@ private[ui] class SparkPlanGraphNode(
 /**
  * Represent a tree of SparkPlan for WholeStageCodegen.
  */
-private[ui] class SparkPlanGraphCluster(
+class SparkPlanGraphCluster(
     id: Long,
     name: String,
     desc: String,
@@ -229,7 +229,7 @@ private[ui] class SparkPlanGraphCluster(
  * Represent an edge in the SparkPlan tree. `fromId` is the child node id, and `toId` is the parent
  * node id.
  */
-private[ui] case class SparkPlanGraphEdge(fromId: Long, toId: Long) {
+case class SparkPlanGraphEdge(fromId: Long, toId: Long) {
 
   def makeDotEdge: String = s"""  $fromId->$toId;\n"""
 }

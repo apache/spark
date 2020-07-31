@@ -380,6 +380,80 @@ class CrossValidatorTests(SparkSessionTestCase):
                                               original_nested_pipeline_model.stages):
             self.assertEqual(loadedStage.uid, originalStage.uid)
 
+    def test_user_specified_folds(self):
+        from pyspark.sql import functions as F
+
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"]).repartition(2, "features")
+
+        dataset_with_folds = dataset.repartition(1).withColumn("random", rand(100)) \
+            .withColumn("fold", F.when(F.col("random") < 0.33, 0)
+                        .when(F.col("random") < 0.66, 1)
+                        .otherwise(2)).repartition(2, "features")
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [20]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator, numFolds=3)
+        cv_with_user_folds = CrossValidator(estimator=lr,
+                                            estimatorParamMaps=grid,
+                                            evaluator=evaluator,
+                                            numFolds=3,
+                                            foldCol="fold")
+
+        self.assertEqual(cv.getEstimator().uid, cv_with_user_folds.getEstimator().uid)
+
+        cvModel1 = cv.fit(dataset)
+        cvModel2 = cv_with_user_folds.fit(dataset_with_folds)
+        for index in range(len(cvModel1.avgMetrics)):
+            print(abs(cvModel1.avgMetrics[index] - cvModel2.avgMetrics[index]))
+            self.assertTrue(abs(cvModel1.avgMetrics[index] - cvModel2.avgMetrics[index])
+                            < 0.1)
+
+        # test save/load of CrossValidator
+        temp_path = tempfile.mkdtemp()
+        cvPath = temp_path + "/cv"
+        cv_with_user_folds.save(cvPath)
+        loadedCV = CrossValidator.load(cvPath)
+        self.assertEqual(loadedCV.getFoldCol(), cv_with_user_folds.getFoldCol())
+
+    def test_invalid_user_specified_folds(self):
+        from pyspark.sql import functions as F
+
+        dataset_with_folds = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0, 0),
+             (Vectors.dense([0.4]), 1.0, 1),
+             (Vectors.dense([0.5]), 0.0, 2),
+             (Vectors.dense([0.6]), 1.0, 0),
+             (Vectors.dense([1.0]), 1.0, 1)] * 10,
+            ["features", "label", "fold"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [20]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        cv = CrossValidator(estimator=lr,
+                            estimatorParamMaps=grid,
+                            evaluator=evaluator,
+                            numFolds=2,
+                            foldCol="fold")
+        with self.assertRaisesRegexp(Exception, "Fold number must be in range"):
+            cv.fit(dataset_with_folds)
+
+        cv = CrossValidator(estimator=lr,
+                            estimatorParamMaps=grid,
+                            evaluator=evaluator,
+                            numFolds=4,
+                            foldCol="fold")
+        with self.assertRaisesRegexp(Exception, "The validation data at fold 3 is empty"):
+            cv.fit(dataset_with_folds)
+
 
 class TrainValidationSplitTests(SparkSessionTestCase):
 

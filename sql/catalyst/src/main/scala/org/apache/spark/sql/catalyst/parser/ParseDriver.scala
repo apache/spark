@@ -96,10 +96,6 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
-    lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    lexer.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
-    lexer.legacy_create_hive_table_by_default_enabled = conf.createHiveTableByDefaultEnabled
-    lexer.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -108,7 +104,6 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
-    parser.legacy_create_hive_table_by_default_enabled = conf.createHiveTableByDefaultEnabled
     parser.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     try {

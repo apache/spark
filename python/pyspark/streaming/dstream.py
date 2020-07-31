@@ -21,11 +21,6 @@ import time
 from itertools import chain
 from datetime import datetime
 
-if sys.version < "3":
-    from itertools import imap as map, ifilter as filter
-else:
-    long = int
-
 from py4j.protocol import Py4JJavaError
 
 from pyspark import RDD
@@ -404,7 +399,7 @@ class DStream(object):
         """
         if isinstance(timestamp, datetime):
             timestamp = time.mktime(timestamp.timetuple())
-        return self._sc._jvm.Time(long(timestamp * 1000))
+        return self._sc._jvm.Time(int(timestamp * 1000))
 
     def slice(self, begin, end):
         """

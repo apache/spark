@@ -29,12 +29,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroUtils}
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.{EmptyPartitionReader, FilePartitionReaderFactory, PartitionReaderWithPartitionValues}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -54,7 +55,8 @@ case class AvroPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    parsedOptions: AvroOptions) extends FilePartitionReaderFactory with Logging {
+    parsedOptions: AvroOptions,
+    filters: Seq[Filter]) extends FilePartitionReaderFactory with Logging {
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
@@ -86,39 +88,28 @@ case class AvroPartitionReaderFactory(
       }
 
       reader.sync(partitionedFile.start)
-      val stop = partitionedFile.start + partitionedFile.length
 
-      val rebaseDateTime = DataSourceUtils.needRebaseDateTime(
-        reader.asInstanceOf[DataFileReader[_]].getMetaString).getOrElse {
-        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_DATETIME_IN_READ)
+      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+        reader.asInstanceOf[DataFileReader[_]].getMetaString,
+        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
+
+      val avroFilters = if (SQLConf.get.avroFilterPushDown) {
+        new OrderedFilters(filters, readDataSchema)
+      } else {
+        new NoopFilters
       }
-      val deserializer = new AvroDeserializer(
-        userProvidedSchema.getOrElse(reader.getSchema), readDataSchema, rebaseDateTime)
 
-      val fileReader = new PartitionReader[InternalRow] {
-        private[this] var completed = false
+      val fileReader = new PartitionReader[InternalRow] with AvroUtils.RowReader {
+        override val fileReader = reader
+        override val deserializer = new AvroDeserializer(
+          userProvidedSchema.getOrElse(reader.getSchema),
+          readDataSchema,
+          datetimeRebaseMode,
+          avroFilters)
+        override val stopPosition = partitionedFile.start + partitionedFile.length
 
-        override def next(): Boolean = {
-          if (completed) {
-            false
-          } else {
-            val r = reader.hasNext && !reader.pastSync(stop)
-            if (!r) {
-              reader.close()
-              completed = true
-            }
-            r
-          }
-        }
-
-        override def get(): InternalRow = {
-          if (!next) {
-            throw new NoSuchElementException("next on empty iterator")
-          }
-          val record = reader.next()
-          deserializer.deserialize(record).asInstanceOf[InternalRow]
-        }
-
+        override def next(): Boolean = hasNextRow
+        override def get(): InternalRow = nextRow
         override def close(): Unit = reader.close()
       }
       new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
