@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expr
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
-import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1237,6 +1237,28 @@ abstract class DynamicPartitionPruningSuiteBase
         plan.collectWithSubqueries({ case _: SubqueryBroadcastExec => 1 }).sum
 
       assert(countSubqueryBroadcasts == 2)
+    }
+  }
+
+  test("Unused Dynamic Pruning filter shouldn't affect canonicalization and exchange reuse") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = sql(
+          """ WITH view1 as (
+            |   SELECT f.store_id FROM fact_stats f WHERE f.units_sold = 70
+            | )
+            |
+            | SELECT * FROM view1 v1 join view1 v2 WHERE v1.store_id = v2.store_id
+          """.stripMargin)
+
+        val executedPlan = df.queryExecution.executedPlan
+        checkPartitionPruningPredicate(df, false, false)
+        val reuseExchangeNodes = executedPlan.collect { case se: ReusedExchangeExec => se }
+        assert(reuseExchangeNodes.size == 1, "Expected plan to contain 1 ReusedExchangeExec " +
+          s"nodes. Found ${reuseExchangeNodes.size}")
+
+        checkAnswer(df, Row(15, 15) :: Nil)
+      }
     }
   }
 

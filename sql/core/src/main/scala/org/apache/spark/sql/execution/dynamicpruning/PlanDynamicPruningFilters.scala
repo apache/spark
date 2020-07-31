@@ -78,7 +78,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
         } else if (onlyInBroadcast) {
           // it is not worthwhile to execute the query, so we fall-back to a true literal
-          DynamicPruningExpression(Literal.TrueLiteral)
+          Literal.TrueLiteral
         } else {
           // we need to apply an aggregate on the buildPlan in order to be column pruned
           val alias = Alias(buildKeys(broadcastKeyIndex), buildKeys(broadcastKeyIndex).toString)()

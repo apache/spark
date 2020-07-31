@@ -608,12 +608,16 @@ case class FileSourceScanExec(
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
   }
 
+  private def filterUnnecessaryPredicates(predicates: Seq[Expression]): Seq[Expression] = {
+    predicates.filterNot(_ == Literal.TrueLiteral)
+  }
+
   override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
       output.map(QueryPlan.normalizeExpressions(_, output)),
       requiredSchema,
-      QueryPlan.normalizePredicates(partitionFilters, output),
+      QueryPlan.normalizePredicates(filterUnnecessaryPredicates(partitionFilters), output),
       optionalBucketSet,
       optionalNumCoalescedBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
