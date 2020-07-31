@@ -135,6 +135,22 @@ struct<count(DISTINCT 1) FILTER (WHERE (a = 1)):bigint>
 
 
 -- !query
+SELECT COUNT(DISTINCT id) FILTER (WHERE true) FROM emp
+-- !query schema
+struct<count(DISTINCT id) FILTER (WHERE true):bigint>
+-- !query output
+8
+
+
+-- !query
+SELECT COUNT(DISTINCT id) FILTER (WHERE false) FROM emp
+-- !query schema
+struct<count(DISTINCT id) FILTER (WHERE false):bigint>
+-- !query output
+0
+
+
+-- !query
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData GROUP BY a
 -- !query schema
 struct<a:int,count(b) FILTER (WHERE (a >= 2)):bigint>

@@ -170,17 +170,21 @@ import org.apache.spark.sql.types.IntegerType
  *    out all unused columns for the given group; this must be done in order to ensure correctness
  *    later on. Groups can by identified by a group id (gid) column added by the expand operator.
  *    If distinct group exists filter clause, the expand will calculate the filter and output it's
- *    result which will be used to calculate the global conditions equivalent to filter clauses.
+ *    result (e.g. cond1) which will be used to calculate the global conditions (e.g. max_cond1)
+ *    equivalent to filter clauses.
  * 2. De-duplicate the distinct paths and aggregate the non-aggregate path. The group by clause of
  *    this aggregate consists of the original group by clause, all the requested distinct columns
  *    and the group id. Both de-duplication of distinct column and the aggregation of the
  *    non-distinct group take advantage of the fact that we group by the group id (gid) and that we
  *    have nulled out all non-relevant columns the given group. If distinct group exists filter
- *    clause, we will use max to aggregate the results of the filter output in the previous step.
- *    These aggregate values are equivalent to filter clauses.
+ *    clause, we will use max to aggregate the results (e.g. cond1) of the filter output in the
+ *    previous step. These aggregate will output the global conditions (e.g. max_cond1) equivalent
+ *    to filter clauses.
  * 3. Aggregating the distinct groups and combining this with the results of the non-distinct
  *    aggregation. In this step we use the group id and the global condition to filter the inputs
- *    for the aggregate functions. The result of the non-distinct group are 'aggregated' by using
+ *    for the aggregate functions. If the global condition (e.g. max_cond1) is true, it means at
+ *    least one row of a distinct value satisfies the filter. This distinct value should be included
+ *    in the aggregate function. The result of the non-distinct group are 'aggregated' by using
  *    the first operator, it might be more elegant to use the native UDAF merge mechanism for this
  *    in the future.
  *
@@ -263,7 +267,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val (distinctAggFilters, distinctAggFilterAttrs, maxConds) = distinctAggExprs.collect {
         case AggregateExpression(_, _, _, filter, _) if filter.isDefined =>
           val (e, attr) = expressionAttributePair(filter.get)
-          val aggregateExp = AggregateExpression(Max(attr), Partial, false)
+          val aggregateExp = Max(attr).toAggregateExpression()
           (e, attr, Alias(aggregateExp, attr.name)())
       }.unzip3
 
