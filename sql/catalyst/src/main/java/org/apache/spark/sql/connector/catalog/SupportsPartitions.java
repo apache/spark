@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.StructType;
  * ${@link #replacePartitionMetadata}:
  *     point a partition to a new location, which will swap one location's data for the other
  *
- * @since 3.0.0
+ * @since 3.1.0
  */
 @Experimental
 public interface SupportsPartitions extends Table {
