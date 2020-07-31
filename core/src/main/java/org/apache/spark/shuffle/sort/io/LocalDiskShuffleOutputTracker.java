@@ -25,7 +25,6 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.api.metadata.MapOutputMetadata;
 import org.apache.spark.shuffle.api.metadata.ShuffleOutputTracker;
 import org.apache.spark.storage.BlockManagerMaster;
-import org.apache.spark.util.Utils;
 
 public final class LocalDiskShuffleOutputTracker implements ShuffleOutputTracker {
 
@@ -49,15 +48,7 @@ public final class LocalDiskShuffleOutputTracker implements ShuffleOutputTracker
 
   @Override
   public void unregisterShuffle(int shuffleId, boolean blocking) {
-    // In local mode, we don't want to route to the block manager master, since we end
-    // up with a cycle: The BlockManagerMaster routes to the MapOutputTracker, which in
-    // local mode is the MapOutputTrackerMaster, but that in turn will route to this
-    // ShuffleOutputTracker.
-    if (Utils.isLocalMaster(sparkConf)) {
-      env.get().shuffleManager().unregisterShuffle(shuffleId);
-    } else {
-      blockManagerMaster.get().removeShuffle(shuffleId, blocking);
-    }
+    blockManagerMaster.get().removeShuffle(shuffleId, blocking);
   }
 
   @Override
