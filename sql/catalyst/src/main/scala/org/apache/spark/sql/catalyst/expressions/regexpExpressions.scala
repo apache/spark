@@ -493,11 +493,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       val index = r.asInstanceOf[Int]
       RegExpExtractBase.checkGroupIndex(mr.groupCount, index)
       val group = mr.group(index)
-      if (group == null) { // Pattern matched, but not optional group
-        UTF8String.EMPTY_UTF8
-      } else {
-        UTF8String.fromString(group)
-      }
+      UTF8String.fromString(group)
     } else {
       UTF8String.EMPTY_UTF8
     }
@@ -594,11 +590,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
       val index = r.asInstanceOf[Int]
       RegExpExtractBase.checkGroupIndex(mr.groupCount, index)
       val group = mr.group(index)
-      if (group == null) { // Pattern matched, but not optional group
-        matchResults += UTF8String.EMPTY_UTF8
-      } else {
-        matchResults += UTF8String.fromString(group)
-      }
+      matchResults += UTF8String.fromString(group)
     }
 
     new GenericArrayData(matchResults.toArray.asInstanceOf[Array[Any]])
