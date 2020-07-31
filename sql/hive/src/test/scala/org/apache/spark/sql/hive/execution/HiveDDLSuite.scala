@@ -1036,6 +1036,30 @@ class HiveDDLSuite
     }
   }
 
+  test("MSCK REPAIR TABLE DROP PARTITIONS") {
+    val catalog = spark.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1")
+    sql("CREATE TABLE tab1 (height INT, length INT) PARTITIONED BY (a INT, b INT)")
+    val part1 = Map("a" -> "1", "b" -> "5")
+    val part2 = Map("a" -> "2", "b" -> "6")
+    val part3 = Map("a" -> "3", "b" -> "7")
+    val root = new Path(catalog.getTableMetadata(tableIdent).location)
+    val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
+    fs.mkdirs(new Path(new Path(root, "A=2"), "B=6"))
+    try {
+      sql("ALTER TABLE tab1 add partition(a=3, b=7)")
+      sql("MSCK REPAIR TABLE tab1")
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
+
+      fs.delete(new Path(new Path(root, "a=3"), "b=7"), true) // delete partition location
+      sql("MSCK REPAIR TABLE tab1 DROP partitions")
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2))
+    } finally {
+      fs.delete(root, true)
+    }
+  }
+
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")

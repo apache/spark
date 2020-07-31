@@ -3254,15 +3254,28 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[RepairTableStatement]].
+   * Create a [[MsckRepairTableAddPartitionsStatement]] or
+   * a [[MsckRepairTableDropPartitionsStatement]].
    *
    * For example:
    * {{{
-   *   MSCK REPAIR TABLE multi_part_name
+   *   MSCK REPAIR TABLE multi_part_name [ADD | DROP] [PARTITIONS]
    * }}}
    */
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
-    RepairTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+    val operator = ctx.op
+    if(operator != null) {
+      ctx.op.getType match {
+        case SqlBaseParser.ADD =>
+          MsckRepairTableAddPartitionsStatement(
+            visitMultipartIdentifier(ctx.multipartIdentifier()))
+        case SqlBaseParser.DROP =>
+          MsckRepairTableDropPartitionsStatement(
+            visitMultipartIdentifier(ctx.multipartIdentifier()))
+      }
+    } else {
+      MsckRepairTableAddPartitionsStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+    }
   }
 
   /**

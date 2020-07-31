@@ -1563,7 +1563,7 @@ class DDLParserSuite extends AnalysisTest {
   test("MSCK REPAIR TABLE") {
     comparePlans(
       parsePlan("MSCK REPAIR TABLE a.b.c"),
-      RepairTableStatement(Seq("a", "b", "c")))
+      MsckRepairTableAddPartitionsStatement(Seq("a", "b", "c")))
   }
 
   test("LOAD DATA INTO table") {

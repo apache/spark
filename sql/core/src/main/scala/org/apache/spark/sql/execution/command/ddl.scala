@@ -587,6 +587,58 @@ case class AlterTableDropPartitionCommand(
 
 }
 
+/**
+ * DROP Partitions in MSCK REPAIR TABLE: drop all the partition if there are any partitions which
+ * are present in metastore but not on the FileSystem, it should also delete them so that it truly
+ * repairs the table metadata and update the catalog.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   MSCK REPAIR TABLE table DROP PARTITIONS;
+ * }}}
+ */
+case class MsckRepairTableDropPartitionsCommand(
+    tableName: TableIdentifier,
+    cmd: String = "MSCK REPAIR TABLE DROP PARTITIONS")
+  extends RunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    val tableIdentWithDB = table.identifier.quotedString
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+    DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, cmd)
+    if (table.partitionColumnNames.isEmpty) {
+      throw new AnalysisException(
+        s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
+    }
+    if (table.storage.locationUri.isEmpty) {
+      throw new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
+        s"location provided: $tableIdentWithDB")
+    }
+    val root = new Path(table.location)
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
+    val fs = root.getFileSystem(hadoopConf)
+
+    catalog.listPartitions(tableName, None).foreach { catalogPartition =>
+      val partitionLocation = catalogPartition.storage.locationUri
+      if (partitionLocation.isDefined) {
+        val partitionPath = new Path(partitionLocation.get)
+        if (!fs.exists(partitionPath)) {
+          catalog.dropPartitions(tableName, Seq(catalogPartition.spec),
+            ignoreIfNotExists = true, purge = false, retainData = false)
+        } else {
+          val fileStatus = fs.getFileStatus(partitionPath)
+          if (!fileStatus.isDirectory) {
+            catalog.dropPartitions(tableName, Seq(catalogPartition.spec),
+              ignoreIfNotExists = true, purge = false, retainData = false)
+          }
+        }
+      }
+    }
+    catalog.refreshTable(tableName)
+    Seq.empty[Row]
+  }
+}
 
 case class PartitionStatistics(numFiles: Int, totalSize: Long)
 

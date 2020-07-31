@@ -378,9 +378,14 @@ case class AnalyzeColumnStatement(
 }
 
 /**
- * A REPAIR TABLE statement, as parsed from SQL
+ * A MSCK REPAIR TABLE ADD PARTITIONS statement, as parsed from SQL
  */
-case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
+case class MsckRepairTableAddPartitionsStatement(tableName: Seq[String]) extends ParsedStatement
+
+/**
+ * A MSCK REPAIR TABLE DROP PARTITIONS statement, as parsed from SQL
+ */
+case class MsckRepairTableDropPartitionsStatement(tableName: Seq[String]) extends ParsedStatement
 
 /**
  * A LOAD DATA INTO TABLE statement, as parsed from SQL

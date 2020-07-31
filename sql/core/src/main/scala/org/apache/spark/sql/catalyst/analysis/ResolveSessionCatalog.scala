@@ -418,11 +418,15 @@ class ResolveSessionCatalog(
       val v1TableName = parseTempViewOrV1Table(tbl, "ANALYZE TABLE")
       AnalyzeColumnCommand(v1TableName.asTableIdentifier, columnNames, allColumns)
 
-    case RepairTableStatement(tbl) =>
+    case MsckRepairTableAddPartitionsStatement(tbl) =>
       val v1TableName = parseV1Table(tbl, "MSCK REPAIR TABLE")
       AlterTableRecoverPartitionsCommand(
         v1TableName.asTableIdentifier,
         "MSCK REPAIR TABLE")
+
+    case MsckRepairTableDropPartitionsStatement(tbl) =>
+      val v1TableName = parseV1Table(tbl, "MSCK REPAIR TABLE DROP PARTITIONS")
+      MsckRepairTableDropPartitionsCommand(v1TableName.asTableIdentifier)
 
     case LoadDataStatement(tbl, path, isLocal, isOverwrite, partition) =>
       val v1TableName = parseV1Table(tbl, "LOAD DATA")
