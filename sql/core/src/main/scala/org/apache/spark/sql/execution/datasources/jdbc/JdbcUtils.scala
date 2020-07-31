@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
@@ -184,7 +185,7 @@ object JdbcUtils extends Logging {
     }
   }
 
-  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
+  private[sql] def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }
@@ -904,6 +905,26 @@ object JdbcUtils extends Logging {
     try {
       statement.setQueryTimeout(options.queryTimeout)
       statement.executeUpdate(dialect.renameTable(oldTable, newTable))
+    } finally {
+      statement.close()
+    }
+  }
+
+  /**
+   * Update a table from the JDBC database.
+   */
+  def alterTable(
+      conn: Connection,
+      tableName: String,
+      changes: Seq[TableChange],
+      options: JDBCOptions
+      ): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      for (stmt <- dialect.alterTable(tableName, changes))
+        statement.executeUpdate(stmt)
     } finally {
       statement.close()
     }

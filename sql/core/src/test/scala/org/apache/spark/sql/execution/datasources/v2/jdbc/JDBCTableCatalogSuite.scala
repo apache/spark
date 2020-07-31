@@ -106,4 +106,58 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         Seq(Row("test", "people"), Row("test", "new_table")))
     }
   }
+
+  test("alter table ... add column") {
+    withTable("h2.test.alt_table") {
+      withConnection { conn =>
+        conn.prepareStatement("""CREATE TABLE "test"."alt_table" (id INTEGER)""").executeUpdate()
+      }
+      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(1) === Seq(Row("ID")))
+      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (c1 INTEGER, c2 STRING)")
+      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(3) ===
+        Seq(Row("ID"), Row("C1"), Row("C2")))
+      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (c3 DOUBLE)")
+      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(4) ===
+        Seq(Row("ID"), Row("C1"), Row("C2"), Row("C3")))
+    }
+  }
+
+  test("alter table ... rename column") {
+    withTable("h2.test.alt_table") {
+      withConnection { conn =>
+        conn.prepareStatement("""CREATE TABLE "test"."alt_table" (id INTEGER)""").executeUpdate()
+      }
+      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(1) === Seq(Row("ID")))
+      sql("ALTER TABLE h2.test.alt_table RENAME COLUMN id TO c")
+      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(1) ===
+        Seq(Row("C")))
+    }
+  }
+
+  test("alter table ... drop column") {
+    withTable("h2.test.alt_table") {
+      withConnection { conn =>
+        conn.prepareStatement("""CREATE TABLE "test"."alt_table" (c1 INTEGER, c2 INTEGER)""")
+          .executeUpdate()
+      }
+      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(2) ===
+        Seq(Row("C1"), Row("C2")))
+      sql("ALTER TABLE h2.test.alt_table DROP COLUMN c1")
+      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(1) ===
+        Seq(Row("C2")))
+    }
+  }
+
+  test("alter table ... update column comment not supported") {
+    withTable("h2.test.alt_table") {
+      withConnection { conn =>
+        conn.prepareStatement("""CREATE TABLE "test"."alt_table" (id INTEGER)""")
+          .executeUpdate()
+      }
+      val thrown = intercept[org.apache.spark.SparkException] {
+        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN id COMMENT 'test'")
+      }
+      assert(thrown.getMessage.contains("JDBC alterTable has Unsupported TableChange"))
+    }
+  }
 }

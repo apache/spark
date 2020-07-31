@@ -19,10 +19,16 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
 
+import scala.collection.mutable
+
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn}
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types._
+
 
 /**
  * :: DeveloperApi ::
@@ -184,14 +190,55 @@ abstract class JdbcDialect extends Serializable {
   /**
    * Rename an existing table.
    *
-   * TODO (SPARK-32382): Override this method in the dialects that don't support such syntax.
-   *
    * @param oldTable The existing table.
    * @param newTable New name of the table.
    * @return The SQL statement to use for renaming the table.
    */
   def renameTable(oldTable: String, newTable: String): String = {
     s"ALTER TABLE $oldTable RENAME TO $newTable"
+  }
+
+  /**
+   * Alter an existing table.
+   *
+   * @param tableName The name of the table to be altered.
+   * @param changes Changes to apply to the table.
+   * @return The SQL statement to use for altering the table.
+   */
+  def alterTable(tableName: String, changes: Seq[TableChange]): Array[String] = {
+    val updateClause = mutable.ArrayBuilder.make[String]
+    for (change <- changes) {
+      change match {
+        case add: AddColumn =>
+          add.fieldNames match {
+            case Array(name) =>
+              val dataType = JdbcUtils.getJdbcType(add.dataType(), this).databaseTypeDefinition
+              updateClause += s"ALTER TABLE $tableName ADD COLUMN $name $dataType"
+            case _ =>
+              throw new IllegalArgumentException(s"Unsupported TableChange fieldNames" +
+                s" ${add.fieldNames}")
+          }
+        case rename: RenameColumn =>
+          rename.fieldNames match {
+            case Array(name) =>
+              updateClause += s"ALTER TABLE $tableName RENAME COLUMN $name TO ${rename.newName}"
+            case _ =>
+              throw new IllegalArgumentException(s"Unsupported TableChange fieldNames" +
+                s" ${rename.fieldNames}")
+          }
+        case delete: DeleteColumn =>
+          delete.fieldNames match {
+            case Array(name) =>
+              updateClause += s"ALTER TABLE $tableName DROP COLUMN $name"
+            case _ =>
+              throw new IllegalArgumentException(s"Unsupported TableChange fieldNames" +
+                s" ${delete.fieldNames}")
+          }
+        case _ => throw new IllegalArgumentException(s"JDBC alterTable has Unsupported" +
+          s" TableChange ${change}")
+      }
+    }
+    updateClause.result()
   }
 }
 
