@@ -62,11 +62,17 @@ trait ConstraintHelper {
    */
   def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
     var inferredConstraints = Set.empty[Expression]
-    constraints.foreach {
+    // IsNotNull should be constructed by `constructIsNotNullConstraints`.
+    val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
+    predicates.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = constraints - eq
+        val candidateConstraints = predicates - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+      case eq @ EqualTo(l @ Cast(_: Attribute, _, _), r: Attribute) =>
+        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
+      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
+        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
       case _ => // No inference
     }
     inferredConstraints -- constraints
@@ -75,7 +81,7 @@ trait ConstraintHelper {
   private def replaceConstraints(
       constraints: Set[Expression],
       source: Expression,
-      destination: Attribute): Set[Expression] = constraints.map(_ transform {
+      destination: Expression): Set[Expression] = constraints.map(_ transform {
     case e: Expression if e.semanticEquals(source) => destination
   })
 

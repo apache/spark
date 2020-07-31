@@ -57,7 +57,7 @@ public class OneForOneStreamManager extends StreamManager {
     int curChunk = 0;
 
     // Used to keep track of the number of chunks being transferred and not finished yet.
-    volatile long chunksBeingTransferred = 0L;
+    final AtomicLong chunksBeingTransferred = new AtomicLong(0L);
 
     StreamState(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
       this.appId = appId;
@@ -117,20 +117,34 @@ public class OneForOneStreamManager extends StreamManager {
 
   @Override
   public void connectionTerminated(Channel channel) {
+    RuntimeException failedToReleaseBufferException = null;
+
     // Close all streams which have been associated with the channel.
     for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
       StreamState state = entry.getValue();
       if (state.associatedChannel == channel) {
         streams.remove(entry.getKey());
 
-        // Release all remaining buffers.
-        while (state.buffers.hasNext()) {
-          ManagedBuffer buffer = state.buffers.next();
-          if (buffer != null) {
-            buffer.release();
+        try {
+          // Release all remaining buffers.
+          while (state.buffers.hasNext()) {
+            ManagedBuffer buffer = state.buffers.next();
+            if (buffer != null) {
+              buffer.release();
+            }
+          }
+        } catch (RuntimeException e) {
+          if (failedToReleaseBufferException == null) {
+            failedToReleaseBufferException = e;
+          } else {
+            logger.error("Exception trying to release remaining StreamState buffers", e);
           }
         }
       }
+    }
+
+    if (failedToReleaseBufferException != null) {
+      throw failedToReleaseBufferException;
     }
   }
 
@@ -153,7 +167,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void chunkBeingSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
-      streamState.chunksBeingTransferred++;
+      streamState.chunksBeingTransferred.incrementAndGet();
     }
 
   }
@@ -167,7 +181,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void chunkSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
-      streamState.chunksBeingTransferred--;
+      streamState.chunksBeingTransferred.decrementAndGet();
     }
   }
 
@@ -180,7 +194,7 @@ public class OneForOneStreamManager extends StreamManager {
   public long chunksBeingTransferred() {
     long sum = 0L;
     for (StreamState streamState: streams.values()) {
-      sum += streamState.chunksBeingTransferred;
+      sum += streamState.chunksBeingTransferred.get();
     }
     return sum;
   }

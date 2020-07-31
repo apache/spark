@@ -41,14 +41,9 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
    * Empty ranges (`KafkaOffsetRange.size <= 0`) will be dropped.
    */
   def getRanges(
-      fromOffsets: PartitionOffsetMap,
-      untilOffsets: PartitionOffsetMap,
+      ranges: Seq[KafkaOffsetRange],
       executorLocations: Seq[String] = Seq.empty): Seq[KafkaOffsetRange] = {
-    val partitionsToRead = untilOffsets.keySet.intersect(fromOffsets.keySet)
-
-    val offsetRanges = partitionsToRead.toSeq.map { tp =>
-      KafkaOffsetRange(tp, fromOffsets(tp), untilOffsets(tp), preferredLoc = None)
-    }.filter(_.size > 0)
+    val offsetRanges = ranges.filter(_.size > 0)
 
     // If minPartitions not set or there are enough partitions to satisfy minPartitions
     if (minPartitions.isEmpty || offsetRanges.size > minPartitions.get) {
@@ -106,6 +101,13 @@ private[kafka010] case class KafkaOffsetRange(
     topicPartition: TopicPartition,
     fromOffset: Long,
     untilOffset: Long,
-    preferredLoc: Option[String]) {
-  lazy val size: Long = untilOffset - fromOffset
+    preferredLoc: Option[String] = None) {
+  def topic: String = topicPartition.topic
+  def partition: Int = topicPartition.partition
+  /**
+   * The estimated size of messages in the range. It may be different than the real number of
+   * messages due to log compaction or transaction metadata. It should not be used to provide
+   * answers directly.
+   */
+  def size: Long = untilOffset - fromOffset
 }

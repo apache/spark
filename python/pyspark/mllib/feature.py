@@ -18,21 +18,15 @@
 """
 Python package for feature in MLlib.
 """
-from __future__ import absolute_import
-
 import sys
 import warnings
-if sys.version >= '3':
-    basestring = str
-    unicode = str
-
 from py4j.protocol import Py4JJavaError
 
 from pyspark import since
-from pyspark.rdd import RDD, ignore_unicode_prefix
+from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import (
-    Vector, Vectors, DenseVector, SparseVector, _convert_to_vector)
+    Vectors, DenseVector, SparseVector, _convert_to_vector)
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.util import JavaLoader, JavaSaveable
 
@@ -43,8 +37,6 @@ __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
 
 class VectorTransformer(object):
     """
-    .. note:: DeveloperApi
-
     Base class for transformation of a vector or RDD of vector
     """
     def transform(self, vector):
@@ -618,7 +610,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
 
         .. note:: Local use only
         """
-        if not isinstance(word, basestring):
+        if not isinstance(word, str):
             word = _convert_to_vector(word)
         words, similarity = self.call("findSynonyms", word, num)
         return zip(words, similarity)
@@ -642,7 +634,6 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         return Word2VecModel(model)
 
 
-@ignore_unicode_prefix
 class Word2Vec(object):
     """Word2Vec creates vector representation of words in a text corpus.
     The algorithm first constructs a vocabulary from the corpus
@@ -670,7 +661,7 @@ class Word2Vec(object):
 
     >>> syms = model.findSynonyms("a", 2)
     >>> [s[0] for s in syms]
-    [u'b', u'c']
+    ['b', 'c']
 
     But querying for synonyms of a vector may return the word whose
     representation is that vector:
@@ -678,7 +669,7 @@ class Word2Vec(object):
     >>> vec = model.transform("a")
     >>> syms = model.findSynonyms(vec, 2)
     >>> [s[0] for s in syms]
-    [u'a', u'b']
+    ['a', 'b']
 
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
@@ -688,7 +679,7 @@ class Word2Vec(object):
     True
     >>> syms = sameModel.findSynonyms("a", 2)
     >>> [s[0] for s in syms]
-    [u'b', u'c']
+    ['b', 'c']
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)

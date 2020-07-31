@@ -28,11 +28,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map, WrappedArray}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.slf4j.MDC
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -41,6 +43,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.metrics.source.JVMCPUSource
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
 import org.apache.spark.shuffle.FetchFailedException
@@ -61,7 +64,8 @@ private[spark] class Executor(
     env: SparkEnv,
     userClassPath: Seq[URL] = Nil,
     isLocal: Boolean = false,
-    uncaughtExceptionHandler: UncaughtExceptionHandler = new SparkUncaughtExceptionHandler)
+    uncaughtExceptionHandler: UncaughtExceptionHandler = new SparkUncaughtExceptionHandler,
+    resources: immutable.Map[String, ResourceInformation])
   extends Logging {
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
@@ -150,11 +154,6 @@ private[spark] class Executor(
   // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
-  // Plugins need to load using a class loader that includes the executor's user classpath
-  private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
-    PluginContainer(env)
-  }
-
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
   private val maxDirectResultSize = Math.min(
@@ -213,16 +212,39 @@ private[spark] class Executor(
    */
   private var heartbeatFailures = 0
 
+  /**
+   * Flag to prevent launching new tasks while decommissioned. There could be a race condition
+   * accessing this, but decommissioning is only intended to help not be a hard stop.
+   */
+  private var decommissioned = false
+
   heartbeater.start()
+
+  // Plugins need to load using a class loader that includes the executor's user classpath.
+  // Plugins also needs to be initialized after the heartbeater started
+  // to avoid blocking to send heartbeat (see SPARK-32175).
+  private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
+    PluginContainer(env, resources.asJava)
+  }
 
   metricsPoller.start()
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
+  /**
+   * Mark an executor for decommissioning and avoid launching new tasks.
+   */
+  private[spark] def decommission(): Unit = {
+    decommissioned = true
+  }
+
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
     threadPool.execute(tr)
+    if (decommissioned) {
+      log.error(s"Launching a task while in decommissioned state.")
+    }
   }
 
   def killTask(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
@@ -301,7 +323,9 @@ private[spark] class Executor(
 
     val taskId = taskDescription.taskId
     val threadName = s"Executor task launch worker for task $taskId"
-    private val taskName = taskDescription.name
+    val taskName = taskDescription.name
+    val mdcProperties = taskDescription.properties.asScala
+      .filter(_._1.startsWith("mdc.")).toSeq
 
     /** If specified, this task has been killed and this option contains the reason. */
     @volatile private var reasonIfKilled: Option[String] = None
@@ -376,6 +400,7 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
+      setMDCForTask(taskName, mdcProperties)
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
@@ -583,7 +608,8 @@ private[spark] class Executor(
           // Here and below, put task metric peaks in a WrappedArray to expose them as a Seq
           // without requiring a copy.
           val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
-          val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates, accums, metricPeaks))
+          val serializedTK = ser.serialize(
+            TaskKilled(t.reason, accUpdates, accums, metricPeaks.toSeq))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case _: InterruptedException | NonFatal(_) if
@@ -593,7 +619,8 @@ private[spark] class Executor(
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
           val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
-          val serializedTK = ser.serialize(TaskKilled(killReason, accUpdates, accums, metricPeaks))
+          val serializedTK = ser.serialize(
+            TaskKilled(killReason, accUpdates, accums, metricPeaks.toSeq))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
@@ -638,13 +665,13 @@ private[spark] class Executor(
             val serializedTaskEndReason = {
               try {
                 val ef = new ExceptionFailure(t, accUpdates).withAccums(accums)
-                  .withMetricPeaks(metricPeaks)
+                  .withMetricPeaks(metricPeaks.toSeq)
                 ser.serialize(ef)
               } catch {
                 case _: NotSerializableException =>
                   // t is not serializable so just send the stacktrace
                   val ef = new ExceptionFailure(t, accUpdates, false).withAccums(accums)
-                    .withMetricPeaks(metricPeaks)
+                    .withMetricPeaks(metricPeaks.toSeq)
                   ser.serialize(ef)
               }
             }
@@ -672,6 +699,14 @@ private[spark] class Executor(
     private def hasFetchFailure: Boolean = {
       task != null && task.context != null && task.context.fetchFailed.isDefined
     }
+  }
+
+  private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
+    // make sure we run the task with the user-specified mdc properties only
+    MDC.clear()
+    mdc.foreach { case (key, value) => MDC.put(key, value) }
+    // avoid overriding the takName by the user
+    MDC.put("mdc.taskName", taskName)
   }
 
   /**
@@ -714,6 +749,7 @@ private[spark] class Executor(
     private[this] val takeThreadDump: Boolean = conf.get(TASK_REAPER_THREAD_DUMP)
 
     override def run(): Unit = {
+      setMDCForTask(taskRunner.taskName, taskRunner.mdcProperties)
       val startTimeNs = System.nanoTime()
       def elapsedTimeNs = System.nanoTime() - startTimeNs
       def timeoutExceeded(): Boolean = killTimeoutNs > 0 && elapsedTimeNs > killTimeoutNs

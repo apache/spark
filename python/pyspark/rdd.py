@@ -33,25 +33,22 @@ from itertools import chain
 from functools import reduce
 from math import sqrt, log, isinf, isnan, pow, ceil
 
-if sys.version > '3':
-    basestring = unicode = str
-else:
-    from itertools import imap as map, ifilter as filter
-
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import AutoBatchedSerializer, BatchedSerializer, NoOpSerializer, \
     CartesianDeserializer, CloudPickleSerializer, PairDeserializer, PickleSerializer, \
-    UTF8Deserializer, pack_long, read_int, write_int
+    pack_long, read_int, write_int
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
+from pyspark.resource.requests import ExecutorResourceRequests, TaskResourceRequests
+from pyspark.resource.profile import ResourceProfile
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.util import fail_on_stopiteration
+from pyspark.util import fail_on_stopiteration, _parse_memory
 
 
 __all__ = ["RDD"]
@@ -91,7 +88,7 @@ def portable_hash(x):
     219750521
     """
 
-    if sys.version_info >= (3, 2, 3) and 'PYTHONHASHSEED' not in os.environ:
+    if 'PYTHONHASHSEED' not in os.environ:
         raise Exception("Randomness of hash of string should be disabled via PYTHONHASHSEED")
 
     if x is None:
@@ -123,22 +120,6 @@ class BoundedFloat(float):
         obj.low = low
         obj.high = high
         return obj
-
-
-def _parse_memory(s):
-    """
-    Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MiB
-
-    >>> _parse_memory("256m")
-    256
-    >>> _parse_memory("2g")
-    2048
-    """
-    units = {'g': 1024, 'm': 1, 't': 1 << 20, 'k': 1.0 / 1024}
-    if s[-1].lower() not in units:
-        raise ValueError("invalid format: " + s)
-    return int(float(s[:-1]) * units[s[-1].lower()])
 
 
 def _create_local_socket(sock_info):
@@ -218,19 +199,6 @@ def _local_iterator_from_socket(sock_info, serializer):
     return iter(PyLocalIterable(sock_info, serializer))
 
 
-def ignore_unicode_prefix(f):
-    """
-    Ignore the 'u' prefix of string in doc tests, to make it works
-    in both python 2 and 3
-    """
-    if sys.version >= '3':
-        # the representation of unicode string in Python 3 does not have prefix 'u',
-        # so remove the prefix 'u' for doc tests
-        literal_re = re.compile(r"(\W|^)[uU](['])", re.UNICODE)
-        f.__doc__ = literal_re.sub(r'\1\2', f.__doc__)
-    return f
-
-
 class Partitioner(object):
     def __init__(self, numPartitions, partitionFunc):
         self.numPartitions = numPartitions
@@ -256,6 +224,7 @@ class RDD(object):
         self._jrdd = jrdd
         self.is_cached = False
         self.is_checkpointed = False
+        self.has_resource_profile = False
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
         self._id = jrdd.id()
@@ -810,13 +779,12 @@ class RDD(object):
         """
         return self.map(lambda x: (f(x), x)).groupByKey(numPartitions, partitionFunc)
 
-    @ignore_unicode_prefix
     def pipe(self, command, env=None, checkCode=False):
         """
         Return an RDD created by piping elements to a forked external process.
 
         >>> sc.parallelize(['1', '2', '', '3']).pipe('cat').collect()
-        [u'1', u'2', u'', u'3']
+        ['1', '2', '', '3']
 
         :param checkCode: whether or not to check the return value of the shell command.
         """
@@ -829,7 +797,7 @@ class RDD(object):
 
             def pipe_objs(out):
                 for obj in iterator:
-                    s = unicode(obj).rstrip('\n') + '\n'
+                    s = str(obj).rstrip('\n') + '\n'
                     out.write(s.encode('utf-8'))
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()
@@ -887,6 +855,25 @@ class RDD(object):
         """
         with SCCallSiteSync(self.context) as css:
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
+        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+
+    def collectWithJobGroup(self, groupId, description, interruptOnCancel=False):
+        """
+        When collect rdd, use this method to specify job group.
+
+        .. note:: Deprecated in 3.1.0. Use :class:`pyspark.InheritableThread` with
+            the pinned thread mode enabled.
+
+        .. versionadded:: 3.0.0
+        """
+        warnings.warn(
+            "Deprecated in 3.1, Use pyspark.InheritableThread with "
+            "the pinned thread mode enabled.",
+            DeprecationWarning)
+
+        with SCCallSiteSync(self.context) as css:
+            sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
+                self._jrdd.rdd(), groupId, description, interruptOnCancel)
         return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
     def reduce(self, f):
@@ -1591,7 +1578,6 @@ class RDD(object):
             ser = BatchedSerializer(PickleSerializer(), batchSize)
         self._reserialize(ser)._jrdd.saveAsObjectFile(path)
 
-    @ignore_unicode_prefix
     def saveAsTextFile(self, path, compressionCodecClass=None):
         """
         Save this RDD as a text file, using string representations of elements.
@@ -1625,13 +1611,13 @@ class RDD(object):
         >>> from fileinput import input, hook_compressed
         >>> result = sorted(input(glob(tempFile3.name + "/part*.gz"), openhook=hook_compressed))
         >>> b''.join(result).decode('utf-8')
-        u'bar\\nfoo\\n'
+        'bar\\nfoo\\n'
         """
         def func(split, iterator):
             for x in iterator:
-                if not isinstance(x, (unicode, bytes)):
-                    x = unicode(x)
-                if isinstance(x, unicode):
+                if not isinstance(x, (str, bytes)):
+                    x = str(x)
+                if isinstance(x, str):
                     x = x.encode("utf-8")
                 yield x
         keyed = self.mapPartitionsWithIndex(func)
@@ -2281,14 +2267,13 @@ class RDD(object):
         if n:
             return n
 
-    @ignore_unicode_prefix
     def setName(self, name):
         """
         Assign a name to this RDD.
 
         >>> rdd1 = sc.parallelize([1, 2])
         >>> rdd1.setName('RDD1').name()
-        u'RDD1'
+        'RDD1'
         """
         self._jrdd.setName(name)
         return self
@@ -2483,6 +2468,47 @@ class RDD(object):
         """
         return self._jrdd.rdd().isBarrier()
 
+    def withResources(self, profile):
+        """
+        .. note:: Experimental
+
+        Specify a :class:`pyspark.resource.ResourceProfile` to use when calculating this RDD.
+        This is only supported on certain cluster managers and currently requires dynamic
+        allocation to be enabled. It will result in new executors with the resources specified
+        being acquired to calculate the RDD.
+
+        .. versionadded:: 3.1.0
+        """
+        self.has_resource_profile = True
+        if profile._java_resource_profile is not None:
+            jrp = profile._java_resource_profile
+        else:
+            builder = self.ctx._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+            ereqs = ExecutorResourceRequests(self.ctx._jvm, profile._executor_resource_requests)
+            treqs = TaskResourceRequests(self.ctx._jvm, profile._task_resource_requests)
+            builder.require(ereqs._java_executor_resource_requests)
+            builder.require(treqs._java_task_resource_requests)
+            jrp = builder.build()
+
+        self._jrdd.withResources(jrp)
+        return self
+
+    def getResourceProfile(self):
+        """
+        .. note:: Experimental
+
+        Get the :class:`pyspark.resource.ResourceProfile` specified with this RDD or None
+        if it wasn't specified.
+        :return: the user specified ResourceProfile or None if none were specified
+
+        .. versionadded:: 3.1.0
+        """
+        rp = self._jrdd.getResourceProfile()
+        if rp is not None:
+            return ResourceProfile(_java_resource_profile=rp)
+        else:
+            return None
+
 
 def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
@@ -2587,6 +2613,7 @@ class PipelinedRDD(RDD):
             self._prev_jrdd = prev._prev_jrdd  # maintain the pipeline
             self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
         self.is_cached = False
+        self.has_resource_profile = False
         self.is_checkpointed = False
         self.ctx = prev.ctx
         self.prev = prev
@@ -2629,7 +2656,7 @@ class PipelinedRDD(RDD):
         return self._id
 
     def _is_pipelinable(self):
-        return not (self.is_cached or self.is_checkpointed)
+        return not (self.is_cached or self.is_checkpointed or self.has_resource_profile)
 
     def _is_barrier(self):
         return self.is_barrier

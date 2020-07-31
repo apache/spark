@@ -24,7 +24,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.mockito.Mockito
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
@@ -529,6 +530,47 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     }
   }
 
+  Seq(true, false).foreach { throwInterruptedException =>
+    val suffix = if (throwInterruptedException) "throw interrupt" else "set Thread interrupted"
+    test(s"SPARK-30285: Fix deadlock in AsyncEventQueue.removeListenerOnError: $suffix") {
+      val LISTENER_BUS_STOP_WAITING_TIMEOUT_MILLIS = 10 * 1000L // 10 seconds
+      val bus = new LiveListenerBus(new SparkConf(false))
+      val counter1 = new BasicJobCounter()
+      val counter2 = new BasicJobCounter()
+      val interruptingListener = new DelayInterruptingJobCounter(throwInterruptedException, 3)
+      bus.addToSharedQueue(counter1)
+      bus.addToSharedQueue(interruptingListener)
+      bus.addToEventLogQueue(counter2)
+      assert(bus.activeQueues() === Set(SHARED_QUEUE, EVENT_LOG_QUEUE))
+      assert(bus.findListenersByClass[BasicJobCounter]().size === 2)
+      assert(bus.findListenersByClass[DelayInterruptingJobCounter]().size === 1)
+
+      bus.start(mockSparkContext, mockMetricsSystem)
+
+      (0 until 5).foreach { jobId =>
+        bus.post(SparkListenerJobEnd(jobId, jobCompletionTime, JobSucceeded))
+      }
+
+      // Call bus.stop in a separate thread, otherwise we will block here until bus is stopped
+      val stoppingThread = new Thread(() => {
+        bus.stop()
+      })
+      stoppingThread.start()
+      // Notify interrupting listener starts to work
+      interruptingListener.sleep = false
+      // Wait for bus to stop
+      stoppingThread.join(LISTENER_BUS_STOP_WAITING_TIMEOUT_MILLIS)
+
+      // Stopping has been finished
+      assert(stoppingThread.isAlive === false)
+      // All queues are removed
+      assert(bus.activeQueues() === Set.empty)
+      assert(counter1.count === 5)
+      assert(counter2.count === 5)
+      assert(interruptingListener.count === 3)
+    }
+  }
+
   test("event queue size can be configued through spark conf") {
     // configure the shared queue size to be 1, event log queue size to be 2,
     // and listner bus event queue size to be 5
@@ -580,7 +622,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     }
 
     override def onStageCompleted(stage: SparkListenerStageCompleted): Unit = {
-      stageInfos(stage.stageInfo) = taskInfoMetrics
+      stageInfos(stage.stageInfo) = taskInfoMetrics.toSeq
       taskInfoMetrics = mutable.Buffer.empty
     }
   }
@@ -624,6 +666,35 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
         throw new InterruptedException("got interrupted")
       } else {
         Thread.currentThread().interrupt()
+      }
+    }
+  }
+
+  /**
+   * A simple listener that works as follows:
+   * 1. sleep and wait when `sleep` is true
+   * 2. when `sleep` is false, start to work:
+   *    if it is interruptOnJobId, interrupt
+   *    else count SparkListenerJobEnd numbers
+   */
+  private class DelayInterruptingJobCounter(
+      val throwInterruptedException: Boolean,
+      val interruptOnJobId: Int) extends SparkListener {
+    @volatile var sleep = true
+    var count = 0
+
+    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+      while (sleep) {
+        Thread.sleep(10)
+      }
+      if (interruptOnJobId == jobEnd.jobId) {
+        if (throwInterruptedException) {
+          throw new InterruptedException("got interrupted")
+        } else {
+          Thread.currentThread().interrupt()
+        }
+      } else {
+        count += 1
       }
     }
   }

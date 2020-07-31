@@ -35,7 +35,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     override val jdbcPort: Int = 3306
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
-    override def getStartupProcessName: Option[String] = None
   }
 
   override def dataPreparation(conn: Connection): Unit = {

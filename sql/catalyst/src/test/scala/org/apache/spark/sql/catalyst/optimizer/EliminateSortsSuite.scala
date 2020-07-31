@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -244,7 +245,8 @@ class EliminateSortsSuite extends PlanTest {
   }
 
   test("should not remove orderBy in groupBy clause with ScalaUDF as aggs") {
-    val scalaUdf = ScalaUDF((s: Int) => s, IntegerType, 'a :: Nil, true :: Nil)
+    val scalaUdf = ScalaUDF((s: Int) => s, IntegerType, 'a :: Nil,
+      Option(ExpressionEncoder[Int]()) :: Nil)
     val projectPlan = testRelation.select('a, 'b)
     val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
     val groupByPlan = orderByPlan.groupBy('a)(scalaUdf)
@@ -279,6 +281,15 @@ class EliminateSortsSuite extends PlanTest {
     val joinPlan = orderByPlan.join(projectPlanB).select('a, 'd)
     val optimized = Optimize.execute(joinPlan.analyze)
     val correctAnswer = joinPlan.analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-32318: should not remove orderBy in distribute statement") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('b.desc)
+    val distributedPlan = orderByPlan.distribute('a)(1)
+    val optimized = Optimize.execute(distributedPlan.analyze)
+    val correctAnswer = distributedPlan.analyze
     comparePlans(optimized, correctAnswer)
   }
 

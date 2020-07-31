@@ -93,16 +93,16 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(id) FROM nativeOrcTable").collect()
+            spark.sql("SELECT sum(id) FROM nativeOrcTable").noop()
           }
         }
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(id) FROM nativeOrcTable").collect()
+          spark.sql("SELECT sum(id) FROM nativeOrcTable").noop()
         }
 
         benchmark.addCase("Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(id) FROM hiveOrcTable").collect()
+          spark.sql("SELECT sum(id) FROM hiveOrcTable").noop()
         }
 
         benchmark.run()
@@ -124,16 +124,16 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(c1), sum(length(c2)) FROM nativeOrcTable").collect()
+            spark.sql("SELECT sum(c1), sum(length(c2)) FROM nativeOrcTable").noop()
           }
         }
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(c1), sum(length(c2)) FROM nativeOrcTable").collect()
+          spark.sql("SELECT sum(c1), sum(length(c2)) FROM nativeOrcTable").noop()
         }
 
         benchmark.addCase("Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(c1), sum(length(c2)) FROM hiveOrcTable").collect()
+          spark.sql("SELECT sum(c1), sum(length(c2)) FROM hiveOrcTable").noop()
         }
 
         benchmark.run()
@@ -153,44 +153,44 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Data column - Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(id) FROM nativeOrcTable").collect()
+            spark.sql("SELECT sum(id) FROM nativeOrcTable").noop()
           }
         }
 
         benchmark.addCase("Data column - Native ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(id) FROM nativeOrcTable").collect()
+          spark.sql("SELECT sum(id) FROM nativeOrcTable").noop()
         }
 
         benchmark.addCase("Data column - Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(id) FROM hiveOrcTable").collect()
+          spark.sql("SELECT sum(id) FROM hiveOrcTable").noop()
         }
 
         benchmark.addCase("Partition column - Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(p) FROM nativeOrcTable").collect()
+            spark.sql("SELECT sum(p) FROM nativeOrcTable").noop()
           }
         }
 
         benchmark.addCase("Partition column - Native ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(p) FROM nativeOrcTable").collect()
+          spark.sql("SELECT sum(p) FROM nativeOrcTable").noop()
         }
 
         benchmark.addCase("Partition column - Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(p) FROM hiveOrcTable").collect()
+          spark.sql("SELECT sum(p) FROM hiveOrcTable").noop()
         }
 
         benchmark.addCase("Both columns - Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(p), sum(id) FROM nativeOrcTable").collect()
+            spark.sql("SELECT sum(p), sum(id) FROM nativeOrcTable").noop()
           }
         }
 
         benchmark.addCase("Both columns - Native ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(p), sum(id) FROM nativeOrcTable").collect()
+          spark.sql("SELECT sum(p), sum(id) FROM nativeOrcTable").noop()
         }
 
         benchmark.addCase("Both columns - Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(p), sum(id) FROM hiveOrcTable").collect()
+          spark.sql("SELECT sum(p), sum(id) FROM hiveOrcTable").noop()
         }
 
         benchmark.run()
@@ -209,16 +209,16 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(length(c1)) FROM nativeOrcTable").collect()
+            spark.sql("SELECT sum(length(c1)) FROM nativeOrcTable").noop()
           }
         }
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(length(c1)) FROM nativeOrcTable").collect()
+          spark.sql("SELECT sum(length(c1)) FROM nativeOrcTable").noop()
         }
 
         benchmark.addCase("Hive built-in ORC") { _ =>
-          spark.sql("SELECT sum(length(c1)) FROM hiveOrcTable").collect()
+          spark.sql("SELECT sum(length(c1)) FROM hiveOrcTable").noop()
         }
 
         benchmark.run()
@@ -244,18 +244,18 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT SUM(LENGTH(c2)) FROM nativeOrcTable " +
-              "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").collect()
+              "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
           }
         }
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
           spark.sql("SELECT SUM(LENGTH(c2)) FROM nativeOrcTable " +
-            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").collect()
+            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
         }
 
         benchmark.addCase("Hive built-in ORC") { _ =>
           spark.sql("SELECT SUM(LENGTH(c2)) FROM hiveOrcTable " +
-            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").collect()
+            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
         }
 
         benchmark.run()
@@ -278,16 +278,16 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql(s"SELECT sum(c$middle) FROM nativeOrcTable").collect()
+            spark.sql(s"SELECT sum(c$middle) FROM nativeOrcTable").noop()
           }
         }
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
-          spark.sql(s"SELECT sum(c$middle) FROM nativeOrcTable").collect()
+          spark.sql(s"SELECT sum(c$middle) FROM nativeOrcTable").noop()
         }
 
         benchmark.addCase("Hive built-in ORC") { _ =>
-          spark.sql(s"SELECT sum(c$middle) FROM hiveOrcTable").collect()
+          spark.sql(s"SELECT sum(c$middle) FROM hiveOrcTable").noop()
         }
 
         benchmark.run()

@@ -274,8 +274,8 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
 
             val orcPartitionedTable = TableIdentifier("dummy_orc_partitioned", Some("default"))
             if (conversion == "true") {
-              // if converted, it's cached as a datasource table.
-              checkCached(orcPartitionedTable)
+              // if converted, we refresh the cached relation.
+              assert(getCachedDataSourceTable(orcPartitionedTable) === null)
             } else {
               // otherwise, not cached.
               assert(getCachedDataSourceTable(orcPartitionedTable) === null)
@@ -283,6 +283,34 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
 
             val df = spark.sql("SELECT key, value FROM dummy_orc_partitioned WHERE key=0")
             checkAnswer(df, singleRowDF)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-32234 read ORC table with column names all starting with '_col'") {
+    Seq("native", "hive").foreach { orcImpl =>
+      Seq("false", "true").foreach { vectorized =>
+        withSQLConf(
+          SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
+          SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized) {
+          withTable("test_hive_orc_impl") {
+            spark.sql(
+              s"""
+                 | CREATE TABLE test_hive_orc_impl
+                 | (_col1 INT, _col2 STRING, _col3 INT)
+                 | STORED AS ORC
+               """.stripMargin)
+            spark.sql(
+              s"""
+                 | INSERT INTO
+                 | test_hive_orc_impl
+                 | VALUES(9, '12', 2020)
+               """.stripMargin)
+
+            val df = spark.sql("SELECT _col2 FROM test_hive_orc_impl")
+            checkAnswer(df, Row("12"))
           }
         }
       }

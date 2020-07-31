@@ -22,7 +22,6 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -33,7 +32,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
@@ -127,27 +125,14 @@ class DecisionTreeClassifier @Since("1.4.0") (
     validateNumClasses(numClasses)
     val instances = extractInstances(dataset, numClasses)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
+    require(!strategy.bootstrap, "DecisionTreeClassifier does not need bootstrap sampling")
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
       probabilityCol, leafCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain,
-      maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed)
+      maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed, thresholds)
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
-
-    trees.head.asInstanceOf[DecisionTreeClassificationModel]
-  }
-
-  /** (private[ml]) Train a decision tree on an RDD */
-  private[ml] def train(data: RDD[LabeledPoint],
-      oldStrategy: OldStrategy): DecisionTreeClassificationModel = instrumented { instr =>
-    val instances = data.map(_.toInstance)
-    instr.logPipelineStage(this)
-    instr.logDataset(instances)
-    instr.logParams(this, maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,
-      cacheNodeIds, checkpointInterval, impurity, seed)
-    val trees = RandomForest.run(instances, oldStrategy, numTrees = 1,
-      featureSubsetStrategy = "all", seed = 0L, instr = Some(instr), parentUID = Some(uid))
 
     trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }
@@ -225,7 +210,8 @@ class DecisionTreeClassificationModel private[ml] (
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     Vectors.dense(rootNode.predictImpl(features).impurityStats.stats.clone())
   }
 

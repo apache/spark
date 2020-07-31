@@ -107,7 +107,7 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
         s"but got $inputDataType.")
     require(schema.fields.forall(_.name != outputColName),
       s"Output column $outputColName already exists.")
-    NominalAttribute.defaultAttr.withName($(outputCol)).toStructField()
+    NominalAttribute.defaultAttr.withName(outputColName).toStructField()
   }
 
   /** Validates and transforms the input schema. */

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -38,8 +38,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * {@code spark.sql.catalog.catalog-name.(key)=(value)} will be passed in the case insensitive
  * string map of options in initialization with the prefix removed.
  * {@code name}, is also passed and is the catalog's name; in this case, "catalog-name".
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface CatalogPlugin {
   /**
    * Called to initialize configuration.
@@ -58,4 +60,18 @@ public interface CatalogPlugin {
    * called to pass the catalog's name.
    */
   String name();
+
+  /**
+   * Return a default namespace for the catalog.
+   * <p>
+   * When this catalog is set as the current catalog, the namespace returned by this method will be
+   * set as the current namespace.
+   * <p>
+   * The namespace returned by this method is not required to exist.
+   *
+   * @return a multi-part namespace
+   */
+  default String[] defaultNamespace() {
+    return new String[0];
+  }
 }

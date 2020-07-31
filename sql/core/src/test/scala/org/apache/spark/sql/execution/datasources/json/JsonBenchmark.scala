@@ -20,10 +20,10 @@ import java.io.File
 import java.time.{Instant, LocalDate}
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.SaveMode.Overwrite
+import org.apache.spark.sql.{Column, Dataset, Row}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -47,10 +47,6 @@ object JsonBenchmark extends SqlBasedBenchmark {
     // scalastyle:off println
     benchmark.out.println("Preparing data for benchmarking ...")
     // scalastyle:on println
-  }
-
-  private def run(ds: Dataset[_]): Unit = {
-    ds.write.format("noop").mode(Overwrite).save()
   }
 
   def schemaInferring(rowsNum: Int, numIters: Int): Unit = {
@@ -220,11 +216,11 @@ object JsonBenchmark extends SqlBasedBenchmark {
 
       benchmark.addCase(s"Select $colsNum columns", numIters) { _ =>
         val ds = in.select("*")
-        run(ds)
+        ds.noop()
       }
       benchmark.addCase(s"Select 1 column", numIters) { _ =>
         val ds = in.select($"col1")
-        run(ds)
+        ds.noop()
       }
 
       benchmark.run()
@@ -245,7 +241,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
 
       benchmark.addCase("Short column without encoding", numIters) { _ =>
         val ds = spark.read.schema(shortSchema).json(shortColumnPath)
-        run(ds)
+        ds.noop()
       }
 
       benchmark.addCase("Short column with UTF-8", numIters) { _ =>
@@ -253,12 +249,12 @@ object JsonBenchmark extends SqlBasedBenchmark {
           .option("encoding", "UTF-8")
           .schema(shortSchema)
           .json(shortColumnPath)
-        run(ds)
+        ds.noop()
       }
 
       benchmark.addCase("Wide column without encoding", numIters) { _ =>
         val ds = spark.read.schema(wideSchema).json(wideColumnPath)
-        run(ds)
+        ds.noop()
       }
 
       benchmark.addCase("Wide column with UTF-8", numIters) { _ =>
@@ -266,7 +262,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
           .option("encoding", "UTF-8")
           .schema(wideSchema)
           .json(wideColumnPath)
-        run(ds)
+        ds.noop()
       }
 
       benchmark.run()
@@ -281,23 +277,23 @@ object JsonBenchmark extends SqlBasedBenchmark {
     val in = spark.range(0, rows, 1, 1).map(_ => """{"a":1}""")
 
     benchmark.addCase("Text read", iters) { _ =>
-      run(in)
+      in.noop()
     }
 
     benchmark.addCase("from_json", iters) { _ =>
       val schema = new StructType().add("a", IntegerType)
       val from_json_ds = in.select(from_json('value, schema))
-      run(from_json_ds)
+      from_json_ds.noop()
     }
 
     benchmark.addCase("json_tuple", iters) { _ =>
       val json_tuple_ds = in.select(json_tuple($"value", "a"))
-      run(json_tuple_ds)
+      json_tuple_ds.noop()
     }
 
     benchmark.addCase("get_json_object", iters) { _ =>
       val get_json_object_ds = in.select(get_json_object($"value", "$.a"))
-      run(get_json_object_ds)
+      get_json_object_ds.noop()
     }
 
     benchmark.run()
@@ -311,7 +307,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
     val in = spark.range(0, rows, 1, 1).map(_ => """{"a":1}""")
 
     benchmark.addCase("Text read", iters) { _ =>
-      run(in)
+      in.noop()
     }
 
     benchmark.addCase("schema inferring", iters) { _ =>
@@ -323,7 +319,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
       val ds = spark.read
         .schema(schema)
         .json(in)
-      run(ds)
+      ds.noop()
     }
 
     benchmark.run()
@@ -344,7 +340,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
         val ds = spark.read
           .format("text")
           .load(path.getAbsolutePath)
-        run(ds)
+        ds.noop()
       }
 
       benchmark.addCase("Schema inferring", iters) { _ =>
@@ -361,7 +357,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
           .schema(schema)
           .option("multiLine", false)
           .json(path.getAbsolutePath)
-        run(ds)
+        ds.noop()
       }
 
       benchmark.addCase("Parsing with UTF-8", iters) { _ =>
@@ -371,7 +367,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
           .option("charset", "UTF-8")
           .json(path.getAbsolutePath)
 
-        run(ds)
+        ds.noop()
       }
 
       benchmark.run()
@@ -398,11 +394,11 @@ object JsonBenchmark extends SqlBasedBenchmark {
 
       val writeBench = new Benchmark("Write dates and timestamps", rowsNum, output = output)
       writeBench.addCase(s"Create a dataset of timestamps", numIters) { _ =>
-        run(timestamps)
+        timestamps.noop()
       }
 
       writeBench.addCase("to_json(timestamp)", numIters) { _ =>
-        run(timestamps.select(to_json(struct($"timestamp"))))
+        timestamps.select(to_json(struct($"timestamp"))).noop()
       }
 
       writeBench.addCase("write timestamps to files", numIters) { _ =>
@@ -410,11 +406,11 @@ object JsonBenchmark extends SqlBasedBenchmark {
       }
 
       writeBench.addCase("Create a dataset of dates", numIters) { _ =>
-        run(dates)
+        dates.noop()
       }
 
       writeBench.addCase("to_json(date)", numIters) { _ =>
-        run(dates.select(to_json(struct($"date"))))
+        dates.select(to_json(struct($"date"))).noop()
       }
 
       writeBench.addCase("write dates to files", numIters) { _ =>
@@ -427,43 +423,45 @@ object JsonBenchmark extends SqlBasedBenchmark {
       val tsSchema = new StructType().add("timestamp", TimestampType)
 
       readBench.addCase("read timestamp text from files", numIters) { _ =>
-        run(spark.read.text(timestampDir))
+        spark.read.text(timestampDir).noop()
       }
 
       readBench.addCase("read timestamps from files", numIters) { _ =>
-        run(spark.read.schema(tsSchema).json(timestampDir))
+        spark.read.schema(tsSchema).json(timestampDir).noop()
       }
 
       readBench.addCase("infer timestamps from files", numIters) { _ =>
-        run(spark.read.json(timestampDir))
+        spark.read.option("inferTimestamp", true).json(timestampDir).noop()
       }
 
       val dateSchema = new StructType().add("date", DateType)
 
       readBench.addCase("read date text from files", numIters) { _ =>
-        run(spark.read.text(dateDir))
+        spark.read.text(dateDir).noop()
       }
 
       readBench.addCase("read date from files", numIters) { _ =>
-        run(spark.read.schema(dateSchema).json(dateDir))
+        spark.read.schema(dateSchema).json(dateDir).noop()
       }
 
       def timestampStr: Dataset[String] = {
         spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
-          iter.map(i => s"""{"timestamp":"1970-01-01T01:02:03.${100 + i % 100}Z"}""")
+          iter.map { i =>
+            s"""{"timestamp":"1970-01-01T01:02:03.${i % 200}Z"}""".stripSuffix(".0Z")
+          }
         }.select($"value".as("timestamp")).as[String]
       }
 
       readBench.addCase("timestamp strings", numIters) { _ =>
-        run(timestampStr)
+        timestampStr.noop()
       }
 
       readBench.addCase("parse timestamps from Dataset[String]", numIters) { _ =>
-        run(spark.read.schema(tsSchema).json(timestampStr))
+        spark.read.schema(tsSchema).json(timestampStr).noop()
       }
 
       readBench.addCase("infer timestamps from Dataset[String]", numIters) { _ =>
-        run(spark.read.json(timestampStr))
+        spark.read.option("inferTimestamp", true).json(timestampStr).noop()
       }
 
       def dateStr: Dataset[String] = {
@@ -473,7 +471,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
       }
 
       readBench.addCase("date strings", numIters) { _ =>
-        run(dateStr)
+        dateStr.noop()
       }
 
       readBench.addCase("parse dates from Dataset[String]", numIters) { _ =>
@@ -481,20 +479,59 @@ object JsonBenchmark extends SqlBasedBenchmark {
           .option("header", false)
           .schema(dateSchema)
           .json(dateStr)
-        run(ds)
+        ds.noop()
       }
 
       readBench.addCase("from_json(timestamp)", numIters) { _ =>
         val ds = timestampStr.select(from_json($"timestamp", tsSchema, Map.empty[String, String]))
-        run(ds)
+        ds.noop()
       }
 
       readBench.addCase("from_json(date)", numIters) { _ =>
         val ds = dateStr.select(from_json($"date", dateSchema, Map.empty[String, String]))
-        run(ds)
+        ds.noop()
       }
 
       readBench.run()
+    }
+  }
+
+  private def filtersPushdownBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark("Filters pushdown", rowsNum, output = output)
+    val colsNum = 100
+    val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", TimestampType))
+    val schema = StructType(StructField("key", IntegerType) +: fields)
+    def columns(): Seq[Column] = {
+      val ts = Seq.tabulate(colsNum) { i =>
+        lit(Instant.ofEpochSecond(i * 12345678)).as(s"col$i")
+      }
+      ($"id" % 1000).as("key") +: ts
+    }
+    withTempPath { path =>
+      spark.range(rowsNum).select(columns(): _*).write.json(path.getAbsolutePath)
+      def readback = {
+        spark.read.schema(schema).json(path.getAbsolutePath)
+      }
+
+      benchmark.addCase("w/o filters", numIters) { _ =>
+        readback.noop()
+      }
+
+      def withFilter(configEnabled: Boolean): Unit = {
+        withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
+          readback.filter($"key" === 0).noop()
+        }
+      }
+
+      benchmark.addCase("pushdown disabled", numIters) { _ =>
+        withFilter(configEnabled = false)
+      }
+
+      benchmark.addCase("w/ filters", numIters) { _ =>
+        withFilter(configEnabled = true)
+      }
+
+      benchmark.run()
     }
   }
 
@@ -511,6 +548,9 @@ object JsonBenchmark extends SqlBasedBenchmark {
       jsonInDS(50 * 1000 * 1000, numIters)
       jsonInFile(50 * 1000 * 1000, numIters)
       datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
+      // Benchmark pushdown filters that refer to top-level columns.
+      // TODO (SPARK-32325): Add benchmarks for filters with nested column attributes.
+      filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
     }
   }
 }

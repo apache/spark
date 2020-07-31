@@ -24,12 +24,14 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.StructType
 
-class DebuggingSuite extends SharedSparkSession {
+// Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
+class DebuggingSuite extends SharedSparkSession with DisableAdaptiveExecutionSuite {
 
   test("DataFrame.debug()") {
     testData.debug()
@@ -67,11 +69,12 @@ class DebuggingSuite extends SharedSparkSession {
     }
 
     val output = captured.toString()
+    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
     assert(output.replaceAll("\\[id=#\\d+\\]", "[id=#x]").contains(
-      """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])), [id=#x] ==
+      s"""== BroadcastExchange $hashedModeString, [id=#x] ==
         |Tuples output: 0
         | id LongType: {}
-        |== WholeStageCodegen ==
+        |== WholeStageCodegen (1) ==
         |Tuples output: 10
         | id LongType: {java.lang.Long}
         |== Range (0, 10, step=1, splits=2) ==

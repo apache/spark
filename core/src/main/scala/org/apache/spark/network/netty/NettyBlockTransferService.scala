@@ -115,11 +115,12 @@ private[spark] class NettyBlockTransferService(
       tempFileManager: DownloadFileManager): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
+      val maxRetries = transportConf.maxIORetries()
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String],
             listener: BlockFetchingListener): Unit = {
           try {
-            val client = clientFactory.createClient(host, port)
+            val client = clientFactory.createClient(host, port, maxRetries > 0)
             new OneForOneBlockFetcher(client, appId, execId, blockIds, listener,
               transportConf, tempFileManager).start()
           } catch {
@@ -136,7 +137,6 @@ private[spark] class NettyBlockTransferService(
         }
       }
 
-      val maxRetries = transportConf.maxIORetries()
       if (maxRetries > 0) {
         // Note this Fetcher will correctly handle maxRetries == 0; we avoid it just in case there's
         // a bug in this code. We should remove the if statement once we're sure of the stability.
@@ -168,7 +168,10 @@ private[spark] class NettyBlockTransferService(
     // Everything else is encoded using our binary protocol.
     val metadata = JavaUtils.bufferToArray(serializer.newInstance().serialize((level, classTag)))
 
-    val asStream = blockData.size() > conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
+    // We always transfer shuffle blocks as a stream for simplicity with the receiving code since
+    // they are always written to disk. Otherwise we check the block size.
+    val asStream = (blockData.size() > conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM) ||
+      blockId.isShuffle)
     val callback = new RpcResponseCallback {
       override def onSuccess(response: ByteBuffer): Unit = {
         logTrace(s"Successfully uploaded block $blockId${if (asStream) " as stream" else ""}")

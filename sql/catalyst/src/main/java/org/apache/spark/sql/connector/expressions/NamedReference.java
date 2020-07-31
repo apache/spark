@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Represents a field or column reference in the public logical expression API.
+ *
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface NamedReference extends Expression {
   /**
    * Returns the referenced field name as an array of String parts.

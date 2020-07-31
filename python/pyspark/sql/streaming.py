@@ -18,13 +18,9 @@
 import sys
 import json
 
-if sys.version >= '3':
-    basestring = str
-
 from py4j.java_gateway import java_import
 
 from pyspark import since, keyword_only
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
@@ -125,6 +121,7 @@ class StreamingQuery(object):
         """
         Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
         None if there were no progress updates
+
         :return: a map
         """
         lastProgress = self._jsq.lastProgress()
@@ -203,7 +200,6 @@ class StreamingQueryManager(object):
         self._jsqm = jsqm
 
     @property
-    @ignore_unicode_prefix
     @since(2.0)
     def active(self):
         """Returns a list of active queries associated with this SQLContext
@@ -212,12 +208,11 @@ class StreamingQueryManager(object):
         >>> sqm = spark.streams
         >>> # get the list of active streaming queries
         >>> [q.name for q in sqm.active]
-        [u'this_query']
+        ['this_query']
         >>> sq.stop()
         """
         return [StreamingQuery(jsq) for jsq in self._jsqm.active()]
 
-    @ignore_unicode_prefix
     @since(2.0)
     def get(self, id):
         """Returns an active query from this SQLContext or throws exception if an active query
@@ -225,7 +220,7 @@ class StreamingQueryManager(object):
 
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.name
-        u'this_query'
+        'this_query'
         >>> sq = spark.streams.get(sq.id)
         >>> sq.isActive
         True
@@ -276,9 +271,9 @@ class StreamingQueryManager(object):
 
 class DataStreamReader(OptionUtils):
     """
-    Interface used to load a streaming :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`spark.readStream`
-    to access this.
+    Interface used to load a streaming :class:`DataFrame <pyspark.sql.DataFrame>` from external
+    storage systems (e.g. file systems, key-value stores, etc).
+    Use :attr:`SparkSession.readStream <pyspark.sql.SparkSession.readStream>` to access this.
 
     .. note:: Evolving.
 
@@ -327,7 +322,7 @@ class DataStreamReader(OptionUtils):
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
-        elif isinstance(schema, basestring):
+        elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
         else:
             raise TypeError("schema should be StructType or string")
@@ -338,9 +333,18 @@ class DataStreamReader(OptionUtils):
         """Adds an input option for the underlying data source.
 
         You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
 
         .. note:: Evolving.
 
@@ -354,9 +358,18 @@ class DataStreamReader(OptionUtils):
         """Adds input options for the underlying data source.
 
         You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
 
         .. note:: Evolving.
 
@@ -368,7 +381,8 @@ class DataStreamReader(OptionUtils):
 
     @since(2.0)
     def load(self, path=None, format=None, schema=None, **options):
-        """Loads a data stream from a data source and returns it as a :class`DataFrame`.
+        """Loads a data stream from a data source and returns it as a
+        :class:`DataFrame <pyspark.sql.DataFrame>`.
 
         .. note:: Evolving.
 
@@ -406,7 +420,7 @@ class DataStreamReader(OptionUtils):
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None,  allowUnquotedControlChars=None, lineSep=None, locale=None,
              dropFieldIfAllNull=None, encoding=None, pathGlobFilter=None,
-             recursiveFileLookup=None):
+             recursiveFileLookup=None, allowNonNumericNumbers=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -441,15 +455,15 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
                   When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
                   field in an output schema.
-                *  ``DROPMALFORMED`` : ignores the whole corrupted records.
-                *  ``FAILFAST`` : throws an exception when it meets corrupted records.
+                *  ``DROPMALFORMED``: ignores the whole corrupted records.
+                *  ``FAILFAST``: throws an exception when it meets corrupted records.
 
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
@@ -457,14 +471,13 @@ class DataStreamReader(OptionUtils):
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.time.format.DateTimeFormatter``. This
-                           applies to date type. If None is set, it uses the
-                           default value, ``uuuu-MM-dd``.
+                           follow the formats at `datetime pattern`_.
+                           This applies to date type. If None is set, it uses the
+                           default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
-                                Custom date formats follow the formats at
-                                ``java.time.format.DateTimeFormatter``.
+                                Custom date formats follow the formats at `datetime pattern`_.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
@@ -487,8 +500,18 @@ class DataStreamReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
+        :param allowNonNumericNumbers: allows JSON parser to recognize set of "Not-a-Number" (NaN)
+                                       tokens as legal floating number values. If None is set,
+                                       it uses the default value, ``true``.
 
-        .. _partition discovery: /sql-data-sources-parquet.html#partition-discovery
+                * ``+INF``: for positive infinity, as well as alias of
+                            ``+Infinity`` and ``Infinity``.
+                *  ``-INF``: for negative infinity, alias ``-Infinity``.
+                *  ``NaN``: for other not-a-numbers, like result of division by zero.
+
+        .. _partition discovery:
+          https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
+        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -505,8 +528,9 @@ class DataStreamReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
             dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            allowNonNumericNumbers=allowNonNumericNumbers)
+        if isinstance(path, str):
             return self._df(self._jreader.json(path))
         else:
             raise TypeError("path can be only a single string")
@@ -526,6 +550,9 @@ class DataStreamReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
             disables `partition discovery`_.
 
+        .. _partition discovery:
+          https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
+
         >>> orc_sdf = spark.readStream.schema(sdf_schema).orc(tempfile.mkdtemp())
         >>> orc_sdf.isStreaming
         True
@@ -534,7 +561,7 @@ class DataStreamReader(OptionUtils):
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
                        recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.orc(path))
         else:
             raise TypeError("path can be only a single string")
@@ -556,6 +583,9 @@ class DataStreamReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
+        .. _partition discovery:
+          https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
+
         >>> parquet_sdf = spark.readStream.schema(sdf_schema).parquet(tempfile.mkdtemp())
         >>> parquet_sdf.isStreaming
         True
@@ -564,12 +594,11 @@ class DataStreamReader(OptionUtils):
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
                        recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.parquet(path))
         else:
             raise TypeError("path can be only a single string")
 
-    @ignore_unicode_prefix
     @since(2.0)
     def text(self, path, wholetext=False, lineSep=None, pathGlobFilter=None,
              recursiveFileLookup=None):
@@ -593,6 +622,9 @@ class DataStreamReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
+        .. _partition discovery:
+          https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
+
         >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
         True
@@ -602,7 +634,7 @@ class DataStreamReader(OptionUtils):
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.text(path))
         else:
             raise TypeError("path can be only a single string")
@@ -669,14 +701,13 @@ class DataStreamReader(OptionUtils):
         :param negativeInf: sets the string representation of a negative infinity value. If None
                             is set, it uses the default value, ``Inf``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.time.format.DateTimeFormatter``. This
-                           applies to date type. If None is set, it uses the
-                           default value, ``uuuu-MM-dd``.
+                           follow the formats at `datetime pattern`_.
+                           This applies to date type. If None is set, it uses the
+                           default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
-                                Custom date formats follow the formats at
-                                ``java.time.format.DateTimeFormatter``.
+                                Custom date formats follow the formats at `datetime pattern`_.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -687,7 +718,7 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
@@ -696,8 +727,8 @@ class DataStreamReader(OptionUtils):
                   When it meets a record having fewer tokens than the length of the schema, \
                   sets ``null`` to extra fields. When the record has more tokens than the \
                   length of the schema, it drops extra tokens.
-                * ``DROPMALFORMED`` : ignores the whole corrupted records.
-                * ``FAILFAST`` : throws an exception when it meets corrupted records.
+                * ``DROPMALFORMED``: ignores the whole corrupted records.
+                * ``FAILFAST``: throws an exception when it meets corrupted records.
 
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
@@ -724,6 +755,10 @@ class DataStreamReader(OptionUtils):
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
 
+        .. _partition discovery:
+          https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
+        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
         True
@@ -742,7 +777,7 @@ class DataStreamReader(OptionUtils):
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
             emptyValue=emptyValue, locale=locale, lineSep=lineSep,
             pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.csv(path))
         else:
             raise TypeError("path can be only a single string")
@@ -750,8 +785,9 @@ class DataStreamReader(OptionUtils):
 
 class DataStreamWriter(object):
     """
-    Interface used to write a streaming :class:`DataFrame` to external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.writeStream`
+    Interface used to write a streaming :class:`DataFrame <pyspark.sql.DataFrame>` to external
+    storage systems (e.g. file systems, key-value stores, etc).
+    Use :attr:`DataFrame.writeStream <pyspark.sql.DataFrame.writeStream>`
     to access this.
 
     .. note:: Evolving.
@@ -774,11 +810,11 @@ class DataStreamWriter(object):
 
         Options include:
 
-        * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to
+        * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to
            the sink
-        * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
+        * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the sink
            every time these is some updates
-        * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+        * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
 
@@ -809,9 +845,18 @@ class DataStreamWriter(object):
         """Adds an output option for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
 
         .. note:: Evolving.
         """
@@ -823,9 +868,18 @@ class DataStreamWriter(object):
         """Adds output options for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
 
        .. note:: Evolving.
         """
@@ -1114,7 +1168,6 @@ class DataStreamWriter(object):
         ensure_callback_server_started(gw)
         return self
 
-    @ignore_unicode_prefix
     @since(2.0)
     def start(self, path=None, format=None, outputMode=None, partitionBy=None, queryName=None,
               **options):
@@ -1131,11 +1184,11 @@ class DataStreamWriter(object):
         :param outputMode: specifies how data of a streaming DataFrame/Dataset is written to a
                            streaming sink.
 
-            * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to the
+            * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
-            * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
-               every time these is some updates
-            * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+            * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
+              sink every time these is some updates
+            * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
         :param partitionBy: names of partitioning columns
@@ -1147,14 +1200,14 @@ class DataStreamWriter(object):
         >>> sq.isActive
         True
         >>> sq.name
-        u'this_query'
+        'this_query'
         >>> sq.stop()
         >>> sq.isActive
         False
         >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').start(
         ...     queryName='that_query', outputMode="append", format='memory')
         >>> sq.name
-        u'that_query'
+        'that_query'
         >>> sq.isActive
         True
         >>> sq.stop()

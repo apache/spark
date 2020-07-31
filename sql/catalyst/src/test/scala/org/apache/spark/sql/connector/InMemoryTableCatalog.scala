@@ -34,8 +34,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   protected val namespaces: util.Map[List[String], Map[String, String]] =
     new ConcurrentHashMap[List[String], Map[String, String]]()
 
-  protected val tables: util.Map[Identifier, InMemoryTable] =
-    new ConcurrentHashMap[Identifier, InMemoryTable]()
+  protected val tables: util.Map[Identifier, Table] =
+    new ConcurrentHashMap[Identifier, Table]()
 
   private val invalidatedTables: util.Set[Identifier] = ConcurrentHashMap.newKeySet()
 

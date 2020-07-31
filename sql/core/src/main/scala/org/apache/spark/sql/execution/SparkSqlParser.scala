@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.Locale
+import java.time.ZoneOffset
+import java.util.{Locale, TimeZone}
+import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
 
@@ -31,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -82,11 +85,47 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Example SQL :
    * {{{
    *   RESET;
+   *   RESET spark.sql.session.timeZone;
    * }}}
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    ResetCommand
+    ResetCommand(Option(remainder(ctx.RESET().getSymbol).trim).filter(_.nonEmpty))
+  }
+
+  /**
+   * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]]
+   * Example SQL :
+   * {{{
+   *   SET TIME ZONE LOCAL;
+   *   SET TIME ZONE 'Asia/Shanghai';
+   *   SET TIME ZONE INTERVAL 10 HOURS;
+   * }}}
+   */
+  override def visitSetTimeZone(ctx: SetTimeZoneContext): LogicalPlan = withOrigin(ctx) {
+    val key = SQLConf.SESSION_LOCAL_TIMEZONE.key
+    if (ctx.interval != null) {
+      val interval = parseIntervalLiteral(ctx.interval)
+      if (interval.months != 0 || interval.days != 0 ||
+        math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR ||
+        interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
+        throw new ParseException("The interval value must be in the range of [-18, +18] hours" +
+          " with second precision",
+          ctx.interval())
+      } else {
+        val seconds = (interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt
+        SetCommand(Some(key -> Some(ZoneOffset.ofTotalSeconds(seconds).toString)))
+      }
+    } else if (ctx.timezone != null) {
+      ctx.timezone.getType match {
+        case SqlBaseParser.LOCAL =>
+          SetCommand(Some(key -> Some(TimeZone.getDefault.getID)))
+        case _ =>
+          SetCommand(Some(key -> Some(string(ctx.STRING))))
+      }
+    } else {
+      throw new ParseException("Invalid time zone displacement value", ctx)
+    }
   }
 
   /**
@@ -224,50 +263,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[CreateFunctionCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
-   *   AS class_name [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
-   * }}}
-   */
-  override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val resources = ctx.resource.asScala.map { resource =>
-      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
-      resourceType match {
-        case "jar" | "file" | "archive" =>
-          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
-        case other =>
-          operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
-      }
-    }
-
-    // Extract database, name & alias.
-    val functionIdentifier = visitFunctionName(ctx.multipartIdentifier)
-    CreateFunctionCommand(
-      functionIdentifier.database,
-      functionIdentifier.funcName,
-      string(ctx.className),
-      resources,
-      ctx.TEMPORARY != null,
-      ctx.EXISTS != null,
-      ctx.REPLACE != null)
-  }
-
-  /**
    * Convert a nested constants list into a sequence of string sequences.
    */
   override def visitNestedConstantList(
       ctx: NestedConstantListContext): Seq[Seq[String]] = withOrigin(ctx) {
-    ctx.constantList.asScala.map(visitConstantList)
+    ctx.constantList.asScala.map(visitConstantList).toSeq
   }
 
   /**
    * Convert a constants list into a String sequence.
    */
   override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
-    ctx.constant.asScala.map(visitStringConstant)
+    ctx.constant.asScala.map(visitStringConstant).toSeq
   }
 
   /**
@@ -368,7 +375,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
     checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
     checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
     checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
@@ -386,12 +393,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     // Storage format
     val defaultStorage = HiveSerDe.getDefaultStorage(conf)
-    validateRowFormatFileFormat(ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx)
+    validateRowFormatFileFormat(
+      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
     val fileStorage = ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat)
       .getOrElse(CatalogStorageFormat.empty)
     val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
       .getOrElse(CatalogStorageFormat.empty)
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val location = visitLocationSpecList(ctx.locationSpec())
     // If we are creating an EXTERNAL table, then the LOCATION field is required
     if (external && location.isEmpty) {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
@@ -425,7 +433,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       provider = Some(DDLUtils.HIVE_PROVIDER),
       partitionColumnNames = partitionCols.map(_.name),
       properties = properties,
-      comment = Option(ctx.comment).map(string))
+      comment = visitCommentSpecList(ctx.commentSpec()))
 
     val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
 
@@ -504,7 +512,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val location = visitLocationSpecList(ctx.locationSpec())
     // rowStorage used to determine CatalogStorageFormat.serde and
     // CatalogStorageFormat.properties in STORED AS clause.
     val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
@@ -777,7 +785,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       ctx: QueryOrganizationContext,
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
-    RepartitionByExpression(expressions, query, conf.numShufflePartitions)
+    RepartitionByExpression(expressions, query, None)
   }
 
   /**
@@ -785,7 +793,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *
    * Expected format:
    * {{{
-   *   INSERT OVERWRITE DIRECTORY
+   *   INSERT OVERWRITE [LOCAL] DIRECTORY
    *   [path]
    *   [OPTIONS table_property_list]
    *   select_statement;
@@ -793,11 +801,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitInsertOverwriteDir(
       ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
-    if (ctx.LOCAL != null) {
-      throw new ParseException(
-        "LOCAL is not supported in INSERT OVERWRITE DIRECTORY to data source", ctx)
-    }
-
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     var storage = DataSource.buildStorageFormatFromOptions(options)
 
@@ -811,6 +814,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     if (!path.isEmpty) {
       val customLocation = Some(CatalogUtils.stringToURI(path))
       storage = storage.copy(locationUri = customLocation)
+    }
+
+    if (ctx.LOCAL() != null) {
+      // assert if directory is local when LOCAL keyword is mentioned
+      val scheme = Option(storage.locationUri.get.getScheme)
+      scheme match {
+        case None =>
+          // force scheme to be file rather than fs.default.name
+          val loc = Some(UriBuilder.fromUri(CatalogUtils.stringToURI(path)).scheme("file").build())
+          storage = storage.copy(locationUri = loc)
+        case Some(pathScheme) if (!pathScheme.equals("file")) =>
+          throw new ParseException("LOCAL is supported only with file: scheme", ctx)
+      }
     }
 
     val provider = ctx.tableProvider.multipartIdentifier.getText

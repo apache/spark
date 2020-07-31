@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.io.IOException
 
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -220,6 +221,160 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
       val df4 = read.parquet(filePath2)
       checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
       assert(df4.columns === Array("str", "max_int"))
+    }
+  }
+
+  test("SPARK-25993 CREATE EXTERNAL TABLE with subdirectories") {
+    Seq("true", "false").foreach { parquetConversion =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> parquetConversion) {
+        withTempPath { path =>
+          withTable("parq_tbl1", "parq_tbl2", "parq_tbl3",
+            "tbl1", "tbl2", "tbl3", "tbl4", "tbl5", "tbl6") {
+            val parquetTblStatement1 =
+              s"""
+                 |CREATE EXTERNAL TABLE parq_tbl1(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/"}'""".stripMargin
+            sql(parquetTblStatement1)
+
+            val parquetTblInsertL1 =
+              s"INSERT INTO TABLE parq_tbl1 VALUES (1, 1, 'parq1'), (2, 2, 'parq2')".stripMargin
+            sql(parquetTblInsertL1)
+
+            val parquetTblStatement2 =
+              s"""
+                 |CREATE EXTERNAL TABLE parq_tbl2(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/l2/"}'""".stripMargin
+            sql(parquetTblStatement2)
+
+            val parquetTblInsertL2 =
+              s"INSERT INTO TABLE parq_tbl2 VALUES (3, 3, 'parq3'), (4, 4, 'parq4')".stripMargin
+            sql(parquetTblInsertL2)
+
+            val parquetTblStatement3 =
+              s"""
+                 |CREATE EXTERNAL TABLE parq_tbl3(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/l2/l3/"}'""".stripMargin
+            sql(parquetTblStatement3)
+
+            val parquetTblInsertL3 =
+              s"INSERT INTO TABLE parq_tbl3 VALUES (5, 5, 'parq5'), (6, 6, 'parq6')".stripMargin
+            sql(parquetTblInsertL3)
+
+            val topDirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl1(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}"}'""".stripMargin
+            sql(topDirStatement)
+            if (parquetConversion == "true") {
+              checkAnswer(sql("SELECT * FROM tbl1"), Nil)
+            } else {
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl1").show()
+              }.getMessage
+              assert(msg.contains("Not a file:"))
+            }
+
+            val l1DirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl2(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/"}'""".stripMargin
+            sql(l1DirStatement)
+            if (parquetConversion == "true") {
+              checkAnswer(sql("SELECT * FROM tbl2"), (1 to 2).map(i => Row(i, i, s"parq$i")))
+            } else {
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl2").show()
+              }.getMessage
+              assert(msg.contains("Not a file:"))
+            }
+
+            val l2DirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl3(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/l2/"}'""".stripMargin
+            sql(l2DirStatement)
+            if (parquetConversion == "true") {
+              checkAnswer(sql("SELECT * FROM tbl3"), (3 to 4).map(i => Row(i, i, s"parq$i")))
+            } else {
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl3").show()
+              }.getMessage
+              assert(msg.contains("Not a file:"))
+            }
+
+            val wildcardTopDirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl4(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${new File(s"${path}/*").toURI}'""".stripMargin
+            sql(wildcardTopDirStatement)
+            if (parquetConversion == "true") {
+              checkAnswer(sql("SELECT * FROM tbl4"), (1 to 2).map(i => Row(i, i, s"parq$i")))
+            } else {
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl4").show()
+              }.getMessage
+              assert(msg.contains("Not a file:"))
+            }
+
+            val wildcardL1DirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl5(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${new File(s"${path}/l1/*").toURI}'""".stripMargin
+            sql(wildcardL1DirStatement)
+            if (parquetConversion == "true") {
+              checkAnswer(sql("SELECT * FROM tbl5"), (1 to 4).map(i => Row(i, i, s"parq$i")))
+            } else {
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl5").show()
+              }.getMessage
+              assert(msg.contains("Not a file:"))
+            }
+
+            val wildcardL2DirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl6(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${new File(s"${path}/l1/l2/*").toURI}'""".stripMargin
+            sql(wildcardL2DirStatement)
+            checkAnswer(sql("SELECT * FROM tbl6"), (3 to 6).map(i => Row(i, i, s"parq$i")))
+          }
+        }
+      }
     }
   }
 }

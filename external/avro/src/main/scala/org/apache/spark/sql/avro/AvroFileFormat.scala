@@ -33,8 +33,9 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -121,34 +122,28 @@ private[sql] class AvroFileFormat extends FileFormat
         }
 
         reader.sync(file.start)
-        val stop = file.start + file.length
 
-        val deserializer =
-          new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), requiredSchema)
+        val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+          reader.asInstanceOf[DataFileReader[_]].getMetaString,
+          SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
 
-        new Iterator[InternalRow] {
-          private[this] var completed = false
+        val avroFilters = if (SQLConf.get.avroFilterPushDown) {
+          new OrderedFilters(filters, requiredSchema)
+        } else {
+          new NoopFilters
+        }
 
-          override def hasNext: Boolean = {
-            if (completed) {
-              false
-            } else {
-              val r = reader.hasNext && !reader.pastSync(stop)
-              if (!r) {
-                reader.close()
-                completed = true
-              }
-              r
-            }
-          }
+        new Iterator[InternalRow] with AvroUtils.RowReader {
+          override val fileReader = reader
+          override val deserializer = new AvroDeserializer(
+            userProvidedSchema.getOrElse(reader.getSchema),
+            requiredSchema,
+            datetimeRebaseMode,
+            avroFilters)
+          override val stopPosition = file.start + file.length
 
-          override def next(): InternalRow = {
-            if (!hasNext) {
-              throw new NoSuchElementException("next on empty iterator")
-            }
-            val record = reader.next()
-            deserializer.deserialize(record).asInstanceOf[InternalRow]
-          }
+          override def hasNext: Boolean = hasNextRow
+          override def next(): InternalRow = nextRow
         }
       } else {
         Iterator.empty

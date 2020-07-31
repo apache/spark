@@ -29,8 +29,11 @@ import com.google.common.io.ByteStreams
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
-import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
+import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
@@ -429,6 +432,7 @@ class SparkSubmitSuite
   test("handles k8s cluster mode") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",
+      "--proxy-user", "test.user",
       "--master", "k8s://host:port",
       "--executor-memory", "5g",
       "--class", "org.SomeClass",
@@ -444,6 +448,7 @@ class SparkSubmitSuite
     childArgsMap.get("--primary-java-resource") should be (Some("file:/home/thejar.jar"))
     childArgsMap.get("--main-class") should be (Some("org.SomeClass"))
     childArgsMap.get("--arg") should be (Some("arg1"))
+    childArgsMap.get("--proxy-user") should be (Some("test.user"))
     mainClass should be (KUBERNETES_CLUSTER_SUBMIT_CLASS)
     classpath should have length (0)
     conf.get("spark.master") should be ("k8s://https://host:port")
@@ -1207,17 +1212,17 @@ class SparkSubmitSuite
     testRemoteResources(enableHttpFs = true)
   }
 
-  test("force download from blacklisted schemes") {
-    testRemoteResources(enableHttpFs = true, blacklistSchemes = Seq("http"))
+  test("force download from forced schemes") {
+    testRemoteResources(enableHttpFs = true, forceDownloadSchemes = Seq("http"))
   }
 
   test("force download for all the schemes") {
-    testRemoteResources(enableHttpFs = true, blacklistSchemes = Seq("*"))
+    testRemoteResources(enableHttpFs = true, forceDownloadSchemes = Seq("*"))
   }
 
   private def testRemoteResources(
       enableHttpFs: Boolean,
-      blacklistSchemes: Seq[String] = Nil): Unit = {
+      forceDownloadSchemes: Seq[String] = Nil): Unit = {
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     if (enableHttpFs) {
@@ -1234,8 +1239,8 @@ class SparkSubmitSuite
     val tmpHttpJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
     val tmpHttpJarPath = s"http://${new File(tmpHttpJar.toURI).getAbsolutePath}"
 
-    val forceDownloadArgs = if (blacklistSchemes.nonEmpty) {
-      Seq("--conf", s"spark.yarn.dist.forceDownloadSchemes=${blacklistSchemes.mkString(",")}")
+    val forceDownloadArgs = if (forceDownloadSchemes.nonEmpty) {
+      Seq("--conf", s"spark.yarn.dist.forceDownloadSchemes=${forceDownloadSchemes.mkString(",")}")
     } else {
       Nil
     }
@@ -1253,19 +1258,19 @@ class SparkSubmitSuite
 
     val jars = conf.get("spark.yarn.dist.jars").split(",").toSet
 
-    def isSchemeBlacklisted(scheme: String) = {
-      blacklistSchemes.contains("*") || blacklistSchemes.contains(scheme)
+    def isSchemeForcedDownload(scheme: String) = {
+      forceDownloadSchemes.contains("*") || forceDownloadSchemes.contains(scheme)
     }
 
-    if (!isSchemeBlacklisted("s3")) {
+    if (!isSchemeForcedDownload("s3")) {
       assert(jars.contains(tmpS3JarPath))
     }
 
-    if (enableHttpFs && blacklistSchemes.isEmpty) {
+    if (enableHttpFs && forceDownloadSchemes.isEmpty) {
       // If Http FS is supported by yarn service, the URI of remote http resource should
       // still be remote.
       assert(jars.contains(tmpHttpJarPath))
-    } else if (!enableHttpFs || isSchemeBlacklisted("http")) {
+    } else if (!enableHttpFs || isSchemeForcedDownload("http")) {
       // If Http FS is not supported by yarn service, or http scheme is configured to be force
       // downloading, the URI of remote http resource should be changed to a local one.
       val jarName = new File(tmpHttpJar.toURI).getName
@@ -1417,7 +1422,7 @@ object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
-  def runSparkSubmit(args: Seq[String], root: String = ".."): Unit = {
+  def runSparkSubmit(args: Seq[String], root: String = "..", timeout: Span = 1.minute): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val sparkSubmitFile = if (Utils.isWindows) {
       new File(s"$root\\bin\\spark-submit.cmd")
@@ -1430,7 +1435,7 @@ object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
 
     try {
-      val exitCode = failAfter(1.minute) { process.waitFor() }
+      val exitCode = failAfter(timeout) { process.waitFor() }
       if (exitCode != 0) {
         fail(s"Process returned with exit code $exitCode. See the log4j logs for more detail.")
       }

@@ -85,6 +85,7 @@ trait NamedExpression extends Expression {
    *    e.g. top level attributes aliased in the SELECT clause, or column from a LocalRelation.
    * 2. Seq with a Single element: either the table name or the alias name of the table.
    * 3. Seq with 2 elements: database name and table name
+   * 4. Seq with 3 elements: catalog name, database name and table name
    */
   def qualifier: Seq[String]
 
@@ -236,8 +237,6 @@ case class AttributeReference(
     val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
 
-  // currently can only handle qualifier of length 2
-  require(qualifier.length <= 2)
   /**
    * Returns true iff the expression id is the same for both attributes.
    */
@@ -384,6 +383,7 @@ case class OuterReference(e: NamedExpression)
   override def nullable: Boolean = e.nullable
   override def prettyName: String = "outer"
 
+  override def sql: String = s"$prettyName(${e.sql})"
   override def name: String = e.name
   override def qualifier: Seq[String] = e.qualifier
   override def exprId: ExprId = e.exprId

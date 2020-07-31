@@ -580,3 +580,20 @@ class HasValidationIndicatorCol(Params):
         Gets the value of validationIndicatorCol or its default value.
         """
         return self.getOrDefault(self.validationIndicatorCol)
+
+
+class HasBlockSize(Params):
+    """
+    Mixin for param blockSize: block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.
+    """
+
+    blockSize = Param(Params._dummy(), "blockSize", "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasBlockSize, self).__init__()
+
+    def getBlockSize(self):
+        """
+        Gets the value of blockSize or its default value.
+        """
+        return self.getOrDefault(self.blockSize)

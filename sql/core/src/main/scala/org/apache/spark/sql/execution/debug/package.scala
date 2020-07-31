@@ -113,7 +113,7 @@ package object debug {
         s
       case s => s
     }
-    codegenSubtrees.toSeq.map { subtree =>
+    codegenSubtrees.toSeq.sortBy(_.codegenStageId).map { subtree =>
       val (_, source) = subtree.doCodeGen()
       val codeStats = try {
         CodeGenerator.compile(source)._2

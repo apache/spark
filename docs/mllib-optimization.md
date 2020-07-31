@@ -111,12 +111,12 @@ As an alternative to just use the subgradient `$R'(\wv)$` of the regularizer in 
 direction, an improved update for some cases can be obtained by using the proximal operator
 instead.
 For the L1-regularizer, the proximal operator is given by soft thresholding, as implemented in
-[L1Updater](api/scala/index.html#org.apache.spark.mllib.optimization.L1Updater).
+[L1Updater](api/scala/org/apache/spark/mllib/optimization/L1Updater.html).
 
 
 ### Update schemes for distributed SGD
 The SGD implementation in
-[GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent) uses
+[GradientDescent](api/scala/org/apache/spark/mllib/optimization/GradientDescent.html) uses
 a simple (distributed) sampling of the data examples.
 We recall that the loss part of the optimization problem `$\eqref{eq:regPrimal}$` is
 `$\frac1n \sum_{i=1}^n L(\wv;\x_i,y_i)$`, and therefore `$\frac1n \sum_{i=1}^n L'_{\wv,i}$` would
@@ -169,7 +169,7 @@ are developed, see the
 section for example.
 
 The SGD class
-[GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+[GradientDescent](api/scala/org/apache/spark/mllib/optimization/GradientDescent.html)
 sets the following parameters:
 
 * `Gradient` is a class that computes the stochastic gradient of the function
@@ -195,15 +195,15 @@ each iteration, to compute the gradient direction.
 L-BFGS is currently only a low-level optimization primitive in `MLlib`. If you want to use L-BFGS in various 
 ML algorithms such as Linear Regression, and Logistic Regression, you have to pass the gradient of objective
 function, and updater into optimizer yourself instead of using the training APIs like 
-[LogisticRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
+[LogisticRegressionWithSGD](api/scala/org/apache/spark/mllib/classification/LogisticRegressionWithSGD.html).
 See the example below. It will be addressed in the next release. 
 
 The L1 regularization by using 
-[L1Updater](api/scala/index.html#org.apache.spark.mllib.optimization.L1Updater) will not work since the 
+[L1Updater](api/scala/org/apache/spark/mllib/optimization/L1Updater.html) will not work since the 
 soft-thresholding logic in L1Updater is designed for gradient descent. See the developer's note.
 
 The L-BFGS method
-[LBFGS.runLBFGS](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS)
+[LBFGS.runLBFGS](api/scala/org/apache/spark/mllib/optimization/LBFGS.html)
 has the following parameters:
 
 * `Gradient` is a class that computes the gradient of the objective function
@@ -233,7 +233,7 @@ L-BFGS optimizer.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [`LBFGS` Scala docs](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS) and [`SquaredL2Updater` Scala docs](api/scala/index.html#org.apache.spark.mllib.optimization.SquaredL2Updater) for details on the API.
+Refer to the [`LBFGS` Scala docs](api/scala/org/apache/spark/mllib/optimization/LBFGS.html) and [`SquaredL2Updater` Scala docs](api/scala/org/apache/spark/mllib/optimization/SquaredL2Updater.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/LBFGSExample.scala %}
 </div>

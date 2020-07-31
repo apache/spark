@@ -51,7 +51,7 @@ import org.apache.spark.streaming.kinesis.KinesisInputDStream
  * Example:
  *      # export AWS keys if necessary
  *      $ export AWS_ACCESS_KEY_ID=<your-access-key>
- *      $ export AWS_SECRET_KEY=<your-secret-key>
+ *      $ export AWS_SECRET_ACCESS_KEY=<your-secret-key>
  *
  *      # run the example
  *      $ SPARK_HOME/bin/run-example  streaming.KinesisWordCountASL myAppName  mySparkStream \
@@ -62,7 +62,7 @@ import org.apache.spark.streaming.kinesis.KinesisInputDStream
  *
  * This code uses the DefaultAWSCredentialsProviderChain to find credentials
  * in the following order:
- *    Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_KEY
+ *    Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
  *    Java System Properties - aws.accessKeyId and aws.secretKey
  *    Credential profiles file - default location (~/.aws/credentials) shared by all AWS SDKs
  *    Instance profile credentials - delivered through the Amazon EC2 metadata service
@@ -78,7 +78,7 @@ object KinesisWordCountASL extends Logging {
     if (args.length != 3) {
       System.err.println(
         """
-          |Usage: KinesisWordCountASL <app-name> <stream-name> <endpoint-url> <region-name>
+          |Usage: KinesisWordCountASL <app-name> <stream-name> <endpoint-url>
           |
           |    <app-name> is the name of the consumer app, used to track the read data in DynamoDB
           |    <stream-name> is the name of the Kinesis stream
@@ -171,11 +171,11 @@ object KinesisWordCountASL extends Logging {
  *   <endpoint-url> is the endpoint of the Kinesis service
  *     (ie. https://kinesis.us-east-1.amazonaws.com)
  *   <records-per-sec> is the rate of records per second to put onto the stream
- *   <words-per-record> is the rate of records per second to put onto the stream
+ *   <words-per-record> is the number of words per record
  *
  * Example:
  *    $ SPARK_HOME/bin/run-example streaming.KinesisWordProducerASL mySparkStream \
- *         https://kinesis.us-east-1.amazonaws.com us-east-1 10 5
+ *         https://kinesis.us-east-1.amazonaws.com 10 5
  */
 object KinesisWordProducerASL {
   def main(args: Array[String]): Unit = {
@@ -183,13 +183,13 @@ object KinesisWordProducerASL {
       System.err.println(
         """
           |Usage: KinesisWordProducerASL <stream-name> <endpoint-url> <records-per-sec>
-                                         <words-per-record>
+          |                              <words-per-record>
           |
           |    <stream-name> is the name of the Kinesis stream
           |    <endpoint-url> is the endpoint of the Kinesis service
           |                   (e.g. https://kinesis.us-east-1.amazonaws.com)
           |    <records-per-sec> is the rate of records per second to put onto the stream
-          |    <words-per-record> is the rate of records per second to put onto the stream
+          |    <words-per-record> is the number of words per record
           |
         """.stripMargin)
 

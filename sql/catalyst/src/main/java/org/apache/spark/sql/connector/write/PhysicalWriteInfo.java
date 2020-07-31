@@ -23,6 +23,8 @@ import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory
 /**
  * This interface contains physical write information that data sources can use when
  * generating a {@link DataWriterFactory} or a {@link StreamingDataWriterFactory}.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface PhysicalWriteInfo {

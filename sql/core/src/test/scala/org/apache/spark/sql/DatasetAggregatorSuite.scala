@@ -219,6 +219,15 @@ case class OptionBooleanIntAggregator(colName: String)
   def OptionalBoolIntEncoder: Encoder[Option[(Boolean, Int)]] = ExpressionEncoder()
 }
 
+case class FooAgg(s: Int) extends Aggregator[Row, Int, Int] {
+  def zero: Int = s
+  def reduce(b: Int, r: Row): Int = b + r.getAs[Int](0)
+  def merge(b1: Int, b2: Int): Int = b1 + b2
+  def finish(b: Int): Int = b
+  def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+  def outputEncoder: Encoder[Int] = Encoders.scalaInt
+}
+
 class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
@@ -393,5 +402,20 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
     assert(group.schema == expectedSchema)
     checkAnswer(group, Row("bob", Row(true, 3)) :: Nil)
     checkDataset(group.as[OptionBooleanIntData], OptionBooleanIntData("bob", Some((true, 3))))
+  }
+
+  test("SPARK-30590: untyped select should not accept typed column that needs input type") {
+    val df = Seq((1, 2, 3, 4, 5, 6)).toDF("a", "b", "c", "d", "e", "f")
+    val fooAgg = (i: Int) => FooAgg(i).toColumn.name(s"foo_agg_$i")
+
+    val agg1 = df.select(fooAgg(1), fooAgg(2), fooAgg(3), fooAgg(4), fooAgg(5))
+    checkDataset(agg1, (3, 5, 7, 9, 11))
+
+    // Passes typed columns to untyped `Dataset.select` API.
+    val err = intercept[AnalysisException] {
+      df.select(fooAgg(1), fooAgg(2), fooAgg(3), fooAgg(4), fooAgg(5), fooAgg(6))
+    }.getMessage
+    assert(err.contains("cannot be passed in untyped `select` API. " +
+      "Use the typed `Dataset.select` API instead."))
   }
 }

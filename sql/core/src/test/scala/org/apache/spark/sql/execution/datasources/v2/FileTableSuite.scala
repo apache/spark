@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{QueryTest, SparkSession}
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.connector.write.WriteBuilder
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.test.SharedSparkSession
@@ -44,7 +44,7 @@ class DummyFileTable(
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = null
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = null
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = null
 
   override def supportsDataType(dataType: DataType): Boolean = dataType == StringType
 

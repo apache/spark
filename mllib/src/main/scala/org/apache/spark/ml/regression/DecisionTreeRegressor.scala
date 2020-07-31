@@ -22,8 +22,6 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -33,7 +31,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
@@ -45,7 +42,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Since("1.4.0")
 class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
+  extends Regressor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
   with DecisionTreeRegressorParams with DefaultParamsWritable {
 
   @Since("1.4.0")
@@ -119,6 +116,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val instances = extractInstances(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
+    require(!strategy.bootstrap, "DecisionTreeRegressor does not need bootstrap sampling")
 
     instr.logPipelineStage(this)
     instr.logDataset(instances)
@@ -126,21 +124,6 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
-
-    trees.head.asInstanceOf[DecisionTreeRegressionModel]
-  }
-
-  /** (private[ml]) Train a decision tree on an RDD */
-  private[ml] def train(
-      data: RDD[Instance],
-      oldStrategy: OldStrategy,
-      featureSubsetStrategy: String): DecisionTreeRegressionModel = instrumented { instr =>
-    instr.logPipelineStage(this)
-    instr.logDataset(data)
-    instr.logParams(this, params: _*)
-
-    val trees = RandomForest.run(data, oldStrategy, numTrees = 1,
-      featureSubsetStrategy, seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
@@ -176,7 +159,7 @@ class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
     override val rootNode: Node,
     override val numFeatures: Int)
-  extends PredictionModel[Vector, DecisionTreeRegressionModel]
+  extends RegressionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with DecisionTreeRegressorParams with MLWritable with Serializable {
 
   /** @group setParam */

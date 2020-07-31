@@ -16,16 +16,13 @@
 #
 
 from abc import ABCMeta, abstractmethod
-import sys
-if sys.version >= '3':
-    xrange = range
 
 from pyspark import since
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
-from pyspark.ml import Estimator, Transformer, Model
+from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model
+from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param import Params
-from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol
 from pyspark.ml.util import _jvm
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
@@ -98,15 +95,15 @@ class JavaWrapper(object):
             # If pylist is a 2D array, then a 2D java array will be created.
             # The 2D array is a square, non-jagged 2D array that is big enough for all elements.
             inner_array_length = 0
-            for i in xrange(len(pylist)):
+            for i in range(len(pylist)):
                 inner_array_length = max(inner_array_length, len(pylist[i]))
             java_array = sc._gateway.new_array(java_class, len(pylist), inner_array_length)
-            for i in xrange(len(pylist)):
-                for j in xrange(len(pylist[i])):
+            for i in range(len(pylist)):
+                for j in range(len(pylist[i])):
                     java_array[i][j] = pylist[i][j]
         else:
             java_array = sc._gateway.new_array(java_class, len(pylist))
-            for i in xrange(len(pylist)):
+            for i in range(len(pylist)):
                 java_array[i] = pylist[i]
         return java_array
 
@@ -377,62 +374,19 @@ class JavaModel(JavaTransformer, Model):
 
 
 @inherit_doc
-class _JavaPredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
-    """
-    Params for :py:class:`JavaPredictor` and :py:class:`JavaPredictorModel`.
-
-    .. versionadded:: 3.0.0
-    """
-    pass
-
-
-@inherit_doc
-class JavaPredictor(JavaEstimator, _JavaPredictorParams):
+class JavaPredictor(Predictor, JavaEstimator, _PredictorParams):
     """
     (Private) Java Estimator for prediction tasks (regression and classification).
     """
 
-    @since("3.0.0")
-    def setLabelCol(self, value):
-        """
-        Sets the value of :py:attr:`labelCol`.
-        """
-        return self._set(labelCol=value)
-
-    @since("3.0.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("3.0.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
+    __metaclass__ = ABCMeta
 
 
 @inherit_doc
-class JavaPredictionModel(JavaModel, _JavaPredictorParams):
+class JavaPredictionModel(PredictionModel, JavaModel, _PredictorParams):
     """
     (Private) Java Model for prediction tasks (regression and classification).
     """
-
-    @since("3.0.0")
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
-    @since("3.0.0")
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
 
     @property
     @since("2.1.0")

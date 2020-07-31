@@ -68,6 +68,6 @@ class TestUDF extends GenericUDF {
 
   override def evaluate(arguments: Array[GenericUDF.DeferredObject]): AnyRef = {
     val point = data.getList(arguments(0).get())
-    new java.lang.Double(point.get(0).asInstanceOf[Double])
+    java.lang.Double.valueOf(point.get(0).asInstanceOf[Double])
   }
 }

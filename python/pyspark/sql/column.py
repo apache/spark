@@ -17,14 +17,10 @@
 
 import sys
 import json
-
-if sys.version >= '3':
-    basestring = str
-    long = int
+import warnings
 
 from pyspark import copy_func, since
 from pyspark.context import SparkContext
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.types import *
 
 __all__ = ["Column"]
@@ -43,7 +39,7 @@ def _create_column_from_name(name):
 def _to_java_column(col):
     if isinstance(col, Column):
         jcol = col._jc
-    elif isinstance(col, basestring):
+    elif isinstance(col, str):
         jcol = _create_column_from_name(col)
     else:
         raise TypeError(
@@ -296,12 +292,14 @@ class Column(object):
         +----+------+
         |   1| value|
         +----+------+
-
-        .. versionchanged:: 3.0
-           If `key` is a `Column` object, the indexing operator should be used instead.
-           For example, `map_col.getItem(col('id'))` should be replaced with `map_col[col('id')]`.
         """
-        return _bin_op("getItem")(self, key)
+        if isinstance(key, Column):
+            warnings.warn(
+                "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[key]` or `column.key` syntax "
+                "instead.",
+                DeprecationWarning)
+        return self[key]
 
     @since(1.3)
     def getField(self, name):
@@ -323,12 +321,18 @@ class Column(object):
         |  1|
         +---+
         """
+        if isinstance(name, Column):
+            warnings.warn(
+                "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
+                "be supported in the future release. Use `column[name]` or `column.name` syntax "
+                "instead.",
+                DeprecationWarning)
         return self[name]
 
     def __getattr__(self, item):
         if item.startswith("__"):
             raise AttributeError(item)
-        return self.getField(item)
+        return self[item]
 
     def __getitem__(self, k):
         if isinstance(k, slice):
@@ -348,7 +352,7 @@ class Column(object):
     :param other: string in line
 
     >>> df.filter(df.name.contains('o')).collect()
-    [Row(age=5, name=u'Bob')]
+    [Row(age=5, name='Bob')]
     """
     _rlike_doc = """
     SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
@@ -357,7 +361,7 @@ class Column(object):
     :param other: an extended regex expression
 
     >>> df.filter(df.name.rlike('ice$')).collect()
-    [Row(age=2, name=u'Alice')]
+    [Row(age=2, name='Alice')]
     """
     _like_doc = """
     SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
@@ -367,7 +371,7 @@ class Column(object):
     See :func:`rlike` for a regex version
 
     >>> df.filter(df.name.like('Al%')).collect()
-    [Row(age=2, name=u'Alice')]
+    [Row(age=2, name='Alice')]
     """
     _startswith_doc = """
     String starts with. Returns a boolean :class:`Column` based on a string match.
@@ -375,7 +379,7 @@ class Column(object):
     :param other: string at start of line (do not use a regex `^`)
 
     >>> df.filter(df.name.startswith('Al')).collect()
-    [Row(age=2, name=u'Alice')]
+    [Row(age=2, name='Alice')]
     >>> df.filter(df.name.startswith('^Al')).collect()
     []
     """
@@ -385,18 +389,17 @@ class Column(object):
     :param other: string at end of line (do not use a regex `$`)
 
     >>> df.filter(df.name.endswith('ice')).collect()
-    [Row(age=2, name=u'Alice')]
+    [Row(age=2, name='Alice')]
     >>> df.filter(df.name.endswith('ice$')).collect()
     []
     """
 
-    contains = ignore_unicode_prefix(_bin_op("contains", _contains_doc))
-    rlike = ignore_unicode_prefix(_bin_op("rlike", _rlike_doc))
-    like = ignore_unicode_prefix(_bin_op("like", _like_doc))
-    startswith = ignore_unicode_prefix(_bin_op("startsWith", _startswith_doc))
-    endswith = ignore_unicode_prefix(_bin_op("endsWith", _endswith_doc))
+    contains = _bin_op("contains", _contains_doc)
+    rlike = _bin_op("rlike", _rlike_doc)
+    like = _bin_op("like", _like_doc)
+    startswith = _bin_op("startsWith", _startswith_doc)
+    endswith = _bin_op("endsWith", _endswith_doc)
 
-    @ignore_unicode_prefix
     @since(1.3)
     def substr(self, startPos, length):
         """
@@ -406,7 +409,7 @@ class Column(object):
         :param length:  length of the substring (int or Column)
 
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
-        [Row(col=u'Ali'), Row(col=u'Bob')]
+        [Row(col='Ali'), Row(col='Bob')]
         """
         if type(startPos) != type(length):
             raise TypeError(
@@ -424,7 +427,6 @@ class Column(object):
             raise TypeError("Unexpected type: %s" % type(startPos))
         return Column(jc)
 
-    @ignore_unicode_prefix
     @since(1.5)
     def isin(self, *cols):
         """
@@ -432,9 +434,9 @@ class Column(object):
         expression is contained by the evaluated values of the arguments.
 
         >>> df[df.name.isin("Bob", "Mike")].collect()
-        [Row(age=5, name=u'Bob')]
+        [Row(age=5, name='Bob')]
         >>> df[df.age.isin([1, 2, 3])].collect()
-        [Row(age=2, name=u'Alice')]
+        [Row(age=2, name='Alice')]
         """
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             cols = cols[0]
@@ -450,7 +452,7 @@ class Column(object):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.asc()).collect()
-    [Row(name=u'Alice'), Row(name=u'Tom')]
+    [Row(name='Alice'), Row(name='Tom')]
     """
     _asc_nulls_first_doc = """
     Returns a sort expression based on ascending order of the column, and null values
@@ -459,7 +461,7 @@ class Column(object):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.asc_nulls_first()).collect()
-    [Row(name=None), Row(name=u'Alice'), Row(name=u'Tom')]
+    [Row(name=None), Row(name='Alice'), Row(name='Tom')]
 
     .. versionadded:: 2.4
     """
@@ -470,7 +472,7 @@ class Column(object):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.asc_nulls_last()).collect()
-    [Row(name=u'Alice'), Row(name=u'Tom'), Row(name=None)]
+    [Row(name='Alice'), Row(name='Tom'), Row(name=None)]
 
     .. versionadded:: 2.4
     """
@@ -480,7 +482,7 @@ class Column(object):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.desc()).collect()
-    [Row(name=u'Tom'), Row(name=u'Alice')]
+    [Row(name='Tom'), Row(name='Alice')]
     """
     _desc_nulls_first_doc = """
     Returns a sort expression based on the descending order of the column, and null values
@@ -489,7 +491,7 @@ class Column(object):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.desc_nulls_first()).collect()
-    [Row(name=None), Row(name=u'Tom'), Row(name=u'Alice')]
+    [Row(name=None), Row(name='Tom'), Row(name='Alice')]
 
     .. versionadded:: 2.4
     """
@@ -500,37 +502,37 @@ class Column(object):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.desc_nulls_last()).collect()
-    [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)]
+    [Row(name='Tom'), Row(name='Alice'), Row(name=None)]
 
     .. versionadded:: 2.4
     """
 
-    asc = ignore_unicode_prefix(_unary_op("asc", _asc_doc))
-    asc_nulls_first = ignore_unicode_prefix(_unary_op("asc_nulls_first", _asc_nulls_first_doc))
-    asc_nulls_last = ignore_unicode_prefix(_unary_op("asc_nulls_last", _asc_nulls_last_doc))
-    desc = ignore_unicode_prefix(_unary_op("desc", _desc_doc))
-    desc_nulls_first = ignore_unicode_prefix(_unary_op("desc_nulls_first", _desc_nulls_first_doc))
-    desc_nulls_last = ignore_unicode_prefix(_unary_op("desc_nulls_last", _desc_nulls_last_doc))
+    asc = _unary_op("asc", _asc_doc)
+    asc_nulls_first = _unary_op("asc_nulls_first", _asc_nulls_first_doc)
+    asc_nulls_last = _unary_op("asc_nulls_last", _asc_nulls_last_doc)
+    desc = _unary_op("desc", _desc_doc)
+    desc_nulls_first = _unary_op("desc_nulls_first", _desc_nulls_first_doc)
+    desc_nulls_last = _unary_op("desc_nulls_last", _desc_nulls_last_doc)
 
     _isNull_doc = """
     True if the current expression is null.
 
     >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df = spark.createDataFrame([Row(name='Tom', height=80), Row(name='Alice', height=None)])
     >>> df.filter(df.height.isNull()).collect()
-    [Row(height=None, name=u'Alice')]
+    [Row(name='Alice', height=None)]
     """
     _isNotNull_doc = """
     True if the current expression is NOT null.
 
     >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df = spark.createDataFrame([Row(name='Tom', height=80), Row(name='Alice', height=None)])
     >>> df.filter(df.height.isNotNull()).collect()
-    [Row(height=80, name=u'Tom')]
+    [Row(name='Tom', height=80)]
     """
 
-    isNull = ignore_unicode_prefix(_unary_op("isNull", _isNull_doc))
-    isNotNull = ignore_unicode_prefix(_unary_op("isNotNull", _isNotNull_doc))
+    isNull = _unary_op("isNull", _isNull_doc)
+    isNotNull = _unary_op("isNotNull", _isNotNull_doc)
 
     @since(1.3)
     def alias(self, *alias, **kwargs):
@@ -540,7 +542,8 @@ class Column(object):
 
         :param alias: strings of desired column names (collects all positional arguments passed)
         :param metadata: a dict of information to be stored in ``metadata`` attribute of the
-            corresponding :class: `StructField` (optional, keyword only argument)
+            corresponding :class:`StructField <pyspark.sql.types.StructField>` (optional, keyword
+            only argument)
 
         .. versionchanged:: 2.2
            Added optional ``metadata`` argument.
@@ -569,17 +572,16 @@ class Column(object):
 
     name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
 
-    @ignore_unicode_prefix
     @since(1.3)
     def cast(self, dataType):
         """ Convert the column into type ``dataType``.
 
         >>> df.select(df.age.cast("string").alias('ages')).collect()
-        [Row(ages=u'2'), Row(ages=u'5')]
+        [Row(ages='2'), Row(ages='5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
-        [Row(ages=u'2'), Row(ages=u'5')]
+        [Row(ages='2'), Row(ages='5')]
         """
-        if isinstance(dataType, basestring):
+        if isinstance(dataType, str):
             jc = self._jc.cast(dataType)
         elif isinstance(dataType, DataType):
             from pyspark.sql import SparkSession
@@ -669,8 +671,9 @@ class Column(object):
         >>> window = Window.partitionBy("name").orderBy("age") \
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
         >>> from pyspark.sql.functions import rank, min
+        >>> from pyspark.sql.functions import desc
         >>> df.withColumn("rank", rank().over(window)) \
-                .withColumn("min", min('age').over(window)).show()
+                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
         +---+-----+----+---+
         |age| name|rank|min|
         +---+-----+----+---+

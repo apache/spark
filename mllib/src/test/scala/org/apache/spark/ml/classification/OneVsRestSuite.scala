@@ -206,7 +206,7 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     val ova = new OneVsRest().setWeightCol("weight").setClassifier(new LogisticRegression())
     assert(ova.fit(dataset2) !== null)
     // classifier doesn't inherit hasWeightCol
-    val ova2 = new OneVsRest().setWeightCol("weight").setClassifier(new DecisionTreeClassifier())
+    val ova2 = new OneVsRest().setWeightCol("weight").setClassifier(new FMClassifier())
     assert(ova2.fit(dataset2) !== null)
   }
 

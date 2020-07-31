@@ -906,7 +906,7 @@ setMethod("sampleByKey",
 
             for (elem in fractions) {
               if (elem < 0.0) {
-                stop(paste("Negative fraction value ", fractions[which(fractions == elem)]))
+                stop("Negative fraction value ", fractions[which(fractions == elem)])
               }
             }
 

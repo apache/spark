@@ -39,7 +39,7 @@ case class AvroDataToCatalyst(
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override lazy val dataType: DataType = {
-    val dt = SchemaConverters.toSqlType(avroSchema).dataType
+    val dt = SchemaConverters.toSqlType(expectedSchema).dataType
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.
@@ -53,14 +53,15 @@ case class AvroDataToCatalyst(
 
   private lazy val avroOptions = AvroOptions(options)
 
-  @transient private lazy val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
+  @transient private lazy val actualSchema = new Schema.Parser().parse(jsonFormatSchema)
 
-  @transient private lazy val reader = avroOptions.actualSchema
-    .map(actualSchema =>
-      new GenericDatumReader[Any](new Schema.Parser().parse(actualSchema), avroSchema))
-    .getOrElse(new GenericDatumReader[Any](avroSchema))
+  @transient private lazy val expectedSchema = avroOptions.schema
+    .map(expectedSchema => new Schema.Parser().parse(expectedSchema))
+    .getOrElse(actualSchema)
 
-  @transient private lazy val deserializer = new AvroDeserializer(avroSchema, dataType)
+  @transient private lazy val reader = new GenericDatumReader[Any](actualSchema, expectedSchema)
+
+  @transient private lazy val deserializer = new AvroDeserializer(expectedSchema, dataType)
 
   @transient private var decoder: BinaryDecoder = _
 
@@ -97,7 +98,10 @@ case class AvroDataToCatalyst(
     try {
       decoder = DecoderFactory.get().binaryDecoder(binary, 0, binary.length, decoder)
       result = reader.read(result, decoder)
-      deserializer.deserialize(result)
+      val deserialized = deserializer.deserialize(result)
+      assert(deserialized.isDefined,
+        "Avro deserializer cannot return an empty result because filters are not pushed down")
+      deserialized.get
     } catch {
       // There could be multiple possible exceptions here, e.g. java.io.IOException,
       // AvroRuntimeException, ArrayIndexOutOfBoundsException, etc.

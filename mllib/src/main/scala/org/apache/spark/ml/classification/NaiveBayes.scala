@@ -22,6 +22,7 @@ import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
@@ -63,6 +64,8 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
+
+  setDefault(smoothing -> 1.0, modelType -> NaiveBayes.Multinomial)
 }
 
 // scalastyle:off line.size.limit
@@ -106,7 +109,6 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("1.5.0")
   def setSmoothing(value: Double): this.type = set(smoothing, value)
-  setDefault(smoothing -> 1.0)
 
   /**
    * Set the model type using a string (case-sensitive).
@@ -116,7 +118,6 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("1.5.0")
   def setModelType(value: String): this.type = set(modelType, value)
-  setDefault(modelType -> Multinomial)
 
   /**
    * Sets the value of param [[weightCol]].
@@ -179,7 +180,7 @@ class NaiveBayes @Since("1.5.0") (
     }
 
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
     } else {
       lit(1.0)
     }
@@ -199,6 +200,7 @@ class NaiveBayes @Since("1.5.0") (
     val numLabels = aggregated.length
     instr.logNumClasses(numLabels)
     val numDocuments = aggregated.map(_._2).sum
+    instr.logSumOfWeights(numDocuments)
 
     val labelArray = new Array[Double](numLabels)
     val piArray = new Array[Double](numLabels)
@@ -258,7 +260,7 @@ class NaiveBayes @Since("1.5.0") (
     import spark.implicits._
 
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
     } else {
       lit(1.0)
     }
@@ -280,6 +282,7 @@ class NaiveBayes @Since("1.5.0") (
     instr.logNumClasses(numLabels)
 
     val numInstances = aggregated.map(_._2).sum
+    instr.logSumOfWeights(numInstances)
 
     // If the ratio of data variance between dimensions is too small, it
     // will cause numerical errors. To address this, we artificially
@@ -351,22 +354,12 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
     Set(Multinomial, Bernoulli, Gaussian, Complement)
 
   private[ml] def requireNonnegativeValues(v: Vector): Unit = {
-    val values = v match {
-      case sv: SparseVector => sv.values
-      case dv: DenseVector => dv.values
-    }
-
-    require(values.forall(_ >= 0.0),
+    require(v.nonZeroIterator.forall(_._2 > 0.0),
       s"Naive Bayes requires nonnegative feature values but found $v.")
   }
 
   private[ml] def requireZeroOneBernoulliValues(v: Vector): Unit = {
-    val values = v match {
-      case sv: SparseVector => sv.values
-      case dv: DenseVector => dv.values
-    }
-
-    require(values.forall(v => v == 0.0 || v == 1.0),
+    require(v.nonZeroIterator.forall(_._2 == 1.0),
       s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
   }
 
@@ -413,18 +406,26 @@ class NaiveBayesModel private[ml] (
    * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
    * application of this condition (in predict function).
    */
-  @transient private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
+  @transient private lazy val thetaMinusNegTheta = $(modelType) match {
     case Bernoulli =>
-      val negTheta = theta.map(value => math.log1p(-math.exp(value)))
-      val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
-      val thetaMinusNegTheta = theta.map { value =>
-        value - math.log1p(-math.exp(value))
-      }
-      (thetaMinusNegTheta, negTheta.multiply(ones))
+      theta.map(value => value - math.log1p(-math.exp(value)))
     case _ =>
       // This should never happen.
       throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
-        "Variables thetaMinusNegTheta and negThetaSum should only be precomputed in Bernoulli NB.")
+        "Variables thetaMinusNegTheta should only be precomputed in Bernoulli NB.")
+  }
+
+  @transient private lazy val piMinusThetaSum = $(modelType) match {
+    case Bernoulli =>
+      val negTheta = theta.map(value => math.log1p(-math.exp(value)))
+      val ones = new DenseVector(Array.fill(theta.numCols)(1.0))
+      val piMinusThetaSum = pi.toDense.copy
+      BLAS.gemv(1.0, negTheta, ones, 1.0, piMinusThetaSum)
+      piMinusThetaSum
+    case _ =>
+      // This should never happen.
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
+        "Variables piMinusThetaSum should only be precomputed in Bernoulli NB.")
   }
 
   /**
@@ -453,8 +454,8 @@ class NaiveBayesModel private[ml] (
 
   private def multinomialCalculation(features: Vector) = {
     requireNonnegativeValues(features)
-    val prob = theta.multiply(features)
-    BLAS.axpy(1.0, pi, prob)
+    val prob = pi.toDense.copy
+    BLAS.gemv(1.0, theta, features, 1.0, prob)
     prob
   }
 
@@ -485,9 +486,8 @@ class NaiveBayesModel private[ml] (
 
   private def bernoulliCalculation(features: Vector) = {
     requireZeroOneBernoulliValues(features)
-    val prob = thetaMinusNegTheta.multiply(features)
-    BLAS.axpy(1.0, pi, prob)
-    BLAS.axpy(1.0, negThetaSum, prob)
+    val prob = piMinusThetaSum.copy
+    BLAS.gemv(1.0, thetaMinusNegTheta, features, 1.0, prob)
     prob
   }
 
@@ -521,7 +521,8 @@ class NaiveBayesModel private[ml] (
     }
   }
 
-  override protected def predictRaw(features: Vector): Vector = predictRawFunc(features)
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = predictRawFunc(features)
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {

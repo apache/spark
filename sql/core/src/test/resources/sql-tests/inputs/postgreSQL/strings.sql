@@ -630,7 +630,8 @@ SELECT rpad('hi', -5, 'xy');
 SELECT rpad('hello', 2);
 SELECT rpad('hi', 5, '');
 
-SELECT ltrim('zzzytrim', 'xyz');
+-- skip this test because PostgreSQL has different parameter order compares to SparkSQL
+-- SELECT ltrim('zzzytrim', 'xyz');
 
 SELECT translate('', '14', 'ax');
 SELECT translate('12345', '14', 'ax');

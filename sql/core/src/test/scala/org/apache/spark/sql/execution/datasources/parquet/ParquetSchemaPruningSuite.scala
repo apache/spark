@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution.datasources.parquet
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 
-abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite {
+abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with AdaptiveSparkPlanHelper {
   override protected val dataSourceName: String = "parquet"
   override protected val vectorizedReaderEnabledKey: String =
     SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key
@@ -48,7 +49,7 @@ class ParquetV2SchemaPruningSuite extends ParquetSchemaPruningSuite {
 
   override def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =
-      df.queryExecution.executedPlan.collect {
+      collect(df.queryExecution.executedPlan) {
         case scan: BatchScanExec => scan.scan.asInstanceOf[ParquetScan].readDataSchema
       }
     assert(fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,

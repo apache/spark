@@ -39,6 +39,7 @@ NAME=none
 MVN="$SPARK_HOME/build/mvn"
 
 function exit_with_usage {
+  set +x
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
@@ -125,19 +126,19 @@ if [ ! "$(command -v "$MVN")" ] ; then
     exit -1;
 fi
 
-VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ 2>/dev/null\
+VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
-SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ 2>/dev/null\
+SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
-SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
+SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
-SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
+SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | fgrep --count "<id>hive</id>";\

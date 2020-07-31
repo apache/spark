@@ -305,7 +305,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         (outputOpData, sparkJobIds.map { jobId => SparkJobIdWithUIData(jobId, getJobData(jobId)) })
       }
 
-    <table id="batch-job-table" class="table table-bordered table-striped table-condensed">
+    <table id="batch-job-table" class="table table-bordered table-striped table-sm">
       <thead>
         {columns}
       </thead>
@@ -325,7 +325,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         throw new IllegalArgumentException(s"Missing id parameter")
       }
     val formattedBatchTime =
-      UIUtils.formatBatchTime(batchTime.milliseconds, streamingListener.batchDuration)
+      SparkUIUtils.formatBatchTime(batchTime.milliseconds, streamingListener.batchDuration)
 
     val batchUIData = streamingListener.getBatchUIData(batchTime).getOrElse {
       throw new IllegalArgumentException(s"Batch $formattedBatchTime does not exist")
@@ -342,7 +342,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     }.toSeq
     val summary: NodeSeq =
       <div>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           <li>
             <strong>Batch Duration: </strong>
             {SparkUIUtils.formatDuration(streamingListener.batchDuration)}

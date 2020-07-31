@@ -61,7 +61,7 @@ In Scala and Java, a DataFrame is represented by a Dataset of `Row`s.
 In [the Scala API][scala-datasets], `DataFrame` is simply a type alias of `Dataset[Row]`.
 While, in [Java API][java-datasets], users need to use `Dataset<Row>` to represent a `DataFrame`.
 
-[scala-datasets]: api/scala/index.html#org.apache.spark.sql.Dataset
+[scala-datasets]: api/scala/org/apache/spark/sql/Dataset.html
 [java-datasets]: api/java/index.html?org/apache/spark/sql/Dataset.html
 
 Throughout this document, we will often refer to Scala/Java Datasets of `Row`s as DataFrames.

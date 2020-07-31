@@ -111,7 +111,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
           case (PATH, i) => writer.write(i, UTF8String.fromString(status.getPath.toString))
           case (LENGTH, i) => writer.write(i, status.getLen)
           case (MODIFICATION_TIME, i) =>
-            writer.write(i, DateTimeUtils.fromMillis(status.getModificationTime))
+            writer.write(i, DateTimeUtils.millisToMicros(status.getModificationTime))
           case (CONTENT, i) =>
             if (status.getLen > maxLength) {
               throw new SparkException(

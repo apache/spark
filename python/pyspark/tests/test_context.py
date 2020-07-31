@@ -267,6 +267,25 @@ class ContextTests(unittest.TestCase):
             resources = sc.resources
             self.assertEqual(len(resources), 0)
 
+    def test_disallow_to_create_spark_context_in_executors(self):
+        # SPARK-32160: SparkContext should not be created in executors.
+        with SparkContext("local-cluster[3, 1, 1024]") as sc:
+            with self.assertRaises(Exception) as context:
+                sc.range(2).foreach(lambda _: SparkContext())
+            self.assertIn("SparkContext should only be created and accessed on the driver.",
+                          str(context.exception))
+
+    def test_allow_to_create_spark_context_in_executors(self):
+        # SPARK-32160: SparkContext can be created in executors if the config is set.
+
+        def create_spark_context():
+            conf = SparkConf().set("spark.driver.allowSparkContextInExecutors", "true")
+            with SparkContext(conf=conf):
+                pass
+
+        with SparkContext("local-cluster[3, 1, 1024]") as sc:
+            sc.range(2).foreach(lambda _: create_spark_context())
+
 
 class ContextTestsWithResources(unittest.TestCase):
 
@@ -275,6 +294,9 @@ class ContextTestsWithResources(unittest.TestCase):
         self.tempFile = tempfile.NamedTemporaryFile(delete=False)
         self.tempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
         self.tempFile.close()
+        # create temporary directory for Worker resources coordination
+        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(self.tempdir.name)
         os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
                  stat.S_IROTH | stat.S_IXOTH)
         conf = SparkConf().set("spark.test.home", SPARK_HOME)

@@ -2,30 +2,30 @@
 -- Number of queries: 19
 
 
--- !query 0
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW tmp AS
 SELECT two, stringu1, ten, string4
 FROM onek
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 SELECT DISTINCT two FROM tmp ORDER BY 1
--- !query 1 schema
+-- !query schema
 struct<two:int>
--- !query 1 output
+-- !query output
 0
 1
 
 
--- !query 2
+-- !query
 SELECT DISTINCT ten FROM tmp ORDER BY 1
--- !query 2 schema
+-- !query schema
 struct<ten:int>
--- !query 2 output
+-- !query output
 0
 1
 2
@@ -38,24 +38,24 @@ struct<ten:int>
 9
 
 
--- !query 3
+-- !query
 SELECT DISTINCT string4 FROM tmp ORDER BY 1
--- !query 3 schema
+-- !query schema
 struct<string4:string>
--- !query 3 output
+-- !query output
 AAAAxx
 HHHHxx
 OOOOxx
 VVVVxx
 
 
--- !query 4
+-- !query
 SELECT DISTINCT two, string4, ten
    FROM tmp
    ORDER BY two ASC, string4 ASC, ten ASC
--- !query 4 schema
+-- !query schema
 struct<two:int,string4:string,ten:int>
--- !query 4 output
+-- !query output
 0	AAAAxx	0
 0	AAAAxx	2
 0	AAAAxx	4
@@ -98,128 +98,128 @@ struct<two:int,string4:string,ten:int>
 1	VVVVxx	9
 
 
--- !query 5
+-- !query
 SELECT count(*) FROM
   (SELECT DISTINCT two, four, two FROM tenk1) ss
--- !query 5 schema
+-- !query schema
 struct<count(1):bigint>
--- !query 5 output
+-- !query output
 4
 
 
--- !query 6
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW disttable AS SELECT * FROM
   (VALUES (1), (2), (3), (NULL))
   AS v(f1)
--- !query 6 schema
+-- !query schema
 struct<>
--- !query 6 output
+-- !query output
 
 
 
--- !query 7
+-- !query
 SELECT f1, f1 IS DISTINCT FROM 2 as `not 2` FROM disttable
--- !query 7 schema
+-- !query schema
 struct<f1:int,not 2:boolean>
--- !query 7 output
+-- !query output
 1	true
 2	false
 3	true
 NULL	true
 
 
--- !query 8
+-- !query
 SELECT f1, f1 IS DISTINCT FROM NULL as `not null` FROM disttable
--- !query 8 schema
+-- !query schema
 struct<f1:int,not null:boolean>
--- !query 8 output
+-- !query output
 1	true
 2	true
 3	true
 NULL	false
 
 
--- !query 9
+-- !query
 SELECT f1, f1 IS DISTINCT FROM f1 as `false` FROM disttable
--- !query 9 schema
+-- !query schema
 struct<f1:int,false:boolean>
--- !query 9 output
+-- !query output
 1	false
 2	false
 3	false
 NULL	false
 
 
--- !query 10
+-- !query
 SELECT f1, f1 IS DISTINCT FROM f1+1 as `not null` FROM disttable
--- !query 10 schema
+-- !query schema
 struct<f1:int,not null:boolean>
--- !query 10 output
+-- !query output
 1	true
 2	true
 3	true
 NULL	false
 
 
--- !query 11
+-- !query
 SELECT 1 IS DISTINCT FROM 2 as `yes`
--- !query 11 schema
+-- !query schema
 struct<yes:boolean>
--- !query 11 output
+-- !query output
 true
 
 
--- !query 12
+-- !query
 SELECT 2 IS DISTINCT FROM 2 as `no`
--- !query 12 schema
+-- !query schema
 struct<no:boolean>
--- !query 12 output
+-- !query output
 false
 
 
--- !query 13
+-- !query
 SELECT 2 IS DISTINCT FROM null as `yes`
--- !query 13 schema
+-- !query schema
 struct<yes:boolean>
--- !query 13 output
+-- !query output
 true
 
 
--- !query 14
+-- !query
 SELECT null IS DISTINCT FROM null as `no`
--- !query 14 schema
+-- !query schema
 struct<no:boolean>
--- !query 14 output
+-- !query output
 false
 
 
--- !query 15
+-- !query
 SELECT 1 IS NOT DISTINCT FROM 2 as `no`
--- !query 15 schema
+-- !query schema
 struct<no:boolean>
--- !query 15 output
+-- !query output
 false
 
 
--- !query 16
+-- !query
 SELECT 2 IS NOT DISTINCT FROM 2 as `yes`
--- !query 16 schema
+-- !query schema
 struct<yes:boolean>
--- !query 16 output
+-- !query output
 true
 
 
--- !query 17
+-- !query
 SELECT 2 IS NOT DISTINCT FROM null as `no`
--- !query 17 schema
+-- !query schema
 struct<no:boolean>
--- !query 17 output
+-- !query output
 false
 
 
--- !query 18
+-- !query
 SELECT null IS NOT DISTINCT FROM null as `yes`
--- !query 18 schema
+-- !query schema
 struct<yes:boolean>
--- !query 18 output
+-- !query output
 true

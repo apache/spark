@@ -68,8 +68,6 @@ public class KVTypeInfo {
 
     Preconditions.checkArgument(indices.containsKey(KVIndex.NATURAL_INDEX_NAME),
         "No natural index defined for type %s.", type.getName());
-    Preconditions.checkArgument(indices.get(KVIndex.NATURAL_INDEX_NAME).parent().isEmpty(),
-        "Natural index of %s cannot have a parent.", type.getName());
 
     for (KVIndex idx : indices.values()) {
       if (!idx.parent().isEmpty()) {
@@ -115,6 +113,11 @@ public class KVTypeInfo {
   Accessor getParentAccessor(String indexName) {
     KVIndex index = indices.get(indexName);
     return index.parent().isEmpty() ? null : getAccessor(index.parent());
+  }
+
+  String getParentIndexName(String indexName) {
+    KVIndex index = indices.get(indexName);
+    return index.parent();
   }
 
   /**

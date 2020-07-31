@@ -21,19 +21,18 @@ import java.util.EnumSet
 import java.util.concurrent.atomic.{AtomicBoolean}
 import javax.servlet.DispatcherType
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
-import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -67,6 +66,14 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
+  /**
+   * Declare implicit single thread execution context for futures doRequestTotalExecutors and
+   * doKillExecutors below, avoiding using the global execution context that may cause conflict
+   * with user code's execution of futures.
+   */
+  private implicit val schedulerEndpointEC = ExecutionContext.fromExecutorService(
+      ThreadUtils.newDaemonSingleThreadExecutor("yarn-scheduler-endpoint"))
+
   /** Application ID. */
   protected var appId: Option[ApplicationId] = None
 
@@ -92,7 +99,7 @@ private[spark] abstract class YarnSchedulerBackend(
     try {
       // SPARK-12009: To prevent Yarn allocator from requesting backup for the executors which
       // was Stopped by SchedulerBackend.
-      requestTotalExecutors(0, 0, Map.empty)
+      requestTotalExecutors(Map.empty, Map.empty, Map.empty)
       super.stop()
     } finally {
       stopped.set(true)
@@ -123,21 +130,24 @@ private[spark] abstract class YarnSchedulerBackend(
     }
   }
 
-  private[cluster] def prepareRequestExecutors(requestedTotal: Int): RequestExecutors = {
+  private[cluster] def prepareRequestExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): RequestExecutors = {
     val nodeBlacklist: Set[String] = scheduler.nodeBlacklist()
     // For locality preferences, ignore preferences for nodes that are blacklisted
-    val filteredHostToLocalTaskCount =
-      hostToLocalTaskCount.filter { case (k, v) => !nodeBlacklist.contains(k) }
-    RequestExecutors(requestedTotal, localityAwareTasks, filteredHostToLocalTaskCount,
-      nodeBlacklist)
+    val filteredRPHostToLocalTaskCount = rpHostToLocalTaskCount.map { case (rpid, v) =>
+      (rpid, v.filter { case (host, count) => !nodeBlacklist.contains(host) })
+    }
+    RequestExecutors(resourceProfileToTotalExecs, numLocalityAwareTasksPerResourceProfileId,
+      filteredRPHostToLocalTaskCount, nodeBlacklist)
   }
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
    * This includes executors already pending or running.
    */
-  override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
-    yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(requestedTotal))
+  override def doRequestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
+    yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(resourceProfileToTotalExecs))
   }
 
   /**
@@ -198,7 +208,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * and re-registered itself to driver after a failure. The stale state in driver should be
    * cleaned.
    */
-  override protected def reset(): Unit = {
+  override protected[scheduler] def reset(): Unit = {
     super.reset()
     sc.executorAllocationManager.foreach(_.reset())
   }
@@ -254,13 +264,14 @@ private[spark] abstract class YarnSchedulerBackend(
               case NonFatal(e) =>
                 logWarning(s"Attempted to get executor loss reason" +
                   s" for executor id ${executorId} at RPC address ${executorRpcAddress}," +
-                  s" but got no response. Marking as slave lost.", e)
-                RemoveExecutor(executorId, SlaveLost())
+                  s" but got no response. Marking as agent lost.", e)
+                RemoveExecutor(executorId, ExecutorProcessLost())
             }(ThreadUtils.sameThread)
         case None =>
           logWarning("Attempted to check for an executor loss reason" +
             " before the AM has registered!")
-          Future.successful(RemoveExecutor(executorId, SlaveLost("AM is not yet registered.")))
+          Future.successful(RemoveExecutor(executorId,
+            ExecutorProcessLost("AM is not yet registered.")))
       }
 
       removeExecutorMessage.foreach { message => driverEndpoint.send(message) }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.lang.reflect.{Method, Modifier}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
@@ -55,7 +55,7 @@ import org.apache.spark.util.Utils
 case class CallMethodViaReflection(children: Seq[Expression])
   extends Expression with CodegenFallback {
 
-  override def prettyName: String = "reflect"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("reflect")
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {

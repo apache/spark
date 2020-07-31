@@ -73,8 +73,8 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
     arrayTypes.foreach { dt =>
       val schema = StructType(StructField("col_1", dt, nullable = false) :: Nil)
       val row = RandomDataGenerator.randomRow(random, schema)
-      val rowConverter = RowEncoder(schema)
-      val internalRow = rowConverter.toRow(row)
+      val toRow = RowEncoder(schema).createSerializer()
+      val internalRow = toRow(row)
 
       val unsafeRowConverter = UnsafeProjection.create(schema)
       val safeRowConverter = SafeProjection.create(schema)

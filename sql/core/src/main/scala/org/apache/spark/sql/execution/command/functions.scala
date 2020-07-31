@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution.command
 
 import java.util.Locale
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
@@ -76,15 +74,6 @@ case class CreateFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Checks if the given resources exist
-    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
-    val nonExistentResources = resources.filter { r =>
-      val path = new Path(r.uri)
-      !path.getFileSystem(hadoopConf).exists(path)
-    }
-    if (nonExistentResources.nonEmpty) {
-      throw new AnalysisException(s"Resources not found: ${nonExistentResources.mkString(",")}")
-    }
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
     if (isTemp) {
@@ -244,6 +233,45 @@ case class ShowFunctionsCommand(
       functionNames.sorted.map(Row(_))
     }
 
+  }
+}
+
+
+/**
+ * A command for users to refresh the persistent function.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    REFRESH FUNCTION functionName
+ * }}}
+ */
+case class RefreshFunctionCommand(
+    databaseName: Option[String],
+    functionName: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {
+      throw new AnalysisException(s"Cannot refresh builtin function $functionName")
+    }
+    if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
+      throw new AnalysisException(s"Cannot refresh temporary function $functionName")
+    }
+
+    val identifier = FunctionIdentifier(
+      functionName, Some(databaseName.getOrElse(catalog.getCurrentDatabase)))
+    // we only refresh the permanent function.
+    if (catalog.isPersistentFunction(identifier)) {
+      // register overwrite function.
+      val func = catalog.getFunctionMetadata(identifier)
+      catalog.registerFunction(func, true)
+    } else {
+      // clear cached function and throw exception
+      catalog.unregisterFunction(identifier)
+      throw new NoSuchFunctionException(identifier.database.get, identifier.funcName)
+    }
+
+    Seq.empty[Row]
   }
 }
 

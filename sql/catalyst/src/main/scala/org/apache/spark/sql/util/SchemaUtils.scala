@@ -41,8 +41,38 @@ private[spark] object SchemaUtils {
    * @param caseSensitiveAnalysis whether duplication checks should be case sensitive or not
    */
   def checkSchemaColumnNameDuplication(
-      schema: StructType, colType: String, caseSensitiveAnalysis: Boolean = false): Unit = {
-    checkColumnNameDuplication(schema.map(_.name), colType, caseSensitiveAnalysis)
+      schema: DataType,
+      colType: String,
+      caseSensitiveAnalysis: Boolean = false): Unit = {
+    schema match {
+      case ArrayType(elementType, _) =>
+        checkSchemaColumnNameDuplication(elementType, colType, caseSensitiveAnalysis)
+      case MapType(keyType, valueType, _) =>
+        checkSchemaColumnNameDuplication(keyType, colType, caseSensitiveAnalysis)
+        checkSchemaColumnNameDuplication(valueType, colType, caseSensitiveAnalysis)
+      case structType: StructType =>
+        val fields = structType.fields
+        checkColumnNameDuplication(fields.map(_.name), colType, caseSensitiveAnalysis)
+        fields.foreach { field =>
+          checkSchemaColumnNameDuplication(field.dataType, colType, caseSensitiveAnalysis)
+        }
+      case _ =>
+    }
+  }
+
+  /**
+   * Checks if an input schema has duplicate column names. This throws an exception if the
+   * duplication exists.
+   *
+   * @param schema schema to check
+   * @param colType column type name, used in an exception message
+   * @param resolver resolver used to determine if two identifiers are equal
+   */
+  def checkSchemaColumnNameDuplication(
+      schema: StructType,
+      colType: String,
+      resolver: Resolver): Unit = {
+    checkSchemaColumnNameDuplication(schema, colType, isCaseSensitiveAnalysis(resolver))
   }
 
   // Returns true if a given resolver is case-sensitive

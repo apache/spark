@@ -23,9 +23,8 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.functions.monotonically_increasing_id
+import org.apache.spark.sql.functions.{monotonically_increasing_id, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
@@ -49,7 +48,6 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       .set("spark.master", "local[1]")
       .setIfMissing("spark.driver.memory", "3g")
       .setIfMissing("spark.executor.memory", "3g")
-      .setIfMissing(UI_ENABLED, false)
       .setIfMissing("orc.compression", "snappy")
       .setIfMissing("spark.sql.parquet.compression.codec", "snappy")
 
@@ -119,7 +117,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       val name = s"Parquet Vectorized ${if (pushDownEnabled) s"(Pushdown)" else ""}"
       benchmark.addCase(name) { _ =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled") {
-          spark.sql(s"SELECT $selectExpr FROM parquetTable WHERE $whereExpr").collect()
+          spark.sql(s"SELECT $selectExpr FROM parquetTable WHERE $whereExpr").noop()
         }
       }
     }
@@ -128,7 +126,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       val name = s"Native ORC Vectorized ${if (pushDownEnabled) s"(Pushdown)" else ""}"
       benchmark.addCase(name) { _ =>
         withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled") {
-          spark.sql(s"SELECT $selectExpr FROM orcTable WHERE $whereExpr").collect()
+          spark.sql(s"SELECT $selectExpr FROM orcTable WHERE $whereExpr").noop()
         }
       }
     }
@@ -334,11 +332,11 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
             withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fileType) {
               val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
               val df = spark.range(numRows).selectExpr(columns: _*)
-                .withColumn("value", monotonically_increasing_id().cast(TimestampType))
+                .withColumn("value", timestamp_seconds(monotonically_increasing_id()))
               withTempTable("orcTable", "parquetTable") {
                 saveAsTable(df, dir)
 
-                Seq(s"value = CAST($mid AS timestamp)").foreach { whereExpr =>
+                Seq(s"value = timestamp_seconds($mid)").foreach { whereExpr =>
                   val title = s"Select 1 timestamp stored as $fileType row ($whereExpr)"
                     .replace("value AND value", "value")
                   filterPushDownBenchmark(numRows, title, whereExpr)
@@ -350,8 +348,8 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
                   filterPushDownBenchmark(
                     numRows,
                     s"Select $percent% timestamp stored as $fileType rows " +
-                      s"(value < CAST(${numRows * percent / 100} AS timestamp))",
-                    s"value < CAST(${numRows * percent / 100} as timestamp)",
+                      s"(value < timestamp_seconds(${numRows * percent / 100}))",
+                    s"value < timestamp_seconds(${numRows * percent / 100})",
                     selectExpr
                   )
                 }

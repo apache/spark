@@ -16,18 +16,26 @@
  */
 package org.apache.spark.sql
 
-import java.util.Locale
+import java.util.{Locale, UUID}
 
-import org.apache.spark.{SparkFunSuite, TaskContext}
+import scala.concurrent.Future
+
+import org.apache.spark.{MapOutputStatistics, SparkFunSuite, TaskContext}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
@@ -144,31 +152,83 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
-  test("inject columnar") {
+  test("inject adaptive query prep rule") {
+    val extensions = create { extensions =>
+      // inject rule that will run during AQE query stage preparation and will add custom tags
+      // to the plan
+      extensions.injectQueryStagePrepRule(session => MyQueryStagePrepRule())
+      // inject rule that will run during AQE query stage optimization and will verify that the
+      // custom tags were written in the preparation phase
+      extensions.injectColumnar(session =>
+        MyColumarRule(MyNewQueryStageRule(), MyNewQueryStageRule()))
+    }
+    withSession(extensions) { session =>
+      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
+      assert(session.sessionState.queryStagePrepRules.contains(MyQueryStagePrepRule()))
+      assert(session.sessionState.columnarRules.contains(
+        MyColumarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
+      import session.sqlContext.implicits._
+      val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
+      val df = data.selectExpr("vals + 1")
+      df.collect()
+    }
+  }
+
+  test("inject columnar AQE on") {
+    testInjectColumnar(true)
+  }
+
+  test("inject columnar AQE off") {
+    testInjectColumnar(false)
+  }
+
+  private def testInjectColumnar(enableAQE: Boolean): Unit = {
+    def collectPlanSteps(plan: SparkPlan): Seq[Int] = plan match {
+      case a: AdaptiveSparkPlanExec =>
+        assert(a.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
+        collectPlanSteps(a.executedPlan)
+      case _ => plan.collect {
+        case _: ReplacedRowToColumnarExec => 1
+        case _: ColumnarProjectExec => 10
+        case _: ColumnarToRowExec => 100
+        case s: QueryStageExec => collectPlanSteps(s.plan).sum
+        case _: MyShuffleExchangeExec => 1000
+        case _: MyBroadcastExchangeExec => 10000
+      }
+    }
+
     val extensions = create { extensions =>
       extensions.injectColumnar(session =>
         MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
     }
     withSession(extensions) { session =>
+      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
       assert(session.sessionState.columnarRules.contains(
         MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.sqlContext.implicits._
-      // repartitioning avoids having the add operation pushed up into the LocalTableScan
-      val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
-      val df = data.selectExpr("vals + 1")
-      // Verify that both pre and post processing of the plan worked.
-      val found = df.queryExecution.executedPlan.collect {
-        case rep: ReplacedRowToColumnarExec => 1
-        case proj: ColumnarProjectExec => 10
-        case c2r: ColumnarToRowExec => 100
-      }.sum
-      assert(found == 111)
+      // perform a join to inject a broadcast exchange
+      val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
+      val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
+      val data = left.join(right, $"l1" === $"r1")
+        // repartitioning avoids having the add operation pushed up into the LocalTableScan
+        .repartition(1)
+      val df = data.selectExpr("l2 + r2")
+      // execute the plan so that the final adaptive plan is available when AQE is on
+      df.collect()
+      val found = collectPlanSteps(df.queryExecution.executedPlan).sum
+      // 1 MyBroadcastExchangeExec
+      // 1 MyShuffleExchangeExec
+      // 1 ColumnarToRowExec
+      // 2 ColumnarProjectExec
+      // 1 ReplacedRowToColumnarExec
+      // so 11121 is expected.
+      assert(found == 11121)
 
       // Verify that we get back the expected, wrong, result
       val result = df.collect()
-      assert(result(0).getLong(0) == 102L) // Check that broken columnar Add was used.
-      assert(result(1).getLong(0) == 202L)
-      assert(result(2).getLong(0) == 302L)
+      assert(result(0).getLong(0) == 101L) // Check that broken columnar Add was used.
+      assert(result(1).getLong(0) == 201L)
+      assert(result(2).getLong(0) == 301L)
     }
   }
 
@@ -324,12 +384,29 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseDataType(sqlText: String): DataType =
     delegate.parseDataType(sqlText)
+
+  override def parseRawDataType(sqlText: String): DataType =
+    delegate.parseRawDataType(sqlText)
 }
 
 object MyExtensions {
 
   val myFunction = (FunctionIdentifier("myFunction"),
-    new ExpressionInfo("noClass", "myDb", "myFunction", "usage", "extended usage"),
+    new ExpressionInfo(
+      "noClass",
+      "myDb",
+      "myFunction",
+      "usage",
+      "extended usage",
+      "    Examples:",
+      """
+       note
+      """,
+      "",
+      "3.0.0",
+      """
+       deprecated
+      """),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -651,6 +728,16 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
   def replaceWithColumnarPlan(plan: SparkPlan): SparkPlan =
     try {
       plan match {
+        case e: ShuffleExchangeExec =>
+          // note that this is not actually columnar but demonstrates that exchanges can
+          // be replaced.
+          val replaced = e.withNewChildren(e.children.map(replaceWithColumnarPlan))
+          MyShuffleExchangeExec(replaced.asInstanceOf[ShuffleExchangeExec])
+        case e: BroadcastExchangeExec =>
+          // note that this is not actually columnar but demonstrates that exchanges can
+          // be replaced.
+          val replaced = e.withNewChildren(e.children.map(replaceWithColumnarPlan))
+          MyBroadcastExchangeExec(replaced.asInstanceOf[BroadcastExchangeExec])
         case plan: ProjectExec =>
           new ColumnarProjectExec(plan.projectList.map((exp) =>
             replaceWithColumnarExpression(exp).asInstanceOf[NamedExpression]),
@@ -667,6 +754,41 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
     }
 
   override def apply(plan: SparkPlan): SparkPlan = replaceWithColumnarPlan(plan)
+}
+
+/**
+ * Custom Exchange used in tests to demonstrate that shuffles can be replaced regardless of
+ * whether AQE is enabled.
+ */
+case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleExchangeLike {
+  override def numMappers: Int = delegate.numMappers
+  override def numPartitions: Int = delegate.numPartitions
+  override def canChangeNumPartitions: Boolean = delegate.canChangeNumPartitions
+  override def mapOutputStatisticsFuture: Future[MapOutputStatistics] =
+    delegate.mapOutputStatisticsFuture
+  override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_] =
+    delegate.getShuffleRDD(partitionSpecs)
+  override def runtimeStatistics: Statistics = delegate.runtimeStatistics
+  override def child: SparkPlan = delegate.child
+  override protected def doExecute(): RDD[InternalRow] = delegate.execute()
+  override def outputPartitioning: Partitioning = delegate.outputPartitioning
+}
+
+/**
+ * Custom Exchange used in tests to demonstrate that broadcasts can be replaced regardless of
+ * whether AQE is enabled.
+ */
+case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends BroadcastExchangeLike {
+  override def runId: UUID = delegate.runId
+  override def relationFuture: java.util.concurrent.Future[Broadcast[Any]] =
+    delegate.relationFuture
+  override def completionFuture: Future[Broadcast[Any]] = delegate.completionFuture
+  override def runtimeStatistics: Statistics = delegate.runtimeStatistics
+  override def child: SparkPlan = delegate.child
+  override protected def doPrepare(): Unit = delegate.prepare()
+  override protected def doExecute(): RDD[InternalRow] = delegate.execute()
+  override def doExecuteBroadcast[T](): Broadcast[T] = delegate.executeBroadcast()
+  override def outputPartitioning: Partitioning = delegate.outputPartitioning
 }
 
 class ReplacedRowToColumnarExec(override val child: SparkPlan)
@@ -711,6 +833,31 @@ class MyExtensions extends (SparkSessionExtensions => Unit) {
   }
 }
 
+object QueryPrepRuleHelper {
+  val myPrepTag: TreeNodeTag[String] = TreeNodeTag[String]("myPrepTag")
+  val myPrepTagValue: String = "myPrepTagValue"
+}
+
+// this rule will run during AQE query preparation and will write custom tags to each node
+case class MyQueryStagePrepRule() extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan.transformDown {
+    case plan =>
+      plan.setTagValue(QueryPrepRuleHelper.myPrepTag, QueryPrepRuleHelper.myPrepTagValue)
+      plan
+  }
+}
+
+// this rule will run during AQE query stage optimization and will verify custom tags were
+// already written during query preparation phase
+case class MyNewQueryStageRule() extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan.transformDown {
+    case plan if !plan.isInstanceOf[AdaptiveSparkPlanExec] =>
+      assert(plan.getTagValue(QueryPrepRuleHelper.myPrepTag).get ==
+          QueryPrepRuleHelper.myPrepTagValue)
+      plan
+  }
+}
+
 case class MyRule2(spark: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan
 }
@@ -726,7 +873,21 @@ case class MySparkStrategy2(spark: SparkSession) extends SparkStrategy {
 object MyExtensions2 {
 
   val myFunction = (FunctionIdentifier("myFunction2"),
-    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "extended usage"),
+    new ExpressionInfo(
+      "noClass",
+      "myDb",
+      "myFunction2",
+      "usage",
+      "extended usage",
+      "    Examples:",
+      """
+       note
+      """,
+      "",
+      "3.0.0",
+      """
+       deprecated
+      """),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 
@@ -745,7 +906,21 @@ class MyExtensions2 extends (SparkSessionExtensions => Unit) {
 object MyExtensions2Duplicate {
 
   val myFunction = (FunctionIdentifier("myFunction2"),
-    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "extended usage"),
+    new ExpressionInfo(
+      "noClass",
+      "myDb",
+      "myFunction2",
+      "usage",
+      "extended usage",
+      "    Examples:",
+      """
+       note
+      """,
+      "",
+      "3.0.0",
+      """
+       deprecated
+      """),
     (_: Seq[Expression]) => Literal(5, IntegerType))
 }
 

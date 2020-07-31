@@ -88,7 +88,8 @@ object SparkBuild extends PomBuild {
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
   override val profiles = {
-    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES")
+      .orElse(Properties.propOrNone("sbt.maven.profiles")) match {
       case None => Seq("sbt")
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
@@ -220,10 +221,13 @@ object SparkBuild extends PomBuild {
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.14",
+    unidocGenjavadocVersion := "0.16",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
+      // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+      // See https://storage-download.googleapis.com/maven-central/index.html for more info.
+      "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
       DefaultMavenRepository,
       Resolver.mavenLocal,
       Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
@@ -440,10 +444,10 @@ object SparkBuild extends PomBuild {
 object SparkParallelTestGrouping {
   // Settings for parallelizing tests. The basic strategy here is to run the slowest suites (or
   // collections of suites) in their own forked JVMs, allowing us to gain parallelism within a
-  // SBT project. Here, we take a whitelisting approach where the default behavior is to run all
+  // SBT project. Here, we take an opt-in approach where the default behavior is to run all
   // tests sequentially in a single JVM, requiring us to manually opt-in to the extra parallelism.
   //
-  // There are a reasons why such a whitelist approach is good:
+  // There are a reasons why such an opt-in approach is good:
   //
   //    1. Launching one JVM per suite adds significant overhead for short-running suites. In
   //       addition to JVM startup time and JIT warmup, it appears that initialization of Derby
@@ -465,23 +469,30 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogSuite",
     "org.apache.spark.sql.hive.StatisticsSuite",
-    "org.apache.spark.sql.hive.execution.HiveCompatibilitySuite",
     "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.client.HiveClientVersions",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
     "org.apache.spark.ml.classification.LinearSVCSuite",
     "org.apache.spark.sql.SQLQueryTestSuite",
+    "org.apache.spark.sql.hive.client.HadoopVersionInfoSuite",
+    "org.apache.spark.sql.hive.thriftserver.SparkExecuteStatementOperationSuite",
     "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite",
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
-    "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite"
+    "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
+    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
+  private val HIVE_EXECUTION_TEST_GROUP = "hive_execution_test_group"
 
   private def testNameToTestGroup(name: String): String = name match {
     case _ if testsWhichShouldRunInTheirOwnDedicatedJvm.contains(name) => name
+    // Different with the cases in testsWhichShouldRunInTheirOwnDedicatedJvm, here we are grouping
+    // all suites of `org.apache.spark.sql.hive.execution.*` into a single group, instead of
+    // launching one JVM per suite.
+    case _ if name.contains("org.apache.spark.sql.hive.execution") => HIVE_EXECUTION_TEST_GROUP
     case _ => DEFAULT_TEST_GROUP
   }
 
@@ -615,9 +626,12 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
+  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("14.0.1")
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1",
-    dependencyOverrides += "jline" % "jline" % "2.14.6")
+    dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
+    dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
+    dependencyOverrides += "jline" % "jline" % "2.14.6",
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.8.2")
 }
 
 /**
@@ -816,13 +830,17 @@ object Unidoc {
       .map(_.filterNot(_.getName.contains("$")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/examples")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/memory")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/network")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/rpc")))
       .map(_.filterNot(f =>
         f.getCanonicalPath.contains("org/apache/spark/shuffle") &&
         !f.getCanonicalPath.contains("org/apache/spark/shuffle/api")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/executor")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/unsafe")))
+      .map(_.filterNot(f =>
+        f.getCanonicalPath.contains("org/apache/spark/unsafe") &&
+        !f.getCanonicalPath.contains("org/apache/spark/unsafe/types/CalendarInterval")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
@@ -954,6 +972,9 @@ object TestSettings {
       "2.12"
     }
      */
+
+  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest")
+
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
@@ -991,9 +1012,22 @@ object TestSettings {
       sys.props.get("test.exclude.tags").map { tags =>
         tags.split(",").flatMap { tag => Seq("-l", tag) }.toSeq
       }.getOrElse(Nil): _*),
+    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
+      sys.props.get("test.default.exclude.tags").map(tags => tags.split(",").toSeq)
+        .map(tags => tags.filter(!_.trim.isEmpty)).getOrElse(defaultExcludedTags)
+        .flatMap(tag => Seq("-l", tag)): _*),
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit,
       sys.props.get("test.exclude.tags").map { tags =>
         Seq("--exclude-categories=" + tags)
+      }.getOrElse(Nil): _*),
+    // Include tags defined in a system property
+    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
+      sys.props.get("test.include.tags").map { tags =>
+        tags.split(",").flatMap { tag => Seq("-n", tag) }.toSeq
+      }.getOrElse(Nil): _*),
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit,
+      sys.props.get("test.include.tags").map { tags =>
+        Seq("--include-categories=" + tags)
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),

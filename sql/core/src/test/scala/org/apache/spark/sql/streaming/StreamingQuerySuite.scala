@@ -466,7 +466,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val streamingTriggerDF = spark.createDataset(1 to 10).toDF
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
 
-    val progress = getFirstProgress(streamingInputDF.join(streamingInputDF, "value"))
+    val progress = getStreamingQuery(streamingInputDF.join(streamingInputDF, "value"))
+      .recentProgress.head
     assert(progress.numInputRows === 20) // data is read multiple times in self-joins
     assert(progress.sources.size === 1)
     assert(progress.sources(0).numInputRows === 20)
@@ -479,7 +480,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
     // Trigger input has 10 rows, static input has 2 rows,
     // therefore after the first trigger, the calculated input rows should be 10
-    val progress = getFirstProgress(streamingInputDF.join(staticInputDF, "value"))
+    val progress = getStreamingQuery(streamingInputDF.join(staticInputDF, "value"))
+      .recentProgress.head
     assert(progress.numInputRows === 10)
     assert(progress.sources.size === 1)
     assert(progress.sources(0).numInputRows === 10)
@@ -492,7 +494,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF)
 
     // After the first trigger, the calculated input rows should be 10
-    val progress = getFirstProgress(streamingInputDF)
+    val progress = getStreamingQuery(streamingInputDF).recentProgress.head
     assert(progress.numInputRows === 10)
     assert(progress.sources.size === 1)
     assert(progress.sources(0).numInputRows === 10)
@@ -1120,12 +1122,12 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     StreamingExecutionRelation(source, spark)
   }
 
-  /** Returns the query progress at the end of the first trigger of streaming DF */
-  private def getFirstProgress(streamingDF: DataFrame): StreamingQueryProgress = {
+  /** Returns the query at the end of the first trigger of streaming DF */
+  private def getStreamingQuery(streamingDF: DataFrame): StreamingQuery = {
     try {
       val q = streamingDF.writeStream.format("memory").queryName("test").start()
       q.processAllAvailable()
-      q.recentProgress.head
+      q
     } finally {
       spark.streams.active.map(_.stop())
     }

@@ -76,11 +76,11 @@ best parameter learned from a sampled subset to the full dataset and expect simi
 
 <div data-lang="scala" markdown="1">
 In the following example, we load rating data. Each row consists of a user, a product and a rating.
-We use the default [ALS.train()](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS$) 
+We use the default [ALS.train()](api/scala/org/apache/spark/mllib/recommendation/ALS$.html)
 method which assumes ratings are explicit. We evaluate the
 recommendation model by measuring the Mean Squared Error of rating prediction.
 
-Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS) for more details on the API.
+Refer to the [`ALS` Scala docs](api/scala/org/apache/spark/mllib/recommendation/ALS.html) for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/RecommendationExample.scala %}
 

@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -189,7 +188,7 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("like escape expressions") {
-    val message = "Escape string must contains only one character."
+    val message = "Escape string must contain only one character."
     assertEqual("a like 'pattern%' escape '#'", 'a.like("pattern%", '#'))
     assertEqual("a like 'pattern%' escape '\"'", 'a.like("pattern%", '\"'))
     intercept("a like 'pattern%' escape '##'", message)
@@ -207,6 +206,21 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
     assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
     assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
+  }
+
+  test("(NOT) LIKE (ANY | SOME | ALL) expressions") {
+    Seq("any", "some").foreach { quantifier =>
+      assertEqual(s"a like $quantifier ('foo%', 'b%')", ('a like "foo%") || ('a like "b%"))
+      assertEqual(s"a not like $quantifier ('foo%', 'b%')", !('a like "foo%") || !('a like "b%"))
+      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !(('a like "foo%") || ('a like "b%")))
+    }
+    assertEqual("a like all ('foo%', 'b%')", ('a like "foo%") && ('a like "b%"))
+    assertEqual("a not like all ('foo%', 'b%')", !('a like "foo%") && !('a like "b%"))
+    assertEqual("not (a like all ('foo%', 'b%'))", !(('a like "foo%") && ('a like "b%")))
+
+    Seq("any", "some", "all").foreach { quantifier =>
+      intercept(s"a like $quantifier()", "Expected something between '(' and ')'")
+    }
   }
 
   test("is null expressions") {
@@ -457,6 +471,11 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual(
       "-interval '3 month 1 hour'",
       UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
+    val intervalStrWithAllUnits = "1 year 3 months 2 weeks 2 days 1 hour 3 minutes 2 seconds " +
+      "100 millisecond 200 microseconds"
+    assertEqual(
+      s"interval '$intervalStrWithAllUnits'",
+      Literal(IntervalUtils.stringToInterval(intervalStrWithAllUnits)))
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
@@ -522,6 +541,16 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
     intercept("1.20E-38BD", "decimal can only support precision up to 38")
+  }
+
+  test("SPARK-30252: Decimal should set zero scale rather than negative scale by default") {
+    assertEqual("123.0BD", Literal(Decimal(BigDecimal("123.0")), DecimalType(4, 1)))
+    assertEqual("123BD", Literal(Decimal(BigDecimal("123")), DecimalType(3, 0)))
+    assertEqual("123E10BD", Literal(Decimal(BigDecimal("123E10")), DecimalType(13, 0)))
+    assertEqual("123E+10BD", Literal(Decimal(BigDecimal("123E+10")), DecimalType(13, 0)))
+    assertEqual("123E-10BD", Literal(Decimal(BigDecimal("123E-10")), DecimalType(10, 10)))
+    assertEqual("1.23E10BD", Literal(Decimal(BigDecimal("1.23E10")), DecimalType(11, 0)))
+    assertEqual("-1.23E10BD", Literal(Decimal(BigDecimal("-1.23E10")), DecimalType(11, 0)))
   }
 
   test("SPARK-29956: scientific decimal should be parsed as Decimal in legacy mode") {
@@ -645,11 +674,6 @@ class ExpressionParserSuite extends AnalysisTest {
         "-" -> UnaryMinus(expected)
       ).foreach { case (sign, expectedLiteral) =>
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
-
-        // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
-        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-          assertEqual(intervalValue, expected)
-        }
       }
     }
 
@@ -676,22 +700,21 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(new CalendarInterval(
         0,
         0,
-        -13 * MICROS_PER_SECOND - 123 * MICROS_PER_MILLIS - 456)))
+        DateTimeTestUtils.secFrac(-13, -123, -456))))
     checkIntervals(
       "13.123456 second",
       Literal(new CalendarInterval(
         0,
         0,
-        13 * MICROS_PER_SECOND + 123 * MICROS_PER_MILLIS + 456)))
+        DateTimeTestUtils.secFrac(13, 123, 456))))
     checkIntervals("1.001 second",
       Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
 
     // Non Existing unit
-    intercept("interval 10 nanoseconds",
-      "no viable alternative at input '10 nanoseconds'")
+    intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
 
     // Year-Month intervals.
-    val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
+    val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0", "\t -1-2\t")
     yearMonthValues.foreach { value =>
       val result = Literal(IntervalUtils.fromYearMonthString(value))
       checkIntervals(s"'$value' year to month", result)
@@ -704,7 +727,8 @@ class ExpressionParserSuite extends AnalysisTest {
       "10 9:8:7.123456789",
       "1 0:0:0",
       "-1 0:0:0",
-      "1 0:0:1")
+      "1 0:0:1",
+      "\t 1 0:0:1 ")
     datTimeValues.foreach { value =>
       val result = Literal(IntervalUtils.fromDayTimeString(value))
       checkIntervals(s"'$value' day to second", result)
@@ -730,34 +754,6 @@ class ExpressionParserSuite extends AnalysisTest {
     checkIntervals(
       "3 months 4 days 22 seconds 1 millisecond",
       Literal(new CalendarInterval(3, 4, 22001000L)))
-  }
-
-  test("SPARK-23264 Interval Compatibility tests") {
-    def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-        assertEqual(intervalValue, expected)
-      }
-
-      // Compatibility tests: If ANSI SQL disabled, `intervalValue` should be parsed as an alias
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-        val aliases = defaultParser.parseExpression(intervalValue).collect {
-          case a @ Alias(_: Literal, name)
-            if intervalUnits.exists { unit => name.startsWith(unit.toString) } => a
-        }
-        assert(aliases.size === 1)
-      }
-    }
-    val forms = Seq("", "s")
-    val values = Seq("5", "1", "-11", "8")
-    intervalUnits.foreach { unit =>
-      forms.foreach { form =>
-         values.foreach { value =>
-           val expected = intervalLiteral(unit, value)
-           checkIntervals(s"$value $unit$form", expected)
-           checkIntervals(s"'$value' $unit$form", expected)
-         }
-      }
-    }
   }
 
   test("composed expressions") {
@@ -789,26 +785,17 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("SPARK-19526 Support ignore nulls keywords for first and last") {
-    assertEqual("first(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
-    assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
-    assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
-  }
-
-  test("Support respect nulls keywords for first_value and last_value") {
-    assertEqual("first_value(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
-    assertEqual("first_value(a respect nulls)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("first_value(a)", First('a, Literal(false)).toAggregateExpression())
-    assertEqual("last_value(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
-    assertEqual("last_value(a respect nulls)", Last('a, Literal(false)).toAggregateExpression())
-    assertEqual("last_value(a)", Last('a, Literal(false)).toAggregateExpression())
+    assertEqual("first(a ignore nulls)", First('a, true).toAggregateExpression())
+    assertEqual("first(a)", First('a, false).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last('a, true).toAggregateExpression())
+    assertEqual("last(a)", Last('a, false).toAggregateExpression())
   }
 
   test("timestamp literals") {
-    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone.getID) {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
         def toMicros(time: LocalDateTime): Long = {
-          val seconds = time.atZone(timeZone.toZoneId).toInstant.getEpochSecond
+          val seconds = time.atZone(zid).toInstant.getEpochSecond
           TimeUnit.SECONDS.toMicros(seconds)
         }
         assertEval(

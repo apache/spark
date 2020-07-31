@@ -26,12 +26,15 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, 
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
 trait AnalysisTest extends PlanTest {
 
-  protected val caseSensitiveAnalyzer = makeAnalyzer(caseSensitive = true)
-  protected val caseInsensitiveAnalyzer = makeAnalyzer(caseSensitive = false)
+  protected lazy val caseSensitiveAnalyzer = makeAnalyzer(caseSensitive = true)
+  protected lazy val caseInsensitiveAnalyzer = makeAnalyzer(caseSensitive = false)
+
+  protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
   private def makeAnalyzer(caseSensitive: Boolean): Analyzer = {
     val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
@@ -42,8 +45,10 @@ trait AnalysisTest extends PlanTest {
     catalog.createTempView("TaBlE", TestRelations.testRelation, overrideIfExists = true)
     catalog.createTempView("TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
     catalog.createTempView("TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
+    catalog.createGlobalTempView("TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
+    catalog.createGlobalTempView("TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
     new Analyzer(catalog, conf) {
-      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
+      override val extendedResolutionRules = EliminateSubqueryAliases +: extendedAnalysisRules
     }
   }
 

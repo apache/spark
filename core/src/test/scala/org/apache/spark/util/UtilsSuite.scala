@@ -745,10 +745,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     manager.add(3, () => output += 3)
     manager.add(2, () => output += 2)
     manager.add(4, () => output += 4)
+    manager.add(Int.MinValue, () => output += Int.MinValue)
+    manager.add(Int.MinValue, () => output += Int.MinValue)
+    manager.add(Int.MaxValue, () => output += Int.MaxValue)
+    manager.add(Int.MaxValue, () => output += Int.MaxValue)
     manager.remove(hook1)
 
     manager.runAll()
-    assert(output.toList === List(4, 3, 2))
+    assert(output.toList === List(Int.MaxValue, Int.MaxValue, 4, 3, 2, Int.MinValue, Int.MinValue))
   }
 
   test("isInDirectory") {
@@ -1243,6 +1247,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     intercept[IllegalArgumentException] {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
+
+    intercept[IllegalArgumentException] {
+      Utils.checkAndGetK8sMasterUrl("k8s:///https://host:port")
+    }
   }
 
   test("stringHalfWidth") {
@@ -1292,6 +1300,111 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assert(Utils.trimExceptCRLF(s"a${s}") === "a")
       assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
     }
+  }
+
+  test("pathsToMetadata") {
+    val paths = (0 to 4).map(i => new Path(s"path$i"))
+    assert(Utils.buildLocationMetadata(paths, 5) == "[path0]")
+    assert(Utils.buildLocationMetadata(paths, 10) == "[path0, path1]")
+    assert(Utils.buildLocationMetadata(paths, 15) == "[path0, path1, path2]")
+    assert(Utils.buildLocationMetadata(paths, 25) == "[path0, path1, path2, path3]")
+  }
+
+  test("checkHost supports both IPV4 and IPV6") {
+    // IPV4 ips
+    Utils.checkHost("0.0.0.0")
+    var e: AssertionError = intercept[AssertionError] {
+      Utils.checkHost("0.0.0.0:0")
+    }
+    assert(e.getMessage.contains("Expected hostname or IP but got 0.0.0.0:0"))
+    e = intercept[AssertionError] {
+      Utils.checkHost("0.0.0.0:")
+    }
+    assert(e.getMessage.contains("Expected hostname or IP but got 0.0.0.0:"))
+    // IPV6 ips
+    Utils.checkHost("[::1]")
+    e = intercept[AssertionError] {
+      Utils.checkHost("[::1]:0")
+    }
+    assert(e.getMessage.contains("Expected hostname or IPv6 IP enclosed in [] but got [::1]:0"))
+    e = intercept[AssertionError] {
+      Utils.checkHost("[::1]:")
+    }
+    assert(e.getMessage.contains("Expected hostname or IPv6 IP enclosed in [] but got [::1]:"))
+    // hostname
+    Utils.checkHost("localhost")
+    e = intercept[AssertionError] {
+      Utils.checkHost("localhost:0")
+    }
+    assert(e.getMessage.contains("Expected hostname or IP but got localhost:0"))
+    e = intercept[AssertionError] {
+      Utils.checkHost("localhost:")
+    }
+    assert(e.getMessage.contains("Expected hostname or IP but got localhost:"))
+  }
+
+  test("checkHostPort support IPV6 and IPV4") {
+    // IPV4 ips
+    Utils.checkHostPort("0.0.0.0:0")
+    var e: AssertionError = intercept[AssertionError] {
+      Utils.checkHostPort("0.0.0.0")
+    }
+    assert(e.getMessage.contains("Expected host and port but got 0.0.0.0"))
+
+    // IPV6 ips
+    Utils.checkHostPort("[::1]:0")
+    e = intercept[AssertionError] {
+      Utils.checkHostPort("[::1]")
+    }
+    assert(e.getMessage.contains("Expected host and port but got [::1]"))
+
+    // hostname
+    Utils.checkHostPort("localhost:0")
+    e = intercept[AssertionError] {
+      Utils.checkHostPort("localhost")
+    }
+    assert(e.getMessage.contains("Expected host and port but got localhost"))
+  }
+
+  test("parseHostPort support IPV6 and IPV4") {
+    // IPV4 ips
+    var hostnamePort = Utils.parseHostPort("0.0.0.0:80")
+    assert(hostnamePort._1.equals("0.0.0.0"))
+    assert(hostnamePort._2 === 80)
+
+    hostnamePort = Utils.parseHostPort("0.0.0.0")
+    assert(hostnamePort._1.equals("0.0.0.0"))
+    assert(hostnamePort._2 === 0)
+
+    hostnamePort = Utils.parseHostPort("0.0.0.0:")
+    assert(hostnamePort._1.equals("0.0.0.0"))
+    assert(hostnamePort._2 === 0)
+
+    // IPV6 ips
+    hostnamePort = Utils.parseHostPort("[::1]:80")
+    assert(hostnamePort._1.equals("[::1]"))
+    assert(hostnamePort._2 === 80)
+
+    hostnamePort = Utils.parseHostPort("[::1]")
+    assert(hostnamePort._1.equals("[::1]"))
+    assert(hostnamePort._2 === 0)
+
+    hostnamePort = Utils.parseHostPort("[::1]:")
+    assert(hostnamePort._1.equals("[::1]"))
+    assert(hostnamePort._2 === 0)
+
+    // hostname
+    hostnamePort = Utils.parseHostPort("localhost:80")
+    assert(hostnamePort._1.equals("localhost"))
+    assert(hostnamePort._2 === 80)
+
+    hostnamePort = Utils.parseHostPort("localhost")
+    assert(hostnamePort._1.equals("localhost"))
+    assert(hostnamePort._2 === 0)
+
+    hostnamePort = Utils.parseHostPort("localhost:")
+    assert(hostnamePort._1.equals("localhost"))
+    assert(hostnamePort._2 === 0)
   }
 }
 

@@ -225,6 +225,52 @@ class SparkSessionTests4(ReusedSQLTestCase):
                 session2.stop()
 
 
+class SparkSessionTests5(unittest.TestCase):
+
+    def setUp(self):
+        # These tests require restarting the Spark context so we set up a new one for each test
+        # rather than at the class level.
+        self.sc = SparkContext('local[4]', self.__class__.__name__, conf=SparkConf())
+        self.spark = SparkSession(self.sc)
+
+    def tearDown(self):
+        self.sc.stop()
+        self.spark.stop()
+
+    def test_sqlcontext_with_stopped_sparksession(self):
+        # SPARK-30856: test that SQLContext.getOrCreate() returns a usable instance after
+        # the SparkSession is restarted.
+        sql_context = self.spark._wrapped
+        self.spark.stop()
+        sc = SparkContext('local[4]', self.sc.appName)
+        spark = SparkSession(sc)  # Instantiate the underlying SQLContext
+        new_sql_context = spark._wrapped
+
+        self.assertIsNot(new_sql_context, sql_context)
+        self.assertIs(SQLContext.getOrCreate(sc).sparkSession, spark)
+        try:
+            df = spark.createDataFrame([(1, 2)], ['c', 'c'])
+            df.collect()
+        finally:
+            spark.stop()
+            self.assertIsNone(SQLContext._instantiatedContext)
+            sc.stop()
+
+    def test_sqlcontext_with_stopped_sparkcontext(self):
+        # SPARK-30856: test initialization via SparkSession when only the SparkContext is stopped
+        self.sc.stop()
+        self.sc = SparkContext('local[4]', self.sc.appName)
+        self.spark = SparkSession(self.sc)
+        self.assertIs(SQLContext.getOrCreate(self.sc).sparkSession, self.spark)
+
+    def test_get_sqlcontext_with_stopped_sparkcontext(self):
+        # SPARK-30856: test initialization via SQLContext.getOrCreate() when only the SparkContext
+        # is stopped
+        self.sc.stop()
+        self.sc = SparkContext('local[4]', self.sc.appName)
+        self.assertIs(SQLContext.getOrCreate(self.sc)._sc, self.sc)
+
+
 class SparkSessionBuilderTests(unittest.TestCase):
 
     def test_create_spark_context_first_then_spark_session(self):

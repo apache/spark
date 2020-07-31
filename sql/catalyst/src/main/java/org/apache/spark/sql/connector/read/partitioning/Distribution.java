@@ -36,6 +36,8 @@ import org.apache.spark.sql.connector.read.PartitionReader;
  * <ul>
  *   <li>{@link ClusteredDistribution}</li>
  * </ul>
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface Distribution {}

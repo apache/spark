@@ -2,37 +2,37 @@
 -- Number of queries: 4
 
 
--- !query 0
+-- !query
 select max(min(unique1)) from tenk1
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.;
 
 
--- !query 1
+-- !query
 select min(unique1) filter (where unique1 > 100) from tenk1
--- !query 1 schema
-struct<min(unique1):int>
--- !query 1 output
+-- !query schema
+struct<min(unique1) FILTER (WHERE (unique1 > 100)):int>
+-- !query output
 101
 
 
--- !query 2
+-- !query
 select sum(1/ten) filter (where ten > 0) from tenk1
--- !query 2 schema
-struct<sum((CAST(1 AS DOUBLE) / CAST(ten AS DOUBLE))):double>
--- !query 2 output
+-- !query schema
+struct<sum((CAST(1 AS DOUBLE) / CAST(ten AS DOUBLE))) FILTER (WHERE (ten > 0)):double>
+-- !query output
 2828.9682539682954
 
 
--- !query 3
+-- !query
 select (select count(*)
         from (values (1)) t0(inner_c))
 from (values (2),(3)) t1(outer_c)
--- !query 3 schema
+-- !query schema
 struct<scalarsubquery():bigint>
--- !query 3 output
+-- !query output
 1
 1

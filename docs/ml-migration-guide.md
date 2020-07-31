@@ -32,9 +32,37 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 {:.no_toc}
 
 * `OneHotEncoder` which is deprecated in 2.3, is removed in 3.0 and `OneHotEncoderEstimator` is now renamed to `OneHotEncoder`.
+* `org.apache.spark.ml.image.ImageSchema.readImages` which is deprecated in 2.3, is removed in 3.0, use `spark.read.format('image')` instead.
+* `org.apache.spark.mllib.clustering.KMeans.train` with param Int `runs` which is deprecated in 2.1, is removed in 3.0. Use `train` method without `runs` instead.
+* `org.apache.spark.mllib.classification.LogisticRegressionWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.classification.LogisticRegression` or `spark.mllib.classification.LogisticRegressionWithLBFGS` instead.
+* `org.apache.spark.mllib.feature.ChiSqSelectorModel.isSorted ` which is deprecated in 2.1, is removed in 3.0, is not intended for subclasses to use.
+* `org.apache.spark.mllib.regression.RidgeRegressionWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.regression.LinearRegression` with `elasticNetParam` = 0.0. Note the default `regParam` is 0.01 for `RidgeRegressionWithSGD`, but is 0.0 for `LinearRegression`.
+* `org.apache.spark.mllib.regression.LassoWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.regression.LinearRegression` with `elasticNetParam` = 1.0. Note the default `regParam` is 0.01 for `LassoWithSGD`, but is 0.0 for `LinearRegression`.
+* `org.apache.spark.mllib.regression.LinearRegressionWithSGD` which is deprecated in 2.0, is removed in 3.0, use `org.apache.spark.ml.regression.LinearRegression` or `LBFGS` instead.
+* `org.apache.spark.mllib.clustering.KMeans.getRuns` and `setRuns` which are deprecated in 2.1, are removed in 3.0, have no effect since Spark 2.0.0.
+* `org.apache.spark.ml.LinearSVCModel.setWeightCol` which is deprecated in 2.4, is removed in 3.0, is not intended for users.
+* From 3.0, `org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel` extends `MultilayerPerceptronParams` to expose the training params. As a result, `layers` in `MultilayerPerceptronClassificationModel` has been changed from `Array[Int]` to `IntArrayParam`. Users should use `MultilayerPerceptronClassificationModel.getLayers` instead of `MultilayerPerceptronClassificationModel.layers` to retrieve the size of layers.
+* `org.apache.spark.ml.classification.GBTClassifier.numTrees`  which is deprecated in 2.4.5, is removed in 3.0, use `getNumTrees` instead.
+* `org.apache.spark.ml.clustering.KMeansModel.computeCost` which is deprecated in 2.4, is removed in 3.0, use `ClusteringEvaluator` instead.
+* The member variable `precision` in `org.apache.spark.mllib.evaluation.MulticlassMetrics` which is deprecated in 2.0, is removed in 3.0. Use `accuracy` instead.
+* The member variable `recall` in `org.apache.spark.mllib.evaluation.MulticlassMetrics` which is deprecated in 2.0, is removed in 3.0. Use `accuracy` instead.
+* The member variable `fMeasure` in `org.apache.spark.mllib.evaluation.MulticlassMetrics` which is deprecated in 2.0, is removed in 3.0. Use `accuracy` instead.
+* `org.apache.spark.ml.util.GeneralMLWriter.context` which is deprecated in 2.0, is removed in 3.0, use `session` instead.
+* `org.apache.spark.ml.util.MLWriter.context` which is deprecated in 2.0, is removed in 3.0, use `session` instead.
+* `org.apache.spark.ml.util.MLReader.context` which is deprecated in 2.0, is removed in 3.0, use `session` instead.
+* `abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]` is changed to `abstract class UnaryTransformer[IN: TypeTag, OUT: TypeTag, T <: UnaryTransformer[IN, OUT, T]]` in 3.0.
 
-### Changes of behavior
+### Deprecations and changes of behavior
 {:.no_toc}
+
+**Deprecations**
+
+* [SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215):
+`labels` in `StringIndexerModel` is deprecated and will be removed in 3.1.0. Use `labelsArray` instead.
+* [SPARK-25758](https://issues.apache.org/jira/browse/SPARK-25758):
+`computeCost` in `BisectingKMeansModel` is deprecated and will be removed in future versions. Use `ClusteringEvaluator` instead.
+
+**Changes of behavior**
 
 * [SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215):
  In Spark 2.4 and previous versions, when specifying `frequencyDesc` or `frequencyAsc` as
@@ -42,6 +70,28 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
  strings is undefined. Since Spark 3.0, the strings with equal frequency are further
  sorted by alphabet. And since Spark 3.0, `StringIndexer` supports encoding multiple
  columns.
+ * [SPARK-20604](https://issues.apache.org/jira/browse/SPARK-20604):
+ In prior to 3.0 releases, `Imputer` requires input column to be Double or Float. In 3.0, this
+ restriction is lifted so `Imputer` can handle all numeric types.
+* [SPARK-23469](https://issues.apache.org/jira/browse/SPARK-23469):
+In Spark 3.0, the `HashingTF` Transformer uses a corrected implementation of the murmur3 hash
+function to hash elements to vectors. `HashingTF` in Spark 3.0 will map elements to
+different positions in vectors than in Spark 2. However, `HashingTF` created with Spark 2.x
+and loaded with Spark 3.0 will still use the previous hash function and will not change behavior.
+* [SPARK-28969](https://issues.apache.org/jira/browse/SPARK-28969):
+The `setClassifier` method in PySpark's `OneVsRestModel` has been removed in 3.0 for parity with
+the Scala implementation. Callers should not need to set the classifier in the model after
+creation.
+* [SPARK-25790](https://issues.apache.org/jira/browse/SPARK-25790):
+ PCA adds the support for more than 65535 column matrix in Spark 3.0.
+* [SPARK-28927](https://issues.apache.org/jira/browse/SPARK-28927):
+ When fitting ALS model on nondeterministic input data, previously if rerun happens, users
+ would see ArrayIndexOutOfBoundsException caused by mismatch between In/Out user/item blocks.
+ From 3.0, a SparkException with more clear message will be thrown, and original
+ ArrayIndexOutOfBoundsException is wrapped.
+* [SPARK-29232](https://issues.apache.org/jira/browse/SPARK-29232):
+ In prior to 3.0 releases, `RandomForestRegressionModel` doesn't update the parameter maps
+ of the DecisionTreeRegressionModels underneath. This is fixed in 3.0.
 
 ## Upgrading from MLlib 2.2 to 2.3
 
@@ -186,7 +236,7 @@ val mlVec: org.apache.spark.ml.linalg.Vector = mllibVec.asML
 val mlMat: org.apache.spark.ml.linalg.Matrix = mllibMat.asML
 {% endhighlight %}
 
-Refer to the [`MLUtils` Scala docs](api/scala/index.html#org.apache.spark.mllib.util.MLUtils$) for further detail.
+Refer to the [`MLUtils` Scala docs](api/scala/org/apache/spark/mllib/util/MLUtils$.html) for further detail.
 </div>
 
 <div data-lang="java" markdown="1">
@@ -340,9 +390,9 @@ In the `spark.ml` package, there exists one breaking API change and one behavior
 In the `spark.mllib` package, there were several breaking changes, but all in `DeveloperApi` or `Experimental` APIs:
 
 * Gradient-Boosted Trees
-    * *(Breaking change)* The signature of the [`Loss.gradient`](api/scala/index.html#org.apache.spark.mllib.tree.loss.Loss) method was changed.  This is only an issues for users who wrote their own losses for GBTs.
-    * *(Breaking change)* The `apply` and `copy` methods for the case class [`BoostingStrategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.BoostingStrategy) have been changed because of a modification to the case class fields.  This could be an issue for users who use `BoostingStrategy` to set GBT parameters.
-* *(Breaking change)* The return value of [`LDA.run`](api/scala/index.html#org.apache.spark.mllib.clustering.LDA) has changed.  It now returns an abstract class `LDAModel` instead of the concrete class `DistributedLDAModel`.  The object of type `LDAModel` can still be cast to the appropriate concrete type, which depends on the optimization algorithm.
+    * *(Breaking change)* The signature of the [`Loss.gradient`](api/scala/org/apache/spark/mllib/tree/loss/Loss.html) method was changed.  This is only an issues for users who wrote their own losses for GBTs.
+    * *(Breaking change)* The `apply` and `copy` methods for the case class [`BoostingStrategy`](api/scala/org/apache/spark/mllib/tree/configuration/BoostingStrategy.html) have been changed because of a modification to the case class fields.  This could be an issue for users who use `BoostingStrategy` to set GBT parameters.
+* *(Breaking change)* The return value of [`LDA.run`](api/scala/org/apache/spark/mllib/clustering/LDA.html) has changed.  It now returns an abstract class `LDAModel` instead of the concrete class `DistributedLDAModel`.  The object of type `LDAModel` can still be cast to the appropriate concrete type, which depends on the optimization algorithm.
 
 In the `spark.ml` package, several major API changes occurred, including:
 
@@ -358,12 +408,12 @@ changes for future releases.
 
 In the `spark.mllib` package, there were several breaking changes.  The first change (in `ALS`) is the only one in a component not marked as Alpha or Experimental.
 
-* *(Breaking change)* In [`ALS`](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS), the extraneous method `solveLeastSquares` has been removed.  The `DeveloperApi` method `analyzeBlocks` was also removed.
-* *(Breaking change)* [`StandardScalerModel`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScalerModel) remains an Alpha component. In it, the `variance` method has been replaced with the `std` method.  To compute the column variance values returned by the original `variance` method, simply square the standard deviation values returned by `std`.
-* *(Breaking change)* [`StreamingLinearRegressionWithSGD`](api/scala/index.html#org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD) remains an Experimental component.  In it, there were two changes:
+* *(Breaking change)* In [`ALS`](api/scala/org/apache/spark/mllib/recommendation/ALS.html), the extraneous method `solveLeastSquares` has been removed.  The `DeveloperApi` method `analyzeBlocks` was also removed.
+* *(Breaking change)* [`StandardScalerModel`](api/scala/org/apache/spark/mllib/feature/StandardScalerModel.html) remains an Alpha component. In it, the `variance` method has been replaced with the `std` method.  To compute the column variance values returned by the original `variance` method, simply square the standard deviation values returned by `std`.
+* *(Breaking change)* [`StreamingLinearRegressionWithSGD`](api/scala/org/apache/spark/mllib/regression/StreamingLinearRegressionWithSGD.html) remains an Experimental component.  In it, there were two changes:
     * The constructor taking arguments was removed in favor of a builder pattern using the default constructor plus parameter setter methods.
     * Variable `model` is no longer public.
-* *(Breaking change)* [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) remains an Experimental component.  In it and its associated classes, there were several changes:
+* *(Breaking change)* [`DecisionTree`](api/scala/org/apache/spark/mllib/tree/DecisionTree.html) remains an Experimental component.  In it and its associated classes, there were several changes:
     * In `DecisionTree`, the deprecated class method `train` has been removed.  (The object/static `train` methods remain.)
     * In `Strategy`, the `checkpointDir` parameter has been removed.  Checkpointing is still supported, but the checkpoint directory must be set before calling tree and tree ensemble training.
 * `PythonMLlibAPI` (the interface between Scala/Java and Python for MLlib) was a public API but is now private, declared `private[python]`.  This was never meant for external use.
@@ -372,31 +422,31 @@ In the `spark.mllib` package, there were several breaking changes.  The first ch
 
 In the `spark.ml` package, the main API changes are from Spark SQL.  We list the most important changes here:
 
-* The old [SchemaRDD](https://spark.apache.org/docs/1.2.1/api/scala/index.html#org.apache.spark.sql.SchemaRDD) has been replaced with [DataFrame](api/scala/index.html#org.apache.spark.sql.DataFrame) with a somewhat modified API.  All algorithms in `spark.ml` which used to use SchemaRDD now use DataFrame.
+* The old [SchemaRDD](https://spark.apache.org/docs/1.2.1/api/scala/index.html#org.apache.spark.sql.SchemaRDD) has been replaced with [DataFrame](api/scala/org/apache/spark/sql/DataFrame.html) with a somewhat modified API.  All algorithms in `spark.ml` which used to use SchemaRDD now use DataFrame.
 * In Spark 1.2, we used implicit conversions from `RDD`s of `LabeledPoint` into `SchemaRDD`s by calling `import sqlContext._` where `sqlContext` was an instance of `SQLContext`.  These implicits have been moved, so we now call `import sqlContext.implicits._`.
 * Java APIs for SQL have also changed accordingly.  Please see the examples above and the [Spark SQL Programming Guide](sql-programming-guide.html) for details.
 
 Other changes were in `LogisticRegression`:
 
 * The `scoreCol` output column (with default value "score") was renamed to be `probabilityCol` (with default value "probability").  The type was originally `Double` (for the probability of class 1.0), but it is now `Vector` (for the probability of each class, to support multiclass classification in the future).
-* In Spark 1.2, `LogisticRegressionModel` did not include an intercept.  In Spark 1.3, it includes an intercept; however, it will always be 0.0 since it uses the default settings for [spark.mllib.LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS).  The option to use an intercept will be added in the future.
+* In Spark 1.2, `LogisticRegressionModel` did not include an intercept.  In Spark 1.3, it includes an intercept; however, it will always be 0.0 since it uses the default settings for [spark.mllib.LogisticRegressionWithLBFGS](api/scala/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html).  The option to use an intercept will be added in the future.
 
 ## Upgrading from MLlib 1.1 to 1.2
 
 The only API changes in MLlib v1.2 are in
-[`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
+[`DecisionTree`](api/scala/org/apache/spark/mllib/tree/DecisionTree.html),
 which continues to be an experimental API in MLlib 1.2:
 
 1. *(Breaking change)* The Scala API for classification takes a named argument specifying the number
 of classes.  In MLlib v1.1, this argument was called `numClasses` in Python and
 `numClassesForClassification` in Scala.  In MLlib v1.2, the names are both set to `numClasses`.
 This `numClasses` parameter is specified either via
-[`Strategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.Strategy)
-or via [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree)
+[`Strategy`](api/scala/org/apache/spark/mllib/tree/configuration/Strategy.html)
+or via [`DecisionTree`](api/scala/org/apache/spark/mllib/tree/DecisionTree.html)
 static `trainClassifier` and `trainRegressor` methods.
 
 2. *(Breaking change)* The API for
-[`Node`](api/scala/index.html#org.apache.spark.mllib.tree.model.Node) has changed.
+[`Node`](api/scala/org/apache/spark/mllib/tree/model/Node.html) has changed.
 This should generally not affect user code, unless the user manually constructs decision trees
 (instead of using the `trainClassifier` or `trainRegressor` methods).
 The tree `Node` now includes more information, including the probability of the predicted label
@@ -410,7 +460,7 @@ Examples in the Spark distribution and examples in the
 ## Upgrading from MLlib 1.0 to 1.1
 
 The only API changes in MLlib v1.1 are in
-[`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
+[`DecisionTree`](api/scala/org/apache/spark/mllib/tree/DecisionTree.html),
 which continues to be an experimental API in MLlib 1.1:
 
 1. *(Breaking change)* The meaning of tree depth has been changed by 1 in order to match
@@ -420,12 +470,12 @@ and in [rpart](http://cran.r-project.org/web/packages/rpart/index.html).
 In MLlib v1.0, a depth-1 tree had 1 leaf node, and a depth-2 tree had 1 root node and 2 leaf nodes.
 In MLlib v1.1, a depth-0 tree has 1 leaf node, and a depth-1 tree has 1 root node and 2 leaf nodes.
 This depth is specified by the `maxDepth` parameter in
-[`Strategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.Strategy)
-or via [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree)
+[`Strategy`](api/scala/org/apache/spark/mllib/tree/configuration/Strategy.html)
+or via [`DecisionTree`](api/scala/org/apache/spark/mllib/tree/DecisionTree.html)
 static `trainClassifier` and `trainRegressor` methods.
 
 2. *(Non-breaking change)* We recommend using the newly added `trainClassifier` and `trainRegressor`
-methods to build a [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
+methods to build a [`DecisionTree`](api/scala/org/apache/spark/mllib/tree/DecisionTree.html),
 rather than using the old parameter class `Strategy`.  These new training methods explicitly
 separate classification and regression, and they replace specialized parameter types with
 simple `String` types.

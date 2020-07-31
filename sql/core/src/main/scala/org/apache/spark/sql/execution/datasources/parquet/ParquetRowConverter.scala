@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
-import java.util.TimeZone
+import java.time.{ZoneId, ZoneOffset}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -33,8 +33,10 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -118,14 +120,17 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * @param parquetType Parquet schema of Parquet records
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type. User-defined
  *        types should have been expanded.
- * @param convertTz the optional time zone to convert to for int96 data
+ * @param convertTz the optional time zone to convert to int96 data
+ * @param datetimeRebaseMode the mode of rebasing date/timestamp from Julian to Proleptic Gregorian
+ *                           calendar
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetToSparkSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
-    convertTz: Option[TimeZone],
+    convertTz: Option[ZoneId],
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -154,8 +159,6 @@ private[parquet] class ParquetRowConverter(
        |${catalystType.prettyJson}
      """.stripMargin)
 
-  private val UTC = DateTimeUtils.TimeZoneUTC
-
   /**
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
    * converted filed values to the `ordinal`-th cell in `currentRow`.
@@ -171,29 +174,45 @@ private[parquet] class ParquetRowConverter(
     override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
   }
 
-  private val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
+  private[this] val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
 
   /**
    * The [[InternalRow]] converted from an entire Parquet record.
    */
   def currentRecord: InternalRow = currentRow
 
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
+    datetimeRebaseMode, "Parquet")
+
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+    datetimeRebaseMode, "Parquet")
+
   // Converters for each field.
-  private val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
+  private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
+    // (SPARK-31116) Use case insensitive map if spark.sql.caseSensitive is false
+    // to prevent throwing IllegalArgumentException when searching catalyst type's field index
+    val catalystFieldNameToIndex = if (SQLConf.get.caseSensitiveAnalysis) {
+      catalystType.fieldNames.zipWithIndex.toMap
+    } else {
+      CaseInsensitiveMap(catalystType.fieldNames.zipWithIndex.toMap)
+    }
     parquetType.getFields.asScala.map { parquetField =>
-      val fieldIndex = catalystType.fieldIndex(parquetField.getName)
+      val fieldIndex = catalystFieldNameToIndex(parquetField.getName)
       val catalystField = catalystType(fieldIndex)
       // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
       newConverter(parquetField, catalystField.dataType, new RowUpdater(currentRow, fieldIndex))
     }.toArray
   }
 
+  // Updaters for each field.
+  private[this] val fieldUpdaters: Array[ParentContainerUpdater] = fieldConverters.map(_.updater)
+
   override def getConverter(fieldIndex: Int): Converter = fieldConverters(fieldIndex)
 
   override def end(): Unit = {
     var i = 0
-    while (i < fieldConverters.length) {
-      fieldConverters(i).updater.end()
+    while (i < fieldUpdaters.length) {
+      fieldUpdaters(i).end()
       i += 1
     }
     updater.set(currentRow)
@@ -201,13 +220,14 @@ private[parquet] class ParquetRowConverter(
 
   override def start(): Unit = {
     var i = 0
-    while (i < currentRow.numFields) {
+    val numFields = currentRow.numFields
+    while (i < numFields) {
       currentRow.setNullAt(i)
       i += 1
     }
     i = 0
-    while (i < fieldConverters.length) {
-      fieldConverters(i).updater.start()
+    while (i < fieldUpdaters.length) {
+      fieldUpdaters(i).start()
       i += 1
     }
   }
@@ -263,14 +283,15 @@ private[parquet] class ParquetRowConverter(
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MICROS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(value)
+            updater.setLong(timestampRebaseFunc(value))
           }
         }
 
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(DateTimeUtils.fromMillis(value))
+            val micros = DateTimeUtils.millisToMicros(value)
+            updater.setLong(timestampRebaseFunc(micros))
           }
         }
 
@@ -288,7 +309,8 @@ private[parquet] class ParquetRowConverter(
             val timeOfDayNanos = buf.getLong
             val julianDay = buf.getInt
             val rawTime = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
-            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, UTC)).getOrElse(rawTime)
+            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, ZoneOffset.UTC))
+              .getOrElse(rawTime)
             updater.setLong(adjTime)
           }
         }
@@ -296,8 +318,7 @@ private[parquet] class ParquetRowConverter(
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
-            // DateType is not specialized in `SpecificMutableRow`, have to box it here.
-            updater.set(value.asInstanceOf[DateType#InternalType])
+            updater.set(dateRebaseFunc(value))
           }
         }
 
@@ -318,10 +339,39 @@ private[parquet] class ParquetRowConverter(
         new ParquetMapConverter(parquetType.asGroupType(), t, updater)
 
       case t: StructType =>
+        val wrappedUpdater = {
+          // SPARK-30338: avoid unnecessary InternalRow copying for nested structs:
+          // There are two cases to handle here:
+          //
+          //  1. Parent container is a map or array: we must make a deep copy of the mutable row
+          //     because this converter may be invoked multiple times per Parquet input record
+          //     (if the map or array contains multiple elements).
+          //
+          //  2. Parent container is a struct: we don't need to copy the row here because either:
+          //
+          //     (a) all ancestors are structs and therefore no copying is required because this
+          //         converter will only be invoked once per Parquet input record, or
+          //     (b) some ancestor is struct that is nested in a map or array and that ancestor's
+          //         converter will perform deep-copying (which will recursively copy this row).
+          if (updater.isInstanceOf[RowUpdater]) {
+            // `updater` is a RowUpdater, implying that the parent container is a struct.
+            updater
+          } else {
+            // `updater` is NOT a RowUpdater, implying that the parent container a map or array.
+            new ParentContainerUpdater {
+              override def set(value: Any): Unit = {
+                updater.set(value.asInstanceOf[SpecificInternalRow].copy())  // deep copy
+              }
+            }
+          }
+        }
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, convertTz, new ParentContainerUpdater {
-            override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
-          })
+          schemaConverter,
+          parquetType.asGroupType(),
+          t,
+          convertTz,
+          datetimeRebaseMode,
+          wrappedUpdater)
 
       case t =>
         throw new RuntimeException(
@@ -464,9 +514,9 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater)
     extends ParquetGroupConverter(updater) {
 
-    private var currentArray: ArrayBuffer[Any] = _
+    private[this] val currentArray = ArrayBuffer.empty[Any]
 
-    private val elementConverter: Converter = {
+    private[this] val elementConverter: Converter = {
       val repeatedType = parquetSchema.getType(0)
       val elementType = catalystSchema.elementType
 
@@ -517,10 +567,7 @@ private[parquet] class ParquetRowConverter(
 
     override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
 
-    // NOTE: We can't reuse the mutable `ArrayBuffer` here and must instantiate a new buffer for the
-    // next value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored
-    // in row cells.
-    override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
+    override def start(): Unit = currentArray.clear()
 
     /** Array element converter */
     private final class ElementConverter(parquetType: Type, catalystType: DataType)
@@ -528,9 +575,10 @@ private[parquet] class ParquetRowConverter(
 
       private var currentElement: Any = _
 
-      private val converter = newConverter(parquetType, catalystType, new ParentContainerUpdater {
-        override def set(value: Any): Unit = currentElement = value
-      })
+      private[this] val converter =
+        newConverter(parquetType, catalystType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentElement = value
+        })
 
       override def getConverter(fieldIndex: Int): Converter = converter
 
@@ -547,10 +595,10 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater)
     extends ParquetGroupConverter(updater) {
 
-    private var currentKeys: ArrayBuffer[Any] = _
-    private var currentValues: ArrayBuffer[Any] = _
+    private[this] val currentKeys = ArrayBuffer.empty[Any]
+    private[this] val currentValues = ArrayBuffer.empty[Any]
 
-    private val keyValueConverter = {
+    private[this] val keyValueConverter = {
       val repeatedType = parquetType.getType(0).asGroupType()
       new KeyValueConverter(
         repeatedType.getType(0),
@@ -565,15 +613,15 @@ private[parquet] class ParquetRowConverter(
       // The parquet map may contains null or duplicated map keys. When it happens, the behavior is
       // undefined.
       // TODO (SPARK-26174): disallow it with a config.
-      updater.set(ArrayBasedMapData(currentKeys.toArray, currentValues.toArray))
+      updater.set(
+        new ArrayBasedMapData(
+          new GenericArrayData(currentKeys.toArray),
+          new GenericArrayData(currentValues.toArray)))
     }
 
-    // NOTE: We can't reuse the mutable Map here and must instantiate a new `Map` for the next
-    // value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored in row
-    // cells.
     override def start(): Unit = {
-      currentKeys = ArrayBuffer.empty[Any]
-      currentValues = ArrayBuffer.empty[Any]
+      currentKeys.clear()
+      currentValues.clear()
     }
 
     /** Parquet converter for key-value pairs within the map. */
@@ -588,7 +636,7 @@ private[parquet] class ParquetRowConverter(
 
       private var currentValue: Any = _
 
-      private val converters = Array(
+      private[this] val converters = Array(
         // Converter for keys
         newConverter(parquetKeyType, catalystKeyType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentKey = value
@@ -614,10 +662,10 @@ private[parquet] class ParquetRowConverter(
   }
 
   private trait RepeatedConverter {
-    private var currentArray: ArrayBuffer[Any] = _
+    private[this] val currentArray = ArrayBuffer.empty[Any]
 
     protected def newArrayUpdater(updater: ParentContainerUpdater) = new ParentContainerUpdater {
-      override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
+      override def start(): Unit = currentArray.clear()
       override def end(): Unit = updater.set(new GenericArrayData(currentArray.toArray))
       override def set(value: Any): Unit = currentArray += value
     }
@@ -635,7 +683,7 @@ private[parquet] class ParquetRowConverter(
 
     val updater: ParentContainerUpdater = newArrayUpdater(parentUpdater)
 
-    private val elementConverter: PrimitiveConverter =
+    private[this] val elementConverter: PrimitiveConverter =
       newConverter(parquetType, catalystType, updater).asPrimitiveConverter()
 
     override def addBoolean(value: Boolean): Unit = elementConverter.addBoolean(value)
@@ -662,7 +710,7 @@ private[parquet] class ParquetRowConverter(
 
     val updater: ParentContainerUpdater = newArrayUpdater(parentUpdater)
 
-    private val elementConverter: GroupConverter =
+    private[this] val elementConverter: GroupConverter =
       newConverter(parquetType, catalystType, updater).asGroupConverter()
 
     override def getConverter(field: Int): Converter = elementConverter.getConverter(field)
@@ -694,7 +742,7 @@ private[parquet] object ParquetRowConverter {
     unscaled
   }
 
-  def binaryToSQLTimestamp(binary: Binary): SQLTimestamp = {
+  def binaryToSQLTimestamp(binary: Binary): Long = {
     assert(binary.length() == 12, s"Timestamps (with nanoseconds) are expected to be stored in" +
       s" 12-byte long binaries. Found a ${binary.length()}-byte binary instead.")
     val buffer = binary.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)

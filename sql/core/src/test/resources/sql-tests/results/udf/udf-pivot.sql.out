@@ -2,7 +2,7 @@
 -- Number of queries: 30
 
 
--- !query 0
+-- !query
 create temporary view courseSales as select * from values
   ("dotNET", 2012, 10000),
   ("Java", 2012, 20000),
@@ -10,35 +10,35 @@ create temporary view courseSales as select * from values
   ("dotNET", 2013, 48000),
   ("Java", 2013, 30000)
   as courseSales(course, year, earnings)
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 create temporary view years as select * from values
   (2012, 1),
   (2013, 2)
   as years(y, s)
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 create temporary view yearsWithComplexTypes as select * from values
   (2012, array(1, 1), map('1', 1), struct(1, 'a')),
   (2013, array(2, 2), map('2', 2), struct(2, 'b'))
   as yearsWithComplexTypes(y, a, m, s)
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 SELECT * FROM (
   SELECT udf(year), course, earnings FROM courseSales
 )
@@ -46,27 +46,27 @@ PIVOT (
   udf(sum(earnings))
   FOR course IN ('dotNET', 'Java')
 )
--- !query 3 schema
+-- !query schema
 struct<CAST(udf(cast(year as string)) AS INT):int,dotNET:bigint,Java:bigint>
--- !query 3 output
+-- !query output
 2012	15000	20000
 2013	48000	30000
 
 
--- !query 4
+-- !query
 SELECT * FROM courseSales
 PIVOT (
   udf(sum(earnings))
   FOR year IN (2012, 2013)
 )
--- !query 4 schema
+-- !query schema
 struct<course:string,2012:bigint,2013:bigint>
--- !query 4 output
+-- !query output
 Java	20000	30000
 dotNET	15000	48000
 
 
--- !query 5
+-- !query
 SELECT * FROM (
   SELECT year, course, earnings FROM courseSales
 )
@@ -74,14 +74,14 @@ PIVOT (
   udf(sum(earnings)), udf(avg(earnings))
   FOR course IN ('dotNET', 'Java')
 )
--- !query 5 schema
+-- !query schema
 struct<year:int,dotNET_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(avg(cast(earnings as bigint)) as string)) AS DOUBLE):double,Java_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(avg(cast(earnings as bigint)) as string)) AS DOUBLE):double>
--- !query 5 output
+-- !query output
 2012	15000	7500.0	20000	20000.0
 2013	48000	48000.0	30000	30000.0
 
 
--- !query 6
+-- !query
 SELECT * FROM (
   SELECT udf(course) as course, earnings FROM courseSales
 )
@@ -89,13 +89,13 @@ PIVOT (
   udf(sum(earnings))
   FOR course IN ('dotNET', 'Java')
 )
--- !query 6 schema
+-- !query schema
 struct<dotNET:bigint,Java:bigint>
--- !query 6 output
+-- !query output
 63000	50000
 
 
--- !query 7
+-- !query
 SELECT * FROM (
   SELECT year, course, earnings FROM courseSales
 )
@@ -103,13 +103,13 @@ PIVOT (
   udf(sum(udf(earnings))), udf(min(year))
   FOR course IN ('dotNET', 'Java')
 )
--- !query 7 schema
+-- !query schema
 struct<dotNET_CAST(udf(cast(sum(cast(cast(udf(cast(earnings as string)) as int) as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(min(year) as string)) AS INT):int,Java_CAST(udf(cast(sum(cast(cast(udf(cast(earnings as string)) as int) as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(min(year) as string)) AS INT):int>
--- !query 7 output
+-- !query output
 63000	2012	50000	2012
 
 
--- !query 8
+-- !query
 SELECT * FROM (
   SELECT course, year, earnings, udf(s) as s
   FROM courseSales
@@ -119,16 +119,16 @@ PIVOT (
   udf(sum(earnings))
   FOR s IN (1, 2)
 )
--- !query 8 schema
+-- !query schema
 struct<course:string,year:int,1:bigint,2:bigint>
--- !query 8 output
+-- !query output
 Java	2012	20000	NULL
 Java	2013	NULL	30000
 dotNET	2012	15000	NULL
 dotNET	2013	NULL	48000
 
 
--- !query 9
+-- !query
 SELECT * FROM (
   SELECT course, year, earnings, s
   FROM courseSales
@@ -138,14 +138,14 @@ PIVOT (
   udf(sum(earnings)), udf(min(s))
   FOR course IN ('dotNET', 'Java')
 )
--- !query 9 schema
+-- !query schema
 struct<year:int,dotNET_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(min(s) as string)) AS INT):int,Java_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(min(s) as string)) AS INT):int>
--- !query 9 output
+-- !query output
 2012	15000	1	20000	1
 2013	48000	2	30000	2
 
 
--- !query 10
+-- !query
 SELECT * FROM (
   SELECT course, year, earnings, s
   FROM courseSales
@@ -155,14 +155,14 @@ PIVOT (
   udf(sum(earnings * s))
   FOR course IN ('dotNET', 'Java')
 )
--- !query 10 schema
+-- !query schema
 struct<year:int,dotNET:bigint,Java:bigint>
--- !query 10 output
+-- !query output
 2012	15000	20000
 2013	96000	60000
 
 
--- !query 11
+-- !query
 SELECT 2012_s, 2013_s, 2012_a, 2013_a, c FROM (
   SELECT year y, course c, earnings e FROM courseSales
 )
@@ -170,14 +170,14 @@ PIVOT (
   udf(sum(e)) s, udf(avg(e)) a
   FOR y IN (2012, 2013)
 )
--- !query 11 schema
+-- !query schema
 struct<2012_s:bigint,2013_s:bigint,2012_a:double,2013_a:double,c:string>
--- !query 11 output
+-- !query output
 15000	48000	7500.0	48000.0	dotNET
 20000	30000	20000.0	30000.0	Java
 
 
--- !query 12
+-- !query
 SELECT firstYear_s, secondYear_s, firstYear_a, secondYear_a, c FROM (
   SELECT year y, course c, earnings e FROM courseSales
 )
@@ -185,27 +185,27 @@ PIVOT (
   udf(sum(e)) s, udf(avg(e)) a
   FOR y IN (2012 as firstYear, 2013 secondYear)
 )
--- !query 12 schema
+-- !query schema
 struct<firstYear_s:bigint,secondYear_s:bigint,firstYear_a:double,secondYear_a:double,c:string>
--- !query 12 output
+-- !query output
 15000	48000	7500.0	48000.0	dotNET
 20000	30000	20000.0	30000.0	Java
 
 
--- !query 13
+-- !query
 SELECT * FROM courseSales
 PIVOT (
   udf(abs(earnings))
   FOR year IN (2012, 2013)
 )
--- !query 13 schema
+-- !query schema
 struct<>
--- !query 13 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Aggregate expression required for pivot, but 'coursesales.`earnings`' did not appear in any aggregate function.;
 
 
--- !query 14
+-- !query
 SELECT * FROM (
   SELECT year, course, earnings FROM courseSales
 )
@@ -213,14 +213,14 @@ PIVOT (
   udf(sum(earnings)), year
   FOR course IN ('dotNET', 'Java')
 )
--- !query 14 schema
+-- !query schema
 struct<>
--- !query 14 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Aggregate expression required for pivot, but '__auto_generated_subquery_name.`year`' did not appear in any aggregate function.;
 
 
--- !query 15
+-- !query
 SELECT * FROM (
   SELECT course, earnings FROM courseSales
 )
@@ -228,14 +228,14 @@ PIVOT (
   udf(sum(earnings))
   FOR year IN (2012, 2013)
 )
--- !query 15 schema
+-- !query schema
 struct<>
--- !query 15 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '`year`' given input columns: [__auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings]; line 4 pos 0
 
 
--- !query 16
+-- !query
 SELECT * FROM (
   SELECT year, course, earnings FROM courseSales
 )
@@ -243,14 +243,14 @@ PIVOT (
   udf(ceil(udf(sum(earnings)))), avg(earnings) + 1 as a1
   FOR course IN ('dotNET', 'Java')
 )
--- !query 16 schema
+-- !query schema
 struct<year:int,dotNET_CAST(udf(cast(CEIL(cast(udf(cast(sum(cast(earnings as bigint)) as string)) as bigint)) as string)) AS BIGINT):bigint,dotNET_a1:double,Java_CAST(udf(cast(CEIL(cast(udf(cast(sum(cast(earnings as bigint)) as string)) as bigint)) as string)) AS BIGINT):bigint,Java_a1:double>
--- !query 16 output
+-- !query output
 2012	15000	7501.0	20000	20001.0
 2013	48000	48001.0	30000	30001.0
 
 
--- !query 17
+-- !query
 SELECT * FROM (
   SELECT year, course, earnings FROM courseSales
 )
@@ -258,14 +258,14 @@ PIVOT (
   sum(udf(avg(earnings)))
   FOR course IN ('dotNET', 'Java')
 )
--- !query 17 schema
+-- !query schema
 struct<>
--- !query 17 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.;
 
 
--- !query 18
+-- !query
 SELECT * FROM (
   SELECT course, year, earnings, s
   FROM courseSales
@@ -275,14 +275,14 @@ PIVOT (
   udf(sum(earnings))
   FOR (course, year) IN (('dotNET', 2012), ('Java', 2013))
 )
--- !query 18 schema
+-- !query schema
 struct<s:int,[dotNET, 2012]:bigint,[Java, 2013]:bigint>
--- !query 18 output
+-- !query output
 1	15000	NULL
 2	NULL	30000
 
 
--- !query 19
+-- !query
 SELECT * FROM (
   SELECT course, year, earnings, s
   FROM courseSales
@@ -292,14 +292,14 @@ PIVOT (
   udf(sum(earnings))
   FOR (course, s) IN (('dotNET', 2) as c1, ('Java', 1) as c2)
 )
--- !query 19 schema
+-- !query schema
 struct<year:int,c1:bigint,c2:bigint>
--- !query 19 output
+-- !query output
 2012	NULL	20000
 2013	48000	NULL
 
 
--- !query 20
+-- !query
 SELECT * FROM (
   SELECT course, year, earnings, s
   FROM courseSales
@@ -309,40 +309,40 @@ PIVOT (
   udf(sum(earnings))
   FOR (course, year) IN ('dotNET', 'Java')
 )
--- !query 20 schema
+-- !query schema
 struct<>
--- !query 20 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Invalid pivot value 'dotNET': value data type string does not match pivot column data type struct<course:string,year:int>;
 
 
--- !query 21
+-- !query
 SELECT * FROM courseSales
 PIVOT (
   udf(sum(earnings))
   FOR year IN (s, 2013)
 )
--- !query 21 schema
+-- !query schema
 struct<>
--- !query 21 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '`s`' given input columns: [coursesales.course, coursesales.earnings, coursesales.year]; line 4 pos 15
 
 
--- !query 22
+-- !query
 SELECT * FROM courseSales
 PIVOT (
   udf(sum(earnings))
   FOR year IN (course, 2013)
 )
--- !query 22 schema
+-- !query schema
 struct<>
--- !query 22 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Literal expressions required for pivot values, found 'course#x';
 
 
--- !query 23
+-- !query
 SELECT * FROM (
   SELECT earnings, year, a
   FROM courseSales
@@ -352,14 +352,14 @@ PIVOT (
   udf(sum(earnings))
   FOR a IN (array(1, 1), array(2, 2))
 )
--- !query 23 schema
+-- !query schema
 struct<year:int,[1, 1]:bigint,[2, 2]:bigint>
--- !query 23 output
+-- !query output
 2012	35000	NULL
 2013	NULL	78000
 
 
--- !query 24
+-- !query
 SELECT * FROM (
   SELECT course, earnings, udf(year) as year, a
   FROM courseSales
@@ -369,14 +369,14 @@ PIVOT (
   udf(sum(earnings))
   FOR (course, a) IN (('dotNET', array(1, 1)), ('Java', array(2, 2)))
 )
--- !query 24 schema
+-- !query schema
 struct<year:int,[dotNET, [1, 1]]:bigint,[Java, [2, 2]]:bigint>
--- !query 24 output
+-- !query output
 2012	15000	NULL
 2013	NULL	30000
 
 
--- !query 25
+-- !query
 SELECT * FROM (
   SELECT earnings, year, s
   FROM courseSales
@@ -386,14 +386,14 @@ PIVOT (
   udf(sum(earnings))
   FOR s IN ((1, 'a'), (2, 'b'))
 )
--- !query 25 schema
+-- !query schema
 struct<year:int,[1, a]:bigint,[2, b]:bigint>
--- !query 25 output
+-- !query output
 2012	35000	NULL
 2013	NULL	78000
 
 
--- !query 26
+-- !query
 SELECT * FROM (
   SELECT course, earnings, year, s
   FROM courseSales
@@ -403,14 +403,14 @@ PIVOT (
   udf(sum(earnings))
   FOR (course, s) IN (('dotNET', (1, 'a')), ('Java', (2, 'b')))
 )
--- !query 26 schema
+-- !query schema
 struct<year:int,[dotNET, [1, a]]:bigint,[Java, [2, b]]:bigint>
--- !query 26 output
+-- !query output
 2012	15000	NULL
 2013	NULL	30000
 
 
--- !query 27
+-- !query
 SELECT * FROM (
   SELECT earnings, year, m
   FROM courseSales
@@ -420,14 +420,14 @@ PIVOT (
   udf(sum(earnings))
   FOR m IN (map('1', 1), map('2', 2))
 )
--- !query 27 schema
+-- !query schema
 struct<>
--- !query 27 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Invalid pivot column 'm#x'. Pivot columns must be comparable.;
 
 
--- !query 28
+-- !query
 SELECT * FROM (
   SELECT course, earnings, year, m
   FROM courseSales
@@ -437,14 +437,14 @@ PIVOT (
   udf(sum(earnings))
   FOR (course, m) IN (('dotNET', map('1', 1)), ('Java', map('2', 2)))
 )
--- !query 28 schema
+-- !query schema
 struct<>
--- !query 28 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.;
 
 
--- !query 29
+-- !query
 SELECT * FROM (
   SELECT course, earnings, udf("a") as a, udf("z") as z, udf("b") as b, udf("y") as y,
   udf("c") as c, udf("x") as x, udf("d") as d, udf("w") as w
@@ -454,7 +454,7 @@ PIVOT (
   udf(sum(Earnings))
   FOR Course IN ('dotNET', 'Java')
 )
--- !query 29 schema
+-- !query schema
 struct<a:string,z:string,b:string,y:string,c:string,x:string,d:string,w:string,dotNET:bigint,Java:bigint>
--- !query 29 output
+-- !query output
 a	z	b	y	c	x	d	w	63000	50000

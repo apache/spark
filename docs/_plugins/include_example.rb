@@ -54,9 +54,9 @@ module Jekyll
         puts(e.backtrace)
         exit 1
       end
-      code = select_lines(code)
+      code = select_lines(code).strip
 
-      formatter = Rouge::Formatters::HTML.new
+      formatter = Rouge::Formatters::HTMLPygments.new(Rouge::Formatters::HTML.new)
       lexer = Rouge::Lexer.find(@lang)
       rendered_code = formatter.format(lexer.lex(code))
 

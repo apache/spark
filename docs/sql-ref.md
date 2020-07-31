@@ -1,7 +1,8 @@
 ---
 layout: global
-title: Reference
-displayTitle: Reference
+title: SQL Reference
+redirect_from: /sql-reference
+displayTitle: SQL Reference
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,7 +20,21 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL is a Apache Spark's module for working with structured data.
-This guide is a reference for Structured Query Language (SQL) for Apache 
-Spark. This document describes the SQL constructs supported by Spark in detail
-along with usage examples when applicable.
+Spark SQL is Apache Spark's module for working with structured data. This guide is a reference for Structured Query Language (SQL) and includes syntax, semantics, keywords, and examples for common SQL usage. It contains information for the following topics:
+
+ * [ANSI Compliance](sql-ref-ansi-compliance.html)
+ * [Data Types](sql-ref-datatypes.html)
+ * [Datetime Pattern](sql-ref-datetime-pattern.html)
+ * [Functions](sql-ref-functions.html)
+   * [Built-in Functions](sql-ref-functions-builtin.html)
+   * [Scalar User-Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
+   * [User-Defined Aggregate Functions (UDAFs)](sql-ref-functions-udf-aggregate.html)
+   * [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
+ * [Identifiers](sql-ref-identifier.html)
+ * [Literals](sql-ref-literals.html)
+ * [Null Semanitics](sql-ref-null-semantics.html)
+ * [SQL Syntax](sql-ref-syntax.html)
+   * [DDL Statements](sql-ref-syntax-ddl.html)
+   * [DML Statements](sql-ref-syntax-dml.html)
+   * [Data Retrieval Statements](sql-ref-syntax-qry.html)
+   * [Auxiliary Statements](sql-ref-syntax-aux.html)

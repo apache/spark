@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumnStatement, DescribeTableStatement, LogicalPlan, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -199,20 +199,20 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual(s"$baseSql distribute by a, b",
       RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
         basePlan,
-        numPartitions = newConf.numShufflePartitions))
+        None))
     assertEqual(s"$baseSql distribute by a sort by b",
       Sort(SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
         global = false,
         RepartitionByExpression(UnresolvedAttribute("a") :: Nil,
           basePlan,
-          numPartitions = newConf.numShufflePartitions)))
+          None)))
     assertEqual(s"$baseSql cluster by a, b",
       Sort(SortOrder(UnresolvedAttribute("a"), Ascending) ::
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
         global = false,
         RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
           basePlan,
-          numPartitions = newConf.numShufflePartitions)))
+          None)))
   }
 
   test("pipeline concatenation") {

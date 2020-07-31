@@ -101,11 +101,12 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
+      int maxRetries = conf.maxIORetries();
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
           (blockIds1, listener1) -> {
             // Unless this client is closed.
             if (clientFactory != null) {
-              TransportClient client = clientFactory.createClient(host, port);
+              TransportClient client = clientFactory.createClient(host, port, maxRetries > 0);
               new OneForOneBlockFetcher(client, appId, execId,
                 blockIds1, listener1, conf, downloadFileManager).start();
             } else {
@@ -113,7 +114,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
             }
           };
 
-      int maxRetries = conf.maxIORetries();
       if (maxRetries > 0) {
         // Note this Fetcher will correctly handle maxRetries == 0; we avoid it just in case there's
         // a bug in this code. We should remove the if statement once we're sure of the stability.

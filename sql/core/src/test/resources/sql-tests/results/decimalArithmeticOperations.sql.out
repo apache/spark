@@ -2,334 +2,334 @@
 -- Number of queries: 40
 
 
--- !query 0
+-- !query
 CREATE TEMPORARY VIEW t AS SELECT 1.0 as a, 0.0 as b
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 select a / b from t
--- !query 1 schema
+-- !query schema
 struct<(CAST(a AS DECIMAL(2,1)) / CAST(b AS DECIMAL(2,1))):decimal(8,6)>
--- !query 1 output
+-- !query output
 NULL
 
 
--- !query 2
+-- !query
 select a % b from t
--- !query 2 schema
+-- !query schema
 struct<(CAST(a AS DECIMAL(2,1)) % CAST(b AS DECIMAL(2,1))):decimal(1,1)>
--- !query 2 output
+-- !query output
 NULL
 
 
--- !query 3
+-- !query
 select pmod(a, b) from t
--- !query 3 schema
+-- !query schema
 struct<pmod(CAST(a AS DECIMAL(2,1)), CAST(b AS DECIMAL(2,1))):decimal(1,1)>
--- !query 3 output
+-- !query output
 NULL
 
 
--- !query 4
+-- !query
 create table decimals_test(id int, a decimal(38,18), b decimal(38,18)) using parquet
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 insert into decimals_test values(1, 100.0, 999.0), (2, 12345.123, 12345.123),
   (3, 0.1234567891011, 1234.1), (4, 123456789123456789.0, 1.123456789123456789)
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 select id, a+b, a-b, a*b, a/b from decimals_test order by id
--- !query 6 schema
+-- !query schema
 struct<id:int,(a + b):decimal(38,17),(a - b):decimal(38,17),(a * b):decimal(38,6),(a / b):decimal(38,6)>
--- !query 6 output
+-- !query output
 1	1099.00000000000000000	-899.00000000000000000	99900.000000	0.100100
 2	24690.24600000000000000	0.00000000000000000	152402061.885129	1.000000
 3	1234.22345678910110000	-1233.97654321089890000	152.358023	0.000100
 4	123456789123456790.12345678912345679	123456789123456787.87654321087654321	138698367904130467.515623	109890109097814272.043109
 
 
--- !query 7
+-- !query
 select id, a*10, b/10 from decimals_test order by id
--- !query 7 schema
+-- !query schema
 struct<id:int,(CAST(a AS DECIMAL(38,18)) * CAST(CAST(10 AS DECIMAL(2,0)) AS DECIMAL(38,18))):decimal(38,15),(CAST(b AS DECIMAL(38,18)) / CAST(CAST(10 AS DECIMAL(2,0)) AS DECIMAL(38,18))):decimal(38,18)>
--- !query 7 output
+-- !query output
 1	1000.000000000000000	99.900000000000000000
 2	123451.230000000000000	1234.512300000000000000
 3	1.234567891011000	123.410000000000000000
 4	1234567891234567890.000000000000000	0.112345678912345679
 
 
--- !query 8
+-- !query
 select 10.3 * 3.0
--- !query 8 schema
+-- !query schema
 struct<(CAST(10.3 AS DECIMAL(3,1)) * CAST(3.0 AS DECIMAL(3,1))):decimal(6,2)>
--- !query 8 output
+-- !query output
 30.90
 
 
--- !query 9
+-- !query
 select 10.3000 * 3.0
--- !query 9 schema
+-- !query schema
 struct<(CAST(10.3000 AS DECIMAL(6,4)) * CAST(3.0 AS DECIMAL(6,4))):decimal(9,5)>
--- !query 9 output
+-- !query output
 30.90000
 
 
--- !query 10
+-- !query
 select 10.30000 * 30.0
--- !query 10 schema
+-- !query schema
 struct<(CAST(10.30000 AS DECIMAL(7,5)) * CAST(30.0 AS DECIMAL(7,5))):decimal(11,6)>
--- !query 10 output
+-- !query output
 309.000000
 
 
--- !query 11
+-- !query
 select 10.300000000000000000 * 3.000000000000000000
--- !query 11 schema
+-- !query schema
 struct<(CAST(10.300000000000000000 AS DECIMAL(20,18)) * CAST(3.000000000000000000 AS DECIMAL(20,18))):decimal(38,34)>
--- !query 11 output
+-- !query output
 30.9000000000000000000000000000000000
 
 
--- !query 12
+-- !query
 select 10.300000000000000000 * 3.0000000000000000000
--- !query 12 schema
+-- !query schema
 struct<(CAST(10.300000000000000000 AS DECIMAL(21,19)) * CAST(3.0000000000000000000 AS DECIMAL(21,19))):decimal(38,34)>
--- !query 12 output
+-- !query output
 30.9000000000000000000000000000000000
 
 
--- !query 13
+-- !query
 select 2.35E10 * 1.0
--- !query 13 schema
+-- !query schema
 struct<(2.35E10 * CAST(1.0 AS DOUBLE)):double>
--- !query 13 output
+-- !query output
 2.35E10
 
 
--- !query 14
+-- !query
 select (5e36BD + 0.1) + 5e36BD
--- !query 14 schema
-struct<(CAST((CAST(5E+36 AS DECIMAL(38,1)) + CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) + CAST(5E+36 AS DECIMAL(38,1))):decimal(38,1)>
--- !query 14 output
+-- !query schema
+struct<(CAST((CAST(5000000000000000000000000000000000000 AS DECIMAL(38,1)) + CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) + CAST(5000000000000000000000000000000000000 AS DECIMAL(38,1))):decimal(38,1)>
+-- !query output
 NULL
 
 
--- !query 15
+-- !query
 select (-4e36BD - 0.1) - 7e36BD
--- !query 15 schema
-struct<(CAST((CAST(-4E+36 AS DECIMAL(38,1)) - CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) - CAST(7E+36 AS DECIMAL(38,1))):decimal(38,1)>
--- !query 15 output
+-- !query schema
+struct<(CAST((CAST(-4000000000000000000000000000000000000 AS DECIMAL(38,1)) - CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) - CAST(7000000000000000000000000000000000000 AS DECIMAL(38,1))):decimal(38,1)>
+-- !query output
 NULL
 
 
--- !query 16
+-- !query
 select 12345678901234567890.0 * 12345678901234567890.0
--- !query 16 schema
+-- !query schema
 struct<(12345678901234567890.0 * 12345678901234567890.0):decimal(38,2)>
--- !query 16 output
+-- !query output
 NULL
 
 
--- !query 17
+-- !query
 select 1e35BD / 0.1
--- !query 17 schema
-struct<(CAST(1E+35 AS DECIMAL(37,1)) / CAST(0.1 AS DECIMAL(37,1))):decimal(38,6)>
--- !query 17 output
+-- !query schema
+struct<(CAST(100000000000000000000000000000000000 AS DECIMAL(37,1)) / CAST(0.1 AS DECIMAL(37,1))):decimal(38,6)>
+-- !query output
 NULL
 
 
--- !query 18
+-- !query
 select 1.2345678901234567890E30BD * 1.2345678901234567890E25BD
--- !query 18 schema
-struct<(CAST(1.2345678901234567890E+30 AS DECIMAL(25,-6)) * CAST(1.2345678901234567890E+25 AS DECIMAL(25,-6))):decimal(38,-17)>
--- !query 18 output
+-- !query schema
+struct<(CAST(1234567890123456789000000000000 AS DECIMAL(31,0)) * CAST(12345678901234567890000000 AS DECIMAL(31,0))):decimal(38,0)>
+-- !query output
 NULL
 
 
--- !query 19
+-- !query
 select 12345678912345678912345678912.1234567 + 9999999999999999999999999999999.12345
--- !query 19 schema
+-- !query schema
 struct<(CAST(12345678912345678912345678912.1234567 AS DECIMAL(38,6)) + CAST(9999999999999999999999999999999.12345 AS DECIMAL(38,6))):decimal(38,6)>
--- !query 19 output
+-- !query output
 10012345678912345678912345678911.246907
 
 
--- !query 20
+-- !query
 select 123456789123456789.1234567890 * 1.123456789123456789
--- !query 20 schema
+-- !query schema
 struct<(CAST(123456789123456789.1234567890 AS DECIMAL(36,18)) * CAST(1.123456789123456789 AS DECIMAL(36,18))):decimal(38,18)>
--- !query 20 output
+-- !query output
 138698367904130467.654320988515622621
 
 
--- !query 21
+-- !query
 select 12345678912345.123456789123 / 0.000000012345678
--- !query 21 schema
+-- !query schema
 struct<(CAST(12345678912345.123456789123 AS DECIMAL(29,15)) / CAST(1.2345678E-8 AS DECIMAL(29,15))):decimal(38,9)>
--- !query 21 output
+-- !query output
 1000000073899961059796.725866332
 
 
--- !query 22
+-- !query
 set spark.sql.decimalOperations.allowPrecisionLoss=false
--- !query 22 schema
+-- !query schema
 struct<key:string,value:string>
--- !query 22 output
+-- !query output
 spark.sql.decimalOperations.allowPrecisionLoss	false
 
 
--- !query 23
+-- !query
 select id, a+b, a-b, a*b, a/b from decimals_test order by id
--- !query 23 schema
+-- !query schema
 struct<id:int,(a + b):decimal(38,18),(a - b):decimal(38,18),(a * b):decimal(38,36),(a / b):decimal(38,18)>
--- !query 23 output
+-- !query output
 1	1099.000000000000000000	-899.000000000000000000	NULL	0.100100100100100100
 2	24690.246000000000000000	0.000000000000000000	NULL	1.000000000000000000
 3	1234.223456789101100000	-1233.976543210898900000	NULL	0.000100037913541123
 4	123456789123456790.123456789123456789	123456789123456787.876543210876543211	NULL	109890109097814272.043109406191131436
 
 
--- !query 24
+-- !query
 select id, a*10, b/10 from decimals_test order by id
--- !query 24 schema
+-- !query schema
 struct<id:int,(CAST(a AS DECIMAL(38,18)) * CAST(CAST(10 AS DECIMAL(2,0)) AS DECIMAL(38,18))):decimal(38,18),(CAST(b AS DECIMAL(38,18)) / CAST(CAST(10 AS DECIMAL(2,0)) AS DECIMAL(38,18))):decimal(38,19)>
--- !query 24 output
+-- !query output
 1	1000.000000000000000000	99.9000000000000000000
 2	123451.230000000000000000	1234.5123000000000000000
 3	1.234567891011000000	123.4100000000000000000
 4	1234567891234567890.000000000000000000	0.1123456789123456789
 
 
--- !query 25
+-- !query
 select 10.3 * 3.0
--- !query 25 schema
+-- !query schema
 struct<(CAST(10.3 AS DECIMAL(3,1)) * CAST(3.0 AS DECIMAL(3,1))):decimal(6,2)>
--- !query 25 output
+-- !query output
 30.90
 
 
--- !query 26
+-- !query
 select 10.3000 * 3.0
--- !query 26 schema
+-- !query schema
 struct<(CAST(10.3000 AS DECIMAL(6,4)) * CAST(3.0 AS DECIMAL(6,4))):decimal(9,5)>
--- !query 26 output
+-- !query output
 30.90000
 
 
--- !query 27
+-- !query
 select 10.30000 * 30.0
--- !query 27 schema
+-- !query schema
 struct<(CAST(10.30000 AS DECIMAL(7,5)) * CAST(30.0 AS DECIMAL(7,5))):decimal(11,6)>
--- !query 27 output
+-- !query output
 309.000000
 
 
--- !query 28
+-- !query
 select 10.300000000000000000 * 3.000000000000000000
--- !query 28 schema
+-- !query schema
 struct<(CAST(10.300000000000000000 AS DECIMAL(20,18)) * CAST(3.000000000000000000 AS DECIMAL(20,18))):decimal(38,36)>
--- !query 28 output
+-- !query output
 30.900000000000000000000000000000000000
 
 
--- !query 29
+-- !query
 select 10.300000000000000000 * 3.0000000000000000000
--- !query 29 schema
+-- !query schema
 struct<(CAST(10.300000000000000000 AS DECIMAL(21,19)) * CAST(3.0000000000000000000 AS DECIMAL(21,19))):decimal(38,37)>
--- !query 29 output
+-- !query output
 NULL
 
 
--- !query 30
+-- !query
 select 2.35E10 * 1.0
--- !query 30 schema
+-- !query schema
 struct<(2.35E10 * CAST(1.0 AS DOUBLE)):double>
--- !query 30 output
+-- !query output
 2.35E10
 
 
--- !query 31
+-- !query
 select (5e36BD + 0.1) + 5e36BD
--- !query 31 schema
-struct<(CAST((CAST(5E+36 AS DECIMAL(38,1)) + CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) + CAST(5E+36 AS DECIMAL(38,1))):decimal(38,1)>
--- !query 31 output
+-- !query schema
+struct<(CAST((CAST(5000000000000000000000000000000000000 AS DECIMAL(38,1)) + CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) + CAST(5000000000000000000000000000000000000 AS DECIMAL(38,1))):decimal(38,1)>
+-- !query output
 NULL
 
 
--- !query 32
+-- !query
 select (-4e36BD - 0.1) - 7e36BD
--- !query 32 schema
-struct<(CAST((CAST(-4E+36 AS DECIMAL(38,1)) - CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) - CAST(7E+36 AS DECIMAL(38,1))):decimal(38,1)>
--- !query 32 output
+-- !query schema
+struct<(CAST((CAST(-4000000000000000000000000000000000000 AS DECIMAL(38,1)) - CAST(0.1 AS DECIMAL(38,1))) AS DECIMAL(38,1)) - CAST(7000000000000000000000000000000000000 AS DECIMAL(38,1))):decimal(38,1)>
+-- !query output
 NULL
 
 
--- !query 33
+-- !query
 select 12345678901234567890.0 * 12345678901234567890.0
--- !query 33 schema
+-- !query schema
 struct<(12345678901234567890.0 * 12345678901234567890.0):decimal(38,2)>
--- !query 33 output
+-- !query output
 NULL
 
 
--- !query 34
+-- !query
 select 1e35BD / 0.1
--- !query 34 schema
-struct<(CAST(1E+35 AS DECIMAL(37,1)) / CAST(0.1 AS DECIMAL(37,1))):decimal(38,3)>
--- !query 34 output
+-- !query schema
+struct<(CAST(100000000000000000000000000000000000 AS DECIMAL(37,1)) / CAST(0.1 AS DECIMAL(37,1))):decimal(38,3)>
+-- !query output
 NULL
 
 
--- !query 35
+-- !query
 select 1.2345678901234567890E30BD * 1.2345678901234567890E25BD
--- !query 35 schema
-struct<(CAST(1.2345678901234567890E+30 AS DECIMAL(25,-6)) * CAST(1.2345678901234567890E+25 AS DECIMAL(25,-6))):decimal(38,-17)>
--- !query 35 output
+-- !query schema
+struct<(CAST(1234567890123456789000000000000 AS DECIMAL(31,0)) * CAST(12345678901234567890000000 AS DECIMAL(31,0))):decimal(38,0)>
+-- !query output
 NULL
 
 
--- !query 36
+-- !query
 select 12345678912345678912345678912.1234567 + 9999999999999999999999999999999.12345
--- !query 36 schema
+-- !query schema
 struct<(CAST(12345678912345678912345678912.1234567 AS DECIMAL(38,7)) + CAST(9999999999999999999999999999999.12345 AS DECIMAL(38,7))):decimal(38,7)>
--- !query 36 output
+-- !query output
 NULL
 
 
--- !query 37
+-- !query
 select 123456789123456789.1234567890 * 1.123456789123456789
--- !query 37 schema
+-- !query schema
 struct<(CAST(123456789123456789.1234567890 AS DECIMAL(36,18)) * CAST(1.123456789123456789 AS DECIMAL(36,18))):decimal(38,28)>
--- !query 37 output
+-- !query output
 NULL
 
 
--- !query 38
+-- !query
 select 12345678912345.123456789123 / 0.000000012345678
--- !query 38 schema
+-- !query schema
 struct<(CAST(12345678912345.123456789123 AS DECIMAL(29,15)) / CAST(1.2345678E-8 AS DECIMAL(29,15))):decimal(38,18)>
--- !query 38 output
+-- !query output
 NULL
 
 
--- !query 39
+-- !query
 drop table decimals_test
--- !query 39 schema
+-- !query schema
 struct<>
--- !query 39 output
+-- !query output
 

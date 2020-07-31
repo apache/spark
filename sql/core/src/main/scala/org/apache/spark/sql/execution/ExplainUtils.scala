@@ -23,9 +23,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 
-object ExplainUtils {
+object ExplainUtils extends AdaptiveSparkPlanHelper {
   /**
    * Given a input physical plan, performs the following tasks.
    *   1. Computes the operator id for current operator and records it in the operaror
@@ -145,15 +145,26 @@ object ExplainUtils {
       case p: WholeStageCodegenExec =>
       case p: InputAdapter =>
       case other: QueryPlan[_] =>
-        if (!other.getTagValue(QueryPlan.OP_ID_TAG).isDefined) {
+
+        def setOpId(): Unit = if (other.getTagValue(QueryPlan.OP_ID_TAG).isEmpty) {
           currentOperationID += 1
           other.setTagValue(QueryPlan.OP_ID_TAG, currentOperationID)
           operatorIDs += ((currentOperationID, other))
         }
-        other.innerChildren.foreach { plan =>
-          currentOperationID = generateOperatorIDs(plan,
-            currentOperationID,
-            operatorIDs)
+
+        other match {
+          case p: AdaptiveSparkPlanExec =>
+            currentOperationID =
+              generateOperatorIDs(p.executedPlan, currentOperationID, operatorIDs)
+            setOpId()
+          case p: QueryStageExec =>
+            currentOperationID = generateOperatorIDs(p.plan, currentOperationID, operatorIDs)
+            setOpId()
+          case _ =>
+            setOpId()
+            other.innerChildren.foldLeft(currentOperationID) {
+              (curId, plan) => generateOperatorIDs(plan, curId, operatorIDs)
+            }
         }
     }
     currentOperationID
@@ -164,22 +175,37 @@ object ExplainUtils {
    * whole stage code gen id in the plan via setting a tag.
    */
   private def generateWholeStageCodegenIds(plan: QueryPlan[_]): Unit = {
+    var currentCodegenId = -1
+
+    def setCodegenId(p: QueryPlan[_], children: Seq[QueryPlan[_]]): Unit = {
+      if (currentCodegenId != -1) {
+        p.setTagValue(QueryPlan.CODEGEN_ID_TAG, currentCodegenId)
+      }
+      children.foreach(generateWholeStageCodegenIds)
+    }
+
     // Skip the subqueries as they are not printed as part of main query block.
     if (plan.isInstanceOf[BaseSubqueryExec]) {
       return
     }
-    var currentCodegenId = -1
     plan.foreach {
       case p: WholeStageCodegenExec => currentCodegenId = p.codegenStageId
-      case p: InputAdapter => currentCodegenId = -1
-      case other: QueryPlan[_] =>
-        if (currentCodegenId != -1) {
-          other.setTagValue(QueryPlan.CODEGEN_ID_TAG, currentCodegenId)
-        }
-        other.innerChildren.foreach { plan =>
-          generateWholeStageCodegenIds(plan)
-        }
+      case _: InputAdapter => currentCodegenId = -1
+      case p: AdaptiveSparkPlanExec => setCodegenId(p, Seq(p.executedPlan))
+      case p: QueryStageExec => setCodegenId(p, Seq(p.plan))
+      case other: QueryPlan[_] => setCodegenId(other, other.innerChildren)
     }
+  }
+
+  /**
+   * Generate detailed field string with different format based on type of input value
+   */
+  def generateFieldString(fieldName: String, values: Any): String = values match {
+    case iter: Iterable[_] if (iter.size == 0) => s"${fieldName}: []"
+    case iter: Iterable[_] => s"${fieldName} [${iter.size}]: ${iter.mkString("[", ", ", "]")}"
+    case str: String if (str == null || str.isEmpty) => s"${fieldName}: None"
+    case str: String => s"${fieldName}: ${str}"
+    case _ => throw new IllegalArgumentException(s"Unsupported type for argument values: $values")
   }
 
   /**
@@ -207,28 +233,23 @@ object ExplainUtils {
 
   /**
    * Returns the operator identifier for the supplied plan by retrieving the
-   * `operationId` tag value.`
+   * `operationId` tag value.
    */
   def getOpId(plan: QueryPlan[_]): String = {
     plan.getTagValue(QueryPlan.OP_ID_TAG).map(v => s"$v").getOrElse("unknown")
   }
 
-  /**
-   * Returns the operator identifier for the supplied plan by retrieving the
-   * `codegenId` tag value.`
-   */
-  def getCodegenId(plan: QueryPlan[_]): String = {
-    plan.getTagValue(QueryPlan.CODEGEN_ID_TAG).map(v => s"[codegen id : $v]").getOrElse("")
-  }
-
   def removeTags(plan: QueryPlan[_]): Unit = {
+    def remove(p: QueryPlan[_], children: Seq[QueryPlan[_]]): Unit = {
+      p.unsetTagValue(QueryPlan.OP_ID_TAG)
+      p.unsetTagValue(QueryPlan.CODEGEN_ID_TAG)
+      children.foreach(removeTags)
+    }
+
     plan foreach {
-      case plan: QueryPlan[_] =>
-        plan.unsetTagValue(QueryPlan.OP_ID_TAG)
-        plan.unsetTagValue(QueryPlan.CODEGEN_ID_TAG)
-        plan.innerChildren.foreach { p =>
-          removeTags(p)
-        }
+      case p: AdaptiveSparkPlanExec => remove(p, Seq(p.executedPlan))
+      case p: QueryStageExec => remove(p, Seq(p.plan))
+      case plan: QueryPlan[_] => remove(plan, plan.innerChildren)
     }
   }
 }

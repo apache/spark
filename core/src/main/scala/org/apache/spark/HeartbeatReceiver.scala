@@ -27,6 +27,9 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Network
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util._
 
@@ -77,7 +80,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   // executor ID -> timestamp of when the last heartbeat from this executor was received
   private val executorLastSeen = new HashMap[String, Long]
 
-  private val executorTimeoutMs = sc.conf.get(config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT)
+  private val executorTimeoutMs = sc.conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
 
   private val checkTimeoutIntervalMs = sc.conf.get(Network.NETWORK_TIMEOUT_INTERVAL)
 
@@ -85,10 +88,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   require(checkTimeoutIntervalMs <= executorTimeoutMs,
     s"${Network.NETWORK_TIMEOUT_INTERVAL.key} should be less than or " +
-      s"equal to ${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key}.")
+      s"equal to ${config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key}.")
   require(executorHeartbeatIntervalMs <= executorTimeoutMs,
     s"${config.EXECUTOR_HEARTBEAT_INTERVAL.key} should be less than or " +
-      s"equal to ${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key}")
+      s"equal to ${config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key}")
 
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 
@@ -199,14 +202,31 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       if (now - lastSeenMs > executorTimeoutMs) {
         logWarning(s"Removing executor $executorId with no recent heartbeats: " +
           s"${now - lastSeenMs} ms exceeds timeout $executorTimeoutMs ms")
-        scheduler.executorLost(executorId, SlaveLost("Executor heartbeat " +
-          s"timed out after ${now - lastSeenMs} ms"))
-          // Asynchronously kill the executor to avoid blocking the current thread
+        // Asynchronously kill the executor to avoid blocking the current thread
         killExecutorThread.submit(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             // Note: we want to get an executor back after expiring this one,
             // so do not simply call `sc.killExecutor` here (SPARK-8119)
             sc.killAndReplaceExecutor(executorId)
+            // SPARK-27348: in case of the executors which are not gracefully shut down,
+            // we should remove lost executors from CoarseGrainedSchedulerBackend manually
+            // here to guarantee two things:
+            // 1) explicitly remove executor information from CoarseGrainedSchedulerBackend for
+            //    a lost executor instead of waiting for disconnect message
+            // 2) call scheduler.executorLost() underlying to fail any tasks assigned to
+            //    those executors to avoid app hang
+            sc.schedulerBackend match {
+              case backend: CoarseGrainedSchedulerBackend =>
+                backend.driverEndpoint.send(RemoveExecutor(executorId,
+                  ExecutorProcessLost(
+                    s"Executor heartbeat timed out after ${now - lastSeenMs} ms")))
+
+              // LocalSchedulerBackend is used locally and only has one single executor
+              case _: LocalSchedulerBackend =>
+
+              case other => throw new UnsupportedOperationException(
+                s"Unknown scheduler backend: ${other.getClass}")
+            }
           }
         })
         executorLastSeen.remove(executorId)

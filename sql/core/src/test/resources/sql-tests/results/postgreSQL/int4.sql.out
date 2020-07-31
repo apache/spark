@@ -2,59 +2,59 @@
 -- Number of queries: 53
 
 
--- !query 0
+-- !query
 CREATE TABLE INT4_TBL(f1 int) USING parquet
--- !query 0 schema
+-- !query schema
 struct<>
--- !query 0 output
+-- !query output
 
 
 
--- !query 1
+-- !query
 INSERT INTO INT4_TBL VALUES (int(trim('   0  ')))
--- !query 1 schema
+-- !query schema
 struct<>
--- !query 1 output
+-- !query output
 
 
 
--- !query 2
+-- !query
 INSERT INTO INT4_TBL VALUES (int(trim('123456     ')))
--- !query 2 schema
+-- !query schema
 struct<>
--- !query 2 output
+-- !query output
 
 
 
--- !query 3
+-- !query
 INSERT INTO INT4_TBL VALUES (int(trim('    -123456')))
--- !query 3 schema
+-- !query schema
 struct<>
--- !query 3 output
+-- !query output
 
 
 
--- !query 4
+-- !query
 INSERT INTO INT4_TBL VALUES (int('2147483647'))
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 
 
 
--- !query 5
+-- !query
 INSERT INTO INT4_TBL VALUES (int('-2147483647'))
--- !query 5 schema
+-- !query schema
 struct<>
--- !query 5 output
+-- !query output
 
 
 
--- !query 6
+-- !query
 SELECT '' AS five, * FROM INT4_TBL
--- !query 6 schema
+-- !query schema
 struct<five:string,f1:int>
--- !query 6 output
+-- !query output
 	-123456
 	-2147483647
 	0
@@ -62,267 +62,267 @@ struct<five:string,f1:int>
 	2147483647
 
 
--- !query 7
+-- !query
 SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> smallint('0')
--- !query 7 schema
+-- !query schema
 struct<four:string,f1:int>
--- !query 7 output
+-- !query output
 	-123456
 	-2147483647
 	123456
 	2147483647
 
 
--- !query 8
+-- !query
 SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> int('0')
--- !query 8 schema
+-- !query schema
 struct<four:string,f1:int>
--- !query 8 output
+-- !query output
 	-123456
 	-2147483647
 	123456
 	2147483647
 
 
--- !query 9
+-- !query
 SELECT '' AS one, i.* FROM INT4_TBL i WHERE i.f1 = smallint('0')
--- !query 9 schema
+-- !query schema
 struct<one:string,f1:int>
--- !query 9 output
+-- !query output
 	0
 
 
--- !query 10
+-- !query
 SELECT '' AS one, i.* FROM INT4_TBL i WHERE i.f1 = int('0')
--- !query 10 schema
+-- !query schema
 struct<one:string,f1:int>
--- !query 10 output
+-- !query output
 	0
 
 
--- !query 11
+-- !query
 SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 < smallint('0')
--- !query 11 schema
+-- !query schema
 struct<two:string,f1:int>
--- !query 11 output
+-- !query output
 	-123456
 	-2147483647
 
 
--- !query 12
+-- !query
 SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 < int('0')
--- !query 12 schema
+-- !query schema
 struct<two:string,f1:int>
--- !query 12 output
+-- !query output
 	-123456
 	-2147483647
 
 
--- !query 13
+-- !query
 SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 <= smallint('0')
--- !query 13 schema
+-- !query schema
 struct<three:string,f1:int>
--- !query 13 output
+-- !query output
 	-123456
 	-2147483647
 	0
 
 
--- !query 14
+-- !query
 SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 <= int('0')
--- !query 14 schema
+-- !query schema
 struct<three:string,f1:int>
--- !query 14 output
+-- !query output
 	-123456
 	-2147483647
 	0
 
 
--- !query 15
+-- !query
 SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 > smallint('0')
--- !query 15 schema
+-- !query schema
 struct<two:string,f1:int>
--- !query 15 output
+-- !query output
 	123456
 	2147483647
 
 
--- !query 16
+-- !query
 SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 > int('0')
--- !query 16 schema
+-- !query schema
 struct<two:string,f1:int>
--- !query 16 output
+-- !query output
 	123456
 	2147483647
 
 
--- !query 17
+-- !query
 SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 >= smallint('0')
--- !query 17 schema
+-- !query schema
 struct<three:string,f1:int>
--- !query 17 output
+-- !query output
 	0
 	123456
 	2147483647
 
 
--- !query 18
+-- !query
 SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 >= int('0')
--- !query 18 schema
+-- !query schema
 struct<three:string,f1:int>
--- !query 18 output
+-- !query output
 	0
 	123456
 	2147483647
 
 
--- !query 19
+-- !query
 SELECT '' AS one, i.* FROM INT4_TBL i WHERE (i.f1 % smallint('2')) = smallint('1')
--- !query 19 schema
+-- !query schema
 struct<one:string,f1:int>
--- !query 19 output
+-- !query output
 	2147483647
 
 
--- !query 20
+-- !query
 SELECT '' AS three, i.* FROM INT4_TBL i WHERE (i.f1 % int('2')) = smallint('0')
--- !query 20 schema
+-- !query schema
 struct<three:string,f1:int>
--- !query 20 output
+-- !query output
 	-123456
 	0
 	123456
 
 
--- !query 21
+-- !query
 SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
--- !query 21 schema
+-- !query schema
 struct<>
--- !query 21 output
+-- !query output
 java.lang.ArithmeticException
 integer overflow
 
 
--- !query 22
+-- !query
 SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
 WHERE abs(f1) < 1073741824
--- !query 22 schema
+-- !query schema
 struct<five:string,f1:int,x:int>
--- !query 22 output
+-- !query output
 	-123456	-246912
 	0	0
 	123456	246912
 
 
--- !query 23
+-- !query
 SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
--- !query 23 schema
+-- !query schema
 struct<>
--- !query 23 output
+-- !query output
 java.lang.ArithmeticException
 integer overflow
 
 
--- !query 24
+-- !query
 SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
 WHERE abs(f1) < 1073741824
--- !query 24 schema
+-- !query schema
 struct<five:string,f1:int,x:int>
--- !query 24 output
+-- !query output
 	-123456	-246912
 	0	0
 	123456	246912
 
 
--- !query 25
+-- !query
 SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
--- !query 25 schema
+-- !query schema
 struct<>
--- !query 25 output
+-- !query output
 java.lang.ArithmeticException
 integer overflow
 
 
--- !query 26
+-- !query
 SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
 WHERE f1 < 2147483646
--- !query 26 schema
+-- !query schema
 struct<five:string,f1:int,x:int>
--- !query 26 output
+-- !query output
 	-123456	-123454
 	-2147483647	-2147483645
 	0	2
 	123456	123458
 
 
--- !query 27
+-- !query
 SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
--- !query 27 schema
+-- !query schema
 struct<>
--- !query 27 output
+-- !query output
 java.lang.ArithmeticException
 integer overflow
 
 
--- !query 28
+-- !query
 SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
 WHERE f1 < 2147483646
--- !query 28 schema
+-- !query schema
 struct<five:string,f1:int,x:int>
--- !query 28 output
+-- !query output
 	-123456	-123454
 	-2147483647	-2147483645
 	0	2
 	123456	123458
 
 
--- !query 29
+-- !query
 SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
--- !query 29 schema
+-- !query schema
 struct<>
--- !query 29 output
+-- !query output
 java.lang.ArithmeticException
 integer overflow
 
 
--- !query 30
+-- !query
 SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
 WHERE f1 > -2147483647
--- !query 30 schema
+-- !query schema
 struct<five:string,f1:int,x:int>
--- !query 30 output
+-- !query output
 	-123456	-123458
 	0	-2
 	123456	123454
 	2147483647	2147483645
 
 
--- !query 31
+-- !query
 SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
--- !query 31 schema
+-- !query schema
 struct<>
--- !query 31 output
+-- !query output
 java.lang.ArithmeticException
 integer overflow
 
 
--- !query 32
+-- !query
 SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
 WHERE f1 > -2147483647
--- !query 32 schema
+-- !query schema
 struct<five:string,f1:int,x:int>
--- !query 32 output
+-- !query output
 	-123456	-123458
 	0	-2
 	123456	123454
 	2147483647	2147483645
 
 
--- !query 33
+-- !query
 SELECT '' AS five, i.f1, i.f1 / smallint('2') AS x FROM INT4_TBL i
--- !query 33 schema
+-- !query schema
 struct<five:string,f1:int,x:double>
--- !query 33 output
+-- !query output
 	-123456	-61728.0
 	-2147483647	-1.0737418235E9
 	0	0.0
@@ -330,11 +330,11 @@ struct<five:string,f1:int,x:double>
 	2147483647	1.0737418235E9
 
 
--- !query 34
+-- !query
 SELECT '' AS five, i.f1, i.f1 / int('2') AS x FROM INT4_TBL i
--- !query 34 schema
+-- !query schema
 struct<five:string,f1:int,x:double>
--- !query 34 output
+-- !query output
 	-123456	-61728.0
 	-2147483647	-1.0737418235E9
 	0	0.0
@@ -342,127 +342,127 @@ struct<five:string,f1:int,x:double>
 	2147483647	1.0737418235E9
 
 
--- !query 35
+-- !query
 SELECT -2+3 AS one
--- !query 35 schema
+-- !query schema
 struct<one:int>
--- !query 35 output
+-- !query output
 1
 
 
--- !query 36
+-- !query
 SELECT 4-2 AS two
--- !query 36 schema
+-- !query schema
 struct<two:int>
--- !query 36 output
+-- !query output
 2
 
 
--- !query 37
+-- !query
 SELECT 2- -1 AS three
--- !query 37 schema
+-- !query schema
 struct<three:int>
--- !query 37 output
+-- !query output
 3
 
 
--- !query 38
+-- !query
 SELECT 2 - -2 AS four
--- !query 38 schema
+-- !query schema
 struct<four:int>
--- !query 38 output
+-- !query output
 4
 
 
--- !query 39
+-- !query
 SELECT smallint('2') * smallint('2') = smallint('16') / smallint('4') AS true
--- !query 39 schema
+-- !query schema
 struct<true:boolean>
--- !query 39 output
+-- !query output
 true
 
 
--- !query 40
+-- !query
 SELECT int('2') * smallint('2') = smallint('16') / int('4') AS true
--- !query 40 schema
+-- !query schema
 struct<true:boolean>
--- !query 40 output
+-- !query output
 true
 
 
--- !query 41
+-- !query
 SELECT smallint('2') * int('2') = int('16') / smallint('4') AS true
--- !query 41 schema
+-- !query schema
 struct<true:boolean>
--- !query 41 output
+-- !query output
 true
 
 
--- !query 42
+-- !query
 SELECT int('1000') < int('999') AS `false`
--- !query 42 schema
+-- !query schema
 struct<false:boolean>
--- !query 42 output
+-- !query output
 false
 
 
--- !query 43
+-- !query
 SELECT 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 AS ten
--- !query 43 schema
+-- !query schema
 struct<ten:int>
--- !query 43 output
+-- !query output
 10
 
 
--- !query 44
+-- !query
 SELECT 2 + 2 / 2 AS three
--- !query 44 schema
+-- !query schema
 struct<three:double>
--- !query 44 output
+-- !query output
 3.0
 
 
--- !query 45
+-- !query
 SELECT (2 + 2) / 2 AS two
--- !query 45 schema
+-- !query schema
 struct<two:double>
--- !query 45 output
+-- !query output
 2.0
 
 
--- !query 46
+-- !query
 SELECT string(shiftleft(int(-1), 31))
--- !query 46 schema
+-- !query schema
 struct<CAST(shiftleft(CAST(-1 AS INT), 31) AS STRING):string>
--- !query 46 output
+-- !query output
 -2147483648
 
 
--- !query 47
+-- !query
 SELECT string(int(shiftleft(int(-1), 31))+1)
--- !query 47 schema
+-- !query schema
 struct<CAST((CAST(shiftleft(CAST(-1 AS INT), 31) AS INT) + 1) AS STRING):string>
--- !query 47 output
+-- !query output
 -2147483647
 
 
--- !query 48
+-- !query
 SELECT int(-2147483648) % int(-1)
--- !query 48 schema
+-- !query schema
 struct<(CAST(-2147483648 AS INT) % CAST(-1 AS INT)):int>
--- !query 48 output
+-- !query output
 0
 
 
--- !query 49
+-- !query
 SELECT int(-2147483648) % smallint(-1)
--- !query 49 schema
+-- !query schema
 struct<(CAST(-2147483648 AS INT) % CAST(CAST(-1 AS SMALLINT) AS INT)):int>
--- !query 49 output
+-- !query output
 0
 
 
--- !query 50
+-- !query
 SELECT x, int(x) AS int4_value
 FROM (VALUES double(-2.5),
              double(-1.5),
@@ -471,9 +471,9 @@ FROM (VALUES double(-2.5),
              double(0.5),
              double(1.5),
              double(2.5)) t(x)
--- !query 50 schema
+-- !query schema
 struct<x:double,int4_value:int>
--- !query 50 output
+-- !query output
 -0.5	0
 -1.5	-1
 -2.5	-2
@@ -483,7 +483,7 @@ struct<x:double,int4_value:int>
 2.5	2
 
 
--- !query 51
+-- !query
 SELECT x, int(x) AS int4_value
 FROM (VALUES cast(-2.5 as decimal(38, 18)),
              cast(-1.5 as decimal(38, 18)),
@@ -492,9 +492,9 @@ FROM (VALUES cast(-2.5 as decimal(38, 18)),
              cast(0.5 as decimal(38, 18)),
              cast(1.5 as decimal(38, 18)),
              cast(2.5 as decimal(38, 18))) t(x)
--- !query 51 schema
+-- !query schema
 struct<x:decimal(38,18),int4_value:int>
--- !query 51 output
+-- !query output
 -0.500000000000000000	0
 -1.500000000000000000	-1
 -2.500000000000000000	-2
@@ -504,9 +504,9 @@ struct<x:decimal(38,18),int4_value:int>
 2.500000000000000000	2
 
 
--- !query 52
+-- !query
 DROP TABLE INT4_TBL
--- !query 52 schema
+-- !query schema
 struct<>
--- !query 52 output
+-- !query output
 

@@ -31,6 +31,7 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
@@ -180,6 +181,9 @@ private[spark] class StandaloneAppClient(
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
         if (ExecutorState.isFinished(state)) {
           listener.executorRemoved(fullId, message.getOrElse(""), exitStatus, workerLost)
+        } else if (state == ExecutorState.DECOMMISSIONED) {
+          listener.executorDecommissioned(fullId,
+            ExecutorDecommissionInfo(message.getOrElse(""), isHostDecommissioned = workerLost))
         }
 
       case WorkerRemoved(id, host, message) =>

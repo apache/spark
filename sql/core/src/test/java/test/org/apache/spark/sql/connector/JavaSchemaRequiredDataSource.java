@@ -17,8 +17,11 @@
 
 package test.org.apache.spark.sql.connector;
 
+import java.util.Map;
+
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableProvider;
+import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.types.StructType;
@@ -46,7 +49,18 @@ public class JavaSchemaRequiredDataSource implements TableProvider {
   }
 
   @Override
-  public Table getTable(CaseInsensitiveStringMap options, StructType schema) {
+  public boolean supportsExternalMetadata() {
+    return true;
+  }
+
+  @Override
+  public StructType inferSchema(CaseInsensitiveStringMap options) {
+    throw new IllegalArgumentException("requires a user-supplied schema");
+  }
+
+  @Override
+  public Table getTable(
+      StructType schema, Transform[] partitioning, Map<String, String> properties) {
     return new JavaSimpleBatchTable() {
 
       @Override
@@ -59,10 +73,5 @@ public class JavaSchemaRequiredDataSource implements TableProvider {
         return new MyScanBuilder(schema);
       }
     };
-  }
-
-  @Override
-  public Table getTable(CaseInsensitiveStringMap options) {
-    throw new IllegalArgumentException("requires a user-supplied schema");
   }
 }

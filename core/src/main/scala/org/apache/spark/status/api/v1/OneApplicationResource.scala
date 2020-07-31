@@ -19,12 +19,14 @@ package org.apache.spark.status.api.v1
 import java.io.OutputStream
 import java.util.{List => JList}
 import java.util.zip.ZipOutputStream
-import javax.ws.rs._
+import javax.ws.rs.{NotFoundException => _, _}
 import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkContext}
+import org.apache.spark.status.api.v1
+import org.apache.spark.util.Utils
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AbstractApplicationResource extends BaseAppResource {
@@ -97,7 +99,17 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
 
   @GET
   @Path("environment")
-  def environmentInfo(): ApplicationEnvironmentInfo = withUI(_.store.environmentInfo())
+  def environmentInfo(): ApplicationEnvironmentInfo = withUI { ui =>
+    val envInfo = ui.store.environmentInfo()
+    val resourceProfileInfo = ui.store.resourceProfileInfo()
+    new v1.ApplicationEnvironmentInfo(
+      envInfo.runtime,
+      Utils.redact(ui.conf, envInfo.sparkProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.hadoopProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.systemProperties).sortBy(_._1),
+      envInfo.classpathEntries.sortBy(_._1),
+      resourceProfileInfo)
+  }
 
   @GET
   @Path("logs")

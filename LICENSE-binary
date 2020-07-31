@@ -469,6 +469,7 @@ xmlenc:xmlenc
 net.sf.py4j:py4j
 org.jpmml:pmml-model
 org.jpmml:pmml-schema
+org.threeten:threeten-extra
 
 python/lib/py4j-*-src.zip
 python/pyspark/cloudpickle.py
@@ -554,12 +555,6 @@ Eclipse Public License (EPL) 2.0
 jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/ee4j.ca
 jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
 org.glassfish.hk2.external:jakarta.inject
-
-
-Python Software Foundation License
-----------------------------------
-
-pyspark/heapq3.py
 
 
 Public Domain

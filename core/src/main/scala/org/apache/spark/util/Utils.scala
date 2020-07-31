@@ -95,7 +95,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
@@ -1026,13 +1026,27 @@ private[spark] object Utils extends Logging {
     customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
   }
 
+  /**
+   * Checks if the host contains only valid hostname/ip without port
+   * NOTE: Incase of IPV6 ip it should be enclosed inside []
+   */
   def checkHost(host: String): Unit = {
-    assert(host != null && host.indexOf(':') == -1, s"Expected hostname (not IP) but got $host")
+    if (host != null && host.split(":").length > 2) {
+      assert(host.startsWith("[") && host.endsWith("]"),
+        s"Expected hostname or IPv6 IP enclosed in [] but got $host")
+    } else {
+      assert(host != null && host.indexOf(':') == -1, s"Expected hostname or IP but got $host")
+    }
   }
 
   def checkHostPort(hostPort: String): Unit = {
-    assert(hostPort != null && hostPort.indexOf(':') != -1,
-      s"Expected host and port but got $hostPort")
+    if (hostPort != null && hostPort.split(":").length > 2) {
+      assert(hostPort != null && hostPort.indexOf("]:") != -1,
+        s"Expected host and port but got $hostPort")
+    } else {
+      assert(hostPort != null && hostPort.indexOf(':') != -1,
+        s"Expected host and port but got $hostPort")
+    }
   }
 
   // Typically, this will be of order of number of nodes in cluster
@@ -1046,18 +1060,30 @@ private[spark] object Utils extends Logging {
       return cached
     }
 
-    val indx: Int = hostPort.lastIndexOf(':')
-    // This is potentially broken - when dealing with ipv6 addresses for example, sigh ...
-    // but then hadoop does not support ipv6 right now.
-    // For now, we assume that if port exists, then it is valid - not check if it is an int > 0
-    if (-1 == indx) {
+    def setDefaultPortValue: (String, Int) = {
       val retval = (hostPort, 0)
       hostPortParseResults.put(hostPort, retval)
-      return retval
+      retval
+    }
+    // checks if the hostport contains IPV6 ip and parses the host, port
+    if (hostPort != null && hostPort.split(":").length > 2) {
+      val indx: Int = hostPort.lastIndexOf("]:")
+      if (-1 == indx) {
+        return setDefaultPortValue
+      }
+      val port = hostPort.substring(indx + 2).trim()
+      val retval = (hostPort.substring(0, indx + 1).trim(), if (port.isEmpty) 0 else port.toInt)
+      hostPortParseResults.putIfAbsent(hostPort, retval)
+    } else {
+      val indx: Int = hostPort.lastIndexOf(':')
+      if (-1 == indx) {
+        return setDefaultPortValue
+      }
+      val port = hostPort.substring(indx + 1).trim()
+      val retval = (hostPort.substring(0, indx).trim(), if (port.isEmpty) 0 else port.toInt)
+      hostPortParseResults.putIfAbsent(hostPort, retval)
     }
 
-    val retval = (hostPort.substring(0, indx).trim(), hostPort.substring(indx + 1).trim().toInt)
-    hostPortParseResults.putIfAbsent(hostPort, retval)
     hostPortParseResults.get(hostPort)
   }
 
@@ -1716,7 +1742,7 @@ private[spark] object Utils extends Logging {
     if (inWord || inDoubleQuote || inSingleQuote) {
       endWord()
     }
-    buf
+    buf.toSeq
   }
 
  /* Calculates 'x' modulo 'mod', takes to consideration sign of x,
@@ -1812,14 +1838,14 @@ private[spark] object Utils extends Logging {
    * Generate a zipWithIndex iterator, avoid index value overflowing problem
    * in scala's zipWithIndex
    */
-  def getIteratorZipWithIndex[T](iterator: Iterator[T], startIndex: Long): Iterator[(T, Long)] = {
+  def getIteratorZipWithIndex[T](iter: Iterator[T], startIndex: Long): Iterator[(T, Long)] = {
     new Iterator[(T, Long)] {
       require(startIndex >= 0, "startIndex should be >= 0.")
       var index: Long = startIndex - 1L
-      def hasNext: Boolean = iterator.hasNext
+      def hasNext: Boolean = iter.hasNext
       def next(): (T, Long) = {
         index += 1L
-        (iterator.next(), index)
+        (iter.next(), index)
       }
     }
   }
@@ -2547,28 +2573,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Given a process id, return true if the process is still running.
-   */
-  def isProcessRunning(pid: Int): Boolean = {
-    val process = executeCommand(Seq("kill", "-0", pid.toString))
-    process.waitFor(10, TimeUnit.SECONDS)
-    process.exitValue() == 0
-  }
-
-  /**
-   * Returns the pid of this JVM process.
-   */
-  def getProcessId: Int = {
-    val PROCESS = "(\\d+)@(.*)".r
-    val name = getProcessName()
-    name match {
-      case PROCESS(pid, _) => pid.toInt
-      case _ =>
-        throw new SparkException(s"Unexpected process name: $name, expected to be PID@hostname.")
-    }
-  }
-
-  /**
    * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
    * this is formatted as PID@hostname.
    */
@@ -2772,19 +2776,16 @@ private[spark] object Utils extends Logging {
     }
 
     val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
-    val resolvedURL = masterScheme.toLowerCase(Locale.ROOT) match {
-      case "https" =>
+
+    val resolvedURL = Option(masterScheme).map(_.toLowerCase(Locale.ROOT)) match {
+      case Some("https") =>
         masterWithoutK8sPrefix
-      case "http" =>
+      case Some("http") =>
         logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
         masterWithoutK8sPrefix
-      case null =>
-        val resolvedURL = s"https://$masterWithoutK8sPrefix"
-        logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
-          s"URL is $resolvedURL.")
-        resolvedURL
       case _ =>
-        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
+        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme
+          + " found in URL: " + masterWithoutK8sPrefix)
     }
 
     s"k8s://$resolvedURL"
@@ -2928,6 +2929,24 @@ private[spark] object Utils extends Logging {
     val resultProps = new Properties()
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
+  }
+
+  /**
+   * Convert a sequence of `Path`s to a metadata string. When the length of metadata string
+   * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
+   */
+  def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
+    val metadata = new StringBuilder("[")
+    var index: Int = 0
+    while (index < paths.length && metadata.length < stopAppendingThreshold) {
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append(paths(index).toString)
+      index += 1
+    }
+    metadata.append("]")
+    metadata.toString
   }
 }
 

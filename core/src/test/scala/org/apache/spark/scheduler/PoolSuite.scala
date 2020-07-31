@@ -22,6 +22,7 @@ import java.util.Properties
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.config.SCHEDULER_ALLOCATION_FILE
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.SchedulingMode._
 
 /**
@@ -39,7 +40,8 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, Nil)
     }
-    new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, null), 0)
+    new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID), 0)
   }
 
   def scheduleTaskAndVerifyId(taskId: Int, rootPool: Pool, expectedStageId: Int): Unit = {

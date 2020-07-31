@@ -31,10 +31,11 @@ case class ShowCurrentNamespaceExec(
     catalogManager: CatalogManager)
   extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-    val encoder = RowEncoder(schema).resolveAndBind()
-    Seq(encoder
-      .toRow(new GenericRowWithSchema(
-        Array(catalogManager.currentCatalog.name, catalogManager.currentNamespace.quoted), schema))
-      .copy())
+    val toRow = RowEncoder(schema).resolveAndBind().createSerializer()
+    val result = new GenericRowWithSchema(Array[Any](
+      catalogManager.currentCatalog.name,
+      catalogManager.currentNamespace.quoted),
+      schema)
+    Seq(toRow(result).copy())
   }
 }

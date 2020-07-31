@@ -44,6 +44,7 @@ import org.apache.spark.util.NextIterator
  * @param stateInfo             Information about how to retrieve the correct version of state
  * @param storeConf             Configuration for the state store.
  * @param hadoopConf            Hadoop configuration for reading state data from storage
+ * @param partitionId           A partition ID of source RDD.
  * @param stateFormatVersion    The version of format for state.
  *
  * Internally, the key -> multiple values is stored in two [[StateStore]]s.
@@ -72,8 +73,8 @@ class SymmetricHashJoinStateManager(
     stateInfo: Option[StatefulOperatorStateInfo],
     storeConf: StateStoreConf,
     hadoopConf: Configuration,
+    partitionId: Int,
     stateFormatVersion: Int) extends Logging {
-
   import SymmetricHashJoinStateManager._
 
   /*
@@ -356,7 +357,7 @@ class SymmetricHashJoinStateManager(
     /** Get the StateStore with the given schema */
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
       val storeProviderId = StateStoreProviderId(
-        stateInfo.get, TaskContext.getPartitionId(), getStateStoreName(joinSide, stateStoreType))
+        stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
       val store = StateStore.get(
         storeProviderId, keySchema, valueSchema, None,
         stateInfo.get.storeVersion, storeConf, hadoopConf)
@@ -450,10 +451,25 @@ class SymmetricHashJoinStateManager(
   }
 
   private trait KeyWithIndexToValueRowConverter {
+    /** Defines the schema of the value row (the value side of K-V in state store). */
     def valueAttributes: Seq[Attribute]
 
+    /**
+     * Convert the value row to (actual value, match) pair.
+     *
+     * NOTE: implementations should ensure the result row is NOT reused during execution, so
+     * that caller can safely read the value in any time.
+     */
     def convertValue(value: UnsafeRow): ValueAndMatchPair
 
+    /**
+     * Build the value row from (actual value, match) pair. This is expected to be called just
+     * before storing to the state store.
+     *
+     * NOTE: depending on the implementation, the result row "may" be reused during execution
+     * (to avoid initialization of object), so the caller should ensure that the logic doesn't
+     * affect by such behavior. Call copy() against the result row if needed.
+     */
     def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow
   }
 
@@ -492,7 +508,7 @@ class SymmetricHashJoinStateManager(
 
     override def convertValue(value: UnsafeRow): ValueAndMatchPair = {
       if (value != null) {
-        ValueAndMatchPair(valueRowGenerator(value),
+        ValueAndMatchPair(valueRowGenerator(value).copy(),
           value.getBoolean(indexOrdinalInValueWithMatchedRow))
       } else {
         null

@@ -117,7 +117,7 @@ trait Logging {
   }
 
   // For testing
-  def initializeForcefully(isInterpreter: Boolean, silent: Boolean): Unit = {
+  private[spark] def initializeForcefully(isInterpreter: Boolean, silent: Boolean): Unit = {
     initializeLogging(isInterpreter, silent)
   }
 

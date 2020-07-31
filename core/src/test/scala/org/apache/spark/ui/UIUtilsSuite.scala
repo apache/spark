@@ -113,8 +113,7 @@ class UIUtilsSuite extends SparkFunSuite {
   test("SPARK-11906: Progress bar should not overflow because of speculative tasks") {
     val generated = makeProgressBar(2, 3, 0, 0, Map.empty, 4).head.child.filter(_.label == "div")
     val expected = Seq(
-      <div class="bar bar-completed" style="width: 75.0%"></div>,
-      <div class="bar bar-running" style="width: 25.0%"></div>
+      <div class="progress-bar" style="width: 75.0%"></div>
     )
     assert(generated.sameElements(expected),
       s"\nRunning progress bar should round down\n\nExpected:\n$expected\nGenerated:\n$generated")
@@ -140,7 +139,7 @@ class UIUtilsSuite extends SparkFunSuite {
     val generated = listingTable(header, generateDataRowValue, data, tooltipHeaders = tooltip)
 
     val expected: Node =
-      <table class="table table-bordered table-condensed table-striped sortable">
+      <table class="table table-bordered table-sm table-striped sortable">
         <thead>
           <th width="" class="">{header(0)}</th>
           <th width="" class="">
@@ -166,7 +165,7 @@ class UIUtilsSuite extends SparkFunSuite {
     val generated = listingTable(header, generateDataRowValue, data)
 
     val expected =
-      <table class="table table-bordered table-condensed table-striped sortable">
+      <table class="table table-bordered table-sm table-striped sortable">
         <thead>
           <th width="" class="">{header(0)}</th>
           <th width="" class="">{header(1)}</th>

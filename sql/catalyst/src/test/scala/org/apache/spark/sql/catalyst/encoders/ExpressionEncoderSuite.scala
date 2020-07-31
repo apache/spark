@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ClosureCleaner
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
@@ -107,6 +107,8 @@ class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
   }
 }
 
+case class Bar(i: Any)
+case class Foo(i: Bar) extends AnyVal
 case class PrimitiveValueClass(wrapped: Int) extends AnyVal
 case class ReferenceValueClass(wrapped: ReferenceValueClass.Container) extends AnyVal
 object ReferenceValueClass {
@@ -207,9 +209,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   productTest(
     OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
-      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true))))
+      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true)), Some(new CalendarInterval(1, 2, 3))))
 
-  productTest(OptionalData(None, None, None, None, None, None, None, None))
+  productTest(OptionalData(None, None, None, None, None, None, None, None, None))
 
   encodeDecodeTest(Seq(Some(1), None), "Option in array")
   encodeDecodeTest(Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map")
@@ -311,6 +313,13 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
+  test("AnyVal class with Any fields") {
+    val exception = intercept[UnsupportedOperationException](implicitly[ExpressionEncoder[Foo]])
+    val errorMsg = exception.getMessage
+    assert(errorMsg.contains("root class: \"org.apache.spark.sql.catalyst.encoders.Foo\""))
+    assert(errorMsg.contains("No Encoder found for Any"))
+  }
+
   test("nullable of encoder schema") {
     def checkNullable[T: ExpressionEncoder](nullable: Boolean*): Unit = {
       assert(implicitly[ExpressionEncoder[T]].schema.map(_.nullable) === nullable.toSeq)
@@ -360,14 +369,14 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   }
 
   test("null check for map key: String") {
-    val encoder = ExpressionEncoder[Map[String, Int]]()
-    val e = intercept[RuntimeException](encoder.toRow(Map(("a", 1), (null, 2))))
+    val toRow = ExpressionEncoder[Map[String, Int]]().createSerializer()
+    val e = intercept[RuntimeException](toRow(Map(("a", 1), (null, 2))))
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 
   test("null check for map key: Integer") {
-    val encoder = ExpressionEncoder[Map[Integer, String]]()
-    val e = intercept[RuntimeException](encoder.toRow(Map((1, "a"), (null, "b"))))
+    val toRow = ExpressionEncoder[Map[Integer, String]]().createSerializer()
+    val e = intercept[RuntimeException](toRow(Map((1, "a"), (null, "b"))))
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 
@@ -427,10 +436,6 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   testOverflowingBigNumeric(BigInt("9" * 100), "scala very large big int")
   testOverflowingBigNumeric(new BigInteger("9" * 100), "java very big int")
 
-  encodeDecodeTest("foo" -> 1L, "makeCopy") {
-    Encoders.product[(String, Long)].makeCopy.asInstanceOf[ExpressionEncoder[(String, Long)]]
-  }
-
   private def testOverflowingBigNumeric[T: TypeTag](bigNumeric: T, testName: String): Unit = {
     Seq(true, false).foreach { ansiEnabled =>
       testAndVerifyNotLeakingReflectionObjects(
@@ -441,12 +446,14 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
           // Need to construct Encoder here rather than implicitly resolving it
           // so that SQLConf changes are respected.
           val encoder = ExpressionEncoder[T]()
+          val toRow = encoder.createSerializer()
           if (!ansiEnabled) {
-            val convertedBack = encoder.resolveAndBind().fromRow(encoder.toRow(bigNumeric))
+            val fromRow = encoder.resolveAndBind().createDeserializer()
+            val convertedBack = fromRow(toRow(bigNumeric))
             assert(convertedBack === null)
           } else {
             val e = intercept[RuntimeException] {
-              encoder.toRow(bigNumeric)
+              toRow(bigNumeric)
             }
             assert(e.getMessage.contains("Error while encoding"))
             assert(e.getCause.getClass === classOf[ArithmeticException])
@@ -465,10 +472,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       // Make sure encoder is serializable.
       ClosureCleaner.clean((s: String) => encoder.getClass.getName)
 
-      val row = encoder.toRow(input)
+      val row = encoder.createSerializer().apply(input)
       val schema = encoder.schema.toAttributes
       val boundEncoder = encoder.resolveAndBind()
-      val convertedBack = try boundEncoder.fromRow(row) catch {
+      val convertedBack = try boundEncoder.createDeserializer().apply(row) catch {
         case e: Exception =>
           fail(
            s"""Exception thrown while decoding

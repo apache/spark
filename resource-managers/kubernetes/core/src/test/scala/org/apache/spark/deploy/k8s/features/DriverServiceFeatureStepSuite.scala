@@ -38,6 +38,9 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
   private val DRIVER_LABELS = Map(
     "label1key" -> "label1value",
     "label2key" -> "label2value")
+  private val DRIVER_SERVICE_ANNOTATIONS = Map(
+    "annotation1key" -> "annotation1value",
+    "annotation2key" -> "annotation2value")
 
   test("Headless service has a port for the driver RPC, the block manager and driver ui.") {
     val sparkConf = new SparkConf(false)
@@ -46,7 +49,8 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       .set(UI_PORT, 4080)
     val kconf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
-      labels = DRIVER_LABELS)
+      labels = DRIVER_LABELS,
+      serviceAnnotations = DRIVER_SERVICE_ANNOTATIONS)
     val configurationStep = new DriverServiceFeatureStep(kconf)
     assert(configurationStep.configurePod(SparkPod.initialPod()) === SparkPod.initialPod())
     assert(configurationStep.getAdditionalKubernetesResources().size === 1)
@@ -79,7 +83,9 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
   }
 
   test("Ports should resolve to defaults in SparkConf and in the service.") {
-    val kconf = KubernetesTestConf.createDriverConf(labels = DRIVER_LABELS)
+    val kconf = KubernetesTestConf.createDriverConf(
+      labels = DRIVER_LABELS,
+      serviceAnnotations = DRIVER_SERVICE_ANNOTATIONS)
     val configurationStep = new DriverServiceFeatureStep(kconf)
     val resolvedService = configurationStep
       .getAdditionalKubernetesResources()
@@ -163,6 +169,9 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     assert(service.getSpec.getClusterIP === "None")
     DRIVER_LABELS.foreach { case (k, v) =>
       assert(service.getSpec.getSelector.get(k) === v)
+    }
+    DRIVER_SERVICE_ANNOTATIONS.foreach { case (k, v) =>
+      assert(service.getMetadata.getAnnotations.get(k) === v)
     }
     assert(service.getSpec.getPorts.size() === 3)
     val driverServicePorts = service.getSpec.getPorts.asScala

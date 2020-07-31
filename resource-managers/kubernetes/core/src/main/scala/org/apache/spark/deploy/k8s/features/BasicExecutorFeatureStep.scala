@@ -24,6 +24,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rpc.RpcEndpointAddress
@@ -33,7 +34,7 @@ import org.apache.spark.util.Utils
 private[spark] class BasicExecutorFeatureStep(
     kubernetesConf: KubernetesExecutorConf,
     secMgr: SecurityManager)
-  extends KubernetesFeatureConfigStep {
+  extends KubernetesFeatureConfigStep with Logging {
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
   private val executorContainerImage = kubernetesConf
@@ -88,12 +89,8 @@ private[spark] class BasicExecutorFeatureStep(
       // Replace dangerous characters in the remaining string with a safe alternative.
       .replaceAll("[^\\w-]+", "_")
 
-    val executorMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${executorMemoryTotal}Mi")
-      .build()
-    val executorCpuQuantity = new QuantityBuilder(false)
-      .withAmount(executorCoresRequest)
-      .build()
+    val executorMemoryQuantity = new Quantity(s"${executorMemoryTotal}Mi")
+    val executorCpuQuantity = new Quantity(executorCoresRequest)
 
     val executorResourceQuantities =
       KubernetesUtils.buildResourcesQuantities(SPARK_EXECUTOR_PREFIX,
@@ -183,15 +180,28 @@ private[spark] class BasicExecutorFeatureStep(
       .addToArgs("executor")
       .build()
     val containerWithLimitCores = executorLimitCores.map { limitCores =>
-      val executorCpuLimitQuantity = new QuantityBuilder(false)
-        .withAmount(limitCores)
-        .build()
+      val executorCpuLimitQuantity = new Quantity(limitCores)
       new ContainerBuilder(executorContainer)
         .editResources()
           .addToLimits("cpu", executorCpuLimitQuantity)
           .endResources()
         .build()
     }.getOrElse(executorContainer)
+    val containerWithLifecycle =
+      if (!kubernetesConf.workerDecommissioning) {
+        logInfo("Decommissioning not enabled, skipping shutdown script")
+        containerWithLimitCores
+      } else {
+        logInfo("Adding decommission script to lifecycle")
+        new ContainerBuilder(containerWithLimitCores).withNewLifecycle()
+          .withNewPreStop()
+            .withNewExec()
+              .addToCommand("/opt/decom.sh")
+            .endExec()
+          .endPreStop()
+          .endLifecycle()
+          .build()
+      }
     val ownerReference = kubernetesConf.driverPod.map { pod =>
       new OwnerReferenceBuilder()
         .withController(true)
@@ -219,6 +229,6 @@ private[spark] class BasicExecutorFeatureStep(
     kubernetesConf.get(KUBERNETES_EXECUTOR_SCHEDULER_NAME)
       .foreach(executorPod.getSpec.setSchedulerName)
 
-    SparkPod(executorPod, containerWithLimitCores)
+    SparkPod(executorPod, containerWithLifecycle)
   }
 }

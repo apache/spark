@@ -36,14 +36,11 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: DeveloperApi ::
  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
  */
-@DeveloperApi
 abstract class PipelineStage extends Params with Logging {
 
   /**
-   * :: DeveloperApi ::
    *
    * Check transform validity and derive the output schema from the input schema.
    *
@@ -54,7 +51,6 @@ abstract class PipelineStage extends Params with Logging {
    * Typical implementation should first conduct verification on schema change and parameter
    * validity, including complex parameter interaction checks.
    */
-  @DeveloperApi
   def transformSchema(schema: StructType): StructType
 
   /**
@@ -139,7 +135,7 @@ class Pipeline @Since("1.4.0") (
     val theStages = $(stages)
     // Search for the last estimator.
     var indexOfLastEstimator = -1
-    theStages.view.zipWithIndex.foreach { case (stage, index) =>
+    theStages.iterator.zipWithIndex.foreach { case (stage, index) =>
       stage match {
         case _: Estimator[_] =>
           indexOfLastEstimator = index
@@ -148,7 +144,7 @@ class Pipeline @Since("1.4.0") (
     }
     var curDataset = dataset
     val transformers = ListBuffer.empty[Transformer]
-    theStages.view.zipWithIndex.foreach { case (stage, index) =>
+    theStages.iterator.zipWithIndex.foreach { case (stage, index) =>
       if (index <= indexOfLastEstimator) {
         val transformer = stage match {
           case estimator: Estimator[_] =>

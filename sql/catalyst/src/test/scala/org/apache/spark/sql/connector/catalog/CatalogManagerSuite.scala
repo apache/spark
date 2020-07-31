@@ -18,11 +18,13 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.net.URI
-import java.util
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -109,34 +111,27 @@ class CatalogManagerSuite extends SparkFunSuite {
     assert(v1SessionCatalog.getCurrentDatabase == "default")
     catalogManager.setCurrentNamespace(Array("test2"))
     assert(v1SessionCatalog.getCurrentDatabase == "default")
+
+    // Check namespace existence if currentCatalog implements SupportsNamespaces.
+    conf.setConfString("spark.sql.catalog.testCatalog", classOf[InMemoryTableCatalog].getName)
+    catalogManager.setCurrentCatalog("testCatalog")
+    catalogManager.currentCatalog.asInstanceOf[InMemoryTableCatalog]
+      .createNamespace(Array("test3"), Map.empty[String, String].asJava)
+    assert(v1SessionCatalog.getCurrentDatabase == "default")
+    catalogManager.setCurrentNamespace(Array("test3"))
+    assert(v1SessionCatalog.getCurrentDatabase == "default")
+
+    intercept[NoSuchNamespaceException] {
+      catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
+    }
   }
 }
 
-class DummyCatalog extends SupportsNamespaces {
-  override def defaultNamespace(): Array[String] = Array("a", "b")
-
-  override def listNamespaces(): Array[Array[String]] = {
-    throw new UnsupportedOperationException
-  }
-  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
-    throw new UnsupportedOperationException
-  }
-  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
-    throw new UnsupportedOperationException
-  }
-  override def createNamespace(
-      namespace: Array[String], metadata: util.Map[String, String]): Unit = {
-    throw new UnsupportedOperationException
-  }
-  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = {
-    throw new UnsupportedOperationException
-  }
-  override def dropNamespace(namespace: Array[String]): Boolean = {
-    throw new UnsupportedOperationException
-  }
+class DummyCatalog extends CatalogPlugin {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = name
   }
   private var _name: String = null
   override def name(): String = _name
+  override def defaultNamespace(): Array[String] = Array("a", "b")
 }

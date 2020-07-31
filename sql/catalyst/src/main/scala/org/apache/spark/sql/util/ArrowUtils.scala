@@ -27,7 +27,7 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-object ArrowUtils {
+private[sql] object ArrowUtils {
 
   val rootAllocator = new RootAllocator(Long.MaxValue)
 
@@ -121,7 +121,7 @@ object ArrowUtils {
           val dt = fromArrowField(child)
           StructField(child.getName, dt, child.isNullable)
         }
-        StructType(fields)
+        StructType(fields.toSeq)
       case arrowType => fromArrowType(arrowType)
     }
   }
@@ -137,16 +137,12 @@ object ArrowUtils {
     StructType(schema.getFields.asScala.map { field =>
       val dt = fromArrowField(field)
       StructField(field.getName, dt, field.isNullable)
-    })
+    }.toSeq)
   }
 
   /** Return Map with conf settings to be used in ArrowPythonRunner */
   def getPythonRunnerConfMap(conf: SQLConf): Map[String, String] = {
-    val timeZoneConf = if (conf.pandasRespectSessionTimeZone) {
-      Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> conf.sessionLocalTimeZone)
-    } else {
-      Nil
-    }
+    val timeZoneConf = Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> conf.sessionLocalTimeZone)
     val pandasColsByName = Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key ->
       conf.pandasGroupedMapAssignColumnsByName.toString)
     val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->

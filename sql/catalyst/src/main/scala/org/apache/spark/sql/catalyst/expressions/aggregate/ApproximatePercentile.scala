@@ -65,6 +65,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(10.0, 0.5, 100);
        10.0
   """,
+  group = "agg_funcs",
   since = "2.1.0")
 case class ApproximatePercentile(
     child: Expression,
@@ -250,7 +251,7 @@ object ApproximatePercentile {
     def getPercentiles(percentages: Array[Double]): Array[Double] = {
       if (!isCompressed) compress()
       if (summaries.count == 0 || percentages.length == 0) {
-        Array.empty[Double]
+        Array.emptyDoubleArray
       } else {
         val result = new Array[Double](percentages.length)
         var i = 0

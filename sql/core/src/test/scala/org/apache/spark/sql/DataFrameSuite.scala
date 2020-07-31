@@ -23,29 +23,36 @@ import java.sql.{Date, Timestamp}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.scalatest.Matchers._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
-import org.apache.spark.sql.test.SQLTestData.{DecimalData, NullStrings, TestData2}
+import org.apache.spark.sql.test.SQLTestData.{DecimalData, TestData2}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
-class DataFrameSuite extends QueryTest with SharedSparkSession {
+class DataFrameSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
@@ -92,9 +99,10 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     assert(spark.emptyDataFrame.count() === 0)
   }
 
-  test("head and take") {
+  test("head, take and tail") {
     assert(testData.take(2) === testData.collect().take(2))
     assert(testData.head(2) === testData.collect().take(2))
+    assert(testData.tail(2) === testData.collect().takeRight(2))
     assert(testData.head(2).head.schema === testData.schema)
   }
 
@@ -105,11 +113,38 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     dfAlias.col("t2.c")
   }
 
+  test("simple explode") {
+    val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
+
+    checkAnswer(
+      df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
+      Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
+    )
+  }
+
+  test("explode") {
+    val df = Seq((1, "a b c"), (2, "a b"), (3, "a")).toDF("number", "letters")
+    val df2 =
+      df.explode('letters) {
+        case Row(letters: String) => letters.split(" ").map(Tuple1(_)).toSeq
+      }
+
+    checkAnswer(
+      df2
+        .select('_1 as 'letter, 'number)
+        .groupBy('letter)
+        .agg(countDistinct('number)),
+      Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
+    )
+  }
+
   test("Star Expansion - CreateStruct and CreateArray") {
     val structDf = testData2.select("a", "b").as("record")
     // CreateStruct and CreateArray in aggregateExpressions
-    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).first() == Row(3, Row(3, 1)))
-    assert(structDf.groupBy($"a").agg(min(array($"record.*"))).first() == Row(3, Seq(3, 1)))
+    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).
+      sort("a").first() == Row(1, Row(1, 1)))
+    assert(structDf.groupBy($"a").agg(min(array($"record.*"))).
+      sort("a").first() == Row(1, Seq(1, 1)))
 
     // CreateStruct and CreateArray in project list (unresolved alias)
     assert(structDf.select(struct($"record.*")).first() == Row(Row(1, 1)))
@@ -158,6 +193,20 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       structDf.select(xxhash64($"a", $"record.*")))
   }
 
+  private def assertDecimalSumOverflow(
+      df: DataFrame, ansiEnabled: Boolean, expectedAnswer: Row): Unit = {
+    if (!ansiEnabled) {
+      checkAnswer(df, expectedAnswer)
+    } else {
+      val e = intercept[SparkException] {
+        df.collect()
+      }
+      assert(e.getCause.isInstanceOf[ArithmeticException])
+      assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
+        e.getCause.getMessage.contains("Overflow in sum of decimals"))
+    }
+  }
+
   test("SPARK-28224: Aggregate sum big decimal overflow") {
     val largeDecimals = spark.sparkContext.parallelize(
       DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
@@ -166,17 +215,114 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
-        if (!ansiEnabled) {
-          checkAnswer(structDf, Row(null))
-        } else {
-          val e = intercept[SparkException] {
-            structDf.collect
+        assertDecimalSumOverflow(structDf, ansiEnabled, Row(null))
+      }
+    }
+  }
+
+  test("SPARK-28067: sum of null decimal values") {
+    Seq("true", "false").foreach { wholeStageEnabled =>
+      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
+        Seq("true", "false").foreach { ansiEnabled =>
+          withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled)) {
+            val df = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
+            checkAnswer(df.agg(sum($"d")), Row(null))
           }
-          assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
-          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
         }
       }
     }
+  }
+
+  test("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow") {
+    Seq("true", "false").foreach { wholeStageEnabled =>
+      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
+        Seq(true, false).foreach { ansiEnabled =>
+          withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+            val df0 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+            val df1 = Seq(
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+            val df = df0.union(df1)
+            val df2 = df.withColumnRenamed("decNum", "decNum2").
+              join(df, "intNum").agg(sum("decNum"))
+
+            val expectedAnswer = Row(null)
+            assertDecimalSumOverflow(df2, ansiEnabled, expectedAnswer)
+
+            val decStr = "1" + "0" * 19
+            val d1 = spark.range(0, 12, 1, 1)
+            val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
+            assertDecimalSumOverflow(d2, ansiEnabled, expectedAnswer)
+
+            val d3 = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
+            val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
+            assertDecimalSumOverflow(d4, ansiEnabled, expectedAnswer)
+
+            val d5 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d"),
+              lit(1).as("key")).groupBy("key").agg(sum($"d").alias("sumd")).select($"sumd")
+            assertDecimalSumOverflow(d5, ansiEnabled, expectedAnswer)
+
+            val nullsDf = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
+
+            val largeDecimals = Seq(BigDecimal("1"* 20 + ".123"), BigDecimal("9"* 20 + ".123")).
+              toDF("d")
+            assertDecimalSumOverflow(
+              nullsDf.union(largeDecimals).agg(sum($"d")), ansiEnabled, expectedAnswer)
+
+            val df3 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("50000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+
+            val df4 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+
+            val df5 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("20000000000000000000"), 2)).toDF("decNum", "intNum")
+
+            val df6 = df3.union(df4).union(df5)
+            val df7 = df6.groupBy("intNum").agg(sum("decNum"), countDistinct("decNum")).
+              filter("intNum == 1")
+            assertDecimalSumOverflow(df7, ansiEnabled, Row(1, null, 2))
+          }
+        }
+      }
+    }
+  }
+
+  test("Star Expansion - ds.explode should fail with a meaningful message if it takes a star") {
+    val df = Seq(("1", "1,2"), ("2", "4"), ("3", "7,8,9")).toDF("prefix", "csv")
+    val e = intercept[AnalysisException] {
+      df.explode($"*") { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+      }.queryExecution.assertAnalyzed()
+    }
+    assert(e.getMessage.contains("Invalid usage of '*' in explode/json_tuple/UDTF"))
+
+    checkAnswer(
+      df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
+        csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
+      },
+      Row("1", "1,2", "1:1") ::
+        Row("1", "1,2", "1:2") ::
+        Row("2", "4", "2:4") ::
+        Row("3", "7,8,9", "3:7") ::
+        Row("3", "7,8,9", "3:8") ::
+        Row("3", "7,8,9", "3:9") :: Nil)
   }
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
@@ -190,7 +336,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   test("explode on output of array-valued function") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
     checkAnswer(
-      df.select(explode(split($"csv", ","))),
+      df.select(explode(split($"csv", pattern = ","))),
       Row("1") :: Row("2") :: Row("4") :: Row("7") :: Row("8") :: Row("9") :: Nil)
   }
 
@@ -324,7 +470,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       testData.select("key").coalesce(1).select("key"),
       testData.select("key").collect().toSeq)
 
-    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 1)
+    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 0)
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
@@ -1161,7 +1307,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
                            |""".stripMargin
     assert(df.showString(1, truncate = 0) === expectedAnswer)
 
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
 
       val expectedAnswer = """+----------+-------------------+
                              ||d         |ts                 |
@@ -1182,7 +1328,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
                          " ts  | 2016-12-01 00:00:00 \n"
     assert(df.showString(1, truncate = 0, vertical = true) === expectedAnswer)
 
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
 
       val expectedAnswer = "-RECORD 0------------------\n" +
                            " d   | 2016-12-01          \n" +
@@ -1329,47 +1475,48 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-6941: Better error message for inserting into RDD-based Table") {
     withTempDir { dir =>
+      withTempView("parquet_base", "json_base", "rdd_base", "indirect_ds", "one_row") {
+        val tempParquetFile = new File(dir, "tmp_parquet")
+        val tempJsonFile = new File(dir, "tmp_json")
 
-      val tempParquetFile = new File(dir, "tmp_parquet")
-      val tempJsonFile = new File(dir, "tmp_json")
+        val df = Seq(Tuple1(1)).toDF()
+        val insertion = Seq(Tuple1(2)).toDF("col")
 
-      val df = Seq(Tuple1(1)).toDF()
-      val insertion = Seq(Tuple1(2)).toDF("col")
+        // pass case: parquet table (HadoopFsRelation)
+        df.write.mode(SaveMode.Overwrite).parquet(tempParquetFile.getCanonicalPath)
+        val pdf = spark.read.parquet(tempParquetFile.getCanonicalPath)
+        pdf.createOrReplaceTempView("parquet_base")
 
-      // pass case: parquet table (HadoopFsRelation)
-      df.write.mode(SaveMode.Overwrite).parquet(tempParquetFile.getCanonicalPath)
-      val pdf = spark.read.parquet(tempParquetFile.getCanonicalPath)
-      pdf.createOrReplaceTempView("parquet_base")
+        insertion.write.insertInto("parquet_base")
 
-      insertion.write.insertInto("parquet_base")
+        // pass case: json table (InsertableRelation)
+        df.write.mode(SaveMode.Overwrite).json(tempJsonFile.getCanonicalPath)
+        val jdf = spark.read.json(tempJsonFile.getCanonicalPath)
+        jdf.createOrReplaceTempView("json_base")
+        insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
 
-      // pass case: json table (InsertableRelation)
-      df.write.mode(SaveMode.Overwrite).json(tempJsonFile.getCanonicalPath)
-      val jdf = spark.read.json(tempJsonFile.getCanonicalPath)
-      jdf.createOrReplaceTempView("json_base")
-      insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
+        // error cases: insert into an RDD
+        df.createOrReplaceTempView("rdd_base")
+        val e1 = intercept[AnalysisException] {
+          insertion.write.insertInto("rdd_base")
+        }
+        assert(e1.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
-      // error cases: insert into an RDD
-      df.createOrReplaceTempView("rdd_base")
-      val e1 = intercept[AnalysisException] {
-        insertion.write.insertInto("rdd_base")
+        // error case: insert into a logical plan that is not a LeafNode
+        val indirectDS = pdf.select("_1").filter($"_1" > 5)
+        indirectDS.createOrReplaceTempView("indirect_ds")
+        val e2 = intercept[AnalysisException] {
+          insertion.write.insertInto("indirect_ds")
+        }
+        assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+
+        // error case: insert into an OneRowRelation
+        Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
+        val e3 = intercept[AnalysisException] {
+          insertion.write.insertInto("one_row")
+        }
+        assert(e3.getMessage.contains("Inserting into an RDD-based table is not allowed."))
       }
-      assert(e1.getMessage.contains("Inserting into an RDD-based table is not allowed."))
-
-      // error case: insert into a logical plan that is not a LeafNode
-      val indirectDS = pdf.select("_1").filter($"_1" > 5)
-      indirectDS.createOrReplaceTempView("indirect_ds")
-      val e2 = intercept[AnalysisException] {
-        insertion.write.insertInto("indirect_ds")
-      }
-      assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
-
-      // error case: insert into an OneRowRelation
-      Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
-      val e3 = intercept[AnalysisException] {
-        insertion.write.insertInto("one_row")
-      }
-      assert(e3.getMessage.contains("Inserting into an RDD-based table is not allowed."))
     }
   }
 
@@ -1693,19 +1840,21 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       val plan = join.queryExecution.executedPlan
       checkAnswer(join, df)
       assert(
-        join.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size === 1)
+        collect(join.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => true }.size === 1)
       assert(
-        join.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 1)
+        collect(join.queryExecution.executedPlan) { case e: ReusedExchangeExec => true }.size === 1)
       val broadcasted = broadcast(join)
       val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
       checkAnswer(join2, df)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size == 1)
+        collect(join2.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => true }.size == 1)
       assert(
-        join2.queryExecution.executedPlan
-          .collect { case e: BroadcastExchangeExec => true }.size === 1)
+        collect(join2.queryExecution.executedPlan) {
+          case e: BroadcastExchangeExec => true }.size === 1)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size == 4)
+        collect(join2.queryExecution.executedPlan) { case e: ReusedExchangeExec => true }.size == 4)
     }
   }
 
@@ -1739,13 +1888,17 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
     // invalid table names
     Seq("11111", "t~", "#$@sum", "table!#").foreach { name =>
-      val m = intercept[AnalysisException](df.createOrReplaceTempView(name)).getMessage
-      assert(m.contains(s"Invalid view name: $name"))
+      withTempView(name) {
+        val m = intercept[AnalysisException](df.createOrReplaceTempView(name)).getMessage
+        assert(m.contains(s"Invalid view name: $name"))
+      }
     }
 
     // valid table names
     Seq("table1", "`11111`", "`t~`", "`#$@sum`", "`table!#`").foreach { name =>
-      df.createOrReplaceTempView(name)
+      withTempView(name) {
+        df.createOrReplaceTempView(name)
+      }
     }
   }
 
@@ -2242,7 +2395,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df3.sort("value"), Row(7) :: Row(9) :: Nil)
 
     // Assert that no extra shuffle introduced by cogroup.
-    val exchanges = df3.queryExecution.executedPlan.collect {
+    val exchanges = collect(df3.queryExecution.executedPlan) {
       case h: ShuffleExchangeExec => h
     }
     assert(exchanges.size == 2)
@@ -2278,6 +2431,115 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       df.groupBy($"d", $"b").as[GroupByKey, Row]
     }
     assert(err.getMessage.contains("cannot resolve '`d`'"))
+  }
+
+  test("emptyDataFrame should be foldable") {
+    val emptyDf = spark.emptyDataFrame.withColumn("id", lit(1L))
+    val joined = spark.range(10).join(emptyDf, "id")
+    joined.queryExecution.optimizedPlan match {
+      case LocalRelation(Seq(id), Nil, _) =>
+        assert(id.name == "id")
+      case _ =>
+        fail("emptyDataFrame should be foldable")
+    }
+  }
+
+  test("SPARK-30811: CTE should not cause stack overflow when " +
+    "it refers to non-existent table with same name") {
+    val e = intercept[AnalysisException] {
+      sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
+    }
+    assert(e.getMessage.contains("Table or view not found:"))
+  }
+
+  test("CalendarInterval reflection support") {
+    val df = Seq((1, new CalendarInterval(1, 2, 3))).toDF("a", "b")
+    checkAnswer(df.selectExpr("b"), Row(new CalendarInterval(1, 2, 3)))
+  }
+
+  test("SPARK-31552: array encoder with different types") {
+    // primitives
+    val booleans = Array(true, false)
+    checkAnswer(Seq(booleans).toDF(), Row(booleans))
+
+    val bytes = Array(1.toByte, 2.toByte)
+    checkAnswer(Seq(bytes).toDF(), Row(bytes))
+    val shorts = Array(1.toShort, 2.toShort)
+    checkAnswer(Seq(shorts).toDF(), Row(shorts))
+    val ints = Array(1, 2)
+    checkAnswer(Seq(ints).toDF(), Row(ints))
+    val longs = Array(1L, 2L)
+    checkAnswer(Seq(longs).toDF(), Row(longs))
+
+    val floats = Array(1.0F, 2.0F)
+    checkAnswer(Seq(floats).toDF(), Row(floats))
+    val doubles = Array(1.0D, 2.0D)
+    checkAnswer(Seq(doubles).toDF(), Row(doubles))
+
+    val strings = Array("2020-04-24", "2020-04-25")
+    checkAnswer(Seq(strings).toDF(), Row(strings))
+
+    // tuples
+    val decOne = Decimal(1, 38, 18)
+    val decTwo = Decimal(2, 38, 18)
+    val tuple1 = (1, 2.2, "3.33", decOne, Date.valueOf("2012-11-22"))
+    val tuple2 = (2, 3.3, "4.44", decTwo, Date.valueOf("2022-11-22"))
+    checkAnswer(Seq(Array(tuple1, tuple2)).toDF(), Seq(Seq(tuple1, tuple2)).toDF())
+
+    // case classes
+    val gbks = Array(GroupByKey(1, 2), GroupByKey(4, 5))
+    checkAnswer(Seq(gbks).toDF(), Row(Array(Row(1, 2), Row(4, 5))))
+
+    // We can move this implicit def to [[SQLImplicits]] when we eventually make fully
+    // support for array encoder like Seq and Set
+    // For now cases below, decimal/datetime/interval/binary/nested types, etc,
+    // are not supported by array
+    implicit def newArrayEncoder[T <: Array[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
+
+    // decimals
+    val decSpark = Array(decOne, decTwo)
+    val decScala = decSpark.map(_.toBigDecimal)
+    val decJava = decSpark.map(_.toJavaBigDecimal)
+    checkAnswer(Seq(decSpark).toDF(), Row(decJava))
+    checkAnswer(Seq(decScala).toDF(), Row(decJava))
+    checkAnswer(Seq(decJava).toDF(), Row(decJava))
+
+    // datetimes and intervals
+    val dates = strings.map(Date.valueOf)
+    checkAnswer(Seq(dates).toDF(), Row(dates))
+    val localDates = dates.map(d => DateTimeUtils.daysToLocalDate(DateTimeUtils.fromJavaDate(d)))
+    checkAnswer(Seq(localDates).toDF(), Row(dates))
+
+    val timestamps =
+      Array(Timestamp.valueOf("2020-04-24 12:34:56"), Timestamp.valueOf("2020-04-24 11:22:33"))
+    checkAnswer(Seq(timestamps).toDF(), Row(timestamps))
+    val instants =
+      timestamps.map(t => DateTimeUtils.microsToInstant(DateTimeUtils.fromJavaTimestamp(t)))
+    checkAnswer(Seq(instants).toDF(), Row(timestamps))
+
+    val intervals = Array(new CalendarInterval(1, 2, 3), new CalendarInterval(4, 5, 6))
+    checkAnswer(Seq(intervals).toDF(), Row(intervals))
+
+    // binary
+    val bins = Array(Array(1.toByte), Array(2.toByte), Array(3.toByte), Array(4.toByte))
+    checkAnswer(Seq(bins).toDF(), Row(bins))
+
+    // nested
+    val nestedIntArray = Array(Array(1), Array(2))
+    checkAnswer(Seq(nestedIntArray).toDF(), Row(nestedIntArray.map(wrapIntArray)))
+    val nestedDecArray = Array(decSpark)
+    checkAnswer(Seq(nestedDecArray).toDF(), Row(Array(wrapRefArray(decJava))))
+  }
+
+  test("SPARK-31750: eliminate UpCast if child's dataType is DecimalType") {
+    withTempPath { f =>
+      sql("select cast(1 as decimal(38, 0)) as d")
+        .write.mode("overwrite")
+        .parquet(f.getAbsolutePath)
+
+      val df = spark.read.parquet(f.getAbsolutePath).as[BigDecimal]
+      assert(df.schema === new StructType().add(StructField("d", DecimalType(38, 0))))
+    }
   }
 }
 

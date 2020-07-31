@@ -79,7 +79,7 @@ abstract class FileTable(
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    SchemaUtils.checkColumnNameDuplication(dataSchema.fieldNames,
+    SchemaUtils.checkSchemaColumnNameDuplication(dataSchema,
       "in the data schema", caseSensitive)
     dataSchema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
@@ -88,7 +88,7 @@ abstract class FileTable(
       }
     }
     val partitionSchema = fileIndex.partitionSchema
-    SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
+    SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema,
       "in the partition schema", caseSensitive)
     val partitionNameSet: Set[String] =
       partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
@@ -102,7 +102,7 @@ abstract class FileTable(
     StructType(fields)
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.asTransforms
+  override def partitioning: Array[Transform] = fileIndex.partitionSchema.names.toSeq.asTransforms
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 

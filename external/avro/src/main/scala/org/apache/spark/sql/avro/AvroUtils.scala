@@ -19,8 +19,8 @@ package org.apache.spark.sql.avro
 import java.io.{FileNotFoundException, IOException}
 
 import org.apache.avro.Schema
+import org.apache.avro.file.{DataFileReader, FileReader}
 import org.apache.avro.file.DataFileConstants.{BZIP2_CODEC, DEFLATE_CODEC, SNAPPY_CODEC, XZ_CODEC}
-import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
@@ -31,6 +31,8 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.avro.AvroOptions.ignoreExtensionKey
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -42,12 +44,12 @@ object AvroUtils extends Logging {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val conf = spark.sessionState.newHadoopConf()
-    if (options.contains("ignoreExtension")) {
-      logWarning(s"Option ${AvroOptions.ignoreExtensionKey} is deprecated. Please use the " +
-        "general data source option pathGlobFilter for filtering file names.")
-    }
     val parsedOptions = new AvroOptions(options, conf)
 
+    if (parsedOptions.parameters.contains(ignoreExtensionKey)) {
+      logWarning(s"Option $ignoreExtensionKey is deprecated. Please use the " +
+        "general data source option pathGlobFilter for filtering file names.")
+    }
     // User can specify an optional avro json schema.
     val avroSchema = parsedOptions.schema
       .map(new Schema.Parser().parse)
@@ -158,6 +160,39 @@ object AvroUtils extends Logging {
       case None =>
         throw new FileNotFoundException(
           "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
+    }
+  }
+
+  // The trait provides iterator-like interface for reading records from an Avro file,
+  // deserializing and returning them as internal rows.
+  trait RowReader {
+    protected val fileReader: FileReader[GenericRecord]
+    protected val deserializer: AvroDeserializer
+    protected val stopPosition: Long
+
+    private[this] var completed = false
+    private[this] var currentRow: Option[InternalRow] = None
+
+    def hasNextRow: Boolean = {
+      do {
+        val r = fileReader.hasNext && !fileReader.pastSync(stopPosition)
+        if (!r) {
+          fileReader.close()
+          completed = true
+          currentRow = None
+        } else {
+          val record = fileReader.next()
+          currentRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
+        }
+      } while (!completed && currentRow.isEmpty)
+
+      currentRow.isDefined
+    }
+
+    def nextRow: InternalRow = {
+      currentRow.getOrElse {
+        throw new NoSuchElementException("next on empty iterator")
+      }
     }
   }
 }

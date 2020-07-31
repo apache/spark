@@ -21,13 +21,14 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
 import org.apache.spark.sql.catalyst.json.JSONOptionsInRead
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.json.JsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
+import org.apache.spark.sql.execution.datasources.v2.{FileScan, TextBasedFileScan}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -38,8 +39,11 @@ case class JsonScan(
     dataSchema: StructType,
     readDataSchema: StructType,
     readPartitionSchema: StructType,
-    options: CaseInsensitiveStringMap)
-  extends TextBasedFileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options) {
+    options: CaseInsensitiveStringMap,
+    pushedFilters: Array[Filter],
+    partitionFilters: Seq[Expression] = Seq.empty,
+    dataFilters: Seq[Expression] = Seq.empty)
+  extends TextBasedFileScan(sparkSession, options) {
 
   private val parsedOptions = new JSONOptionsInRead(
     CaseInsensitiveMap(options.asScala.toMap),
@@ -84,6 +88,22 @@ case class JsonScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     JsonPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions)
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, pushedFilters)
+  }
+
+  override def withFilters(
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
+    this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
+
+  override def equals(obj: Any): Boolean = obj match {
+    case j: JsonScan => super.equals(j) && dataSchema == j.dataSchema && options == j.options &&
+      equivalentFilters(pushedFilters, j.pushedFilters)
+    case _ => false
+  }
+
+  override def hashCode(): Int = super.hashCode()
+
+  override def description(): String = {
+    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
   }
 }

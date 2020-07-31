@@ -19,9 +19,10 @@ package org.apache.spark.sql
 
 import scala.util.Random
 
-import org.scalatest.Matchers.the
+import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.expressions.Window
@@ -30,11 +31,12 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
-class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
+class DataFrameAggregateSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   val absTol = 1e-8
@@ -527,6 +529,22 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("SPARK-31500: collect_set() of BinaryType returns duplicate elements") {
+    val bytesTest1 = "test1".getBytes
+    val bytesTest2 = "test2".getBytes
+    val df = Seq(bytesTest1, bytesTest1, bytesTest2).toDF("a")
+    checkAnswer(df.select(size(collect_set($"a"))), Row(2) :: Nil)
+
+    val a = "aa".getBytes
+    val b = "bb".getBytes
+    val c = "cc".getBytes
+    val d = "dd".getBytes
+    val df1 = Seq((a, b), (a, b), (c, d))
+      .toDF("x", "y")
+      .select(struct($"x", $"y").as("a"))
+    checkAnswer(df1.select(size(collect_set($"a"))), Row(2) :: Nil)
+  }
+
   test("collect_set functions cannot have maps") {
     val df = Seq((1, 3, 0), (2, 3, 0), (3, 4, 1))
       .toDF("a", "x", "y")
@@ -618,26 +636,27 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
 
         // test case for HashAggregate
         val hashAggDF = df.groupBy("x").agg(c, sum("y"))
+        hashAggDF.collect()
         val hashAggPlan = hashAggDF.queryExecution.executedPlan
         if (wholeStage) {
-          assert(hashAggPlan.find {
+          assert(find(hashAggPlan) {
             case WholeStageCodegenExec(_: HashAggregateExec) => true
             case _ => false
           }.isDefined)
         } else {
-          assert(hashAggPlan.isInstanceOf[HashAggregateExec])
+          assert(stripAQEPlan(hashAggPlan).isInstanceOf[HashAggregateExec])
         }
-        hashAggDF.collect()
 
         // test case for ObjectHashAggregate and SortAggregate
         val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
-        val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
+        objHashAggOrSortAggDF.collect()
+        val objHashAggOrSortAggPlan =
+          stripAQEPlan(objHashAggOrSortAggDF.queryExecution.executedPlan)
         if (useObjectHashAgg) {
           assert(objHashAggOrSortAggPlan.isInstanceOf[ObjectHashAggregateExec])
         } else {
           assert(objHashAggOrSortAggPlan.isInstanceOf[SortAggregateExec])
         }
-        objHashAggOrSortAggDF.collect()
       }
     }
   }
@@ -678,17 +697,17 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
         .groupBy("a").agg(collect_list("f").as("g"))
       val aggPlan = objHashAggDF.queryExecution.executedPlan
 
-      val sortAggPlans = aggPlan.collect {
+      val sortAggPlans = collect(aggPlan) {
         case sortAgg: SortAggregateExec => sortAgg
       }
       assert(sortAggPlans.isEmpty)
 
-      val objHashAggPlans = aggPlan.collect {
+      val objHashAggPlans = collect(aggPlan) {
         case objHashAgg: ObjectHashAggregateExec => objHashAgg
       }
       assert(objHashAggPlans.nonEmpty)
 
-      val exchangePlans = aggPlan.collect {
+      val exchangePlans = collect(aggPlan) {
         case shuffle: ShuffleExchangeExec => shuffle
       }
       assert(exchangePlans.length == 1)
@@ -954,36 +973,77 @@ class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("calendar interval agg support hash aggregate") {
-    val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
-    val df2 = df1.select(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df2, Row(new CalendarInterval(0, 2, 0)) :: Nil)
-    assert(df2.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
-    val df3 = df1.groupBy($"a").agg(avg($"b" cast CalendarIntervalType))
-    checkAnswer(df3,
-      Row(1, new CalendarInterval(0, 1, 0)) ::
-        Row(2, new CalendarInterval(0, 2, 0)) ::
-        Row(3, new CalendarInterval(0, 3, 0)) :: Nil)
-    assert(df3.queryExecution.executedPlan.find(_.isInstanceOf[HashAggregateExec]).isDefined)
+  Seq(true, false).foreach { value =>
+    test(s"SPARK-31620: agg with subquery (whole-stage-codegen = $value)") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString) {
+        withTempView("t1", "t2") {
+          sql("create temporary view t1 as select * from values (1, 2) as t1(a, b)")
+          sql("create temporary view t2 as select * from values (3, 4) as t2(c, d)")
+
+          // test without grouping keys
+          checkAnswer(sql("select sum(if(c > (select a from t1), d, 0)) as csum from t2"),
+            Row(4) :: Nil)
+
+          // test with grouping keys
+          checkAnswer(sql("select c, sum(if(c > (select a from t1), d, 0)) as csum from " +
+            "t2 group by c"), Row(3, 4) :: Nil)
+
+          // test with distinct
+          checkAnswer(sql("select avg(distinct(d)), sum(distinct(if(c > (select a from t1)," +
+            " d, 0))) as csum from t2 group by c"), Row(4, 4) :: Nil)
+
+          // test subquery with agg
+          checkAnswer(sql("select sum(distinct(if(c > (select sum(distinct(a)) from t1)," +
+            " d, 0))) as csum from t2 group by c"), Row(4) :: Nil)
+
+          // test SortAggregateExec
+          var df = sql("select max(if(c > (select a from t1), 'str1', 'str2')) as csum from t2")
+          assert(df.queryExecution.executedPlan
+            .find { case _: SortAggregateExec => true }.isDefined)
+          checkAnswer(df, Row("str1") :: Nil)
+
+          // test ObjectHashAggregateExec
+          df = sql("select collect_list(d), sum(if(c > (select a from t1), d, 0)) as csum from t2")
+          assert(df.queryExecution.executedPlan
+            .find { case _: ObjectHashAggregateExec => true }.isDefined)
+          checkAnswer(df, Row(Array(4), 4) :: Nil)
+        }
+      }
+    }
   }
 
-  test("Dataset agg functions support calendar intervals") {
-    val df1 = Seq((1, "1 day"), (2, "2 day"), (3, "3 day"), (3, null)).toDF("a", "b")
-    val df2 = df1.select($"a", $"b" cast CalendarIntervalType).groupBy($"a" % 2)
-    checkAnswer(df2.sum("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 4, 0)) :: Nil)
-    checkAnswer(df2.avg("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 2, 0)) :: Nil)
-    checkAnswer(df2.mean("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 2, 0)) :: Nil)
-    checkAnswer(df2.max("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 3, 0)) :: Nil)
-    checkAnswer(df2.min("b"),
-      Row(0, new CalendarInterval(0, 2, 0)) ::
-        Row(1, new CalendarInterval(0, 1, 0)) :: Nil)
+  test("SPARK-32038: NormalizeFloatingNumbers should work on distinct aggregate") {
+    withTempView("view") {
+      val nan1 = java.lang.Float.intBitsToFloat(0x7f800001)
+      val nan2 = java.lang.Float.intBitsToFloat(0x7fffffff)
+
+      Seq(("mithunr", Float.NaN),
+        ("mithunr", nan1),
+        ("mithunr", nan2),
+        ("abellina", 1.0f),
+        ("abellina", 2.0f)).toDF("uid", "score").createOrReplaceTempView("view")
+
+      val df = spark.sql("select uid, count(distinct score) from view group by 1 order by 1 asc")
+      checkAnswer(df, Row("abellina", 2) :: Row("mithunr", 1) :: Nil)
+    }
+  }
+
+  test("SPARK-32136: NormalizeFloatingNumbers should work on null struct") {
+    val df = Seq(
+      A(None),
+      A(Some(B(None))),
+      A(Some(B(Some(1.0))))).toDF
+    val groupBy = df.groupBy("b").agg(count("*"))
+    checkAnswer(groupBy, Row(null, 1) :: Row(Row(null), 1) :: Row(Row(1.0), 1) :: Nil)
+  }
+
+  test("SPARK-32344: Unevaluable's set to FIRST/LAST ignoreNullsExpr in distinct aggregates") {
+    val queryTemplate = (agg: String) =>
+      s"SELECT $agg(DISTINCT v) FROM (SELECT v FROM VALUES 1, 2, 3 t(v) ORDER BY v)"
+    checkAnswer(sql(queryTemplate("FIRST")), Row(1))
+    checkAnswer(sql(queryTemplate("LAST")), Row(3))
   }
 }
+
+case class B(c: Option[Double])
+case class A(b: Option[B])

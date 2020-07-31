@@ -31,9 +31,8 @@ import org.apache.spark.sql.types._
        2.0
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
        1.5
-      > SELECT _FUNC_(cast(v as interval)) FROM VALUES ('-1 weeks'), ('2 seconds'), (null) t(v);
-       -3 days -11 hours -59 minutes -59 seconds
   """,
+  group = "agg_funcs",
   since = "1.0.0")
 case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
@@ -41,7 +40,10 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "function average")
 
   override def nullable: Boolean = true
 
@@ -51,13 +53,11 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
-    case interval: CalendarIntervalType => interval
     case _ => DoubleType
   }
 
   private lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
-    case interval: CalendarIntervalType => interval
     case _ => DoubleType
   }
 
@@ -80,8 +80,6 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
-    case CalendarIntervalType =>
-      DivideInterval(sum.cast(resultType), count.cast(DoubleType))
     case _ =>
       sum.cast(resultType) / count.cast(resultType)
   }

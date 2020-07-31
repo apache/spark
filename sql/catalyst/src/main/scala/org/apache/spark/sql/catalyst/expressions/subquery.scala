@@ -62,11 +62,13 @@ abstract class SubqueryExpression(
 
 object SubqueryExpression {
   /**
-   * Returns true when an expression contains an IN or EXISTS subquery and false otherwise.
+   * Returns true when an expression contains an IN or correlated EXISTS subquery
+   * and false otherwise.
    */
-  def hasInOrExistsSubquery(e: Expression): Boolean = {
+  def hasInOrCorrelatedExistsSubquery(e: Expression): Boolean = {
     e.find {
-      case _: ListQuery | _: Exists => true
+      case _: ListQuery => true
+      case _: Exists if e.children.nonEmpty => true
       case _ => false
     }.isDefined
   }
@@ -101,24 +103,6 @@ object SubExprUtils extends PredicateHelper {
    */
   def containsOuter(e: Expression): Boolean = {
     e.find(_.isInstanceOf[OuterReference]).isDefined
-  }
-
-  /**
-   * Returns whether there are any null-aware predicate subqueries inside Not. If not, we could
-   * turn the null-aware predicate into not-null-aware predicate.
-   */
-  def hasNullAwarePredicateWithinNot(condition: Expression): Boolean = {
-    splitConjunctivePredicates(condition).exists {
-      case _: Exists | Not(_: Exists) => false
-      case _: InSubquery | Not(_: InSubquery) => false
-      case e => e.find { x =>
-        x.isInstanceOf[Not] && e.find {
-          case _: InSubquery => true
-          case _ => false
-        }.isDefined
-      }.isDefined
-    }
-
   }
 
   /**
@@ -202,7 +186,7 @@ object SubExprUtils extends PredicateHelper {
           e
       }
     }
-    outerExpressions
+    outerExpressions.toSeq
   }
 
   /**
@@ -302,7 +286,10 @@ case class ListQuery(
 }
 
 /**
- * The [[Exists]] expression checks if a row exists in a subquery given some correlated condition.
+ * The [[Exists]] expression checks if a row exists in a subquery given some correlated condition
+ * or some uncorrelated condition.
+ *
+ * 1. correlated condition:
  *
  * For example (SQL):
  * {{{
@@ -311,6 +298,17 @@ case class ListQuery(
  *   WHERE   EXISTS (SELECT  *
  *                   FROM    b
  *                   WHERE   b.id = a.id)
+ * }}}
+ *
+ * 2. uncorrelated condition example:
+ *
+ * For example (SQL):
+ * {{{
+ *   SELECT  *
+ *   FROM    a
+ *   WHERE   EXISTS (SELECT  *
+ *                   FROM    b
+ *                   WHERE   b.id > 10)
  * }}}
  */
 case class Exists(

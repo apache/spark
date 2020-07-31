@@ -188,7 +188,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
       int port = conf.getInt(
         SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
-      transportContext = new TransportContext(transportConf, blockHandler);
+      transportContext = new TransportContext(transportConf, blockHandler, true);
       shuffleServer = transportContext.createServer(port, bootstraps);
       // the port should normally be fixed, but for tests its useful to find an open port
       port = shuffleServer.getPort();
@@ -198,6 +198,7 @@ public class YarnShuffleService extends AuxiliaryService {
       // register metrics on the block handler into the Node Manager's metrics system.
       blockHandler.getAllMetrics().getMetrics().put("numRegisteredConnections",
           shuffleServer.getRegisteredConnections());
+      blockHandler.getAllMetrics().getMetrics().putAll(shuffleServer.getAllMetrics().getMetrics());
       YarnShuffleServiceMetrics serviceMetrics =
           new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
 

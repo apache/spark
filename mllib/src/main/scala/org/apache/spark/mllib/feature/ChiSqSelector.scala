@@ -74,8 +74,9 @@ class ChiSqSelectorModel @Since("1.3.0") (
     }
   }
 
-  private[spark] def compressSparse(indices: Array[Int],
-                                    values: Array[Double]): (Array[Int], Array[Double]) = {
+  private[spark] def compressSparse(
+      indices: Array[Int],
+      values: Array[Double]): (Array[Int], Array[Double]) = {
     val newValues = new ArrayBuilder.ofDouble
     val newIndices = new ArrayBuilder.ofInt
     var i = 0

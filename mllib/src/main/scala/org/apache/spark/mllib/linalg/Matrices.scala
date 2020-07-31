@@ -1055,7 +1055,7 @@ object Matrices {
     DenseMatrix.rand(numRows, numCols, rng)
 
   /**
-   * Generate a `SparseMatrix` consisting of `i.i.d.` gaussian random numbers.
+   * Generate a `SparseMatrix` consisting of `i.i.d.` uniform random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -1108,7 +1108,7 @@ object Matrices {
   @Since("1.3.0")
   def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array.empty)
+      return new DenseMatrix(0, 0, Array.emptyDoubleArray)
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1167,7 +1167,7 @@ object Matrices {
   @Since("1.3.0")
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array.empty[Double])
+      return new DenseMatrix(0, 0, Array.emptyDoubleArray)
     } else if (matrices.length == 1) {
       return matrices(0)
     }

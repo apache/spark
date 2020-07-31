@@ -21,6 +21,8 @@ import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
 
+import scala.collection.JavaConverters._
+
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
@@ -71,7 +73,8 @@ class JDBCSuite extends QueryTest
     }
   }
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     Utils.classForName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
     // usage of parameters from OPTIONS clause in queries.
@@ -273,8 +276,9 @@ class JDBCSuite extends QueryTest
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
 
-  after {
+  override def afterAll(): Unit = {
     conn.close()
+    super.afterAll()
   }
 
   // Check whether the tables are fetched in the expected degree of parallelism
@@ -635,12 +639,14 @@ class JDBCSuite extends QueryTest
   }
 
   test("test DATE types in cache") {
-    val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
-    spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
-      .cache().createOrReplaceTempView("mycached_date")
-    val cachedRows = sql("select * from mycached_date").collect()
-    assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
-    assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    withTempView("mycached_date") {
+      val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+      spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+        .cache().createOrReplaceTempView("mycached_date")
+      val cachedRows = sql("select * from mycached_date").collect()
+      assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+      assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    }
   }
 
   test("test types for null value") {
@@ -884,17 +890,37 @@ class JDBCSuite extends QueryTest
       "BIT")
     assert(msSqlServerDialect.getJDBCType(BinaryType).map(_.databaseTypeDefinition).get ==
       "VARBINARY(MAX)")
-    assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get ==
-      "SMALLINT")
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
+        if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
+          assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).isEmpty)
+        } else {
+          assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get ==
+            "SMALLINT")
+        }
+      }
+    }
   }
 
   test("SPARK-28152 MsSqlServerDialect catalyst type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)
-    assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
-      metadata).get == ShortType)
-    assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
-      metadata).get == FloatType)
+
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
+        if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
+            metadata).isEmpty)
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
+            metadata).isEmpty)
+        } else {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
+            metadata).get == ShortType)
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
+            metadata).get == FloatType)
+        }
+      }
+    }
   }
 
   test("table exists query by jdbc dialect") {
@@ -1158,7 +1184,10 @@ class JDBCSuite extends QueryTest
 
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
-    val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
+    val schema = JdbcUtils.schemaString(
+      df.schema,
+      df.sqlContext.conf.caseSensitiveAnalysis,
+      "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
   }
 
@@ -1280,7 +1309,8 @@ class JDBCSuite extends QueryTest
     testJdbcOptions(new JDBCOptions(parameters))
     testJdbcOptions(new JDBCOptions(CaseInsensitiveMap(parameters)))
     // test add/remove key-value from the case-insensitive map
-    var modifiedParameters = CaseInsensitiveMap(Map.empty) ++ parameters
+    var modifiedParameters =
+      (CaseInsensitiveMap(Map.empty) ++ parameters).asInstanceOf[Map[String, String]]
     testJdbcOptions(new JDBCOptions(modifiedParameters))
     modifiedParameters -= "dbtable"
     assert(modifiedParameters.get("dbTAblE").isEmpty)
@@ -1678,5 +1708,38 @@ class JDBCSuite extends QueryTest
     assert(JdbcDialects.get("jdbc:Oracle://localhost/db") === OracleDialect)
     assert(JdbcDialects.get("jdbc:teradata://localhost/db") === TeradataDialect)
     assert(JdbcDialects.get("jdbc:Teradata://localhost/db") === TeradataDialect)
+  }
+
+  test("SQLContext.jdbc (deprecated)") {
+    val sqlContext = spark.sqlContext
+    var jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE")
+    checkAnswer(jdbcDF, Row("fred", 1) :: Row("mary", 2) :: Row ("joe 'foo' \"bar\"", 3) :: Nil)
+
+    jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3)
+    checkNumPartitions(jdbcDF, 3)
+    checkAnswer(jdbcDF, Row("fred", 1) :: Row("mary", 2) :: Row ("joe 'foo' \"bar\"", 3) :: Nil)
+
+    val parts = Array[String]("THEID = 2")
+    jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts)
+    checkAnswer(jdbcDF, Row("mary", 2) :: Nil)
+  }
+
+  test("SPARK-32364: JDBCOption constructor") {
+    val extraOptions = CaseInsensitiveMap[String](Map("UrL" -> "url1", "dBTable" -> "table1"))
+    val connectionProperties = new Properties()
+    connectionProperties.put("url", "url2")
+    connectionProperties.put("dbtable", "table2")
+
+    // connection property should override the options in extraOptions
+    val params = extraOptions ++ connectionProperties.asScala
+    assert(params.size == 2)
+    assert(params.get("uRl").contains("url2"))
+    assert(params.get("DbtaBle").contains("table2"))
+
+    // JDBCOptions constructor parameter should overwrite the existing conf
+    val options = new JDBCOptions(url, "table3", params)
+    assert(options.asProperties.size == 2)
+    assert(options.asProperties.get("url") == url)
+    assert(options.asProperties.get("dbtable") == "table3")
   }
 }

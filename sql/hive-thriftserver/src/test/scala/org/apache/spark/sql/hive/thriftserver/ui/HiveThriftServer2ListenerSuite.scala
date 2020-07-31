@@ -140,6 +140,23 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(listener.noLiveData())
   }
 
+  test("SPARK-31387 - listener update methods should not throw exception with unknown input") {
+    val (statusStore: HiveThriftServer2AppStatusStore, listener: HiveThriftServer2Listener) =
+      createAppStatusStore(true)
+
+    val unknownSession = "unknown_session"
+    val unknownOperation = "unknown_operation"
+    listener.onOtherEvent(SparkListenerThriftServerSessionClosed(unknownSession, 0))
+    listener.onOtherEvent(SparkListenerThriftServerOperationStart("id", unknownSession,
+      "stmt", "groupId", 0))
+    listener.onOtherEvent(SparkListenerThriftServerOperationParsed(unknownOperation, "query"))
+    listener.onOtherEvent(SparkListenerThriftServerOperationCanceled(unknownOperation, 0))
+    listener.onOtherEvent(SparkListenerThriftServerOperationError(unknownOperation,
+      "msg", "trace", 0))
+    listener.onOtherEvent(SparkListenerThriftServerOperationFinish(unknownOperation, 0))
+    listener.onOtherEvent(SparkListenerThriftServerOperationClosed(unknownOperation, 0))
+  }
+
   private def createProperties: Properties = {
     val properties = new Properties()
     properties.setProperty(SparkContext.SPARK_JOB_GROUP_ID, "groupId")

@@ -92,8 +92,14 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
     } else {
       resource
     }
+    var proxyUserArgs = Seq[String]()
+    if (!conf.proxyUser.isEmpty) {
+      proxyUserArgs = proxyUserArgs :+ "--proxy-user"
+      proxyUserArgs = proxyUserArgs :+ conf.proxyUser.get
+    }
     new ContainerBuilder(pod.container)
       .addToArgs("driver")
+      .addToArgs(proxyUserArgs: _*)
       .addToArgs("--properties-file", SPARK_CONF_PATH)
       .addToArgs("--class", conf.mainClass)
       .addToArgs(resolvedResource)

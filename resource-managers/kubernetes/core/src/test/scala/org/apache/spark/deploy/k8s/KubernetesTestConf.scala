@@ -48,9 +48,11 @@ object KubernetesTestConf {
       labels: Map[String, String] = Map.empty,
       environment: Map[String, String] = Map.empty,
       annotations: Map[String, String] = Map.empty,
+      serviceAnnotations: Map[String, String] = Map.empty,
       secretEnvNamesToKeyRefs: Map[String, String] = Map.empty,
       secretNamesToMountPaths: Map[String, String] = Map.empty,
-      volumes: Seq[KubernetesVolumeSpec] = Seq.empty): KubernetesDriverConf = {
+      volumes: Seq[KubernetesVolumeSpec] = Seq.empty,
+      proxyUser: Option[String] = None): KubernetesDriverConf = {
     val conf = sparkConf.clone()
 
     resourceNamePrefix.foreach { prefix =>
@@ -59,11 +61,12 @@ object KubernetesTestConf {
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_LABEL_PREFIX, labels)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_ENV_PREFIX, environment)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_ANNOTATION_PREFIX, annotations)
+    setPrefixedConfigs(conf, KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX, serviceAnnotations)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SECRETS_PREFIX, secretNamesToMountPaths)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX, secretEnvNamesToKeyRefs)
     setVolumeSpecs(conf, KUBERNETES_DRIVER_VOLUMES_PREFIX, volumes)
 
-    new KubernetesDriverConf(conf, appId, mainAppResource, mainClass, appArgs)
+    new KubernetesDriverConf(conf, appId, mainAppResource, mainClass, appArgs, proxyUser)
   }
   // scalastyle:on argcount
 
@@ -119,6 +122,11 @@ object KubernetesTestConf {
           val mconf = medium.map { m => (KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY, m) }.toMap
           val lconf = sizeLimit.map { l => (KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY, l) }.toMap
           (KUBERNETES_VOLUMES_EMPTYDIR_TYPE, mconf ++ lconf)
+
+        case KubernetesNFSVolumeConf(path, server) =>
+          (KUBERNETES_VOLUMES_NFS_TYPE, Map(
+            KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path,
+            KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY -> server))
       }
 
       conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_PATH_KEY), spec.mountPath)

@@ -81,6 +81,22 @@ class StructTypeSuite extends SparkFunSuite {
     assert(7 == schema.treeString.split("\n").length)
     assert(7 == schema.treeString(0).split("\n").length)
     assert(7 == schema.treeString(-1).split("\n").length)
+
+    val schema2 = StructType.fromDDL(
+      "c1 INT, c2 ARRAY<STRUCT<c3: INT>>, c4 STRUCT<c5: INT, c6: ARRAY<ARRAY<INT>>>")
+    assert(4 == schema2.treeString(1).split("\n").length)
+    assert(7 == schema2.treeString(2).split("\n").length)
+    assert(9 == schema2.treeString(3).split("\n").length)
+    assert(10 == schema2.treeString(4).split("\n").length)
+    assert(10 == schema2.treeString(0).split("\n").length)
+
+    val schema3 = StructType.fromDDL(
+      "c1 MAP<INT, STRUCT<c2: MAP<INT, INT>>>, c3 STRUCT<c4: MAP<INT, MAP<INT, INT>>>")
+    assert(3 == schema3.treeString(1).split("\n").length)
+    assert(6 == schema3.treeString(2).split("\n").length)
+    assert(9 == schema3.treeString(3).split("\n").length)
+    assert(13 == schema3.treeString(4).split("\n").length)
+    assert(13 == schema3.treeString(0).split("\n").length)
   }
 
   test("interval keyword in schema string") {

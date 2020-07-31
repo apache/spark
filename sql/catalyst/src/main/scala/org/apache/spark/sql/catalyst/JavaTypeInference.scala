@@ -21,6 +21,7 @@ import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.{Iterable => JIterable}
 import java.lang.reflect.Type
 import java.util.{Iterator => JIterator, List => JList, Map => JMap}
+import javax.annotation.Nonnull
 
 import scala.language.existentials
 
@@ -148,7 +149,9 @@ object JavaTypeInference {
         val fields = properties.map { property =>
           val returnType = typeToken.method(property.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
-          new StructField(property.getName, dataType, nullable)
+          // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
+          val hasNonNull = property.getReadMethod.isAnnotationPresent(classOf[Nonnull])
+          new StructField(property.getName, dataType, nullable && !hasNonNull)
         }
         (new StructType(fields), true)
     }
@@ -340,10 +343,12 @@ object JavaTypeInference {
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(fieldType)
           val newTypePath = walkedTypePath.recordField(fieldType.getType.getTypeName, fieldName)
+          // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
+          val hasNonNull = p.getReadMethod.isAnnotationPresent(classOf[Nonnull])
           val setter = expressionWithNullSafety(
             deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePath),
               newTypePath),
-            nullable = nullable,
+            nullable = nullable && !hasNonNull,
             newTypePath)
           p.getWriteMethod.getName -> setter
         }.toMap
@@ -442,10 +447,13 @@ object JavaTypeInference {
           val fields = properties.map { p =>
             val fieldName = p.getName
             val fieldType = typeToken.method(p.getReadMethod).getReturnType
+            val hasNonNull = p.getReadMethod.isAnnotationPresent(classOf[Nonnull])
             val fieldValue = Invoke(
               inputObject,
               p.getReadMethod.getName,
-              inferExternalType(fieldType.getRawType))
+              inferExternalType(fieldType.getRawType),
+              propagateNull = !hasNonNull,
+              returnNullable = !hasNonNull)
             (fieldName, serializerFor(fieldValue, fieldType))
           }
           createSerializerForObject(inputObject, fields)

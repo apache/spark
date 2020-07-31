@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Map;
+
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -31,31 +34,57 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * <p>
  * The major responsibility of this interface is to return a {@link Table} for read/write.
  * </p>
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface TableProvider {
 
   /**
-   * Return a {@link Table} instance to do read/write with user-specified options.
+   * Infer the schema of the table identified by the given options.
    *
-   * @param options the user-specified options that can identify a table, e.g. file path, Kafka
-   *                topic name, etc. It's an immutable case-insensitive string-to-string map.
+   * @param options an immutable case-insensitive string-to-string map that can identify a table,
+   *                e.g. file path, Kafka topic name, etc.
    */
-  Table getTable(CaseInsensitiveStringMap options);
+  StructType inferSchema(CaseInsensitiveStringMap options);
 
   /**
-   * Return a {@link Table} instance to do read/write with user-specified schema and options.
+   * Infer the partitioning of the table identified by the given options.
    * <p>
-   * By default this method throws {@link UnsupportedOperationException}, implementations should
-   * override this method to handle user-specified schema.
-   * </p>
-   * @param options the user-specified options that can identify a table, e.g. file path, Kafka
-   *                topic name, etc. It's an immutable case-insensitive string-to-string map.
-   * @param schema the user-specified schema.
-   * @throws UnsupportedOperationException
+   * By default this method returns empty partitioning, please override it if this source support
+   * partitioning.
+   *
+   * @param options an immutable case-insensitive string-to-string map that can identify a table,
+   *                e.g. file path, Kafka topic name, etc.
    */
-  default Table getTable(CaseInsensitiveStringMap options, StructType schema) {
-    throw new UnsupportedOperationException(
-      this.getClass().getSimpleName() + " source does not support user-specified schema");
+  default Transform[] inferPartitioning(CaseInsensitiveStringMap options) {
+    return new Transform[0];
+  }
+
+  /**
+   * Return a {@link Table} instance with the specified table schema, partitioning and properties
+   * to do read/write. The returned table should report the same schema and partitioning with the
+   * specified ones, or Spark may fail the operation.
+   *
+   * @param schema The specified table schema.
+   * @param partitioning The specified table partitioning.
+   * @param properties The specified table properties. It's case preserving (contains exactly what
+   *                   users specified) and implementations are free to use it case sensitively or
+   *                   insensitively. It should be able to identify a table, e.g. file path, Kafka
+   *                   topic name, etc.
+   */
+  Table getTable(StructType schema, Transform[] partitioning, Map<String, String> properties);
+
+  /**
+   * Returns true if the source has the ability of accepting external table metadata when getting
+   * tables. The external table metadata includes user-specified schema from
+   * `DataFrameReader`/`DataStreamReader` and schema/partitioning stored in Spark catalog.
+   * <p>
+   * By default this method returns false, which means the schema and partitioning passed to
+   * `getTable` are from the infer methods. Please override it if this source has expensive
+   * schema/partitioning inference and wants external table metadata to avoid inference.
+   */
+  default boolean supportsExternalMetadata() {
+    return false;
   }
 }

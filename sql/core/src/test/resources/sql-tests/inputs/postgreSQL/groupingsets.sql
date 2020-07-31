@@ -385,7 +385,6 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
 --     from gstest1 group by cube(a,b);
 
 -- unsortable cases
--- [SPARK-29708] Different answers in aggregates of multiple grouping sets
 select unsortable_col, count(*)
   from gstest4 group by grouping sets ((unsortable_col),(unsortable_col))
   order by string(unsortable_col);

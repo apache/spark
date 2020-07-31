@@ -80,8 +80,8 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
             val e = intercept[AnalysisException] {
               sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
             }.getMessage
-            assert(e.contains("Not allowed to create a permanent view `view1` by referencing " +
-              s"a temporary function `$tempFunctionName`"))
+            assert(e.contains("Not allowed to create a permanent view `default`.`view1` by " +
+              s"referencing a temporary function `$tempFunctionName`"))
           }
         }
       }

@@ -29,6 +29,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * If Spark fails to execute any methods in the implementations of this interface or in the returned
  * {@link PartitionReader} (by throwing an exception), corresponding Spark task would fail and
  * get retried until hitting the maximum retry times.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface PartitionReaderFactory extends Serializable {

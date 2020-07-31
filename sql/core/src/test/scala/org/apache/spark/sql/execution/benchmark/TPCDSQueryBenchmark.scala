@@ -81,17 +81,17 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
       val queryRelations = scala.collection.mutable.HashSet[String]()
       spark.sql(queryString).queryExecution.analyzed.foreach {
         case SubqueryAlias(alias, _: LogicalRelation) =>
-          queryRelations.add(alias.identifier)
+          queryRelations.add(alias.name)
         case LogicalRelation(_, _, Some(catalogTable), _) =>
           queryRelations.add(catalogTable.identifier.table)
-        case HiveTableRelation(tableMeta, _, _, _) =>
+        case HiveTableRelation(tableMeta, _, _, _, _) =>
           queryRelations.add(tableMeta.identifier.table)
         case _ =>
       }
       val numRows = queryRelations.map(tableSizes.getOrElse(_, 0L)).sum
       val benchmark = new Benchmark(s"TPCDS Snappy", numRows, 2, output = output)
       benchmark.addCase(s"$name$nameSuffix") { _ =>
-        spark.sql(queryString).collect()
+        spark.sql(queryString).noop()
       }
       benchmark.run()
     }

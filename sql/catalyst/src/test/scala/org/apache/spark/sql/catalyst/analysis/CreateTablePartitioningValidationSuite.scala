@@ -133,7 +133,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 }
 
-private object CreateTablePartitioningValidationSuite {
+private[sql] object CreateTablePartitioningValidationSuite {
   val catalog: TableCatalog = {
     val cat = new InMemoryTableCatalog()
     cat.initialize("test", CaseInsensitiveStringMap.empty())
@@ -146,7 +146,7 @@ private object CreateTablePartitioningValidationSuite {
       .add("point", new StructType().add("x", DoubleType).add("y", DoubleType))
 }
 
-private case object TestRelation2 extends LeafNode with NamedRelation {
+private[sql] case object TestRelation2 extends LeafNode with NamedRelation {
   override def name: String = "source_relation"
   override def output: Seq[AttributeReference] =
     CreateTablePartitioningValidationSuite.schema.toAttributes

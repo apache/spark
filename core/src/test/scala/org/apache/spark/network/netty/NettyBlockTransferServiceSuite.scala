@@ -25,7 +25,9 @@ import scala.util.Random
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, times, verify, when}
-import org.scalatest._
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{ExecutorDeadException, SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.BlockDataManager
@@ -105,7 +107,7 @@ class NettyBlockTransferServiceSuite
     // This is used to touch an IOException during fetching block.
     when(client.sendRpc(any(), any())).thenAnswer(_ => {throw new IOException()})
     var createClientCount = 0
-    when(clientFactory.createClient(any(), any())).thenAnswer(_ => {
+    when(clientFactory.createClient(any(), any(), any())).thenAnswer(_ => {
       createClientCount += 1
       client
     })

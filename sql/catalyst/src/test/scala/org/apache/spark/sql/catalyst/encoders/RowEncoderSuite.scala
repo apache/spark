@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.util.Random
 
 import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.internal.SQLConf
@@ -80,6 +81,18 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   private val arrayOfNull = ArrayType(NullType)
   private val mapOfString = MapType(StringType, StringType)
   private val arrayOfUDT = ArrayType(new ExamplePointUDT, false)
+
+  private def toRow(encoder: ExpressionEncoder[Row], row: Row): InternalRow = {
+    encoder.createSerializer().apply(row)
+  }
+
+  private def fromRow(encoder: ExpressionEncoder[Row], row: InternalRow): Row = {
+    encoder.createDeserializer().apply(row)
+  }
+
+  private def roundTrip(encoder: ExpressionEncoder[Row], row: Row): Row = {
+    fromRow(encoder, toRow(encoder, row))
+  }
 
   encodeDecodeTest(
     new StructType()
@@ -144,8 +157,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val catalystDecimal = Decimal("1234.5678")
 
     val input = Row(100, "test", 0.123, javaDecimal, scalaDecimal, catalystDecimal)
-    val row = encoder.toRow(input)
-    val convertedBack = encoder.fromRow(row)
+    val convertedBack = roundTrip(encoder, input)
     // Decimal will be converted back to Java BigDecimal when decoding.
     assert(convertedBack.getDecimal(3).compareTo(javaDecimal) == 0)
     assert(convertedBack.getDecimal(4).compareTo(scalaDecimal.bigDecimal) == 0)
@@ -157,7 +169,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val encoder = RowEncoder(schema).resolveAndBind()
     val decimal = Decimal("67123.45")
     val input = Row(decimal)
-    val row = encoder.toRow(input)
+    val row = toRow(encoder, input)
 
     assert(row.toSeq(schema).head == decimal)
   }
@@ -172,7 +184,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val encoder = RowEncoder(schema).resolveAndBind()
       intercept[Exception] {
-        encoder.toRow(row)
+        toRow(encoder, row)
       } match {
         case e: ArithmeticException =>
           assert(e.getMessage.contains("cannot be represented as Decimal"))
@@ -184,7 +196,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       val encoder = RowEncoder(schema).resolveAndBind()
-      assert(encoder.fromRow(encoder.toRow(row)).get(0) == null)
+      assert(roundTrip(encoder, row).get(0) == null)
     }
   }
 
@@ -237,8 +249,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       Array(1.1.toFloat, 123.456.toFloat, Float.MaxValue),
       Array(11.1111, 123456.7890123, Double.MaxValue)
     )
-    val row = encoder.toRow(Row.fromSeq(input))
-    val convertedBack = encoder.fromRow(row)
+    val convertedBack = roundTrip(encoder, Row.fromSeq(input))
     input.zipWithIndex.map { case (array, index) =>
       assert(convertedBack.getSeq(index) === array)
     }
@@ -254,8 +265,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       Array(1, 2, null),
       Array(Array("abc", null), null),
       Array(Seq(Array(0L, null), null), null))
-    val row = encoder.toRow(input)
-    val convertedBack = encoder.fromRow(row)
+    val convertedBack = roundTrip(encoder, input)
     assert(convertedBack.getSeq(0) == Seq(1, 2, null))
     assert(convertedBack.getSeq(1) == Seq(Seq("abc", null), null))
     assert(convertedBack.getSeq(2) == Seq(Seq(Seq(0L, null), null), null))
@@ -264,7 +274,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   test("RowEncoder should throw RuntimeException if input row object is null") {
     val schema = new StructType().add("int", IntegerType)
     val encoder = RowEncoder(schema)
-    val e = intercept[RuntimeException](encoder.toRow(null))
+    val e = intercept[RuntimeException](toRow(encoder, null))
     assert(e.getMessage.contains("Null value appeared in non-nullable field"))
     assert(e.getMessage.contains("top level Product or row object"))
   }
@@ -273,14 +283,14 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val e1 = intercept[RuntimeException] {
       val schema = new StructType().add("a", IntegerType)
       val encoder = RowEncoder(schema)
-      encoder.toRow(Row(1.toShort))
+      toRow(encoder, Row(1.toShort))
     }
     assert(e1.getMessage.contains("java.lang.Short is not a valid external type"))
 
     val e2 = intercept[RuntimeException] {
       val schema = new StructType().add("a", StringType)
       val encoder = RowEncoder(schema)
-      encoder.toRow(Row(1))
+      toRow(encoder, Row(1))
     }
     assert(e2.getMessage.contains("java.lang.Integer is not a valid external type"))
 
@@ -288,14 +298,14 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val schema = new StructType().add("a",
         new StructType().add("b", IntegerType).add("c", StringType))
       val encoder = RowEncoder(schema)
-      encoder.toRow(Row(1 -> "a"))
+      toRow(encoder, Row(1 -> "a"))
     }
     assert(e3.getMessage.contains("scala.Tuple2 is not a valid external type"))
 
     val e4 = intercept[RuntimeException] {
       val schema = new StructType().add("a", ArrayType(TimestampType))
       val encoder = RowEncoder(schema)
-      encoder.toRow(Row(Array("a")))
+      toRow(encoder, Row(Array("a")))
     }
     assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
   }
@@ -313,9 +323,9 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val schema = new StructType().add("t", TimestampType)
       val encoder = RowEncoder(schema).resolveAndBind()
       val instant = java.time.Instant.parse("2019-02-26T16:56:00Z")
-      val row = encoder.toRow(Row(instant))
+      val row = toRow(encoder, Row(instant))
       assert(row.getLong(0) === DateTimeUtils.instantToMicros(instant))
-      val readback = encoder.fromRow(row)
+      val readback = fromRow(encoder, row)
       assert(readback.get(0) === instant)
     }
   }
@@ -325,9 +335,9 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val schema = new StructType().add("d", DateType)
       val encoder = RowEncoder(schema).resolveAndBind()
       val localDate = java.time.LocalDate.parse("2019-02-27")
-      val row = encoder.toRow(Row(localDate))
-      assert(row.getLong(0) === DateTimeUtils.localDateToDays(localDate))
-      val readback = encoder.fromRow(row)
+      val row = toRow(encoder, Row(localDate))
+      assert(row.getInt(0) === DateTimeUtils.localDateToDays(localDate))
+      val readback = fromRow(encoder, row)
       assert(readback.get(0).equals(localDate))
     }
   }
@@ -367,24 +377,27 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   private def encodeDecodeTest(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
-      val encoder = RowEncoder(schema).resolveAndBind()
-      val inputGenerator = RandomDataGenerator.forType(schema, nullable = false).get
+      Seq(false, true).foreach { java8Api =>
+        withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+          val encoder = RowEncoder(schema).resolveAndBind()
+          val inputGenerator = RandomDataGenerator.forType(schema, nullable = false).get
 
-      var input: Row = null
-      try {
-        for (_ <- 1 to 5) {
-          input = inputGenerator.apply().asInstanceOf[Row]
-          val row = encoder.toRow(input)
-          val convertedBack = encoder.fromRow(row)
-          assert(input == convertedBack)
+          var input: Row = null
+          try {
+            for (_ <- 1 to 5) {
+              input = inputGenerator.apply().asInstanceOf[Row]
+              val convertedBack = roundTrip(encoder, input)
+              assert(input == convertedBack)
+            }
+          } catch {
+            case e: Exception =>
+              fail(
+                s"""
+                   |schema: ${schema.simpleString}
+                   |input: ${input}
+                 """.stripMargin, e)
+          }
         }
-      } catch {
-        case e: Exception =>
-          fail(
-            s"""
-               |schema: ${schema.simpleString}
-               |input: ${input}
-             """.stripMargin, e)
       }
     }
   }

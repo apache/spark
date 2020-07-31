@@ -22,10 +22,11 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.write.{SupportsTruncate, WriteBuilder}
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, WriteBuilder}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStreamingUpdate}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -35,7 +36,7 @@ case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
   override def schema: StructType = data.schema
 }
 
-class ConsoleSinkProvider extends TableProvider
+class ConsoleSinkProvider extends SimpleTableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
 
@@ -71,21 +72,17 @@ object ConsoleTable extends Table with SupportsWrite {
     Set(TableCapability.STREAMING_WRITE).asJava
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-    new WriteBuilder with SupportsTruncate {
-      private var inputSchema: StructType = _
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdate {
+      private val inputSchema: StructType = info.schema()
 
-      override def withInputDataSchema(schema: StructType): WriteBuilder = {
-        this.inputSchema = schema
-        this
-      }
-
-      // Do nothing for truncate. Console sink is special that it just prints all the records.
+      // Do nothing for truncate/update. Console sink is special and it just prints all the records.
       override def truncate(): WriteBuilder = this
+      override def update(): WriteBuilder = this
 
       override def buildForStreaming(): StreamingWrite = {
         assert(inputSchema != null)
-        new ConsoleWrite(inputSchema, options)
+        new ConsoleWrite(inputSchema, info.options)
       }
     }
   }
