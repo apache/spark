@@ -26,9 +26,6 @@ Note that this migration guide describes the items specific to PySpark.
 Many items of SQL migration can be applied when migrating PySpark to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.html).
 
-## Upgrading from PySpark 3.0 to 3.1
-- In Spark 3.1, PySpark `DataFrame.head()` will return `[]` if the PySpark DataFrame is empty. In Spark 3.0 or prior, it will return `None`. The bahavior remains the same for non-empty PySpark DataFrame.
-
 ## Upgrading from PySpark 2.4 to 3.0
 - In Spark 3.0, PySpark requires a pandas version of 0.23.2 or higher to use pandas related functionality, such as `toPandas`, `createDataFrame` from pandas DataFrame, and so on.
 

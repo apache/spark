@@ -859,12 +859,18 @@ class RDD(object):
 
     def collectWithJobGroup(self, groupId, description, interruptOnCancel=False):
         """
-        .. note:: Experimental
-
         When collect rdd, use this method to specify job group.
+
+        .. note:: Deprecated in 3.1.0. Use :class:`pyspark.InheritableThread` with
+            the pinned thread mode enabled.
 
         .. versionadded:: 3.0.0
         """
+        warnings.warn(
+            "Deprecated in 3.1, Use pyspark.InheritableThread with "
+            "the pinned thread mode enabled.",
+            DeprecationWarning)
+
         with SCCallSiteSync(self.context) as css:
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
                 self._jrdd.rdd(), groupId, description, interruptOnCancel)
