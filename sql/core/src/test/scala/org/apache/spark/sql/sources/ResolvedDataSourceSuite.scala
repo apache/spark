@@ -35,13 +35,13 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
   test("jdbc") {
     assert(
       getProvidingClass("jdbc") ===
-      classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+      classOf[org.apache.spark.sql.execution.datasources.jdbc.JDBCRelationProvider])
     assert(
       getProvidingClass("org.apache.spark.sql.execution.datasources.jdbc") ===
-      classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+      classOf[org.apache.spark.sql.execution.datasources.jdbc.JDBCRelationProvider])
     assert(
       getProvidingClass("org.apache.spark.sql.jdbc") ===
-        classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+        classOf[org.apache.spark.sql.execution.datasources.jdbc.JDBCRelationProvider])
   }
 
   test("json") {

@@ -21,7 +21,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCUtils._
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
-class JdbcRelationProvider extends CreatableRelationProvider
+class JDBCRelationProvider extends CreatableRelationProvider
   with RelationProvider with DataSourceRegister {
 
   override def shortName(): String = "jdbc"

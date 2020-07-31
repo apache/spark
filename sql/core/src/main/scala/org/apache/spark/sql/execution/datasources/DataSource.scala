@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -582,7 +582,7 @@ object DataSource extends Logging {
 
   /** A map to maintain backward compatibility in case we move data sources around. */
   private val backwardCompatibilityMap: Map[String, String] = {
-    val jdbc = classOf[JdbcRelationProvider].getCanonicalName
+    val jdbc = classOf[JDBCRelationProvider].getCanonicalName
     val json = classOf[JsonFileFormat].getCanonicalName
     val parquet = classOf[ParquetFileFormat].getCanonicalName
     val csv = classOf[CSVFileFormat].getCanonicalName
