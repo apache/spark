@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -81,6 +82,11 @@ abstract class QueryStageExec extends LeafExecNode {
   def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec
 
   /**
+   * Returns the runtime statistics after stage materialization.
+   */
+  def getRuntimeStatistics: Statistics
+
+  /**
    * Compute the statistics of the query stage if executed, otherwise None.
    */
   def computeStats(): Option[Statistics] = resultOption.map { _ =>
@@ -107,6 +113,8 @@ abstract class QueryStageExec extends LeafExecNode {
 
   protected override def doPrepare(): Unit = plan.prepare()
   protected override def doExecute(): RDD[InternalRow] = plan.execute()
+  override def supportsColumnar: Boolean = plan.supportsColumnar
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = plan.executeColumnar()
   override def doExecuteBroadcast[T](): Broadcast[T] = plan.executeBroadcast()
   override def doCanonicalize(): SparkPlan = plan.canonicalized
 
@@ -135,15 +143,15 @@ abstract class QueryStageExec extends LeafExecNode {
 }
 
 /**
- * A shuffle query stage whose child is a [[ShuffleExchangeExec]] or [[ReusedExchangeExec]].
+ * A shuffle query stage whose child is a [[ShuffleExchangeLike]] or [[ReusedExchangeExec]].
  */
 case class ShuffleQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan) extends QueryStageExec {
 
   @transient val shuffle = plan match {
-    case s: ShuffleExchangeExec => s
-    case ReusedExchangeExec(_, s: ShuffleExchangeExec) => s
+    case s: ShuffleExchangeLike => s
+    case ReusedExchangeExec(_, s: ShuffleExchangeLike) => s
     case _ =>
       throw new IllegalStateException("wrong plan for shuffle stage:\n " + plan.treeString)
   }
@@ -176,18 +184,20 @@ case class ShuffleQueryStageExec(
     val stats = resultOption.get.asInstanceOf[MapOutputStatistics]
     Option(stats)
   }
+
+  override def getRuntimeStatistics: Statistics = shuffle.runtimeStatistics
 }
 
 /**
- * A broadcast query stage whose child is a [[BroadcastExchangeExec]] or [[ReusedExchangeExec]].
+ * A broadcast query stage whose child is a [[BroadcastExchangeLike]] or [[ReusedExchangeExec]].
  */
 case class BroadcastQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan) extends QueryStageExec {
 
   @transient val broadcast = plan match {
-    case b: BroadcastExchangeExec => b
-    case ReusedExchangeExec(_, b: BroadcastExchangeExec) => b
+    case b: BroadcastExchangeLike => b
+    case ReusedExchangeExec(_, b: BroadcastExchangeLike) => b
     case _ =>
       throw new IllegalStateException("wrong plan for broadcast stage:\n " + plan.treeString)
   }
@@ -224,6 +234,8 @@ case class BroadcastQueryStageExec(
       broadcast.relationFuture.cancel(true)
     }
   }
+
+  override def getRuntimeStatistics: Statistics = broadcast.runtimeStatistics
 }
 
 object BroadcastQueryStageExec {
