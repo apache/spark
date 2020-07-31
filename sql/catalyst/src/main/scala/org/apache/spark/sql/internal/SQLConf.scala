@@ -2678,6 +2678,17 @@ object SQLConf {
       .checkValue(_ >= 0, "The value must be non-negative.")
       .createWithDefault(8)
 
+  val OPTIMIZE_NULL_AWARE_ANTI_JOIN_MAX_NUM_KEYS =
+    buildConf("spark.sql.optimizeNullAwareAntiJoin.maxNumKeys")
+      .internal()
+      .doc("The maximum number of keys that will be supported to use NAAJ optimize. " +
+        "While with NAAJ optimize, buildSide data would be expanded to (2^numKeys - 1) times, " +
+        "it might cause Driver OOM if NAAJ numKeys increased, since it is exponential growth. " +
+        "It's ok to increase this configuration if buildSide is small enough and safe enough " +
+        "to do such exponential expansion to gain performance improvement from O(M*N) to O(M).")
+      .intConf
+      .createWithDefault(3)
+
   val OPTIMIZE_NULL_AWARE_ANTI_JOIN =
     buildConf("spark.sql.optimizeNullAwareAntiJoin")
       .internal()
@@ -2690,17 +2701,6 @@ object SQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
-
-  val OPTIMIZE_NULL_AWARE_ANTI_JOIN_MAX_NUM_KEYS =
-    buildConf("spark.sql.optimizeNullAwareAntiJoin.maxNumKeys")
-      .internal()
-      .doc("The maximum number of keys that will be supported to use NAAJ optimize. " +
-        "While with NAAJ optimize, buildSide data would be expanded to (2^numKeys - 1) times, " +
-        "it might cause Driver OOM if NAAJ numKeys increased, since it is exponential growth. " +
-        "It's ok to increase this configuration if buildSide is small enough and safe enough " +
-        "to do such exponential expansion to gain performance improvement from O(M*N) to O(M).")
-      .intConf
-      .createWithDefault(3)
 
   /**
    * Holds information about keys that have been deprecated.
