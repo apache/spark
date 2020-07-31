@@ -23,7 +23,7 @@ import org.apache.hive.jdbc.HiveDriver
 
 import org.apache.spark.util.Utils
 
-class JdbcConnectionUriSuite extends HiveThriftServer2Test {
+class JDBCConnectionUriSuite extends HiveThriftServer2Test {
   Utils.classForName(classOf[HiveDriver].getCanonicalName)
 
   override def mode: ServerMode.Value = ServerMode.binary
