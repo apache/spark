@@ -160,8 +160,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
       val colSize = columns.get(6).getI32Val.getValues
       assert(colSize.get(3).intValue() === decimalType.defaultSize)
-      assert(colSize.get(6).intValue() === ByteType.defaultSize + ShortType.defaultSize,
-        "map column size mismatches")
+      assert(colSize.get(6).intValue() === 0)
       assert(colSize.get(9).intValue() === LongType.defaultSize + DoubleType.defaultSize,
         "struct column size mismatches")
 
@@ -169,15 +168,14 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(decimalDigits.get(1).intValue() === 0)
       assert(decimalDigits.get(2).intValue() === 7)
       assert(decimalDigits.get(3).intValue() === decimalType.scale)
-      assert(decimalDigits.get(8).intValue() === 9,
-        "timestamp support 9 digits for second fraction")
+      assert(decimalDigits.get(8).intValue() === 6,
+        "timestamp support 6 digits for second fraction")
 
       val positions = columns.get(16).getI32Val.getValues
       positions.asScala.zipWithIndex.foreach { case (pos, idx) =>
         assert(pos === idx, "the client columns disorder")
       }
     }
-
   }
 }
 

@@ -124,17 +124,14 @@ private[hive] class SparkGetColumnsOperation(
     HiveThriftServer2.eventManager.onStatementFinish(statementId)
   }
 
+  /**
+   * For numeric and datetime types, it returns the default size of its catalyst type
+   * For struct type, when its elements are fixed-size, the summation of all element sizes will be
+   * returned.
+   * For array, map, string, and binaries, the column size is variable, return null as unknown.
+   */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
-    case StringType | BinaryType => None
-    case ArrayType(et, _) => getColumnSize(et)
-    case MapType(kt, vt, _) =>
-      val kSize = getColumnSize(kt)
-      val vSize = getColumnSize(vt)
-      if (kSize.isEmpty || vSize.isEmpty) {
-        None
-      } else {
-        Some(kSize.get + vSize.get)
-      }
+    case StringType | BinaryType | _: ArrayType | _: MapType => None
     case StructType(fields) =>
       val sizeArr = fields.map(f => getColumnSize(f.dataType))
       if (sizeArr.contains(None)) {
@@ -145,12 +142,20 @@ private[hive] class SparkGetColumnsOperation(
     case other => Some(other.defaultSize)
   }
 
-  private def getDecimalDigits(typ: DataType): Option[Int] = typ match {
+  /**
+   * The number of fractional digits for this type.
+   * Null is returned for data types where this is not applicable.
+   * For boolean and integrals, the decimal digits is 0
+   * For floating types, we follow the IEEE Standard for Floating-Point Arithmetic (IEEE 754)
+   * For timestamp values, we support microseconds
+   * For decimals, it returns the scale
+   */
+  private def getDecimalDigits(typ: DataType) = typ match {
     case BooleanType | _: IntegerType => Some(0)
     case FloatType => Some(7)
     case DoubleType => Some(15)
     case d: DecimalType => Some(d.scale)
-    case TimestampType => Some(9)
+    case TimestampType => Some(6)
     case _ => None
   }
 
