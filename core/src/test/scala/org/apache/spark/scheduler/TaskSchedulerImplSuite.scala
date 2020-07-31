@@ -1802,6 +1802,53 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(2 == taskDescriptions.head.resources(GPU).addresses.size)
   }
 
+  private def setupSchedulerForDecommissionTests(): TaskSchedulerImpl = {
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[2]",
+      config.CPUS_PER_TASK.key -> 1.toString)
+    taskScheduler.submitTasks(FakeTask.createTaskSet(2))
+    val multiCoreWorkerOffers = IndexedSeq(WorkerOffer("executor0", "host0", 1),
+      WorkerOffer("executor1", "host1", 1))
+    val taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
+    assert(taskDescriptions.map(_.executorId).sorted === Seq("executor0", "executor1"))
+    taskScheduler
+  }
+
+  test("scheduler should keep the decommission info where host was decommissioned") {
+    val scheduler = setupSchedulerForDecommissionTests()
+
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0", false))
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1", true))
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("0 new", false))
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("1 new", false))
+
+    assert(scheduler.getExecutorDecommissionInfo("executor0")
+      === Some(ExecutorDecommissionInfo("0 new", false)))
+    assert(scheduler.getExecutorDecommissionInfo("executor1")
+      === Some(ExecutorDecommissionInfo("1", true)))
+    assert(scheduler.getExecutorDecommissionInfo("executor2").isEmpty)
+  }
+
+  test("scheduler should ignore decommissioning of removed executors") {
+    val scheduler = setupSchedulerForDecommissionTests()
+
+    // executor 0 is decommissioned after loosing
+    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+    scheduler.executorLost("executor0", ExecutorExited(0, false, "normal"))
+    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+    scheduler.executorDecommission("executor0", ExecutorDecommissionInfo("", false))
+    assert(scheduler.getExecutorDecommissionInfo("executor0").isEmpty)
+
+    // executor 1 is decommissioned before loosing
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isDefined)
+    scheduler.executorLost("executor1", ExecutorExited(0, false, "normal"))
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
+    scheduler.executorDecommission("executor1", ExecutorDecommissionInfo("", false))
+    assert(scheduler.getExecutorDecommissionInfo("executor1").isEmpty)
+  }
+
   /**
    * Used by tests to simulate a task failure. This calls the failure handler explicitly, to ensure
    * that all the state is updated when this method returns. Otherwise, there's no way to know when
