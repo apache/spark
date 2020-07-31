@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import java.{lang, util}
+import java.util
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -38,13 +38,12 @@ class InMemoryPartitionTable(
     partitioning: Array[Transform],
     properties: util.Map[String, String])
   extends InMemoryTable(name, schema, partitioning, properties) with SupportsPartitions {
-
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private val memoryTablePartitions: util.Map[InternalRow, util.Map[String, String]] =
     new ConcurrentHashMap[InternalRow, util.Map[String, String]]()
 
-  private val partCols: StructType = {
+  def partitionSchema: StructType = {
     val partitionColumnNames = partitioning.toSeq.asPartitionColumns
     new StructType(schema.filter(partitionColumnNames.contains).toArray)
   }
@@ -53,13 +52,13 @@ class InMemoryPartitionTable(
       ident: InternalRow,
       properties: util.Map[String, String]): Unit = {
     if (memoryTablePartitions.containsKey(ident)) {
-      throw new PartitionAlreadyExistsException(name, ident, partCols)
+      throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
     } else {
       memoryTablePartitions.put(ident, properties)
     }
   }
 
-  def dropPartition(ident: InternalRow): lang.Boolean = {
+  def dropPartition(ident: InternalRow): Boolean = {
     if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.remove(ident)
       true
@@ -68,40 +67,28 @@ class InMemoryPartitionTable(
     }
   }
 
-  def renamePartition(oldIdent: InternalRow, newIdent: InternalRow): Unit = {
-    if (!memoryTablePartitions.containsKey(oldIdent)) {
-      throw new NoSuchPartitionException(name, oldIdent, partCols)
-    } else if (memoryTablePartitions.containsKey(newIdent)) {
-      throw new PartitionAlreadyExistsException(name, newIdent, partCols)
-    } else {
-      val partitionMetadata = memoryTablePartitions.get(oldIdent)
-      memoryTablePartitions.remove(oldIdent)
-      memoryTablePartitions.put(newIdent, partitionMetadata)
-    }
-  }
-
   def replacePartitionMetadata(ident: InternalRow, properties: util.Map[String, String]): Unit = {
     if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.put(ident, properties)
     } else {
-      throw new NoSuchPartitionException(name, ident, partCols)
+      throw new NoSuchPartitionException(name, ident, partitionSchema)
     }
   }
 
-  def getPartitionMetadata(ident: InternalRow): util.Map[String, String] = {
+  def loadPartitionMetadata(ident: InternalRow): util.Map[String, String] = {
     if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.get(ident)
     } else {
-      throw new NoSuchPartitionException(name, ident, partCols)
+      throw new NoSuchPartitionException(name, ident, partitionSchema)
     }
   }
 
   def listPartitionIdentifiers(ident: InternalRow): Array[InternalRow] = {
     val prefixPartCols =
-      new StructType(partCols.dropRight(partCols.length - ident.numFields).toArray)
+      new StructType(partitionSchema.dropRight(partitionSchema.length - ident.numFields).toArray)
     val prefixPart = ident.toSeq(prefixPartCols)
     memoryTablePartitions.keySet().asScala
-      .filter(_.toSeq(partCols).startsWith(prefixPart)).toArray
+      .filter(_.toSeq(partitionSchema).startsWith(prefixPart)).toArray
   }
 
   def partitionExists(ident: InternalRow): Boolean = memoryTablePartitions.containsKey(ident)
