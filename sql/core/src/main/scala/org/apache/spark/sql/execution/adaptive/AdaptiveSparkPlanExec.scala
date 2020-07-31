@@ -100,7 +100,12 @@ case class AdaptiveSparkPlanExec(
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`. So they must be executed after it.
     OptimizeSkewedJoin(conf),
-    OptimizeLocalShuffleReader(conf),
+    OptimizeLocalShuffleReader(conf)
+  )
+
+  // A list of physical optimizer rules to be applied right after a new stage is created. The input
+  // plan to these rules has exchange as its root node.
+  @transient private val postStageCreationRules = Seq(
     ApplyColumnarRulesAndInsertTransitions(conf, context.session.sessionState.columnarRules),
     CollapseCodegenStages(conf)
   )
@@ -227,7 +232,8 @@ case class AdaptiveSparkPlanExec(
       }
 
       // Run the final plan when there's no more unfinished stages.
-      currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
+      currentPhysicalPlan = applyPhysicalRules(
+        result.newPlan, queryStageOptimizerRules ++ postStageCreationRules)
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       currentPhysicalPlan
@@ -376,10 +382,22 @@ case class AdaptiveSparkPlanExec(
   private def newQueryStage(e: Exchange): QueryStageExec = {
     val optimizedPlan = applyPhysicalRules(e.child, queryStageOptimizerRules)
     val queryStage = e match {
-      case s: ShuffleExchangeExec =>
-        ShuffleQueryStageExec(currentStageId, s.copy(child = optimizedPlan))
-      case b: BroadcastExchangeExec =>
-        BroadcastQueryStageExec(currentStageId, b.copy(child = optimizedPlan))
+      case s: ShuffleExchangeLike =>
+        val newShuffle = applyPhysicalRules(
+          s.withNewChildren(Seq(optimizedPlan)), postStageCreationRules)
+        if (!newShuffle.isInstanceOf[ShuffleExchangeLike]) {
+          throw new IllegalStateException(
+            "Custom columnar rules cannot transform shuffle node to something else.")
+        }
+        ShuffleQueryStageExec(currentStageId, newShuffle)
+      case b: BroadcastExchangeLike =>
+        val newBroadcast = applyPhysicalRules(
+          b.withNewChildren(Seq(optimizedPlan)), postStageCreationRules)
+        if (!newBroadcast.isInstanceOf[BroadcastExchangeLike]) {
+          throw new IllegalStateException(
+            "Custom columnar rules cannot transform broadcast node to something else.")
+        }
+        BroadcastQueryStageExec(currentStageId, newBroadcast)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, e)
