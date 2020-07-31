@@ -247,8 +247,8 @@ struct<regexp_extract_all(1a 2b 14m, (\d+)?([a-z]+), 1):array<string>>
 
 
 -- !query
-SELECT regexp_extract_all('1a 2b 14m', '(\\d+)?([a-z]+)', 1)
+SELECT regexp_extract_all('a 2b 14m', '(\\d+)?([a-z]+)', 1)
 -- !query schema
-struct<regexp_extract_all(1a 2b 14m, (\d+)?([a-z]+), 1):array<string>>
+struct<regexp_extract_all(a 2b 14m, (\d+)?([a-z]+), 1):array<string>>
 -- !query output
 ["","2","14"]
