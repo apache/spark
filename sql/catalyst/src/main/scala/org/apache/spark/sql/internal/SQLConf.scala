@@ -2684,7 +2684,9 @@ object SQLConf {
       .doc("When true, NULL-aware anti join execution will be planed into " +
         "BroadcastHashJoinExec with flag isNullAwareAntiJoin enabled, " +
         "optimized from O(M*N) calculation into O(M) calculation " +
-        "using Hash lookup instead of Looping lookup.")
+        "using Hash lookup instead of Looping lookup. " +
+        "The number of keys supported for NAAJ is configured by " +
+        s"${OPTIMIZE_NULL_AWARE_ANTI_JOIN_MAX_NUM_KEYS.key}.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
@@ -2692,7 +2694,11 @@ object SQLConf {
   val OPTIMIZE_NULL_AWARE_ANTI_JOIN_MAX_NUM_KEYS =
     buildConf("spark.sql.optimizeNullAwareAntiJoin.maxNumKeys")
       .internal()
-      .doc("The maximum number of keys that will be supported to use NAAJ optimize.")
+      .doc("The maximum number of keys that will be supported to use NAAJ optimize. " +
+        "While with NAAJ optimize, buildSide data would be expanded to (2^numKeys - 1) times, " +
+        "it might cause Driver OOM if NAAJ numKeys increased, since it is exponential growth. " +
+        "It's ok to increase this configuration if buildSide is small enough and safe enough " +
+        "to do such exponential expansion to gain performance improvement from O(M*N) to O(M).")
       .intConf
       .createWithDefault(3)
 

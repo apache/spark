@@ -591,6 +591,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes / 8);
   }
 
+  /**
+   * return whether an UnsafeRow is null on every column.
+   */
   public boolean allNull() {
     for (int i = 0; i < numFields; i++) {
       if (!BitSetMethods.isSet(baseObject, baseOffset, i)) {
