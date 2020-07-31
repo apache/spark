@@ -21,6 +21,8 @@ import java.sql.SQLException
 
 import org.apache.hive.service.cli.HiveSQLException
 
+import org.apache.spark.sql.hive.HiveUtils
+
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("the scratch dir will be deleted during server start but recreated with new operation") {
@@ -52,31 +54,51 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("Full stack traces as error message for jdbc or thrift client") {
     val sql = "select date_sub(date'2011-11-11', '1.2')"
-    withCLIServiceClient { client =>
-      val sessionHandle = client.openSession(user, "")
+    val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
 
-      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
-      val e = intercept[HiveSQLException] {
-        client.executeStatement(
-          sessionHandle,
-          sql,
-          confOverlay)
+    withSQLConf((HiveUtils.HIVE_THRIFT_SERVER_ASYNC.key, "false")) {
+      withCLIServiceClient { client =>
+        val sessionHandle = client.openSession(user, "")
+        val e = intercept[HiveSQLException] {
+          client.executeStatement(sessionHandle, sql, confOverlay)
+        }
+        assert(e.getMessage
+          .contains("The second argument of 'date_sub' function needs to be an integer."))
+        assert(!e.getMessage
+          .contains("java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
       }
-
-      assert(e.getMessage
-        .contains("The second argument of 'date_sub' function needs to be an integer."))
-      assert(!e.getMessage.contains("" +
-        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
     }
 
-    withJdbcStatement { statement =>
-      val e = intercept[SQLException] {
-        statement.executeQuery(sql)
+    withSQLConf((HiveUtils.HIVE_THRIFT_SERVER_ASYNC.key, "true")) {
+      withCLIServiceClient { client =>
+        val sessionHandle = client.openSession(user, "")
+        val opHandle = client.executeStatementAsync(sessionHandle, sql, confOverlay)
+        var status = client.getOperationStatus(opHandle)
+        while (!status.getState.isTerminal) {
+          Thread.sleep(10)
+          status = client.getOperationStatus(opHandle)
+        }
+        val e = status.getOperationException
+
+        assert(e.getMessage
+          .contains("The second argument of 'date_sub' function needs to be an integer."))
+        assert(e.getMessage
+          .contains("java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
       }
-      assert(e.getMessage
-        .contains("The second argument of 'date_sub' function needs to be an integer."))
-      assert(e.getMessage.contains("" +
-        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+    }
+
+    Seq("true", "false").foreach { value =>
+      withSQLConf((HiveUtils.HIVE_THRIFT_SERVER_ASYNC.key, value)) {
+        withJdbcStatement { statement =>
+          val e = intercept[SQLException] {
+            statement.executeQuery(sql)
+          }
+          assert(e.getMessage.contains(
+            "The second argument of 'date_sub' function needs to be an integer."))
+          assert(e.getMessage.contains(
+            "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+        }
+      }
     }
   }
 }

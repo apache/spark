@@ -1013,8 +1013,10 @@ class SparkContext(object):
         .. note:: Currently, setting a group ID (set to local properties) with multiple threads
             does not properly work. Internally threads on PVM and JVM are not synced, and JVM
             thread can be reused for multiple threads on PVM, which fails to isolate local
-            properties for each thread on PVM. To work around this, You can use
-            :meth:`RDD.collectWithJobGroup` for now.
+            properties for each thread on PVM.
+
+            To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
+            environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
         """
         self._jsc.setJobGroup(groupId, description, interruptOnCancel)
 
@@ -1026,8 +1028,10 @@ class SparkContext(object):
         .. note:: Currently, setting a local property with multiple threads does not properly work.
             Internally threads on PVM and JVM are not synced, and JVM thread
             can be reused for multiple threads on PVM, which fails to isolate local properties
-            for each thread on PVM. To work around this, You can use
-            :meth:`RDD.collectWithJobGroup`.
+            for each thread on PVM.
+
+            To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
+            environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
         """
         self._jsc.setLocalProperty(key, value)
 
@@ -1045,8 +1049,10 @@ class SparkContext(object):
         .. note:: Currently, setting a job description (set to local properties) with multiple
             threads does not properly work. Internally threads on PVM and JVM are not synced,
             and JVM thread can be reused for multiple threads on PVM, which fails to isolate
-            local properties for each thread on PVM. To work around this, You can use
-            :meth:`RDD.collectWithJobGroup` for now.
+            local properties for each thread on PVM.
+
+            To avoid this, enable the pinned thread mode by setting ``PYSPARK_PIN_THREAD``
+            environment variable to ``true`` and uses :class:`pyspark.InheritableThread`.
         """
         self._jsc.setJobDescription(value)
 

@@ -154,11 +154,6 @@ private[spark] class Executor(
   // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
-  // Plugins need to load using a class loader that includes the executor's user classpath
-  private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
-    PluginContainer(env, resources.asJava)
-  }
-
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
   private val maxDirectResultSize = Math.min(
@@ -224,6 +219,13 @@ private[spark] class Executor(
   private var decommissioned = false
 
   heartbeater.start()
+
+  // Plugins need to load using a class loader that includes the executor's user classpath.
+  // Plugins also needs to be initialized after the heartbeater started
+  // to avoid blocking to send heartbeat (see SPARK-32175).
+  private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
+    PluginContainer(env, resources.asJava)
+  }
 
   metricsPoller.start()
 
