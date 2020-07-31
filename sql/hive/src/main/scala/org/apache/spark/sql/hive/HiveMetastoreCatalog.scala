@@ -166,11 +166,23 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val lazyPruningEnabled = sparkSession.sqlContext.conf.manageFilesourcePartitions
     val tablePath = new Path(relation.tableMeta.location)
     val fileFormat = fileFormatClass.getConstructor().newInstance()
+    val inputFormat = relation.tableMeta.storage.inputFormat.getOrElse("")
+    val fs = tablePath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+
+    val symlinkTargets = if (SymlinkTextInputFormatUtil.isSymlinkTextFormat(inputFormat)) {
+      SymlinkTextInputFormatUtil.getTargetPathsFromSymlink(fs, tablePath)
+    } else {
+      Nil
+    }
 
     val result = if (relation.isPartitioned) {
       val partitionSchema = relation.tableMeta.partitionSchema
       val rootPaths: Seq[Path] = if (lazyPruningEnabled) {
-        Seq(tablePath)
+        if (SymlinkTextInputFormatUtil.isSymlinkTextFormat(inputFormat)) {
+          symlinkTargets
+        } else {
+          Seq(tablePath)
+        }
       } else {
         // By convention (for example, see CatalogFileIndex), the definition of a
         // partitioned table's paths depends on whether that table has any actual partitions.
@@ -183,6 +195,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
         if (paths.isEmpty) {
           Seq(tablePath)
+        } else if (SymlinkTextInputFormatUtil.isSymlinkTextFormat(inputFormat)) {
+          paths.flatMap(path => SymlinkTextInputFormatUtil.getTargetPathsFromSymlink(fs, path))
         } else {
           paths
         }
@@ -227,11 +241,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         logicalRelation
       })
     } else {
-      val rootPath = tablePath
+      val rootPaths = if (SymlinkTextInputFormatUtil.isSymlinkTextFormat(inputFormat)) {
+        symlinkTargets
+      } else {
+        Seq(tablePath)
+      }
+
       withTableCreationLock(tableIdentifier, {
         val cached = getCached(
           tableIdentifier,
-          Seq(rootPath),
+          rootPaths,
           metastoreSchema,
           fileFormatClass,
           None)
@@ -241,7 +260,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             LogicalRelation(
               DataSource(
                 sparkSession = sparkSession,
-                paths = rootPath.toString :: Nil,
+                paths = rootPaths.map(rootPath => rootPath.toString),
                 userSpecifiedSchema = Option(updatedTable.dataSchema),
                 bucketSpec = None,
                 options = options,
