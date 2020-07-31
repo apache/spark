@@ -25,7 +25,6 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.api.metadata.MapOutputMetadata;
 import org.apache.spark.shuffle.api.metadata.ShuffleOutputTracker;
 import org.apache.spark.storage.BlockManagerMaster;
-import org.apache.spark.util.Utils;
 
 public final class LocalDiskShuffleOutputTracker implements ShuffleOutputTracker {
 
