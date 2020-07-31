@@ -153,6 +153,8 @@ Classification
     NaiveBayesModel
     MultilayerPerceptronClassifier
     MultilayerPerceptronClassificationModel
+    MultilayerPerceptronClassificationSummary
+    MultilayerPerceptronClassificationTrainingSummary
     OneVsRest
     OneVsRestModel
     FMClassifier

@@ -19,7 +19,8 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.internal.config.ALLOW_SPARK_CONTEXT_IN_EXECUTORS
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -255,6 +256,29 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       val afterListenerSize = context.listenerBus.listeners.size()
       assert(beforeListenerSize + 1 == afterListenerSize)
       context.stop()
+    }
+  }
+
+  test("SPARK-32160: Disallow to create SparkSession in executors") {
+    val session = SparkSession.builder().master("local-cluster[3, 1, 1024]").getOrCreate()
+
+    val error = intercept[SparkException] {
+      session.range(1).foreach { v =>
+        SparkSession.builder.master("local").getOrCreate()
+        ()
+      }
+    }.getMessage()
+
+    assert(error.contains("SparkSession should only be created and accessed on the driver."))
+  }
+
+  test("SPARK-32160: Allow to create SparkSession in executors if the config is set") {
+    val session = SparkSession.builder().master("local-cluster[3, 1, 1024]").getOrCreate()
+
+    session.range(1).foreach { v =>
+      SparkSession.builder.master("local")
+        .config(ALLOW_SPARK_CONTEXT_IN_EXECUTORS.key, true).getOrCreate().stop()
+      ()
     }
   }
 }

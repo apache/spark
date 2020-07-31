@@ -177,9 +177,7 @@ class FMClassifier @Since("3.0.0") (
   def setSeed(value: Long): this.type = set(seed, value)
 
   override protected def train(
-      dataset: Dataset[_]
-    ): FMClassificationModel = instrumented { instr =>
-
+      dataset: Dataset[_]): FMClassificationModel = instrumented { instr =>
     val numClasses = 2
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
@@ -190,7 +188,7 @@ class FMClassifier @Since("3.0.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, factorSize, fitIntercept, fitLinear, regParam,
-      miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
+      miniBatchFraction, initStd, maxIter, stepSize, tol, solver, thresholds)
     instr.logNumClasses(numClasses)
 
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))

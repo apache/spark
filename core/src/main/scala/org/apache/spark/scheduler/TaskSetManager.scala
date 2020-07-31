@@ -985,6 +985,7 @@ private[spark] class TaskSetManager(
       val exitCausedByApp: Boolean = reason match {
         case exited: ExecutorExited => exited.exitCausedByApp
         case ExecutorKilled => false
+        case ExecutorProcessLost(_, _, false) => false
         case _ => true
       }
       handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitCausedByApp,

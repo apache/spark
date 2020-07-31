@@ -136,6 +136,8 @@ private[spark] class TaskSchedulerImpl(
   // IDs of the tasks running on each executor
   private val executorIdToRunningTaskIds = new HashMap[String, HashSet[Long]]
 
+  private val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionInfo]
+
   def runningTasksByExecutors: Map[String, Int] = synchronized {
     executorIdToRunningTaskIds.toMap.mapValues(_.size).toMap
   }
@@ -662,8 +664,9 @@ private[spark] class TaskSchedulerImpl(
                   // in order to provision more executors to make them schedulable
                   if (Utils.isDynamicAllocationEnabled(conf)) {
                     if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
-                      logInfo(s"Notifying ExecutorAllocationManager to allocate more executors to" +
-                        s" schedule the unschedulable task before aborting $taskSet.")
+                      logInfo("Notifying ExecutorAllocationManager to allocate more executors to" +
+                        " schedule the unschedulable task before aborting" +
+                        " stage ${taskSet.stageId}.")
                       dagScheduler.unschedulableTaskSetAdded(taskSet.taskSet.stageId,
                         taskSet.taskSet.stageAttemptId)
                       updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
@@ -671,7 +674,7 @@ private[spark] class TaskSchedulerImpl(
                   } else {
                     // Abort Immediately
                     logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
-                      s" executors can be found to kill. Aborting $taskSet.")
+                      s" executors can be found to kill. Aborting stage ${taskSet.stageId}.")
                     taskSet.abortSinceCompletelyBlacklisted(taskIndex)
                   }
               }
@@ -742,7 +745,7 @@ private[spark] class TaskSchedulerImpl(
     val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
     unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
     logInfo(s"Waiting for $timeout ms for completely " +
-      s"blacklisted task to be schedulable again before aborting $taskSet.")
+      s"blacklisted task to be schedulable again before aborting stage ${taskSet.stageId}.")
     abortTimer.schedule(
       createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
   }
@@ -755,7 +758,7 @@ private[spark] class TaskSchedulerImpl(
         if (unschedulableTaskSetToExpiryTime.contains(taskSet) &&
             unschedulableTaskSetToExpiryTime(taskSet) <= clock.getTimeMillis()) {
           logInfo("Cannot schedule any task because of complete blacklisting. " +
-            s"Wait time for scheduling expired. Aborting $taskSet.")
+            s"Wait time for scheduling expired. Aborting stage ${taskSet.stageId}.")
           taskSet.abortSinceCompletelyBlacklisted(taskIndex)
         } else {
           this.cancel()
@@ -939,12 +942,43 @@ private[spark] class TaskSchedulerImpl(
 
   override def executorDecommission(
       executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
+    synchronized {
+      // Don't bother noting decommissioning for executors that we don't know about
+      if (executorIdToHost.contains(executorId)) {
+        // The scheduler can get multiple decommission updates from multiple sources,
+        // and some of those can have isHostDecommissioned false. We merge them such that
+        // if we heard isHostDecommissioned ever true, then we keep that one since it is
+        // most likely coming from the cluster manager and thus authoritative
+        val oldDecomInfo = executorsPendingDecommission.get(executorId)
+        if (oldDecomInfo.isEmpty || !oldDecomInfo.get.isHostDecommissioned) {
+          executorsPendingDecommission(executorId) = decommissionInfo
+        }
+      }
+    }
     rootPool.executorDecommission(executorId)
     backend.reviveOffers()
   }
 
-  override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
+  override def getExecutorDecommissionInfo(executorId: String)
+    : Option[ExecutorDecommissionInfo] = synchronized {
+      executorsPendingDecommission.get(executorId)
+  }
+
+  override def executorLost(executorId: String, givenReason: ExecutorLossReason): Unit = {
     var failedExecutor: Option[String] = None
+    val reason = givenReason match {
+      // Handle executor process loss due to decommissioning
+      case ExecutorProcessLost(message, origWorkerLost, origCausedByApp) =>
+        val executorDecommissionInfo = getExecutorDecommissionInfo(executorId)
+        ExecutorProcessLost(
+          message,
+          // Also mark the worker lost if we know that the host was decommissioned
+          origWorkerLost || executorDecommissionInfo.exists(_.isHostDecommissioned),
+          // Executor loss is certainly not caused by app if we knew that this executor is being
+          // decommissioned
+          causedByApp = executorDecommissionInfo.isEmpty && origCausedByApp)
+      case e => e
+    }
 
     synchronized {
       if (executorIdToRunningTaskIds.contains(executorId)) {
@@ -1032,6 +1066,8 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
+
+    executorsPendingDecommission -= executorId
 
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId
