@@ -23,6 +23,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.BuildSide
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -49,7 +50,10 @@ case class ShuffledHashJoinExec(
 
   override def outputPartitioning: Partitioning = super[ShuffledJoin].outputPartitioning
 
-  private def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
+  /**
+   * This is called by generated Java class, should be public.
+   */
+  def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
     val buildDataSize = longMetric("buildDataSize")
     val buildTime = longMetric("buildTime")
     val start = System.nanoTime()
@@ -69,5 +73,21 @@ case class ShuffledHashJoinExec(
       val hashed = buildHashedRelation(buildIter)
       join(streamIter, hashed, numOutputRows)
     }
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    streamedPlan.execute() :: buildPlan.execute() :: Nil
+  }
+
+  override def needCopyResult: Boolean = true
+
+  protected override def prepareRelation(ctx: CodegenContext): (String, Boolean) = {
+    val thisPlan = ctx.addReferenceObj("plan", this)
+    val clsName = classOf[HashedRelation].getName
+
+    // Inline mutable state since not many join operations in a task
+    val relationTerm = ctx.addMutableState(clsName, "relation",
+      v => s"$v = $thisPlan.buildHashedRelation(inputs[1]);", forceInline = true)
+    (relationTerm, false)
   }
 }
