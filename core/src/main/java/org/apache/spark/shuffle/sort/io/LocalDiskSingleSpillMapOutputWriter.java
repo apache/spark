@@ -20,12 +20,10 @@ package org.apache.spark.shuffle.sort.io;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.Optional;
 
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
-import org.apache.spark.shuffle.api.metadata.MapOutputMetadata;
 import org.apache.spark.util.Utils;
 
 public class LocalDiskSingleSpillMapOutputWriter

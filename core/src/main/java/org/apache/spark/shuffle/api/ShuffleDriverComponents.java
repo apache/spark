@@ -18,10 +18,8 @@
 package org.apache.spark.shuffle.api;
 
 import java.util.Map;
-import java.util.Optional;
 
 import org.apache.spark.annotation.Private;
-import org.apache.spark.shuffle.api.metadata.MapOutputMetadata;
 import org.apache.spark.shuffle.api.metadata.NoOpShuffleOutputTracker;
 import org.apache.spark.shuffle.api.metadata.ShuffleOutputTracker;
 
