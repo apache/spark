@@ -71,7 +71,7 @@ final class UnsafeSorterSpillMerger {
       }
 
       @Override
-      public boolean hasNext() {
+      public boolean hasNext() throws IOException {
         return !priorityQueue.isEmpty() || (spillReader != null && spillReader.hasNext());
       }
 

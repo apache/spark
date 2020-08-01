@@ -95,7 +95,8 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       // inside `UnsafeExternalSorter`
       spillableArray.cleanupResources()
       spillableArray = null
-    } else if (inMemoryBuffer != null) {
+    }
+    if (inMemoryBuffer != null) {
       inMemoryBuffer.clear()
     }
     numFieldsPerRow = 0
@@ -124,18 +125,6 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
           numRowsSpillThreshold,
           false)
 
-        // populate with existing in-memory buffered rows
-        if (inMemoryBuffer != null) {
-          inMemoryBuffer.foreach(existingUnsafeRow =>
-            spillableArray.insertRecord(
-              existingUnsafeRow.getBaseObject,
-              existingUnsafeRow.getBaseOffset,
-              existingUnsafeRow.getSizeInBytes,
-              0,
-              false)
-          )
-          inMemoryBuffer.clear()
-        }
         numFieldsPerRow = unsafeRow.numFields()
       }
 
@@ -168,7 +157,15 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     if (spillableArray == null) {
       new InMemoryBufferIterator(startIndex)
     } else {
-      new SpillableArrayIterator(spillableArray.getIterator(startIndex), numFieldsPerRow)
+      val offsetIndex = if (inMemoryBuffer != null && startIndex > inMemoryBuffer.length) {
+        startIndex - inMemoryBuffer.length
+      } else {
+        0
+      }
+      new SpilledArrayMergeIterator(
+        spillableArray.getIterator(offsetIndex),
+        numFieldsPerRow,
+        startIndex)
     }
   }
 
@@ -204,20 +201,37 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     }
   }
 
-  private[this] class SpillableArrayIterator(
+  private[this] class SpilledArrayMergeIterator(
       iterator: UnsafeSorterIterator,
-      numFieldPerRow: Int)
+      numFieldPerRow: Int,
+      startIndex: Int)
     extends ExternalAppendOnlyUnsafeRowArrayIterator {
 
-    private val currentRow = new UnsafeRow(numFieldPerRow)
+    private var currentIndex = startIndex
 
-    override def hasNext(): Boolean = !isModified() && iterator.hasNext
+    private val currentSorterRow = new UnsafeRow(numFieldPerRow)
+
+    override def hasNext(): Boolean = {
+      if (inMemoryBuffer != null && currentIndex < inMemoryBuffer.length) {
+        !isModified()
+      } else {
+        !isModified() && iterator.hasNext
+      }
+    }
 
     override def next(): UnsafeRow = {
       throwExceptionIfModified()
-      iterator.loadNext()
-      currentRow.pointTo(iterator.getBaseObject, iterator.getBaseOffset, iterator.getRecordLength)
-      currentRow
+      if (inMemoryBuffer != null && currentIndex < inMemoryBuffer.length) {
+        val result = inMemoryBuffer(currentIndex)
+        currentIndex += 1
+        result
+      } else {
+        iterator.loadNext()
+        currentSorterRow.pointTo(iterator.getBaseObject,
+          iterator.getBaseOffset,
+          iterator.getRecordLength)
+        currentSorterRow
+      }
     }
   }
 }

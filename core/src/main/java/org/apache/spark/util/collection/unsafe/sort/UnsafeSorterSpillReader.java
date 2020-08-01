@@ -47,55 +47,49 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   private int numRecords;
   private int numRecordsRemaining;
 
-  private byte[] arr = new byte[1024 * 1024];
+  private byte[] arr = new byte[1024];
   private Object baseObject = arr;
   private final TaskContext taskContext = TaskContext.get();
+  private final SerializerManager serManager;
+  private final File dataFile;
+  private final BlockId blkId;
+  private boolean initialized;
 
   public UnsafeSorterSpillReader(
       SerializerManager serializerManager,
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
-    final ConfigEntry<Object> bufferSizeConfigEntry =
-        package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE();
-    // This value must be less than or equal to MAX_BUFFER_SIZE_BYTES. Cast to int is always safe.
-    final int DEFAULT_BUFFER_SIZE_BYTES =
-        ((Long) bufferSizeConfigEntry.defaultValue().get()).intValue();
-    int bufferSizeBytes = SparkEnv.get() == null ? DEFAULT_BUFFER_SIZE_BYTES :
-        ((Long) SparkEnv.get().conf().get(bufferSizeConfigEntry)).intValue();
-
-    final boolean readAheadEnabled = SparkEnv.get() != null && (boolean)SparkEnv.get().conf().get(
-        package$.MODULE$.UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED());
-
-    final InputStream bs =
-        new NioBufferedFileInputStream(file, bufferSizeBytes);
-    try {
-      if (readAheadEnabled) {
-        this.in = new ReadAheadInputStream(serializerManager.wrapStream(blockId, bs),
-                bufferSizeBytes);
-      } else {
-        this.in = serializerManager.wrapStream(blockId, bs);
-      }
-      this.din = new DataInputStream(this.in);
-      numRecords = numRecordsRemaining = din.readInt();
-    } catch (IOException e) {
-      Closeables.close(bs, /* swallowIOException = */ true);
-      throw e;
-    }
+    serManager = serializerManager;
+    dataFile = file;
+    blkId = blockId;
+    initialized = false;
   }
 
   @Override
-  public int getNumRecords() {
+  public int getNumRecords() throws IOException {
+    if (!initialized) {
+      readSpilledFile();
+      initialized = true;
+    }
     return numRecords;
   }
 
   @Override
-  public boolean hasNext() {
+  public boolean hasNext() throws IOException {
+    if (!initialized) {
+      readSpilledFile();
+      initialized = true;
+    }
     return (numRecordsRemaining > 0);
   }
 
   @Override
   public void loadNext() throws IOException {
+    if (!initialized) {
+      readSpilledFile();
+      initialized = true;
+    }
     // Kill the task in case it has been marked as killed. This logic is from
     // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
     // to avoid performance overhead. This check is added here in `loadNext()` instead of in
@@ -147,5 +141,35 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
        din = null;
      }
    }
+  }
+
+  private void readSpilledFile() throws IOException {
+    assert (dataFile.length() > 0);
+    final ConfigEntry<Object> bufferSizeConfigEntry =
+        package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE();
+    // This value must be less than or equal to MAX_BUFFER_SIZE_BYTES. Cast to int is always safe.
+    final int DEFAULT_BUFFER_SIZE_BYTES =
+        ((Long) bufferSizeConfigEntry.defaultValue().get()).intValue();
+    int bufferSizeBytes = SparkEnv.get() == null ? DEFAULT_BUFFER_SIZE_BYTES :
+        ((Long) SparkEnv.get().conf().get(bufferSizeConfigEntry)).intValue();
+
+    final boolean readAheadEnabled = SparkEnv.get() != null && (boolean)SparkEnv.get().conf().get(
+        package$.MODULE$.UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED());
+
+    final InputStream bs =
+        new NioBufferedFileInputStream(dataFile, bufferSizeBytes);
+    try {
+      if (readAheadEnabled) {
+        this.in = new ReadAheadInputStream(serManager.wrapStream(blkId, bs),
+                bufferSizeBytes);
+      } else {
+        this.in = serManager.wrapStream(blkId, bs);
+      }
+      this.din = new DataInputStream(this.in);
+      numRecords = numRecordsRemaining = din.readInt();
+    } catch (IOException e) {
+      Closeables.close(bs, /* swallowIOException = */ true);
+      throw e;
+    }
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
@@ -51,7 +52,7 @@ public class UnsafeInMemorySorterSuite {
   }
 
   @Test
-  public void testSortingEmptyInput() {
+  public void testSortingEmptyInput() throws IOException {
     final TaskMemoryManager memoryManager = new TaskMemoryManager(
       new TestMemoryManager(
         new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);

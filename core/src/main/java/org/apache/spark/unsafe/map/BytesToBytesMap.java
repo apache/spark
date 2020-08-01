@@ -322,10 +322,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
         return loc;
       } else {
         assert(reader != null);
-        if (!reader.hasNext()) {
-          advanceToNextPage();
-        }
         try {
+          if (!reader.hasNext()) {
+            advanceToNextPage();
+          }
           reader.loadNext();
         } catch (IOException e) {
           try {

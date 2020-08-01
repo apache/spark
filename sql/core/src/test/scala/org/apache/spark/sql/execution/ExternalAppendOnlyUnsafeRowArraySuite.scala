@@ -169,8 +169,8 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
 
       // Add more rows to trigger switch to [[UnsafeExternalSorter]] and cause a spill to happen.
       // Verify that spill has happened
-      populateRows(array, 2, expectedValues)
-      assert(array.length == inMemoryThreshold + 1)
+      populateRows(array, 12, expectedValues)
+      assert(array.length == inMemoryThreshold + 11)
       assertSpill()
 
       val iterator2 = validateData(array, expectedValues)
@@ -202,7 +202,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
   }
 
   test("generate iterator with start index exceeding array's size (without spill)") {
-    val (inMemoryThreshold, spillThreshold) = (20, 100)
+    val (inMemoryThreshold, spillThreshold) = (60, 100)
     withExternalArray(inMemoryThreshold, spillThreshold) { array =>
       populateRows(array, spillThreshold / 2)
 

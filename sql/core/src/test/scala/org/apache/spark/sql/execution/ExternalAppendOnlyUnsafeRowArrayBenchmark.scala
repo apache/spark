@@ -182,6 +182,47 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
     }
   }
 
+  def testAgainstUnsafeSorterSpillReader(
+      numSpillThreshold: Int,
+      numRows: Int,
+      numIterators: Int,
+      iterations: Int): Unit = {
+    val rows = testRows(numRows)
+    val benchmark = new Benchmark(s"Spilling  SpillReader with $numRows rows", iterations * numRows,
+      output = output)
+
+    benchmark.addCase("UnsafeSorterSpillReader_bufferSize1024") { _: Int =>
+      val array = UnsafeExternalSorter.create(
+        TaskContext.get().taskMemoryManager(),
+        SparkEnv.get.blockManager,
+        SparkEnv.get.serializerManager,
+        TaskContext.get(),
+        null,
+        null,
+        1024,
+        SparkEnv.get.memoryManager.pageSizeBytes,
+        numSpillThreshold,
+        false)
+
+      rows.foreach(x =>
+        array.insertRecord(
+          x.getBaseObject,
+          x.getBaseOffset,
+          x.getSizeInBytes,
+          0,
+          false))
+
+      for (_ <- 0L until numIterators) {
+        array.getIterator(0)
+      }
+      array.cleanupResources()
+    }
+
+    withFakeTaskContext {
+      benchmark.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("WITHOUT SPILL") {
       val spillThreshold = 100 * 1000
@@ -194,6 +235,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
       testAgainstRawUnsafeExternalSorter(100 * 1000, 1000, 1 << 18)
       testAgainstRawUnsafeExternalSorter(
         config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get, 10 * 1000, 1 << 4)
+      testAgainstUnsafeSorterSpillReader(5 * 1000, 16 * 1000, 100 * 1000, 1 << 4)
     }
   }
 }

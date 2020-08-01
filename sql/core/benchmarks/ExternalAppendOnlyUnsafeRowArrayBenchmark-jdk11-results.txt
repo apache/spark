@@ -42,4 +42,8 @@ Spilling with 10000 rows:                 Best Time(ms)   Avg Time(ms)   Stdev(m
 UnsafeExternalSorter                                 12             12           0         13.8          72.7       1.0X
 ExternalAppendOnlyUnsafeRowArray                      8              8           0         19.8          50.6       1.4X
 
-
+Java HotSpot(TM) 64-Bit Server VM 11.0.7+8-LTS on Linux 4.4.0-178-generic
+Intel(R) Xeon(R) CPU E5-2687W v3 @ 3.10GHz
+Spilling  SpillReader with 16000 rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+UnsafeSorterSpillReader_bufferSize1024              231            342          82          1.1         901.6       1.0X

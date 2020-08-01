@@ -614,7 +614,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("Window spill with more than the inMemoryThreshold and spillThreshold") {
-    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4"), (1, "5"), (2, "6")).toDF("key", "value")
     val window = Window.partitionBy($"key").orderBy($"value")
 
     withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
@@ -628,7 +628,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   test("SPARK-21258: complex object in combination with spilling") {
     // Make sure we trigger the spilling path.
     withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
-      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "17") {
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "16") {
       val sampleSchema = new StructType().
         add("f0", StringType).
         add("f1", LongType).
