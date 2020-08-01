@@ -917,8 +917,7 @@ object JdbcUtils extends Logging {
       conn: Connection,
       tableName: String,
       changes: Seq[TableChange],
-      options: JDBCOptions
-      ): Unit = {
+      options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
