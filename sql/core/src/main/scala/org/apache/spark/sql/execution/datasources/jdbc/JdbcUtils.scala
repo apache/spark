@@ -923,8 +923,9 @@ object JdbcUtils extends Logging {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      for (stmt <- dialect.alterTable(tableName, changes))
-        statement.executeUpdate(stmt)
+      for (sql <- dialect.alterTable(tableName, changes)) {
+        statement.executeUpdate(sql)
+      }
     } finally {
       statement.close()
     }

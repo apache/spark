@@ -29,7 +29,6 @@ import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColu
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types._
 
-
 /**
  * :: DeveloperApi ::
  * A database type definition coupled with the jdbc type needed to send null
