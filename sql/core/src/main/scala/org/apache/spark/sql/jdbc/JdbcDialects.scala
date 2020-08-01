@@ -234,7 +234,7 @@ abstract class JdbcDialect extends Serializable {
                 s" ${delete.fieldNames}")
           }
         case _ => throw new IllegalArgumentException(s"JDBC alterTable has Unsupported" +
-          s" TableChange ${change}")
+          s" TableChange $change")
       }
     }
     updateClause.result()
