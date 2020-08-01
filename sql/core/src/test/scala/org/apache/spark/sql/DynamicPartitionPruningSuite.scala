@@ -1240,7 +1240,8 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("Unused Dynamic Pruning filter shouldn't affect canonicalization and exchange reuse") {
+  test("SPARK-32509: Unused Dynamic Pruning filter shouldn't affect " +
+    "canonicalization and exchange reuse") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         val df = sql(
