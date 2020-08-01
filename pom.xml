@@ -120,7 +120,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.30</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>3.2.0</hadoop.version>
+    <hadoop.version>3.2.1</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.4.14</zookeeper.version>
@@ -180,7 +180,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>14.0.1</guava.version>
+    <guava.version>27.0-jre</guava.version>
     <janino.version>3.1.2</janino.version>
     <jersey.version>2.30</jersey.version>
     <joda.version>2.10.5</joda.version>
@@ -3129,6 +3129,7 @@
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
         <commons-io.version>2.4</commons-io.version>
+        <guava.version>14.0.1</guava.version>
       </properties>
     </profile>
 
