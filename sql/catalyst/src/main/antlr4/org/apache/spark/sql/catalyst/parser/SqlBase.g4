@@ -33,16 +33,6 @@ grammar SqlBase;
    * When true, the behavior of keywords follows ANSI SQL standard.
    */
   public boolean SQL_standard_keyword_behavior = false;
-
-  /**
-   * Returns true if a token at the given relative offset is put on the hidden channel.
-   * For example, this method can be used to respect 'WS' between tokens
-   * (See the syntax 'configKey').
-   */
-  public boolean isHidden(int indexOffset) {
-    Token token = _input.get(_input.index() + indexOffset);
-    return token.getChannel() == token.HIDDEN_CHANNEL;
-  }
 }
 
 @lexer::members {
@@ -256,30 +246,15 @@ statement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
-    | SET configKey (EQ configValue)?                                  #setConfiguration
+    | SET quotedConfigKey (EQ value=.*)?                               #setQuotedConfiguration
     | SET .*?                                                          #setConfiguration
-    | RESET configKey?                                                 #resetConfiguration
+    | RESET quotedConfigKey                                            #resetQuotedConfiguration
     | RESET .*?                                                        #resetConfiguration
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
-configKey
-    : configIdentifier (('.' | ':') configIdentifier
-        // The two semantic predicates make sure that no token on the hidden channel
-        // (e.g., spaces) exists before/after the config separator ('.' or ':').
-        {!isHidden(-3)}? {!isHidden(-2)}?)*
-    | quotedIdentifier
-    ;
-
-configValue
-    : vaule=.*
-    ;
-
-configIdentifier
-    : IDENTIFIER
-    | INTEGER_VALUE
-    | nonReserved
-    | strictNonReserved
+quotedConfigKey
+    : quotedIdentifier
     ;
 
 unsupportedHiveNativeCommands

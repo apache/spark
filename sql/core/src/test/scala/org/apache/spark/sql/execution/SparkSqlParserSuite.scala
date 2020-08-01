@@ -87,6 +87,8 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("SET spark:sql:key=  ", SetCommand(Some("spark:sql:key" -> Some(""))))
     assertEqual("SET spark:sql:key=-1 ", SetCommand(Some("spark:sql:key" -> Some("-1"))))
     assertEqual("SET spark:sql:key = -1", SetCommand(Some("spark:sql:key" -> Some("-1"))))
+    assertEqual("SET 1.2.key=value", SetCommand(Some("1.2.key" -> Some("value"))))
+    assertEqual("SET spark.sql.3=4", SetCommand(Some("spark.sql.3" -> Some("4"))))
     assertEqual("SET 1:2:key=value", SetCommand(Some("1:2:key" -> Some("value"))))
     assertEqual("SET spark:sql:3=4", SetCommand(Some("spark:sql:3" -> Some("4"))))
     assertEqual("SET 5=6", SetCommand(Some("5" -> Some("6"))))
@@ -94,6 +96,8 @@ class SparkSqlParserSuite extends AnalysisTest {
       SetCommand(Some("spark:sql:key" -> Some("va l u  e"))))
     assertEqual("SET `spark.sql.    key`=value",
       SetCommand(Some("spark.sql.    key" -> Some("value"))))
+    assertEqual("SET `spark.sql.    key`=  -1",
+      SetCommand(Some("spark.sql.    key" -> Some("-1"))))
 
     val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
       "'SET key=value'. If you want to include special characters in key, " +
@@ -102,22 +106,20 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("SET spark.sql.key   'value'", expectedErrMsg)
     intercept("SET    spark.sql.key \"value\" ", expectedErrMsg)
     intercept("SET spark.sql.key value1 value2", expectedErrMsg)
-    intercept("SET 1.2.key=value", expectedErrMsg)
-    intercept("SET spark.sql.3=4", expectedErrMsg)
-
-    // TODO: Needs to make the error message more meaningful for users
-    intercept("SET spark.   sql.key=value", "failed predicate")
-    intercept("SET spark   :sql:key=value", "failed predicate")
-    intercept("SET spark .  sql.key=value", "failed predicate")
-    intercept("SET spark.sql.   key=value", "failed predicate")
-    intercept("SET spark.sql   :key=value", "failed predicate")
-    intercept("SET spark.sql .  key=value", "failed predicate")
+    intercept("SET spark.   sql.key=value", expectedErrMsg)
+    intercept("SET spark   :sql:key=value", expectedErrMsg)
+    intercept("SET spark .  sql.key=value", expectedErrMsg)
+    intercept("SET spark.sql.   key=value", expectedErrMsg)
+    intercept("SET spark.sql   :key=value", expectedErrMsg)
+    intercept("SET spark.sql .  key=value", expectedErrMsg)
   }
 
   test("Report Error for invalid usage of RESET command") {
     assertEqual("RESET", ResetCommand(None))
     assertEqual("RESET spark.sql.key", ResetCommand(Some("spark.sql.key")))
     assertEqual("RESET spark.sql.key ", ResetCommand(Some("spark.sql.key")))
+    assertEqual("RESET 1.2.key ", ResetCommand(Some("1.2.key")))
+    assertEqual("RESET spark.sql.3", ResetCommand(Some("spark.sql.3")))
     assertEqual("RESET 1:2:key ", ResetCommand(Some("1:2:key")))
     assertEqual("RESET spark:sql:3", ResetCommand(Some("spark:sql:3")))
     assertEqual("RESET `spark.sql.    key`", ResetCommand(Some("spark.sql.    key")))
@@ -128,16 +130,12 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("RESET spark.sql.key1 key2", expectedErrMsg)
     intercept("RESET spark.  sql.key1 key2", expectedErrMsg)
     intercept("RESET spark.sql.key1 key2 key3", expectedErrMsg)
-    intercept("RESET 1.2.key", expectedErrMsg)
-    intercept("RESET spark.sql.3", expectedErrMsg)
-
-    // TODO: Needs to make the error message more meaningful for users
-    intercept("RESET spark:   sql:key", "failed predicate")
-    intercept("RESET spark   .sql.key", "failed predicate")
-    intercept("RESET spark :  sql:key", "failed predicate")
-    intercept("RESET spark.sql:    key", "failed predicate")
-    intercept("RESET spark.sql    .key", "failed predicate")
-    intercept("RESET spark.sql :   key", "failed predicate")
+    intercept("RESET spark:   sql:key", expectedErrMsg)
+    intercept("RESET spark   .sql.key", expectedErrMsg)
+    intercept("RESET spark :  sql:key", expectedErrMsg)
+    intercept("RESET spark.sql:   key", expectedErrMsg)
+    intercept("RESET spark.sql   .key", expectedErrMsg)
+    intercept("RESET spark.sql :  key", expectedErrMsg)
   }
 
   test("refresh resource") {
