@@ -1236,9 +1236,9 @@ object SQLConf {
   val STATE_STORE_FORMAT_VALIDATION_ENABLED =
     buildConf("spark.sql.streaming.stateStore.formatValidation.enabled")
       .internal()
-      .doc("When true, check if the UnsafeRow from the state store is valid or not when running " +
-        "streaming queries. This can happen if the state store format has been changed. Note, " +
-        "the feature is only effective in the build-in HDFS state store provider now.")
+      .doc("When true, check if the data from state store is valid or not when running streaming " +
+        "queries. This can happen if the state store format has been changed. Note, the feature " +
+        "is only effective in the build-in HDFS state store provider now.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
