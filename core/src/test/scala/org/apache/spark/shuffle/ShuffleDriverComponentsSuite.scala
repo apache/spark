@@ -50,6 +50,10 @@ class ShuffleDriverComponentsSuite
         }
       }
   }
+
+  override def afterEach(): Unit = {
+    TestShuffleExecutorComponentsInitialized.initialized.set(false)
+  }
 }
 
 class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
@@ -65,6 +69,7 @@ class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
       extraConfigs: JMap[String, String]): ShuffleExecutorComponents = {
     assert(extraConfigs.get("test-plugin-key") == "plugin-set-value")
     assert(extraConfigs.get("test-user-key") == "user-set-value")
+    TestShuffleExecutorComponentsInitialized.initialized.set(true)
     new TestShuffleExecutorComponentsInitialized(delegate.initializeShuffleExecutorComponents(
       appId, execId, extraConfigs))
   }
