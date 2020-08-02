@@ -330,21 +330,19 @@ private[joins] object UnsafeHashedRelation {
     val nullPaddingCombinations: Seq[UnsafeProjection] = if (isNullAware) {
       // C(numKeys, 0), C(numKeys, 1) ... C(numKeys, numKeys - 1)
       // In total 2^numKeys - 1 records will be appended.
-      key.indices.flatMap(n => {
-        key.indices.combinations(n)
-          .map(combination => {
-            // combination is Seq[Int] indicates which key should be replaced to null padding.
-            UnsafeProjection.create(
-              key.indices.map(index => {
-                if (combination.contains(index)) {
-                  Literal.create(null, key(index).dataType)
-                } else {
-                  key(index)
-                }
-              })
-            )
-          })
-      })
+      key.indices.flatMap { n =>
+        key.indices.combinations(n).map { combination =>
+          // combination is Seq[Int] indicates which key should be replaced to null padding
+          val exprs = key.indices.map { index =>
+            if (combination.contains(index)) {
+              Literal.create(null, key(index).dataType)
+            } else {
+              key(index)
+            }
+          }
+          UnsafeProjection.create(exprs)
+        }
+      }
     } else {
       Seq.empty
     }

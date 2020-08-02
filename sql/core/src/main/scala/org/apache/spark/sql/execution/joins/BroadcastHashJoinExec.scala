@@ -244,7 +244,7 @@ case class BroadcastHashJoinExec(
            |boolean $found = false;
            |// generate join key for stream side
            |${keyEv.code}
-           |if (${ if (isLongHashedRelation) s"$anyNull" else s"${keyEv.value}.allNull()"}) {
+           |if (${if (isLongHashedRelation) s"$anyNull" else s"${keyEv.value}.allNull()"}) {
            |  $found = true;
            |} else {
            |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});

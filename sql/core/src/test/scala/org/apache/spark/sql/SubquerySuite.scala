@@ -1667,7 +1667,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             var joinExec: BaseJoinExec = null
 
             // single column not in subquery -- empty sub-query
-            df = sql("select * from l where a not in (select c from r where c > 10)")
+            df = sql("SELECT * FROM l WHERE a NOT IN (SELECT c FROM r WHERE c > 10)")
             checkAnswer(df, spark.table("l"))
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1678,7 +1678,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             }
 
             // single column not in subquery -- sub-query include null
-            df = sql("select * from l where a not in (select c from r where d < 6.0)")
+            df = sql("SELECT * FROM l WHERE a NOT IN (SELECT c FROM r WHERE d < 6.0)")
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1689,8 +1689,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             }
 
             // single column not in subquery -- streamedSide row is null
-            df =
-              sql("select * from l where b = 5.0 and a not in(select c from r where c is not null)")
+            df = sql("SELECT * FROM l WHERE b = 5.0 AND a NOT IN " +
+              "(SELECT c FROM r WHERE c IS NOT NULL)")
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1702,7 +1702,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
             // single column not in subquery -- streamedSide row is not null, match found
             df =
-              sql("select * from l where a = 6 and a not in (select c from r where c is not null)")
+              sql("SELECT * FROM l WHERE a = 6 AND a NOT IN (SELECT c FROM r WHERE c IS NOT NULL)")
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1714,7 +1714,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
             // single column not in subquery -- streamedSide row is not null, match not found
             df =
-              sql("select * from l where a = 1 and a not in (select c from r where c is not null)")
+              sql("SELECT * FROM l WHERE a = 1 AND a NOT IN (SELECT c FROM r WHERE c IS NOT NULL)")
             checkAnswer(df, Row(1, 2.0) :: Row(1, 2.0) :: Nil)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1725,7 +1725,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             }
 
             // single column not in subquery -- d = b + 10 joinKey found, match ExtractEquiJoinKeys
-            df = sql("select * from l where a not in (select c from r where d = b + 10)")
+            df = sql("SELECT * FROM l WHERE a NOT IN (SELECT c FROM r WHERE d = b + 10)")
             checkAnswer(df, spark.table("l"))
             joinExec = findJoinExec(df)
             assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
@@ -1734,7 +1734,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             // single column not in subquery -- d = b + 10 and b = 5.0 => d = 15, joinKey not found
             // match ExtractSingleColumnNullAwareAntiJoin
             df =
-              sql("select * from l where b = 5.0 and a not in (select c from r where d = b + 10)")
+              sql("SELECT * FROM l WHERE b = 5.0 AND a NOT IN (SELECT c FROM r WHERE d = b + 10)")
             checkAnswer(df, Row(null, 5.0) :: Nil)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1762,7 +1762,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             var joinExec: BaseJoinExec = null
 
             // multi column not in subquery -- empty sub-query
-            df = sql("select * from l where (a, b) not in (select * from r where c > 10)")
+            df = sql("SELECT * FROM l WHERE (a, b) NOT IN (SELECT * FROM r WHERE c > 10)")
             checkAnswer(df, spark.table("l"))
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1774,7 +1774,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
             // multi column not in subquery -- sub-query include all null column key
             df = sql(
-              "select * from l where (a, b) not in (select * from r where c is null and d is null)")
+              "SELECT * FROM l WHERE (a, b) NOT IN (SELECT * FROM r WHERE c IS NULL and d IS NULL)")
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1785,8 +1785,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             }
 
             // multi column not in subquery -- streamedSide row is all null column key
-            df = sql("select * from l where a is null and b is null " +
-              "and (a, b) not in (select * from r where c is not null)")
+            df = sql("SELECT * FROM l WHERE a IS NULL and b IS NULL " +
+              "AND (a, b) NOT IN (SELECT * FROM r WHERE c IS NOT NULL)")
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1797,8 +1797,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             }
 
             // multi column not in subquery -- streamedSide row is not all null, match found
-            df = sql("select * from l where a = 6 " +
-              "and (a, b) not in (select * from r where c is not null)")
+            df = sql("SELECT * FROM l WHERE a = 6 " +
+              "AND (a, b) NOT IN (SELECT * FROM r WHERE c IS NOT NULL)")
             checkAnswer(df, Seq.empty)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)
@@ -1809,8 +1809,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             }
 
             // multi column not in subquery -- streamedSide row is not all null, match not found
-            df = sql("select * from l where a = 1 " +
-              "and (a, b) not in (select * from r where c is not null)")
+            df = sql("SELECT * FROM l WHERE a = 1 " +
+              "AND (a, b) NOT IN (SELECT * FROM r WHERE c IS NOT NULL)")
             checkAnswer(df, Row(1, 2.0) :: Row(1, 2.0) :: Nil)
             if (enableNAAJ) {
               joinExec = findJoinExec(df)

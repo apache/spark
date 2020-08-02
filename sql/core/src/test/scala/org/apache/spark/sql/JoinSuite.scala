@@ -1154,7 +1154,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       // positive not in subquery case
       var joinExec = assertJoin((
-        "select * from testData where key not in (select a from testData2)",
+        "SELECT * FROM testData WHERE key NOT IN (SELECT a FROM testData2)",
         classOf[BroadcastHashJoinExec]))
       assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
@@ -1162,7 +1162,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       // testData.key nullable false
       // testData3.b nullable true
       joinExec = assertJoin((
-        "select * from testData left anti join testData3 ON key = b or isnull(key = b)",
+        "SELECT * FROM testData LEFT ANTI JOIN testData3 ON key = b OR ISNULL(key = b)",
         classOf[BroadcastHashJoinExec]))
       assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
@@ -1171,15 +1171,15 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       // testData2.a nullable false
       // isnull(key = a) will be optimized to true literal and removed
       joinExec = assertJoin((
-        "select * from testData left anti join testData2 ON key = a or isnull(key = a)",
+        "SELECT * FROM testData LEFT ANTI JOIN testData2 ON key = a OR ISNULL(key = a)",
         classOf[BroadcastHashJoinExec]))
       assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
       // negative hand-written left anti join
       // not match pattern Or(EqualTo(a=b), IsNull(EqualTo(a=b))
       assertJoin((
-        "select * from testData2 left anti join testData3 ON testData2.a = testData3.b or " +
-          "isnull(testData2.b = testData3.b)",
+        "SELECT * FROM testData2 LEFT ANTI JOIN testData3 ON testData2.a = testData3.b OR " +
+          "ISNULL(testData2.b = testData3.b)",
         classOf[BroadcastNestedLoopJoinExec]))
     }
   }
@@ -1189,7 +1189,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       // positive not in subquery case
       var joinExec = assertJoin((
-        "select * from testData where (key, key + 1) not in (select * from testData2)",
+        "SELECT * FROM testData WHERE (key, key + 1) NOT IN (SELECT * FROM testData2)",
         classOf[BroadcastHashJoinExec]))
       assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
@@ -1197,8 +1197,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       // testData.key nullable false
       // testData3.b nullable true
       joinExec = assertJoin((
-        "select * from testData left anti join testData3 ON (key = b or isnull(key = b)) " +
-          "and (key + 1 = b or isnull(key + 1 = b))",
+        "SELECT * FROM testData LEFT ANTI JOIN testData3 ON (key = b OR ISNULL(key = b)) " +
+          "AND (key + 1 = b OR ISNULL(key + 1 = b))",
         classOf[BroadcastHashJoinExec]))
       assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
@@ -1207,17 +1207,17 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       // testData2.a nullable false
       // isnull(key = a) isnull(key+1=a) will be optimized to true literal and removed
       joinExec = assertJoin((
-        "select * from testData left anti join testData3 ON (key = a or isnull(key = a)) " +
-          "and (key + 1 = a or isnull(key + 1 = a))",
+        "SELECT * FROM testData LEFT ANTI JOIN testData3 ON (key = a OR ISNULL(key = a)) " +
+          "AND (key + 1 = a OR ISNULL(key + 1 = a))",
         classOf[BroadcastHashJoinExec]))
       assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
       // negative exceed OPTIMIZE_NULL_AWARE_ANTI_JOIN_MAX_NUM_KEYS
       joinExec = assertJoin((
-        "select * from testData left anti join testData3 ON (key = b or isnull(key = b)) " +
-          "and (key + 2 = b or isnull(key + 2 = b)) " +
-          "and (key + 3 = b or isnull(key + 3 = b)) " +
-          "and (key + 4 = b or isnull(key + 4 = b))",
+        "SELECT * FROM testData LEFT ANTI JOIN testData3 ON (key = b OR ISNULL(key = b)) " +
+          "AND (key + 2 = b OR ISNULL(key + 2 = b)) " +
+          "AND (key + 3 = b OR ISNULL(key + 3 = b)) " +
+          "AND (key + 4 = b OR ISNULL(key + 4 = b))",
         classOf[BroadcastNestedLoopJoinExec]))
     }
   }

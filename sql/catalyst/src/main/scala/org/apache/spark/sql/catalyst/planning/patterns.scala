@@ -393,7 +393,7 @@ object PhysicalWindow {
   }
 }
 
-object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with PredicateHelper {
+object ExtractNullAwareAntiJoinKeys extends JoinSelectionHelper with PredicateHelper {
 
   // streamedSideKeys, buildSideKeys
   private type ReturnType = (Seq[Expression], Seq[Expression])
@@ -405,20 +405,17 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
         predicates.length > SQLConf.get.optimizeNullAwareAntiJoinMaxNumKeys) {
         None
       } else {
-        val leftKeys = ArrayBuffer[Expression]()
-        val rightKeys = ArrayBuffer[Expression]()
+        val joinKeys = ArrayBuffer[(Expression, Expression)]()
 
-        // all predicate must match pattern condition: Or(EqualTo(a=b), IsNull(EqualTo(a=b)))
+        // All predicate must match pattern condition: Or(EqualTo(a=b), IsNull(EqualTo(a=b)))
         val allMatch = predicates.forall {
           case Or(e @ EqualTo(leftExpr: Expression, rightExpr: Expression),
               IsNull(e2 @ EqualTo(_, _))) if e.semanticEquals(e2) =>
             if (canEvaluate(leftExpr, left) && canEvaluate(rightExpr, right)) {
-              leftKeys += leftExpr
-              rightKeys += rightExpr
+              joinKeys += ((leftExpr, rightExpr))
               true
             } else if (canEvaluate(leftExpr, right) && canEvaluate(rightExpr, left)) {
-              leftKeys += rightExpr
-              rightKeys += leftExpr
+              joinKeys += ((rightExpr, leftExpr))
               true
             } else {
               false
@@ -427,7 +424,7 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
         }
 
         if (allMatch) {
-          Some(leftKeys, rightKeys)
+          Some(joinKeys.unzip)
         } else {
           None
         }

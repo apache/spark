@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractNullAwareAntiJoinKeys}
 import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.execution.{joins, SparkPlan}
@@ -49,7 +49,7 @@ object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
       Seq(BroadcastHashJoinExec(
         leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
-    case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
+    case j @ ExtractNullAwareAntiJoinKeys(leftKeys, rightKeys)
         if isBroadcastStage(j.right) =>
       Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
         None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
