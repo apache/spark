@@ -41,17 +41,23 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  * @param jobId the job's or stage's id
  * @param path the job's output path, or null if committer acts as a noop
  * @param dynamicPartitionOverwrite If true, Spark will overwrite partition directories at runtime
- *                                  dynamically, i.e., for speculative tasks, we first write files
- *                                  to task attempt paths under a staging directory, e.g.
- *                                  /path/to/staging/.spark-staging-{jobId}/_temporary/
+ *                                  dynamically, i.e., we first write files to task attempt paths
+ *                                  under a staging directory, e.g.
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/_temporary/
  *                                  {appAttemptId}/_temporary/{taskAttemptId}/a=1/b=1/xxx.parquet.
- *                                  When committing the job, we first move files from task attempt
+ *                                  1. When [[FileOutputCommitter]] algorithm version set to 1,
+ *                                  we firstly move files from task attempt
  *                                  paths to corresponding partition directories under the staging
- *                                  directory, e.g.
- *                                  /path/to/staging/.spark-staging-{jobId}/a=1/b=1.
+ *                                  directory during committing job, e.g.
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1.
  *                                  Secondly, move the partition directories under staging
- *                                  directory to partition directories under destination path,
- *                                  e.g. /path/to/destination/a=1/b=1
+ *                                  directory to destination path, e.g. /path/to/outputPath/a=1/b=1
+ *                                  2. When [[FileOutputCommitter]] algorithm version set to 2,
+ *                                  committing tasks directly move files to staging directory,
+ *                                  e.g. /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1.
+ *                                  Then move this partition directories under staging directory
+ *                                  to destination path during job committing, e.g.
+ *                                  /path/to/outputPath/a=1/b=1
  */
 class HadoopMapReduceCommitProtocol(
     jobId: String,
