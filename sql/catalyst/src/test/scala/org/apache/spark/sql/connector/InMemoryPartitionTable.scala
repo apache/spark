@@ -45,7 +45,7 @@ class InMemoryPartitionTable(
 
   def partitionSchema: StructType = {
     val partitionColumnNames = partitioning.toSeq.asPartitionColumns
-    new StructType(schema.filter(partitionColumnNames.contains).toArray)
+    new StructType(schema.filter(p => partitionColumnNames.contains(p.name)).toArray)
   }
 
   def createPartition(
