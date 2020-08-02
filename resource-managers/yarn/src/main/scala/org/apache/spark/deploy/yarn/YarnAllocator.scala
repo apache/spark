@@ -296,7 +296,7 @@ private[yarn] class YarnAllocator(
       val profResource = rpIdToYarnResource.get(id)
       val result = amClient.getMatchingRequests(getContainerPriority(id), location, profResource)
         .asScala.flatMap(_.asScala)
-      allContainerRequests(id) = result
+      allContainerRequests(id) = result.toSeq
     }
     allContainerRequests.toMap
   }
@@ -308,7 +308,6 @@ private[yarn] class YarnAllocator(
       if (!rpIdToYarnResource.contains(rp.id)) {
         // Start with the application or default settings
         var heapMem = executorMemory.toLong
-        // Note we currently don't support off heap memory in ResourceProfile - SPARK-30794
         var offHeapMem = executorOffHeapMemory.toLong
         var overheadMem = memoryOverhead.toLong
         var pysparkMem = pysparkWorkerMemory.toLong
@@ -326,6 +325,8 @@ private[yarn] class YarnAllocator(
               overheadMem = execReq.amount
             case ResourceProfile.PYSPARK_MEM =>
               pysparkMem = execReq.amount
+            case ResourceProfile.OFFHEAP_MEM =>
+              offHeapMem = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf, execReq)
             case ResourceProfile.CORES =>
               cores = execReq.amount.toInt
             case "gpu" =>
@@ -426,13 +427,13 @@ private[yarn] class YarnAllocator(
           getNumExecutorsStarting,
           allocateResponse.getAvailableResources))
 
-      handleAllocatedContainers(allocatedContainers.asScala)
+      handleAllocatedContainers(allocatedContainers.asScala.toSeq)
     }
 
     val completedContainers = allocateResponse.getCompletedContainersStatuses()
     if (completedContainers.size > 0) {
       logDebug("Completed %d containers".format(completedContainers.size))
-      processCompletedContainers(completedContainers.asScala)
+      processCompletedContainers(completedContainers.asScala.toSeq)
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, getNumExecutorsRunning))
     }
@@ -960,7 +961,7 @@ private[yarn] class YarnAllocator(
       }
     }
 
-    (localityMatched, localityUnMatched, localityFree)
+    (localityMatched.toSeq, localityUnMatched.toSeq, localityFree.toSeq)
   }
 
 }

@@ -232,6 +232,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
           .getOrElse(createJoinWithoutHint())
 
+      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
+        Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+          None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
+
       // If it is not an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast nested loop join. If both sides have the broadcast
       //      hints, choose the smaller side (based on stats) to broadcast for inner and full joins,
@@ -661,7 +665,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
           ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
-            planLater(child), canChangeNumPartitions = false) :: Nil
+            planLater(child), noUserSpecifiedNumPartition = false) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -683,8 +687,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
-      case logical.Union(unionChildren) =>
-        execution.UnionExec(unionChildren.map(planLater)) :: Nil
+      case union: logical.Union =>
+        execution.UnionExec(union.children.map(planLater)) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>
         execution.GenerateExec(
           generator, g.requiredChildOutput, outer,
@@ -694,9 +698,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val canChangeNumParts = r.optNumPartitions.isEmpty
         exchange.ShuffleExchangeExec(
-          r.partitioning, planLater(r.child), canChangeNumParts) :: Nil
+          r.partitioning,
+          planLater(r.child),
+          noUserSpecifiedNumPartition = r.optNumPartitions.isEmpty) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

@@ -346,8 +346,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val rightDf = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key2", "value")
     Seq((0L, "right_outer", leftDf, rightDf, 10L, false),
       (0L, "left_outer", rightDf, leftDf, 10L, false),
-      (0L, "right_outer", leftDf, rightDf, 10L, true),
-      (0L, "left_outer", rightDf, leftDf, 10L, true),
+      (1L, "right_outer", leftDf, rightDf, 10L, true),
+      (1L, "left_outer", rightDf, leftDf, 10L, true),
       (2L, "left_anti", rightDf, leftDf, 8L, true),
       (2L, "left_semi", rightDf, leftDf, 2L, true),
       (1L, "left_anti", rightDf, leftDf, 8L, false),
