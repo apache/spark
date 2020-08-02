@@ -70,7 +70,7 @@ class SparkSqlParserSuite extends AnalysisTest {
     (SQLConf.sqlConfEntries.values.asScala ++ ConfigEntry.knownConfigs.values.asScala)
         .foreach { config =>
       assertEqual(s"SET ${config.key}", SetCommand(Some(config.key -> None)))
-      if (config.defaultValue.isDefined) {
+      if (config.defaultValue.isDefined && config.defaultValueString != null) {
         assertEqual(s"SET ${config.key}=${config.defaultValueString}",
           SetCommand(Some(config.key -> Some(config.defaultValueString))))
       }
