@@ -95,13 +95,7 @@ object JdbcUtils extends Logging {
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
-    val statement = conn.createStatement
-    try {
-      statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(s"DROP TABLE $table")
-    } finally {
-      statement.close()
-    }
+    executeStatement(conn, options, s"DROP TABLE $table")
   }
 
   /**
@@ -883,13 +877,7 @@ object JdbcUtils extends Logging {
     // table_options or partition_options.
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
     val sql = s"CREATE TABLE $tableName ($strSchema) $createTableOptions"
-    val statement = conn.createStatement
-    try {
-      statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(sql)
-    } finally {
-      statement.close()
-    }
+    executeStatement(conn, options, sql)
   }
 
   /**
@@ -901,13 +889,7 @@ object JdbcUtils extends Logging {
       newTable: String,
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    val statement = conn.createStatement
-    try {
-      statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(dialect.renameTable(oldTable, newTable))
-    } finally {
-      statement.close()
-    }
+    executeStatement(conn, options, dialect.renameTable(oldTable, newTable))
   }
 
   /**
@@ -919,12 +901,29 @@ object JdbcUtils extends Logging {
       changes: Seq[TableChange],
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
+    conn.setAutoCommit(false)
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
       for (sql <- dialect.alterTable(tableName, changes)) {
         statement.executeUpdate(sql)
       }
+      conn.commit()
+    } catch {
+      case e: SQLException =>
+        if (conn != null) conn.rollback()
+        throw e
+    } finally {
+      statement.close()
+      conn.setAutoCommit(true)
+    }
+  }
+
+  private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      statement.executeUpdate(sql)
     } finally {
       statement.close()
     }

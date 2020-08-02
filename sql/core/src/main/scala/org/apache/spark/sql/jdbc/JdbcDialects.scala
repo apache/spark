@@ -19,13 +19,13 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
 
-import scala.collection.mutable
+import scala.collection.mutable.ArrayBuilder
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.connector.catalog.TableChange
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn}
+import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types._
 
@@ -202,10 +202,10 @@ abstract class JdbcDialect extends Serializable {
    *
    * @param tableName The name of the table to be altered.
    * @param changes Changes to apply to the table.
-   * @return The SQL statement to use for altering the table.
+   * @return The SQL statements to use for altering the table.
    */
   def alterTable(tableName: String, changes: Seq[TableChange]): Array[String] = {
-    val updateClause = mutable.ArrayBuilder.make[String]
+    val updateClause = ArrayBuilder.make[String]
     for (change <- changes) {
       change match {
         case add: AddColumn =>
@@ -213,28 +213,37 @@ abstract class JdbcDialect extends Serializable {
             case Array(name) =>
               val dataType = JdbcUtils.getJdbcType(add.dataType(), this).databaseTypeDefinition
               updateClause += s"ALTER TABLE $tableName ADD COLUMN $name $dataType"
-            case _ =>
-              throw new IllegalArgumentException(s"Unsupported TableChange fieldNames" +
-                s" ${add.fieldNames}")
           }
         case rename: RenameColumn =>
           rename.fieldNames match {
             case Array(name) =>
               updateClause += s"ALTER TABLE $tableName RENAME COLUMN $name TO ${rename.newName}"
-            case _ =>
-              throw new IllegalArgumentException(s"Unsupported TableChange fieldNames" +
-                s" ${rename.fieldNames}")
           }
         case delete: DeleteColumn =>
           delete.fieldNames match {
             case Array(name) =>
               updateClause += s"ALTER TABLE $tableName DROP COLUMN $name"
-            case _ =>
-              throw new IllegalArgumentException(s"Unsupported TableChange fieldNames" +
-                s" ${delete.fieldNames}")
           }
-        case _ => throw new IllegalArgumentException(s"JDBC alterTable has Unsupported" +
+        case update: UpdateColumnType =>
+          update.fieldNames match {
+            case Array(name) =>
+              val dataType = JdbcUtils.getJdbcType(update.newDataType(), this)
+                .databaseTypeDefinition
+              updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name $dataType"
+          }
+        case update: UpdateColumnNullability =>
+          update.fieldNames match {
+            case Array(name) =>
+              if (update.nullable()) {
+                updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name SET NULL"
+              } else {
+                updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name SET NOT NULL"
+              }
+          }
+        // scalastyle:off throwerror
+        case _ => throw new NotImplementedError(s"JDBC alterTable has Unsupported" +
           s" TableChange $change")
+        // scalastyle:on throwerror
       }
     }
     updateClause.result()

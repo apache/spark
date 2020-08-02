@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
+import scala.collection.mutable.ArrayBuilder
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -110,54 +112,66 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("alter table ... add column") {
     withTable("h2.test.alt_table") {
       withConnection { conn =>
-        conn.prepareStatement("""CREATE TABLE "test"."alt_table" (id INTEGER)""").executeUpdate()
+        sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
       }
-      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(1) === Seq(Row("ID")))
-      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (c1 INTEGER, c2 STRING)")
-      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(3) ===
-        Seq(Row("ID"), Row("C1"), Row("C2")))
-      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (c3 DOUBLE)")
-      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(4) ===
-        Seq(Row("ID"), Row("C1"), Row("C2"), Row("C3")))
+      assert(checkColumnExistence("h2.test.alt_table", Array("ID")))
+      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (C1 INTEGER, C2 STRING)")
+      assert(checkColumnExistence("h2.test.alt_table", Array("ID", "C1", "C2")))
+      sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (C3 DOUBLE)")
+      assert(checkColumnExistence("h2.test.alt_table", Array("ID", "C1", "C2", "C3")))
     }
   }
 
   test("alter table ... rename column") {
     withTable("h2.test.alt_table") {
       withConnection { conn =>
-        conn.prepareStatement("""CREATE TABLE "test"."alt_table" (id INTEGER)""").executeUpdate()
+        sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
       }
-      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(1) === Seq(Row("ID")))
-      sql("ALTER TABLE h2.test.alt_table RENAME COLUMN id TO c")
-      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(1) ===
-        Seq(Row("C")))
+      assert(checkColumnExistence("h2.test.alt_table", Array("ID")))
+      sql("ALTER TABLE h2.test.alt_table RENAME COLUMN ID TO C")
+      assert(checkColumnExistence("h2.test.alt_table", Array("C")))
     }
   }
 
   test("alter table ... drop column") {
     withTable("h2.test.alt_table") {
       withConnection { conn =>
-        conn.prepareStatement("""CREATE TABLE "test"."alt_table" (c1 INTEGER, c2 INTEGER)""")
-          .executeUpdate()
+        sql("CREATE TABLE h2.test.alt_table (C1 INTEGER, C2 INTEGER) USING _")
       }
-      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(2) ===
-        Seq(Row("C1"), Row("C2")))
-      sql("ALTER TABLE h2.test.alt_table DROP COLUMN c1")
-      assert(sql("DESCRIBE TABLE h2.test.alt_table").select("col_name").take(1) ===
-        Seq(Row("C2")))
+      assert(checkColumnExistence("h2.test.alt_table", Array("C1", "C2")))
+      sql("ALTER TABLE h2.test.alt_table DROP COLUMN C1")
+      assert(checkColumnExistence("h2.test.alt_table", Array("C2")))
+    }
+  }
+
+  test("alter table ... update column type") {
+    withTable("h2.test.alt_table") {
+      withConnection { conn =>
+        sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
+      }
+      sql("ALTER TABLE h2.test.alt_table ALTER COLUMN id TYPE DOUBLE")
+      assert(sql(s"DESCRIBE TABLE h2.test.alt_table").select("data_type").first()
+        === Row("double"))
     }
   }
 
   test("alter table ... update column comment not supported") {
     withTable("h2.test.alt_table") {
       withConnection { conn =>
-        conn.prepareStatement("""CREATE TABLE "test"."alt_table" (id INTEGER)""")
-          .executeUpdate()
+        sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
       }
-      val thrown = intercept[org.apache.spark.SparkException] {
-        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN id COMMENT 'test'")
+      val thrown = intercept[scala.NotImplementedError] {
+        sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID COMMENT 'test'")
       }
       assert(thrown.getMessage.contains("JDBC alterTable has Unsupported TableChange"))
     }
+  }
+
+  private def checkColumnExistence(tableName: String, columns: Array[String]): Boolean = {
+    val rows = ArrayBuilder.make[Row]
+    for (column <- columns) {
+      rows += Row(column)
+    }
+    sql(s"DESCRIBE TABLE $tableName").select("col_name").take(columns.length) === rows.result()
   }
 }
