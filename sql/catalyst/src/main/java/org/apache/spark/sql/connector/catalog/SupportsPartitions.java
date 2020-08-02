@@ -74,7 +74,7 @@ public interface SupportsPartitions extends Table {
      *
      * @param ident the partition identifier of the existing partition
      * @param properties the new metadata of the partition
-     * @throws NoSuchPartitionException If the partition identifier to rename doesn't exist
+     * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
      * @throws UnsupportedOperationException If partition property is not supported
      */
     void replacePartitionMetadata(
