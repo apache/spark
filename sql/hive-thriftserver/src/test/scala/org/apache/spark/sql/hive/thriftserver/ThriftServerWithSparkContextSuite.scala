@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.types.{ByteType, DecimalType, DoubleType, LongType, ShortType}
+import org.apache.spark.sql.types._
 
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
@@ -105,25 +105,34 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
     }
   }
 
-  test("SparkGetColumnsOperation") {
+  test("check results from get columns operation from thrift server") {
     val schemaName = "default"
     val tableName = "spark_get_col_operation"
-    val decimalType = DecimalType(10, 2)
+    val schema = new StructType()
+      .add("c0", "boolean", nullable = false, "0")
+      .add("c1", "tinyint", nullable = true, "1")
+      .add("c2", "smallint", nullable = false, "2")
+      .add("c3", "int", nullable = true, "3")
+      .add("c4", "long", nullable = false, "4")
+      .add("c5", "float", nullable = true, "5")
+      .add("c6", "double", nullable = false, "6")
+      .add("c7", "decimal(38, 20)", nullable = true, "7")
+      .add("c8", "decimal(10, 2)", nullable = false, "8")
+      .add("c9", "string", nullable = true, "9")
+      .add("c10", "array<long>", nullable = false, "10")
+      .add("c11", "array<string>", nullable = true, "11")
+      .add("c12", "map<smallint, tinyint>", nullable = false, "12")
+      .add("c13", "date", nullable = true, "13")
+      .add("c14", "timestamp", nullable = false, "14")
+      .add("c15", "struct<X: bigint,Y: double>", nullable = true, "15")
+      .add("c16", "binary", nullable = false, "16")
+
     val ddl =
       s"""
-         |CREATE TABLE $schemaName.$tableName
-         |  (
-         |    a boolean comment '0',
-         |    b int comment '1',
-         |    c float comment '2',
-         |    d ${decimalType.sql} comment '3',
-         |    e array<long> comment '4',
-         |    f array<string> comment '5',
-         |    g map<smallint, tinyint> comment '6',
-         |    h date comment '7',
-         |    i timestamp comment '8',
-         |    j struct<X: bigint,Y: double> comment '9'
-         |  ) using parquet""".stripMargin
+         |CREATE TABLE $schemaName.$tableName (
+         |  ${schema.toDDL}
+         |)
+         |using parquet""".stripMargin
 
     withCLIServiceClient { client =>
       val sessionHandle = client.openSession(user, "")
@@ -137,44 +146,91 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       val getCol = client.getColumns(sessionHandle, "", schemaName, tableName, null)
       val rowSet = client.fetchResults(getCol)
       val columns = rowSet.toTRowSet.getColumns
-      assert(columns.get(0).getStringVal.getValues.asScala.forall(_.isEmpty),
-        "catalog name mismatches")
 
-      assert(columns.get(1).getStringVal.getValues.asScala.forall(_ == schemaName),
-        "schema name mismatches")
+      val catalogs = columns.get(0).getStringVal.getValues.asScala
+      assert(catalogs.forall(_.isEmpty), "catalog name mismatches")
 
-      assert(columns.get(2).getStringVal.getValues.asScala.forall(_ == tableName),
-        "table name mismatches")
+      val schemas = columns.get(1).getStringVal.getValues.asScala
+      assert(schemas.forall(_ == schemaName), "schema name mismatches")
 
-      // column name
-      columns.get(3).getStringVal.getValues.asScala.zipWithIndex.foreach {
-        case (v, i) => assert(v === ('a' + i).toChar.toString, "column name mismatches")
+      val tableNames = columns.get(2).getStringVal.getValues.asScala
+      assert(tableNames.forall(_ == tableName), "table name mismatches")
+
+      val columnNames = columns.get(3).getStringVal.getValues.asScala
+      columnNames.zipWithIndex.foreach {
+        case (v, i) => assert(v === "c" + i, "column name mismatches")
       }
 
       val javaTypes = columns.get(4).getI32Val.getValues
-      assert(javaTypes.get(3).intValue() === java.sql.Types.DECIMAL)
-      assert(javaTypes.get(6).intValue() === java.sql.Types.JAVA_OBJECT)
+      import java.sql.Types._
+      assert(javaTypes.get(0).intValue() === BOOLEAN)
+      assert(javaTypes.get(1).intValue() === TINYINT)
+      assert(javaTypes.get(2).intValue() === SMALLINT)
+      assert(javaTypes.get(3).intValue() === INTEGER)
+      assert(javaTypes.get(4).intValue() === BIGINT)
+      assert(javaTypes.get(5).intValue() === FLOAT)
+      assert(javaTypes.get(6).intValue() === DOUBLE)
+      assert(javaTypes.get(7).intValue() === DECIMAL)
+      assert(javaTypes.get(8).intValue() === DECIMAL)
+      assert(javaTypes.get(9).intValue() === VARCHAR)
+      assert(javaTypes.get(10).intValue() === ARRAY)
+      assert(javaTypes.get(11).intValue() === ARRAY)
+      assert(javaTypes.get(12).intValue() === JAVA_OBJECT)
+      assert(javaTypes.get(13).intValue() === DATE)
+      assert(javaTypes.get(14).intValue() === TIMESTAMP)
+      assert(javaTypes.get(15).intValue() === STRUCT)
+      assert(javaTypes.get(16).intValue() === BINARY)
 
-      val typeNames = columns.get(5).getStringVal.getValues
-      assert(typeNames.get(3) === decimalType.sql)
+      val typeNames = columns.get(5).getStringVal.getValues.asScala
+      typeNames.zip(schema).foreach { case (tName, f) =>
+        assert(tName === f.dataType.sql)
+      }
 
-      val colSize = columns.get(6).getI32Val.getValues
-      assert(colSize.get(3).intValue() === decimalType.defaultSize)
-      assert(colSize.get(6).intValue() === 0)
-      assert(colSize.get(9).intValue() === LongType.defaultSize + DoubleType.defaultSize,
-        "struct column size mismatches")
+      val colSize = columns.get(6).getI32Val.getValues.asScala
 
-      val decimalDigits = columns.get(8).getI32Val.getValues
-      assert(decimalDigits.get(1).intValue() === 0)
-      assert(decimalDigits.get(2).intValue() === 7)
-      assert(decimalDigits.get(3).intValue() === decimalType.scale)
-      assert(decimalDigits.get(8).intValue() === 6,
-        "timestamp support 6 digits for second fraction")
+      colSize.zip(schema).foreach { case (size, f) =>
+        f.dataType match {
+          case StringType | BinaryType | _: ArrayType | _: MapType => assert(size === 0)
+          case o => assert(size === o.defaultSize)
+        }
+      }
 
-      val positions = columns.get(16).getI32Val.getValues
-      positions.asScala.zipWithIndex.foreach { case (pos, idx) =>
+      val decimalDigits = columns.get(8).getI32Val.getValues.asScala
+      decimalDigits.zip(schema).foreach { case (dd, f) =>
+        f.dataType match {
+          case BooleanType | _: IntegerType => assert(dd === 0)
+          case d: DecimalType => assert(dd === d.scale)
+          case FloatType => assert(dd === 7)
+          case DoubleType => assert(dd === 15)
+          case TimestampType => assert(dd === 6)
+          case _ => assert(dd === 0) // nulls
+        }
+      }
+
+      val radixes = columns.get(9).getI32Val.getValues.asScala
+      radixes.zip(schema).foreach { case (radix, f) =>
+        f.dataType match {
+          case _: NumericType => assert(radix === 10)
+          case _ => assert(radix === 0) // nulls
+        }
+      }
+
+      val nullables = columns.get(10).getI32Val.getValues.asScala
+      assert(nullables.forall(_ === 1))
+
+      val comments = columns.get(11).getStringVal.getValues.asScala
+      comments.zip(schema).foreach { case (c, f) => assert(c === f.getComment().get) }
+
+      val positions = columns.get(16).getI32Val.getValues.asScala
+      positions.zipWithIndex.foreach { case (pos, idx) =>
         assert(pos === idx, "the client columns disorder")
       }
+
+      val isNullables = columns.get(17).getStringVal.getValues.asScala
+      assert(isNullables.forall(_ === "YES"))
+
+      val autoIncs = columns.get(22).getStringVal.getValues.asScala
+      assert(isNullables.forall(_ === "NO"))
     }
   }
 }
