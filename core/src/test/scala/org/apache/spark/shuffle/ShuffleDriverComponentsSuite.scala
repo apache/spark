@@ -32,6 +32,8 @@ import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 class ShuffleDriverComponentsSuite
     extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach {
 
+  private var sc: SparkContext = _
+
   test("test serialization of shuffle initialization conf to executors") {
     val testConf = new SparkConf()
       .setAppName("testing")
@@ -52,6 +54,7 @@ class ShuffleDriverComponentsSuite
   }
 
   override def afterEach(): Unit = {
+    super.afterEach()
     TestShuffleExecutorComponentsInitialized.initialized.set(false)
   }
 }
