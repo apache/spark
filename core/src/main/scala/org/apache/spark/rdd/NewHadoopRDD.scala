@@ -41,7 +41,6 @@ import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Utils}
 
-
 private[spark] class NewHadoopPartition(
     rddId: Int,
     val index: Int,
@@ -70,7 +69,7 @@ private[spark] class NewHadoopPartition(
  */
 @DeveloperApi
 class NewHadoopRDD[K, V](
-    @transient sc: SparkContext,
+    sc : SparkContext,
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
@@ -122,8 +121,14 @@ class NewHadoopRDD[K, V](
   }
 
   override def getPartitions: Array[Partition] = {
+    val inputFormat = inputFormatClass.getConstructor().newInstance()
+    inputFormat match {
+      case configurable: Configurable =>
+        configurable.setConf(_conf)
+      case _ =>
+    }
     try {
-      val allRowSplits = getSplits()
+      val allRowSplits = inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
       val rawSplits = if (ignoreEmptySplits) {
         allRowSplits.filter(_.getLength > 0)
       } else {
@@ -157,17 +162,6 @@ class NewHadoopRDD[K, V](
             s" partitions returned from this path.", e)
         Array.empty[Partition]
     }
-  }
-
-  private def getSplits(): Seq[InputSplit] = {
-    val inputFormat = inputFormatClass.getConstructor().newInstance()
-    inputFormat match {
-      case configurable: Configurable =>
-        configurable.setConf(_conf)
-      case _ =>
-    }
-
-    inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
   }
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
