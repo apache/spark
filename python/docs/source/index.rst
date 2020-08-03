@@ -21,10 +21,10 @@
 PySpark Documentation
 =====================
 
-PySpark is an interface for Apache Spark in Python language. It not only offers for you
-to write an application in the Python APIs but also provides PySpark shell so you can
-interactively analyze your data in a distributed environment. PySpark supports most
-of Spark features such as Spark SQL, DataFrmae, Streaming, MLlib
+PySpark is an interface for Apache Spark in Python. It not only allows you to write
+Spark applications using Python APIs, but also provides the PySpark shell for
+interactively analyzing your data in a distributed environment. PySpark supports most
+of Spark's features such as Spark SQL, DataFrmae, Streaming, MLlib
 (Machine Learning) and Spark Core.
 
 .. image:: ../../../docs/img/pyspark-components.png
@@ -51,7 +51,7 @@ learning pipelines.
 **Spark Core**
 
 Spark Core is the underlying general execution engine for the Spark platform that all
-other functionality is built on top of. It provides an RDD (Resilient Disributed Data)
+other functionality is built on top of. It provides an RDD (Resilient Disributed Dataset)
 and in-memory computing capabilities.
 
 .. toctree::
