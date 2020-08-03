@@ -149,9 +149,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("alter table ... update column comment not supported") {
     withTable("h2.test.alt_table") {
-      withConnection { conn =>
-        sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
-      }
+      sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
       val thrown = intercept[scala.NotImplementedError] {
         sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID COMMENT 'test'")
       }
