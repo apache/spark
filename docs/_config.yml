@@ -8,6 +8,9 @@ gems:
 kramdown:
   entity_output: numeric
 
+plugins:
+  - jekyll-redirect-from
+
 include:
   - _static
   - _modules

@@ -21,7 +21,7 @@ import functools
 import sys
 
 from pyspark import SparkContext, since
-from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
+from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string
 from pyspark.sql.pandas.types import to_arrow_type
@@ -232,7 +232,6 @@ class UDFRegistration(object):
     def __init__(self, sparkSession):
         self.sparkSession = sparkSession
 
-    @ignore_unicode_prefix
     @since("1.3.1")
     def register(self, name, f, returnType=None):
         """Register a Python function (including lambda function) or a user-defined function
@@ -261,10 +260,10 @@ class UDFRegistration(object):
 
             >>> strlen = spark.udf.register("stringLengthString", lambda x: len(x))
             >>> spark.sql("SELECT stringLengthString('test')").collect()
-            [Row(stringLengthString(test)=u'4')]
+            [Row(stringLengthString(test)='4')]
 
             >>> spark.sql("SELECT 'foo' AS text").select(strlen("text")).collect()
-            [Row(stringLengthString(text)=u'3')]
+            [Row(stringLengthString(text)='3')]
 
             >>> from pyspark.sql.types import IntegerType
             >>> _ = spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
@@ -349,7 +348,6 @@ class UDFRegistration(object):
         self.sparkSession._jsparkSession.udf().registerPython(name, register_udf._judf)
         return return_udf
 
-    @ignore_unicode_prefix
     @since(2.3)
     def registerJavaFunction(self, name, javaClassName, returnType=None):
         """Register a Java user-defined function as a SQL function.
@@ -389,7 +387,6 @@ class UDFRegistration(object):
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
-    @ignore_unicode_prefix
     @since(2.3)
     def registerJavaUDAF(self, name, javaClassName):
         """Register a Java user-defined aggregate function as a SQL function.
@@ -403,7 +400,7 @@ class UDFRegistration(object):
         >>> df.createOrReplaceTempView("df")
         >>> q = "SELECT name, javaUDAF(id) as avg from df group by name order by name desc"
         >>> spark.sql(q).collect()  # doctest: +SKIP
-        [Row(name=u'b', avg=102.0), Row(name=u'a', avg=102.0)]
+        [Row(name='b', avg=102.0), Row(name='a', avg=102.0)]
         """
 
         self.sparkSession._jsparkSession.udf().registerJavaUDAF(name, javaClassName)
@@ -419,9 +416,6 @@ def _test():
         .appName("sql.udf tests")\
         .getOrCreate()
     globs['spark'] = spark
-    # Hack to skip the unit tests in register. These are currently being tested in proper tests.
-    # We should reenable this test once we completely drop Python 2.
-    del pyspark.sql.udf.UDFRegistration.register
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.udf, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)

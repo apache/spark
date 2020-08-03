@@ -87,7 +87,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, options.table, options)
-              createTable(conn, df, options)
+              createTable(conn, options.table, df.schema, isCaseSensitive, options)
               saveTable(df, Some(df.schema), isCaseSensitive, options)
             }
 
@@ -106,7 +106,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             // Therefore, it is okay to do nothing here and then just return the relation below.
         }
       } else {
-        createTable(conn, df, options)
+        createTable(conn, options.table, df.schema, isCaseSensitive, options)
         saveTable(df, Some(df.schema), isCaseSensitive, options)
       }
 

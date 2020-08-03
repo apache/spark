@@ -183,7 +183,7 @@ class SQLAppStatusListener(
     } else {
       info.accumulables
     }
-    updateStageMetrics(event.stageId, event.stageAttemptId, info.taskId, info.index, accums,
+    updateStageMetrics(event.stageId, event.stageAttemptId, info.taskId, info.index, accums.toSeq,
       info.successful)
   }
 
@@ -290,7 +290,7 @@ class SQLAppStatusListener(
           cluster.id,
           cluster.name,
           cluster.desc,
-          toStoredNodes(cluster.nodes),
+          toStoredNodes(cluster.nodes.toSeq),
           cluster.metrics)
         new SparkPlanGraphNodeWrapper(null, storedCluster)
 

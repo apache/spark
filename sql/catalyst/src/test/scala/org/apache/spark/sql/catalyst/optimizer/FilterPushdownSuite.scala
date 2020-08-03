@@ -33,9 +33,6 @@ class FilterPushdownSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
 
-    override protected val blacklistedOnceBatches: Set[String] =
-      Set("Push CNF predicate through join")
-
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
@@ -45,8 +42,9 @@ class FilterPushdownSuite extends PlanTest {
         BooleanSimplification,
         PushPredicateThroughJoin,
         CollapseProject) ::
-      Batch("Push CNF predicate through join", Once,
-        PushCNFPredicateThroughJoin) :: Nil
+      Batch("Push extra predicate through join", FixedPoint(10),
+        PushExtraPredicateThroughJoin,
+        PushDownPredicates) :: Nil
   }
 
   val attrA = 'a.int
@@ -60,7 +58,7 @@ class FilterPushdownSuite extends PlanTest {
 
   val simpleDisjunctivePredicate =
     ("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)
-  val expectedCNFPredicatePushDownResult = {
+  val expectedPredicatePushDownResult = {
     val left = testRelation.where(('a > 3 || 'a > 1)).subquery('x)
     val right = testRelation.where('a > 13 || 'a > 11).subquery('y)
     left.join(right, condition = Some("x.b".attr === "y.b".attr
@@ -1247,17 +1245,17 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(query.analyze), expected)
   }
 
-  test("inner join: rewrite filter predicates to conjunctive normal form") {
+  test("push down filter predicates through inner join") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
     val originalQuery = x.join(y).where(("x.b".attr === "y.b".attr) && (simpleDisjunctivePredicate))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    comparePlans(optimized, expectedCNFPredicatePushDownResult)
+    comparePlans(optimized, expectedPredicatePushDownResult)
   }
 
-  test("inner join: rewrite join predicates to conjunctive normal form") {
+  test("push down join predicates through inner join") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
@@ -1265,10 +1263,10 @@ class FilterPushdownSuite extends PlanTest {
       x.join(y, condition = Some(("x.b".attr === "y.b".attr) && (simpleDisjunctivePredicate)))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    comparePlans(optimized, expectedCNFPredicatePushDownResult)
+    comparePlans(optimized, expectedPredicatePushDownResult)
   }
 
-  test("inner join: rewrite complex join predicates to conjunctive normal form") {
+  test("push down complex predicates through inner join") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
@@ -1288,7 +1286,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("inner join: rewrite join predicates(with NOT predicate) to conjunctive normal form") {
+  test("push down predicates(with NOT predicate) through inner join") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
@@ -1308,7 +1306,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("left join: rewrite join predicates to conjunctive normal form") {
+  test("push down predicates through left join") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
@@ -1327,7 +1325,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("right join: rewrite join predicates to conjunctive normal form") {
+  test("push down predicates through right join") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
@@ -1346,7 +1344,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("inner join: rewrite to conjunctive normal form avoid generating too many predicates") {
+  test("SPARK-32302: avoid generating too many predicates") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
@@ -1364,30 +1362,20 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test(s"Disable rewrite to CNF by setting ${SQLConf.MAX_CNF_NODE_COUNT.key}=0") {
+  test("push down predicate through multiple joins") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
+    val z = testRelation.subquery('z)
+    val xJoinY = x.join(y, condition = Some("x.b".attr === "y.b".attr))
+    val originalQuery = z.join(xJoinY,
+      condition = Some("x.a".attr === "z.a".attr && simpleDisjunctivePredicate))
 
-    val originalQuery =
-      x.join(y, condition = Some(("x.b".attr === "y.b".attr)
-        && ((("x.a".attr > 3) && ("x.a".attr < 13) && ("y.c".attr <= 5))
-        || (("y.a".attr > 2) && ("y.c".attr < 1)))))
-
-    Seq(0, 10).foreach { count =>
-      withSQLConf(SQLConf.MAX_CNF_NODE_COUNT.key -> count.toString) {
-        val optimized = Optimize.execute(originalQuery.analyze)
-        val (left, right) = if (count == 0) {
-          (testRelation.subquery('x), testRelation.subquery('y))
-        } else {
-          (testRelation.subquery('x),
-            testRelation.where('c <= 5 || ('a > 2 && 'c < 1)).subquery('y))
-        }
-        val correctAnswer = left.join(right, condition = Some("x.b".attr === "y.b".attr
-          && ((("x.a".attr > 3) && ("x.a".attr < 13) && ("y.c".attr <= 5))
-          || (("y.a".attr > 2) && ("y.c".attr < 1))))).analyze
-
-        comparePlans(optimized, correctAnswer)
-      }
-    }
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = x.where('a > 3 || 'a > 1)
+    val right = y.where('a > 13 || 'a > 11)
+    val correctAnswer = z.join(left.join(right,
+      condition = Some("x.b".attr === "y.b".attr && simpleDisjunctivePredicate)),
+      condition = Some("x.a".attr === "z.a".attr)).analyze
+    comparePlans(optimized, correctAnswer)
   }
 }
