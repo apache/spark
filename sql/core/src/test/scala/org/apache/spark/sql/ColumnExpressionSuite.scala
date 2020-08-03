@@ -1420,4 +1420,16 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       }.getMessage should include("No such struct field b in a, B")
     }
   }
+
+  test("SPARK-32521: withField with statically evaluable arguments should succeed") {
+    checkAnswerAndSchema(
+      sql("SELECT named_struct('a', 1, 'b', 2) a").select($"a".withField("c", lit(3)).as("a")),
+      Row(Row(1, 2, 3)) :: Nil,
+      StructType(Seq(
+        StructField("a", StructType(Seq(
+          StructField("a", IntegerType, nullable = false),
+          StructField("b", IntegerType, nullable = false),
+          StructField("c", IntegerType, nullable = false))),
+          nullable = false))))
+  }
 }
