@@ -131,9 +131,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("alter table ... drop column") {
     withTable("h2.test.alt_table") {
-      withConnection { conn =>
-        sql("CREATE TABLE h2.test.alt_table (C1 INTEGER, C2 INTEGER) USING _")
-      }
+      sql("CREATE TABLE h2.test.alt_table (C1 INTEGER, C2 INTEGER) USING _")
       assert(checkColumnExistence("h2.test.alt_table", Array("C1", "C2")))
       sql("ALTER TABLE h2.test.alt_table DROP COLUMN C1")
       assert(checkColumnExistence("h2.test.alt_table", Array("C2")))
