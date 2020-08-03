@@ -115,7 +115,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
       assert(spark.conf.get(SQLConf.SHUFFLE_PARTITIONS) === 10)
     } finally {
-      sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
+      sql(s"set ${SQLConf.SHUFFLE_PARTITIONS.key}=$original")
     }
   }
 
@@ -149,7 +149,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       assert(spark.conf.get(SQLConf.OPTIMIZER_EXCLUDED_RULES) ===
         Some("org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"))
     } finally {
-      sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
+      sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=$original")
     }
   }
 
@@ -165,7 +165,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
       assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 0)
     } finally {
-      sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS}=$original")
+      sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}=$original")
     }
   }
 
