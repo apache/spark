@@ -262,8 +262,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair)
       val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
       // Setup all the filters in distinct aggregate.
-      val distinctAggExprs = aggExpressions.filter(e => e.isDistinct)
-      val (distinctAggFilters, distinctAggFilterAttrs, maxConds) = distinctAggExprs.collect {
+      val (distinctAggFilters, distinctAggFilterAttrs, maxConds) = distinctAggs.collect {
         case AggregateExpression(_, _, _, filter, _) if filter.isDefined =>
           val (e, attr) = expressionAttributePair(filter.get)
           val aggregateExp = Max(attr).toAggregateExpression()
