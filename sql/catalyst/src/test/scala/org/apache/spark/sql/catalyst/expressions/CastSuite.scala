@@ -691,16 +691,22 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
     val ret2 = cast(Literal.create(Array("ab", "cde", "f")), StringType)
     checkEvaluation(ret2, "[ab, cde, f]")
-    val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
-    checkEvaluation(ret3, "[ab, null, c]")
-    val ret4 = cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
+    Seq(false, true).foreach { omitNull =>
+      withSQLConf(SQLConf.OMIT_NESTED_NULL_IN_CAST.key -> omitNull.toString) {
+        val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
+        checkEvaluation(ret3, s"[ab,${if (omitNull) "" else " null"}, c]")
+      }
+    }
+    val ret4 =
+      cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
     checkEvaluation(ret4, "[ab, cde, f]")
     val ret5 = cast(
       Literal.create(Array("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf)),
       StringType)
     checkEvaluation(ret5, "[2014-12-03, 2014-12-04, 2014-12-06]")
     val ret6 = cast(
-      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00").map(Timestamp.valueOf)),
+      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00")
+        .map(Timestamp.valueOf)),
       StringType)
     checkEvaluation(ret6, "[2014-12-03 13:01:00, 2014-12-04 15:05:00]")
     val ret7 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
@@ -714,10 +720,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22973 Cast map to string") {
     val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
     checkEvaluation(ret1, "[1 -> a, 2 -> b, 3 -> c]")
-    val ret2 = cast(
-      Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
-      StringType)
-    checkEvaluation(ret2, "[1 -> a, 2 -> null, 3 -> c]")
+    Seq(false, true).foreach { omitNull =>
+      withSQLConf(SQLConf.OMIT_NESTED_NULL_IN_CAST.key -> omitNull.toString) {
+        val ret2 = cast(
+          Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
+          StringType)
+        checkEvaluation(ret2, s"[1 -> a, 2 ->${if (omitNull) "" else " null"}, 3 -> c]")
+      }
+    }
     val ret3 = cast(
       Literal.create(Map(
         1 -> Date.valueOf("2014-12-03"),
@@ -742,8 +752,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22981 Cast struct to string") {
     val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
     checkEvaluation(ret1, "[1, a, 0.1]")
-    val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
-    checkEvaluation(ret2, "[1, null, a]")
+    Seq(false, true).foreach { omitNull =>
+      withSQLConf(SQLConf.OMIT_NESTED_NULL_IN_CAST.key -> omitNull.toString) {
+        val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
+        checkEvaluation(ret2, s"[1,${if (omitNull) "" else " null"}, a]")
+      }
+    }
     val ret3 = cast(Literal.create(
       (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
     checkEvaluation(ret3, "[2014-12-03, 2014-12-03 15:05:00]")

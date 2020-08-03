@@ -297,6 +297,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private lazy val dateFormatter = DateFormatter(zoneId)
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
 
+  private val omitNestedNull = SQLConf.get.getConf(SQLConf.OMIT_NESTED_NULL_IN_CAST)
+
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
     case CalendarIntervalType =>
@@ -316,10 +318,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           }
           var i = 1
           while (i < array.numElements) {
-            builder.append(", ")
+            builder.append(",")
             if (array.isNullAt(i)) {
-              builder.append("null")
+              if (!omitNestedNull) builder.append(" null")
             } else {
+              builder.append(" ")
               builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
             }
             i += 1
@@ -338,21 +341,24 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           val keyToUTF8String = castToString(kt)
           val valueToUTF8String = castToString(vt)
           builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
-          builder.append(" -> ")
+          builder.append(" ->")
           if (valueArray.isNullAt(0)) {
-            builder.append("null")
+            if (!omitNestedNull) builder.append(" null")
           } else {
+            builder.append(" ")
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
           }
           var i = 1
           while (i < map.numElements) {
             builder.append(", ")
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
-            builder.append(" -> ")
+            builder.append(" ->")
             if (valueArray.isNullAt(i)) {
-              builder.append("null")
+              if (!omitNestedNull) builder.append(" null")
             } else {
-              builder.append(valueToUTF8String(valueArray.get(i, vt)).asInstanceOf[UTF8String])
+              builder.append(" ")
+              builder.append(valueToUTF8String(valueArray.get(i, vt))
+                .asInstanceOf[UTF8String])
             }
             i += 1
           }
@@ -368,16 +374,17 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           val st = fields.map(_.dataType)
           val toUTF8StringFuncs = st.map(castToString)
           if (row.isNullAt(0)) {
-            builder.append("null")
+            if (!omitNestedNull) builder.append(" null")
           } else {
             builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
           }
           var i = 1
           while (i < row.numFields) {
-            builder.append(", ")
+            builder.append(",")
             if (row.isNullAt(i)) {
-              builder.append("null")
+              if (!omitNestedNull) builder.append(" null")
             } else {
+              builder.append(" ")
               builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
             }
             i += 1
@@ -896,6 +903,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     """
   }
 
+  private def outNullElem(buffer: ExprValue): Block = {
+    if (omitNestedNull) code";" else code"""$buffer.append(" null");"""
+  }
+
   private def writeArrayToStringBuilder(
       et: DataType,
       array: ExprValue,
@@ -919,15 +930,16 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
        |  if ($array.isNullAt(0)) {
-       |    $buffer.append("null");
+       |    ${outNullElem(buffer)}
        |  } else {
        |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
-       |    $buffer.append(", ");
+       |    $buffer.append(",");
        |    if ($array.isNullAt($loopIndex)) {
-       |      $buffer.append("null");
+       |      ${outNullElem(buffer)}
        |    } else {
+       |      $buffer.append(" ");
        |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
        |    }
        |  }
@@ -973,19 +985,21 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |$buffer.append("[");
        |if ($map.numElements() > 0) {
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
-       |  $buffer.append(" -> ");
+       |  $buffer.append(" ->");
        |  if ($map.valueArray().isNullAt(0)) {
-       |    $buffer.append("null");
+       |    ${outNullElem(buffer)}
        |  } else {
+       |    $buffer.append(" ");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
        |    $buffer.append(", ");
        |    $buffer.append($keyToStringFunc($getMapKeyArray));
-       |    $buffer.append(" -> ");
+       |    $buffer.append(" ->");
        |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      $buffer.append("null");
+       |      ${outNullElem(buffer)}
        |    } else {
+       |      $buffer.append(" ");
        |      $buffer.append($valueToStringFunc($getMapValueArray));
        |    }
        |  }
@@ -1005,10 +1019,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       val fieldStr = ctx.freshVariable("fieldStr", StringType)
       val javaType = JavaCode.javaType(ft)
       code"""
-         |${if (i != 0) code"""$buffer.append(", ");""" else EmptyBlock}
+         |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
          |if ($row.isNullAt($i)) {
-         |  $buffer.append("null");
+         |  ${outNullElem(buffer)}
          |} else {
+         |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
+         |
          |  // Append $i field into the string buffer
          |  $javaType $field = ${CodeGenerator.getValue(row, ft, s"$i")};
          |  UTF8String $fieldStr = null;
