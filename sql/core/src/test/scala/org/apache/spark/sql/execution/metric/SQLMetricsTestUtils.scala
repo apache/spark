@@ -220,9 +220,9 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
         (actualMetricValue: Any) => {
           actualMetricValue.toString.matches(expectedMetricValue.toString)
-        }))
+        }).toMap)
     }
-    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates,
+    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates.toMap,
       enableWholeStage)
   }
 

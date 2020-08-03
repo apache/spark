@@ -43,6 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
@@ -91,7 +92,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   test("script") {
     withTempView("script_table") {
       assume(TestUtils.testCommandAvailable("/bin/bash"))
-      assume(TestUtils.testCommandAvailable("echo | sed"))
+      assume(TestUtils.testCommandAvailable("echo"))
+      assume(TestUtils.testCommandAvailable("sed"))
       val scriptFilePath = getTestResourcePath("test_script.sh")
       val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
       df.createOrReplaceTempView("script_table")
@@ -2559,6 +2561,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 }
 
+@SlowHiveTest
 class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite
+@SlowHiveTest
 class SQLQuerySuiteAE extends SQLQuerySuiteBase with EnableAdaptiveExecutionSuite
 

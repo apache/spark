@@ -236,6 +236,45 @@ case class ShowFunctionsCommand(
   }
 }
 
+
+/**
+ * A command for users to refresh the persistent function.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    REFRESH FUNCTION functionName
+ * }}}
+ */
+case class RefreshFunctionCommand(
+    databaseName: Option[String],
+    functionName: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {
+      throw new AnalysisException(s"Cannot refresh builtin function $functionName")
+    }
+    if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
+      throw new AnalysisException(s"Cannot refresh temporary function $functionName")
+    }
+
+    val identifier = FunctionIdentifier(
+      functionName, Some(databaseName.getOrElse(catalog.getCurrentDatabase)))
+    // we only refresh the permanent function.
+    if (catalog.isPersistentFunction(identifier)) {
+      // register overwrite function.
+      val func = catalog.getFunctionMetadata(identifier)
+      catalog.registerFunction(func, true)
+    } else {
+      // clear cached function and throw exception
+      catalog.unregisterFunction(identifier)
+      throw new NoSuchFunctionException(identifier.database.get, identifier.funcName)
+    }
+
+    Seq.empty[Row]
+  }
+}
+
 object FunctionsCommand {
   // operators that do not have corresponding functions.
   // They should be handled `DescribeFunctionCommand`, `ShowFunctionsCommand`

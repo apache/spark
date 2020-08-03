@@ -15,12 +15,7 @@
 # limitations under the License.
 #
 
-import sys
-if sys.version > '3':
-    basestring = str
-
 from pyspark import since, keyword_only, SparkContext
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
@@ -2178,7 +2173,6 @@ class MinMaxScalerModel(JavaModel, _MinMaxScalerParams, JavaMLReadable, JavaMLWr
 
 
 @inherit_doc
-@ignore_unicode_prefix
 class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that converts the input array of strings into an array of n-grams. Null
@@ -2196,15 +2190,15 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
     >>> ngram.setOutputCol("nGrams")
     NGram...
     >>> ngram.transform(df).head()
-    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b', u'b c', u'c d', u'd e'])
+    Row(inputTokens=['a', 'b', 'c', 'd', 'e'], nGrams=['a b', 'b c', 'c d', 'd e'])
     >>> # Change n-gram length
     >>> ngram.setParams(n=4).transform(df).head()
-    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b c d', u'b c d e'])
+    Row(inputTokens=['a', 'b', 'c', 'd', 'e'], nGrams=['a b c d', 'b c d e'])
     >>> # Temporarily modify output column.
     >>> ngram.transform(df, {ngram.outputCol: "output"}).head()
-    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], output=[u'a b c d', u'b c d e'])
+    Row(inputTokens=['a', 'b', 'c', 'd', 'e'], output=['a b c d', 'b c d e'])
     >>> ngram.transform(df).head()
-    Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b c d', u'b c d e'])
+    Row(inputTokens=['a', 'b', 'c', 'd', 'e'], nGrams=['a b c d', 'b c d e'])
     >>> # Must use keyword arguments to specify params.
     >>> ngram.setParams("text")
     Traceback (most recent call last):
@@ -3082,7 +3076,6 @@ class RobustScalerModel(JavaModel, _RobustScalerParams, JavaMLReadable, JavaMLWr
 
 
 @inherit_doc
-@ignore_unicode_prefix
 class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A regex based tokenizer that extracts tokens either by using the
@@ -3099,15 +3092,15 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
     >>> reTokenizer.setOutputCol("words")
     RegexTokenizer...
     >>> reTokenizer.transform(df).head()
-    Row(text=u'A B  c', words=[u'a', u'b', u'c'])
+    Row(text='A B  c', words=['a', 'b', 'c'])
     >>> # Change a parameter.
     >>> reTokenizer.setParams(outputCol="tokens").transform(df).head()
-    Row(text=u'A B  c', tokens=[u'a', u'b', u'c'])
+    Row(text='A B  c', tokens=['a', 'b', 'c'])
     >>> # Temporarily modify a parameter.
     >>> reTokenizer.transform(df, {reTokenizer.outputCol: "words"}).head()
-    Row(text=u'A B  c', words=[u'a', u'b', u'c'])
+    Row(text='A B  c', words=['a', 'b', 'c'])
     >>> reTokenizer.transform(df).head()
-    Row(text=u'A B  c', tokens=[u'a', u'b', u'c'])
+    Row(text='A B  c', tokens=['a', 'b', 'c'])
     >>> # Must use keyword arguments to specify params.
     >>> reTokenizer.setParams("text")
     Traceback (most recent call last):
@@ -3935,7 +3928,6 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols,
 
 
 @inherit_doc
-@ignore_unicode_prefix
 class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A tokenizer that converts the input string to lowercase and then
@@ -3946,15 +3938,15 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
     >>> tokenizer.setInputCol("text")
     Tokenizer...
     >>> tokenizer.transform(df).head()
-    Row(text=u'a b c', words=[u'a', u'b', u'c'])
+    Row(text='a b c', words=['a', 'b', 'c'])
     >>> # Change a parameter.
     >>> tokenizer.setParams(outputCol="tokens").transform(df).head()
-    Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
+    Row(text='a b c', tokens=['a', 'b', 'c'])
     >>> # Temporarily modify a parameter.
     >>> tokenizer.transform(df, {tokenizer.outputCol: "words"}).head()
-    Row(text=u'a b c', words=[u'a', u'b', u'c'])
+    Row(text='a b c', words=['a', 'b', 'c'])
     >>> tokenizer.transform(df).head()
-    Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
+    Row(text='a b c', tokens=['a', 'b', 'c'])
     >>> # Must use keyword arguments to specify params.
     >>> tokenizer.setParams("text")
     Traceback (most recent call last):
@@ -4476,7 +4468,6 @@ class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCo
 
 
 @inherit_doc
-@ignore_unicode_prefix
 class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     """
     Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
@@ -4505,7 +4496,7 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     +----+--------------------+
     ...
     >>> model.findSynonymsArray("a", 2)
-    [(u'b', 0.015859870240092278), (u'c', -0.5680795907974243)]
+    [('b', 0.015859870240092278), ('c', -0.5680795907974243)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
@@ -4668,7 +4659,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable, JavaMLWritable):
         Returns a dataframe with two fields word and similarity (which
         gives the cosine similarity).
         """
-        if not isinstance(word, basestring):
+        if not isinstance(word, str):
             word = _convert_to_vector(word)
         return self._call_java("findSynonyms", word, num)
 
@@ -4680,7 +4671,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable, JavaMLWritable):
         Returns an array with two fields word and similarity (which
         gives the cosine similarity).
         """
-        if not isinstance(word, basestring):
+        if not isinstance(word, str):
             word = _convert_to_vector(word)
         tuples = self._java_obj.findSynonymsArray(word, num)
         return list(map(lambda st: (st._1(), st._2()), list(tuples)))
@@ -5745,6 +5736,7 @@ class VarianceThresholdSelectorModel(JavaModel, _VarianceThresholdSelectorParams
 
 if __name__ == "__main__":
     import doctest
+    import sys
     import tempfile
 
     import pyspark.ml.feature

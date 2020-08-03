@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -82,16 +83,18 @@ abstract class QueryStageExec extends LeafExecNode {
   def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec
 
   /**
+   * Returns the runtime statistics after stage materialization.
+   */
+  def getRuntimeStatistics: Statistics
+
+  /**
    * Compute the statistics of the query stage if executed, otherwise None.
    */
   def computeStats(): Option[Statistics] = resultOption.get().map { _ =>
-    // Metrics `dataSize` are available in both `ShuffleExchangeExec` and `BroadcastExchangeExec`.
-    val exchange = plan match {
-      case r: ReusedExchangeExec => r.child
-      case e: Exchange => e
-      case _ => throw new IllegalStateException("wrong plan for query stage:\n " + plan.treeString)
-    }
-    Statistics(sizeInBytes = exchange.metrics("dataSize").value)
+    val runtimeStats = getRuntimeStatistics
+    val dataSize = runtimeStats.sizeInBytes.max(0)
+    val numOutputRows = runtimeStats.rowCount.map(_.max(0))
+    Statistics(dataSize, numOutputRows)
   }
 
   @transient
@@ -110,6 +113,8 @@ abstract class QueryStageExec extends LeafExecNode {
 
   protected override def doPrepare(): Unit = plan.prepare()
   protected override def doExecute(): RDD[InternalRow] = plan.execute()
+  override def supportsColumnar: Boolean = plan.supportsColumnar
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = plan.executeColumnar()
   override def doExecuteBroadcast[T](): Broadcast[T] = plan.executeBroadcast()
   override def doCanonicalize(): SparkPlan = plan.canonicalized
 
@@ -138,15 +143,15 @@ abstract class QueryStageExec extends LeafExecNode {
 }
 
 /**
- * A shuffle query stage whose child is a [[ShuffleExchangeExec]] or [[ReusedExchangeExec]].
+ * A shuffle query stage whose child is a [[ShuffleExchangeLike]] or [[ReusedExchangeExec]].
  */
 case class ShuffleQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan) extends QueryStageExec {
 
   @transient val shuffle = plan match {
-    case s: ShuffleExchangeExec => s
-    case ReusedExchangeExec(_, s: ShuffleExchangeExec) => s
+    case s: ShuffleExchangeLike => s
+    case ReusedExchangeExec(_, s: ShuffleExchangeLike) => s
     case _ =>
       throw new IllegalStateException("wrong plan for shuffle stage:\n " + plan.treeString)
   }
@@ -177,22 +182,24 @@ case class ShuffleQueryStageExec(
    * this method returns None, as there is no map statistics.
    */
   def mapStats: Option[MapOutputStatistics] = {
-    assert(resultOption.get().isDefined, "ShuffleQueryStageExec should already be ready")
+    assert(resultOption.get().isDefined, s"${getClass.getSimpleName} should already be ready")
     val stats = resultOption.get().get.asInstanceOf[MapOutputStatistics]
     Option(stats)
   }
+
+  override def getRuntimeStatistics: Statistics = shuffle.runtimeStatistics
 }
 
 /**
- * A broadcast query stage whose child is a [[BroadcastExchangeExec]] or [[ReusedExchangeExec]].
+ * A broadcast query stage whose child is a [[BroadcastExchangeLike]] or [[ReusedExchangeExec]].
  */
 case class BroadcastQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan) extends QueryStageExec {
 
   @transient val broadcast = plan match {
-    case b: BroadcastExchangeExec => b
-    case ReusedExchangeExec(_, b: BroadcastExchangeExec) => b
+    case b: BroadcastExchangeLike => b
+    case ReusedExchangeExec(_, b: BroadcastExchangeLike) => b
     case _ =>
       throw new IllegalStateException("wrong plan for broadcast stage:\n " + plan.treeString)
   }
@@ -231,6 +238,8 @@ case class BroadcastQueryStageExec(
       broadcast.relationFuture.cancel(true)
     }
   }
+
+  override def getRuntimeStatistics: Statistics = broadcast.runtimeStatistics
 }
 
 object BroadcastQueryStageExec {
