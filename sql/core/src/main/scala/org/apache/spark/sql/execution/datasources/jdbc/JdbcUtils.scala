@@ -819,8 +819,10 @@ object JdbcUtils extends Logging {
     if (null != customSchema && customSchema.nonEmpty) {
       val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 
-      SchemaUtils.checkColumnNameDuplication(
-        userSchema.map(_.name), "in the customSchema option value", nameEquality)
+      SchemaUtils.checkSchemaColumnNameDuplication(
+        userSchema,
+        "in the customSchema option value",
+        nameEquality)
 
       // This is resolved by names, use the custom filed dataType to replace the default dataType.
       val newSchema = tableSchema.map { col =>
