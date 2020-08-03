@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLFeatureNotSupportedException}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -901,21 +901,32 @@ object JdbcUtils extends Logging {
       changes: Seq[TableChange],
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    conn.setAutoCommit(false)
-    val statement = conn.createStatement
-    try {
-      statement.setQueryTimeout(options.queryTimeout)
-      for (sql <- dialect.alterTable(tableName, changes)) {
-        statement.executeUpdate(sql)
+    if (changes.length == 1) {
+      executeStatement(conn, options, dialect.alterTable(tableName, changes)(0))
+    } else {
+      val metadata = conn.getMetaData
+      if (!metadata.supportsTransactions) {
+        throw new SQLFeatureNotSupportedException(s"${this.getClass.getName}.alterTable doesn't" +
+          s" support multiple alter table changes simultaneously for database server" +
+            s" that doesn't have transaction support.")
+      } else {
+        conn.setAutoCommit(false)
+        val statement = conn.createStatement
+        try {
+          statement.setQueryTimeout(options.queryTimeout)
+          for (sql <- dialect.alterTable(tableName, changes)) {
+            statement.executeUpdate(sql)
+          }
+          conn.commit()
+        } catch {
+          case e: SQLException =>
+            if (conn != null) conn.rollback()
+            throw e
+        } finally {
+          statement.close()
+          conn.setAutoCommit(true)
+        }
       }
-      conn.commit()
-    } catch {
-      case e: SQLException =>
-        if (conn != null) conn.rollback()
-        throw e
-    } finally {
-      statement.close()
-      conn.setAutoCommit(true)
     }
   }
 

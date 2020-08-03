@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, SQLFeatureNotSupportedException, Timestamp}
 
 import scala.collection.mutable.ArrayBuilder
 
@@ -199,6 +199,7 @@ abstract class JdbcDialect extends Serializable {
 
   /**
    * Alter an existing table.
+   * TODO (SPARK-32523): Override this method in the dialects that have different syntax.
    *
    * @param tableName The name of the table to be altered.
    * @param changes Changes to apply to the table.
@@ -237,10 +238,9 @@ abstract class JdbcDialect extends Serializable {
               val nullable = if (update.nullable()) "NULL" else "NOT NULL"
               updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name SET " + nullable
           }
-        // scalastyle:off throwerror
-        case _ => throw new NotImplementedError(s"JDBC alterTable has Unsupported" +
-          s" TableChange $change")
-        // scalastyle:on throwerror
+        case _ =>
+          throw new SQLFeatureNotSupportedException(s"${this.getClass.getName}.alterTable" +
+            s" has unsupported TableChange $change")
       }
     }
     updateClause.result()
