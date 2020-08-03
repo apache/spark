@@ -140,9 +140,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("alter table ... update column type") {
     withTable("h2.test.alt_table") {
-      withConnection { conn =>
-        sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
-      }
+      sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")
       sql("ALTER TABLE h2.test.alt_table ALTER COLUMN id TYPE DOUBLE")
       assert(sql(s"DESCRIBE TABLE h2.test.alt_table").select("data_type").first()
         === Row("double"))
