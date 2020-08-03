@@ -86,8 +86,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
   override def visitSetQuotedConfiguration(ctx: SetQuotedConfigurationContext)
     : LogicalPlan = withOrigin(ctx) {
-    val keyStr = ctx.key.getText.replaceAll("`", "")
-    if (ctx.value != null) {
+    val keyStr = ctx.configKey().getText
+    if (ctx.EQ() != null) {
       SetCommand(Some(keyStr -> Option(remainder(ctx.EQ().getSymbol).trim)))
     } else {
       SetCommand(Some(keyStr -> None))
@@ -117,7 +117,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
   override def visitResetQuotedConfiguration(
       ctx: ResetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    ResetCommand(Some(ctx.key.getText.replaceAll("`", "")))
+    ResetCommand(Some(ctx.configKey().getText))
   }
 
   /**
