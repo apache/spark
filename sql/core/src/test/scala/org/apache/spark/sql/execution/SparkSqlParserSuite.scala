@@ -67,8 +67,7 @@ class SparkSqlParserSuite extends AnalysisTest {
   test("Checks if SET/RESET can parse all the configurations") {
     // Force to build static SQL configurations
     StaticSQLConf
-    (SQLConf.sqlConfEntries.values.asScala ++ ConfigEntry.knownConfigs.values.asScala)
-        .foreach { config =>
+    ConfigEntry.knownConfigs.values.asScala.foreach { config =>
       assertEqual(s"SET ${config.key}", SetCommand(Some(config.key -> None)))
       if (config.defaultValue.isDefined && config.defaultValueString != null) {
         assertEqual(s"SET ${config.key}=${config.defaultValueString}",
@@ -82,6 +81,7 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("SET", SetCommand(None))
     assertEqual("SET -v", SetCommand(Some("-v", None)))
     assertEqual("SET spark.sql.key", SetCommand(Some("spark.sql.key" -> None)))
+    assertEqual("SET  spark.sql.key   ", SetCommand(Some("spark.sql.key" -> None)))
     assertEqual("SET spark:sql:key=false", SetCommand(Some("spark:sql:key" -> Some("false"))))
     assertEqual("SET spark:sql:key=", SetCommand(Some("spark:sql:key" -> Some(""))))
     assertEqual("SET spark:sql:key=  ", SetCommand(Some("spark:sql:key" -> Some(""))))
@@ -96,6 +96,8 @@ class SparkSqlParserSuite extends AnalysisTest {
       SetCommand(Some("spark:sql:key" -> Some("va l u  e"))))
     assertEqual("SET `spark.sql.    key`=value",
       SetCommand(Some("spark.sql.    key" -> Some("value"))))
+    assertEqual("SET `spark.sql.    key`= v  a lu e ",
+      SetCommand(Some("spark.sql.    key" -> Some("v  a lu e"))))
     assertEqual("SET `spark.sql.    key`=  -1",
       SetCommand(Some("spark.sql.    key" -> Some("-1"))))
 
@@ -117,7 +119,7 @@ class SparkSqlParserSuite extends AnalysisTest {
   test("Report Error for invalid usage of RESET command") {
     assertEqual("RESET", ResetCommand(None))
     assertEqual("RESET spark.sql.key", ResetCommand(Some("spark.sql.key")))
-    assertEqual("RESET spark.sql.key ", ResetCommand(Some("spark.sql.key")))
+    assertEqual("RESET  spark.sql.key  ", ResetCommand(Some("spark.sql.key")))
     assertEqual("RESET 1.2.key ", ResetCommand(Some("1.2.key")))
     assertEqual("RESET spark.sql.3", ResetCommand(Some("spark.sql.3")))
     assertEqual("RESET 1:2:key ", ResetCommand(Some("1:2:key")))

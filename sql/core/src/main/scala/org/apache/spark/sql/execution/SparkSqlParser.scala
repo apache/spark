@@ -58,7 +58,8 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
 class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
-  private val configKeyDef = """([a-zA-Z_\d\\.:]+)""".r
+  private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=(.*)""".r
+  private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -68,7 +69,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=(.*)""".r
     remainder(ctx.SET.getSymbol).trim match {
       case configKeyValueDef(key, value) =>
         SetCommand(Some(key -> Option(value.trim)))
@@ -86,7 +86,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
   override def visitSetQuotedConfiguration(ctx: SetQuotedConfigurationContext)
     : LogicalPlan = withOrigin(ctx) {
-    val keyStr = ctx.quotedConfigKey().getText
+    val keyStr = ctx.key.getText.replaceAll("`", "")
     if (ctx.value != null) {
       SetCommand(Some(keyStr -> Option(remainder(ctx.EQ().getSymbol).trim)))
     } else {
@@ -117,7 +117,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
   override def visitResetQuotedConfiguration(
       ctx: ResetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    ResetCommand(Some(ctx.quotedConfigKey().getText))
+    ResetCommand(Some(ctx.key.getText.replaceAll("`", "")))
   }
 
   /**
