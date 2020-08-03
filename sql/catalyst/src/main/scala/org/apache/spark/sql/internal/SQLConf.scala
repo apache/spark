@@ -2686,6 +2686,7 @@ object SQLConf {
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup." +
         "Only support for singleColumn NAAJ for now.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
 
