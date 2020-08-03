@@ -177,6 +177,12 @@ jobs:
         mkdir -p ~/.m2
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
         rm -rf ~/.m2/repository/org/apache/spark
+    # Test report
+      - uses: ashley-taylor/junit-report-annotations-action@1.3
+        with:
+          name: "Failed tests"
+          access-token: ${{ secrets.GITHUB_TOKEN }}
+          path: "**/target/test-reports/*.xml"
 
   # Static analysis, and documentation build
   lint:
