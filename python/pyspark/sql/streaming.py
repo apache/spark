@@ -420,7 +420,7 @@ class DataStreamReader(OptionUtils):
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None,  allowUnquotedControlChars=None, lineSep=None, locale=None,
              dropFieldIfAllNull=None, encoding=None, pathGlobFilter=None,
-             recursiveFileLookup=None):
+             recursiveFileLookup=None, allowNonNumericNumbers=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -500,6 +500,14 @@ class DataStreamReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
+        :param allowNonNumericNumbers: allows JSON parser to recognize set of "Not-a-Number" (NaN)
+                                       tokens as legal floating number values. If None is set,
+                                       it uses the default value, ``true``.
+
+                * ``+INF``: for positive infinity, as well as alias of
+                            ``+Infinity`` and ``Infinity``.
+                *  ``-INF``: for negative infinity, alias ``-Infinity``.
+                *  ``NaN``: for other not-a-numbers, like result of division by zero.
 
         .. _partition discovery:
           https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
@@ -520,7 +528,8 @@ class DataStreamReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
             dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            allowNonNumericNumbers=allowNonNumericNumbers)
         if isinstance(path, str):
             return self._df(self._jreader.json(path))
         else:

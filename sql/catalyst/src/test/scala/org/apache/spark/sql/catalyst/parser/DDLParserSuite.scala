@@ -2026,40 +2026,40 @@ class DDLParserSuite extends AnalysisTest {
   test("DESCRIBE FUNCTION") {
     comparePlans(
       parsePlan("DESC FUNCTION a"),
-      DescribeFunctionStatement(Seq("a"), false))
+      DescribeFunction(UnresolvedFunc(Seq("a")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION a"),
-      DescribeFunctionStatement(Seq("a"), false))
+      DescribeFunction(UnresolvedFunc(Seq("a")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION a.b.c"),
-      DescribeFunctionStatement(Seq("a", "b", "c"), false))
+      DescribeFunction(UnresolvedFunc(Seq("a", "b", "c")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION EXTENDED a.b.c"),
-      DescribeFunctionStatement(Seq("a", "b", "c"), true))
+      DescribeFunction(UnresolvedFunc(Seq("a", "b", "c")), true))
   }
 
   test("SHOW FUNCTIONS") {
     comparePlans(
       parsePlan("SHOW FUNCTIONS"),
-      ShowFunctionsStatement(true, true, None, None))
+      ShowFunctions(None, true, true, None))
     comparePlans(
       parsePlan("SHOW USER FUNCTIONS"),
-      ShowFunctionsStatement(true, false, None, None))
+      ShowFunctions(None, true, false, None))
     comparePlans(
       parsePlan("SHOW user FUNCTIONS"),
-      ShowFunctionsStatement(true, false, None, None))
+      ShowFunctions(None, true, false, None))
     comparePlans(
       parsePlan("SHOW SYSTEM FUNCTIONS"),
-      ShowFunctionsStatement(false, true, None, None))
+      ShowFunctions(None, false, true, None))
     comparePlans(
       parsePlan("SHOW ALL FUNCTIONS"),
-      ShowFunctionsStatement(true, true, None, None))
+      ShowFunctions(None, true, true, None))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE 'funct*'"),
-      ShowFunctionsStatement(true, true, Some("funct*"), None))
+      ShowFunctions(None, true, true, Some("funct*")))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
-      ShowFunctionsStatement(true, true, None, Some(Seq("a", "b", "c"))))
+      ShowFunctions(Some(UnresolvedFunc(Seq("a", "b", "c"))), true, true, None))
     val sql = "SHOW other FUNCTIONS"
     intercept(sql, s"$sql not supported")
   }
@@ -2067,19 +2067,19 @@ class DDLParserSuite extends AnalysisTest {
   test("DROP FUNCTION") {
     comparePlans(
       parsePlan("DROP FUNCTION a"),
-      DropFunctionStatement(Seq("a"), false, false))
+      DropFunction(UnresolvedFunc(Seq("a")), false, false))
     comparePlans(
       parsePlan("DROP FUNCTION a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), false, false))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), false, false))
     comparePlans(
       parsePlan("DROP TEMPORARY FUNCTION a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), false, true))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), false, true))
     comparePlans(
       parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), true, false))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), true, false))
     comparePlans(
       parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a.b.c"),
-      DropFunctionStatement(Seq("a", "b", "c"), true, true))
+      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), true, true))
   }
 
   test("CREATE FUNCTION") {

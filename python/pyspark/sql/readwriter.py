@@ -184,7 +184,7 @@ class DataFrameReader(OptionUtils):
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
              dropFieldIfAllNull=None, encoding=None, locale=None, pathGlobFilter=None,
-             recursiveFileLookup=None):
+             recursiveFileLookup=None, allowNonNumericNumbers=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -264,6 +264,14 @@ class DataFrameReader(OptionUtils):
                                It does not change the behavior of `partition discovery`_.
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
                                     disables `partition discovery`_.
+        :param allowNonNumericNumbers: allows JSON parser to recognize set of "Not-a-Number" (NaN)
+                                       tokens as legal floating number values. If None is set,
+                                       it uses the default value, ``true``.
+
+                * ``+INF``: for positive infinity, as well as alias of
+                            ``+Infinity`` and ``Infinity``.
+                *  ``-INF``: for negative infinity, alias ``-Infinity``.
+                *  ``NaN``: for other not-a-numbers, like result of division by zero.
 
         .. _partition discovery:
           https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
@@ -287,7 +295,8 @@ class DataFrameReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
             samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
+            locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            allowNonNumericNumbers=allowNonNumericNumbers)
         if isinstance(path, str):
             path = [path]
         if type(path) == list:

@@ -127,6 +127,16 @@ object StaticSQLConf {
     .toSequence
     .createOptional
 
+  val SPARK_CACHE_SERIALIZER = buildStaticConf("spark.sql.cache.serializer")
+    .doc("The name of a class that implements " +
+      "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +
+      "translate SQL data into a format that can more efficiently be cached. The underlying " +
+      "API is subject to change so use with caution. Multiple classes cannot be specified. " +
+      "The class must have a no-arg constructor.")
+    .version("3.1.0")
+    .stringConf
+    .createWithDefault("org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
+
   val QUERY_EXECUTION_LISTENERS = buildStaticConf("spark.sql.queryExecutionListeners")
     .doc("List of class names implementing QueryExecutionListener that will be automatically " +
       "added to newly created sessions. The classes should have either a no-arg constructor, " +
