@@ -230,7 +230,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(isNullables.forall(_ === "YES"))
 
       val autoIncs = columns.get(22).getStringVal.getValues.asScala
-      assert(isNullables.forall(_ === "NO"))
+      assert(autoIncs.forall(_ === "NO"))
     }
   }
 }
