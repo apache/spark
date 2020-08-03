@@ -268,12 +268,28 @@ class ContextTests(unittest.TestCase):
             self.assertEqual(len(resources), 0)
 
     def test_disallow_to_create_spark_context_in_executors(self):
-        # SPARK-32160: SparkContext should not be created in executors.
+        # SPARK-32160: SparkContext should not created in executors if the config is set.
+
+        def create_spark_context():
+            conf = SparkConf().set("spark.driver.allowSparkContextInExecutors", "false")
+            with SparkContext(conf=conf):
+                pass
+
         with SparkContext("local-cluster[3, 1, 1024]") as sc:
             with self.assertRaises(Exception) as context:
-                sc.range(2).foreach(lambda _: SparkContext())
+                sc.range(2).foreach(lambda _: create_spark_context())
             self.assertIn("SparkContext should only be created and accessed on the driver.",
                           str(context.exception))
+
+    def test_allow_to_create_spark_context_in_executors(self):
+        # SPARK-32160: SparkContext can be created in executors.
+
+        def create_spark_context():
+            with SparkContext():
+                pass
+
+        with SparkContext("local-cluster[3, 1, 1024]") as sc:
+            sc.range(2).foreach(lambda _: create_spark_context())
 
 
 class ContextTestsWithResources(unittest.TestCase):
