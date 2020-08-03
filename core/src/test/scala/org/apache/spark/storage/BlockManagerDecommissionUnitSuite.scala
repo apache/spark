@@ -57,6 +57,106 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     }
   }
 
+  /**
+   * Validate a given configuration with the mocks.
+   * The fail variable controls if we expect migration to fail, in which case we expect
+   * a constant Long.MaxValue timestamp.
+   */
+  private def validateWithMocks(conf: SparkConf, bm: BlockManager,
+      migratableShuffleBlockResolver: MigratableResolver, fail: Boolean = false) = {
+    // Verify the decom manager handles this correctly
+    val bmDecomManager = new BlockManagerDecommissioner(conf, bm)
+    var previousTime = Long.MaxValue
+    try {
+      bmDecomManager.start()
+      eventually(timeout(10.second), interval(10.milliseconds)) {
+        val (currentTime, done) = bmDecomManager.lastMigrationInfo()
+        assert(done)
+        // Make sure the time stamp starts moving forward.
+        if (!fail && previousTime > currentTime) {
+          previousTime = currentTime
+          assert(false)
+        } else if (fail) {
+          assert(currentTime === Long.MaxValue)
+        }
+      }
+      if (!fail) {
+        // Wait 5 seconds and assert times keep moving forward.
+        Thread.sleep(5000)
+        val (currentTime, done) = bmDecomManager.lastMigrationInfo()
+        assert(done && currentTime > previousTime)
+      }
+    } finally {
+      bmDecomManager.stop()
+    }
+  }
+
+  test("test that with no blocks we finish migration") {
+    // Set up the mocks so we return empty
+    val bm = mock(classOf[BlockManager])
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    when(migratableShuffleBlockResolver.getStoredShuffles())
+      .thenReturn(Seq())
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+      .thenReturn(Seq())
+    when(bm.getPeers(mc.any()))
+      .thenReturn(Seq(BlockManagerId("exec2", "host2", 12345)))
+
+
+    // Verify the decom manager handles this correctly
+    validateWithMocks(sparkConf, bm, migratableShuffleBlockResolver)
+  }
+
+  test("block decom manager with no migrations configured") {
+    val bm = mock(classOf[BlockManager])
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    registerShuffleBlocks(migratableShuffleBlockResolver, Set((1, 1L, 1)))
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+      .thenReturn(Seq())
+    when(bm.getPeers(mc.any()))
+      .thenReturn(Seq(BlockManagerId("exec2", "host2", 12345)))
+
+    val badConf = new SparkConf(false)
+      .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, false)
+      .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED, false)
+      .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 10L)
+    // Verify the decom manager handles this correctly
+    validateWithMocks(badConf, bm, migratableShuffleBlockResolver, fail = true)
+  }
+
+  test("block decom manager with no peers") {
+    // Set up the mocks so we return one shuffle block
+    val bm = mock(classOf[BlockManager])
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    registerShuffleBlocks(migratableShuffleBlockResolver, Set((1, 1L, 1)))
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+      .thenReturn(Seq())
+    when(bm.getPeers(mc.any()))
+      .thenReturn(Seq())
+
+    // Verify the decom manager handles this correctly
+    validateWithMocks(sparkConf, bm, migratableShuffleBlockResolver, fail = true)
+  }
+
+
+  test("block decom manager with only shuffle files time moves forward") {
+    // Set up the mocks so we return one shuffle block
+    val bm = mock(classOf[BlockManager])
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    registerShuffleBlocks(migratableShuffleBlockResolver, Set((1, 1L, 1)))
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+    when(bm.getMigratableRDDBlocks())
+      .thenReturn(Seq())
+    when(bm.getPeers(mc.any()))
+      .thenReturn(Seq(BlockManagerId("exec2", "host2", 12345)))
+
+    // Verify the decom manager handles this correctly
+    validateWithMocks(sparkConf, bm, migratableShuffleBlockResolver)
+  }
+
   test("test shuffle and cached rdd migration without any error") {
     val blockTransferService = mock(classOf[BlockTransferService])
     val bm = mock(classOf[BlockManager])
@@ -80,6 +180,9 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     try {
       bmDecomManager.start()
 
+      var previousRDDTime = Long.MaxValue
+      var previousShuffleTime = Long.MaxValue
+
       // We don't check that all blocks are migrated because out mock is always returning an RDD.
       eventually(timeout(10.second), interval(10.milliseconds)) {
         assert(bmDecomManager.shufflesToMigrate.isEmpty == true)
@@ -88,6 +191,19 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
         verify(blockTransferService, times(2))
           .uploadBlockSync(mc.eq("host2"), mc.eq(bmPort), mc.eq("exec2"), mc.any(), mc.any(),
             mc.eq(StorageLevel.DISK_ONLY), mc.isNull())
+        // Since we never "finish" the RDD blocks make sure the time is always moving forward.
+        assert(bmDecomManager.rddBlocksLeft)
+        if (!(bmDecomManager.lastRDDMigrationTime > previousRDDTime)) {
+          previousRDDTime = bmDecomManager.lastRDDMigrationTime
+          assert(false)
+        }
+        // Since we do eventually finish the shuffle blocks make sure the shuffle blocks complete
+        // and that the time keeps moving forward.
+        assert(!bmDecomManager.shuffleBlocksLeft)
+        if (!(bmDecomManager.lastShuffleMigrationTime > previousShuffleTime)) {
+          previousShuffleTime = bmDecomManager.lastShuffleMigrationTime
+          assert(false)
+        }
       }
     } finally {
         bmDecomManager.stop()

@@ -42,11 +42,11 @@ private[storage] class BlockManagerDecommissioner(
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
 
-  // Used for tracking if our migrations are complete.
-  @volatile private var lastRDDMigrationTime: Long = 0
-  @volatile private var lastShuffleMigrationTime: Long = 0
-  @volatile private var rddBlocksLeft: Boolean = true
-  @volatile private var shuffleBlocksLeft: Boolean = true
+  // Used for tracking if our migrations are complete. Readable for testing
+  @volatile private[storage] var lastRDDMigrationTime: Long = 0
+  @volatile private[storage] var lastShuffleMigrationTime: Long = 0
+  @volatile private[storage] var rddBlocksLeft: Boolean = true
+  @volatile private[storage] var shuffleBlocksLeft: Boolean = true
 
   /**
    * This runnable consumes any shuffle blocks in the queue for migration. This part of a
@@ -152,6 +152,13 @@ private[storage] class BlockManagerDecommissioner(
       assert(conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED))
       while (!stopped && !stoppedRDD && !Thread.interrupted()) {
         logInfo("Iterating on migrating from the block manager.")
+        // Validate we have peers to migrate to.
+        val peers = bm.getPeers(false)
+        // If we have no peers give up.
+        if (peers.isEmpty) {
+          stopped = true
+          stoppedRDD = true
+        }
         try {
           val startTime = System.nanoTime()
           logDebug("Attempting to replicate all cached RDD blocks")
@@ -237,6 +244,10 @@ private[storage] class BlockManagerDecommissioner(
     deadPeers.foreach { peer =>
         migrationPeers.get(peer).foreach(_.running = false)
     }
+    // If we don't have anyone to migrate to give up
+    if (migrationPeers.values.find(_.running == true).isEmpty) {
+      stoppedShuffle = true
+    }
     // If we found any new shuffles to migrate or otherwise have not migrated everything.
     newShufflesToMigrate.nonEmpty || migratingShuffles.size < numMigratedShuffles.get()
   }
@@ -259,6 +270,7 @@ private[storage] class BlockManagerDecommissioner(
    */
   private[storage] def decommissionRddCacheBlocks(): Boolean = {
     val replicateBlocksInfo = bm.getMigratableRDDBlocks()
+    // Refresh peers and validate we have somewhere to move blocks.
 
     if (replicateBlocksInfo.nonEmpty) {
       logInfo(s"Need to replicate ${replicateBlocksInfo.size} RDD blocks " +
@@ -364,7 +376,9 @@ private[storage] class BlockManagerDecommissioner(
    */
   private[storage] def lastMigrationInfo(): (Long, Boolean) = {
     if (stopped || (stoppedRDD && stoppedShuffle)) {
-      (System.nanoTime(), true)
+      // Since we don't have anything left to migrate ever (since we don't restart once
+      // stopped), return that we're done with a validity timestamp that doesn't expire.
+      (Long.MaxValue, true)
     } else {
       // Chose the min of the active times. See the function description for more information.
       val lastMigrationTime = if (!stoppedRDD && !stoppedShuffle) {
