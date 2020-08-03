@@ -228,6 +228,24 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case ShowCurrentNamespaceStatement() =>
       ShowCurrentNamespace(catalogManager)
+
+    case AlterTableAddPartitionStatement(
+        NonSessionCatalogAndTable(catalog, tableName), partitionSpecsAndLocs, ifNotExists) =>
+      AlterTableAddPartition(
+        catalog.asTableCatalog,
+        tableName.asIdentifier,
+        partitionSpecsAndLocs,
+        ifNotExists)
+
+    case AlterTableDropPartitionStatement(
+        NonSessionCatalogAndTable(catalog, tableName), specs, ifExists, purge, retainData) =>
+      AlterTableDropPartition(
+        catalog.asTableCatalog,
+        tableName.asIdentifier,
+        specs,
+        ifExists,
+        purge,
+        retainData)
   }
 
   object NonSessionCatalogAndTable {

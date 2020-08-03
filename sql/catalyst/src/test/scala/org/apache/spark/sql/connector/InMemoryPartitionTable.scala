@@ -91,5 +91,11 @@ class InMemoryPartitionTable(
       .filter(_.toSeq(partitionSchema).startsWith(prefixPart)).toArray
   }
 
-  def partitionExists(ident: InternalRow): Boolean = memoryTablePartitions.containsKey(ident)
+  def partitionExists(ident: InternalRow): Boolean = {
+    memoryTablePartitions.containsKey(ident)
+  }
+
+  def clearPartitions(): Unit = {
+    memoryTablePartitions.clear()
+  }
 }

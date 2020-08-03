@@ -20,7 +20,10 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{SupportsDelete, SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.catalog.{SupportsDelete, SupportsPartitions, SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.types.{ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Implicits {
@@ -52,6 +55,15 @@ object DataSourceV2Implicits {
       }
     }
 
+    def asPartitionable: SupportsPartitions = {
+      table match {
+        case support: SupportsPartitions =>
+          support
+        case _ =>
+          throw new AnalysisException(s"Table does not support partitions: ${table.name}")
+      }
+    }
+
     def supports(capability: TableCapability): Boolean = table.capabilities.contains(capability)
 
     def supportsAny(capabilities: TableCapability*): Boolean = capabilities.exists(supports)
@@ -61,5 +73,32 @@ object DataSourceV2Implicits {
     def asOptions: CaseInsensitiveStringMap = {
       new CaseInsensitiveStringMap(options.asJava)
     }
+  }
+
+  def convertPartitionIndentifers(
+      partSpec: TablePartitionSpec,
+      partSchema: StructType): InternalRow = {
+    val partValues = partSchema.map { part =>
+      part.dataType match {
+        case _: ByteType =>
+          partSpec.getOrElse(part.name, "0").toByte
+        case _: ShortType =>
+          partSpec.getOrElse(part.name, "0").toShort
+        case _: IntegerType =>
+          partSpec.getOrElse(part.name, "0").toInt
+        case _: LongType =>
+          partSpec.getOrElse(part.name, "0").toLong
+        case _: FloatType =>
+          partSpec.getOrElse(part.name, "0").toFloat
+        case _: DoubleType =>
+          partSpec.getOrElse(part.name, "0").toDouble
+        case _: StringType =>
+          partSpec.getOrElse(part.name, "")
+        case _ =>
+          throw new AnalysisException(
+            s"Type ${part.dataType.typeName} is not supported for partition.")
+      }
+    }
+    InternalRow.fromSeq(partValues)
   }
 }
