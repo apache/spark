@@ -2689,6 +2689,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_SQUARE_BRACKETS = buildConf("spark.sql.legacy.squareBrackets.enabled")
+    .internal()
+    .doc("When true, maps and structs are wrapped by [] in casting to strings. " +
+      "Otherwise, if this is false, which is the default, maps and structs are wrapped by {}.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
