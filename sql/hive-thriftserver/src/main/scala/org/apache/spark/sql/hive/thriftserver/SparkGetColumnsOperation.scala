@@ -125,13 +125,13 @@ private[hive] class SparkGetColumnsOperation(
   }
 
   /**
-   * For numeric and datetime types, it returns the default size of its catalyst type
+   * For boolean, numeric and datetime types, it returns the default size of its catalyst type
    * For struct type, when its elements are fixed-size, the summation of all element sizes will be
    * returned.
    * For array, map, string, and binaries, the column size is variable, return null as unknown.
    */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
-    case StringType | BinaryType | _: ArrayType | _: MapType => None
+    case dt @ (BooleanType | _: NumericType | DateType | TimestampType) => Some(dt.defaultSize)
     case StructType(fields) =>
       val sizeArr = fields.map(f => getColumnSize(f.dataType))
       if (sizeArr.contains(None)) {
@@ -139,7 +139,7 @@ private[hive] class SparkGetColumnsOperation(
       } else {
         Some(sizeArr.map(_.get).sum)
       }
-    case other => Some(other.defaultSize)
+    case other => None
   }
 
   /**
