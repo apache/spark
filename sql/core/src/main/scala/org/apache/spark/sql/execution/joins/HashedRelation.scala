@@ -77,6 +77,11 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def keys(): Iterator[InternalRow]
 
   /**
+   * Returns an iterator for values of InternalRow type.
+   */
+  def values(): Iterator[InternalRow]
+
+  /**
    * Returns a read-only copy of this, to be safely used in current thread.
    */
   def asReadOnlyCopy(): HashedRelation
@@ -97,7 +102,9 @@ private[execution] object HashedRelation {
       key: Seq[Expression],
       sizeEstimate: Int = 64,
       taskMemoryManager: TaskMemoryManager = null,
-      isNullAware: Boolean = false): HashedRelation = {
+      isNullAware: Boolean = false,
+      isLookupAware: Boolean = false,
+      value: Option[Seq[Expression]] = None): HashedRelation = {
     val mm = Option(taskMemoryManager).getOrElse {
       new TaskMemoryManager(
         new UnifiedMemoryManager(
@@ -110,10 +117,10 @@ private[execution] object HashedRelation {
 
     if (!input.hasNext) {
       EmptyHashedRelation
-    } else if (key.length == 1 && key.head.dataType == LongType) {
+    } else if (key.length == 1 && key.head.dataType == LongType && !isLookupAware) {
       LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     } else {
-      UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware)
+      UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware, isLookupAware, value)
     }
   }
 }
@@ -128,15 +135,18 @@ private[execution] object HashedRelation {
 private[joins] class UnsafeHashedRelation(
     private var numKeys: Int,
     private var numFields: Int,
-    private var binaryMap: BytesToBytesMap)
+    private var binaryMap: BytesToBytesMap,
+    private val isLookupAware: Boolean = false)
   extends HashedRelation with Externalizable with KryoSerializable {
 
-  private[joins] def this() = this(0, 0, null)  // Needed for serialization
+  private[joins] def this() = this(0, 0, null, false)  // Needed for serialization
 
-  override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
+  override def keyIsUnique: Boolean = {
+    binaryMap.numKeys() == binaryMap.numValues()
+  }
 
   override def asReadOnlyCopy(): UnsafeHashedRelation = {
-    new UnsafeHashedRelation(numKeys, numFields, binaryMap)
+    new UnsafeHashedRelation(numKeys, numFields, binaryMap, isLookupAware)
   }
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
@@ -305,6 +315,27 @@ private[joins] class UnsafeHashedRelation(
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
     read(() => in.readInt(), () => in.readLong(), in.readBytes)
   }
+
+  override def values(): Iterator[InternalRow] = {
+    if (isLookupAware) {
+      val iter = binaryMap.iterator()
+
+      new Iterator[InternalRow] {
+        override def hasNext: Boolean = iter.hasNext
+
+        override def next(): InternalRow = {
+          if (!hasNext) {
+            throw new NoSuchElementException("End of the iterator")
+          }
+          val loc = iter.next()
+          resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
+          resultRow
+        }
+      }
+    } else {
+      throw new UnsupportedOperationException
+    }
+  }
 }
 
 private[joins] object UnsafeHashedRelation {
@@ -314,7 +345,9 @@ private[joins] object UnsafeHashedRelation {
       key: Seq[Expression],
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager,
-      isNullAware: Boolean = false): HashedRelation = {
+      isNullAware: Boolean = false,
+      isLookupAware: Boolean = false,
+      value: Option[Seq[Expression]] = None): HashedRelation = {
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
@@ -327,27 +360,52 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
-    while (input.hasNext) {
-      val row = input.next().asInstanceOf[UnsafeRow]
-      numFields = row.numFields()
-      val key = keyGenerator(row)
-      if (!key.anyNull) {
+
+    if (isLookupAware) {
+      // Add one extra boolean value at the end as part of the row,
+      // to track the information that whether the corresponding key
+      // has been looked up or not. See `ShuffledHashJoin.fullOuterJoin` for example of usage.
+      val valueGenerator = UnsafeProjection.create(value.get :+ Literal(false))
+
+      while (input.hasNext) {
+        val row = input.next().asInstanceOf[UnsafeRow]
+        numFields = row.numFields() + 1
+        val key = keyGenerator(row)
+        val value = valueGenerator(row)
         val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
         val success = loc.append(
           key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-          row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
+          value.getBaseObject, value.getBaseOffset, value.getSizeInBytes)
         if (!success) {
           binaryMap.free()
           // scalastyle:off throwerror
           throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
           // scalastyle:on throwerror
         }
-      } else if (isNullAware) {
-        return EmptyHashedRelationWithAllNullKeys
+      }
+    } else {
+      while (input.hasNext) {
+        val row = input.next().asInstanceOf[UnsafeRow]
+        numFields = row.numFields()
+        val key = keyGenerator(row)
+        if (!key.anyNull) {
+          val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
+          val success = loc.append(
+            key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+            row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
+          if (!success) {
+            binaryMap.free()
+            // scalastyle:off throwerror
+            throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
+            // scalastyle:on throwerror
+          }
+        } else if (isNullAware) {
+          return EmptyHashedRelationWithAllNullKeys
+        }
       }
     }
 
-    new UnsafeHashedRelation(key.size, numFields, binaryMap)
+    new UnsafeHashedRelation(key.size, numFields, binaryMap, isLookupAware)
   }
 }
 
@@ -885,6 +943,10 @@ class LongHashedRelation(
    * Returns an iterator for keys of InternalRow type.
    */
   override def keys(): Iterator[InternalRow] = map.keys()
+
+  override def values(): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
 }
 
 /**
@@ -936,6 +998,10 @@ trait NullAwareHashedRelation extends HashedRelation with Externalizable {
   override def keyIsUnique: Boolean = true
 
   override def keys(): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def values(): Iterator[InternalRow] = {
     throw new UnsupportedOperationException
   }
 

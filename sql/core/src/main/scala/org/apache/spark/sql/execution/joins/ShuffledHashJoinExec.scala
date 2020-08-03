@@ -22,13 +22,13 @@ import java.util.concurrent.TimeUnit._
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.optimizer.BuildSide
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 /**
  * Performs a hash join of two child relations by first shuffling the data using the join keys.
@@ -48,7 +48,14 @@ case class ShuffledHashJoinExec(
     "buildDataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size of build side"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"))
 
+  override def output: Seq[Attribute] = super[ShuffledJoin].output
+
   override def outputPartitioning: Partitioning = super[ShuffledJoin].outputPartitioning
+
+  override def outputOrdering: Seq[SortOrder] = joinType match {
+    case FullOuter => Nil
+    case _ => super.outputOrdering
+  }
 
   /**
    * This is called by generated Java class, should be public.
@@ -58,8 +65,19 @@ case class ShuffledHashJoinExec(
     val buildTime = longMetric("buildTime")
     val start = System.nanoTime()
     val context = TaskContext.get()
+
+    val (isLookupAware, value) =
+      if (joinType == FullOuter) {
+        (true, Some(BindReferences.bindReferences(buildOutput, buildOutput)))
+      } else {
+        (false, None)
+      }
     val relation = HashedRelation(
-      iter, buildBoundKeys, taskMemoryManager = context.taskMemoryManager())
+      iter,
+      buildBoundKeys,
+      taskMemoryManager = context.taskMemoryManager(),
+      isLookupAware = isLookupAware,
+      value = value)
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.
@@ -71,8 +89,137 @@ case class ShuffledHashJoinExec(
     val numOutputRows = longMetric("numOutputRows")
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
       val hashed = buildHashedRelation(buildIter)
-      join(streamIter, hashed, numOutputRows)
+      joinType match {
+        case FullOuter => fullOuterJoin(streamIter, hashed, numOutputRows)
+        case _ => join(streamIter, hashed, numOutputRows)
+      }
     }
+  }
+
+  /**
+   * Full outer shuffled hash join has three steps:
+   * 1. Construct hash relation from build side,
+   *    with extra boolean value at the end of row to track look up information
+   *    (done in `buildHashedRelation`).
+   * 2. Process rows from stream side by looking up hash relation,
+   *    and mark the matched rows from build side be looked up.
+   * 3. Process rows from build side by iterating hash relation,
+   *    and filter out rows from build side being looked up already.
+   */
+  private def fullOuterJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation,
+      numOutputRows: SQLMetric): Iterator[InternalRow] = {
+    abstract class HashJoinedRow extends JoinedRow {
+      /** Updates this JoinedRow by updating its stream side row. Returns itself. */
+      def withStream(newStream: InternalRow): JoinedRow
+
+      /** Updates this JoinedRow by updating its build side row. Returns itself. */
+      def withBuild(newBuild: InternalRow): JoinedRow
+    }
+    val joinRow: HashJoinedRow = buildSide match {
+      case BuildLeft =>
+        new HashJoinedRow {
+          override def withStream(newStream: InternalRow): JoinedRow = withRight(newStream)
+          override def withBuild(newBuild: InternalRow): JoinedRow = withLeft(newBuild)
+        }
+      case BuildRight =>
+        new HashJoinedRow {
+          override def withStream(newStream: InternalRow): JoinedRow = withLeft(newStream)
+          override def withBuild(newBuild: InternalRow): JoinedRow = withRight(newBuild)
+        }
+    }
+    val joinKeys = streamSideKeyGenerator()
+    val buildRowGenerator = UnsafeProjection.create(buildOutput, buildOutput)
+    val buildNullRow = new GenericInternalRow(buildOutput.length)
+    val streamNullRow = new GenericInternalRow(streamedOutput.length)
+
+    def markRowLookedUp(row: UnsafeRow): Unit = {
+      if (!row.getBoolean(row.numFields() - 1)) {
+        row.setBoolean(row.numFields() - 1, true)
+      }
+    }
+
+    // Process stream side with looking up hash relation
+    val streamResultIter =
+      if (hashedRelation.keyIsUnique) {
+        streamIter.map { srow =>
+          joinRow.withStream(srow)
+          val keys = joinKeys(srow)
+          if (keys.anyNull) {
+            joinRow.withBuild(buildNullRow)
+          } else {
+            val matched = hashedRelation.getValue(keys)
+            if (matched != null) {
+              val buildRow = buildRowGenerator(matched)
+              if (boundCondition(joinRow.withBuild(buildRow))) {
+                markRowLookedUp(matched.asInstanceOf[UnsafeRow])
+                joinRow
+              } else {
+                joinRow.withBuild(buildNullRow)
+              }
+            } else {
+              joinRow.withBuild(buildNullRow)
+            }
+          }
+        }
+      } else {
+        streamIter.flatMap { srow =>
+          joinRow.withStream(srow)
+          val keys = joinKeys(srow)
+          if (keys.anyNull) {
+            Iterator.single(joinRow.withBuild(buildNullRow))
+          } else {
+            val buildIter = hashedRelation.get(keys)
+            new RowIterator {
+              private var found = false
+              override def advanceNext(): Boolean = {
+                while (buildIter != null && buildIter.hasNext) {
+                  val matched = buildIter.next()
+                  val buildRow = buildRowGenerator(matched)
+                  if (boundCondition(joinRow.withBuild(buildRow))) {
+                    markRowLookedUp(matched.asInstanceOf[UnsafeRow])
+                    found = true
+                    return true
+                  }
+                }
+                if (!found) {
+                  joinRow.withBuild(buildNullRow)
+                  found = true
+                  return true
+                }
+                false
+              }
+              override def getRow: InternalRow = joinRow
+            }.toScala
+          }
+        }
+      }
+
+    // Process build side with filtering out rows looked up already
+    val buildResultIter = hashedRelation.values().flatMap { brow =>
+      val unsafebrow = brow.asInstanceOf[UnsafeRow]
+      val isLookup = unsafebrow.getBoolean(unsafebrow.numFields() - 1)
+      if (!isLookup) {
+        val buildRow = buildRowGenerator(unsafebrow)
+        joinRow.withBuild(buildRow)
+        joinRow.withStream(streamNullRow)
+        Some(joinRow)
+      } else {
+        None
+      }
+    }
+
+    val resultProj = UnsafeProjection.create(output, output)
+    (streamResultIter ++ buildResultIter).map { r =>
+      numOutputRows += 1
+      resultProj(r)
+    }
+  }
+
+  // TODO: support full outer shuffled hash join code-gen
+  override def supportCodegen: Boolean = {
+    joinType != FullOuter
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
