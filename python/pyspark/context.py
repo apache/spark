@@ -120,7 +120,7 @@ class SparkContext(object):
         ValueError:...
         """
         if (conf is not None and
-                conf.get("spark.driver.allowSparkContextInExecutors", "true").lower() != "true"):
+                conf.get("spark.executor.allowSparkContext", "true").lower() != "true"):
             # In order to prevent SparkContext from being created in executors.
             SparkContext._assert_on_driver()
 

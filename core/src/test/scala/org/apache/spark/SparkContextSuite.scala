@@ -957,7 +957,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val error = intercept[SparkException] {
       sc.range(0, 1).foreach { _ =>
         new SparkContext(new SparkConf().setAppName("test").setMaster("local")
-          .set(ALLOW_SPARK_CONTEXT_IN_EXECUTORS, false))
+          .set(EXECUTOR_ALLOW_SPARK_CONTEXT, false))
       }
     }.getMessage()
 
