@@ -222,7 +222,7 @@ object UnifiedMemoryManager {
     }
     // SPARK-12759 Check executor memory to fail fast if memory is insufficient
     if (conf.contains(config.EXECUTOR_MEMORY)) {
-      val executorMemory = conf.getSizeAsBytes(config.EXECUTOR_MEMORY.key)
+      val executorMemory = conf.getSizeAsMb(config.EXECUTOR_MEMORY.key)
       if (executorMemory < minSystemMemory) {
         throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
           s"$minSystemMemory. Please increase executor memory using the " +
