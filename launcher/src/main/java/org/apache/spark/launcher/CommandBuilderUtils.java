@@ -333,6 +333,8 @@ class CommandBuilderUtils {
    */
   static String addDefaultMSuffixIfNeeded(String memoryString) {
     if (memoryString.chars().allMatch(Character::isDigit)) {
+      System.err.println("Memory setting without explicit unit (" +
+        memoryString + ") is taken to be in MB by default! For details check SPARK-32293.");
       return memoryString + "m";
     } else {
       return memoryString;
