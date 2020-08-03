@@ -551,3 +551,35 @@ case class ShowFunctions(
     pattern: Option[String]) extends Command {
   override def children: Seq[LogicalPlan] = child.toSeq
 }
+
+/**
+ * The logical plan of the ALTER TABLE ADD PARTITION command that works for v2 tables.
+ *
+ * The syntax of this command is:
+ * {{{
+ *     ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec1 [LOCATION 'loc1']
+ *                                          PARTITION spec2 [LOCATION 'loc2']
+ * }}}
+ */
+case class AlterTableAddPartition(
+    catalog: TableCatalog,
+    ident: Identifier,
+    partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
+    ignoreIfExists: Boolean) extends Command
+
+/**
+ * The logical plan of the ALTER TABLE DROP PARTITION command that works for v2 tables.
+ * This may remove the data and metadata for this partition.
+ *
+ * The syntax of this command is:
+ * {{{
+ *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
+ * }}}
+ */
+case class AlterTableDropPartition(
+    catalog: TableCatalog,
+    ident: Identifier,
+    specs: Seq[TablePartitionSpec],
+    ignoreIfNotExists: Boolean,
+    purge: Boolean,
+    retainData: Boolean) extends Command

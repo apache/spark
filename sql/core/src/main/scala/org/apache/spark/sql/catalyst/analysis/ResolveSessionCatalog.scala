@@ -497,10 +497,10 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
-    case AlterTableAddPartitionStatement(tbl, partitionSpecsAndLocs, ifNotExists) =>
-      val v1TableName = parseV1Table(tbl, "ALTER TABLE ADD PARTITION")
+    case AlterTableAddPartitionStatement(
+        SessionCatalogAndTable(_, tbl), partitionSpecsAndLocs, ifNotExists) =>
       AlterTableAddPartitionCommand(
-        v1TableName.asTableIdentifier,
+        tbl.asTableIdentifier,
         partitionSpecsAndLocs,
         ifNotExists)
 
@@ -511,10 +511,10 @@ class ResolveSessionCatalog(
         from,
         to)
 
-    case AlterTableDropPartitionStatement(tbl, specs, ifExists, purge, retainData) =>
-      val v1TableName = parseV1Table(tbl, "ALTER TABLE DROP PARTITION")
+    case AlterTableDropPartitionStatement(
+        SessionCatalogAndTable(_, tbl), specs, ifExists, purge, retainData) =>
       AlterTableDropPartitionCommand(
-        v1TableName.asTableIdentifier,
+        tbl.asTableIdentifier,
         specs,
         ifExists,
         purge,
