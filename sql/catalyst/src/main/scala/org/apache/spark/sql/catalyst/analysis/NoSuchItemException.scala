@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -46,12 +48,17 @@ class NoSuchTableException(message: String) extends AnalysisException(message) {
   }
 }
 
-class NoSuchPartitionException(
-    db: String,
-    table: String,
-    spec: TablePartitionSpec)
-  extends AnalysisException(
-    s"Partition not found in table '$table' database '$db':\n" + spec.mkString("\n"))
+class NoSuchPartitionException(message: String) extends AnalysisException(message) {
+  def this(db: String, table: String, spec: TablePartitionSpec) = {
+    this(s"Partition not found in table '$table' database '$db':\n" + spec.mkString("\n"))
+  }
+
+  def this(tableName: String, partitionIdent: InternalRow, partitionSchema: StructType) = {
+    this(s"Partition not found in table $tableName: " +
+      s"${partitionIdent.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
+        .map( kv => s"${kv._1} -> ${kv._2}").mkString(",")}")
+  }
+}
 
 class NoSuchPermanentFunctionException(db: String, func: String)
   extends AnalysisException(s"Function '$func' not found in database '$db'")
