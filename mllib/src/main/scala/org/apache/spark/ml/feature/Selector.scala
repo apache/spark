@@ -50,7 +50,6 @@ private[feature] trait SelectorParams extends Params
     "Number of features that selector will select, ordered by ascending p-value. If the" +
       " number of features is < numTopFeatures, then this will select all features.",
     ParamValidators.gtEq(1))
-  setDefault(numTopFeatures -> 50)
 
   /** @group getParam */
   @Since("3.1.0")
@@ -66,7 +65,6 @@ private[feature] trait SelectorParams extends Params
   final val percentile = new DoubleParam(this, "percentile",
     "Percentile of features that selector will select, ordered by ascending p-value.",
     ParamValidators.inRange(0, 1))
-  setDefault(percentile -> 0.1)
 
   /** @group getParam */
   @Since("3.1.0")
@@ -81,7 +79,6 @@ private[feature] trait SelectorParams extends Params
   @Since("3.1.0")
   final val fpr = new DoubleParam(this, "fpr", "The higest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
-  setDefault(fpr -> 0.05)
 
   /** @group getParam */
   @Since("3.1.0")
@@ -96,7 +93,6 @@ private[feature] trait SelectorParams extends Params
   @Since("3.1.0")
   final val fdr = new DoubleParam(this, "fdr",
     "The upper bound of the expected false discovery rate.", ParamValidators.inRange(0, 1))
-  setDefault(fdr -> 0.05)
 
   /** @group getParam */
   def getFdr: Double = $(fdr)
@@ -110,7 +106,6 @@ private[feature] trait SelectorParams extends Params
   @Since("3.1.0")
   final val fwe = new DoubleParam(this, "fwe",
     "The upper bound of the expected family-wise error rate.", ParamValidators.inRange(0, 1))
-  setDefault(fwe -> 0.05)
 
   /** @group getParam */
   def getFwe: Double = $(fwe)
@@ -125,12 +120,13 @@ private[feature] trait SelectorParams extends Params
     "The selector type. Supported options: numTopFeatures, percentile, fpr, fdr, fwe",
     ParamValidators.inArray(Array("numTopFeatures", "percentile", "fpr", "fdr",
       "fwe")))
-  setDefault(selectorType -> "numTopFeatures")
 
   /** @group getParam */
   @Since("3.1.0")
   def getSelectorType: String = $(selectorType)
 
+  setDefault(numTopFeatures -> 50, percentile -> 0.1, fpr -> 0.05, fdr -> 0.05, fwe -> 0.05,
+    selectorType -> "numTopFeatures")
 }
 
 /**

@@ -24,6 +24,16 @@ import org.apache.spark.sql.types.{LongType, StructType}
 // Datasource tests for nested schemas
 trait NestedDataSourceSuiteBase extends QueryTest with SharedSparkSession {
   protected val nestedDataSources: Seq[String] = Seq("orc", "parquet", "json")
+  protected def readOptions(schema: StructType): Map[String, String] = Map.empty
+  protected def save(selectExpr: Seq[String], format: String, path: String): Unit = {
+    spark
+      .range(1L)
+      .selectExpr(selectExpr: _*)
+      .write.mode("overwrite")
+      .format(format)
+      .save(path)
+  }
+  protected val colType: String = "in the data schema"
 
   test("SPARK-32431: consistent error for nested and top-level duplicate columns") {
     Seq(
@@ -44,22 +54,17 @@ trait NestedDataSourceSuiteBase extends QueryTest with SharedSparkSession {
           withClue(s"format = $format select = ${selectExpr.mkString(",")}") {
             withTempPath { dir =>
               val path = dir.getCanonicalPath
-              spark
-                .range(1L)
-                .selectExpr(selectExpr: _*)
-                .write.mode("overwrite")
-                .format(format)
-                .save(path)
+              save(selectExpr, format, path)
               val e = intercept[AnalysisException] {
                 spark
                   .read
+                  .options(readOptions(caseInsensitiveSchema))
                   .schema(caseInsensitiveSchema)
                   .format(format)
                   .load(path)
                   .show
               }
-              assert(e.getMessage.contains(
-                "Found duplicate column(s) in the data schema: `camelcase`"))
+              assert(e.getMessage.contains(s"Found duplicate column(s) $colType: `camelcase`"))
             }
           }
         }
