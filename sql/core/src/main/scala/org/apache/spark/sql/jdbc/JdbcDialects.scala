@@ -234,11 +234,8 @@ abstract class JdbcDialect extends Serializable {
         case update: UpdateColumnNullability =>
           update.fieldNames match {
             case Array(name) =>
-              if (update.nullable()) {
-                updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name SET NULL"
-              } else {
-                updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name SET NOT NULL"
-              }
+              val nullable = if (update.nullable()) "NULL" else "NOT NULL"
+              updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name SET " + nullable
           }
         // scalastyle:off throwerror
         case _ => throw new NotImplementedError(s"JDBC alterTable has Unsupported" +
