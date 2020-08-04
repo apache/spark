@@ -104,8 +104,8 @@ class _LinearRegressionParams(_PredictorParams, HasRegParam, HasElasticNetParam,
                     "robustness. Must be > 1.0. Only valid when loss is huber",
                     typeConverter=TypeConverters.toFloat)
 
-    def __init__(self):
-        super(_LinearRegressionParams, self).__init__()
+    def __init__(self, *args):
+        super(_LinearRegressionParams, self).__init__(*args)
         self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35,
                          blockSize=1)
 
@@ -189,6 +189,8 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     >>> model.coefficients[0] == model2.coefficients[0]
     True
     >>> model.intercept == model2.intercept
+    True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
     True
     >>> model.numFeatures
     1
@@ -622,8 +624,8 @@ class _IsotonicRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         "The index of the feature if featuresCol is a vector column, no effect otherwise.",
         typeConverter=TypeConverters.toInt)
 
-    def __init__(self):
-        super(_IsotonicRegressionParams, self).__init__()
+    def __init__(self, *args):
+        super(_IsotonicRegressionParams, self).__init__(*args)
         self._setDefault(isotonic=True, featureIndex=0)
 
     def getIsotonic(self):
@@ -674,6 +676,8 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     >>> model.boundaries == model2.boundaries
     True
     >>> model.predictions == model2.predictions
+    True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
     True
 
     .. versionadded:: 1.6.0
@@ -814,8 +818,8 @@ class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, Ha
     .. versionadded:: 3.0.0
     """
 
-    def __init__(self):
-        super(_DecisionTreeRegressorParams, self).__init__()
+    def __init__(self, *args):
+        super(_DecisionTreeRegressorParams, self).__init__(*args)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="variance", leafCol="", minWeightFractionPerNode=0.0)
@@ -876,7 +880,8 @@ class DecisionTreeRegressor(_JavaRegressor, _DecisionTreeRegressorParams, JavaML
     True
     >>> model.transform(test1).head().variance
     0.0
-
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
     >>> df3 = spark.createDataFrame([
     ...     (1.0, 0.2, Vectors.dense(1.0)),
     ...     (1.0, 0.8, Vectors.dense(1.0)),
@@ -1060,8 +1065,8 @@ class _RandomForestRegressorParams(_RandomForestParams, _TreeRegressorParams):
     .. versionadded:: 3.0.0
     """
 
-    def __init__(self):
-        super(_RandomForestRegressorParams, self).__init__()
+    def __init__(self, *args):
+        super(_RandomForestRegressorParams, self).__init__(*args)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="variance", subsamplingRate=1.0, numTrees=20,
@@ -1126,6 +1131,8 @@ class RandomForestRegressor(_JavaRegressor, _RandomForestRegressorParams, JavaML
     >>> model.save(model_path)
     >>> model2 = RandomForestRegressionModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
+    True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
     True
 
     .. versionadded:: 1.4.0
@@ -1319,8 +1326,8 @@ class _GBTRegressorParams(_GBTParams, _TreeRegressorParams):
                      "Supported options: " + ", ".join(supportedLossTypes),
                      typeConverter=TypeConverters.toString)
 
-    def __init__(self):
-        super(_GBTRegressorParams, self).__init__()
+    def __init__(self, *args):
+        super(_GBTRegressorParams, self).__init__(*args)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
@@ -1389,6 +1396,8 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
     >>> model.featureImportances == model2.featureImportances
     True
     >>> model.treeWeights == model2.treeWeights
+    True
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
     True
     >>> model.trees
     [DecisionTreeRegressionModel...depth=..., DecisionTreeRegressionModel...]
@@ -1642,8 +1651,8 @@ class _AFTSurvivalRegressionParams(_PredictorParams, HasMaxIter, HasTol, HasFitI
         "corresponding quantileProbabilities if it is set.",
         typeConverter=TypeConverters.toString)
 
-    def __init__(self):
-        super(_AFTSurvivalRegressionParams, self).__init__()
+    def __init__(self, *args):
+        super(_AFTSurvivalRegressionParams, self).__init__(*args)
         self._setDefault(censorCol="censor",
                          quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
                          maxIter=100, tol=1E-6, blockSize=1)
@@ -1721,6 +1730,8 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     >>> model.intercept == model2.intercept
     True
     >>> model.scale == model2.scale
+    True
+    >>> model.transform(df).take(1) == model2.transform(df).take(1)
     True
 
     .. versionadded:: 1.6.0
@@ -1906,8 +1917,8 @@ class _GeneralizedLinearRegressionParams(_PredictorParams, HasFitIntercept, HasM
                       "or empty, we treat all instance offsets as 0.0",
                       typeConverter=TypeConverters.toString)
 
-    def __init__(self):
-        super(_GeneralizedLinearRegressionParams, self).__init__()
+    def __init__(self, *args):
+        super(_GeneralizedLinearRegressionParams, self).__init__(*args)
         self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls",
                          variancePower=0.0, aggregationDepth=2)
 
@@ -2024,6 +2035,8 @@ class GeneralizedLinearRegression(_JavaRegressor, _GeneralizedLinearRegressionPa
     >>> model.intercept == model2.intercept
     True
     >>> model.coefficients[0] == model2.coefficients[0]
+    True
+    >>> model.transform(df).take(1) == model2.transform(df).take(1)
     True
 
     .. versionadded:: 2.0.0
@@ -2391,7 +2404,7 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
 
 
 class _FactorizationMachinesParams(_PredictorParams, HasMaxIter, HasStepSize, HasTol,
-                                   HasSolver, HasSeed, HasFitIntercept, HasRegParam):
+                                   HasSolver, HasSeed, HasFitIntercept, HasRegParam, HasWeightCol):
     """
     Params for :py:class:`FMRegressor`, :py:class:`FMRegressionModel`, :py:class:`FMClassifier`
     and :py:class:`FMClassifierModel`.
@@ -2416,8 +2429,8 @@ class _FactorizationMachinesParams(_PredictorParams, HasMaxIter, HasStepSize, Ha
     solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
                    "options: gd, adamW. (Default adamW)", typeConverter=TypeConverters.toString)
 
-    def __init__(self):
-        super(_FactorizationMachinesParams, self).__init__()
+    def __init__(self, *args):
+        super(_FactorizationMachinesParams, self).__init__(*args)
         self._setDefault(factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
                          miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
                          tol=1e-6, solver="adamW")
@@ -2495,6 +2508,17 @@ class FMRegressor(_JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, 
     DenseVector([0.9978])
     >>> model.factors
     DenseMatrix(1, 2, [0.0173, 0.0021], 1)
+    >>> model_path = temp_path + "/fm_model"
+    >>> model.save(model_path)
+    >>> model2 = FMRegressionModel.load(model_path)
+    >>> model2.intercept
+    -0.0032501766849261557
+    >>> model2.linear
+    DenseVector([0.9978])
+    >>> model2.factors
+    DenseMatrix(1, 2, [0.0173, 0.0021], 1)
+    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    True
 
     .. versionadded:: 3.0.0
     """
