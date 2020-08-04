@@ -72,12 +72,13 @@ object JSONBenchmarks {
       }
 
       /*
-      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_241-b07 on Mac OS X 10.15.5
+      Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
 
-      JSON schema inferring:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      --------------------------------------------------------------------------------------------
-      No encoding                             38902 / 39282          2.6         389.0       1.0X
-      UTF-8 is set                            56959 / 57261          1.8         569.6       0.7X
+      JSON schema inferring:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      No encoding                                7664 / 7686         13.0          76.6       1.0X
+      UTF-8 is set                              9981 / 10180         10.0          99.8       0.8X
       */
       benchmark.run()
     }
@@ -113,12 +114,13 @@ object JSONBenchmarks {
       }
 
       /*
-      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_241-b07 on Mac OS X 10.15.5
+      Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
 
-      JSON per-line parsing:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      --------------------------------------------------------------------------------------------
-      No encoding                             25947 / 26188          3.9         259.5       1.0X
-      UTF-8 is set                            46319 / 46417          2.2         463.2       0.6X
+      JSON per-line parsing:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      No encoding                                5832 / 5915         17.1          58.3       1.0X
+      UTF-8 is set                               8687 / 8884         11.5          86.9       0.7X
       */
       benchmark.run()
     }
@@ -161,12 +163,13 @@ object JSONBenchmarks {
       }
 
       /*
-      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_241-b07 on Mac OS X 10.15.5
+      Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
 
-      JSON parsing of wide lines:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      --------------------------------------------------------------------------------------------
-      No encoding                             45543 / 45660          0.2        4554.3       1.0X
-      UTF-8 is set                            65737 / 65957          0.2        6573.7       0.7X
+      JSON parsing of wide lines:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      No encoding                                9367 / 9475          1.1         936.7       1.0X
+      UTF-8 is set                             14211 / 14397          0.7        1421.1       0.7X
       */
       benchmark.run()
     }
@@ -196,12 +199,14 @@ object JSONBenchmarks {
       }
 
       /*
-      Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_241-b07 on Mac OS X 10.15.5
+      Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
 
       Count a dataset with 10 columns:      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       ---------------------------------------------------------------------------------------------
-      Select 10 columns + count()               9961 / 10006          1.0         996.1       1.0X
-      Select 1 column + count()                  8355 / 8470          1.2         835.5       1.2X
+      Select 10 columns + count()                2074 / 2112          4.8         207.4       1.0X
+      Select 1 column + count()                  1753 / 1792          5.7         175.3       1.2X
+
       */
       benchmark.run()
     }
