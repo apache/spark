@@ -297,7 +297,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private lazy val dateFormatter = DateFormatter(zoneId)
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
 
-  private val omitNestedNull = SQLConf.get.getConf(SQLConf.OMIT_NESTED_NULL_IN_CAST)
+  private val omitNestedNull = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {

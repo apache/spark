@@ -2689,8 +2689,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val OMIT_NESTED_NULL_IN_CAST =
-    buildConf("spark.sql.legacy.omitNestedNullInCast.enabled")
+  val LEGACY_COMPLEX_TYPES_TO_STRING =
+    buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
       .internal()
       .doc("When true, NULL elements of structs/maps/arrays will be omitted while converting to " +
         "strings. Otherwise, when it is false, NULL elements will be converted to \"null\".")

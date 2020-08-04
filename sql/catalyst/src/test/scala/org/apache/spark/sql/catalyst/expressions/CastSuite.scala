@@ -692,7 +692,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val ret2 = cast(Literal.create(Array("ab", "cde", "f")), StringType)
     checkEvaluation(ret2, "[ab, cde, f]")
     Seq(false, true).foreach { omitNull =>
-      withSQLConf(SQLConf.OMIT_NESTED_NULL_IN_CAST.key -> omitNull.toString) {
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
         val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
         checkEvaluation(ret3, s"[ab,${if (omitNull) "" else " null"}, c]")
       }
@@ -721,7 +721,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
     checkEvaluation(ret1, "[1 -> a, 2 -> b, 3 -> c]")
     Seq(false, true).foreach { omitNull =>
-      withSQLConf(SQLConf.OMIT_NESTED_NULL_IN_CAST.key -> omitNull.toString) {
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
         val ret2 = cast(
           Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
           StringType)
@@ -753,7 +753,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
     checkEvaluation(ret1, "[1, a, 0.1]")
     Seq(false, true).foreach { omitNull =>
-      withSQLConf(SQLConf.OMIT_NESTED_NULL_IN_CAST.key -> omitNull.toString) {
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
         val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
         checkEvaluation(ret2, s"[1,${if (omitNull) "" else " null"}, a]")
       }
