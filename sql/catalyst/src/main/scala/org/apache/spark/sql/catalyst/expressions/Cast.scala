@@ -297,11 +297,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private lazy val dateFormatter = DateFormatter(zoneId)
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
 
+  private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
   // The brackets that are used in casting structs and maps to strings
-  private val (leftBracket, rightBracket) =
-    if (SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)) ("[", "]") else ("{", "}")
-
-  private val omitNestedNull = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
+  private val (leftBracket, rightBracket) = if (legacyCastToStr) ("[", "]") else ("{", "}")
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
@@ -324,7 +322,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           while (i < array.numElements) {
             builder.append(",")
             if (array.isNullAt(i)) {
-              if (!omitNestedNull) builder.append(" null")
+              if (!legacyCastToStr) builder.append(" null")
             } else {
               builder.append(" ")
               builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
@@ -347,7 +345,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
           builder.append(" ->")
           if (valueArray.isNullAt(0)) {
-            if (!omitNestedNull) builder.append(" null")
+            if (!legacyCastToStr) builder.append(" null")
           } else {
             builder.append(" ")
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
@@ -358,7 +356,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
             builder.append(" ->")
             if (valueArray.isNullAt(i)) {
-              if (!omitNestedNull) builder.append(" null")
+              if (!legacyCastToStr) builder.append(" null")
             } else {
               builder.append(" ")
               builder.append(valueToUTF8String(valueArray.get(i, vt))
@@ -378,7 +376,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           val st = fields.map(_.dataType)
           val toUTF8StringFuncs = st.map(castToString)
           if (row.isNullAt(0)) {
-            if (!omitNestedNull) builder.append(" null")
+            if (!legacyCastToStr) builder.append(" null")
           } else {
             builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
           }
@@ -386,7 +384,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           while (i < row.numFields) {
             builder.append(",")
             if (row.isNullAt(i)) {
-              if (!omitNestedNull) builder.append(" null")
+              if (!legacyCastToStr) builder.append(" null")
             } else {
               builder.append(" ")
               builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
@@ -908,7 +906,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private def outNullElem(buffer: ExprValue): Block = {
-    if (omitNestedNull) code";" else code"""$buffer.append(" null");"""
+    if (legacyCastToStr) code";" else code"""$buffer.append(" null");"""
   }
 
   private def writeArrayToStringBuilder(
