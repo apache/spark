@@ -527,6 +527,13 @@ trait CheckAnalysis extends PredicateHelper {
                         s"${field.dataType.simpleString} cannot be cast to " +
                         s"${update.newDataType.simpleString}")
                 }
+              case update: UpdateColumnNullability =>
+                val field = findField("update", update.fieldNames)
+                val fieldName = update.fieldNames.quoted
+                if (!update.nullable && field.nullable) {
+                  alter.failAnalysis(
+                    s"Cannot change nullable column to non-nullable: $fieldName")
+                }
               case updatePos: UpdateColumnPosition =>
                 findField("update", updatePos.fieldNames)
                 val parent = findParentStruct("update", updatePos.fieldNames())

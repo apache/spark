@@ -161,19 +161,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("alter table ... update column nullability") {
     withTable("h2.test.alt_table") {
       sql("CREATE TABLE h2.test.alt_table (ID INTEGER NOT NULL) USING _")
-      var t = spark.table("h2.test.alt_table")
-      var expectedSchema = new StructType().add("ID", IntegerType, nullable = false)
-      // Todo: find out why the nullable for ID INTEGER NOT NULL is true
-      // assert(t.schema === expectedSchema)
       sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID DROP NOT NULL")
-      t = spark.table("h2.test.alt_table")
-      expectedSchema = new StructType().add("ID", IntegerType, nullable = true)
+      val t = spark.table("h2.test.alt_table")
+      val expectedSchema = new StructType().add("ID", IntegerType, nullable = true)
       assert(t.schema === expectedSchema)
-      sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID SET NOT NULL")
-      t = spark.table("h2.test.alt_table")
-      expectedSchema = new StructType().add("ID", IntegerType, nullable = false)
-      // Todo: find out why the nullable for ID INTEGER NOT NULL is true
-      // assert(t.schema === expectedSchema)
     }
   }
 
