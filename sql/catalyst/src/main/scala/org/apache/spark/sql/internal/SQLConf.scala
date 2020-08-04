@@ -2694,7 +2694,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
       .internal()
       .doc("When true, maps and structs are wrapped by [] in casting to strings, and " +
-        "NULL elements of structs/maps/arrays will be omitted while converting to strings." +
+        "NULL elements of structs/maps/arrays will be omitted while converting to strings. " +
         "Otherwise, if this is false, which is the default, maps and structs are wrapped by {}, " +
         "and NULL elements will be converted to \"null\".")
       .version("3.1.0")
