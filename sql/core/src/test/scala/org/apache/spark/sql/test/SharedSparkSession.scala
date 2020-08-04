@@ -26,6 +26,7 @@ import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.execution.columnar.InMemoryRelation.clearSerializer
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
@@ -63,6 +64,7 @@ trait SharedSparkSessionBase
   with Eventually { self: Suite =>
 
   protected def sparkConf = {
+    clearSerializer()
     val conf = new SparkConf()
       .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
       .set(UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
