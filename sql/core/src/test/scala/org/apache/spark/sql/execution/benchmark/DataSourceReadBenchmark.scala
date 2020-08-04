@@ -66,14 +66,15 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
 
-  private def prepareTable(dir: File, df: DataFrame, partition: Option[String] = None): Unit = {
+  private def prepareTable(dir: File, df: DataFrame, partition: Option[String] = None,
+      csv: Boolean = true): Unit = {
     val testDf = if (partition.isDefined) {
       df.write.partitionBy(partition.get)
     } else {
       df.write
     }
 
-    saveAsCsvTable(testDf, dir.getCanonicalPath + "/csv")
+    if (csv) saveAsCsvTable(testDf, dir.getCanonicalPath + "/csv")
     saveAsJsonTable(testDf, dir.getCanonicalPath + "/json")
     saveAsParquetTable(testDf, dir.getCanonicalPath + "/parquet")
     saveAsOrcTable(testDf, dir.getCanonicalPath + "/orc")
@@ -540,6 +541,148 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  def structDFGenerator[T](delta: Int, func: Long => T): Long => (T, T, T, T) = { x =>
+    (func(x + delta), func(x + 2*delta), func(x + 3*delta), func(x + 4*delta))
+  }
+
+  def structWriteGenerator(func: String => String): String => String = { x =>
+    s"(${func(x + "._1")}) + (${func(x + "._2")}) + (${func(x + "._3")}) + (${func(x + "._4")})"
+  }
+
+  def nestedStructBenchmark(values: Int): Unit = {
+    val benchmark = new Benchmark(s"Nested Struct Scan", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("jsonTable", "parquetTable", "orcTable") {
+        import spark.implicits._
+        val writeGen = structWriteGenerator(structWriteGenerator(structWriteGenerator(x => x )))
+        val writeString = s"${writeGen.apply("col1")} + ${writeGen.apply("col2")} + " +
+            s"${writeGen.apply("col3")} + ${writeGen.apply("col4")}"
+        val structGen =
+          structDFGenerator(1000, structDFGenerator(100, structDFGenerator(
+            10, structDFGenerator[Long](1, x => x))))
+
+        prepareTable(dir, spark.range(values).map { _ => structGen.apply(Random.nextLong) }
+            .toDF("col1", "col2", "col3", "col4"), csv = false)
+
+        // CSV is missing because the this data structure is not supported
+
+        benchmark.addCase("SQL Json") { _ =>
+          spark.sql(s"SELECT sum(${writeString}) FROM jsonTable").noop()
+        }
+
+        benchmark.addCase("SQL Parquet Vectorized") { _ =>
+          spark.sql(s"SELECT sum(${writeString}) FROM parquetTable").noop()
+        }
+
+        benchmark.addCase("SQL Parquet MR") { _ =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql(s"SELECT sum(${writeString}) FROM parquetTable").noop()
+          }
+        }
+
+        benchmark.addCase("SQL ORC Vectorized") { _ =>
+          spark.sql(s"SELECT sum(${writeString}) FROM orcTable").noop()
+        }
+
+        benchmark.addCase("SQL ORC MR") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql(s"SELECT sum(${writeString}) FROM orcTable").noop()
+          }
+        }
+
+        benchmark.run()
+      }
+    }
+  }
+
+  def arrayBenchmark(values: Int): Unit = {
+    val benchmark = new Benchmark(s"Array Scan", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("jsonTable", "parquetTable", "orcTable") {
+        import spark.implicits._
+
+        prepareTable(dir, spark.range(values).map { _ =>
+          (0 until Random.nextInt(100)).map(_ => Random.nextLong)
+        }.toDF("col1"), csv = false)
+
+        // CSV is missing because this data structure is not supported
+
+        benchmark.addCase("SQL Json") { _ =>
+          spark.sql("SELECT sum(array_max(col1)) FROM jsonTable").noop()
+        }
+
+        benchmark.addCase("SQL Parquet Vectorized") { _ =>
+          spark.sql("SELECT sum(array_max(col1)) FROM parquetTable").noop()
+        }
+
+        benchmark.addCase("SQL Parquet MR") { _ =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql("SELECT sum(array_max(col1)) FROM parquetTable").noop()
+          }
+        }
+
+        benchmark.addCase("SQL ORC Vectorized") { _ =>
+          spark.sql("SELECT sum(array_max(col1)) FROM orcTable").noop()
+        }
+
+        benchmark.addCase("SQL ORC MR") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql("SELECT sum(array_max(col1)) FROM orcTable").noop()
+          }
+        }
+
+        benchmark.run()
+      }
+    }
+  }
+
+  def arrayOfStructBenchmark(values: Int): Unit = {
+    val benchmark = new Benchmark(s"Array of Struct Scan", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("jsonTable", "parquetTable", "orcTable") {
+        import spark.implicits._
+        val writeGen = structWriteGenerator( x => s"array_max($x)" )
+        val writeString = s"${writeGen.apply("col1")}"
+        val structGen = structDFGenerator[Long](1, x => x)
+
+        prepareTable(dir, spark.range(values).map { _ =>
+          (0 until Random.nextInt(100)).map(_ => structGen.apply(Random.nextLong))
+        }.toDF("col1"), csv = false)
+
+        // CSV is missing because this data structure is not supported
+
+        benchmark.addCase("SQL Json") { _ =>
+          spark.sql(s"SELECT sum(${writeString}) FROM jsonTable").noop()
+        }
+
+        benchmark.addCase("SQL Parquet Vectorized") { _ =>
+          spark.sql(s"SELECT sum(${writeString}) FROM parquetTable").noop()
+        }
+
+        benchmark.addCase("SQL Parquet MR") { _ =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql(s"SELECT sum(${writeString}) FROM parquetTable").noop()
+          }
+        }
+
+        benchmark.addCase("SQL ORC Vectorized") { _ =>
+          spark.sql(s"SELECT sum(${writeString}) FROM orcTable").noop()
+        }
+
+        benchmark.addCase("SQL ORC MR") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql(s"SELECT sum(${writeString}) FROM orcTable").noop()
+          }
+        }
+
+        benchmark.run()
+      }
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
       Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach {
@@ -564,6 +707,15 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       for (columnWidth <- List(10, 50, 100)) {
         columnsBenchmark(1024 * 1024 * 1, columnWidth)
       }
+    }
+    runBenchmark("Nested Struct Numeric Scan") {
+      nestedStructBenchmark(1024 * 512)
+    }
+    runBenchmark("Array Numeric Scan") {
+      arrayBenchmark(1024 * 1024 * 1)
+    }
+    runBenchmark("Array of Struct Numeric Scan") {
+      arrayOfStructBenchmark(1024 * 512)
     }
   }
 }

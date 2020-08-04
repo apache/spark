@@ -15,17 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.sql.execution.benchmark
 
-class AvroReadSchemaSuite
-  extends ReadSchemaSuite
-  with AddColumnIntoTheMiddleTest
-  with HideColumnInTheMiddleTest
-  with AddNestedColumnTest
-  with HideNestedColumnTest
-  with ChangePositionTest
-  with ArrayWithNestedStructTest
-  with MapWithNestedStructTest {
-
-  override val format: String = "avro"
+/**
+ * Synthetic benchmark for nested schema pruning performance for Avro datasource.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class>
+ *        --jars <catalyst test jar>,<core test jar>,<spark-avro jar> <avro test jar>
+ *   2. build/sbt "avro/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "avro/test:runMain <this class>"
+ *      Results will be written to "benchmarks/AvroNestedSchemaPruningBenchmark-results.txt".
+ * }}}
+ */
+object AvroNestedSchemaPruningBenchmark extends NestedSchemaPruningBenchmark {
+  override val dataSourceName: String = "avro"
+  override val benchmarkName: String = "Nested Schema Pruning Benchmark For Avro"
 }
