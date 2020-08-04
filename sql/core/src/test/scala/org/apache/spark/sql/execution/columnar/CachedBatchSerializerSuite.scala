@@ -121,6 +121,11 @@ class CachedBatchSerializerSuite  extends QueryTest with SharedSparkSession {
       classOf[TestSingleIntColumnarCachedBatchSerializer].getName)
   }
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    clearSerializer()
+  }
+
   protected override def afterAll(): Unit = {
     clearSerializer()
     super.afterAll()
