@@ -17,41 +17,31 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.SupportsPartitions
 
 /**
  * Physical plan node for dropping partitions of table.
  */
 case class AlterTableDropPartitionExec(
-    catalog: TableCatalog,
-    ident: Identifier,
-    specs: Seq[TablePartitionSpec],
+    table: SupportsPartitions,
+    partIdents: Seq[InternalRow],
     ignoreIfNotExists: Boolean,
     purge: Boolean,
     retainData: Boolean) extends V2CommandExec {
-  import DataSourceV2Implicits._
-  import CatalogV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val table = catalog.loadTable(ident).asPartitionable
-    val partNames = table.partitionSchema().map(_.name)
+    table.properties().put("purge", purge.toString)
+    table.properties().put("retainData", retainData.toString)
 
-    specs.foreach { partSpec =>
-      val conflictKeys = partSpec.keys.filterNot(partNames.contains)
-      if (conflictKeys.nonEmpty) {
-        throw new AnalysisException(
-          s"Partition key ${conflictKeys.mkString(",")} " +
-            s"not exists in ${ident.namespace().quoted}.${ident.name()}")
+    partIdents.foreach { partIdent =>
+      if (!table.dropPartition(partIdent) && !ignoreIfNotExists) {
+        throw new NoSuchPartitionException(table.name(), partIdent, table.partitionSchema())
       }
-
-      val partIdent: InternalRow = convertPartitionIndentifers(partSpec, table.partitionSchema())
-      table.dropPartition(partIdent)
     }
     Seq.empty
   }

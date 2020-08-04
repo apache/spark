@@ -276,12 +276,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
       ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
 
-    case AlterTableAddPartition(catalog, ident, partitionSpecsAndLocs, ignoreIfExists) =>
-      AlterTableAddPartitionExec(catalog, ident, partitionSpecsAndLocs, ignoreIfExists) :: Nil
+    case AlterTableAddPartition(table, parts, ignoreIfExists) =>
+      AlterTableAddPartitionExec(table, parts, ignoreIfExists) :: Nil
 
-    case AlterTableDropPartition(catalog, ident, specs, ignoreIfNotExists, purge, retainData) =>
+    case AlterTableDropPartition(table, partIdents, ignoreIfNotExists, purge, retainData) =>
       AlterTableDropPartitionExec(
-        catalog, ident, specs, ignoreIfNotExists, purge, retainData) :: Nil
+        table, partIdents, ignoreIfNotExists, purge, retainData) :: Nil
 
     case _ => Nil
   }

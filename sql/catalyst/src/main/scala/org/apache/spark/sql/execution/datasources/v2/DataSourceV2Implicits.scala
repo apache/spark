@@ -75,30 +75,41 @@ object DataSourceV2Implicits {
     }
   }
 
-  def convertPartitionIndentifers(
-      partSpec: TablePartitionSpec,
-      partSchema: StructType): InternalRow = {
-    val partValues = partSchema.map { part =>
-      part.dataType match {
-        case _: ByteType =>
-          partSpec.getOrElse(part.name, "0").toByte
-        case _: ShortType =>
-          partSpec.getOrElse(part.name, "0").toShort
-        case _: IntegerType =>
-          partSpec.getOrElse(part.name, "0").toInt
-        case _: LongType =>
-          partSpec.getOrElse(part.name, "0").toLong
-        case _: FloatType =>
-          partSpec.getOrElse(part.name, "0").toFloat
-        case _: DoubleType =>
-          partSpec.getOrElse(part.name, "0").toDouble
-        case _: StringType =>
-          partSpec.getOrElse(part.name, "")
-        case _ =>
-          throw new AnalysisException(
-            s"Type ${part.dataType.typeName} is not supported for partition.")
+  implicit class TablePartitionSpecHelper(partSpec: TablePartitionSpec) {
+    def asPartitionIdentifier(partSchema: StructType): InternalRow = {
+      val conflictKeys = partSpec.keys.toSeq.diff(partSchema.map(_.name))
+      if (conflictKeys.nonEmpty) {
+        throw new AnalysisException(
+          s"Partition key ${conflictKeys.mkString(",")} not exists")
       }
+
+      val partValues = partSchema.map { part =>
+        val partValue = partSpec.get(part.name).orNull
+        if (partValue == null) {
+          null
+        } else {
+          part.dataType match {
+            case _: ByteType =>
+              partValue.toByte
+            case _: ShortType =>
+              partValue.toShort
+            case _: IntegerType =>
+              partValue.toInt
+            case _: LongType =>
+              partValue.toLong
+            case _: FloatType =>
+              partValue.toFloat
+            case _: DoubleType =>
+              partValue.toDouble
+            case _: StringType =>
+              partValue
+            case _ =>
+              throw new AnalysisException(
+                s"Type ${part.dataType.typeName} is not supported for partition.")
+          }
+        }
+      }
+      InternalRow.fromSeq(partValues)
     }
-    InternalRow.fromSeq(partValues)
   }
 }

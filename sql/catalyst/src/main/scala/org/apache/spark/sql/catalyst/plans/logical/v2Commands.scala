@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
@@ -562,9 +563,8 @@ case class ShowFunctions(
  * }}}
  */
 case class AlterTableAddPartition(
-    catalog: TableCatalog,
-    ident: Identifier,
-    partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
+    table: SupportsPartitions,
+    parts: Seq[(InternalRow, Map[String, String])],
     ignoreIfExists: Boolean) extends Command
 
 /**
@@ -577,9 +577,8 @@ case class AlterTableAddPartition(
  * }}}
  */
 case class AlterTableDropPartition(
-    catalog: TableCatalog,
-    ident: Identifier,
-    specs: Seq[TablePartitionSpec],
+    table: SupportsPartitions,
+    partIdents: Seq[InternalRow],
     ignoreIfNotExists: Boolean,
     purge: Boolean,
     retainData: Boolean) extends Command

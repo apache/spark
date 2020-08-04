@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -30,6 +32,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+  import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case AlterTableAddColumnsStatement(
@@ -229,23 +232,30 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case ShowCurrentNamespaceStatement() =>
       ShowCurrentNamespace(catalogManager)
 
-    case AlterTableAddPartitionStatement(
-        NonSessionCatalogAndTable(catalog, tableName), partitionSpecsAndLocs, ifNotExists) =>
+    case c @ AlterTableAddPartitionStatement(
+        NonSessionCatalogAndTable(catalog, tableName), _, _) =>
+      val table = catalog.asTableCatalog.loadTable(tableName.asIdentifier).asPartitionable
+      val partitions = c.partitionSpecsAndLocs.map { case (spec, location) =>
+        val tableProperties = table.properties().asScala.toMap
+        val partParams =
+          location.map(locationUri => tableProperties + ("location" -> locationUri))
+            .getOrElse(tableProperties)
+        (spec.asPartitionIdentifier(table.partitionSchema()), partParams)
+      }
       AlterTableAddPartition(
-        catalog.asTableCatalog,
-        tableName.asIdentifier,
-        partitionSpecsAndLocs,
-        ifNotExists)
+        table,
+        partitions,
+        c.ifNotExists)
 
-    case AlterTableDropPartitionStatement(
-        NonSessionCatalogAndTable(catalog, tableName), specs, ifExists, purge, retainData) =>
+    case c @ AlterTableDropPartitionStatement(
+        NonSessionCatalogAndTable(catalog, tableName), _, _, _, _) =>
+      val table = catalog.asTableCatalog.loadTable(tableName.asIdentifier).asPartitionable
       AlterTableDropPartition(
-        catalog.asTableCatalog,
-        tableName.asIdentifier,
-        specs,
-        ifExists,
-        purge,
-        retainData)
+        table,
+        c.specs.map(_.asPartitionIdentifier(table.partitionSchema())),
+        c.ifExists,
+        c.purge,
+        c.retainData)
   }
 
   object NonSessionCatalogAndTable {
