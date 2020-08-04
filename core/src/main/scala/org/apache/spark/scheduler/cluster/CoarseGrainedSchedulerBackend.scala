@@ -633,15 +633,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
-    val (rpIds, cpus, resources) = executorDataMap.values.toArray.map { executor =>
-      (
-        executor.resourceProfileId,
-        executor.totalCores,
-        executor.resourcesInfo.map { case (name, rInfo) =>
-          (name, rInfo.resourceAddresses.length * rInfo.slotsPerAddress)
-        }
-      )
-    }.unzip3
+    val (rpIds, cpus, resources) = {
+      executorDataMap
+        .filter { case (id, _) => isExecutorActive(id) }
+        .values.toArray.map { executor =>
+          (
+            executor.resourceProfileId,
+            executor.totalCores,
+            executor.resourcesInfo.map { case (name, rInfo) =>
+              (name, rInfo.resourceAddresses.length * rInfo.slotsPerAddress)
+            }
+          )
+        }.unzip3
+    }
     TaskSchedulerImpl.calculateAvailableSlots(scheduler, conf, rp.id, rpIds, cpus, resources)
   }
 
