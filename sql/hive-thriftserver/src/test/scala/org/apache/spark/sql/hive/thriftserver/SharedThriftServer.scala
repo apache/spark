@@ -68,6 +68,8 @@ trait SharedThriftServer extends SharedSparkSession {
         throw cause
     }.get
     logInfo("HiveThriftServer2 started successfully")
+    val state = SessionState.get()
+    if (state != null) state.applyAuthorizationPolicy()
   }
 
   override def afterAll(): Unit = {
