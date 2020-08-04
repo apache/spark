@@ -52,9 +52,10 @@ import org.apache.spark.sql.types._
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
 class ParquetReadSupport(
-    val convertTz: Option[ZoneId],
+    val convertTz: ZoneId,
     enableVectorizedReader: Boolean,
-    datetimeRebaseMode: LegacyBehaviorPolicy.Value)
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
+    convertInt96Timestamp: Boolean)
   extends ReadSupport[InternalRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
@@ -62,7 +63,8 @@ class ParquetReadSupport(
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
     // used in the vectorized reader, where we get the convertTz/rebaseDateTime value directly,
     // and the values here are ignored.
-    this(None, enableVectorizedReader = true, datetimeRebaseMode = LegacyBehaviorPolicy.CORRECTED)
+    this(null, enableVectorizedReader = true,
+      datetimeRebaseMode = LegacyBehaviorPolicy.CORRECTED, false)
   }
 
   /**
@@ -131,7 +133,8 @@ class ParquetReadSupport(
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
       new ParquetToSparkSchemaConverter(conf),
       convertTz,
-      datetimeRebaseMode)
+      datetimeRebaseMode,
+      convertInt96Timestamp)
   }
 }
 

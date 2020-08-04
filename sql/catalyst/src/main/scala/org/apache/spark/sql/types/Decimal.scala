@@ -412,6 +412,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
             if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
               longVal += (if (droppedDigits < 0) -1L else 1L)
             }
+          case ROUND_DOWN =>
           case _ =>
             sys.error(s"Not supported rounding mode: $roundMode")
         }
@@ -534,6 +535,7 @@ object Decimal {
   val ROUND_HALF_EVEN = BigDecimal.RoundingMode.HALF_EVEN
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
+  val ROUND_DOWN = BigDecimal.RoundingMode.DOWN
 
   /** Maximum number of decimal digits an Int can represent */
   val MAX_INT_DIGITS = 9

@@ -19,21 +19,23 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
+import java.nio.charset.StandardCharsets
 import java.time.{ZoneId, ZoneOffset}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.{GroupType, MessageType, OriginalType, Type}
-import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
+import org.apache.parquet.schema.{DecimalMetadata, GroupType, MessageType, OriginalType, Type}
+import org.apache.parquet.schema.OriginalType._
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -108,10 +110,10 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * 5 converters will be created:
  *
  * - a root [[ParquetRowConverter]] for [[MessageType]] `root`, which contains:
- *   - a [[ParquetPrimitiveConverter]] for required [[INT_32]] field `f1`, and
+ *   - a [[ToSparkIntegerConverter]] for required [[INT_32]] field `f1`, and
  *   - a nested [[ParquetRowConverter]] for optional [[GroupType]] `f2`, which contains:
- *     - a [[ParquetPrimitiveConverter]] for required [[DOUBLE]] field `f21`, and
- *     - a [[ParquetStringConverter]] for optional [[UTF8]] string field `f22`
+ *     - a [[ToSparkDoubleConverter]] for required [[DOUBLE]] field `f21`, and
+ *     - a [[ToSparkStringConverter]] for optional [[UTF8]] string field `f22`
  *
  * When used as a root converter, [[NoopUpdater]] should be used since root converters don't have
  * any "parent" container.
@@ -120,18 +122,20 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * @param parquetType Parquet schema of Parquet records
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type. User-defined
  *        types should have been expanded.
- * @param convertTz the optional time zone to convert to int96 data
+ * @param convertTz Timezone ID of the session
  * @param datetimeRebaseMode the mode of rebasing date/timestamp from Julian to Proleptic Gregorian
  *                           calendar
  * @param updater An updater which propagates converted field values to the parent container
+ * @param convertInt96Timestamp Whether to use session timezone to convert to int96 data
  */
 private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetToSparkSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
-    convertTz: Option[ZoneId],
+    convertTz: ZoneId,
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
-    updater: ParentContainerUpdater)
+    updater: ParentContainerUpdater,
+    convertInt96Timestamp: Boolean)
   extends ParquetGroupConverter(updater) with Logging {
 
   assert(
@@ -186,6 +190,9 @@ private[parquet] class ParquetRowConverter(
 
   private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
     datetimeRebaseMode, "Parquet")
+
+  private lazy val dateFormatter = DateFormatter(convertTz)
+  private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(convertTz)
 
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
@@ -242,85 +249,38 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
     catalystType match {
-      case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
+      case BooleanType | BinaryType =>
         new ParquetPrimitiveConverter(updater)
 
+      case FloatType =>
+        new ToSparkFloatConverter(parquetType, updater)
+
+      case DoubleType =>
+        new ToSparkDoubleConverter(parquetType, updater)
+
       case ByteType =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addInt(value: Int): Unit =
-            updater.setByte(value.asInstanceOf[ByteType#InternalType])
-        }
+        new ToSparkByteConverter(parquetType, updater)
 
       case ShortType =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addInt(value: Int): Unit =
-            updater.setShort(value.asInstanceOf[ShortType#InternalType])
-        }
+        new ToSparkShortConverter(parquetType, updater)
 
-      // For INT32 backed decimals
-      case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
-        new ParquetIntDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+      case IntegerType =>
+        new ToSparkIntegerConverter(parquetType, updater)
 
-      // For INT64 backed decimals
-      case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
-        new ParquetLongDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
-
-      // For BINARY and FIXED_LEN_BYTE_ARRAY backed decimals
-      case t: DecimalType
-        if parquetType.asPrimitiveType().getPrimitiveTypeName == FIXED_LEN_BYTE_ARRAY ||
-           parquetType.asPrimitiveType().getPrimitiveTypeName == BINARY =>
-        new ParquetBinaryDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+      case LongType =>
+        new ToSparkLongConverter(parquetType, updater)
 
       case t: DecimalType =>
-        throw new RuntimeException(
-          s"Unable to create Parquet converter for decimal type ${t.json} whose Parquet type is " +
-            s"$parquetType.  Parquet DECIMAL type can only be backed by INT32, INT64, " +
-            "FIXED_LEN_BYTE_ARRAY, or BINARY.")
+        new ToSparkDecimalConverter(parquetType, updater, t)
 
       case StringType =>
-        new ParquetStringConverter(updater)
-
-      case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MICROS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            updater.setLong(timestampRebaseFunc(value))
-          }
-        }
-
-      case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(timestampRebaseFunc(micros))
-          }
-        }
-
-      // INT96 timestamp doesn't have a logical type, here we check the physical type instead.
-      case TimestampType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT96 =>
-        new ParquetPrimitiveConverter(updater) {
-          // Converts nanosecond timestamps stored as INT96
-          override def addBinary(value: Binary): Unit = {
-            assert(
-              value.length() == 12,
-              "Timestamps (with nanoseconds) are expected to be stored in 12-byte long binaries, " +
-              s"but got a ${value.length()}-byte binary.")
-
-            val buf = value.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-            val timeOfDayNanos = buf.getLong
-            val julianDay = buf.getInt
-            val rawTime = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
-            val adjTime = convertTz.map(DateTimeUtils.convertTz(rawTime, _, ZoneOffset.UTC))
-              .getOrElse(rawTime)
-            updater.setLong(adjTime)
-          }
-        }
+        new ToSparkStringConverter(parquetType, updater)
 
       case DateType =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addInt(value: Int): Unit = {
-            updater.set(dateRebaseFunc(value))
-          }
-        }
+        new ToSparkDateConverter(parquetType, updater)
+
+      case TimestampType =>
+        new ToSparkTimestampConverter(parquetType, updater)
 
       // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
       // annotated by `LIST` or `MAP` should be interpreted as a required list of required
@@ -371,7 +331,8 @@ private[parquet] class ParquetRowConverter(
           t,
           convertTz,
           datetimeRebaseMode,
-          wrappedUpdater)
+          wrappedUpdater,
+          convertInt96Timestamp)
 
       case t =>
         throw new RuntimeException(
@@ -381,111 +342,823 @@ private[parquet] class ParquetRowConverter(
   }
 
   /**
-   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
+   * Converter to spark [[NumericType]].
+   * Possible parquet primitive types:
+   * 1.FLOAT
+   * 2.DOUBLE
+   * 3.INT32(INT_8 INT_16 INT_32 DECIMAL)
+   * 4.INT64(INT_64 DECIMAL)
+   * 5.BINARY(UTF8 DECIMAL)
+   * 6.FIXED_LEN_BYTE_ARRAY(DECIMAL)
    */
-  private final class ParquetStringConverter(updater: ParentContainerUpdater)
+  private abstract class ToSparkNumericConverter[T: ClassTag](
+      parquetType: Type, updater: ParentContainerUpdater)
     extends ParquetPrimitiveConverter(updater) {
 
-    private var expandedDictionary: Array[UTF8String] = null
+    protected val isDecimal: Boolean = parquetType.asPrimitiveType().getOriginalType == DECIMAL
+    protected val parquetDecimal: DecimalMetadata = parquetType.asPrimitiveType().getDecimalMetadata
+    protected var expandedDictionary: Array[T] = null
 
-    override def hasDictionarySupport: Boolean = true
-
+    override def hasDictionarySupport: Boolean = {
+      parquetType.asPrimitiveType().getPrimitiveTypeName match {
+        case BINARY | FIXED_LEN_BYTE_ARRAY => true
+        case INT32 | INT64 if isDecimal => true
+        case _ => false
+      }
+    }
     override def setDictionary(dictionary: Dictionary): Unit = {
-      this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { i =>
-        UTF8String.fromBytes(dictionary.decodeToBinary(i).getBytes)
+      this.expandedDictionary = parquetType.asPrimitiveType().getPrimitiveTypeName match {
+        case INT32 if isDecimal =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            val d = ParquetRowConverter.decimalFromLong(dictionary.decodeToInt(i), parquetDecimal)
+            decimalToType(d)
+          }
+        case INT64 if isDecimal =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            val d = ParquetRowConverter.decimalFromLong(dictionary.decodeToLong(i), parquetDecimal)
+            decimalToType(d)
+          }
+        case BINARY | FIXED_LEN_BYTE_ARRAY if isDecimal =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            val d = ParquetRowConverter
+              .decimalFromBinary(dictionary.decodeToBinary(i), parquetDecimal)
+            decimalToType(d)
+          }
+        case BINARY | FIXED_LEN_BYTE_ARRAY =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            utf8BinaryToType(dictionary.decodeToBinary(i))
+          }
+        case _ =>
+          throw new RuntimeException(
+          s"Unable to create Parquet dictionary converter for spark NumericType " +
+            s"whose Parquet type is $parquetType")
       }
     }
 
+    protected def add(value: T): Unit
+    protected def decimalToType(decimal: Decimal): T
+    protected def utf8BinaryToType(binary: Binary): T
+    protected def doubleToType(doubleValue: Double): T
+    protected def longToType(longValue: Long): T
+
     override def addValueFromDictionary(dictionaryId: Int): Unit = {
-      updater.set(expandedDictionary(dictionaryId))
+      add(expandedDictionary(dictionaryId))
     }
 
+    // parquet primitive types: FLOAT
+    override def addFloat(value: Float): Unit = {
+      addDouble(value: Double)
+    }
+
+    // parquet primitive types: DOUBLE
+    override def addDouble(value: Double): Unit = {
+      add(doubleToType(value))
+    }
+
+    // parquet primitive types: INT32(INT_8 INT_16 INT_32 DECIMAL)
+    override def addInt(value: Int): Unit = {
+      addLong(value)
+    }
+
+    // parquet primitive types: INT64(INT_64 DECIMAL)
+    override def addLong(value: Long): Unit = {
+      if (isDecimal) {
+        val decimal = ParquetRowConverter.decimalFromLong(value, parquetDecimal)
+        add(decimalToType(decimal))
+      } else {
+        add(longToType(value))
+      }
+    }
+
+    // parquet primitive types: (UTF8 DECIMAL)
     override def addBinary(value: Binary): Unit = {
-      // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here we
-      // are using `Binary.toByteBuffer.array()` to steal the underlying byte array without copying
-      // it.
-      val buffer = value.toByteBuffer
-      val offset = buffer.arrayOffset() + buffer.position()
-      val numBytes = buffer.remaining()
-      updater.set(UTF8String.fromBytes(buffer.array(), offset, numBytes))
+      if (isDecimal) {
+        val decimal = ParquetRowConverter.decimalFromBinary(value, parquetDecimal)
+        add(decimalToType(decimal))
+      } else {
+        add(utf8BinaryToType(value))
+      }
+    }
+
+    protected def isFiniteFloat(floatValue: Float): Boolean =
+      Float.NegativeInfinity < floatValue && floatValue < Float.PositiveInfinity
+
+    protected def isFiniteDouble(doubleValue: Double): Boolean =
+      Double.NegativeInfinity < doubleValue && doubleValue < Double.PositiveInfinity
+
+    protected def checkToIntegralOverflow(x: Double, upperBound: Long, lowerBound: Long): Unit = {
+      if (Math.floor(x) > upperBound || Math.ceil(x) < lowerBound) {
+        throw new ArithmeticException(
+          s"Casting Fractional($x) to Integral causes overflow, $parquetType")
+      }
     }
   }
 
   /**
-   * Parquet converter for fixed-precision decimals.
+   * Converter to spark [[FloatType]].
+   * Possible parquet primitive types:
+   * 1.FLOAT
+   * 2.DOUBLE - may overflow
+   * 3.INT32(INT_8 INT_16 INT_32 DECIMAL)
+   * 4.INT64(INT_64 DECIMAL)
+   * 5.BINARY(UTF8 DECIMAL) - may overflow
+   * 6.FIXED_LEN_BYTE_ARRAY(DECIMAL) - may overflow
    */
-  private abstract class ParquetDecimalConverter(
-      precision: Int, scale: Int, updater: ParentContainerUpdater)
+  private final class ToSparkFloatConverter(parquetType: Type, updater: ParentContainerUpdater)
+    extends ToSparkNumericConverter[Float](parquetType, updater) {
+    private val decimalMayOverflow = isDecimal && parquetDecimal.getPrecision > 38
+
+    override protected def add(value: Float): Unit = {
+      updater.setFloat(value)
+    }
+
+    override def addFloat(value: Float): Unit = {
+      updater.setFloat(value)
+    }
+
+    override protected def decimalToType(decimal: Decimal): Float = {
+      val floatValue = decimal.toFloat
+      if (decimalMayOverflow && !isFiniteFloat(floatValue)) {
+        throw new ArithmeticException(
+          s"Casting Decimal(${decimal.toString}) to Float causes overflow $parquetType")
+      }
+      floatValue
+    }
+
+    override protected def utf8BinaryToType(binary: Binary): Float = {
+      val string = ParquetRowConverter.binaryToJString(binary).trim()
+      // Infinity, -Infinity, NaN
+      if (string.length < 2 || string.charAt(1) <= '9') {
+        val floatValue = string.toFloat
+        if (!isFiniteFloat(floatValue)) {
+          throw new ArithmeticException(
+            s"Casting String($string) to Float causes overflow, $parquetType")
+        }
+        floatValue
+      } else {
+        val floatValue = Cast.processFloatingPointSpecialLiterals(string, isFloat = true)
+        if (floatValue == null) {
+          throw new NumberFormatException(
+            s"This String($string) cannot be converted to Float, $parquetType")
+        }
+        floatValue.asInstanceOf[Float]
+      }
+    }
+
+    override protected def doubleToType(doubleValue: Double): Float = {
+      doubleToFloat(doubleValue)
+    }
+
+    override protected def longToType(longValue: Long): Float = longValue.toFloat
+
+    private def doubleToFloat(doubleValue: Double): Float = {
+      if ((doubleValue < Float.MinValue || doubleValue > Float.MaxValue)
+        && isFiniteDouble(doubleValue)) {
+        throw new ArithmeticException(
+          s"Casting Double($doubleValue) to Float causes overflow, $parquetType")
+      } else {
+        doubleValue.toFloat
+      }
+    }
+  }
+
+  /**
+   * Converter to spark [[DoubleType]].
+   * Possible parquet primitive types:
+   * 1.FLOAT
+   * 2.DOUBLE
+   * 3.INT32(INT_8 INT_16 INT_32 DECIMAL)
+   * 4.INT64(INT_64 DECIMAL)
+   * 5.BINARY(UTF8 DECIMAL) - may overflow
+   * 6.FIXED_LEN_BYTE_ARRAY(DECIMAL) - may overflow
+   */
+  private final class ToSparkDoubleConverter(parquetType: Type, updater: ParentContainerUpdater)
+    extends ToSparkNumericConverter[Double](parquetType, updater) {
+    private val decimalMayOverflow = isDecimal && parquetDecimal.getPrecision > 308
+
+    override protected def add(value: Double): Unit = {
+      updater.setDouble(value)
+    }
+
+    override protected def decimalToType(decimal: Decimal): Double = {
+      val doubleValue = decimal.toDouble
+      if (decimalMayOverflow && !isFiniteDouble(doubleValue)) {
+        throw new ArithmeticException(
+          s"Casting Decimal($decimal) to Double causes overflow, $parquetType")
+      }
+      doubleValue
+    }
+
+    override protected def utf8BinaryToType(binary: Binary): Double = {
+      val string = ParquetRowConverter.binaryToJString(binary).trim()
+      // Infinity, -Infinity, NaN
+      if (string.length < 2 || string.charAt(1) <= '9') {
+        val doubleValue = string.toDouble
+        if (!isFiniteDouble(doubleValue)) {
+          throw new ArithmeticException(
+            s"Casting String($string) to Double causes overflow, $parquetType")
+        }
+        doubleValue
+      } else {
+        val doubleValue = Cast.processFloatingPointSpecialLiterals(string, isFloat = false)
+        if (doubleValue == null) {
+          throw new NumberFormatException(
+            s"This String($string) cannot be converted to Double, $parquetType")
+        }
+        doubleValue.asInstanceOf[Double]
+      }
+    }
+
+    override protected def doubleToType(doubleValue: Double): Double = doubleValue
+
+    override protected def longToType(longValue: Long): Double = longValue.toDouble
+  }
+
+  /**
+   * Converter to spark [[ByteType]].
+   * Possible parquet primitive types:
+   * 1.FLOAT - may overflow
+   * 2.DOUBLE - may overflow
+   * 3.INT32(INT_8)
+   *   INT32(INT_16 INT_32 DECIMAL) - may overflow
+   * 4.INT64(INT_64 DECIMAL) - may overflow
+   * 5.BINARY(UTF8 DECIMAL) - may overflow
+   * 6.FIXED_LEN_BYTE_ARRAY(DECIMAL) - may overflow
+   */
+  private final class ToSparkByteConverter(parquetType: Type, updater: ParentContainerUpdater)
+    extends ToSparkNumericConverter[Byte](parquetType, updater) {
+    private val upperBound = Byte.MaxValue
+    private val lowerBound = Byte.MinValue
+
+    override protected def add(value: Byte): Unit = {
+      updater.setByte(value)
+    }
+
+    override protected def decimalToType(decimal: Decimal): Byte = {
+      decimal.roundToByte()
+    }
+
+    override protected def utf8BinaryToType(binary: Binary): Byte = {
+      val utf8 = ParquetRowConverter.utf8StringFromBinary(binary)
+      utf8.toByteExact
+    }
+
+    override protected def doubleToType(doubleValue: Double): Byte = {
+      checkToIntegralOverflow(doubleValue, upperBound, lowerBound)
+      doubleValue.toByte
+    }
+
+    override protected def longToType(longValue: Long): Byte = {
+      if (longValue == longValue.toByte) {
+        longValue.toByte
+      } else {
+        throw new ArithmeticException(
+          s"Casting Long($longValue) to Byte causes overflow, $parquetType")
+      }
+    }
+  }
+
+  /**
+   * Converter to spark [[ShortType]].
+   * Possible parquet primitive types:
+   * 1.FLOAT - may overflow
+   * 2.DOUBLE - may overflow
+   * 3.INT32(INT_8 INT_16)
+   *   INT32(INT_32 DECIMAL) - may overflow
+   * 4.INT64(INT_64 DECIMAL) - may overflow
+   * 5.BINARY(UTF8 DECIMAL) - may overflow
+   * 6.FIXED_LEN_BYTE_ARRAY(DECIMAL) - may overflow
+   */
+  private final class ToSparkShortConverter(parquetType: Type, updater: ParentContainerUpdater)
+    extends ToSparkNumericConverter[Short](parquetType, updater) {
+    private val upperBound = Short.MaxValue
+    private val lowerBound = Short.MinValue
+
+    override protected def add(value: Short): Unit = {
+      updater.setShort(value)
+    }
+
+    override protected def decimalToType(decimal: Decimal): Short = {
+      decimal.roundToShort()
+    }
+
+    override protected def utf8BinaryToType(binary: Binary): Short = {
+      val utf8 = ParquetRowConverter.utf8StringFromBinary(binary)
+      utf8.toShortExact
+    }
+
+    override protected def doubleToType(doubleValue: Double): Short = {
+      checkToIntegralOverflow(doubleValue, upperBound, lowerBound)
+      doubleValue.toShort
+    }
+
+    override protected def longToType(longValue: Long): Short = {
+      if (longValue == longValue.toShort) {
+        longValue.toShort
+      } else {
+        throw new ArithmeticException(
+          s"Casting Long($longValue) to Short causes overflow, $parquetType")
+      }
+    }
+  }
+
+  /**
+   * Converter to spark [[IntegerType]].
+   * Possible parquet primitive types:
+   * 1.FLOAT - may overflow
+   * 2.DOUBLE - may overflow
+   * 3.INT32(INT_8 INT_16 INT_32 DECIMAL)
+   * 4.INT64(INT_64 DECIMAL) - may overflow
+   * 5.BINARY(UTF8 DECIMAL) - may overflow
+   * 6.FIXED_LEN_BYTE_ARRAY(DECIMAL) - may overflow
+   */
+  private final class ToSparkIntegerConverter(parquetType: Type, updater: ParentContainerUpdater)
+    extends ToSparkNumericConverter[Int](parquetType, updater) {
+    private val upperBound = Int.MaxValue
+    private val lowerBound = Int.MinValue
+
+    override protected def add(value: Int): Unit = {
+      updater.setInt(value)
+    }
+
+    override def addInt(value: Int): Unit = {
+      if (isDecimal) {
+        val decimal = ParquetRowConverter.decimalFromLong(value, parquetDecimal)
+        add(decimalToType(decimal))
+      } else {
+        add(value)
+      }
+    }
+
+    override protected def decimalToType(decimal: Decimal): Int = {
+      decimal.roundToInt()
+    }
+
+    override protected def utf8BinaryToType(binary: Binary): Int = {
+      val utf8 = ParquetRowConverter.utf8StringFromBinary(binary)
+      utf8.toIntExact
+    }
+
+    override protected def doubleToType(doubleValue: Double): Int = {
+      checkToIntegralOverflow(doubleValue, upperBound, lowerBound)
+      doubleValue.toInt
+    }
+
+    override protected def longToType(longValue: Long): Int = {
+      if (longValue == longValue.toInt) {
+        longValue.toInt
+      } else {
+        throw new ArithmeticException(
+          s"Casting Long($longValue) to Int causes overflow, $parquetType")
+      }
+    }
+  }
+
+  /**
+   * Converter to spark [[LongType]].
+   * Possible parquet primitive types:
+   * 1.FLOAT - may overflow
+   * 2.DOUBLE - may overflow
+   * 3.INT32(INT_8 INT_16 INT_32 DECIMAL)
+   * 4.INT64(INT_64 DECIMAL)
+   * 5.BINARY(UTF8 DECIMAL) - may overflow
+   * 6.FIXED_LEN_BYTE_ARRAY(DECIMAL) - may overflow
+   */
+  private final class ToSparkLongConverter(parquetType: Type, updater: ParentContainerUpdater)
+    extends ToSparkNumericConverter[Long](parquetType, updater) {
+    private val upperBound = Long.MaxValue
+    private val lowerBound = Long.MinValue
+
+    override protected def add(value: Long): Unit = {
+      updater.setLong(value)
+    }
+
+    override protected def decimalToType(decimal: Decimal): Long = {
+      decimal.roundToLong()
+    }
+
+    override protected def utf8BinaryToType(binary: Binary): Long = {
+      val utf8 = ParquetRowConverter.utf8StringFromBinary(binary)
+      utf8.toLongExact
+    }
+
+    override protected def doubleToType(doubleValue: Double): Long = {
+      checkToIntegralOverflow(doubleValue, upperBound, lowerBound)
+      doubleValue.toLong
+    }
+
+    override protected def longToType(longValue: Long): Long = longValue
+  }
+
+  /**
+   * Converter to spark [[DecimalType]].
+   * Possible parquet primitive types:
+   * 1.FLOAT - may overflow
+   * 2.DOUBLE - may overflow
+   * 3.INT32(INT_8 INT_16 INT_32 DECIMAL) - may overflow
+   * 4.INT64(INT_64 DECIMAL) - may overflow
+   * 5.BINARY(UTF8 DECIMAL) - may overflow
+   * 6.FIXED_LEN_BYTE_ARRAY(DECIMAL) - may overflow
+   */
+  private final class ToSparkDecimalConverter(
+    parquetType: Type, updater: ParentContainerUpdater, sparkDecimal: DecimalType)
+    extends ToSparkNumericConverter[Decimal](parquetType, updater) {
+    private val sparkPrecision = sparkDecimal.precision
+    private val sparkScale = sparkDecimal.scale
+
+    override def hasDictionarySupport: Boolean = {
+      parquetType.asPrimitiveType().getPrimitiveTypeName match {
+        case FLOAT | DOUBLE => true
+        case _ => super.hasDictionarySupport
+      }
+    }
+
+    override def setDictionary(dictionary: Dictionary): Unit = {
+      this.expandedDictionary = parquetType.asPrimitiveType().getPrimitiveTypeName match {
+        case FLOAT =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            doubleToType(dictionary.decodeToFloat(i))
+          }
+        case DOUBLE =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            doubleToType(dictionary.decodeToDouble(i))
+          }
+        case _ => null
+      }
+      super.setDictionary(dictionary)
+    }
+
+    override protected def add(value: Decimal): Unit = {
+      updater.set(value)
+    }
+
+    override protected def decimalToType(decimal: Decimal): Decimal = {
+      decimalToPrecision(decimal)
+    }
+
+    override protected def utf8BinaryToType(binary: Binary): Decimal = {
+      val string = ParquetRowConverter.binaryToJString(binary)
+      val decimal = Decimal(new BigDecimal(string.trim))
+      decimalToPrecision(decimal)
+    }
+
+    override protected def doubleToType(doubleValue: Double): Decimal = {
+      decimalToPrecision(Decimal(doubleValue))
+    }
+
+    override protected def longToType(longValue: Long): Decimal = {
+      decimalToPrecision(Decimal(longValue))
+    }
+
+    private def decimalToPrecision(decimal: Decimal): Decimal = {
+      if (!decimal.changePrecision(sparkPrecision, sparkScale, Decimal.ROUND_DOWN)) {
+        throw new ArithmeticException(s"Decimal($decimal) cannot be represented as " +
+          s"Decimal($sparkPrecision, $sparkScale), $parquetType")
+      }
+      decimal
+    }
+  }
+
+  /**
+   * Converter to spark [[DateType]].
+   * Possible parquet primitive types:
+   * 1.INT32(DATE)
+   * 2.INT64(TIMESTAMP_MILLIS TIMESTAMP_MICROS)
+   * 3.INT96
+   * 4.BINARY(UTF8)
+   */
+  private final class ToSparkDateConverter(
+    parquetType: Type, updater: ParentContainerUpdater)
     extends ParquetPrimitiveConverter(updater) {
+    private val isInt96 = parquetType.asPrimitiveType().getPrimitiveTypeName == INT96
+    private val isMillis = parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS
 
-    protected var expandedDictionary: Array[Decimal] = _
-
+    protected var expandedDictionary: Array[Int] = null
     override def hasDictionarySupport: Boolean = true
-
+    override def setDictionary(dictionary: Dictionary): Unit = {
+      this.expandedDictionary = parquetType.asPrimitiveType().getPrimitiveTypeName match {
+        case  INT32 =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            dateRebaseFunc(dictionary.decodeToInt(i))
+          }
+        case INT64 =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            longTimeToDate(dictionary.decodeToLong(i))
+          }
+        case INT96 | BINARY =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            binaryToDate(dictionary.decodeToBinary(i))
+          }
+        case _ =>
+          throw new RuntimeException(
+            s"Unable to create Parquet dictionary converter for spark DateType " +
+              s"whose Parquet type is $parquetType")
+      }
+    }
     override def addValueFromDictionary(dictionaryId: Int): Unit = {
       updater.set(expandedDictionary(dictionaryId))
     }
 
-    // Converts decimals stored as INT32
+    // parquet primitive types: DINT32(DATE)
     override def addInt(value: Int): Unit = {
-      addLong(value: Long)
+      updater.set(dateRebaseFunc(value))
     }
 
-    // Converts decimals stored as INT64
+    // parquet primitive types: INT64(TIMESTAMP_MILLIS TIMESTAMP_MICROS)
     override def addLong(value: Long): Unit = {
-      updater.set(decimalFromLong(value))
+      updater.set(longTimeToDate(value))
     }
 
-    // Converts decimals stored as either FIXED_LENGTH_BYTE_ARRAY or BINARY
-    override def addBinary(value: Binary): Unit = {
-      updater.set(decimalFromBinary(value))
-    }
-
-    protected def decimalFromLong(value: Long): Decimal = {
-      Decimal(value, precision, scale)
-    }
-
-    protected def decimalFromBinary(value: Binary): Decimal = {
-      if (precision <= Decimal.MAX_LONG_DIGITS) {
-        // Constructs a `Decimal` with an unscaled `Long` value if possible.
-        val unscaled = ParquetRowConverter.binaryToUnscaledLong(value)
-        Decimal(unscaled, precision, scale)
+    private def longTimeToDate(value: Long): Int = {
+      val micros = if (isMillis) {
+        DateTimeUtils.millisToMicros(value)
       } else {
-        // Otherwise, resorts to an unscaled `BigInteger` instead.
-        Decimal(new BigDecimal(new BigInteger(value.getBytes), scale), precision, scale)
+        value
+      }
+      DateTimeUtils.microsToDays(timestampRebaseFunc(micros), convertTz)
+    }
+
+    // parquet primitive types: INT96 BINARY(UTF8)
+    override def addBinary(value: Binary): Unit = {
+      updater.set(binaryToDate(value))
+    }
+
+    private def binaryToDate(value: Binary): Int = {
+      if (isInt96) {
+        val rawTime = ParquetRowConverter.binaryToSQLTimestamp(value)
+        val micros = if (convertInt96Timestamp) {
+          DateTimeUtils.convertTz(rawTime, convertTz, ZoneOffset.UTC)
+        } else {
+          rawTime
+        }
+        DateTimeUtils.microsToDays(micros, convertTz)
+      } else {
+        val utf8 = ParquetRowConverter.utf8StringFromBinary(value)
+        DateTimeUtils.stringToDate(utf8, convertTz).getOrElse {
+          throw new IllegalArgumentException(s"This String(${utf8.toString})" +
+            s" cannot be converted to Date, $parquetType")
+        }
       }
     }
   }
 
-  private class ParquetIntDictionaryAwareDecimalConverter(
-      precision: Int, scale: Int, updater: ParentContainerUpdater)
-    extends ParquetDecimalConverter(precision, scale, updater) {
+  /**
+   * Converter to spark [[TimestampType]].
+   * Possible parquet primitive types:
+   * 1.INT32(DATE)
+   * 2.INT64(TIMESTAMP_MILLIS TIMESTAMP_MICROS)
+   * 3.INT96
+   * 4.BINARY(UTF8)
+   */
+  private final class ToSparkTimestampConverter(
+    parquetType: Type, updater: ParentContainerUpdater)
+    extends ParquetPrimitiveConverter(updater) {
+    private val isInt96 = parquetType.asPrimitiveType().getPrimitiveTypeName == INT96
+    private val isMillis = parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS
 
+    protected var expandedDictionary: Array[Long] = null
+    override def hasDictionarySupport: Boolean = true
     override def setDictionary(dictionary: Dictionary): Unit = {
-      this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { id =>
-        decimalFromLong(dictionary.decodeToInt(id).toLong)
+      this.expandedDictionary = parquetType.asPrimitiveType().getPrimitiveTypeName match {
+        case  INT32 =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            intDateToMicros(dictionary.decodeToInt(i))
+          }
+        case INT64 =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            longTimeToMicros(dictionary.decodeToLong(i))
+          }
+        case INT96 | BINARY =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            binaryToMicros(dictionary.decodeToBinary(i))
+          }
+        case _ =>
+          throw new RuntimeException(
+            s"Unable to create Parquet dictionary converter for spark TimestampType " +
+              s"whose Parquet type is $parquetType")
+      }
+    }
+    override def addValueFromDictionary(dictionaryId: Int): Unit = {
+      updater.setLong(expandedDictionary(dictionaryId))
+    }
+
+    // parquet primitive types: DINT32(DATE)
+    override def addInt(value: Int): Unit = {
+      updater.setLong(intDateToMicros(value))
+    }
+
+    private def intDateToMicros(value: Int): Long = {
+      val date = dateRebaseFunc(value)
+      DateTimeUtils.daysToMicros(date, convertTz)
+    }
+
+    // parquet primitive types: INT64(TIMESTAMP_MILLIS TIMESTAMP_MICROS)
+    override def addLong(value: Long): Unit = {
+      updater.setLong(longTimeToMicros(value))
+    }
+
+    private def longTimeToMicros(value: Long): Long = {
+      val micros = if (isMillis) {
+        DateTimeUtils.millisToMicros(value)
+      } else {
+        value
+      }
+      timestampRebaseFunc(micros)
+    }
+
+    // parquet primitive types: INT96 BINARY(UTF8)
+    override def addBinary(value: Binary): Unit = {
+      updater.setLong(binaryToMicros(value))
+    }
+
+    private def binaryToMicros(value: Binary): Long = {
+      if (isInt96) {
+        val rawTime = ParquetRowConverter.binaryToSQLTimestamp(value)
+        if (convertInt96Timestamp) {
+          DateTimeUtils.convertTz(rawTime, convertTz, ZoneOffset.UTC)
+        } else {
+          rawTime
+        }
+      } else {
+        val utf8 = ParquetRowConverter.utf8StringFromBinary(value)
+        DateTimeUtils.stringToTimestamp(utf8, convertTz).getOrElse {
+          throw new IllegalArgumentException(s"This String(${utf8.toString})" +
+            s" cannot be converted to Timestamp, $parquetType")
+        }
       }
     }
   }
 
-  private class ParquetLongDictionaryAwareDecimalConverter(
-      precision: Int, scale: Int, updater: ParentContainerUpdater)
-    extends ParquetDecimalConverter(precision, scale, updater) {
 
+  /**
+   * Converter to spark [[StringType]].
+   * Possible parquet primitive types:
+   * 1.BOOLEAN
+   * 2.FLOAT
+   * 3.DOUBLE
+   * 4.INT32(INT_8 INT_16 INT_32 DECIMAL DATE)
+   * 5.INT64(INT_64 DECIMAL TIMESTAMP_MILLIS TIMESTAMP_MICROS)
+   * 6.INT96
+   * 7.BINARY(UTF8 DECIMAL)
+   * 8.FIXED_LEN_BYTE_ARRAY(DECIMAL)
+   */
+  private final class ToSparkStringConverter(
+    parquetType: Type, updater: ParentContainerUpdater)
+    extends ParquetPrimitiveConverter(updater) {
+    // TODO: It may be possible to cache the created utf8string to
+    //  avoid duplicate creation of utf8string objects with the same value.
+    //  This is a space for time optimization.
+
+    private val parquetDecimal = parquetType.asPrimitiveType().getDecimalMetadata
+    protected var expandedDictionary: Array[UTF8String] = null
+    override def hasDictionarySupport: Boolean =
+      parquetType.asPrimitiveType().getPrimitiveTypeName != BOOLEAN
     override def setDictionary(dictionary: Dictionary): Unit = {
-      this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { id =>
-        decimalFromLong(dictionary.decodeToLong(id))
+      this.expandedDictionary = parquetType.asPrimitiveType().getPrimitiveTypeName match {
+        case FLOAT =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            UTF8String.fromString(dictionary.decodeToFloat(i).toString)
+          }
+        case DOUBLE =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            UTF8String.fromString(dictionary.decodeToDouble(i).toString)
+          }
+        case INT32 =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            intToUtf8String(dictionary.decodeToInt(i))
+          }
+        case INT64 =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            longToUtf8String(dictionary.decodeToLong(i))
+          }
+        case INT96 | BINARY | FIXED_LEN_BYTE_ARRAY =>
+          Array.tabulate(dictionary.getMaxId + 1) { i =>
+            binaryToUtf8String(dictionary.decodeToBinary(i))
+          }
+        case _ =>
+          throw new RuntimeException(
+            s"Unable to create Parquet dictionary converter for spark StringType " +
+              s"whose Parquet type is $parquetType")
       }
     }
-  }
+    override def addValueFromDictionary(dictionaryId: Int): Unit = {
+      updater.set(expandedDictionary(dictionaryId))
+    }
 
-  private class ParquetBinaryDictionaryAwareDecimalConverter(
-      precision: Int, scale: Int, updater: ParentContainerUpdater)
-    extends ParquetDecimalConverter(precision, scale, updater) {
+    // parquet primitive types: BOOLEAN
+    override def addBoolean(value: Boolean): Unit = {
+      updater.set {
+        if (value) ParquetRowConverter.trueUtf8String
+        else ParquetRowConverter.falseUtf8String
+      }
+    }
 
-    override def setDictionary(dictionary: Dictionary): Unit = {
-      this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { id =>
-        decimalFromBinary(dictionary.decodeToBinary(id))
+    // parquet primitive types: FLOAT
+    override def addFloat(value: Float): Unit = {
+      val utf8 = UTF8String.fromString(value.toString)
+      updater.set(utf8)
+    }
+
+    // parquet primitive types: DOUBLE
+    override def addDouble(value: Double): Unit = {
+      val utf8 = UTF8String.fromString(value.toString)
+      updater.set(utf8)
+    }
+
+    // parquet primitive types: INT32(INT_8 INT_16 INT_32 DECIMAL DATE)
+    override def addInt(value: Int): Unit = {
+      updater.set(intToUtf8String(value))
+    }
+
+    private val intToUtf8String: Int => UTF8String = {
+      parquetType.asPrimitiveType().getOriginalType match {
+        case null | INT_8 | INT_16 | INT_32 =>
+          intValue => {
+            UTF8String.fromString(intValue.toString)
+          }
+        case DATE =>
+          dateIntValue => {
+            val date = dateRebaseFunc(dateIntValue)
+            UTF8String.fromString(dateFormatter.format(date))
+          }
+        case DECIMAL =>
+          decimalIntValue => {
+            val decimal = ParquetRowConverter.decimalFromLong(decimalIntValue, parquetDecimal)
+            UTF8String.fromString(decimal.toString)
+          }
+        case _ =>
+          _ => throw new RuntimeException(
+            s"Unsupported int value from parquet type: $parquetType")
+      }
+    }
+
+    // parquet primitive types: INT64(INT_64 DECIMAL TIMESTAMP_MILLIS TIMESTAMP_MICROS)
+    override def addLong(value: Long): Unit = {
+      updater.set(longToUtf8String(value))
+    }
+
+    private val longToUtf8String: Long => UTF8String = {
+      parquetType.asPrimitiveType().getOriginalType match {
+        case null | INT_64 =>
+          longValue => {
+            UTF8String.fromString(longValue.toString)
+          }
+        case DECIMAL =>
+          decimalLongValue => {
+            val decimal = ParquetRowConverter.decimalFromLong(decimalLongValue, parquetDecimal)
+            UTF8String.fromString(decimal.toString)
+          }
+        case TIMESTAMP_MILLIS =>
+          millisLongValue => {
+            val micros = timestampRebaseFunc(DateTimeUtils.millisToMicros(millisLongValue))
+            UTF8String.fromString(timestampFormatter.format(micros))
+          }
+        case TIMESTAMP_MICROS =>
+          microsLongValue => {
+            val micros = timestampRebaseFunc(microsLongValue)
+            UTF8String.fromString(timestampFormatter.format(micros))
+          }
+        case _ =>
+          _ => throw new RuntimeException(s"" +
+            s"Unsupported long value from parquet type: $parquetType")
+      }
+    }
+
+    // parquet primitive types: (INT96 UTF8 DECIMAL)
+    override def addBinary(value: Binary): Unit = {
+      updater.set(binaryToUtf8String(value))
+    }
+
+    private val binaryToUtf8String: Binary => UTF8String = {
+      parquetType.asPrimitiveType().getPrimitiveTypeName match {
+        case INT96 =>
+          int96BinaryValue => {
+            val rawTime = ParquetRowConverter.binaryToSQLTimestamp(int96BinaryValue)
+            val micros = if (convertInt96Timestamp) {
+              DateTimeUtils.convertTz(rawTime, convertTz, ZoneOffset.UTC)
+            } else {
+              rawTime
+            }
+            UTF8String.fromString(timestampFormatter.format(micros))
+          }
+        case BINARY | FIXED_LEN_BYTE_ARRAY =>
+          parquetType.asPrimitiveType().getOriginalType match {
+            case DECIMAL =>
+              decimalBinaryValue => {
+                val decimal =
+                  ParquetRowConverter.decimalFromBinary(decimalBinaryValue, parquetDecimal)
+                UTF8String.fromString(decimal.toString)
+              }
+            case null | UTF8 | ENUM | JSON => value => {
+              ParquetRowConverter.utf8StringFromBinary(value)
+            }
+            case _ =>
+              _ => throw new RuntimeException(s"" +
+                s"Unsupported binary value from parquet type: $parquetType")
+          }
+        case _ =>
+          _ => throw new RuntimeException(s"" +
+            s"Unsupported binary value from parquet type: $parquetType")
       }
     }
   }
@@ -720,6 +1393,9 @@ private[parquet] class ParquetRowConverter(
 }
 
 private[parquet] object ParquetRowConverter {
+  val trueUtf8String: UTF8String = UTF8String.fromString(true.toString)
+  val falseUtf8String: UTF8String = UTF8String.fromString(false.toString)
+
   def binaryToUnscaledLong(binary: Binary): Long = {
     // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here
     // we are using `Binary.toByteBuffer.array()` to steal the underlying byte array without
@@ -749,5 +1425,35 @@ private[parquet] object ParquetRowConverter {
     val timeOfDayNanos = buffer.getLong
     val julianDay = buffer.getInt
     DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
+  }
+
+  def binaryToJString(binary: Binary): String = {
+    val buffer = binary.toByteBuffer
+    val offset = buffer.arrayOffset() + buffer.position()
+    val numBytes = buffer.remaining()
+    new String(buffer.array(), offset, numBytes, StandardCharsets.UTF_8)
+  }
+
+  def utf8StringFromBinary(binary: Binary): UTF8String = {
+    val buffer = binary.toByteBuffer
+    val offset = buffer.arrayOffset() + buffer.position()
+    val numBytes = buffer.remaining()
+    UTF8String.fromBytes(buffer.array(), offset, numBytes)
+  }
+
+  def decimalFromLong(longValue: Long, parquetDecimal: DecimalMetadata): Decimal = {
+    Decimal(longValue, parquetDecimal.getPrecision, parquetDecimal.getScale)
+  }
+
+  def decimalFromBinary(binary: Binary, parquetDecimal: DecimalMetadata): Decimal = {
+    if (parquetDecimal.getPrecision <= Decimal.MAX_LONG_DIGITS) {
+      // Constructs a `Decimal` with an unscaled `Long` value if possible.
+      val unscaled = ParquetRowConverter.binaryToUnscaledLong(binary)
+      decimalFromLong(unscaled, parquetDecimal)
+    } else {
+      // Otherwise, resorts to an unscaled `BigInteger` instead.
+      Decimal(new BigDecimal(new BigInteger(binary.getBytes),
+        parquetDecimal.getScale), parquetDecimal.getPrecision, parquetDecimal.getScale)
+    }
   }
 }

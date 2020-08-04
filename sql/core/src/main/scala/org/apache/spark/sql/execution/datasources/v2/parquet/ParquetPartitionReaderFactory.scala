@@ -118,8 +118,8 @@ case class ParquetPartitionReaderFactory(
       file: PartitionedFile,
       buildReaderFunc: (
         ParquetInputSplit, InternalRow, TaskAttemptContextImpl,
-          Option[FilterPredicate], Option[ZoneId],
-          LegacyBehaviorPolicy.Value) => RecordReader[Void, T]): RecordReader[Void, T] = {
+          Option[FilterPredicate], ZoneId, LegacyBehaviorPolicy.Value,
+          Boolean) => RecordReader[Void, T]): RecordReader[Void, T] = {
     val conf = broadcastedConf.value.value
 
     val filePath = new Path(new URI(file.filePath))
@@ -161,12 +161,8 @@ case class ParquetPartitionReaderFactory(
     def isCreatedByParquetMr: Boolean =
       footerFileMetaData.getCreatedBy().startsWith("parquet-mr")
 
-    val convertTz =
-      if (timestampConversion && !isCreatedByParquetMr) {
-        Some(DateTimeUtils.getZoneId(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
-      } else {
-        None
-      }
+    val convertTz = DateTimeUtils.getZoneId(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key))
+    val convertInt96Timestamp = timestampConversion && !isCreatedByParquetMr
 
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
@@ -180,7 +176,8 @@ case class ParquetPartitionReaderFactory(
       footerFileMetaData.getKeyValueMetaData.get,
       SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ))
     val reader = buildReaderFunc(
-      split, file.partitionValues, hadoopAttemptContext, pushed, convertTz, datetimeRebaseMode)
+      split, file.partitionValues, hadoopAttemptContext,
+      pushed, convertTz, datetimeRebaseMode, convertInt96Timestamp)
     reader.initialize(split, hadoopAttemptContext)
     reader
   }
@@ -194,13 +191,14 @@ case class ParquetPartitionReaderFactory(
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
-      convertTz: Option[ZoneId],
-      datetimeRebaseMode: LegacyBehaviorPolicy.Value): RecordReader[Void, InternalRow] = {
+      convertTz: ZoneId,
+      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
+      convertInt96Timestamp: Boolean): RecordReader[Void, InternalRow] = {
     logDebug(s"Falling back to parquet-mr")
     val taskContext = Option(TaskContext.get())
     // ParquetRecordReader returns InternalRow
     val readSupport = new ParquetReadSupport(
-      convertTz, enableVectorizedReader = false, datetimeRebaseMode)
+      convertTz, enableVectorizedReader = false, datetimeRebaseMode, convertInt96Timestamp)
     val reader = if (pushed.isDefined && enableRecordFilter) {
       val parquetFilter = FilterCompat.get(pushed.get, null)
       new ParquetRecordReader[InternalRow](readSupport, parquetFilter)
@@ -225,11 +223,12 @@ case class ParquetPartitionReaderFactory(
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
-      convertTz: Option[ZoneId],
-      datetimeRebaseMode: LegacyBehaviorPolicy.Value): VectorizedParquetRecordReader = {
+      convertTz: ZoneId,
+      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
+      convertInt96Timestamp: Boolean): VectorizedParquetRecordReader = {
     val taskContext = Option(TaskContext.get())
     val vectorizedReader = new VectorizedParquetRecordReader(
-      convertTz.orNull,
+      convertTz,  // TODO
       datetimeRebaseMode.toString,
       enableOffHeapColumnVector && taskContext.isDefined,
       capacity)
