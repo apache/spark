@@ -209,30 +209,30 @@ abstract class JdbcDialect extends Serializable {
     val updateClause = ArrayBuilder.make[String]
     for (change <- changes) {
       change match {
-        case add: AddColumn =>
+        case add: AddColumn if add.fieldNames.length == 1 =>
           add.fieldNames match {
             case Array(name) =>
               val dataType = JdbcUtils.getJdbcType(add.dataType(), this).databaseTypeDefinition
               updateClause += s"ALTER TABLE $tableName ADD COLUMN $name $dataType"
           }
-        case rename: RenameColumn =>
+        case rename: RenameColumn if rename.fieldNames.length == 1 =>
           rename.fieldNames match {
             case Array(name) =>
               updateClause += s"ALTER TABLE $tableName RENAME COLUMN $name TO ${rename.newName}"
           }
-        case delete: DeleteColumn =>
+        case delete: DeleteColumn if delete.fieldNames.length == 1 =>
           delete.fieldNames match {
             case Array(name) =>
               updateClause += s"ALTER TABLE $tableName DROP COLUMN $name"
           }
-        case update: UpdateColumnType =>
+        case update: UpdateColumnType if update.fieldNames.length == 1 =>
           update.fieldNames match {
             case Array(name) =>
               val dataType = JdbcUtils.getJdbcType(update.newDataType(), this)
                 .databaseTypeDefinition
               updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name $dataType"
           }
-        case update: UpdateColumnNullability =>
+        case update: UpdateColumnNullability if update.fieldNames.length == 1 =>
           update.fieldNames match {
             case Array(name) =>
               val nullable = if (update.nullable()) "NULL" else "NOT NULL"

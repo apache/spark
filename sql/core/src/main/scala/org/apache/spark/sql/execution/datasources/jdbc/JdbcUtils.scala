@@ -906,7 +906,7 @@ object JdbcUtils extends Logging {
     } else {
       val metadata = conn.getMetaData
       if (!metadata.supportsTransactions) {
-        throw new SQLFeatureNotSupportedException("The target JDBC server does not support" +
+        throw new SQLFeatureNotSupportedException("The target JDBC server does not support " +
           "transaction and can only support ALTER TABLE with a single action.")
       } else {
         conn.setAutoCommit(false)
