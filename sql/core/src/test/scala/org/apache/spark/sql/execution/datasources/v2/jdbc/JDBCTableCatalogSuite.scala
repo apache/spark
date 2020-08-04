@@ -119,11 +119,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       assert(t.schema === expectedSchema)
       sql("ALTER TABLE h2.test.alt_table ADD COLUMNS (C3 DOUBLE)")
       t = spark.table("h2.test.alt_table")
-      expectedSchema = new StructType()
-        .add("ID", IntegerType)
-        .add("C1", IntegerType)
-        .add("C2", StringType)
-        .add("C3", DoubleType)
+      expectedSchema = expectedSchema.add("C3", DoubleType)
       assert(t.schema === expectedSchema)
     }
   }
@@ -174,7 +170,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val thrown = intercept[java.sql.SQLFeatureNotSupportedException] {
         sql("ALTER TABLE h2.test.alt_table ALTER COLUMN ID COMMENT 'test'")
       }
-      assert(thrown.getMessage.contains("alterTable has unsupported TableChange"))
+      assert(thrown.getMessage.contains("Unsupported TableChange"))
     }
   }
 }

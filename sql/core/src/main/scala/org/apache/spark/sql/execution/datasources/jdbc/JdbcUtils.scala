@@ -906,9 +906,8 @@ object JdbcUtils extends Logging {
     } else {
       val metadata = conn.getMetaData
       if (!metadata.supportsTransactions) {
-        throw new SQLFeatureNotSupportedException(s"${this.getClass.getName}.alterTable doesn't" +
-          s" support multiple alter table changes simultaneously for database server" +
-            s" that doesn't have transaction support.")
+        throw new SQLFeatureNotSupportedException("The target JDBC server does not support" +
+          "transaction and can only support ALTER TABLE with a single action.")
       } else {
         conn.setAutoCommit(false)
         val statement = conn.createStatement
@@ -919,7 +918,7 @@ object JdbcUtils extends Logging {
           }
           conn.commit()
         } catch {
-          case e: SQLException =>
+          case e: Exception =>
             if (conn != null) conn.rollback()
             throw e
         } finally {

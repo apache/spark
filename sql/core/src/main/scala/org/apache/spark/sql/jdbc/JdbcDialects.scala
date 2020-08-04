@@ -236,11 +236,10 @@ abstract class JdbcDialect extends Serializable {
           update.fieldNames match {
             case Array(name) =>
               val nullable = if (update.nullable()) "NULL" else "NOT NULL"
-              updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name SET " + nullable
+              updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name SET $nullable"
           }
         case _ =>
-          throw new SQLFeatureNotSupportedException(s"${this.getClass.getName}.alterTable" +
-            s" has unsupported TableChange $change")
+          throw new SQLFeatureNotSupportedException(s"Unsupported TableChange $change")
       }
     }
     updateClause.result()
