@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 import java.util.Properties
-import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -68,7 +67,7 @@ case class HiveScriptTransformationExec(
       var curLine: String = null
       val scriptOutputStream = new DataInputStream(inputStream)
 
-      @Nullable val scriptOutputReader =
+      val scriptOutputReader =
         recordReader(ioschema, scriptOutputStream, hadoopConf).orNull
 
       var scriptOutputWritable: Writable = null
@@ -141,9 +140,7 @@ case class HiveScriptTransformationExec(
 
     val (outputStream, proc, inputStream, stderrBuffer) = initProc
 
-    // This nullability is a performance optimization in order to avoid an Option.foreach() call
-    // inside of a loop
-    @Nullable val (inputSerde, inputSoi) = initInputSerDe(ioschema, input).getOrElse((null, null))
+    val (inputSerde, inputSoi) = initInputSerDe(ioschema, input).getOrElse((null, null))
 
     // For HiveScriptTransformationExec, if inputSerde == null, but outputSerde != null
     // We will use StringBuffer to pass data, in this case, we should cast data as string too.
@@ -170,9 +167,7 @@ case class HiveScriptTransformationExec(
       hadoopConf
     )
 
-    // This nullability is a performance optimization in order to avoid an Option.foreach() call
-    // inside of a loop
-    @Nullable val (outputSerde, outputSoi) = {
+    val (outputSerde, outputSoi) = {
       initOutputSerDe(ioschema, output).getOrElse((null, null))
     }
 
@@ -192,8 +187,8 @@ case class HiveScriptTransformationExec(
 case class HiveScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
-    @Nullable inputSerde: AbstractSerDe,
-    @Nullable inputSoi: StructObjectInspector,
+    inputSerde: AbstractSerDe,
+    inputSoi: StructObjectInspector,
     ioSchema: ScriptTransformationIOSchema,
     outputStream: OutputStream,
     proc: Process,
@@ -205,7 +200,7 @@ case class HiveScriptTransformationWriterThread(
 
   override def processRows(): Unit = {
     val dataOutputStream = new DataOutputStream(outputStream)
-    @Nullable val scriptInputWriter = recordWriter(ioSchema, dataOutputStream, conf).orNull
+    val scriptInputWriter = recordWriter(ioSchema, dataOutputStream, conf).orNull
 
     if (inputSerde == null) {
       processRowsWithoutSerde()
