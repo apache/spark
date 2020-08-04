@@ -19,8 +19,11 @@ package org.apache.spark.sql.execution.joins
 
 import java.io._
 
+import scala.collection.mutable
+
 import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
+import org.roaringbitmap.longlong.Roaring64Bitmap
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED}
@@ -28,7 +31,7 @@ import org.apache.spark.memory._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{DataType, LongType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.{KnownSizeEstimation, Utils}
@@ -108,12 +111,16 @@ private[execution] object HashedRelation {
         0)
     }
 
-    if (isNullAware && !input.hasNext) {
-      EmptyHashedRelation
+    if (isNullAware) {
+      if (!input.hasNext) {
+        EmptyHashedRelation
+      } else {
+        InvertedIndexHashedRelation(input, key, sizeEstimate, mm)
+      }
     } else if (key.length == 1 && key.head.dataType == LongType) {
-      LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
+      LongHashedRelation(input, key, sizeEstimate, mm)
     } else {
-      UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware)
+      UnsafeHashedRelation(input, key, sizeEstimate, mm)
     }
   }
 }
@@ -313,8 +320,7 @@ private[joins] object UnsafeHashedRelation {
       input: Iterator[InternalRow],
       key: Seq[Expression],
       sizeEstimate: Int,
-      taskMemoryManager: TaskMemoryManager,
-      isNullAware: Boolean = false): HashedRelation = {
+      taskMemoryManager: TaskMemoryManager): HashedRelation = {
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
@@ -327,27 +333,11 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
-    val nullPaddingCombinations: Seq[UnsafeProjection] = if (isNullAware) {
-      // C(numKeys, 0), C(numKeys, 1) ... C(numKeys, numKeys - 1)
-      // In total 2^numKeys - 1 records will be appended.
-      key.indices.flatMap { n =>
-        key.indices.combinations(n).map { combination =>
-          // combination is Seq[Int] indicates which key should be replaced to null padding
-          val exprs = key.indices.map { index =>
-            if (combination.contains(index)) {
-              Literal.create(null, key(index).dataType)
-            } else {
-              key(index)
-            }
-          }
-          UnsafeProjection.create(exprs)
-        }
-      }
-    } else {
-      Seq.empty
-    }
     while (input.hasNext) {
-      def append(key: UnsafeRow, row: UnsafeRow): Unit = {
+      val row = input.next().asInstanceOf[UnsafeRow]
+      numFields = row.numFields()
+      val key = keyGenerator(row)
+      if (!key.anyNull) {
         val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
         val success = loc.append(
           key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
@@ -358,19 +348,6 @@ private[joins] object UnsafeHashedRelation {
           throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
           // scalastyle:on throwerror
         }
-      }
-
-      val row = input.next().asInstanceOf[UnsafeRow]
-      numFields = row.numFields()
-      val key = keyGenerator(row)
-      if (isNullAware) {
-        // fast stop when all null column key found.
-        if (key.allNull()) {
-          return EmptyHashedRelationWithAllNullKeys
-        }
-        nullPaddingCombinations.foreach(project => append(project(row).copy(), row))
-      } else if (!key.anyNull) {
-        append(key, row)
       }
     }
 
@@ -922,8 +899,7 @@ private[joins] object LongHashedRelation {
       input: Iterator[InternalRow],
       key: Seq[Expression],
       sizeEstimate: Int,
-      taskMemoryManager: TaskMemoryManager,
-      isNullAware: Boolean = false): HashedRelation = {
+      taskMemoryManager: TaskMemoryManager): HashedRelation = {
 
     val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)
@@ -937,8 +913,6 @@ private[joins] object LongHashedRelation {
       if (!rowKey.isNullAt(0)) {
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
-      } else if (isNullAware) {
-        return EmptyHashedRelationWithAllNullKeys
       }
     }
     map.optimize()
@@ -988,6 +962,103 @@ object EmptyHashedRelation extends NullAwareHashedRelation {
  */
 object EmptyHashedRelationWithAllNullKeys extends NullAwareHashedRelation {
   override def asReadOnlyCopy(): EmptyHashedRelationWithAllNullKeys.type = this
+}
+
+class NullAwareUnsafeRowHashSet(
+    numKeys: Int,
+    dataTypes: Seq[DataType],
+    keyMaps: Seq[mutable.HashMap[Any, Roaring64Bitmap]])
+  extends Serializable {
+
+  private var numRows: Long = 0L
+  private[joins] def this() = this(0, null, null)  // Needed for serialization
+
+  def add(key: UnsafeRow): Unit = {
+    require(key.numFields() == numKeys)
+    0.until(numKeys).foreach { index =>
+      keyMaps(index).getOrElseUpdate(
+        if (key.isNullAt(index)) null else key.get(index, dataTypes(index)),
+        new Roaring64Bitmap
+      ).addLong(numRows)
+    }
+    numRows += 1
+  }
+
+  def contains(key: UnsafeRow): Boolean = {
+    require(key.numFields() == numKeys)
+    // all null key should not exist
+    val bitmapSeq: Seq[Roaring64Bitmap] = 0.until(numKeys).map { index =>
+      if (key.isNullAt(index)) {
+        null
+      } else {
+        val result = new Roaring64Bitmap
+        result.or(keyMaps(index).getOrElse(key.get(index, dataTypes(index)), new Roaring64Bitmap))
+        if (numKeys > 1) {
+          result.or(keyMaps(index).getOrElse(null, new Roaring64Bitmap))
+        }
+        result
+      }
+    }.filter(_ != null)
+
+    !bitmapSeq.reduceLeft[Roaring64Bitmap]((a, b) => {
+      a.and(b)
+      a
+    }).isEmpty
+  }
+}
+
+class InvertedIndexHashedRelation(
+    private var numKeys: Int,
+    private var hashSet: NullAwareUnsafeRowHashSet)
+  extends NullAwareHashedRelation with Externalizable {
+
+  private[joins] def this() = this(0, null)  // Needed for serialization
+  override def asReadOnlyCopy(): InvertedIndexHashedRelation = this
+
+  override def get(key: InternalRow): Iterator[InternalRow] = {
+    if (hashSet.contains(key.asInstanceOf[UnsafeRow])) {
+      Seq.empty[InternalRow].toIterator
+    } else {
+      null
+    }
+  }
+
+  override def writeExternal(out: ObjectOutput): Unit = {
+    out.writeInt(numKeys)
+    out.writeObject(hashSet)
+  }
+
+  override def readExternal(in: ObjectInput): Unit = {
+    numKeys = in.readInt()
+    hashSet = in.readObject().asInstanceOf[NullAwareUnsafeRowHashSet]
+  }
+}
+
+object InvertedIndexHashedRelation {
+  def apply(
+      input: Iterator[InternalRow],
+      key: Seq[Expression],
+      sizeEstimate: Int,
+      taskMemoryManager: TaskMemoryManager): HashedRelation = {
+
+    val keyGenerator = UnsafeProjection.create(key)
+    val hashSet: NullAwareUnsafeRowHashSet = new NullAwareUnsafeRowHashSet(
+      key.length,
+      key.map(_.dataType),
+      key.map(_ => new mutable.HashMap[Any, Roaring64Bitmap]())
+    )
+
+    while (input.hasNext) {
+      val unsafeRow = input.next().asInstanceOf[UnsafeRow]
+      val rowKey = keyGenerator(unsafeRow)
+      if (rowKey.allNull()) {
+        return EmptyHashedRelationWithAllNullKeys
+      }
+      hashSet.add(rowKey)
+    }
+
+    new InvertedIndexHashedRelation(key.length, hashSet)
+  }
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */

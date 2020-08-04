@@ -2684,6 +2684,7 @@ object SQLConf {
       .doc("The maximum number of keys that will be supported to use NAAJ optimize. " +
         "While with NAAJ optimize, buildSide data would be expanded to (2^numKeys - 1) times, " +
         "it might cause Driver OOM if NAAJ numKeys increased, since it is exponential growth.")
+      .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The value must be positive.")
       .createWithDefault(3)

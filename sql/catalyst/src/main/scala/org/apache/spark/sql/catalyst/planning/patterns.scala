@@ -395,6 +395,10 @@ object PhysicalWindow {
 
 object ExtractNullAwareAntiJoinKeys extends JoinSelectionHelper with PredicateHelper {
 
+  // FYI. Extra information about Null Aware Anti Join.
+  // https://dl.acm.org/doi/10.14778/1687553.1687563
+  // http://www.vldb.org/pvldb/vol2/vldb09-423.pdf
+
   // streamedSideKeys, buildSideKeys
   private type ReturnType = (Seq[Expression], Seq[Expression])
 

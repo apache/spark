@@ -342,9 +342,11 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    */
   protected def genStreamSideJoinKey(
       ctx: CodegenContext,
-      input: Seq[ExprCode]): (ExprCode, String) = {
+      input: Seq[ExprCode],
+      forceUnsafe: Boolean = false): (ExprCode, String) = {
     ctx.currentVars = input
-    if (streamedBoundKeys.length == 1 && streamedBoundKeys.head.dataType == LongType) {
+    if (streamedBoundKeys.length == 1 && streamedBoundKeys.head.dataType == LongType &&
+      !forceUnsafe) {
       // generate the join key as Long
       val ev = streamedBoundKeys.head.genCode(ctx)
       (ev, ev.isNull)

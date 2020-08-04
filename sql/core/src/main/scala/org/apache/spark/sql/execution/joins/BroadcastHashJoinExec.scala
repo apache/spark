@@ -223,7 +223,7 @@ case class BroadcastHashJoinExec(
   protected override def codegenAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     if (isNullAwareAntiJoin) {
       val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-      val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
+      val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input, true)
       val (matched, _, _) = getJoinCondition(ctx, input)
       val numOutput = metricTerm(ctx, "numOutputRows")
       val isLongHashedRelation = broadcastRelation.value.isInstanceOf[LongHashedRelation]
@@ -244,11 +244,10 @@ case class BroadcastHashJoinExec(
            |boolean $found = false;
            |// generate join key for stream side
            |${keyEv.code}
-           |if (${if (isLongHashedRelation) s"$anyNull" else s"${keyEv.value}.allNull()"}) {
+           |if (${s"${keyEv.value}.allNull()"}) {
            |  $found = true;
            |} else {
-           |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-           |  if ($matched != null) {
+           |  if ($relationTerm.get(${keyEv.value}) != null) {
            |    $found = true;
            |  }
            |}
