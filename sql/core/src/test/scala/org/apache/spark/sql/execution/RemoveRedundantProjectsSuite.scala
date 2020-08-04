@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession with SQLTestUtils {
+  import testImplicits._
 
-  private def assertProjectExecCount(df: DataFrame, expected: Integer): Unit = {
+  private def assertProjectExecCount(df: DataFrame, expected: Int): Unit = {
     withClue(df.queryExecution) {
       val plan = df.queryExecution.executedPlan
       val actual = plan.collectWithSubqueries { case p: ProjectExec => p }.size
@@ -32,7 +34,7 @@ class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession wit
     }
   }
 
-  private def assertProjectExec(query: String, enabled: Integer, disabled: Integer): Unit = {
+  private def assertProjectExec(query: String, enabled: Int, disabled: Int): Unit = {
     val df = sql(query)
     assertProjectExecCount(df, enabled)
     val result = df.collect()
@@ -120,9 +122,13 @@ class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession wit
   }
 
   test("subquery") {
-    testData
-    val query = "select key, value from testData where key in " +
-      "(select sum(a) from testView where a > 5 group by key)"
-    assertProjectExec(query, 0, 1)
+    withTempView("testData") {
+      val data = spark.sparkContext.parallelize((1 to 100).map(i => Row(i, i.toString)))
+      val schema = new StructType().add("key", "int").add("value", "string")
+      spark.createDataFrame(data, schema).createOrReplaceTempView("testData")
+      val query = "select key, value from testData where key in " +
+        "(select sum(a) from testView where a > 5 group by key)"
+      assertProjectExec(query, 0, 1)
+    }
   }
 }
