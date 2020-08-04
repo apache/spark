@@ -1452,7 +1452,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .select($"struct_col".withField("a.c", lit(3)))
     }.getMessage should include("Ambiguous reference to fields")
   }
-  
+
   test("dropFields should throw an exception if called on a non-StructType column") {
     intercept[AnalysisException] {
       testData.withColumn("key", $"key".dropFields("a"))
@@ -1758,5 +1758,47 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             StructField("a", IntegerType, nullable = false),
             StructField("c", IntegerType, nullable = false))), nullable = false))),
           nullable = false))))
+  }
+
+  test("dropFields user-facing examples") {
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+        .select($"struct_col".dropFields("b")),
+      Row(Row(1)))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+        .select($"struct_col".dropFields("c")),
+      Row(Row(1, 2)))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2, 'c', 3) struct_col")
+        .select($"struct_col".dropFields("b", "c")),
+      Row(Row(1)))
+
+    intercept[AnalysisException] {
+      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+        .select($"struct_col".dropFields("a", "b"))
+    }.getMessage should include("cannot drop all fields in struct")
+
+    checkAnswer(
+      sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+        .select($"struct_col".dropFields("b")),
+      Row(null))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+        .select($"struct_col".dropFields("b")),
+      Row(Row(1)))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+        .select($"struct_col".dropFields("a.b")),
+      Row(Row(Row(1))))
+
+    intercept[AnalysisException] {
+      sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+        .select($"struct_col".dropFields("a.c"))
+    }.getMessage should include("Ambiguous reference to fields")
   }
 }
