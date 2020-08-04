@@ -21,10 +21,12 @@
 PySpark Documentation
 =====================
 
+.. TODO(SPARK-32204): Add Binder integration at Live Notebook.
+
 PySpark is an interface for Apache Spark in Python. It not only allows you to write
 Spark applications using Python APIs, but also provides the PySpark shell for
 interactively analyzing your data in a distributed environment. PySpark supports most
-of Spark's features such as Spark SQL, DataFrmae, Streaming, MLlib
+of Spark's features such as Spark SQL, DataFrame, Streaming, MLlib
 (Machine Learning) and Spark Core.
 
 .. image:: ../../../docs/img/pyspark-components.png
@@ -51,7 +53,7 @@ learning pipelines.
 **Spark Core**
 
 Spark Core is the underlying general execution engine for the Spark platform that all
-other functionality is built on top of. It provides an RDD (Resilient Disributed Dataset)
+other functionality is built on top of. It provides an RDD (Resilient Distributed Dataset)
 and in-memory computing capabilities.
 
 .. toctree::
