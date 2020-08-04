@@ -278,7 +278,7 @@ object InMemoryRelation {
   }
 
   /* Visible for testing */
-  private[spark] def clearSerializer(): Unit = synchronized { ser = None }
+  private[columnar] def clearSerializer(): Unit = synchronized { ser = None }
 
   def convertToColumnarIfPossible(plan: SparkPlan): SparkPlan = plan match {
     case gen: WholeStageCodegenExec => gen.child match {
