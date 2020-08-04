@@ -187,29 +187,35 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     try {
       bmDecomManager.start()
 
-      var previousRDDTime = Long.MaxValue
-      var previousShuffleTime = Long.MaxValue
+      var previousRDDTime: Option[Long] = None
+      var previousShuffleTime: Option[Long] = None
 
       // We don't check that all blocks are migrated because out mock is always returning an RDD.
-      eventually(timeout(10.second), interval(10.milliseconds)) {
+      eventually(timeout(100.second), interval(10.milliseconds)) {
         assert(bmDecomManager.shufflesToMigrate.isEmpty == true)
         verify(bm, least(1)).replicateBlock(
           mc.eq(storedBlockId1), mc.any(), mc.any(), mc.eq(Some(3)))
         verify(blockTransferService, times(2))
           .uploadBlockSync(mc.eq("host2"), mc.eq(bmPort), mc.eq("exec2"), mc.any(), mc.any(),
             mc.eq(StorageLevel.DISK_ONLY), mc.isNull())
-        // Since we never "finish" the RDD blocks make sure the time is always moving forward.
+        // Since we never "finish" the RDD blocks, make sure the time is always moving forward.
         assert(bmDecomManager.rddBlocksLeft)
-        if (!(bmDecomManager.lastRDDMigrationTime > previousRDDTime)) {
-          previousRDDTime = bmDecomManager.lastRDDMigrationTime
-          assert(false)
+        previousRDDTime match {
+          case None =>
+            previousRDDTime = Some(bmDecomManager.lastRDDMigrationTime)
+            assert(false)
+          case Some(t) =>
+            assert(bmDecomManager.lastRDDMigrationTime > t)
         }
         // Since we do eventually finish the shuffle blocks make sure the shuffle blocks complete
         // and that the time keeps moving forward.
         assert(!bmDecomManager.shuffleBlocksLeft)
-        if (!(bmDecomManager.lastShuffleMigrationTime > previousShuffleTime)) {
-          previousShuffleTime = bmDecomManager.lastShuffleMigrationTime
-          assert(false)
+        previousShuffleTime match {
+          case None =>
+            previousShuffleTime = Some(bmDecomManager.lastShuffleMigrationTime)
+            assert(false)
+          case Some(t) =>
+            assert(bmDecomManager.lastShuffleMigrationTime > t)
         }
       }
     } finally {
