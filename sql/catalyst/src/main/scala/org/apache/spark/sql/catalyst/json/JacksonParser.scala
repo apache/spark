@@ -87,7 +87,11 @@ class JacksonParser(
   private def makeStructRootConverter(st: StructType): JsonParser => Iterable[InternalRow] = {
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
-    val jsonFilters = new JsonFilters(filters, st)
+    val jsonFilters = if (SQLConf.get.jsonFilterPushDown) {
+      new JsonFilters(filters, st)
+    } else {
+      new NoopFilters
+    }
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, st) {
       case START_OBJECT => convertObject(parser, st, fieldConverters, jsonFilters)
         // SPARK-3308: support reading top level JSON arrays and take every element

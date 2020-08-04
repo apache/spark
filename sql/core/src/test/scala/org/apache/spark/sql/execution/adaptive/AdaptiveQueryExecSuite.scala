@@ -213,7 +213,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("Empty stage coalesced to 0-partition RDD") {
+  test("Empty stage coalesced to 1-partition RDD") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true") {
@@ -227,8 +227,8 @@ class AdaptiveQueryExecSuite
         val coalescedReaders = collect(plan) {
           case r: CustomShuffleReaderExec => r
         }
-        assert(coalescedReaders.length == 2)
-        coalescedReaders.foreach(r => assert(r.partitionSpecs.isEmpty))
+        assert(coalescedReaders.length == 3)
+        coalescedReaders.foreach(r => assert(r.partitionSpecs.length == 1))
       }
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
@@ -239,8 +239,8 @@ class AdaptiveQueryExecSuite
         val coalescedReaders = collect(plan) {
           case r: CustomShuffleReaderExec => r
         }
-        assert(coalescedReaders.length == 2, s"$plan")
-        coalescedReaders.foreach(r => assert(r.partitionSpecs.isEmpty))
+        assert(coalescedReaders.length == 3, s"$plan")
+        coalescedReaders.foreach(r => assert(r.isLocalReader || r.partitionSpecs.length == 1))
       }
     }
   }

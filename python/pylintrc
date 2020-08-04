@@ -29,7 +29,7 @@ profile=no
 
 # Add files or directories to the ignoreList. They should be base names, not
 # paths.
-ignore=pyspark.heapq3
+#ignore=
 
 # Pickle collected data for later comparisons.
 persistent=yes

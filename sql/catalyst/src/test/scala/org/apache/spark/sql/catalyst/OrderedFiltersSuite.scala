@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.csv
+package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.{StructFilters, StructFiltersSuite}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 
-class CSVFiltersSuite extends StructFiltersSuite {
+class OrderedFiltersSuite extends StructFiltersSuite {
   override def createFilters(filters: Seq[sources.Filter], schema: StructType): StructFilters = {
-    new CSVFilters(filters, schema)
+    new OrderedFilters(filters, schema)
   }
 }
