@@ -34,6 +34,7 @@ private[spark] class ExecutorResourceInfo(
   extends ResourceInformation(name, addresses.toArray) with ResourceAllocator {
 
   override protected def resourceName = this.name
-  override def resourceAddresses: Seq[String] = this.addresses
-  override def slotsPerAddress: Int = numParts
+  override protected def resourceAddresses = this.addresses
+  override protected def slotsPerAddress: Int = numParts
+  def totalAddressAmount: Int = resourceAddresses.length * slotsPerAddress
 }

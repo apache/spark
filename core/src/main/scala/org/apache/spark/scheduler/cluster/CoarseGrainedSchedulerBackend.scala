@@ -640,9 +640,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           (
             executor.resourceProfileId,
             executor.totalCores,
-            executor.resourcesInfo.map { case (name, rInfo) =>
-              (name, rInfo.resourceAddresses.length * rInfo.slotsPerAddress)
-            }
+            executor.resourcesInfo.map { case (name, rInfo) => (name, rInfo.totalAddressAmount) }
           )
         }.unzip3
     }
