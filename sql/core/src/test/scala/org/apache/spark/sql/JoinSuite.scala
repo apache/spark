@@ -1189,7 +1189,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("Full outer shuffled hash join") {
+  test("SPARK-32399: Full outer shuffled hash join") {
     val inputDFs = Seq(
       // Test unique join key
       (spark.range(10).selectExpr("id as k1"),

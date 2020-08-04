@@ -135,18 +135,15 @@ private[execution] object HashedRelation {
 private[joins] class UnsafeHashedRelation(
     private var numKeys: Int,
     private var numFields: Int,
-    private var binaryMap: BytesToBytesMap,
-    private val isLookupAware: Boolean = false)
+    private var binaryMap: BytesToBytesMap)
   extends HashedRelation with Externalizable with KryoSerializable {
 
-  private[joins] def this() = this(0, 0, null, false)  // Needed for serialization
+  private[joins] def this() = this(0, 0, null)  // Needed for serialization
 
-  override def keyIsUnique: Boolean = {
-    binaryMap.numKeys() == binaryMap.numValues()
-  }
+  override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
 
   override def asReadOnlyCopy(): UnsafeHashedRelation = {
-    new UnsafeHashedRelation(numKeys, numFields, binaryMap, isLookupAware)
+    new UnsafeHashedRelation(numKeys, numFields, binaryMap)
   }
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
@@ -317,23 +314,19 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def values(): Iterator[InternalRow] = {
-    if (isLookupAware) {
-      val iter = binaryMap.iterator()
+    val iter = binaryMap.iterator()
 
-      new Iterator[InternalRow] {
-        override def hasNext: Boolean = iter.hasNext
+    new Iterator[InternalRow] {
+      override def hasNext: Boolean = iter.hasNext
 
-        override def next(): InternalRow = {
-          if (!hasNext) {
-            throw new NoSuchElementException("End of the iterator")
-          }
-          val loc = iter.next()
-          resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
-          resultRow
+      override def next(): InternalRow = {
+        if (!hasNext) {
+          throw new NoSuchElementException("End of the iterator")
         }
+        val loc = iter.next()
+        resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
+        resultRow
       }
-    } else {
-      throw new UnsupportedOperationException
     }
   }
 }
@@ -405,7 +398,7 @@ private[joins] object UnsafeHashedRelation {
       }
     }
 
-    new UnsafeHashedRelation(key.size, numFields, binaryMap, isLookupAware)
+    new UnsafeHashedRelation(key.size, numFields, binaryMap)
   }
 }
 
@@ -945,7 +938,9 @@ class LongHashedRelation(
   override def keys(): Iterator[InternalRow] = map.keys()
 
   override def values(): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
+    keys().flatMap { key =>
+      get(key.getLong(0))
+    }
   }
 }
 

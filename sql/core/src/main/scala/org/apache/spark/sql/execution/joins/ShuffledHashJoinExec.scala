@@ -134,11 +134,8 @@ case class ShuffledHashJoinExec(
     val buildNullRow = new GenericInternalRow(buildOutput.length)
     val streamNullRow = new GenericInternalRow(streamedOutput.length)
 
-    def markRowLookedUp(row: UnsafeRow): Unit = {
-      if (!row.getBoolean(row.numFields() - 1)) {
-        row.setBoolean(row.numFields() - 1, true)
-      }
-    }
+    def markRowLookedUp(row: UnsafeRow): Unit =
+      row.setBoolean(row.numFields() - 1, true)
 
     // Process stream side with looking up hash relation
     val streamResultIter =
