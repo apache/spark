@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.SQLException
 
-import scala.collection.JavaConverters._
-
 import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.sql.hive.HiveUtils
@@ -134,103 +132,61 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
          |)
          |using parquet""".stripMargin
 
-    withCLIServiceClient { client =>
-      val sessionHandle = client.openSession(user, "")
-      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
-      val opHandle = client.executeStatement(sessionHandle, ddl, confOverlay)
-      var status = client.getOperationStatus(opHandle)
-      while (!status.getState.isTerminal) {
-        Thread.sleep(10)
-        status = client.getOperationStatus(opHandle)
-      }
-      val getCol = client.getColumns(sessionHandle, "", schemaName, tableName, null)
-      val rowSet = client.fetchResults(getCol)
-      val columns = rowSet.toTRowSet.getColumns
+    withJdbcStatement { statement =>
+      statement.execute(ddl)
+      try {
+        val databaseMetaData = statement.getConnection.getMetaData
+        val rowSet = databaseMetaData.getColumns("", schemaName, tableName, null)
 
-      val catalogs = columns.get(0).getStringVal.getValues.asScala
-      assert(catalogs.forall(_.isEmpty), "catalog name mismatches")
+        import java.sql.Types._
+        val expectedJavaTypes = Seq(BOOLEAN, TINYINT, SMALLINT, INTEGER, BIGINT, FLOAT, DOUBLE,
+          DECIMAL, DECIMAL, VARCHAR, ARRAY, ARRAY, JAVA_OBJECT, DATE, TIMESTAMP, STRUCT, BINARY)
 
-      val schemas = columns.get(1).getStringVal.getValues.asScala
-      assert(schemas.forall(_ == schemaName), "schema name mismatches")
+        var pos = 0
 
-      val tableNames = columns.get(2).getStringVal.getValues.asScala
-      assert(tableNames.forall(_ == tableName), "table name mismatches")
+        while (rowSet.next()) {
+          assert(rowSet.getString("TABLE_CAT") === null)
+          assert(rowSet.getString("TABLE_SCHEM") === schemaName)
+          assert(rowSet.getString("TABLE_NAME") === tableName)
+          assert(rowSet.getString("COLUMN_NAME") === schema(pos).name)
+          assert(rowSet.getInt("DATA_TYPE") === expectedJavaTypes(pos))
+          assert(rowSet.getString("TYPE_NAME") === schema(pos).dataType.sql)
 
-      val columnNames = columns.get(3).getStringVal.getValues.asScala
-      columnNames.zipWithIndex.foreach {
-        case (v, i) => assert(v === "c" + i, "column name mismatches")
-      }
+          val colSize = rowSet.getInt("COLUMN_SIZE")
+          schema(pos).dataType match {
+            case StringType | BinaryType | _: ArrayType | _: MapType => assert(colSize === 0)
+            case o => assert(colSize === o.defaultSize)
+          }
 
-      val javaTypes = columns.get(4).getI32Val.getValues
-      import java.sql.Types._
-      assert(javaTypes.get(0).intValue() === BOOLEAN)
-      assert(javaTypes.get(1).intValue() === TINYINT)
-      assert(javaTypes.get(2).intValue() === SMALLINT)
-      assert(javaTypes.get(3).intValue() === INTEGER)
-      assert(javaTypes.get(4).intValue() === BIGINT)
-      assert(javaTypes.get(5).intValue() === FLOAT)
-      assert(javaTypes.get(6).intValue() === DOUBLE)
-      assert(javaTypes.get(7).intValue() === DECIMAL)
-      assert(javaTypes.get(8).intValue() === DECIMAL)
-      assert(javaTypes.get(9).intValue() === VARCHAR)
-      assert(javaTypes.get(10).intValue() === ARRAY)
-      assert(javaTypes.get(11).intValue() === ARRAY)
-      assert(javaTypes.get(12).intValue() === JAVA_OBJECT)
-      assert(javaTypes.get(13).intValue() === DATE)
-      assert(javaTypes.get(14).intValue() === TIMESTAMP)
-      assert(javaTypes.get(15).intValue() === STRUCT)
-      assert(javaTypes.get(16).intValue() === BINARY)
+          assert(rowSet.getInt("BUFFER_LENGTH") === 0) // not used
+          val decimalDigits = rowSet.getInt("DECIMAL_DIGITS")
+          schema(pos).dataType match {
+            case BooleanType | _: IntegerType => assert(decimalDigits === 0)
+            case d: DecimalType => assert(decimalDigits === d.scale)
+            case FloatType => assert(decimalDigits === 7)
+            case DoubleType => assert(decimalDigits === 15)
+            case TimestampType => assert(decimalDigits === 6)
+            case _ => assert(decimalDigits === 0) // nulls
+          }
 
-      val typeNames = columns.get(5).getStringVal.getValues.asScala
-      typeNames.zip(schema).foreach { case (tName, f) =>
-        assert(tName === f.dataType.sql)
-      }
+          val radix = rowSet.getInt("NUM_PREC_RADIX")
+          schema(pos).dataType match {
+            case _: NumericType => assert(radix === 10)
+            case _ => assert(radix === 0) // nulls
+          }
 
-      val colSize = columns.get(6).getI32Val.getValues.asScala
-
-      colSize.zip(schema).foreach { case (size, f) =>
-        f.dataType match {
-          case StringType | BinaryType | _: ArrayType | _: MapType => assert(size === 0)
-          case o => assert(size === o.defaultSize)
+          assert(rowSet.getInt("NULLABLE") === 1)
+          assert(rowSet.getString("REMARKS") === pos.toString)
+          assert(rowSet.getInt("ORDINAL_POSITION") === pos)
+          assert(rowSet.getString("IS_NULLABLE") === "YES")
+          assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
+          pos += 1
         }
+
+        assert(pos === 17, "all columns should have been verified")
+      } finally {
+        statement.execute(s"DROP TABLE $schemaName.$tableName")
       }
-
-      val decimalDigits = columns.get(8).getI32Val.getValues.asScala
-      decimalDigits.zip(schema).foreach { case (dd, f) =>
-        f.dataType match {
-          case BooleanType | _: IntegerType => assert(dd === 0)
-          case d: DecimalType => assert(dd === d.scale)
-          case FloatType => assert(dd === 7)
-          case DoubleType => assert(dd === 15)
-          case TimestampType => assert(dd === 6)
-          case _ => assert(dd === 0) // nulls
-        }
-      }
-
-      val radixes = columns.get(9).getI32Val.getValues.asScala
-      radixes.zip(schema).foreach { case (radix, f) =>
-        f.dataType match {
-          case _: NumericType => assert(radix === 10)
-          case _ => assert(radix === 0) // nulls
-        }
-      }
-
-      val nullables = columns.get(10).getI32Val.getValues.asScala
-      assert(nullables.forall(_ === 1))
-
-      val comments = columns.get(11).getStringVal.getValues.asScala
-      comments.zip(schema).foreach { case (c, f) => assert(c === f.getComment().get) }
-
-      val positions = columns.get(16).getI32Val.getValues.asScala
-      positions.zipWithIndex.foreach { case (pos, idx) =>
-        assert(pos === idx, "the client columns disorder")
-      }
-
-      val isNullables = columns.get(17).getStringVal.getValues.asScala
-      assert(isNullables.forall(_ === "YES"))
-
-      val autoIncs = columns.get(22).getStringVal.getValues.asScala
-      assert(autoIncs.forall(_ === "NO"))
     }
   }
 }
