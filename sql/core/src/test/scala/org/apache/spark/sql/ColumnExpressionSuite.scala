@@ -1452,16 +1452,4 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         .select($"struct_col".withField("a.c", lit(3)))
     }.getMessage should include("Ambiguous reference to fields")
   }
-
-  test("SPARK-32521: withField with statically evaluable arguments should succeed") {
-    checkAnswerAndSchema(
-      sql("SELECT named_struct('a', 1, 'b', 2) a").select($"a".withField("c", lit(3)).as("a")),
-      Row(Row(1, 2, 3)) :: Nil,
-      StructType(Seq(
-        StructField("a", StructType(Seq(
-          StructField("a", IntegerType, nullable = false),
-          StructField("b", IntegerType, nullable = false),
-          StructField("c", IntegerType, nullable = false))),
-          nullable = false))))
-  }
 }
