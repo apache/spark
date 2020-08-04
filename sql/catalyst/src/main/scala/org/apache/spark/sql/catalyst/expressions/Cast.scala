@@ -297,6 +297,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private lazy val dateFormatter = DateFormatter(zoneId)
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
 
+  // The brackets that are used in casting structs and maps to strings
+  private val (leftBracket, rightBracket) =
+    if (SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)) ("[", "]") else ("{", "}")
+
   private val omitNestedNull = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
 
   // UDFToString
@@ -334,7 +338,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case MapType(kt, vt, _) =>
       buildCast[MapData](_, map => {
         val builder = new UTF8StringBuilder
-        builder.append("[")
+        builder.append(leftBracket)
         if (map.numElements > 0) {
           val keyArray = map.keyArray()
           val valueArray = map.valueArray()
@@ -363,13 +367,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             i += 1
           }
         }
-        builder.append("]")
+        builder.append(rightBracket)
         builder.build()
       })
     case StructType(fields) =>
       buildCast[InternalRow](_, row => {
         val builder = new UTF8StringBuilder
-        builder.append("[")
+        builder.append(leftBracket)
         if (row.numFields > 0) {
           val st = fields.map(_.dataType)
           val toUTF8StringFuncs = st.map(castToString)
@@ -390,7 +394,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             i += 1
           }
         }
-        builder.append("]")
+        builder.append(rightBracket)
         builder.build()
       })
     case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
@@ -982,7 +986,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     val getMapKeyArray = CodeGenerator.getValue(mapKeyArray, kt, loopIndex)
     val getMapValueArray = CodeGenerator.getValue(mapValueArray, vt, loopIndex)
     code"""
-       |$buffer.append("[");
+       |$buffer.append("$leftBracket");
        |if ($map.numElements() > 0) {
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
        |  $buffer.append(" ->");
@@ -1004,7 +1008,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |    }
        |  }
        |}
-       |$buffer.append("]");
+       |$buffer.append("$rightBracket");
      """.stripMargin
   }
 
@@ -1041,9 +1045,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (classOf[UTF8StringBuilder].getName, buffer.code) :: Nil)
 
     code"""
-       |$buffer.append("[");
+       |$buffer.append("$leftBracket");
        |$writeStructCode
-       |$buffer.append("]");
+       |$buffer.append("$rightBracket");
      """.stripMargin
   }
 

@@ -46,7 +46,6 @@ private[feature] trait QuantileDiscretizerBase extends Params
   val numBuckets = new IntParam(this, "numBuckets", "Number of buckets (quantiles, or " +
     "categories) into which data points are grouped. Must be >= 2.",
     ParamValidators.gtEq(2))
-  setDefault(numBuckets -> 2)
 
   /** @group getParam */
   def getNumBuckets: Int = getOrDefault(numBuckets)
@@ -82,7 +81,8 @@ private[feature] trait QuantileDiscretizerBase extends Params
     "how to handle invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
-  setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
+
+  setDefault(handleInvalid -> Bucketizer.ERROR_INVALID, numBuckets -> 2)
 }
 
 /**

@@ -83,8 +83,10 @@ class SparkContext(config: SparkConf) extends Logging {
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
-  // In order to prevent SparkContext from being created in executors.
-  SparkContext.assertOnDriver()
+  if (!config.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
+    // In order to prevent SparkContext from being created in executors.
+    SparkContext.assertOnDriver()
+  }
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having started construction.
