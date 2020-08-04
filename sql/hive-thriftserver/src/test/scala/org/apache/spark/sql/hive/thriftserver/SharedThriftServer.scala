@@ -35,6 +35,7 @@ import org.apache.http.impl.client.HttpClientBuilder
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.{THttpClient, TSocket}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -48,6 +49,11 @@ trait SharedThriftServer extends SharedSparkSession {
     dir.setWritable(true, false)
     Utils.createTempDir(dir.getAbsolutePath)
     dir
+  }
+
+  override def sparkConf: SparkConf = {
+    super.sparkConf
+      .set("spark.hadoop.hive.security.authenticator.manager", "")
   }
 
   def mode: ServerMode.Value
