@@ -715,7 +715,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       "false" -> ("{", "}"),
       "true" -> ("[", "]")).foreach { case (legacyBrackets, (lb, rb)) =>
-      withSQLConf(SQLConf.LEGACY_SQUARE_BRACKETS.key -> legacyBrackets) {
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyBrackets) {
         val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
         checkEvaluation(ret1, s"${lb}1 -> a, 2 -> b, 3 -> c$rb")
         val ret2 = cast(
@@ -749,7 +749,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       "false" -> ("{", "}"),
       "true" -> ("[", "]")).foreach { case (legacyBrackets, (lb, rb)) =>
-      withSQLConf(SQLConf.LEGACY_SQUARE_BRACKETS.key -> legacyBrackets) {
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyBrackets) {
         val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
         checkEvaluation(ret1, s"${lb}1, a, 0.1$rb")
         val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)

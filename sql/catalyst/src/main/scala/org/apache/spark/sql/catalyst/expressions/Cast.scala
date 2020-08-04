@@ -299,7 +299,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // The brackets that are used in casting structs and maps to strings
   private val (leftBracket, rightBracket) =
-    if (SQLConf.get.getConf(SQLConf.LEGACY_SQUARE_BRACKETS)) ("[", "]") else ("{", "}")
+    if (SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)) ("[", "]") else ("{", "}")
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
