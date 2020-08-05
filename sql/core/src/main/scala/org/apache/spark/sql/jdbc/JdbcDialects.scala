@@ -210,34 +210,24 @@ abstract class JdbcDialect extends Serializable {
     for (change <- changes) {
       change match {
         case add: AddColumn if add.fieldNames.length == 1 =>
-          add.fieldNames match {
-            case Array(name) =>
-              val dataType = JdbcUtils.getJdbcType(add.dataType(), this).databaseTypeDefinition
-              updateClause += s"ALTER TABLE $tableName ADD COLUMN $name $dataType"
-          }
+          val dataType = JdbcUtils.getJdbcType(add.dataType(), this).databaseTypeDefinition
+          val name = add.fieldNames
+          updateClause += s"ALTER TABLE $tableName ADD COLUMN ${name(0)} $dataType"
         case rename: RenameColumn if rename.fieldNames.length == 1 =>
-          rename.fieldNames match {
-            case Array(name) =>
-              updateClause += s"ALTER TABLE $tableName RENAME COLUMN $name TO ${rename.newName}"
-          }
+          val name = rename.fieldNames
+          updateClause += s"ALTER TABLE $tableName RENAME COLUMN ${name(0)} TO ${rename.newName}"
         case delete: DeleteColumn if delete.fieldNames.length == 1 =>
-          delete.fieldNames match {
-            case Array(name) =>
-              updateClause += s"ALTER TABLE $tableName DROP COLUMN $name"
-          }
-        case update: UpdateColumnType if update.fieldNames.length == 1 =>
-          update.fieldNames match {
-            case Array(name) =>
-              val dataType = JdbcUtils.getJdbcType(update.newDataType(), this)
-                .databaseTypeDefinition
-              updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name $dataType"
-          }
-        case update: UpdateColumnNullability if update.fieldNames.length == 1 =>
-          update.fieldNames match {
-            case Array(name) =>
-              val nullable = if (update.nullable()) "NULL" else "NOT NULL"
-              updateClause += s"ALTER TABLE $tableName ALTER COLUMN $name SET $nullable"
-          }
+          val name = delete.fieldNames
+          updateClause += s"ALTER TABLE $tableName DROP COLUMN ${name(0)}"
+        case updateColumnType: UpdateColumnType if updateColumnType.fieldNames.length == 1 =>
+          val name = updateColumnType.fieldNames
+          val dataType = JdbcUtils.getJdbcType(updateColumnType.newDataType(), this)
+            .databaseTypeDefinition
+          updateClause += s"ALTER TABLE $tableName ALTER COLUMN ${name(0)} $dataType"
+        case updateNull: UpdateColumnNullability if updateNull.fieldNames.length == 1 =>
+          val name = updateNull.fieldNames
+          val nullable = if (updateNull.nullable()) "NULL" else "NOT NULL"
+          updateClause += s"ALTER TABLE $tableName ALTER COLUMN ${name(0)} SET $nullable"
         case _ =>
           throw new SQLFeatureNotSupportedException(s"Unsupported TableChange $change")
       }
