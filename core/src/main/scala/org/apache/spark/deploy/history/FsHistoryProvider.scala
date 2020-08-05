@@ -538,6 +538,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               } catch {
                 case _: FileNotFoundException => false
               }
+            case _: FileNotFoundException =>
+              false
           }
         }
         .sortWith { case (entry1, entry2) =>
