@@ -35,8 +35,7 @@ case class AlterTableDropPartitionExec(
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    table.properties().put("purge", purge.toString)
-    table.properties().put("retainData", retainData.toString)
+    logWarning("PURGE won't take effect, please put it in table properties")
 
     partIdents.foreach { partIdent =>
       if (!table.dropPartition(partIdent) && !ignoreIfNotExists) {
