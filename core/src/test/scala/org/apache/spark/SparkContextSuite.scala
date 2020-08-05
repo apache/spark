@@ -952,7 +952,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
     sc.range(0, 1).foreach { _ =>
       new SparkContext(new SparkConf().setAppName("test").setMaster("local")
-        .set(ALLOW_SPARK_CONTEXT_IN_EXECUTORS, true)).stop()
+        .set(EXECUTOR_ALLOW_SPARK_CONTEXT, true)).stop()
     }
   }
 }
