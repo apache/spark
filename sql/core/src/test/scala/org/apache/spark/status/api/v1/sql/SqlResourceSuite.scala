@@ -17,14 +17,22 @@
 
 package org.apache.spark.status.api.v1.sql
 
+import java.net.URL
+import java.text.SimpleDateFormat
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
-import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLExecutionUIData, SQLPlanMetric}
+import org.apache.spark.{JobExecutionStatus, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
+import org.apache.spark.sql.execution.ui.{SQLExecutionUIData, SQLPlanMetric, SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode}
+import org.apache.spark.sql.test.SharedSparkSession
 
 object SqlResourceSuite {
 
@@ -54,11 +62,10 @@ object SqlResourceSuite {
       SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, ""),
       SQLPlanMetric(SIZE_OF_FILES_READ, 5, ""))))
 
+  val edges: Seq[SparkPlanGraphEdge] = Seq(SparkPlanGraphEdge(3, 2))
+
   val nodesWhenCodegenIsOff: Seq[SparkPlanGraphNode] =
     SparkPlanGraph(nodes, edges).allNodes.filterNot(_.name == WHOLE_STAGE_CODEGEN_1)
-
-  val edges: Seq[SparkPlanGraphEdge] =
-    Seq(SparkPlanGraphEdge(3, 2))
 
   val metrics: Seq[SQLPlanMetric] = {
     Seq(SQLPlanMetric(DURATION, 0, ""),
@@ -200,6 +207,104 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
     val wholeStageCodegenId =
       sqlResource invokePrivate getWholeStageCodegenId(WHOLE_STAGE_CODEGEN_1)
     assert(wholeStageCodegenId == Some(1))
+  }
+
+}
+
+case class Person(id: Int, name: String, age: Int)
+case class Salary(personId: Int, salary: Double)
+
+/**
+  * Sql Resource Public API Unit Tests running query and extracting the metrics.
+  */
+class SqlResourceWithActualMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
+
+  import testImplicits._
+
+  // Exclude nodes which may not have the metrics
+  val excludedNodes = List("WholeStageCodegen", "Project", "SerializeFromObject")
+
+  implicit val formats = new DefaultFormats {
+    override def dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
+  }
+
+  override def sparkConf = {
+    new SparkConf()
+      .set("spark.ui.enabled", "true")
+  }
+
+  test("Check Sql Rest Api Endpoints") {
+    // Materalize result DataFrame
+    val count = getDF().count()
+    assert(count == 2, s"Expected Query Count is 2 but received: $count")
+
+    // Spark apps launched by local-mode seems not having `attemptId` as default
+    // so UT is just added for existing endpoints.
+    val executionId = callSqlRestEndpointAndVerifyResult()
+    callSqlRestEndpointByExecutionIdAndVerifyResult(executionId)
+  }
+
+  private def callSqlRestEndpointAndVerifyResult(): Long = {
+    val url = new URL(spark.sparkContext.ui.get.webUrl
+      + s"/api/v1/applications/${spark.sparkContext.applicationId}/sql")
+    val jsonResult = verifyAndGetSqlRestResult(url)
+    val executionDatas = JsonMethods.parse(jsonResult).extract[Seq[ExecutionData]]
+    assert(executionDatas.size > 0,
+      s"Expected Query Result Size is higher than 0 but received: ${executionDatas.size}")
+    val executionData = executionDatas.head
+    verifySqlRestContent(executionData)
+    executionData.id
+  }
+
+  private def callSqlRestEndpointByExecutionIdAndVerifyResult(executionId: Long): Unit = {
+    val url = new URL(spark.sparkContext.ui.get.webUrl
+      + s"/api/v1/applications/${spark.sparkContext.applicationId}/sql/${executionId}")
+    val jsonResult = verifyAndGetSqlRestResult(url)
+    val executionData = JsonMethods.parse(jsonResult).extract[ExecutionData]
+    verifySqlRestContent(executionData)
+  }
+
+  private def verifySqlRestContent(executionData: ExecutionData): Unit = {
+    assert(executionData.status == "COMPLETED",
+      s"Expected status is COMPLETED but actual: ${executionData.status}")
+    assert(executionData.successJobIds.nonEmpty,
+      s"Expected successJobIds should not be empty")
+    assert(executionData.runningJobIds.isEmpty,
+      s"Expected runningJobIds should be empty but actual: ${executionData.runningJobIds}")
+    assert(executionData.failedJobIds.isEmpty,
+      s"Expected failedJobIds should be empty but actual: ${executionData.failedJobIds}")
+    assert(executionData.nodes.nonEmpty, "Expected nodes should not be empty}")
+    executionData.nodes.filterNot(node => excludedNodes.contains(node.nodeName)).foreach { node =>
+      assert(node.metrics.nonEmpty, "Expected metrics of nodes should not be empty")
+    }
+  }
+
+  private def verifyAndGetSqlRestResult(url: URL): String = {
+    val (code, resultOpt, error) = getContentAndCode(url)
+    assert(code == 200, s"Expected Http Response Code is 200 but received: $code for url: $url")
+    assert(resultOpt.nonEmpty, s"Rest result should not be empty for url: $url")
+    assert(error.isEmpty, s"Error message should be empty for url: $url")
+    resultOpt.get
+  }
+
+  private def getDF(): DataFrame = {
+    val person: DataFrame =
+      spark.sparkContext.parallelize(
+        Person(0, "mike", 30) ::
+          Person(1, "jim", 20) :: Nil).toDF()
+
+    val salary: DataFrame =
+      spark.sparkContext.parallelize(
+        Salary(0, 2000.0) ::
+          Salary(1, 1000.0) :: Nil).toDF()
+
+    val salaryDF = salary.withColumnRenamed("personId", "id")
+    val ds = person.join(salaryDF, "id")
+      .groupBy("name", "age", "salary").avg("age", "salary")
+      .filter(_.getAs[Int]("age") <= 30)
+      .sort()
+
+    ds.toDF
   }
 
 }
