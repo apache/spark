@@ -269,7 +269,7 @@ This file is divided into 3 sections:
     <customMessage><![CDATA[
       Are you sure that you want to use "FileSystem.get(Configuration conf)"? If the input
       configuration is not set properly, a default FileSystem instance will be returned. Please use
-      "FileSystem.get(URI uri, Configuration conf)" or "Path.getFileSystem()" instead.
+      "FileSystem.get(URI uri, Configuration conf)" or "Path.getFileSystem(Configuration conf)" instead.
       If you must use the method "FileSystem.get(Configuration conf)", wrap the code block with
       // scalastyle:off FileSystemGet
       FileSystem.get(...)
