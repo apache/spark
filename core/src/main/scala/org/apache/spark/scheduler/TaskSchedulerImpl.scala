@@ -1150,9 +1150,15 @@ private[spark] object TaskSchedulerImpl {
       availableResources: Array[Map[String, Int]]): Int = {
     val resourceProfile = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
     val coresKnown = resourceProfile.isCoresLimitKnown
-    val limitingResource = resourceProfile.limitingResource(conf)
-    // if limiting resource is empty then we have no other resources, so it has to be CPU
-    val limitedByCpu = limitingResource == ResourceProfile.CPUS || limitingResource.isEmpty
+    val (limitingResource, limitedByCpu) = {
+      val limiting = resourceProfile.limitingResource(conf)
+      // if limiting resource is empty then we have no other resources, so it has to be CPU
+      if (limiting == ResourceProfile.CPUS || limiting.isEmpty) {
+        (ResourceProfile.CPUS, true)
+      } else {
+        (limiting, false)
+      }
+    }
     val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfile(resourceProfile, conf)
     val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).get
 
