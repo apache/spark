@@ -906,7 +906,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private def outNullElem(buffer: ExprValue): Block = {
-    if (legacyCastToStr) code";" else code"""$buffer.append(" null");"""
+    if (legacyCastToStr) code"" else code"""$buffer.append(" null");"""
   }
 
   private def writeArrayToStringBuilder(
