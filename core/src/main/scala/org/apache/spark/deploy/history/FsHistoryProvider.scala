@@ -538,6 +538,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               } catch {
                 case _: FileNotFoundException => false
               }
+
             case _: FileNotFoundException =>
               false
           }
