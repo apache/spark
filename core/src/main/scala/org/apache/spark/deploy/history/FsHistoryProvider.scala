@@ -530,10 +530,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // If the file is currently not being tracked by the SHS, add an entry for it and try
               // to parse it. This will allow the cleaner code to detect the file as stale later on
               // if it was not possible to parse it.
-              listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime, LogType.EventLogs,
-                None, None, reader.fileSizeForLastIndex, reader.lastIndex, None,
-                reader.completed))
-              reader.fileSizeForLastIndex > 0
+              try {
+                listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
+                  LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
+                  None, reader.completed))
+                reader.fileSizeForLastIndex > 0
+              } catch {
+                case _: FileNotFoundException => false
+              }
+
+            case _: FileNotFoundException =>
+              false
           }
         }
         .sortWith { case (entry1, entry2) =>
