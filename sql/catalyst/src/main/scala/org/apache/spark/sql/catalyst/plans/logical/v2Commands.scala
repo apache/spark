@@ -573,12 +573,10 @@ case class AlterTableAddPartition(
  *
  * The syntax of this command is:
  * {{{
- *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
+ *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
  * }}}
  */
 case class AlterTableDropPartition(
     table: SupportsPartitions,
     partIdents: Seq[InternalRow],
-    ignoreIfNotExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean) extends Command
+    ignoreIfNotExists: Boolean) extends Command

@@ -249,13 +249,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ AlterTableDropPartitionStatement(
         NonSessionCatalogAndTable(catalog, tableName), _, _, _, _) =>
+      if (c.purge) {
+        logWarning("PURGE won't take effect here, please put it in table properties")
+      }
       val table = catalog.asTableCatalog.loadTable(tableName.asIdentifier).asPartitionable
       AlterTableDropPartition(
         table,
         c.specs.map(_.asPartitionIdentifier(table.partitionSchema())),
-        c.ifExists,
-        c.purge,
-        c.retainData)
+        c.ifExists)
   }
 
   object NonSessionCatalogAndTable {

@@ -28,15 +28,11 @@ import org.apache.spark.sql.connector.catalog.SupportsPartitions
 case class AlterTableDropPartitionExec(
     table: SupportsPartitions,
     partIdents: Seq[InternalRow],
-    ignoreIfNotExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean) extends V2CommandExec {
+    ignoreIfNotExists: Boolean) extends V2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    logWarning("PURGE won't take effect, please put it in table properties")
-
     partIdents.foreach { partIdent =>
       if (!table.dropPartition(partIdent) && !ignoreIfNotExists) {
         throw new NoSuchPartitionException(table.name(), partIdent, table.partitionSchema())
