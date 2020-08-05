@@ -267,10 +267,10 @@ This file is divided into 3 sections:
   <check customId="FileSystemGet" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileSystem.get\([a-zA-Z_$][a-zA-Z_$0-9]*\)</parameter></parameters>
     <customMessage><![CDATA[
-      The method FileSystem.get(Configuration conf) will return a default FileSystem instance if the
-      configuration "fs.file.impl" is not set. This can cause FileNotFoundException on reading a target
-      path of non-default file system. Please consider using "FileSystem.get(URI uri, Configuration conf)"
-      or "Path.getFileSystem(Configuration conf)" instead.
+      Are you sure that you want to use "FileSystem.get(Configuration conf)"? If the input
+      configuration is not set properly, a default FileSystem instance will be returned. It can
+      lead to errors when you deal with multiple file systems. Please consider using
+      "FileSystem.get(URI uri, Configuration conf)" or "Path.getFileSystem(Configuration conf)" instead.
       If you must use the method "FileSystem.get(Configuration conf)", wrap the code block with
       // scalastyle:off FileSystemGet
       FileSystem.get(...)
