@@ -34,7 +34,7 @@ license: |
 
   - In Spark 3.1, structs and maps are wrapped by the `{}` brackets in casting them to strings. For instance, the `show()` action and the `CAST` expression use such brackets. In Spark 3.0 and earlier, the `[]` brackets are used for the same purpose. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.castComplexTypesToString.enabled` to `true`.
 
-  - In Spark 3.1, `CAST` converts NULL elements of structures, arrays and maps to "null". In Spark 3.0 or earlier, NULL elements are converted to empty strings. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.castComplexTypesToString.enabled` to `true`.
+  - In Spark 3.1, NULL elements of structures, arrays and maps are converted to "null" in casting them to strings. In Spark 3.0 or earlier, NULL elements are converted to empty strings. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.castComplexTypesToString.enabled` to `true`.
 
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
