@@ -31,7 +31,7 @@ import org.apache.spark.{JobExecutionStatus, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
-import org.apache.spark.sql.execution.ui.{SQLExecutionUIData, SQLPlanMetric, SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode}
+import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLExecutionUIData, SQLPlanMetric}
 import org.apache.spark.sql.test.SharedSparkSession
 
 object SqlResourceSuite {
@@ -215,8 +215,8 @@ case class Person(id: Int, name: String, age: Int)
 case class Salary(personId: Int, salary: Double)
 
 /**
-  * Sql Resource Public API Unit Tests running query and extracting the metrics.
-  */
+ * Sql Resource Public API Unit Tests running query and extracting the metrics.
+ */
 class SqlResourceWithActualMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
 
   import testImplicits._
@@ -228,7 +228,7 @@ class SqlResourceWithActualMetricsSuite extends SharedSparkSession with SQLMetri
     override def dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
   }
 
-  override def sparkConf = {
+  override def sparkConf: SparkConf = {
     new SparkConf()
       .set("spark.ui.enabled", "true")
   }
