@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -414,7 +415,8 @@ private[hive] class HiveClientImpl(
   override def getTablesByName(
       dbName: String,
       tableNames: Seq[String]): Seq[CatalogTable] = withHiveState {
-    getRawTablesByName(dbName, tableNames).map(convertHiveTableToCatalogTable)
+    getRawTablesByName(dbName, tableNames)
+      .flatMap(ht => Try(convertHiveTableToCatalogTable(ht)).toOption)
   }
 
   override def getTableOption(
