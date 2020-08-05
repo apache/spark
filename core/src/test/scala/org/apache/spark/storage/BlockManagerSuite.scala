@@ -148,6 +148,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     System.setProperty("os.arch", "amd64")
+    System.setProperty(TEST_USE_COMPRESSED_OOPS_KEY, "true")
     conf = new SparkConf(false)
     init(conf)
 

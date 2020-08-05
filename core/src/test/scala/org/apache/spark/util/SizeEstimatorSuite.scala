@@ -78,6 +78,8 @@ class SizeEstimatorSuite
     super.beforeEach()
     System.setProperty("os.arch", "amd64")
     System.setProperty(TEST_USE_COMPRESSED_OOPS_KEY, "true")
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
+    SizeEstimator invokePrivate initialize()
   }
 
   override def afterEach(): Unit = {
@@ -214,6 +216,10 @@ class SizeEstimatorSuite
   }
 
   test("class field blocks rounding on 64-bit VM without useCompressedOops") {
+    System.setProperty(TEST_USE_COMPRESSED_OOPS_KEY, "false")
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
+    SizeEstimator invokePrivate initialize()
+
     assertResult(24)(SizeEstimator.estimate(new DummyClass5))
     assertResult(32)(SizeEstimator.estimate(new DummyClass6))
   }
