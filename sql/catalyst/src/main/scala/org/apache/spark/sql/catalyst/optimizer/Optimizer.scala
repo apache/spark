@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -108,7 +106,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveNoopOperators,
         CombineWithFields,
         SimplifyExtractValueOps,
-        CombineConcats) ++
+        CombineConcats,
+        SplitAggregateWithExpand) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
@@ -1821,5 +1820,35 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
+  }
+}
+
+
+/**
+ * Split [[Expand]] into several splitExpand if the projection size of Expand is larger
+ * than default projection size.
+ */
+object SplitAggregateWithExpand extends Rule[LogicalPlan] {
+  private def splitExpand(expand: Expand, num: Int): Seq[Expand] = {
+    val groupedProjections = expand.projections.grouped(num).toList
+    val expands: Seq[Expand] = groupedProjections.map {
+      projectionSeq => Expand(projectionSeq, expand.output, expand.child)
+    }
+    expands
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a @ Aggregate(_, _, e @ Expand(projections, _, _)) =>
+      if (SQLConf.get.groupingWithUnion && projections.length
+        > SQLConf.get.groupingExpandProjections) {
+        val num = SQLConf.get.groupingExpandProjections
+        val subExpands = splitExpand(e, num)
+        val aggregates: Seq[Aggregate] = subExpands.map { expand =>
+          Aggregate(a.groupingExpressions, a.aggregateExpressions, expand)
+        }
+        Union(aggregates)
+      } else {
+        a
+      }
   }
 }

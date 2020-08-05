@@ -26,9 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.util.Try
 import scala.util.matching.Regex
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -2689,6 +2687,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val GROUPING_WITH_UNION = buildConf("spark.sql.optimizer.grouping")
+    .doc("When true,enable grouping with union.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val GROUPING_EXPAND_PROJECTIONS = buildConf("spark.sql.optimizer.projections.size")
+    .doc("Split a expand into several smallExpand,which contains the size of projections.It can" +
+      "reduce the shuffle pressure and improve performance in multidimensional analysis " +
+      "when data is huge.")
+    .intConf
+    .createWithDefault(4)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3298,6 +3308,10 @@ class SQLConf extends Serializable with Logging {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
+
+  def groupingWithUnion: Boolean = getConf(GROUPING_WITH_UNION)
+
+  def groupingExpandProjections: Int = getConf(GROUPING_EXPAND_PROJECTIONS)
 
   /** ********************** SQLConf functionality methods ************ */
 
