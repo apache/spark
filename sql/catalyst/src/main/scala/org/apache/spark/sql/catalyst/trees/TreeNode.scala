@@ -421,7 +421,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
             arg
           }
         case other => other
-      }.view.force // `mapValues` is lazy and we need to force it to materialize
+      }.view.force.toMap // `mapValues` is lazy and we need to force it to materialize
       case d: DataType => d // Avoid unpacking Structs
       case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
       case args: Iterable[_] => args.map(mapChild)
