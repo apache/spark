@@ -60,6 +60,8 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates apt-tr
   $APT_INSTALL nodejs && \
   # Install needed python packages. Use pip for installing packages (for consistency).
   $APT_INSTALL libpython2.7-dev libpython3-dev python-pip python3-pip && \
+  # qpdf is required for CRAN checks to pass.
+  $APT_INSTALL qpdf jq && \
   pip install --upgrade pip && hash -r pip && \
   pip install setuptools && \
   pip install $BASE_PIP_PKGS && \
