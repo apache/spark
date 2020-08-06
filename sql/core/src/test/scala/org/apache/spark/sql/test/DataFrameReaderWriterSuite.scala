@@ -224,6 +224,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(LastOptions.parameters("opt3") == "3")
   }
 
+  test("SPARK-32364: option key should be case insensitive") {
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .load()
+    assert(LastOptions.parameters("path") == "4")
+  }
+
   test("SPARK-32364: path argument of save function should override all existing options") {
     Seq(1).toDF.write
       .format("org.apache.spark.sql.test")
@@ -384,7 +395,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       .load("/test")
 
     assert(LastOptions.parameters("intOpt") == "56")
-    assert(!LastOptions.parameters.contains("path"))
+    assert(LastOptions.parameters("path") == "/test")
 
     LastOptions.clear()
     spark.read
@@ -1108,13 +1119,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
       verifyLoadFails(() => spark.read.option("path", path).parquet(path))
       verifyLoadFails(() => spark.read.option("path", path).format("parquet").load(path))
-      verifyLoadFails(() => spark.read
-        .format("org.apache.spark.sql.test")
-        .option("paTh", "1")
-        .option("PATH", "2")
-        .option("Path", "3")
-        .option("patH", "4")
-        .load("5"))
     }
   }
 }

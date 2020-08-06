@@ -229,7 +229,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
-    load(Seq(path): _*)
+    checkPathOptionDoesNotExist()
+    option("path", path).load(Seq.empty: _*)
   }
 
   /**
@@ -245,9 +246,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    if (extraOptions.contains("path") && paths.nonEmpty) {
-      throw new AnalysisException("There is a path option set and load() is called with path " +
-        "parameters. Either remove the path option or put it into the load() parameters.")
+    if (paths.nonEmpty) {
+      checkPathOptionDoesNotExist()
     }
 
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
@@ -300,6 +300,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.originalMap).resolveRelation())
+  }
+
+  /**
+   * Called when load() takes non-empty path parameters.
+   */
+  private def checkPathOptionDoesNotExist() = {
+    if (extraOptions.contains("path")) {
+      throw new AnalysisException("There is a path option set and load() is called with path " +
+        "parameters. Either remove the path option or put it into the load() parameters.")
+    }
   }
 
   /**
