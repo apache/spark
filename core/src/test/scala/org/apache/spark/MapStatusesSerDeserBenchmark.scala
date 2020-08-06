@@ -68,7 +68,7 @@ object MapStatusesSerDeserBenchmark extends BenchmarkBase {
     var serializedMapStatusSizes = 0
     var serializedBroadcastSizes = 0
 
-    val (serializedMapStatus, serializedBroadcast) = MapOutputTracker.serializeMapStatuses(
+    val (serializedMapStatus, serializedBroadcast) = MapOutputTracker.serializeOutputStatuses(
       shuffleStatus.mapStatuses, tracker.broadcastManager, tracker.isLocal, minBroadcastSize,
       sc.getConf)
     serializedMapStatusSizes = serializedMapStatus.length
@@ -77,12 +77,12 @@ object MapStatusesSerDeserBenchmark extends BenchmarkBase {
     }
 
     benchmark.addCase("Serialization") { _ =>
-      MapOutputTracker.serializeMapStatuses(shuffleStatus.mapStatuses, tracker.broadcastManager,
+      MapOutputTracker.serializeOutputStatuses(shuffleStatus.mapStatuses, tracker.broadcastManager,
         tracker.isLocal, minBroadcastSize, sc.getConf)
     }
 
     benchmark.addCase("Deserialization") { _ =>
-      val result = MapOutputTracker.deserializeMapStatuses(serializedMapStatus, sc.getConf)
+      val result = MapOutputTracker.deserializeOutputStatuses(serializedMapStatus, sc.getConf)
       assert(result.length == numMaps)
     }
 
