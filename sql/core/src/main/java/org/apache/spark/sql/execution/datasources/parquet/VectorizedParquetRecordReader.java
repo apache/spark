@@ -83,10 +83,15 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private boolean[] missingColumns;
 
   /**
-   * The timezone that timestamp INT96 values should be converted to. Null if no conversion. Here to
-   * workaround incompatibilities between different engines when writing timestamp values.
+   * Timezone ID of the session.
    */
   private final ZoneId convertTz;
+
+  /**
+   * Whether to use session timezone to convert to int96 data.
+   * Here to workaround incompatibilities between different engines when writing timestamp values.
+   */
+  private final boolean convertInt96Timestamp;
 
   /**
    * The mode of rebasing date/timestamp from Julian to Proleptic Gregorian calendar.
@@ -122,8 +127,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private final MemoryMode MEMORY_MODE;
 
   public VectorizedParquetRecordReader(
-    ZoneId convertTz, String datetimeRebaseMode, boolean useOffHeap, int capacity) {
+    ZoneId convertTz, String datetimeRebaseMode, boolean useOffHeap,
+    int capacity, boolean convertInt96Timestamp) {
     this.convertTz = convertTz;
+    this.convertInt96Timestamp = convertInt96Timestamp;
     this.datetimeRebaseMode = datetimeRebaseMode;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.capacity = capacity;
@@ -131,7 +138,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   // For test only.
   public VectorizedParquetRecordReader(boolean useOffHeap, int capacity) {
-    this(null, "CORRECTED", useOffHeap, capacity);
+    this(null, "CORRECTED", useOffHeap, capacity, false);
   }
 
   /**
@@ -321,7 +328,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
       columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getOriginalType(),
-        pages.getPageReader(columns.get(i)), convertTz, datetimeRebaseMode);
+        pages.getPageReader(columns.get(i)), convertTz, datetimeRebaseMode, convertInt96Timestamp);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

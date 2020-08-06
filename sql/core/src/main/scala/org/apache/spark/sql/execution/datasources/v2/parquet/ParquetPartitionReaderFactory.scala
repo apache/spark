@@ -228,10 +228,11 @@ case class ParquetPartitionReaderFactory(
       convertInt96Timestamp: Boolean): VectorizedParquetRecordReader = {
     val taskContext = Option(TaskContext.get())
     val vectorizedReader = new VectorizedParquetRecordReader(
-      convertTz,  // TODO
+      convertTz,
       datetimeRebaseMode.toString,
       enableOffHeapColumnVector && taskContext.isDefined,
-      capacity)
+      capacity,
+      convertInt96Timestamp)
     val iter = new RecordReaderIterator(vectorizedReader)
     // SPARK-23457 Register a task completion listener before `initialization`.
     taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
