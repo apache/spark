@@ -279,7 +279,7 @@ class ContextTests(unittest.TestCase):
         # SPARK-32160: SparkContext can be created in executors if the config is set.
 
         def create_spark_context():
-            conf = SparkConf().set("spark.driver.allowSparkContextInExecutors", "true")
+            conf = SparkConf().set("spark.executor.allowSparkContext", "true")
             with SparkContext(conf=conf):
                 pass
 

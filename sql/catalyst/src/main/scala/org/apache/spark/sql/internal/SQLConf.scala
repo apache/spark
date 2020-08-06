@@ -2686,8 +2686,10 @@ object SQLConf {
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup." +
         "Only support for singleColumn NAAJ for now.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
+
 
   val GROUPING_WITH_UNION = buildConf("spark.sql.optimizer.grouping")
     .doc("When true,enable grouping with union.")
@@ -2700,6 +2702,16 @@ object SQLConf {
       "when data is huge.")
     .intConf
     .createWithDefault(4)
+
+  val LEGACY_COMPLEX_TYPES_TO_STRING =
+    buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
+      .internal()
+      .doc("When true, maps and structs are wrapped by [] in casting to strings. " +
+        "Otherwise, if this is false, which is the default, maps and structs are wrapped by {}.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
 
   /**
    * Holds information about keys that have been deprecated.
