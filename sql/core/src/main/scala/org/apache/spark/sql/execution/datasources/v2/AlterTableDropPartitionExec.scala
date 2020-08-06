@@ -42,7 +42,7 @@ case class AlterTableDropPartitionExec(
 
     val existsPartitions = partIdents.filterNot(notExistsPartIdents.contains)
     existsPartitions match {
-      case Seq.empty => // Nothing will be done
+      case Seq() => // Nothing will be done
       case Seq(partIdent) =>
         table.dropPartition(partIdent)
       case Seq(_ *) if table.isInstanceOf[SupportsAtomicPartitionManagement] =>

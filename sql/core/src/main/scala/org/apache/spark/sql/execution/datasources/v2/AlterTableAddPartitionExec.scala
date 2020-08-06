@@ -45,7 +45,7 @@ case class AlterTableAddPartitionExec(
     val notExistsPartitions =
       partitions.filterNot(part => existsPartIdents.contains(part._1))
     notExistsPartitions match {
-      case Seq.empty => // Nothing will be done
+      case Seq() => // Nothing will be done
       case Seq((partIdent, properties)) =>
         table.createPartition(partIdent, properties.asJava)
       case Seq(_ *) if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
