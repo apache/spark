@@ -20,23 +20,32 @@ package org.apache.spark.sql
 import org.apache.log4j.Level
 
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, Repartition, RepartitionByExpression, ResolvedHint, SHUFFLE_HASH, SHUFFLE_MERGE, SHUFFLE_REPLICATE_NL}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
 
-class CTEHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class CTEHintSuite extends PlanTest with SharedSparkSession {
 
   def verifyCoalesceHint(df: DataFrame): Unit = {
-    val optimized = df.queryExecution.optimizedPlan
-    val repartitions = optimized collect {
-      case r: Repartition => r
-      case r: RepartitionByExpression => r
-      case _: ResolvedHint => fail("ResolvedHint should not appear after optimize.")
+    def checkPlanContainsRepartition(plan: LogicalPlan): Unit = {
+      val repartitions = plan collect {
+        case r: Repartition => r
+        case r: RepartitionByExpression => r
+        case _: ResolvedHint => fail("ResolvedHint should not appear after optimize.")
+      }
+      assert(repartitions.nonEmpty)
     }
-    assert(repartitions.nonEmpty)
+    val analyzed = df.queryExecution.analyzed
+    val optimized = df.queryExecution.optimizedPlan
+    checkPlanContainsRepartition(analyzed)
+    checkPlanContainsRepartition(optimized)
   }
 
   def verifyJoinHint(df: DataFrame, expectedHints: Seq[JoinHint]): Unit = {
+    val analyzed = df.queryExecution.analyzed
+    val resolvedHints = analyzed collect {
+      case r: ResolvedHint => r
+    }
+    assert(resolvedHints.nonEmpty)
     val optimized = df.queryExecution.optimizedPlan
     val joinHints = optimized collect {
       case Join(_, _, _, _, hint) => hint
