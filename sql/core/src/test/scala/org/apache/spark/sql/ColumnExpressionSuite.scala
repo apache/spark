@@ -1420,4 +1420,36 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       }.getMessage should include("No such struct field b in a, B")
     }
   }
+
+  test("withField user-facing examples") {
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+        .select($"struct_col".withField("c", lit(3))),
+      Row(Row(1, 2, 3)))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+        .select($"struct_col".withField("b", lit(3))),
+      Row(Row(1, 3)))
+
+    checkAnswer(
+      sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+        .select($"struct_col".withField("c", lit(3))),
+      Row(null))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+        .select($"struct_col".withField("b", lit(100))),
+      Row(Row(1, 100, 100)))
+
+    checkAnswer(
+      sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+        .select($"struct_col".withField("a.c", lit(3))),
+      Row(Row(Row(1, 2, 3))))
+
+    intercept[AnalysisException] {
+      sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+        .select($"struct_col".withField("a.c", lit(3)))
+    }.getMessage should include("Ambiguous reference to fields")
+  }
 }

@@ -92,6 +92,8 @@ class Binarizer(JavaTransformer, HasThreshold, HasThresholds, HasInputCol, HasOu
     >>> loadedBinarizer = Binarizer.load(binarizerPath)
     >>> loadedBinarizer.getThreshold() == binarizer.getThreshold()
     True
+    >>> loadedBinarizer.transform(df).take(1) == binarizer.transform(df).take(1)
+    True
     >>> df2 = spark.createDataFrame([(0.5, 0.3)], ["values1", "values2"])
     >>> binarizer2 = Binarizer(thresholds=[0.0, 1.0])
     >>> binarizer2.setInputCols(["values1", "values2"]).setOutputCols(["output1", "output2"])
@@ -194,6 +196,10 @@ class _LSHParams(HasInputCol, HasOutputCol):
                           "increasing number of hash tables lowers the false negative rate, " +
                           "and decreasing it improves the running performance.",
                           typeConverter=TypeConverters.toInt)
+
+    def __init__(self, *args):
+        super(_LSHParams, self).__init__(*args)
+        self._setDefault(numHashTables=1)
 
     def getNumHashTables(self):
         """
@@ -390,7 +396,6 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
         super(BucketedRandomProjectionLSH, self).__init__()
         self._java_obj = \
             self._new_java_obj("org.apache.spark.ml.feature.BucketedRandomProjectionLSH", self.uid)
-        self._setDefault(numHashTables=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -476,6 +481,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     >>> bucketizer.save(bucketizerPath)
     >>> loadedBucketizer = Bucketizer.load(bucketizerPath)
     >>> loadedBucketizer.getSplits() == bucketizer.getSplits()
+    True
+    >>> loadedBucketizer.transform(df).take(1) == bucketizer.transform(df).take(1)
     True
     >>> bucketed = bucketizer.setHandleInvalid("skip").transform(df).collect()
     >>> len(bucketed)
@@ -733,6 +740,8 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
     >>> loadedModel = CountVectorizerModel.load(modelPath)
     >>> loadedModel.vocabulary == model.vocabulary
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
     >>> fromVocabModel = CountVectorizerModel.from_vocabulary(["a", "b", "c"],
     ...     inputCol="raw", outputCol="vectors")
     >>> fromVocabModel.transform(df).show(truncate=False)
@@ -920,6 +929,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
     >>> dctPath = temp_path + "/dct"
     >>> dct.save(dctPath)
     >>> loadedDtc = DCT.load(dctPath)
+    >>> loadedDtc.transform(df1).take(1) == dct.transform(df1).take(1)
+    True
     >>> loadedDtc.getInverse()
     False
 
@@ -1002,6 +1013,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
     >>> ep.save(elementwiseProductPath)
     >>> loadedEp = ElementwiseProduct.load(elementwiseProductPath)
     >>> loadedEp.getScalingVec() == ep.getScalingVec()
+    True
+    >>> loadedEp.transform(df).take(1) == ep.transform(df).take(1)
     True
 
     .. versionadded:: 1.5.0
@@ -1201,6 +1214,8 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
     >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
     True
+    >>> loadedHashingTF.transform(df).take(1) == hashingTF.transform(df).take(1)
+    True
     >>> hashingTF.indexOf("b")
     5
 
@@ -1292,6 +1307,10 @@ class _IDFParams(HasInputCol, HasOutputCol):
         """
         return self.getOrDefault(self.minDocFreq)
 
+    def __init__(self, *args):
+        super(_IDFParams, self).__init__(*args)
+        self._setDefault(minDocFreq=0)
+
 
 @inherit_doc
 class IDF(JavaEstimator, _IDFParams, JavaMLReadable, JavaMLWritable):
@@ -1345,7 +1364,6 @@ class IDF(JavaEstimator, _IDFParams, JavaMLReadable, JavaMLWritable):
         """
         super(IDF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IDF", self.uid)
-        self._setDefault(minDocFreq=0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1444,6 +1462,10 @@ class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, Has
     missingValue = Param(Params._dummy(), "missingValue",
                          "The placeholder for the missing values. All occurrences of missingValue "
                          "will be imputed.", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_ImputerParams, self).__init__(*args)
+        self._setDefault(strategy="mean", missingValue=float("nan"), relativeError=0.001)
 
     @since("2.2.0")
     def getStrategy(self):
@@ -1582,7 +1604,6 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
         """
         super(Imputer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Imputer", self.uid)
-        self._setDefault(strategy="mean", missingValue=float("nan"), relativeError=0.001)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1811,6 +1832,8 @@ class MaxAbsScaler(JavaEstimator, _MaxAbsScalerParams, JavaMLReadable, JavaMLWri
     >>> loadedModel = MaxAbsScalerModel.load(modelPath)
     >>> loadedModel.maxAbs == model.maxAbs
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 2.0.0
     """
@@ -1951,7 +1974,6 @@ class MinHashLSH(_LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaM
         """
         super(MinHashLSH, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHashLSH", self.uid)
-        self._setDefault(numHashTables=1)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2001,6 +2023,10 @@ class _MinMaxScalerParams(HasInputCol, HasOutputCol):
                 typeConverter=TypeConverters.toFloat)
     max = Param(Params._dummy(), "max", "Upper bound of the output feature range",
                 typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_MinMaxScalerParams, self).__init__(*args)
+        self._setDefault(min=0.0, max=1.0)
 
     @since("1.6.0")
     def getMin(self):
@@ -2065,6 +2091,8 @@ class MinMaxScaler(JavaEstimator, _MinMaxScalerParams, JavaMLReadable, JavaMLWri
     True
     >>> loadedModel.originalMax == model.originalMax
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 1.6.0
     """
@@ -2076,7 +2104,6 @@ class MinMaxScaler(JavaEstimator, _MinMaxScalerParams, JavaMLReadable, JavaMLWri
         """
         super(MinMaxScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
-        self._setDefault(min=0.0, max=1.0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2209,6 +2236,8 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
     >>> loadedNGram = NGram.load(ngramPath)
     >>> loadedNGram.getN() == ngram.getN()
     True
+    >>> loadedNGram.transform(df).take(1) == ngram.transform(df).take(1)
+    True
 
     .. versionadded:: 1.5.0
     """
@@ -2289,6 +2318,8 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> loadedNormalizer = Normalizer.load(normalizerPath)
     >>> loadedNormalizer.getP() == normalizer.getP()
     True
+    >>> loadedNormalizer.transform(df).take(1) == normalizer.transform(df).take(1)
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -2362,6 +2393,10 @@ class _OneHotEncoderParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCol
     dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category",
                      typeConverter=TypeConverters.toBoolean)
 
+    def __init__(self, *args):
+        super(_OneHotEncoderParams, self).__init__(*args)
+        self._setDefault(handleInvalid="error", dropLast=True)
+
     @since("2.3.0")
     def getDropLast(self):
         """
@@ -2422,6 +2457,8 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
     >>> loadedModel = OneHotEncoderModel.load(modelPath)
     >>> loadedModel.categorySizes == model.categorySizes
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 2.3.0
     """
@@ -2436,7 +2473,6 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.OneHotEncoder", self.uid)
-        self._setDefault(handleInvalid="error", dropLast=True)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2582,6 +2618,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
     >>> px.save(polyExpansionPath)
     >>> loadedPx = PolynomialExpansion.load(polyExpansionPath)
     >>> loadedPx.getDegree() == px.getDegree()
+    True
+    >>> loadedPx.transform(df).take(1) == px.transform(df).take(1)
     True
 
     .. versionadded:: 1.4.0
@@ -2879,6 +2917,11 @@ class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError):
     withScaling = Param(Params._dummy(), "withScaling", "Whether to scale the data to "
                         "quantile range", typeConverter=TypeConverters.toBoolean)
 
+    def __init__(self, *args):
+        super(_RobustScalerParams, self).__init__(*args)
+        self._setDefault(lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+                         relativeError=0.001)
+
     @since("3.0.0")
     def getLower(self):
         """
@@ -2954,6 +2997,8 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
     True
     >>> loadedModel.range == model.range
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 3.0.0
     """
@@ -2967,8 +3012,6 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
         """
         super(RobustScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RobustScaler", self.uid)
-        self._setDefault(lower=0.25, upper=0.75, withCentering=False, withScaling=True,
-                         relativeError=0.001)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -3113,6 +3156,8 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
     True
     >>> loadedReTokenizer.getGaps() == reTokenizer.getGaps()
     True
+    >>> loadedReTokenizer.transform(df).take(1) == reTokenizer.transform(df).take(1)
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -3237,6 +3282,8 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
     >>> loadedSqlTrans = SQLTransformer.load(sqlTransformerPath)
     >>> loadedSqlTrans.getStatement() == sqlTrans.getStatement()
     True
+    >>> loadedSqlTrans.transform(df).take(1) == sqlTrans.transform(df).take(1)
+    True
 
     .. versionadded:: 1.6.0
     """
@@ -3290,6 +3337,10 @@ class _StandardScalerParams(HasInputCol, HasOutputCol):
                      typeConverter=TypeConverters.toBoolean)
     withStd = Param(Params._dummy(), "withStd", "Scale to unit standard deviation",
                     typeConverter=TypeConverters.toBoolean)
+
+    def __init__(self, *args):
+        super(_StandardScalerParams, self).__init__(*args)
+        self._setDefault(withMean=False, withStd=True)
 
     @since("1.4.0")
     def getWithMean(self):
@@ -3348,6 +3399,8 @@ class StandardScaler(JavaEstimator, _StandardScalerParams, JavaMLReadable, JavaM
     True
     >>> loadedModel.mean == model.mean
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -3359,7 +3412,6 @@ class StandardScaler(JavaEstimator, _StandardScalerParams, JavaMLReadable, JavaM
         """
         super(StandardScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StandardScaler", self.uid)
-        self._setDefault(withMean=False, withStd=True)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -3512,6 +3564,8 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     >>> inverter.save(indexToStringPath)
     >>> loadedInverter = IndexToString.load(indexToStringPath)
     >>> loadedInverter.getLabels() == inverter.getLabels()
+    True
+    >>> loadedModel.transform(stringIndDf).take(1) == model.transform(stringIndDf).take(1)
     True
     >>> stringIndexer.getStringOrderType()
     'frequencyDesc'
@@ -3797,6 +3851,8 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols,
     >>> loadedRemover.getStopWords() == remover.getStopWords()
     True
     >>> loadedRemover.getCaseSensitive() == remover.getCaseSensitive()
+    True
+    >>> loadedRemover.transform(df).take(1) == remover.transform(df).take(1)
     True
     >>> df2 = spark.createDataFrame([(["a", "b", "c"], ["a", "b"])], ["text1", "text2"])
     >>> remover2 = StopWordsRemover(stopWords=["b"])
@@ -4109,6 +4165,10 @@ class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
                           "of categories of the feature).",
                           typeConverter=TypeConverters.toString)
 
+    def __init__(self, *args):
+        super(_VectorIndexerParams, self).__init__(*args)
+        self._setDefault(maxCategories=20, handleInvalid="error")
+
     @since("1.4.0")
     def getMaxCategories(self):
         """
@@ -4189,6 +4249,8 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
     True
     >>> loadedModel.categoryMaps == model.categoryMaps
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
     >>> dfWithInvalid = spark.createDataFrame([(Vectors.dense([3.0, 1.0]),)], ["a"])
     >>> indexer.getHandleInvalid()
     'error'
@@ -4209,7 +4271,6 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
         """
         super(VectorIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorIndexer", self.uid)
-        self._setDefault(maxCategories=20, handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -4332,6 +4393,8 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
     True
     >>> loadedVs.getNames() == vs.getNames()
     True
+    >>> loadedVs.transform(df).take(1) == vs.transform(df).take(1)
+    True
 
     .. versionadded:: 1.6.0
     """
@@ -4431,6 +4494,11 @@ class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCo
                               "be divided into chunks up to the size.",
                               typeConverter=TypeConverters.toInt)
 
+    def __init__(self, *args):
+        super(_Word2VecParams, self).__init__(*args)
+        self._setDefault(vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
+                         windowSize=5, maxSentenceLength=1000)
+
     @since("1.4.0")
     def getVectorSize(self):
         """
@@ -4524,6 +4592,8 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     True
     >>> loadedModel.getVectors().first().vector == model.getVectors().first().vector
     True
+    >>> loadedModel.transform(doc).take(1) == model.transform(doc).take(1)
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -4537,8 +4607,6 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
         """
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
-        self._setDefault(vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                         windowSize=5, maxSentenceLength=1000)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -4730,6 +4798,8 @@ class PCA(JavaEstimator, _PCAParams, JavaMLReadable, JavaMLWritable):
     True
     >>> loadedModel.explainedVariance == model.explainedVariance
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 1.5.0
     """
@@ -4846,6 +4916,11 @@ class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
                           "additional bucket, at index numLabels).",
                           typeConverter=TypeConverters.toString)
 
+    def __init__(self, *args):
+        super(_RFormulaParams, self).__init__(*args)
+        self._setDefault(forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
+                         handleInvalid="error")
+
     @since("1.5.0")
     def getFormula(self):
         """
@@ -4948,8 +5023,6 @@ class RFormula(JavaEstimator, _RFormulaParams, JavaMLReadable, JavaMLWritable):
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
-        self._setDefault(forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
-                         handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -5057,6 +5130,11 @@ class _SelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
 
     fwe = Param(Params._dummy(), "fwe", "The upper bound of the expected family-wise error rate.",
                 typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_SelectorParams, self).__init__(*args)
+        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
+                         fpr=0.05, fdr=0.05, fwe=0.05)
 
     @since("2.1.0")
     def getSelectorType(self):
@@ -5257,6 +5335,8 @@ class ANOVASelector(_Selector, JavaMLReadable, JavaMLWritable):
     >>> loadedModel = ANOVASelectorModel.load(modelPath)
     >>> loadedModel.selectedFeatures == model.selectedFeatures
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 3.1.0
     """
@@ -5272,8 +5352,6 @@ class ANOVASelector(_Selector, JavaMLReadable, JavaMLWritable):
         """
         super(ANOVASelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ANOVASelector", self.uid)
-        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
-                         fpr=0.05, fdr=0.05, fwe=0.05)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -5356,6 +5434,8 @@ class ChiSqSelector(_Selector, JavaMLReadable, JavaMLWritable):
     >>> loadedModel = ChiSqSelectorModel.load(modelPath)
     >>> loadedModel.selectedFeatures == model.selectedFeatures
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 2.0.0
     """
@@ -5371,8 +5451,6 @@ class ChiSqSelector(_Selector, JavaMLReadable, JavaMLWritable):
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
-        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
-                         fpr=0.05, fdr=0.05, fwe=0.05)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -5459,6 +5537,8 @@ class FValueSelector(_Selector, JavaMLReadable, JavaMLWritable):
     >>> loadedModel = FValueSelectorModel.load(modelPath)
     >>> loadedModel.selectedFeatures == model.selectedFeatures
     True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
 
     .. versionadded:: 3.1.0
     """
@@ -5474,8 +5554,6 @@ class FValueSelector(_Selector, JavaMLReadable, JavaMLWritable):
         """
         super(FValueSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FValueSelector", self.uid)
-        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
-                         fpr=0.05, fdr=0.05, fwe=0.05)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -5651,6 +5729,8 @@ class VarianceThresholdSelector(JavaEstimator, _VarianceThresholdSelectorParams,
     >>> model.save(modelPath)
     >>> loadedModel = VarianceThresholdSelectorModel.load(modelPath)
     >>> loadedModel.selectedFeatures == model.selectedFeatures
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
     True
 
     .. versionadded:: 3.1.0

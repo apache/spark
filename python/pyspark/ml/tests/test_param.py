@@ -359,16 +359,14 @@ class DefaultValuesTests(PySparkTestCase):
                         and issubclass(cls, JavaParams) and not inspect.isabstract(cls) \
                         and not re.match("_?Java", name) and name != '_LSH' \
                         and name != '_Selector':
-                    # NOTE: disable check_params_exist until there is parity with Scala API
-
-                    check_params(self, cls(), check_params_exist=False)
+                    check_params(self, cls(), check_params_exist=True)
 
         # Additional classes that need explicit construction
         from pyspark.ml.feature import CountVectorizerModel, StringIndexerModel
         check_params(self, CountVectorizerModel.from_vocabulary(['a'], 'input'),
-                     check_params_exist=False)
+                     check_params_exist=True)
         check_params(self, StringIndexerModel.from_labels(['a', 'b'], 'input'),
-                     check_params_exist=False)
+                     check_params_exist=True)
 
 
 if __name__ == "__main__":
