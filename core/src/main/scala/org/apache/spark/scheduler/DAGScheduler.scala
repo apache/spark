@@ -249,6 +249,8 @@ private[spark] class DAGScheduler(
   private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf)
+
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -1252,6 +1254,28 @@ private[spark] class DAGScheduler(
     execCores.map(cores => properties.setProperty(EXECUTOR_CORES_LOCAL_PROPERTY, cores))
   }
 
+  /**
+   * If push based shuffle is enabled, set the shuffle services to be used for the given
+   * shuffle map stage. The list of shuffle services is determined based on the list of
+   * active executors tracked by block manager master at the start of the stage.
+   */
+  private def prepareShuffleServicesForShuffleMapStage(stage: ShuffleMapStage) {
+    // TODO: Handle stage reuse/retry cases separately as without finalize changes we cannot
+    // TODO: disable shuffle merge for the retry/reuse cases
+    val mergerLocs = sc.schedulerBackend.getMergerLocations(
+      stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
+    logDebug(s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
+
+    if (mergerLocs.nonEmpty) {
+      stage.shuffleDep.setMergerLocs(mergerLocs)
+      logInfo("Shuffle merge enabled for %s (%s) with %d merger locations"
+        .format(stage, stage.name, stage.shuffleDep.getMergerLocs.size))
+    } else {
+      stage.shuffleDep.setShuffleMergeEnabled(false)
+      logInfo("Shuffle merge disabled for %s (%s)".format(stage, stage.name))
+    }
+  }
+
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     logDebug("submitMissingTasks(" + stage + ")")
@@ -1281,6 +1305,12 @@ private[spark] class DAGScheduler(
     stage match {
       case s: ShuffleMapStage =>
         outputCommitCoordinator.stageStart(stage = s.id, maxPartitionId = s.numPartitions - 1)
+        // Only generate merger location for a given shuffle dependency once. This way, even if
+        // this stage gets retried, it would still be merging blocks using the same set of
+        // shuffle services.
+        if (s.shuffleDep.shuffleMergeEnabled) {
+          prepareShuffleServicesForShuffleMapStage(s)
+        }
       case s: ResultStage =>
         outputCommitCoordinator.stageStart(
           stage = s.id, maxPartitionId = s.rdd.partitions.length - 1)

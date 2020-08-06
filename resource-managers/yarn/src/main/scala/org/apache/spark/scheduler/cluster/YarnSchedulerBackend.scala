@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.EnumSet
-import java.util.concurrent.atomic.{AtomicBoolean}
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.servlet.DispatcherType
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -29,13 +29,14 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.DYN_ALLOCATION_MAX_EXECUTORS
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.storage.{BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
@@ -79,6 +80,14 @@ private[spark] abstract class YarnSchedulerBackend(
 
   /** Attempt ID. This is unset for client-mode schedulers */
   private var attemptId: Option[ApplicationAttemptId] = None
+
+  private val blockManagerMaster: BlockManagerMaster = sc.env.blockManager.master
+
+  private val minMergersThresholdRatio = conf.get(config.MERGER_LOCATIONS_MIN_THRESHOLD_RATIO)
+
+  private val minMergersStaticThreshold = conf.get(config.MERGER_LOCATIONS_MIN_STATIC_THRESHOLD)
+
+  private val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
 
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
@@ -159,6 +168,27 @@ private[spark] abstract class YarnSchedulerBackend(
 
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
+  }
+
+  override def getMergerLocations(
+      numPartitions: Int,
+      resourceProfileId: Int): Seq[BlockManagerId] = {
+    // Currently this is naive way of calculating numMergersNeeded for a stage. In future,
+    // we can use better heuristics to calculate numMergersNeeded for a stage.
+    val tasksPerExecutor = sc.resourceProfileManager
+        .resourceProfileFromId(resourceProfileId).maxTasksPerExecutor(sc.conf)
+    val numMergersNeeded = math.min(
+      math.max(1, math.ceil(numPartitions / tasksPerExecutor).toInt), maxNumExecutors)
+    val minMergersThreshold = math.max(minMergersStaticThreshold,
+      math.floor(numMergersNeeded * minMergersThresholdRatio).toInt)
+    val mergerLocations = blockManagerMaster
+      .getMergerLocations(numMergersNeeded, scheduler.nodeBlacklist())
+    logDebug(s"Num merger locations available ${mergerLocations.length}")
+    if (mergerLocations.size < numMergersNeeded && mergerLocations.size < minMergersThreshold) {
+      Seq.empty[BlockManagerId]
+    } else {
+      mergerLocations
+    }
   }
 
   /**

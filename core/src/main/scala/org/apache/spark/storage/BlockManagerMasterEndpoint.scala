@@ -74,6 +74,12 @@ class BlockManagerMasterEndpoint(
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
+  // Mapping from host name to shuffle (mergers) services
+  private val mergerLocations = new mutable.LinkedHashMap[String, BlockManagerId]()
+
+  // Maximum number of merger locations to cache
+  private val maxRetainedMergerLocations = conf.get(config.MAX_MERGER_LOCATIONS_CACHED)
+
   private val askThreadPool =
     ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
   private implicit val askExecutionContext = ExecutionContext.fromExecutorService(askThreadPool)
@@ -138,6 +144,9 @@ class BlockManagerMasterEndpoint(
 
     case GetBlockStatus(blockId, askStorageEndpoints) =>
       context.reply(blockStatus(blockId, askStorageEndpoints))
+
+    case GetMergerLocations(numMergersNeeded, hostsToFilter) =>
+      context.reply(getMergerLocations(numMergersNeeded, hostsToFilter))
 
     case IsExecutorAlive(executorId) =>
       context.reply(blockManagerIdByExecutor.contains(executorId))
@@ -360,6 +369,17 @@ class BlockManagerMasterEndpoint(
 
   }
 
+  private def addMergerLocation(blockManagerId: BlockManagerId): Unit = {
+    if (!mergerLocations.contains(blockManagerId.host) && !blockManagerId.isDriver) {
+      val shuffleServerId = BlockManagerId(blockManagerId.executorId, blockManagerId.host,
+        StorageUtils.externalShuffleServicePort(conf))
+      if (mergerLocations.size >= maxRetainedMergerLocations) {
+        mergerLocations -= mergerLocations.head._1
+      }
+      mergerLocations(shuffleServerId.host) = shuffleServerId
+    }
+  }
+
   private def removeExecutor(execId: String): Unit = {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
@@ -526,6 +546,8 @@ class BlockManagerMasterEndpoint(
 
       blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(),
         maxOnHeapMemSize, maxOffHeapMemSize, storageEndpoint, externalShuffleServiceBlockStatus)
+
+      addMergerLocation(id)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxOnHeapMemSize + maxOffHeapMemSize,
         Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
@@ -655,6 +677,14 @@ class BlockManagerMasterEndpoint(
     } else {
       Seq.empty
     }
+  }
+
+  private def getMergerLocations(
+      numMergersNeeded: Int,
+      hostsToFilter: Set[String]): Seq[BlockManagerId] = {
+    // Copying the merger locations to a list so that the original mergerLocations won't be shuffled
+    val mergers = mergerLocations.values.filterNot(x => hostsToFilter.contains(x.host)).toSeq
+    Utils.randomize(mergers).take(numMergersNeeded)
   }
 
   /**

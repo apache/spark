@@ -141,4 +141,8 @@ private[spark] object BlockManagerMessages {
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
   case class IsExecutorAlive(executorId: String) extends ToBlockManagerMaster
+
+  case class GetMergerLocations(numMergersNeeded: Int, hostsToFilter: Set[String])
+    extends ToBlockManagerMaster
+
 }

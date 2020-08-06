@@ -24,7 +24,7 @@ import scala.concurrent.Future
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.storage.BlockManagerMessages.{GetMergerLocations, _}
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 private[spark]
@@ -123,6 +123,16 @@ class BlockManagerMaster(
   /** Get ids of other nodes in the cluster from the driver */
   def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
     driverEndpoint.askSync[Seq[BlockManagerId]](GetPeers(blockManagerId))
+  }
+
+  /**
+   * Get list of shuffle service locations available for pushing the shuffle blocks
+   * with push based shuffle
+   */
+  def getMergerLocations(
+      numMergersNeeded: Int,
+      hostsToFilter: Set[String]): Seq[BlockManagerId] = {
+    driverEndpoint.askSync[Seq[BlockManagerId]](GetMergerLocations(numMergersNeeded, hostsToFilter))
   }
 
   def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {

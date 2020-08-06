@@ -23,6 +23,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
+import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -94,6 +96,29 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, this)
+
+  // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle is enabled
+  private[this] var _shuffleMergeEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf)
+
+  def setShuffleMergeEnabled(shuffleMergeEnabled: Boolean): Unit = {
+    _shuffleMergeEnabled = shuffleMergeEnabled
+  }
+
+  def shuffleMergeEnabled : Boolean = _shuffleMergeEnabled
+
+  /**
+   * Stores the location of the list of chosen external shuffle services for handling the
+   * shuffle merge requests from mappers in this shuffle map stage.
+   */
+  private[this] var _mergerLocs: Seq[BlockManagerId] = Nil
+
+  def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
+    if (mergerLocs != null && mergerLocs.length > 0) {
+      _mergerLocs = mergerLocs
+    }
+  }
+
+  def getMergerLocs: Seq[BlockManagerId] = _mergerLocs
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
   _rdd.sparkContext.shuffleDriverComponents.registerShuffle(shuffleId)

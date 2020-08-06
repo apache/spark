@@ -1927,4 +1927,31 @@ package object config {
       .version("3.0.1")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
+    ConfigBuilder("spark.shuffle.push.based.enabled")
+      .doc("Set to 'true' to enable push based shuffle")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val MAX_MERGER_LOCATIONS_CACHED =
+    ConfigBuilder("spark.shuffle.push.retainedMergerLocations")
+      .doc("Max number of shuffle services hosts info cached to determine the locations of" +
+        " shuffle services when pushing the blocks.")
+      .intConf
+      .createWithDefault(500)
+
+  private[spark] val MERGER_LOCATIONS_MIN_THRESHOLD_RATIO =
+    ConfigBuilder("spark.shuffle.push.mergerLocations.minThresholdRatio")
+      .doc("Minimum percentage of shuffle services (merger locations) should be available with" +
+        " respect to numPartitions in order to enable push based shuffle for a stage.")
+      .doubleConf
+      .createWithDefault(0.05)
+
+  private[spark] val MERGER_LOCATIONS_MIN_STATIC_THRESHOLD =
+    ConfigBuilder("spark.shuffle.push.mergerLocations.minStaticThreshold")
+      .doc("Minimum number of shuffle services (merger locations) should be available in order" +
+        "to enable push based shuffle for a stage.")
+      .doubleConf
+      .createWithDefault(5)
 }

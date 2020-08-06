@@ -1974,7 +1974,28 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
-  class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
+  test("mergerLocations should be bounded with in" +
+    " spark.shuffle.push.retainedMergerLocations") {
+    assert(master.getMergerLocations(10, Set.empty).isEmpty)
+    makeBlockManager(100, "execA",
+      transferService = Some(new MockBlockTransferService(10, "hostA")))
+    makeBlockManager(100, "execB",
+      transferService = Some(new MockBlockTransferService(10, "hostB")))
+    makeBlockManager(100, "execC",
+      transferService = Some(new MockBlockTransferService(10, "hostC")))
+    makeBlockManager(100, "execD",
+      transferService = Some(new MockBlockTransferService(10, "hostD")))
+    makeBlockManager(100, "execE",
+      transferService = Some(new MockBlockTransferService(10, "hostA")))
+    assert(master.getMergerLocations(10, Set.empty).size == 4)
+    assert(master.getMergerLocations(10, Set.empty)
+      .exists(x => Seq("hostC", "hostD", "hostA", "hostB").contains(x.host)))
+    assert(master.getMergerLocations(10, Set("hostB")).size == 3)
+  }
+
+  class MockBlockTransferService(
+      val maxFailures: Int,
+      hostname: String = "MockBlockTransferServiceHost") extends BlockTransferService {
     var numCalls = 0
     var tempFileManager: DownloadFileManager = null
 
@@ -1992,7 +2013,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     override def close(): Unit = {}
 
-    override def hostName: String = { "MockBlockTransferServiceHost" }
+    override def hostName: String = { hostname }
 
     override def port: Int = { 63332 }
 
