@@ -2689,19 +2689,18 @@ object SQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
-
-
+  
   val GROUPING_WITH_UNION = buildConf("spark.sql.optimizer.grouping")
     .doc("When true,enable grouping with union.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val GROUPING_EXPAND_PROJECTIONS = buildConf("spark.sql.optimizer.projections.size")
     .doc("Split a expand into several smallExpand,which contains the size of projections.It can" +
       "reduce the shuffle pressure and improve performance in multidimensional analysis " +
       "when data is huge.")
     .intConf
-    .createWithDefault(4)
+    .createWithDefault(1)
 
   val LEGACY_COMPLEX_TYPES_TO_STRING =
     buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
@@ -2711,7 +2710,6 @@ object SQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
-
 
   /**
    * Holds information about keys that have been deprecated.
