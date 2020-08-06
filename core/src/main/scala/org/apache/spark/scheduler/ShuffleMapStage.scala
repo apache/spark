@@ -21,6 +21,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.{MapOutputTrackerMaster, ShuffleDependency}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.CallSite
 
 /**
@@ -47,6 +48,12 @@ private[spark] class ShuffleMapStage(
   extends Stage(id, rdd, numTasks, parents, firstJobId, callSite, resourceProfileId) {
 
   private[this] var _mapStageJobs: List[ActiveJob] = Nil
+
+  /**
+   * Stores the location of the list of chosen external shuffle services for handling the
+   * shuffle merge requests from mappers in this shuffle map stage.
+   */
+  private[this] var _mergerLocs: Seq[BlockManagerId] = Nil
 
   /**
    * Partitions that either haven't yet been computed, or that were computed on an executor
@@ -94,4 +101,12 @@ private[spark] class ShuffleMapStage(
       .findMissingPartitions(shuffleDep.shuffleId)
       .getOrElse(0 until numPartitions)
   }
+
+  def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
+    if (mergerLocs != null && mergerLocs.length > 0) {
+      _mergerLocs = mergerLocs
+    }
+  }
+
+  def getMergerLocs: Seq[BlockManagerId] = _mergerLocs
 }

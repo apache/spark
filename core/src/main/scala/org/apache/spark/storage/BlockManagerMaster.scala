@@ -125,6 +125,10 @@ class BlockManagerMaster(
     driverEndpoint.askSync[Seq[BlockManagerId]](GetPeers(blockManagerId))
   }
 
+  def getAllExecutors: Seq[BlockManagerId] = {
+    driverEndpoint.askSync[Seq[BlockManagerId]](GetAllExecutors)
+  }
+
   def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {
     driverEndpoint.askSync[Option[RpcEndpointRef]](GetExecutorEndpointRef(executorId))
   }

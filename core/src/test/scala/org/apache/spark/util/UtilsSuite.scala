@@ -33,7 +33,7 @@ import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
 import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
+import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
@@ -1405,6 +1405,27 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     hostnamePort = Utils.parseHostPort("localhost:")
     assert(hostnamePort._1.equals("localhost"))
     assert(hostnamePort._2 === 0)
+  }
+
+  test("isPushBasedShuffleEnabled") {
+    val conf = new SparkConf()
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    conf.set("spark.shuffle.push.based.enabled", "true")
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    conf.set("spark.shuffle.service.enabled", "true")
+    assert(Utils.isPushBasedShuffleEnabled(conf) === true)
+    assert(Utils.isPushBasedShuffleEnabled(
+      conf.set("spark.sql.adaptive.enabled", "true")) === false)
+  }
+
+  test("Test create dir with 770") {
+    val testDir = new File("target/testDir");
+    FileUtils.deleteQuietly(testDir)
+    Utils.createDirWith770(testDir)
+    val foo = new File(testDir, "foo.txt")
+    Files.touch(foo)
+    assert(testDir.exists && testDir.isDirectory)
+    FileUtils.deleteQuietly(testDir)
   }
 }
 

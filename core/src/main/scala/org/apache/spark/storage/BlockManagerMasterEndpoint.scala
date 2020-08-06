@@ -127,6 +127,9 @@ class BlockManagerMasterEndpoint(
     case GetPeers(blockManagerId) =>
       context.reply(getPeers(blockManagerId))
 
+    case GetAllExecutors =>
+      context.reply(getAllExecutors)
+
     case GetExecutorEndpointRef(executorId) =>
       context.reply(getExecutorEndpointRef(executorId))
 
@@ -642,6 +645,12 @@ class BlockManagerMasterEndpoint(
     } else {
       Seq.empty
     }
+  }
+
+  /** Get the list of active block manager ids */
+  private def getAllExecutors: Seq[BlockManagerId] = {
+    val blockManagerIds = blockManagerInfo.keySet
+    blockManagerIds.filterNot { _.isDriver }.toSeq
   }
 
   /**

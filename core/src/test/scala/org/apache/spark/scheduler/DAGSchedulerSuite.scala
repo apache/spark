@@ -267,6 +267,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override def removeExecutor(execId: String): Unit = {
       // don't need to propagate to the driver, which we don't have
     }
+    override def getAllExecutors: Seq[BlockManagerId] = cacheLocations.values.toSeq.flatten
   }
 
   /** The list of results that DAGScheduler has collected. */
@@ -328,7 +329,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       sc.listenerBus,
       mapOutputTracker,
       blockManagerMaster,
-      sc.env)
+      sc.env) {
+      /**
+       * Schedules shuffle merge finalize.
+       */
+      override private[scheduler] def scheduleShuffleMergeFinalize(
+          shuffleMapStage: ShuffleMapStage): Unit = {
+          handleShuffleMergeFinalized(shuffleMapStage.shuffleDep.shuffleId)
+      }
+    }
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
 
@@ -3391,6 +3400,33 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val (shuffleDepsE, rprofsE) = scheduler.getShuffleDependenciesAndResourceProfiles(rddE)
     assert(shuffleDepsE === Set(shuffleDepA, shuffleDepC))
     assert(rprofsE === Set())
+  }
+
+  test("shuffle merge finalization") {
+    afterEach()
+    val conf = new SparkConf()
+    conf.set("spark.shuffle.push.based.enabled", "true")
+    conf.set("spark.shuffle.service.enabled", "true")
+    init(conf)
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    cacheLocations(shuffleMapRdd.id -> 0) = Seq(makeBlockManagerId("hostA"))
+    cacheLocations(shuffleMapRdd.id -> 1) = Seq(makeBlockManagerId("hostB"))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a map stage by itself
+    submitMapStage(shuffleDep)
+    completeShuffleMapStageSuccessfully(0, 0, 1)
+    assert(results.size === 1)
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Submit a reduce job that depends on this map stage; it should directly do the reduce
+    submit(reduceRdd, Array(0))
+    completeNextResultStageWithSuccess(2, 0)
+    assert(results === Map(0 -> 42))
+    results.clear()
+    assertDataStructuresEmpty()
   }
 
   /**

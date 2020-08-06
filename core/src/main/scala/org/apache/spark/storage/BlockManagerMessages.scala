@@ -132,6 +132,8 @@ private[spark] object BlockManagerMessages {
   case class GetReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId)
     extends ToBlockManagerMaster
 
+  case object GetAllExecutors extends ToBlockManagerMaster
+
   case class GetBlockStatus(blockId: BlockId, askStorageEndpoints: Boolean = true)
     extends ToBlockManagerMaster
 

@@ -21,13 +21,14 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.{RPC_ASK_TIMEOUT, RPC_MESSAGE_MAX_SIZE}
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
-import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
+import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus, MergeStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
 
@@ -333,4 +334,63 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
+  test("master register and unregister merge result") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    tracker.registerShuffle(10, 4, 2)
+    assert(tracker.containsShuffle(10))
+    val bitmap = new RoaringBitmap()
+    bitmap.add(0)
+    bitmap.add(1)
+
+    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000),
+      bitmap, 1000L))
+    tracker.registerMergeResult(10, 1, MergeStatus(BlockManagerId("b", "hostB", 1000),
+      bitmap, 1000L))
+    assert(tracker.getNumAvailableMergeResults(10) == 2)
+    tracker.unregisterMergeResult(10, 0, BlockManagerId("a", "hostA", 1000));
+    assert(tracker.getNumAvailableMergeResults(10) == 1)
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
+
+  test("remote fetch with merged shuffle result") {
+    conf.set("spark.shuffle.push.based.enabled", "true")
+    conf.set("spark.shuffle.service.enabled", "true")
+    val hostname = "localhost"
+    val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
+
+    val masterTracker = newTrackerMaster()
+    masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
+
+    val slaveRpcEnv = createRpcEnv("spark-slave", hostname, 0, new SecurityManager(conf))
+    val slaveTracker = new MapOutputTrackerWorker(conf)
+    slaveTracker.trackerEndpoint =
+        slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+    masterTracker.registerShuffle(10, 1, 1)
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    // This is expected to fail because no outputs have been registered for the shuffle.
+    intercept[FetchFailedException] { slaveTracker.getMapSizesByExecutorId(10, 0) }
+    val bitmap = new RoaringBitmap()
+    bitmap.add(0)
+    masterTracker.registerMapOutput(10, 0, MapStatus(
+      BlockManagerId("a", "hostA", 1000), Array(1000L), 0))
+    masterTracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000),
+      bitmap, 1000L))
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
+      Seq((BlockManagerId("a", "hostA", 1000), Seq((ShuffleBlockId(10, -1, 0), 1000L, -1)))))
+    val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
+    assert(slaveTracker.getMapSizesForMergeResult(10, 0) ===
+      Seq((BlockManagerId("a", "hostA", 1000), Seq((ShuffleBlockId(10, 0, 0), size1000))))
+    )
+    masterTracker.stop()
+    slaveTracker.stop()
+    rpcEnv.shutdown()
+    slaveRpcEnv.shutdown()
+  }
 }

@@ -338,6 +338,39 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Create a directory that is writable by the group.
+   * TODO: Find out why can't we create a dir using java api with permission 770
+   *  Files.createDirectories(mergeDir.toPath, PosixFilePermissions.asFileAttribute(
+   *  PosixFilePermissions.fromString("rwxrwx---")))
+   */
+  def createDirWith770(dirToCreate: File): Unit = {
+    var attempts = 0
+    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
+    var created: File = null
+    while (created == null) {
+      attempts += 1
+      if (attempts > maxAttempts) {
+        throw new IOException(
+          s"Failed to create directory ${dirToCreate.getAbsolutePath} after " +
+              s"${maxAttempts} attempts!")
+      }
+      try {
+        val builder = new ProcessBuilder().command(
+          "mkdir", "-m770", dirToCreate.getAbsolutePath)
+        val proc = builder.start()
+        val exitCode = proc.waitFor()
+        if (dirToCreate.exists()) {
+          created = dirToCreate
+        }
+        logDebug(
+          s"Created directory at ${dirToCreate.getAbsolutePath} and exitCode $exitCode")
+      } catch {
+        case e: SecurityException => created = null;
+      }
+    }
+  }
+
+  /**
    * Create a temporary directory inside the given parent directory. The directory will be
    * automatically deleted when the VM shuts down.
    */
@@ -2539,6 +2572,16 @@ private[spark] object Utils extends Logging {
   def isLocalMaster(conf: SparkConf): Boolean = {
     val master = conf.get("spark.master", "")
     master == "local" || master.startsWith("local[")
+  }
+
+  /**
+   * Push based shuffle can only be enabled when external shuffle service is enabled.
+   * In the initial version, we cannot support pushed based shuffle and adaptive execution
+   * at the same time. Will improve this in a later version.
+   */
+  def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
+    conf.get(PUSH_BASED_SHUFFLE_ENABLED) && conf.get(SHUFFLE_SERVICE_ENABLED) &&
+      !conf.getBoolean("spark.sql.adaptive.enabled", false)
   }
 
   /**
