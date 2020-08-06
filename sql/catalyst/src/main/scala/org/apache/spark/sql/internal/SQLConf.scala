@@ -2196,6 +2196,23 @@ object SQLConf {
       .checkValue(bit => bit >= 10 && bit <= 30, "The bit value must be in [10, 30].")
       .createWithDefault(16)
 
+
+  val SKIP_PARTIAL_AGGREGATE_MINROWS =
+  buildConf("spark.sql.aggregate.skipPartialAggregate.minNumRows")
+      .internal()
+      .doc("Number of records after which aggregate operator checks if " +
+        "partial aggregation phase can be avoided")
+      .longConf
+      .createWithDefault(100000)
+
+  val SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO =
+  buildConf("spark.sql.aggregate.skipPartialAggregate.aggregateRatio")
+      .internal()
+      .doc("Ratio of number of records present in map of Aggregate operator" +
+        "to the total number of records processed by the Aggregate operator")
+      .doubleConf
+      .createWithDefault(0.5)
+
   val SKIP_PARTIAL_AGGREGATE_ENABLED =
     buildConf("spark.sql.aggregate.skipPartialAggregate")
       .internal()
@@ -2206,22 +2223,6 @@ object SQLConf {
         s"${SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO.key}")
       .booleanConf
       .createWithDefault(true)
-
-  val SKIP_PARTIAL_AGGREGATE_MINROWS =
-    buildConf("spark.sql.aggregate.skipPartialAggregate.minNumRows")
-      .internal()
-      .doc("Number of records after which aggregate operator checks if " +
-        "partial aggregation phase can be avoided")
-      .longConf
-      .createWithDefault(100000)
-
-  val SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO =
-    buildConf("spark.sql.aggregate.skipPartialAggregate.aggregateRatio")
-      .internal()
-      .doc("Ratio of number of records present in map of Aggregate operator" +
-        "to the total number of records processed by the Aggregate operator")
-      .doubleConf
-      .createWithDefault(0.5)
 
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
