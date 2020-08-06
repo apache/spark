@@ -34,6 +34,7 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
@@ -191,7 +192,7 @@ private[sql] object Dataset {
 class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
-  extends Serializable {
+  extends Serializable with Logging {
 
   @transient lazy val sparkSession: SparkSession = {
     if (queryExecution == null || queryExecution.sparkSession == null) {
@@ -297,7 +298,15 @@ class Dataset[T] private[sql](
         Column(col).cast(StringType)
       }
     }
+
+    val startTime = System.currentTimeMillis();
     val data = newDf.select(castCols: _*).take(numRows + 1)
+    val endTime = System.currentTimeMillis();
+    logWarning(
+      s"""
+          DF select Timing : ${endTime - startTime}
+          """
+        .stripMargin.replace('\n', ' ').trim)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the

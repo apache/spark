@@ -64,7 +64,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
 
     // The candidates may contain placeholders marked as [[planLater]],
     // so try to replace them by their child plans.
-    val plans = candidates.flatMap { candidate =>
+    val  plans = candidates.flatMap { candidate =>
       val placeholders = collectPlaceholders(candidate)
 
       if (placeholders.isEmpty) {
