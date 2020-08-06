@@ -1106,14 +1106,22 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
-  test("SPARK-32516: 'path' option should be treated the same when loading dataframes") {
+  test("SPARK-32516: 'path' option cannot coexist with load() parameters") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
       Seq(1).toDF.write.mode("overwrite").parquet(path)
 
-      val df1 = spark.read.option("path", path).parquet(path)
-      val df2 = spark.read.option("path", path).format("parquet").load(path)
-      checkAnswer(df1, df2)
+      def verify(f: () => DataFrame): Unit = {
+        val e = intercept[AnalysisException](f)
+        assert(e.getMessage.contains(
+          "Either remove the path option or put it into the load() parameters"))
+      }
+
+      spark.read.option("path", path).parquet(path)
+      spark.read.option("path", path).format("parquet").load(path)
+
+      verify(() => { spark.read.option("path", path).parquet(path) })
+      verify(() => spark.read.option("path", path).format("parquet").load(path))
     }
   }
 }

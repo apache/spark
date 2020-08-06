@@ -42,7 +42,7 @@ case class JsonTable(
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = new JSONOptionsInRead(
-      options.asCaseSensitiveMap.asScala.toMap,
+      options.asScala.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     JsonDataSource(parsedOptions).inferSchema(

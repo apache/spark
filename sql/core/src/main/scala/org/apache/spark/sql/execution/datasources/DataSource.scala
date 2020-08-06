@@ -563,11 +563,7 @@ case class DataSource(
   private def createInMemoryFileIndex(globbedPaths: Seq[Path]): InMemoryFileIndex = {
     val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
     new InMemoryFileIndex(
-      sparkSession,
-      globbedPaths,
-      caseInsensitiveOptions.originalMap,
-      userSpecifiedSchema,
-      fileStatusCache)
+      sparkSession, globbedPaths, options, userSpecifiedSchema, fileStatusCache)
   }
 
   /**

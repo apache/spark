@@ -245,22 +245,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    val updatedPaths = if (paths.length == 1) {
-      option("path", paths.head)
-      Seq.empty
-    } else {
-      paths
+    if (extraOptions.contains("path") && paths.nonEmpty) {
+      throw new AnalysisException("There is a path option set and load() is called with path " +
+        "parameters. Either remove the path option or put it into the load() parameters.")
     }
 
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
       val catalogManager = sparkSession.sessionState.catalogManager
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = if (updatedPaths.isEmpty) {
+      val pathsOption = if (paths.isEmpty) {
         None
       } else {
         val objectMapper = new ObjectMapper()
-        Some("paths" -> objectMapper.writeValueAsString(updatedPaths.toArray))
+        Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
 
       val finalOptions = sessionOptions ++ extraOptions.originalMap ++ pathsOption
@@ -288,9 +286,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
             sparkSession,
             DataSourceV2Relation.create(table, catalog, ident, dsOptions))
 
-        case _ => loadV1Source(updatedPaths: _*)
+        case _ => loadV1Source(paths: _*)
       }
-    }.getOrElse(loadV1Source(updatedPaths: _*))
+    }.getOrElse(loadV1Source(paths: _*))
   }
 
   private def loadV1Source(paths: String*) = {
