@@ -1037,8 +1037,7 @@ def _infer_schema(row, names=None):
         try:
             fields.append(StructField(k, _infer_type(v), True))
         except TypeError as e:
-            e.args = ("Column {} contains {}".format(k, e.args[0]), )
-            raise e
+            raise TypeError("Unable to infer the type of the field {}.".format(k)) from e
     return StructType(fields)
 
 

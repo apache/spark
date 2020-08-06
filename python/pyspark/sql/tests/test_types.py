@@ -720,7 +720,7 @@ class TypesTests(ReusedSQLTestCase):
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
-            with self.assertRaisesRegexp(TypeError, "Column myarray contains not supported"):
+            with self.assertRaisesRegexp(TypeError, "infer the type of the field myarray"):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
 
