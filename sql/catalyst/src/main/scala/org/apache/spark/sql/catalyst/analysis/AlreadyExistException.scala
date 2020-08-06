@@ -62,10 +62,18 @@ class PartitionAlreadyExistsException(message: String) extends AnalysisException
   }
 }
 
-class PartitionsAlreadyExistException(db: String, table: String, specs: Seq[TablePartitionSpec])
-  extends AnalysisException(
-    s"The following partitions already exists in table '$table' database '$db':\n"
+class PartitionsAlreadyExistException(message: String) extends AnalysisException(message) {
+  def this(db: String, table: String, specs: Seq[TablePartitionSpec]) {
+    this(s"The following partitions already exists in table '$table' database '$db':\n"
       + specs.mkString("\n===\n"))
+  }
+
+  def this(tableName: String, partitionIdents: Seq[InternalRow], partitionSchema: StructType) = {
+    this(s"The following partitions already exists in table $tableName:" +
+      partitionIdents.map(_.toSeq(partitionSchema).zip(partitionSchema.map(_.name))
+        .map( kv => s"${kv._1} -> ${kv._2}").mkString(",")).mkString("\n===\n"))
+  }
+}
 
 class FunctionAlreadyExistsException(db: String, func: String)
   extends AnalysisException(s"Function '$func' already exists in database '$db'")

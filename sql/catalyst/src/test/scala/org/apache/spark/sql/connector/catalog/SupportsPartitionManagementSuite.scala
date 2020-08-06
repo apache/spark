@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedRefe
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class SupportsPartitionsSuite extends SparkFunSuite {
+class SupportsPartitionManagementSuite extends SparkFunSuite {
 
   private val ident: Identifier = Identifier.of(Array("ns"), "test_table")
 
