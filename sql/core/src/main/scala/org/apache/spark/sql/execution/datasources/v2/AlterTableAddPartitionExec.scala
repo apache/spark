@@ -46,13 +46,13 @@ case class AlterTableAddPartitionExec(
       partitions.filterNot(part => existsPartIdents.contains(part._1))
     notExistsPartitions match {
       case Seq.empty => // Nothing will be done
+      case Seq((partIdent, properties)) =>
+        table.createPartition(partIdent, properties.asJava)
       case Seq(_ *) if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
         table.asAtomicPartitionable
           .createPartitions(
             notExistsPartitions.map(_._1).toArray,
             notExistsPartitions.map(_._2.asJava).toArray)
-      case Seq((partIdent, properties)) =>
-        table.createPartition(partIdent, properties.asJava)
       case _ =>
         throw new UnsupportedOperationException(
           s"Nonatomic partition table ${table.name()} can not add multiple partitions")

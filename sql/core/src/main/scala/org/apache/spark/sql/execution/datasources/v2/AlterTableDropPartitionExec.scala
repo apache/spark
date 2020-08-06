@@ -43,11 +43,11 @@ case class AlterTableDropPartitionExec(
     val existsPartitions = partIdents.filterNot(notExistsPartIdents.contains)
     existsPartitions match {
       case Seq.empty => // Nothing will be done
+      case Seq(partIdent) =>
+        table.dropPartition(partIdent)
       case Seq(_ *) if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
         table.asAtomicPartitionable
           .dropPartitions(existsPartitions.toArray)
-      case Seq(partIdent) =>
-        table.dropPartition(partIdent)
       case _ =>
         throw new UnsupportedOperationException(
           s"Nonatomic partition table ${table.name()} can not drop multiple partitions")
