@@ -67,15 +67,22 @@ case class HashAggregateExec(
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
-    "partialAggSkipped" -> SQLMetrics.createMetric(sparkContext,
-      "number of skipped records for partial aggregates"),
-    "avgHashProbe" ->
-      SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"))
+  override lazy val metrics = {
+    val metrics = Map(
+      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
+      "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+      "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
+      "avgHashProbe" ->
+        SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"))
+    if (skipPartialAggregateEnabled) {
+      metrics ++ Map("partialAggSkipped" -> SQLMetrics.createMetric(sparkContext,
+        "number of skipped records for partial aggregates"))
+    } else {
+      metrics
+    }
+  }
+
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -412,7 +419,7 @@ case class HashAggregateExec(
   private var isFastHashMapEnabled: Boolean = false
 
   private var avoidSpillInPartialAggregateTerm: String = _
-  private val skipPartialAggregate = sqlContext.conf.skipPartialAggregate &&
+  private val skipPartialAggregateEnabled = sqlContext.conf.skipPartialAggregate &&
     AggUtils.areAggExpressionsPartial(modes) && find(_.isInstanceOf[ExpandExec]).isEmpty
   private var rowCountTerm: String = _
   private var outputFunc: String = _
@@ -688,7 +695,7 @@ case class HashAggregateExec(
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
-    if (skipPartialAggregate) {
+    if (skipPartialAggregateEnabled) {
       avoidSpillInPartialAggregateTerm = ctx.
         addMutableState(CodeGenerator.JAVA_BOOLEAN,
           "avoidPartialAggregate",
@@ -781,7 +788,6 @@ case class HashAggregateExec(
     // generate code for output
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
-
     def outputFromFastHashMap: String = {
       if (isFastHashMapEnabled) {
         if (isVectorizedHashMapEnabled) {
@@ -869,7 +875,7 @@ case class HashAggregateExec(
      """.stripMargin
   }
 
-  override def needStopCheck: Boolean = skipPartialAggregate
+  override def needStopCheck: Boolean = skipPartialAggregateEnabled
 
   private def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // create grouping key
@@ -940,24 +946,22 @@ case class HashAggregateExec(
           |}""".stripMargin
       }
 
-      def getHeuristicToAvoidAgg: String = {
-        s"""
-          |!($rowCountTerm < $skipPartialAggregateThreshold) &&
-          |      ((float)$countTerm/$rowCountTerm) > $skipPartialAggRatio;
-          |""".stripMargin
-      }
-
-      if (skipPartialAggregate) {
-        s"""
+      if (skipPartialAggregateEnabled) {
+        val checkIfPartialAggSkipped =
+          s"""
+            |!($rowCountTerm < $skipPartialAggregateThreshold) &&
+            |    ((float)$countTerm/$rowCountTerm) > $skipPartialAggRatio;
+            |""".stripMargin
+          s"""
            |if (!$avoidSpillInPartialAggregateTerm) {
            |  $getAggBufferFromMap
            |  // Can't allocate buffer from the hash map.
            |  // Check if we can avoid partial aggregation.
            |  //  Otherwise, Spill the map and fallback to sort-based
            |  // aggregation after processing all input rows.
-           |  if ($unsafeRowBuffer == null && !$avoidSpillInPartialAggregateTerm) {
+           |  if ($unsafeRowBuffer == null) {
            |    $countTerm = $countTerm + $hashMapTerm.getNumRows();
-           |    boolean skipPartAgg = $getHeuristicToAvoidAgg
+           |    boolean skipPartAgg = $checkIfPartialAggSkipped
            |    if (skipPartAgg) {
            |      // Aggregation buffer is created later
            |      $avoidSpillInPartialAggregateTerm = true;
@@ -969,12 +973,12 @@ case class HashAggregateExec(
        """.stripMargin
       } else {
         s"""
-           |  $getAggBufferFromMap
-           |  // Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
-           |  // aggregation after processing all input rows.
-           |  if ($unsafeRowBuffer == null) {
-           |    $addToSorter
-           |  }
+           |$getAggBufferFromMap
+           |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
+           |// aggregation after processing all input rows.
+           |if ($unsafeRowBuffer == null) {
+           |  $addToSorter
+           |}
        """.stripMargin
       }
     }
@@ -990,7 +994,7 @@ case class HashAggregateExec(
             |}
             |""".stripMargin
         }
-        val insertFastMap = if (skipPartialAggregate) {
+        val insertFastMap = if (skipPartialAggregateEnabled) {
           s"""
              |if ($checkFallbackForGeneratedHashMap && !$avoidSpillInPartialAggregateTerm) {
              |  $findOrInsertIntoFastHashMap
@@ -1017,8 +1021,8 @@ case class HashAggregateExec(
         findOrInsertRegularHashMap
       }
       def createEmptyAggBufferAndUpdateMetrics: String = {
-        if (skipPartialAggregate) {
-          val partTerm = metricTerm(ctx, "partialAggSkipped")
+        if (skipPartialAggregateEnabled) {
+          val numAggSkippedRows = metricTerm(ctx, "partialAggSkipped")
           val initExpr = declFunctions.flatMap(f => f.initialValues)
           val emptyBufferKeyCode = GenerateUnsafeProjection.createCode(ctx, initExpr)
           s"""
@@ -1027,7 +1031,7 @@ case class HashAggregateExec(
              |  ${unsafeRowKeyCode.code}
              |  ${emptyBufferKeyCode.code}
              |  $unsafeRowBuffer = ${emptyBufferKeyCode.value};
-             |  $partTerm.add(1);
+             |  $numAggSkippedRows.add(1);
              |}
              |""".stripMargin
         } else ""
@@ -1190,7 +1194,7 @@ case class HashAggregateExec(
       }
 
       def outputRow: String = {
-        if (skipPartialAggregate) {
+        if (skipPartialAggregateEnabled) {
           s"""
              |if ($avoidSpillInPartialAggregateTerm) {
              |  $outputFunc(${unsafeRowKeyCode.value}, $unsafeRowBuffer);

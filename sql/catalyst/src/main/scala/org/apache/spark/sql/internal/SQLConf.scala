@@ -2197,22 +2197,26 @@ object SQLConf {
       .createWithDefault(16)
 
   val SKIP_PARTIAL_AGGREGATE_ENABLED =
-    buildConf("spark.sql.aggregate.partialaggregate.skip.enabled")
+    buildConf("spark.sql.aggregate.skipPartialAggregate")
       .internal()
-      .doc("Avoid sorter(sort/spill) during partial aggregation")
+      .doc("When enabled, the partial aggregation is skipped when the following" +
+        "two conditions are met. 1. When the total number of records processed is greater" +
+        s"than threshold defined by ${SKIP_PARTIAL_AGGREGATE_MINROWS.key} 2. When the ratio" +
+        "of recornd count in map to the total records is less that value defined by " +
+        s"${SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO.key}")
       .booleanConf
       .createWithDefault(true)
 
-  val SKIP_PARTIAL_AGGREGATE_THRESHOLD =
-    buildConf("spark.sql.aggregate.partialaggregate.skip.threshold")
+  val SKIP_PARTIAL_AGGREGATE_MINROWS =
+    buildConf("spark.sql.aggregate.skipPartialAggregate.minNumRows")
       .internal()
       .doc("Number of records after which aggregate operator checks if " +
         "partial aggregation phase can be avoided")
       .longConf
       .createWithDefault(100000)
 
-  val SKIP_PARTIAL_AGGREGATE_REDUCTION_RATIO =
-    buildConf("spark.sql.aggregate.partialaggregate.skip.ratio")
+  val SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO =
+    buildConf("spark.sql.aggregate.skipPartialAggregate.aggregateRatio")
       .internal()
       .doc("Ratio of number of records present in map of Aggregate operator" +
         "to the total number of records processed by the Aggregate operator")
@@ -2947,9 +2951,9 @@ class SQLConf extends Serializable with Logging {
 
   def skipPartialAggregate: Boolean = getConf(SKIP_PARTIAL_AGGREGATE_ENABLED)
 
-  def skipPartialAggregateThreshold: Long = getConf(SKIP_PARTIAL_AGGREGATE_THRESHOLD)
+  def skipPartialAggregateThreshold: Long = getConf(SKIP_PARTIAL_AGGREGATE_MINROWS)
 
-  def skipPartialAggregateRatio: Double = getConf(SKIP_PARTIAL_AGGREGATE_REDUCTION_RATIO)
+  def skipPartialAggregateRatio: Double = getConf(SKIP_PARTIAL_AGGREGATE_AGGREGATE_RATIO)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 

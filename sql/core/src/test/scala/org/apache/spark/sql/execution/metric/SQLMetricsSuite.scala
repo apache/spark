@@ -192,7 +192,6 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         }
       }
     }
-
   }
 
   test("ObjectHashAggregate metrics") {
