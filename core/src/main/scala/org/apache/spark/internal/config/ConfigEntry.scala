@@ -275,7 +275,8 @@ private[spark] object ConfigEntry {
 
   val UNDEFINED = "<undefined>"
 
-  private val knownConfigs = new java.util.concurrent.ConcurrentHashMap[String, ConfigEntry[_]]()
+  private[spark] val knownConfigs =
+    new java.util.concurrent.ConcurrentHashMap[String, ConfigEntry[_]]()
 
   def registerEntry(entry: ConfigEntry[_]): Unit = {
     val existing = knownConfigs.putIfAbsent(entry.key, entry)

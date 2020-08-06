@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.Locale
+import java.time.ZoneOffset
+import java.util.{Locale, TimeZone}
 import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -56,6 +58,9 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
 class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
+  private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=(.*)""".r
+  private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
+
   /**
    * Create a [[SetCommand]] logical plan.
    *
@@ -64,17 +69,28 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    // Construct the command.
-    val raw = remainder(ctx.SET.getSymbol)
-    val keyValueSeparatorIndex = raw.indexOf('=')
-    if (keyValueSeparatorIndex >= 0) {
-      val key = raw.substring(0, keyValueSeparatorIndex).trim
-      val value = raw.substring(keyValueSeparatorIndex + 1).trim
-      SetCommand(Some(key -> Option(value)))
-    } else if (raw.nonEmpty) {
-      SetCommand(Some(raw.trim -> None))
+    remainder(ctx.SET.getSymbol).trim match {
+      case configKeyValueDef(key, value) =>
+        SetCommand(Some(key -> Option(value.trim)))
+      case configKeyDef(key) =>
+        SetCommand(Some(key -> None))
+      case s if s == "-v" =>
+        SetCommand(Some("-v" -> None))
+      case s if s.isEmpty =>
+        SetCommand(None)
+      case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
+        "'SET key=value'. If you want to include special characters in key, " +
+        "please use quotes, e.g., SET `ke y`=value.", ctx)
+    }
+  }
+
+  override def visitSetQuotedConfiguration(ctx: SetQuotedConfigurationContext)
+    : LogicalPlan = withOrigin(ctx) {
+    val keyStr = ctx.configKey().getText
+    if (ctx.EQ() != null) {
+      SetCommand(Some(keyStr -> Option(remainder(ctx.EQ().getSymbol).trim)))
     } else {
-      SetCommand(None)
+      SetCommand(Some(keyStr -> None))
     }
   }
 
@@ -83,11 +99,60 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Example SQL :
    * {{{
    *   RESET;
+   *   RESET spark.sql.session.timeZone;
    * }}}
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    ResetCommand
+    remainder(ctx.RESET.getSymbol).trim match {
+      case configKeyDef(key) =>
+        ResetCommand(Some(key))
+      case s if s.trim.isEmpty =>
+        ResetCommand(None)
+      case _ => throw new ParseException("Expected format is 'RESET' or 'RESET key'. " +
+        "If you want to include special characters in key, " +
+        "please use quotes, e.g., RESET `ke y`.", ctx)
+    }
+  }
+
+  override def visitResetQuotedConfiguration(
+      ctx: ResetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
+    ResetCommand(Some(ctx.configKey().getText))
+  }
+
+  /**
+   * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]]
+   * Example SQL :
+   * {{{
+   *   SET TIME ZONE LOCAL;
+   *   SET TIME ZONE 'Asia/Shanghai';
+   *   SET TIME ZONE INTERVAL 10 HOURS;
+   * }}}
+   */
+  override def visitSetTimeZone(ctx: SetTimeZoneContext): LogicalPlan = withOrigin(ctx) {
+    val key = SQLConf.SESSION_LOCAL_TIMEZONE.key
+    if (ctx.interval != null) {
+      val interval = parseIntervalLiteral(ctx.interval)
+      if (interval.months != 0 || interval.days != 0 ||
+        math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR ||
+        interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
+        throw new ParseException("The interval value must be in the range of [-18, +18] hours" +
+          " with second precision",
+          ctx.interval())
+      } else {
+        val seconds = (interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt
+        SetCommand(Some(key -> Some(ZoneOffset.ofTotalSeconds(seconds).toString)))
+      }
+    } else if (ctx.timezone != null) {
+      ctx.timezone.getType match {
+        case SqlBaseParser.LOCAL =>
+          SetCommand(Some(key -> Some(TimeZone.getDefault.getID)))
+        case _ =>
+          SetCommand(Some(key -> Some(string(ctx.STRING))))
+      }
+    } else {
+      throw new ParseException("Invalid time zone displacement value", ctx)
+    }
   }
 
   /**

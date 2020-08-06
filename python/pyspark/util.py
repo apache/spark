@@ -16,9 +16,12 @@
 # limitations under the License.
 #
 
+import threading
 import re
 import sys
 import traceback
+
+from py4j.clientserver import ClientServer
 
 __all__ = []
 
@@ -113,6 +116,64 @@ def _parse_memory(s):
     if s[-1].lower() not in units:
         raise ValueError("invalid format: " + s)
     return int(float(s[:-1]) * units[s[-1].lower()])
+
+
+class InheritableThread(threading.Thread):
+    """
+    Thread that is recommended to be used in PySpark instead of :class:`threading.Thread`
+    when the pinned thread mode is enabled. The usage of this class is exactly same as
+    :class:`threading.Thread` but correctly inherits the inheritable properties specific
+    to JVM thread such as ``InheritableThreadLocal``.
+
+    Also, note that pinned thread mode does not close the connection from Python
+    to JVM when the thread is finished in the Python side. With this class, Python
+    garbage-collects the Python thread instance and also closes the connection
+    which finishes JVM thread correctly.
+
+    When the pinned thread mode is off, this works as :class:`threading.Thread`.
+
+    .. note:: Experimental
+
+    .. versionadded:: 3.1.0
+    """
+    def __init__(self, target, *args, **kwargs):
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+
+        if isinstance(sc._gateway, ClientServer):
+            # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+            properties = sc._jsc.sc().getLocalProperties().clone()
+            self._sc = sc
+
+            def copy_local_properties(*a, **k):
+                sc._jsc.sc().setLocalProperties(properties)
+                return target(*a, **k)
+
+            super(InheritableThread, self).__init__(
+                target=copy_local_properties, *args, **kwargs)
+        else:
+            super(InheritableThread, self).__init__(target=target, *args, **kwargs)
+
+    def __del__(self):
+        from pyspark import SparkContext
+
+        if isinstance(SparkContext._gateway, ClientServer):
+            thread_connection = self._sc._jvm._gateway_client.thread_connection.connection()
+            if thread_connection is not None:
+                connections = self._sc._jvm._gateway_client.deque
+
+                # Reuse the lock for Py4J in PySpark
+                with SparkContext._lock:
+                    for i in range(len(connections)):
+                        if connections[i] is thread_connection:
+                            connections[i].close()
+                            del connections[i]
+                            break
+                    else:
+                        # Just in case the connection was not closed but removed from the queue.
+                        thread_connection.close()
+
 
 if __name__ == "__main__":
     import doctest

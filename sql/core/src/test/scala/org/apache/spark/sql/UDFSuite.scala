@@ -22,6 +22,8 @@ import java.sql.Timestamp
 import java.time.{Instant, LocalDate}
 import java.time.format.DateTimeFormatter
 
+import scala.collection.mutable.{ArrayBuffer, WrappedArray}
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -548,7 +550,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       udf((d: LocalDate, i: Instant) => LocalDateInstantType(d, i)))
     checkAnswer(df.selectExpr(s"buildLocalDateInstantType(d, i) as di")
       .select('di.cast(StringType)),
-      Row(s"[$expectedDate, $expectedInstant]") :: Nil)
+      Row(s"{$expectedDate, $expectedInstant}") :: Nil)
 
     // test null cases
     spark.udf.register("buildLocalDateInstantType",
@@ -578,7 +580,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       udf((t: Timestamp, i: Instant) => TimestampInstantType(t, i)))
     checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti")
       .select('ti.cast(StringType)),
-      Row(s"[$expectedTimestamp, $expectedInstant]"))
+      Row(s"{$expectedTimestamp, $expectedInstant}"))
 
     // test null cases
     spark.udf.register("buildTimestampInstantType",
@@ -786,5 +788,14 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     spark.udf.register("key", udf((m: Array[Int]) => m.head))
     Seq(Array(1)).toDF("a").createOrReplaceTempView("t")
     checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
+  }
+
+  test("SPARK-32459: UDF should not fail on WrappedArray") {
+    val myUdf = udf((a: WrappedArray[Int]) =>
+      WrappedArray.make[Int](Array(a.head + 99)))
+    checkAnswer(Seq(Array(1))
+      .toDF("col")
+      .select(myUdf(Column("col"))),
+      Row(ArrayBuffer(100)))
   }
 }

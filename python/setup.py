@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -161,6 +161,7 @@ try:
         author_email='dev@spark.apache.org',
         url='https://github.com/apache/spark/tree/master/python',
         packages=['pyspark',
+                  'pyspark.cloudpickle',
                   'pyspark.mllib',
                   'pyspark.mllib.linalg',
                   'pyspark.mllib.stat',
