@@ -2589,8 +2589,12 @@ private[spark] object Utils extends Logging {
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
     val dynamicAllocationEnabled = conf.get(DYN_ALLOCATION_ENABLED)
+    // LIHADOOP-52773 Disable dynamic allocation when user enables push based shuffle.
+    // This enforcement needs to be removed after push based shuffle gets improved to
+    // work better with dynamic allocation enabled.
     dynamicAllocationEnabled &&
-      (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))
+      (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING)) &&
+      !isPushBasedShuffleEnabled(conf)
   }
 
   def isStreamingDynamicAllocationEnabled(conf: SparkConf): Boolean = {

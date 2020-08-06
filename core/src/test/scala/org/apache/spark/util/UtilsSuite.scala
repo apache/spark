@@ -868,6 +868,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       conf.set("spark.executor.instances", "0")))
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
     assert(Utils.isDynamicAllocationEnabled(conf.set(DYN_ALLOCATION_TESTING, true)))
+    // LIHADOOP-52773 Disable dynamic allocation when user enables push based shuffle.
+    conf.set(DYN_ALLOCATION_ENABLED, true)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.shuffle.push.based.enabled", "true")) === true)
+    conf.set("spark.shuffle.service.enabled", "true")
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.shuffle.push.based.enabled", "true")) === false)
+    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.shuffle.push.based.enabled", "true")
+      .set("spark.sql.adaptive.enabled", "true")) === true)
   }
 
   test("getDynamicAllocationInitialExecutors") {
