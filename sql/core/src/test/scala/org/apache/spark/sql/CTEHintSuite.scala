@@ -19,11 +19,10 @@ package org.apache.spark.sql
 
 import org.apache.log4j.Level
 
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
 
-class CTEHintSuite extends PlanTest with SharedSparkSession {
+class CTEHintSuite extends QueryTest with SharedSparkSession {
 
   def verifyCoalesceHint(df: DataFrame): Unit = {
     def checkPlanContainsRepartition(plan: LogicalPlan): Unit = {
@@ -162,6 +161,18 @@ class CTEHintSuite extends PlanTest with SharedSparkSession {
           Some(HintInfo(strategy = Some(SHUFFLE_REPLICATE_NL))),
           Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil
       )
+    }
+  }
+
+  test("SPARK-32237: Hint in CTE") {
+    withTable("t") {
+      sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS id")
+      checkAnswer(
+        sql(s"""
+               |WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM t)
+               |SELECT * FROM cte
+        """.stripMargin),
+        Row(1) :: Nil)
     }
   }
 }
