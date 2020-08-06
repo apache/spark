@@ -43,11 +43,4 @@ trait TPCDSBase extends TPCDSSchema {
   val modifiedTPCDSQueries = Seq(
     "q3", "q7", "q10", "q19", "q27", "q34", "q42", "q43", "q46", "q52", "q53", "q55", "q59",
     "q63", "q65", "q68", "q73", "q79", "q89", "q98", "ss_max")
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    for (tableName <- tableNames) {
-      createTable(spark, tableName)
-    }
-  }
 }

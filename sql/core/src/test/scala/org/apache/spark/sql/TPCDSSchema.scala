@@ -17,7 +17,15 @@
 
 package org.apache.spark.sql
 
+import java.io.{FileInputStream, ObjectInputStream}
+import java.nio.file.Paths
+
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
+
+import scala.collection.mutable
 
 trait TPCDSSchema extends SharedSparkSession {
 
@@ -246,6 +254,37 @@ trait TPCDSSchema extends SharedSparkSession {
 
   val tableNames: Iterable[String] = tableColumns.keys
 
+  val DB_TPCDS_SF1 = "tpcds_sf1_parquet_stats"
+  val DB_TPCDS_SF100 = "tpcds_sf100_parquet_stats"
+
+  private def loadDB(dbName: String): Unit = {
+    sql(s"DROP DATABASE IF EXISTS $dbName CASCADE")
+    sql(s"CREATE DATABASE $dbName")
+    sql(s"USE $dbName")
+    val tableStatsFile = Paths.get("src", "test", "resources", dbName).toFile
+    val tableStatsMap = new mutable.HashMap[String, CatalogStatistics]()
+
+    // construct the table stats
+    val objIn = new ObjectInputStream(new FileInputStream(tableStatsFile))
+    try {
+      val tableNum = objIn.readInt()
+      (0 until tableNum).foreach { _ =>
+        val tableName = objIn.readUTF()
+        val tableStat = objIn.readObject().asInstanceOf[CatalogStatistics]
+        tableStatsMap(tableName) = tableStat
+      }
+    }
+
+    tableNames.foreach { tableName =>
+      createTable(spark, tableName)
+      // To simulate plan generation on actual TPCDS data, injects data stats here
+      tableStatsMap.get(tableName).foreach { stat =>
+        spark.sessionState.catalog.alterTableStats(
+          TableIdentifier(tableName, Some(dbName)), Some(stat))
+      }
+    }
+  }
+
   def createTable(
       spark: SparkSession,
       tableName: String,
@@ -257,5 +296,11 @@ trait TPCDSSchema extends SharedSparkSession {
          |USING $format
          |${options.mkString("\n")}
        """.stripMargin)
+  }
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    loadDB(DB_TPCDS_SF1)
+    loadDB(DB_TPCDS_SF100)
   }
 }

@@ -258,7 +258,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
    * Test a TPC-DS query. Depending of the settings this test will either check if the plan matches
    * a golden file or it will create a new golden file.
    */
-  protected def testQuery(tpcdsGroup: String, query: String): Unit = {
+  protected def testQuery(tpcdsGroup: String, query: String, scaleFactor: String): Unit = {
     val queryString = resourceToString(s"$tpcdsGroup/$query.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     val qe = sql(queryString).queryExecution
@@ -266,9 +266,9 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     val explain = normalizeIds(qe.toString)
 
     if (regenerateGoldenFiles) {
-      approvePlan(plan, query, variant = false, explain)
+      approvePlan(plan, s"$query.$scaleFactor", variant = false, explain)
     } else {
-      checkWithApproved(plan, query, explain)
+      checkWithApproved(plan, s"$query.$scaleFactor", explain)
     }
   }
 }
@@ -278,8 +278,16 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
 
   tpcdsQueries.foreach { q =>
-    test(s"check simplified (tpcds-v1.4/$q)") {
-      testQuery("tpcds", q)
+    test(s"check simplified sf1 (tpcds-v1.4/$q)") {
+      activateDatabase(DB_TPCDS_SF1) {
+        testQuery("tpcds", q, "sf1")
+      }
+    }
+
+    test(s"check simplified sf100 (tpcds-v1.4/$q)") {
+      activateDatabase(DB_TPCDS_SF100) {
+        testQuery("tpcds", q, "sf100")
+      }
     }
   }
 }
@@ -289,8 +297,16 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
     new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
 
   tpcdsQueriesV2_7_0.foreach { q =>
-    test(s"check simplified (tpcds-v2.7.0/$q)") {
-      testQuery("tpcds-v2.7.0", q)
+    test(s"check simplified sf1 (tpcds-v2.7.0/$q)") {
+      activateDatabase(DB_TPCDS_SF1) {
+        testQuery("tpcds-v2.7.0", q, "sf1")
+      }
+    }
+
+    test(s"check simplified sf100 (tpcds-v2.7.0/$q)") {
+      activateDatabase(DB_TPCDS_SF100) {
+        testQuery("tpcds-v2.7.0", q, "sf10")
+      }
     }
   }
 }
@@ -300,8 +316,16 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
     new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
 
   modifiedTPCDSQueries.foreach { q =>
-    test(s"check simplified (tpcds-modifiedQueries/$q)") {
-      testQuery("tpcds-modifiedQueries", q)
+    test(s"check simplified sf1 (tpcds-modifiedQueries/$q)") {
+      activateDatabase(DB_TPCDS_SF1) {
+        testQuery("tpcds-modifiedQueries", q, "sf1")
+      }
+    }
+
+    test(s"check simplified sf100 (tpcds-modifiedQueries/$q)") {
+      activateDatabase(DB_TPCDS_SF100) {
+        testQuery("tpcds-modifiedQueries", q, "sf100")
+      }
     }
   }
 }
