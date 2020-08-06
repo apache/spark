@@ -20,12 +20,11 @@ package org.apache.spark.sql
 import java.io.{FileInputStream, ObjectInputStream}
 import java.nio.file.Paths
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.Utils
-
-import scala.collection.mutable
 
 trait TPCDSSchema extends SharedSparkSession {
 
