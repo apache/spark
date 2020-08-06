@@ -91,10 +91,10 @@ class InMemoryPartitionTable(
   }
 
   override def partitionExists(ident: InternalRow): Boolean =
+    memoryTablePartitions.containsKey(ident)
 
   def clearPartitions(): Unit = {
     memoryTablePartitions.clear()
   }
-  override def partitionExists(ident: InternalRow): Boolean =
 }
 
