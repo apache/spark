@@ -229,7 +229,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
-    checkPathOptionDoesNotExist()
+    verifyPathOptionDoesNotExist()
     option("path", path).load(Seq.empty: _*)
   }
 
@@ -247,7 +247,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     if (paths.nonEmpty) {
-      checkPathOptionDoesNotExist()
+      verifyPathOptionDoesNotExist()
     }
 
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
@@ -305,7 +305,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Called when load() takes non-empty path parameters.
    */
-  private def checkPathOptionDoesNotExist() = {
+  private def verifyPathOptionDoesNotExist() = {
     if (extraOptions.contains("path")) {
       throw new AnalysisException("There is a path option set and load() is called with path " +
         "parameters. Either remove the path option or put it into the load() parameters.")
