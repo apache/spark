@@ -767,7 +767,7 @@ private[hive] class HiveClientImpl(
       case _: UnsupportedOperationException =>
         // Fallback to filter logic if getTablesByType not supported.
         val tableNames = client.getTablesByPattern(dbName, pattern).asScala
-        getRawTablesByName(dbName, tableNames)
+        getRawTablesByName(dbName, tableNames.toSeq)
           .filter(_.getTableType == hiveTableType)
           .map(_.getTableName)
     }
