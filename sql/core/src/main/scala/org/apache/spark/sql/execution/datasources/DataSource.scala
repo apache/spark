@@ -193,7 +193,7 @@ case class DataSource(
     }.orElse {
       format.inferSchema(
         sparkSession,
-        caseInsensitiveOptions - "path",
+        caseInsensitiveOptions,
         tempFileIndex.allFiles())
     }.getOrElse {
       throw new AnalysisException(
@@ -369,7 +369,7 @@ case class DataSource(
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
-            caseInsensitiveOptions - "path",
+            caseInsensitiveOptions,
             fileCatalog.allFiles())
         }.getOrElse {
           throw new AnalysisException(
