@@ -2689,7 +2689,7 @@ object SQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
-  
+
   val GROUPING_WITH_UNION = buildConf("spark.sql.optimizer.grouping")
     .doc("When true,enable grouping with union.")
     .booleanConf
