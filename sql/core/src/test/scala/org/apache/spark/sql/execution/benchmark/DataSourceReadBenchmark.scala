@@ -36,11 +36,21 @@ import org.apache.spark.sql.vectorized.ColumnVector
  * Benchmark to measure data source read performance.
  * To run this benchmark:
  * {{{
+ *   By default it measures 4 data source format: Parquet, ORC, JSON, CSV.
  *   1. without sbt: bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *      Results will be written to "benchmarks/DataSourceReadBenchmark-results.txt".
+ *
+ *   To measure specified formats, run it with arguments.
+ *   1. without sbt: bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
+ *          format1 [format2] [...]
+ *   2. build/sbt "sql/test:runMain <this class> format1 [format2] [...]"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>
+ *        format1 [format2] [...]"
+ *      Results will be written to "benchmarks/BuiltInDataSourceWriteBenchmark-results.txt".
  * }}}
  */
 object DataSourceReadBenchmark extends SqlBasedBenchmark {
