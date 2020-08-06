@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.connector.catalog;
 
 import java.util.Map;
@@ -41,7 +42,7 @@ import org.apache.spark.sql.types.StructType;
  * @since 3.1.0
  */
 @Experimental
-public interface SupportsPartitions extends Table {
+public interface SupportsPartitionManagement extends Table {
 
     /**
      * @return the partition schema of table
@@ -68,6 +69,16 @@ public interface SupportsPartitions extends Table {
      * @return true if a partition was deleted, false if no partition exists for the identifier
      */
     boolean dropPartition(InternalRow ident);
+
+    /**
+     * Test whether a partition exists using an {@link Identifier identifier} from the table.
+     *
+     * @param ident a partition identifier
+     * @return true if the partition exists, false otherwise
+     */
+    default boolean partitionExists(InternalRow ident) {
+        return listPartitionIdentifiers(ident).length > 0;
+    }
 
     /**
      * Replace the partition metadata of the existing partition.

@@ -563,7 +563,7 @@ case class ShowFunctions(
  * }}}
  */
 case class AlterTableAddPartition(
-    table: SupportsPartitions,
+    table: SupportsPartitionManagement,
     parts: Seq[(InternalRow, Map[String, String])],
     ignoreIfExists: Boolean) extends Command
 
@@ -577,6 +577,6 @@ case class AlterTableAddPartition(
  * }}}
  */
 case class AlterTableDropPartition(
-    table: SupportsPartitions,
+    table: SupportsPartitionManagement,
     partIdents: Seq[InternalRow],
     ignoreIfNotExists: Boolean) extends Command

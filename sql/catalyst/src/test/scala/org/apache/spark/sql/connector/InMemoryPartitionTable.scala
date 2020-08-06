@@ -24,20 +24,19 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.SupportsPartitions
+import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
-
 /**
- * This class is used to test SupportsPartitions API.
+ * This class is used to test SupportsPartitionManagement API.
  */
 class InMemoryPartitionTable(
     name: String,
     schema: StructType,
     partitioning: Array[Transform],
     properties: util.Map[String, String])
-  extends InMemoryTable(name, schema, partitioning, properties) with SupportsPartitions {
+  extends InMemoryTable(name, schema, partitioning, properties) with SupportsPartitionManagement {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   private val memoryTablePartitions: util.Map[InternalRow, util.Map[String, String]] =
@@ -91,11 +90,11 @@ class InMemoryPartitionTable(
       .filter(_.toSeq(partitionSchema).startsWith(prefixPart)).toArray
   }
 
-  def partitionExists(ident: InternalRow): Boolean = {
-    memoryTablePartitions.containsKey(ident)
-  }
+  override def partitionExists(ident: InternalRow): Boolean =
 
   def clearPartitions(): Unit = {
     memoryTablePartitions.clear()
   }
+  override def partitionExists(ident: InternalRow): Boolean =
 }
+

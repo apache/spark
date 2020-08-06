@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.connector.catalog.{SupportsDelete, SupportsPartitions, SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsDelete, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.types.{ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -55,12 +55,23 @@ object DataSourceV2Implicits {
       }
     }
 
-    def asPartitionable: SupportsPartitions = {
+    def asPartitionable: SupportsPartitionManagement = {
       table match {
-        case support: SupportsPartitions =>
+        case support: SupportsPartitionManagement =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support partitions: ${table.name}")
+          throw new AnalysisException(
+            s"Table does not support partition management: ${table.name}")
+      }
+    }
+
+    def asAtomicPartitionable: SupportsAtomicPartitionManagement = {
+      table match {
+        case support: SupportsAtomicPartitionManagement =>
+          support
+        case _ =>
+          throw new AnalysisException(
+            s"Table does not support atomic partition management: ${table.name}")
       }
     }
 

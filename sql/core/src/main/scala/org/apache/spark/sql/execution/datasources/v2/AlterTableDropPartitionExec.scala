@@ -18,25 +18,39 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.SupportsPartitions
+import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement}
 
 /**
  * Physical plan node for dropping partitions of table.
  */
 case class AlterTableDropPartitionExec(
-    table: SupportsPartitions,
+    table: SupportsPartitionManagement,
     partIdents: Seq[InternalRow],
     ignoreIfNotExists: Boolean) extends V2CommandExec {
+  import DataSourceV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    partIdents.foreach { partIdent =>
-      if (!table.dropPartition(partIdent) && !ignoreIfNotExists) {
-        throw new NoSuchPartitionException(table.name(), partIdent, table.partitionSchema())
-      }
+    val notExistsPartIdents = partIdents.filterNot(table.partitionExists)
+    if (notExistsPartIdents.nonEmpty && !ignoreIfNotExists) {
+      throw new NoSuchPartitionsException(
+        table.name(), notExistsPartIdents, table.partitionSchema())
+    }
+
+    val existsPartitions = partIdents.filterNot(notExistsPartIdents.contains)
+    existsPartitions match {
+      case Seq.empty => // Nothing will be done
+      case Seq(_ *) if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
+        table.asAtomicPartitionable
+          .dropPartitions(existsPartitions.toArray)
+      case Seq(partIdent) =>
+        table.dropPartition(partIdent)
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Nonatomic partition table ${table.name()} can not drop multiple partitions")
     }
     Seq.empty
   }
