@@ -94,4 +94,17 @@ private[spark] class ShuffleMapStage(
       .findMissingPartitions(shuffleDep.shuffleId)
       .getOrElse(0 until numPartitions)
   }
+
+  /**
+   * Returns true if push based shuffle is disabled for this stage, or if the shuffle merge for
+   * this stage is finalized, i.e. the shuffle merge results for all partitions are available.
+   */
+  def isMergeFinalized: Boolean = {
+    // EmptyRDD should not be computed
+    if (numPartitions > 0 && shuffleDep.mergerLocs.nonEmpty) {
+      shuffleDep.shuffleMergeFinalized
+    } else {
+      true
+    }
+  }
 }
