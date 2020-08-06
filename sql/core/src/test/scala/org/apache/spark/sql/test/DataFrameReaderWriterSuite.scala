@@ -224,17 +224,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(LastOptions.parameters("opt3") == "3")
   }
 
-  test("SPARK-32364: path argument of load function should override all existing options") {
-    spark.read
-      .format("org.apache.spark.sql.test")
-      .option("paTh", "1")
-      .option("PATH", "2")
-      .option("Path", "3")
-      .option("patH", "4")
-      .load("5")
-    assert(LastOptions.parameters("path") == "5")
-  }
-
   test("SPARK-32364: path argument of save function should override all existing options") {
     Seq(1).toDF.write
       .format("org.apache.spark.sql.test")
@@ -395,7 +384,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       .load("/test")
 
     assert(LastOptions.parameters("intOpt") == "56")
-    assert(LastOptions.parameters("path") == "/test")
+    assert(!LastOptions.parameters.contains("path"))
 
     LastOptions.clear()
     spark.read
@@ -1106,22 +1095,26 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
-  test("SPARK-32516: 'path' option cannot coexist with load() parameters") {
+  test("SPARK-32516: 'path' option cannot coexist with load()'s path parameters") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
       Seq(1).toDF.write.mode("overwrite").parquet(path)
 
-      def verify(f: () => DataFrame): Unit = {
-        val e = intercept[AnalysisException](f)
+      def verifyLoadFails(f: () => DataFrame): Unit = {
+        val e = intercept[AnalysisException](f())
         assert(e.getMessage.contains(
           "Either remove the path option or put it into the load() parameters"))
       }
 
-      spark.read.option("path", path).parquet(path)
-      spark.read.option("path", path).format("parquet").load(path)
-
-      verify(() => { spark.read.option("path", path).parquet(path) })
-      verify(() => spark.read.option("path", path).format("parquet").load(path))
+      verifyLoadFails(() => spark.read.option("path", path).parquet(path))
+      verifyLoadFails(() => spark.read.option("path", path).format("parquet").load(path))
+      verifyLoadFails(() => spark.read
+        .format("org.apache.spark.sql.test")
+        .option("paTh", "1")
+        .option("PATH", "2")
+        .option("Path", "3")
+        .option("patH", "4")
+        .load("5"))
     }
   }
 }
