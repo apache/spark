@@ -276,7 +276,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         s.map(mapChild)
       case m: Map[_, _] =>
         // `mapValues` is lazy and we need to force it to materialize
-        m.mapValues(mapChild).view.force
+        m.mapValues(mapChild).view.force.toMap
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
