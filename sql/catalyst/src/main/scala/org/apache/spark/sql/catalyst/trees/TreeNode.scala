@@ -275,8 +275,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       case s: Seq[_] =>
         s.map(mapChild)
       case m: Map[_, _] =>
-        // `map.mapValues().view.force` return Map in Scala 2.12 but return IndexedSeq in Scala
-        // 2.13, call toMap method manually to compatible with Scala 2.12 and Scala 2.13`
+        // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
+        // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
         // `mapValues` is lazy and we need to force it to materialize
         m.mapValues(mapChild).view.force.toMap
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
@@ -413,8 +413,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         } else {
           Some(arg)
         }
-      // `map.mapValues().view.force` return Map in Scala 2.12 but return IndexedSeq in Scala
-      // 2.13, call toMap method manually to compatible with Scala 2.12 and Scala 2.13`
+      // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
+      // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
       case m: Map[_, _] => m.mapValues {
         case arg: TreeNode[_] if containsChild(arg) =>
           val newChild = f(arg.asInstanceOf[BaseType])
