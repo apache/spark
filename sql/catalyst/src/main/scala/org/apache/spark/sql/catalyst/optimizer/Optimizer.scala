@@ -1825,7 +1825,6 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
   }
 }
 
-
 /**
  * Split [[Expand]] into several splitExpand if the projection size of Expand is larger
  * than default projection size.
