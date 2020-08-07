@@ -17,19 +17,23 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import java.io.ObjectInputStream
+
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -162,6 +166,56 @@ object ExpressionEncoder {
       e4: ExpressionEncoder[T4],
       e5: ExpressionEncoder[T5]): ExpressionEncoder[(T1, T2, T3, T4, T5)] =
     tuple(Seq(e1, e2, e3, e4, e5)).asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4, T5)]]
+
+  private val anyObjectType = ObjectType(classOf[Any])
+
+  /**
+   * Function that deserializes an [[InternalRow]] into an object of type `T`. This class is not
+   * thread-safe.
+   */
+  class Deserializer[T](private val expressions: Seq[Expression])
+    extends (InternalRow => T) with Serializable {
+    @transient
+    private[this] var constructProjection: Projection = _
+
+    override def apply(row: InternalRow): T = try {
+      if (constructProjection == null) {
+        constructProjection = SafeProjection.create(expressions)
+      }
+      constructProjection(row).get(0, anyObjectType).asInstanceOf[T]
+    } catch {
+      case e: Exception =>
+        throw new RuntimeException(s"Error while decoding: $e\n" +
+          s"${expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
+    }
+  }
+
+  /**
+   * Function that serializesa an object of type `T` to an [[InternalRow]]. This class is not
+   * thread-safe. Note that multiple calls to `apply(..)` return the same actual [[InternalRow]]
+   * object.  Thus, the caller should copy the result before making another call if required.
+   */
+  class Serializer[T](private val expressions: Seq[Expression])
+    extends (T => InternalRow) with Serializable {
+    @transient
+    private[this] var inputRow: GenericInternalRow = _
+
+    @transient
+    private[this] var extractProjection: UnsafeProjection = _
+
+    override def apply(t: T): InternalRow = try {
+      if (extractProjection == null) {
+        inputRow = new GenericInternalRow(1)
+        extractProjection = GenerateUnsafeProjection.generate(expressions)
+      }
+      inputRow(0) = t
+      extractProjection(inputRow)
+    } catch {
+      case e: Exception =>
+        throw new RuntimeException(s"Error while encoding: $e\n" +
+          s"${expressions.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
+    }
+  }
 }
 
 /**
@@ -203,6 +257,7 @@ case class ExpressionEncoder[T](
       }
       nullSafeSerializer match {
         case If(_: IsNull, _, s: CreateNamedStruct) => s
+        case s: CreateNamedStruct => s
         case _ =>
           throw new RuntimeException(s"class $clsName has unexpected serializer: $objSerializer")
       }
@@ -250,6 +305,11 @@ case class ExpressionEncoder[T](
   val schema: StructType = StructType(serializer.map { s =>
     StructField(s.name, s.dataType, s.nullable)
   })
+
+  def dataTypeAndNullable: Schema = {
+    val dataType = if (isSerializedAsStruct) schema else schema.head.dataType
+    Schema(dataType, objSerializer.nullable)
+  }
 
   /**
    * Returns true if the type `T` is serialized as a struct by `objSerializer`.
@@ -301,25 +361,22 @@ case class ExpressionEncoder[T](
   }
 
   @transient
-  private lazy val extractProjection = GenerateUnsafeProjection.generate({
-    // When using `ExpressionEncoder` directly, we will skip the normal query processing steps
-    // (analyzer, optimizer, etc.). Here we apply the ReassignLambdaVariableID rule, as it's
-    // important to codegen performance.
-    val optimizedPlan = ReassignLambdaVariableID.apply(DummyExpressionHolder(serializer))
-    optimizedPlan.asInstanceOf[DummyExpressionHolder].exprs
-  })
-
-  @transient
-  private lazy val inputRow = new GenericInternalRow(1)
-
-  @transient
-  private lazy val constructProjection = SafeProjection.create({
+  private lazy val optimizedDeserializer: Seq[Expression] = {
     // When using `ExpressionEncoder` directly, we will skip the normal query processing steps
     // (analyzer, optimizer, etc.). Here we apply the ReassignLambdaVariableID rule, as it's
     // important to codegen performance.
     val optimizedPlan = ReassignLambdaVariableID.apply(DummyExpressionHolder(Seq(deserializer)))
     optimizedPlan.asInstanceOf[DummyExpressionHolder].exprs
-  })
+  }
+
+  @transient
+  private lazy val optimizedSerializer = {
+    // When using `ExpressionEncoder` directly, we will skip the normal query processing steps
+    // (analyzer, optimizer, etc.). Here we apply the ReassignLambdaVariableID rule, as it's
+    // important to codegen performance.
+    val optimizedPlan = ReassignLambdaVariableID.apply(DummyExpressionHolder(serializer))
+    optimizedPlan.asInstanceOf[DummyExpressionHolder].exprs
+  }
 
   /**
    * Returns a new set (with unique ids) of [[NamedExpression]] that represent the serialized form
@@ -331,31 +388,21 @@ case class ExpressionEncoder[T](
   }
 
   /**
-   * Returns an encoded version of `t` as a Spark SQL row.  Note that multiple calls to
-   * toRow are allowed to return the same actual [[InternalRow]] object.  Thus, the caller should
-   * copy the result before making another call if required.
+   * Create a serializer that can convert an object of type `T` to a Spark SQL Row.
+   *
+   * Note that the returned [[Serializer]] is not thread safe. Multiple calls to
+   * `serializer.apply(..)` are allowed to return the same actual [[InternalRow]] object.  Thus,
+   *  the caller should copy the result before making another call if required.
    */
-  def toRow(t: T): InternalRow = try {
-    inputRow(0) = t
-    extractProjection(inputRow)
-  } catch {
-    case e: Exception =>
-      throw new RuntimeException(s"Error while encoding: $e\n" +
-          s"${serializer.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
-  }
+  def createSerializer(): Serializer[T] = new Serializer[T](optimizedSerializer)
 
   /**
-   * Returns an object of type `T`, extracting the required values from the provided row.  Note that
-   * you must `resolveAndBind` an encoder to a specific schema before you can call this
-   * function.
+   * Create a deserializer that can convert a Spark SQL Row into an object of type `T`.
+   *
+   * Note that you must `resolveAndBind` an encoder to a specific schema before you can create a
+   * deserializer.
    */
-  def fromRow(row: InternalRow): T = try {
-    constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
-  } catch {
-    case e: Exception =>
-      throw new RuntimeException(s"Error while decoding: $e\n" +
-        s"${deserializer.simpleString(SQLConf.get.maxToStringFields)}", e)
-  }
+  def createDeserializer(): Deserializer[T] = new Deserializer[T](optimizedDeserializer)
 
   /**
    * The process of resolution to a given schema throws away information about where a given field
@@ -382,8 +429,6 @@ case class ExpressionEncoder[T](
       .map { case(f, a) => s"${f.name}$a: ${f.dataType.simpleString}"}.mkString(", ")
 
   override def toString: String = s"class[$schemaString]"
-
-  override def makeCopy: ExpressionEncoder[T] = copy()
 }
 
 // A dummy logical plan that can hold expressions and go through optimizer rules.

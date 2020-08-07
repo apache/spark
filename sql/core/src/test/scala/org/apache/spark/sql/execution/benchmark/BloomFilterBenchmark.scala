@@ -70,10 +70,10 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
       runBenchmark(s"ORC Read") {
         val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
         benchmark.addCase("Without bloom filter") { _ =>
-          spark.read.orc(path + "/withoutBF").where("value = 0").count
+          spark.read.orc(path + "/withoutBF").where("value = 0").noop()
         }
         benchmark.addCase("With bloom filter") { _ =>
-          spark.read.orc(path + "/withBF").where("value = 0").count
+          spark.read.orc(path + "/withBF").where("value = 0").noop()
         }
         benchmark.run()
       }

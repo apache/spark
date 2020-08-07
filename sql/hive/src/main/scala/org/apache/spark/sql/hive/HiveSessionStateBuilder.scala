@@ -21,13 +21,17 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlanner
+import org.apache.spark.sql.execution.{SparkOptimizer, SparkPlanner}
+import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
+import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.hive.execution.PruneHiveTablePartitions
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
 /**
@@ -73,7 +77,9 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
-        new ResolveSessionCatalog(catalogManager, conf, catalog.isView) +:
+        ResolveEncodersInScalaAgg +:
+        new ResolveSessionCatalog(
+          catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -90,18 +96,23 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       PreWriteCheck +:
         PreReadCheck +:
         TableCapabilityCheck +:
+        CommandCheck(conf) +:
         customCheckRules
   }
+
+  override def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
+    Seq(new PruneHiveTablePartitions(session))
 
   /**
    * Planner that takes into account Hive-specific strategies.
    */
   override protected def planner: SparkPlanner = {
-    new SparkPlanner(session.sparkContext, conf, experimentalMethods) with HiveStrategies {
+    new SparkPlanner(session, conf, experimentalMethods) with HiveStrategies {
       override val sparkSession: SparkSession = session
 
       override def extraPlanningStrategies: Seq[Strategy] =
-        super.extraPlanningStrategies ++ customPlanningStrategies ++ Seq(HiveTableScans, Scripts)
+        super.extraPlanningStrategies ++ customPlanningStrategies ++
+          Seq(HiveTableScans, HiveScripts)
     }
   }
 

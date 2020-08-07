@@ -26,55 +26,43 @@ exception will be thrown if the database does not exist in the system.
 
 ### Syntax
 
-{% highlight sql %}
-DROP (DATABASE|SCHEMA) [IF EXISTS] dbname [RESTRICT|CASCADE];
-{% endhighlight %}
-
+```sql
+DROP { DATABASE | SCHEMA } [ IF EXISTS ] dbname [ RESTRICT | CASCADE ]
+```
 
 ### Parameters
 
-<dl>
-  <dt><code><em>DATABASE|SCHEMA</em></code></dt>
-  <dd>`DATABASE` and `SCHEMA` mean the same thing, either of them can be used.</dd>
-</dl>
+* **DATABASE `|` SCHEMA**
 
-<dl>
-  <dt><code><em>IF EXISTS</em></code></dt>
-  <dd>If specified, no exception is thrown when the database does not exist.</dd>
-</dl>
+    `DATABASE` and `SCHEMA` mean the same thing, either of them can be used.
 
-<dl>
-  <dt><code><em>RESTRICT</em></code></dt>
-  <dd>If specified, will restrict dropping a non-empty database and is enabled by default.</dd>
-</dl>
+* **IF EXISTS**
 
-<dl>
-  <dt><code><em>CASCADE</em></code></dt>
-  <dd>If specified, will drop all the associated tables and functions.</dd>
-</dl>
+    If specified, no exception is thrown when the database does not exist.
 
-### Example
-{% highlight sql %}
+* **RESTRICT**
+
+    If specified, will restrict dropping a non-empty database and is enabled by default.
+
+* **CASCADE**
+
+    If specified, will drop all the associated tables and functions.
+
+### Examples
+
+```sql
 -- Create `inventory_db` Database
 CREATE DATABASE inventory_db COMMENT 'This database is used to maintain Inventory';
 
 -- Drop the database and it's tables
 DROP DATABASE inventory_db CASCADE;
-+---------+
-| Result  |
-+---------+
-+---------+
 
 -- Drop the database using IF EXISTS
 DROP DATABASE IF EXISTS inventory_db CASCADE;
-+---------+
-| Result  |
-+---------+
-+---------+
+```
 
-{% endhighlight %}
+### Related Statements
 
-### Related statements
-- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
-- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
-- [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)
+* [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+* [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+* [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)

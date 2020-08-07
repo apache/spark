@@ -32,7 +32,7 @@ class Module(object):
     """
 
     def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(), environ={},
-                 sbt_test_goals=(), python_test_goals=(), blacklisted_python_implementations=(),
+                 sbt_test_goals=(), python_test_goals=(), excluded_python_implementations=(),
                  test_tags=(), should_run_r_tests=False, should_run_build_tests=False):
         """
         Define a new module.
@@ -49,7 +49,7 @@ class Module(object):
             module are changed.
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
-        :param blacklisted_python_implementations: A set of Python implementations that are not
+        :param excluded_python_implementations: A set of Python implementations that are not
             supported by this module's Python components. The values in this set should match
             strings returned by Python's `platform.python_implementation()`.
         :param test_tags A set of tags that will be excluded when running unit tests if the module
@@ -64,7 +64,7 @@ class Module(object):
         self.build_profile_flags = build_profile_flags
         self.environ = environ
         self.python_test_goals = python_test_goals
-        self.blacklisted_python_implementations = blacklisted_python_implementations
+        self.excluded_python_implementations = excluded_python_implementations
         self.test_tags = test_tags
         self.should_run_r_tests = should_run_r_tests
         self.should_run_build_tests = should_run_build_tests
@@ -100,9 +100,75 @@ tags = Module(
     ]
 )
 
+kvstore = Module(
+    name="kvstore",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/kvstore/",
+    ],
+    sbt_test_goals=[
+        "kvstore/test",
+    ],
+)
+
+network_common = Module(
+    name="network-common",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/network-common/",
+    ],
+    sbt_test_goals=[
+        "network-common/test",
+    ],
+)
+
+network_shuffle = Module(
+    name="network-shuffle",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/network-shuffle/",
+    ],
+    sbt_test_goals=[
+        "network-shuffle/test",
+    ],
+)
+
+unsafe = Module(
+    name="unsafe",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/unsafe",
+    ],
+    sbt_test_goals=[
+        "unsafe/test",
+    ],
+)
+
+launcher = Module(
+    name="launcher",
+    dependencies=[tags],
+    source_file_regexes=[
+        "launcher/",
+    ],
+    sbt_test_goals=[
+        "launcher/test",
+    ],
+)
+
+core = Module(
+    name="core",
+    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher],
+    source_file_regexes=[
+        "core/",
+    ],
+    sbt_test_goals=[
+        "core/test",
+    ],
+)
+
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags],
+    dependencies=[tags, core],
     source_file_regexes=[
         "sql/catalyst/",
     ],
@@ -110,7 +176,6 @@ catalyst = Module(
         "catalyst/test",
     ],
 )
-
 
 sql = Module(
     name="sql",
@@ -122,7 +187,6 @@ sql = Module(
         "sql/test",
     ],
 )
-
 
 hive = Module(
     name="hive",
@@ -142,7 +206,6 @@ hive = Module(
     ]
 )
 
-
 repl = Module(
     name="repl",
     dependencies=[hive],
@@ -153,7 +216,6 @@ repl = Module(
         "repl/test",
     ],
 )
-
 
 hive_thriftserver = Module(
     name="hive-thriftserver",
@@ -192,7 +254,6 @@ sql_kafka = Module(
     ]
 )
 
-
 sketch = Module(
     name="sketch",
     dependencies=[tags],
@@ -204,10 +265,9 @@ sketch = Module(
     ]
 )
 
-
 graphx = Module(
     name="graphx",
-    dependencies=[tags],
+    dependencies=[tags, core],
     source_file_regexes=[
         "graphx/",
     ],
@@ -216,10 +276,9 @@ graphx = Module(
     ]
 )
 
-
 streaming = Module(
     name="streaming",
-    dependencies=[tags],
+    dependencies=[tags, core],
     source_file_regexes=[
         "streaming",
     ],
@@ -235,7 +294,7 @@ streaming = Module(
 # fail other PRs.
 streaming_kinesis_asl = Module(
     name="streaming-kinesis-asl",
-    dependencies=[tags],
+    dependencies=[tags, core],
     source_file_regexes=[
         "external/kinesis-asl/",
         "external/kinesis-asl-assembly/",
@@ -254,21 +313,23 @@ streaming_kinesis_asl = Module(
 
 streaming_kafka_0_10 = Module(
     name="streaming-kafka-0-10",
-    dependencies=[streaming],
+    dependencies=[streaming, core],
     source_file_regexes=[
         # The ending "/" is necessary otherwise it will include "sql-kafka" codes
         "external/kafka-0-10/",
         "external/kafka-0-10-assembly",
+        "external/kafka-0-10-token-provider",
     ],
     sbt_test_goals=[
         "streaming-kafka-0-10/test",
+        "token-provider-kafka-0-10/test"
     ]
 )
 
 
 mllib_local = Module(
     name="mllib-local",
-    dependencies=[tags],
+    dependencies=[tags, core],
     source_file_regexes=[
         "mllib-local",
     ],
@@ -302,10 +363,9 @@ examples = Module(
     ]
 )
 
-
 pyspark_core = Module(
     name="pyspark-core",
-    dependencies=[],
+    dependencies=[core],
     source_file_regexes=[
         "python/(?!pyspark/(ml|mllib|sql|streaming))"
     ],
@@ -339,7 +399,6 @@ pyspark_core = Module(
     ]
 )
 
-
 pyspark_sql = Module(
     name="pyspark-sql",
     dependencies=[pyspark_core, hive, avro],
@@ -362,6 +421,13 @@ pyspark_sql = Module(
         "pyspark.sql.udf",
         "pyspark.sql.window",
         "pyspark.sql.avro.functions",
+        "pyspark.sql.pandas.conversion",
+        "pyspark.sql.pandas.map_ops",
+        "pyspark.sql.pandas.group_ops",
+        "pyspark.sql.pandas.types",
+        "pyspark.sql.pandas.serializers",
+        "pyspark.sql.pandas.typehints",
+        "pyspark.sql.pandas.utils",
         # unittests
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_catalog",
@@ -372,11 +438,13 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_datasources",
         "pyspark.sql.tests.test_functions",
         "pyspark.sql.tests.test_group",
+        "pyspark.sql.tests.test_pandas_cogrouped_map",
+        "pyspark.sql.tests.test_pandas_grouped_map",
+        "pyspark.sql.tests.test_pandas_map",
         "pyspark.sql.tests.test_pandas_udf",
-        "pyspark.sql.tests.test_pandas_udf_cogrouped_map",
         "pyspark.sql.tests.test_pandas_udf_grouped_agg",
-        "pyspark.sql.tests.test_pandas_udf_grouped_map",
         "pyspark.sql.tests.test_pandas_udf_scalar",
+        "pyspark.sql.tests.test_pandas_udf_typehints",
         "pyspark.sql.tests.test_pandas_udf_window",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",
@@ -385,6 +453,21 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_utils",
+    ]
+)
+
+
+pyspark_resource = Module(
+    name="pyspark-resource",
+    dependencies=[
+        pyspark_core
+    ],
+    source_file_regexes=[
+        "python/pyspark/resource"
+    ],
+    python_test_goals=[
+        # unittests
+        "pyspark.resource.tests.test_resources",
     ]
 )
 
@@ -441,7 +524,7 @@ pyspark_mllib = Module(
         "pyspark.mllib.tests.test_streaming_algorithms",
         "pyspark.mllib.tests.test_util",
     ],
-    blacklisted_python_implementations=[
+    excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ]
 )
@@ -460,6 +543,7 @@ pyspark_ml = Module(
         "pyspark.ml.evaluation",
         "pyspark.ml.feature",
         "pyspark.ml.fpm",
+        "pyspark.ml.functions",
         "pyspark.ml.image",
         "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",
@@ -481,7 +565,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_tuning",
         "pyspark.ml.tests.test_wrapper",
     ],
-    blacklisted_python_implementations=[
+    excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ]
 )
@@ -568,7 +652,7 @@ spark_ganglia_lgpl = Module(
 # No other modules should directly depend on this module.
 root = Module(
     name="root",
-    dependencies=[build],  # Changes to build should trigger all tests.
+    dependencies=[build, core],  # Changes to build should trigger all tests.
     source_file_regexes=[],
     # In order to run all of the tests, enable every test profile:
     build_profile_flags=list(set(

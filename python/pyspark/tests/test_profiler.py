@@ -19,14 +19,10 @@ import os
 import sys
 import tempfile
 import unittest
+from io import StringIO
 
 from pyspark import SparkConf, SparkContext, BasicProfiler
 from pyspark.testing.utils import PySparkTestCase
-
-if sys.version >= "3":
-    from io import StringIO
-else:
-    from StringIO import StringIO
 
 
 class ProfilerTests(PySparkTestCase):

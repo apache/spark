@@ -28,7 +28,7 @@ import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
-import java.util.{Locale, Properties, Random, UUID}
+import java.util.{Arrays, Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.GZIPInputStream
@@ -45,9 +45,9 @@ import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
-import com.google.common.hash.HashCodes
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
+import org.apache.commons.codec.binary.Hex
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
@@ -95,7 +95,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
@@ -731,7 +731,7 @@ private[spark] object Utils extends Logging {
       case "file" =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
-        val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
+        val sourceFile = if (uri.isAbsolute) new File(uri) else new File(uri.getPath)
         copyFile(url, sourceFile, targetFile, fileOverwrite)
       case _ =>
         val fs = getHadoopFileSystem(uri, hadoopConf)
@@ -1026,13 +1026,27 @@ private[spark] object Utils extends Logging {
     customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
   }
 
+  /**
+   * Checks if the host contains only valid hostname/ip without port
+   * NOTE: Incase of IPV6 ip it should be enclosed inside []
+   */
   def checkHost(host: String): Unit = {
-    assert(host != null && host.indexOf(':') == -1, s"Expected hostname (not IP) but got $host")
+    if (host != null && host.split(":").length > 2) {
+      assert(host.startsWith("[") && host.endsWith("]"),
+        s"Expected hostname or IPv6 IP enclosed in [] but got $host")
+    } else {
+      assert(host != null && host.indexOf(':') == -1, s"Expected hostname or IP but got $host")
+    }
   }
 
   def checkHostPort(hostPort: String): Unit = {
-    assert(hostPort != null && hostPort.indexOf(':') != -1,
-      s"Expected host and port but got $hostPort")
+    if (hostPort != null && hostPort.split(":").length > 2) {
+      assert(hostPort != null && hostPort.indexOf("]:") != -1,
+        s"Expected host and port but got $hostPort")
+    } else {
+      assert(hostPort != null && hostPort.indexOf(':') != -1,
+        s"Expected host and port but got $hostPort")
+    }
   }
 
   // Typically, this will be of order of number of nodes in cluster
@@ -1046,18 +1060,30 @@ private[spark] object Utils extends Logging {
       return cached
     }
 
-    val indx: Int = hostPort.lastIndexOf(':')
-    // This is potentially broken - when dealing with ipv6 addresses for example, sigh ...
-    // but then hadoop does not support ipv6 right now.
-    // For now, we assume that if port exists, then it is valid - not check if it is an int > 0
-    if (-1 == indx) {
+    def setDefaultPortValue: (String, Int) = {
       val retval = (hostPort, 0)
       hostPortParseResults.put(hostPort, retval)
-      return retval
+      retval
+    }
+    // checks if the hostport contains IPV6 ip and parses the host, port
+    if (hostPort != null && hostPort.split(":").length > 2) {
+      val indx: Int = hostPort.lastIndexOf("]:")
+      if (-1 == indx) {
+        return setDefaultPortValue
+      }
+      val port = hostPort.substring(indx + 2).trim()
+      val retval = (hostPort.substring(0, indx + 1).trim(), if (port.isEmpty) 0 else port.toInt)
+      hostPortParseResults.putIfAbsent(hostPort, retval)
+    } else {
+      val indx: Int = hostPort.lastIndexOf(':')
+      if (-1 == indx) {
+        return setDefaultPortValue
+      }
+      val port = hostPort.substring(indx + 1).trim()
+      val retval = (hostPort.substring(0, indx).trim(), if (port.isEmpty) 0 else port.toInt)
+      hostPortParseResults.putIfAbsent(hostPort, retval)
     }
 
-    val retval = (hostPort.substring(0, indx).trim(), hostPort.substring(indx + 1).trim().toInt)
-    hostPortParseResults.putIfAbsent(hostPort, retval)
     hostPortParseResults.get(hostPort)
   }
 
@@ -1716,7 +1742,7 @@ private[spark] object Utils extends Logging {
     if (inWord || inDoubleQuote || inSingleQuote) {
       endWord()
     }
-    buf
+    buf.toSeq
   }
 
  /* Calculates 'x' modulo 'mod', takes to consideration sign of x,
@@ -1742,34 +1768,6 @@ private[spark] object Utils extends Logging {
 
     // Nothing else to guard against ?
     hashAbs
-  }
-
-  /**
-   * NaN-safe version of `java.lang.Double.compare()` which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN is greater than any non-NaN double.
-   */
-  def nanSafeCompareDoubles(x: Double, y: Double): Int = {
-    val xIsNan: Boolean = java.lang.Double.isNaN(x)
-    val yIsNan: Boolean = java.lang.Double.isNaN(y)
-    if ((xIsNan && yIsNan) || (x == y)) 0
-    else if (xIsNan) 1
-    else if (yIsNan) -1
-    else if (x > y) 1
-    else -1
-  }
-
-  /**
-   * NaN-safe version of `java.lang.Float.compare()` which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN is greater than any non-NaN float.
-   */
-  def nanSafeCompareFloats(x: Float, y: Float): Int = {
-    val xIsNan: Boolean = java.lang.Float.isNaN(x)
-    val yIsNan: Boolean = java.lang.Float.isNaN(y)
-    if ((xIsNan && yIsNan) || (x == y)) 0
-    else if (xIsNan) 1
-    else if (yIsNan) -1
-    else if (x > y) 1
-    else -1
   }
 
   /**
@@ -1840,14 +1838,14 @@ private[spark] object Utils extends Logging {
    * Generate a zipWithIndex iterator, avoid index value overflowing problem
    * in scala's zipWithIndex
    */
-  def getIteratorZipWithIndex[T](iterator: Iterator[T], startIndex: Long): Iterator[(T, Long)] = {
+  def getIteratorZipWithIndex[T](iter: Iterator[T], startIndex: Long): Iterator[(T, Long)] = {
     new Iterator[(T, Long)] {
       require(startIndex >= 0, "startIndex should be >= 0.")
       var index: Long = startIndex - 1L
-      def hasNext: Boolean = iterator.hasNext
+      def hasNext: Boolean = iter.hasNext
       def next(): (T, Long) = {
         index += 1L
-        (iterator.next(), index)
+        (iter.next(), index)
       }
     }
   }
@@ -2575,28 +2573,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Given a process id, return true if the process is still running.
-   */
-  def isProcessRunning(pid: Int): Boolean = {
-    val process = executeCommand(Seq("kill", "-0", pid.toString))
-    process.waitFor(10, TimeUnit.SECONDS)
-    process.exitValue() == 0
-  }
-
-  /**
-   * Returns the pid of this JVM process.
-   */
-  def getProcessId: Int = {
-    val PROCESS = "(\\d+)@(.*)".r
-    val name = getProcessName()
-    name match {
-      case PROCESS(pid, _) => pid.toInt
-      case _ =>
-        throw new SparkException(s"Unexpected process name: $name, expected to be PID@hostname.")
-    }
-  }
-
-  /**
    * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
    * this is formatted as PID@hostname.
    */
@@ -2800,19 +2776,16 @@ private[spark] object Utils extends Logging {
     }
 
     val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
-    val resolvedURL = masterScheme.toLowerCase(Locale.ROOT) match {
-      case "https" =>
+
+    val resolvedURL = Option(masterScheme).map(_.toLowerCase(Locale.ROOT)) match {
+      case Some("https") =>
         masterWithoutK8sPrefix
-      case "http" =>
+      case Some("http") =>
         logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
         masterWithoutK8sPrefix
-      case null =>
-        val resolvedURL = s"https://$masterWithoutK8sPrefix"
-        logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
-          s"URL is $resolvedURL.")
-        resolvedURL
       case _ =>
-        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
+        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme
+          + " found in URL: " + masterWithoutK8sPrefix)
     }
 
     s"k8s://$resolvedURL"
@@ -2838,7 +2811,7 @@ private[spark] object Utils extends Logging {
     val rnd = new SecureRandom()
     val secretBytes = new Array[Byte](bits / JByte.SIZE)
     rnd.nextBytes(secretBytes)
-    HashCodes.fromBytes(secretBytes).toString()
+    Hex.encodeHexString(secretBytes)
   }
 
   /**
@@ -2956,6 +2929,24 @@ private[spark] object Utils extends Logging {
     val resultProps = new Properties()
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
+  }
+
+  /**
+   * Convert a sequence of `Path`s to a metadata string. When the length of metadata string
+   * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
+   */
+  def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
+    val metadata = new StringBuilder("[")
+    var index: Int = 0
+    while (index < paths.length && metadata.length < stopAppendingThreshold) {
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append(paths(index).toString)
+      index += 1
+    }
+    metadata.append("]")
+    metadata.toString
   }
 }
 

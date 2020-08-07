@@ -22,6 +22,8 @@ import org.apache.spark.sql.connector.read.PartitionReader;
 
 /**
  * A variation on {@link PartitionReader} for use with continuous streaming processing.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface ContinuousPartitionReader<T> extends PartitionReader<T> {

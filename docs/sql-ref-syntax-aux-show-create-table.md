@@ -20,45 +20,44 @@ license: |
 ---
 
 ### Description
+
 `SHOW CREATE TABLE` returns the [CREATE TABLE statement](sql-ref-syntax-ddl-create-table.html) or [CREATE VIEW statement](sql-ref-syntax-ddl-create-view.html) that was used to create a given table or view. `SHOW CREATE TABLE` on a non-existent table or a temporary view throws an exception.
 
 ### Syntax
-{% highlight sql %}
-SHOW CREATE TABLE name
-{% endhighlight %}
+
+```sql
+SHOW CREATE TABLE table_identifier
+```
 
 ### Parameters
-<dl>
- <dt><code><em>name</em></code></dt>
- <dd>The name of the table or view to be used for SHOW CREATE TABLE.</dd>
-</dl>
+
+* **table_identifier**
+
+    Specifies a table or view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
 
 ### Examples
-{% highlight sql %}
+
+```sql
 CREATE TABLE test (c INT) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
     STORED AS TEXTFILE
     TBLPROPERTIES ('prop1' = 'value1', 'prop2' = 'value2');
 
-show create table test;
-
--- the result of SHOW CREATE TABLE test
-CREATE TABLE `test`(`c` INT)
-ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-WITH SERDEPROPERTIES (
-  'field.delim' = ',',
-  'serialization.format' = ','
-)
-STORED AS
-  INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
-  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-TBLPROPERTIES (
-  'transient_lastDdlTime' = '1569350233',
-  'prop1' = 'value1',
-  'prop2' = 'value2'
-)
-
-{% endhighlight %}
+SHOW CREATE TABLE test;
++----------------------------------------------------+
+|                                      createtab_stmt|
++----------------------------------------------------+
+|CREATE TABLE `default`.`test` (`c` INT)
+ USING text
+ TBLPROPERTIES (
+   'transient_lastDdlTime' = '1586269021',
+   'prop1' = 'value1',
+   'prop2' = 'value2')
++----------------------------------------------------+
+```
 
 ### Related Statements
- * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
- * [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
+
+* [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+* [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)

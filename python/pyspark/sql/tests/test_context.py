@@ -19,14 +19,11 @@ import shutil
 import sys
 import tempfile
 import unittest
-try:
-    from importlib import reload  # Python 3.4+ only.
-except ImportError:
-    # Otherwise, we will stick to Python 2's built-in reload.
-    pass
+from importlib import reload
 
 import py4j
 
+from pyspark import SparkContext, SQLContext
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
@@ -227,7 +224,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         from datetime import date
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
-        self.assertEquals(date(2017, 1, 22), parse_result['to_date(`dateCol`)'])
+        self.assertEquals(date(2017, 1, 22), parse_result['to_date(dateCol)'])
 
     def test_unbounded_frames(self):
         from pyspark.sql import functions as F
@@ -257,6 +254,22 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
                 sys.maxsize = old_maxsize
 
         reload(window)
+
+
+class SQLContextTests(unittest.TestCase):
+
+    def test_get_or_create(self):
+        sc = None
+        sql_context = None
+        try:
+            sc = SparkContext('local[4]', "SQLContextTests")
+            sql_context = SQLContext.getOrCreate(sc)
+            assert(isinstance(sql_context, SQLContext))
+        finally:
+            if sql_context is not None:
+                sql_context.sparkSession.stop()
+            if sc is not None:
+                sc.stop()
 
 
 if __name__ == "__main__":

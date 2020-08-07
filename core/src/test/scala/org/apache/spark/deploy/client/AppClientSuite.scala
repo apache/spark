@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.client
 
 import java.io.Closeable
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.concurrent.duration._
 
@@ -30,8 +30,9 @@ import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.{ApplicationInfo, Master}
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.util.Utils
 
 /**
@@ -44,13 +45,13 @@ class AppClientSuite
     with Eventually
     with ScalaFutures {
   private val numWorkers = 2
-  private val conf = new SparkConf()
-  private val securityManager = new SecurityManager(conf)
 
+  private var conf: SparkConf = null
   private var masterRpcEnv: RpcEnv = null
   private var workerRpcEnvs: Seq[RpcEnv] = null
   private var master: Master = null
   private var workers: Seq[Worker] = null
+  private var securityManager: SecurityManager = null
 
   /**
    * Start the local cluster.
@@ -58,6 +59,8 @@ class AppClientSuite
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
+    conf = new SparkConf().set(config.Worker.WORKER_DECOMMISSION_ENABLED.key, "true")
+    securityManager = new SecurityManager(conf)
     masterRpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityManager)
     workerRpcEnvs = (0 until numWorkers).map { i =>
       RpcEnv.create(Worker.SYSTEM_NAME + i, "localhost", 0, conf, securityManager)
@@ -111,14 +114,41 @@ class AppClientSuite
         assert(apps.head.getExecutorLimit === numExecutorsRequested, s"executor request failed")
       }
 
+
+      // Save the executor id before decommissioning so we can kill it
+      val application = getApplications().head
+      val executors = application.executors
+      val executorId: String = executors.head._2.fullId
+
+      // Send a decommission self to all the workers
+      // Note: normally the worker would send this on their own.
+      workers.foreach(worker => worker.decommissionSelf())
+
+      // Decommissioning is async.
+      eventually(timeout(1.seconds), interval(10.millis)) {
+        // We only record decommissioning for the executor we've requested
+        assert(ci.listener.execDecommissionedMap.size === 1)
+        val decommissionInfo = ci.listener.execDecommissionedMap.get(executorId)
+        assert(decommissionInfo != null && decommissionInfo.isHostDecommissioned,
+          s"$executorId should have been decommissioned along with its worker")
+      }
+
       // Send request to kill executor, verify request was made
-      val executorId: String = getApplications().head.executors.head._2.fullId
       whenReady(
         ci.client.killExecutors(Seq(executorId)),
         timeout(10.seconds),
         interval(10.millis)) { acknowledged =>
         assert(acknowledged)
       }
+
+      // Verify that asking for executors on the decommissioned workers fails
+      whenReady(
+        ci.client.requestTotalExecutors(numExecutorsRequested),
+        timeout(10.seconds),
+        interval(10.millis)) { acknowledged =>
+        assert(acknowledged)
+      }
+      assert(getApplications().head.executors.size === 0)
 
       // Issue stop command for Client to disconnect from Master
       ci.client.stop()
@@ -189,6 +219,7 @@ class AppClientSuite
     val deadReasonList = new ConcurrentLinkedQueue[String]()
     val execAddedList = new ConcurrentLinkedQueue[String]()
     val execRemovedList = new ConcurrentLinkedQueue[String]()
+    val execDecommissionedMap = new ConcurrentHashMap[String, ExecutorDecommissionInfo]()
 
     def connected(id: String): Unit = {
       connectedIdList.add(id)
@@ -216,6 +247,11 @@ class AppClientSuite
     def executorRemoved(
         id: String, message: String, exitStatus: Option[Int], workerLost: Boolean): Unit = {
       execRemovedList.add(id)
+    }
+
+    def executorDecommissioned(id: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
+      val previousDecommissionInfo = execDecommissionedMap.putIfAbsent(id, decommissionInfo)
+      assert(previousDecommissionInfo === null, s"Expected no previous decommission info for $id")
     }
 
     def workerRemoved(workerId: String, host: String, message: String): Unit = {}

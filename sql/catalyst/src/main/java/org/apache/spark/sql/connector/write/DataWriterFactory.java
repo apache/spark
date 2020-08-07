@@ -31,6 +31,8 @@ import org.apache.spark.sql.catalyst.InternalRow;
  * Note that, the writer factory will be serialized and sent to executors, then the data writer
  * will be created on executors and do the actual writing. So this interface must be
  * serializable and {@link DataWriter} doesn't need to be.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface DataWriterFactory extends Serializable {

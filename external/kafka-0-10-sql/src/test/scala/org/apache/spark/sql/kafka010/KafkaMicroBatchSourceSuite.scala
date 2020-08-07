@@ -297,6 +297,28 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         13, 126, 127, 128, 129, 130, 131, 132, 133, 134
       )
     )
+
+    // When Trigger.Once() is used, the read limit should be ignored
+    val allData = Seq(1) ++ (10 to 20) ++ (100 to 200)
+    withTempDir { dir =>
+      testStream(mapped)(
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer(allData: _*),
+        StopStream,
+
+        AddKafkaData(Set(topic), 1000 to 1010: _*),
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer((allData ++ 1000.to(1010)): _*)
+      )
+    }
   }
 
   test("input row metrics") {
@@ -327,7 +349,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
-  test("subscribing topic by pattern with topic deletions") {
+  // TODO (SPARK-31731): re-enable it
+  ignore("subscribing topic by pattern with topic deletions") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-seems"
     val topic2 = topicPrefix + "-bad"
@@ -340,6 +363,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", s"$topicPrefix-.*")
       .option("failOnDataLoss", "false")
@@ -377,6 +401,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("startingOffsets", "earliest")
       .option("subscribePattern", s"$topicPrefix-.*")
@@ -566,6 +591,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribe", topic)
       // If a topic is deleted and we try to poll data starting from offset 0,
@@ -1063,6 +1089,35 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
   test("SPARK-27494: read kafka record containing null key/values.") {
     testNullableKeyValue(Trigger.ProcessingTime(100))
   }
+
+  test("SPARK-30656: minPartitions") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("20"), Some(2))
+
+    val ds = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .option("minPartitions", "6")
+      .load()
+      .select($"value".as[String])
+    val q = ds.writeStream.foreachBatch { (batch: Dataset[String], _: Long) =>
+      val partitions = batch.rdd.collectPartitions()
+      assert(partitions.length >= 6)
+      assert(partitions.flatten.toSet === (0 to 20).map(_.toString).toSet): Unit
+    }.start()
+    try {
+      q.processAllAvailable()
+    } finally {
+      q.stop()
+    }
+  }
 }
 
 
@@ -1488,8 +1543,8 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       makeSureGetOffsetCalled,
       Execute { q =>
         // wait to reach the last offset in every partition
-        q.awaitOffset(
-          0, KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L)), streamingTimeout.toMillis)
+        q.awaitOffset(0,
+          KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L).toMap), streamingTimeout.toMillis)
       },
       CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22),
       StopStream,
@@ -1808,6 +1863,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
         .option("kafka.metadata.max.age.ms", "1")
         .option("subscribePattern", "stress.*")
         .option("failOnDataLoss", "false")
+        .option("kafka.request.timeout.ms", "3000")
         .option("kafka.default.api.timeout.ms", "3000")
         .load()
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")

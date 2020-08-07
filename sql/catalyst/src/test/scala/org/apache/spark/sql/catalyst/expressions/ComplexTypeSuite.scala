@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -158,6 +160,31 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(getArrayStructFields(nullArrayStruct, "a"), null)
   }
 
+  test("SPARK-32167: nullability of GetArrayStructFields") {
+    val resolver = SQLConf.get.resolver
+
+    val array1 = ArrayType(
+      new StructType().add("a", "int", nullable = true),
+      containsNull = false)
+    val data1 = Literal.create(Seq(Row(null)), array1)
+    val get1 = ExtractValue(data1, Literal("a"), resolver).asInstanceOf[GetArrayStructFields]
+    assert(get1.containsNull)
+
+    val array2 = ArrayType(
+      new StructType().add("a", "int", nullable = false),
+      containsNull = true)
+    val data2 = Literal.create(Seq(null), array2)
+    val get2 = ExtractValue(data2, Literal("a"), resolver).asInstanceOf[GetArrayStructFields]
+    assert(get2.containsNull)
+
+    val array3 = ArrayType(
+      new StructType().add("a", "int", nullable = false),
+      containsNull = false)
+    val data3 = Literal.create(Seq(Row(1)), array3)
+    val get3 = ExtractValue(data3, Literal("a"), resolver).asInstanceOf[GetArrayStructFields]
+    assert(!get3.containsNull)
+  }
+
   test("CreateArray") {
     val intSeq = Seq(5, 10, 15, 20, 25)
     val longSeq = intSeq.map(_.toLong)
@@ -216,10 +243,14 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
       "Cannot use null as map key")
 
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(
-      CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))),
-      create_map(1 -> 3))
+    checkExceptionInExpression[RuntimeException](
+      CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(
+        CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))),
+        create_map(1 -> 3))
+    }
 
     // ArrayType map key and value
     val map = CreateMap(Seq(
@@ -281,12 +312,19 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       MapFromArrays(intWithNullArray, strArray),
       "Cannot use null as map key")
 
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(
+    checkExceptionInExpression[RuntimeException](
       MapFromArrays(
         Literal.create(Seq(1, 1), ArrayType(IntegerType)),
         Literal.create(Seq(2, 3), ArrayType(IntegerType))),
-      create_map(1 -> 3))
+      "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(
+        MapFromArrays(
+          Literal.create(Seq(1, 1), ArrayType(IntegerType)),
+          Literal.create(Seq(2, 3), ArrayType(IntegerType))),
+        create_map(1 -> 3))
+    }
 
     // map key can't be map
     val arrayOfMap = Seq(create_map(1 -> "a", 2 -> "b"))
@@ -399,10 +437,14 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val m5 = Map("a" -> null)
     checkEvaluation(new StringToMap(s5), m5)
 
-    // Duplicated map keys will be removed w.r.t. the last wins policy.
-    checkEvaluation(
-      new StringToMap(Literal("a:1,b:2,a:3")),
-      create_map("a" -> "3", "b" -> "2"))
+    checkExceptionInExpression[RuntimeException](
+      new StringToMap(Literal("a:1,b:2,a:3")), "Duplicate map key")
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      // Duplicated map keys will be removed w.r.t. the last wins policy.
+      checkEvaluation(
+        new StringToMap(Literal("a:1,b:2,a:3")),
+        create_map("a" -> "3", "b" -> "2"))
+    }
 
     // arguments checking
     assert(new StringToMap(Literal("a:1,b:2,c:3")).checkInputDataTypes().isSuccess)

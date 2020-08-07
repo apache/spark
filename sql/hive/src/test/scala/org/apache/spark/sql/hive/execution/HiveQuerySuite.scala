@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.net.URI
 import java.sql.Timestamp
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 
 import scala.util.Try
 
@@ -39,6 +39,7 @@ import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.SlowHiveTest
 
 case class TestData(a: Int, b: String)
 
@@ -46,10 +47,8 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests
  * included in the hive distribution.
  */
+@SlowHiveTest
 class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAndAfter {
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
-
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
@@ -59,10 +58,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    // Add Locale setting
-    Locale.setDefault(Locale.US)
     // Ensures that cross joins are enabled so that we can test them
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
   }
@@ -70,8 +65,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
-      TimeZone.setDefault(originalTimeZone)
-      Locale.setDefault(originalLocale)
       sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
     } finally {
@@ -210,14 +203,17 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |IF(TRUE, CAST(NULL AS BINARY), CAST("1" AS BINARY)) AS COL18,
       |IF(FALSE, CAST(NULL AS DATE), CAST("1970-01-01" AS DATE)) AS COL19,
       |IF(TRUE, CAST(NULL AS DATE), CAST("1970-01-01" AS DATE)) AS COL20,
-      |IF(TRUE, CAST(NULL AS TIMESTAMP), CAST(1 AS TIMESTAMP)) AS COL21,
+      |IF(TRUE, CAST(NULL AS TIMESTAMP), CAST('1969-12-31 16:00:01' AS TIMESTAMP)) AS COL21,
       |IF(FALSE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL22,
       |IF(TRUE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL23
       |FROM src LIMIT 1""".stripMargin)
 
   test("constant null testing timestamp") {
-    val r1 = sql("SELECT IF(FALSE, CAST(NULL AS TIMESTAMP), CAST(1 AS TIMESTAMP)) AS COL20")
-      .collect().head
+    var r1 = sql(
+      """
+        |SELECT IF(FALSE, CAST(NULL AS TIMESTAMP),
+        |CAST('1969-12-31 16:00:01' AS TIMESTAMP)) AS COL20
+      """.stripMargin).collect().head
     assert(new Timestamp(1000) == r1.getTimestamp(0))
   }
 
@@ -561,36 +557,30 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   // Jdk version leads to different query output for double, so not use createQueryTest here
   test("timestamp cast #1") {
-    val res = sql("SELECT CAST(CAST(1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1").collect().head
+    val res = sql("SELECT CAST(TIMESTAMP_SECONDS(1) AS DOUBLE) FROM src LIMIT 1").collect().head
     assert(1 == res.getDouble(0))
   }
 
-  createQueryTest("timestamp cast #2",
-    "SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
-
-  test("timestamp cast #3") {
-    val res = sql("SELECT CAST(CAST(1200 AS TIMESTAMP) AS INT) FROM src LIMIT 1").collect().head
-    assert(1200 == res.getInt(0))
-  }
-
-  createQueryTest("timestamp cast #4",
-    "SELECT CAST(CAST(1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
-
-  test("timestamp cast #5") {
-    val res = sql("SELECT CAST(CAST(-1 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1").collect().head
+  test("timestamp cast #2") {
+    val res = sql("SELECT CAST(TIMESTAMP_SECONDS(-1) AS DOUBLE) FROM src LIMIT 1").collect().head
     assert(-1 == res.get(0))
   }
 
-  createQueryTest("timestamp cast #6",
-    "SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+  createQueryTest("timestamp cast #3",
+    "SELECT CAST(TIMESTAMP_SECONDS(1.2) AS DOUBLE) FROM src LIMIT 1")
 
-  test("timestamp cast #7") {
-    val res = sql("SELECT CAST(CAST(-1200 AS TIMESTAMP) AS INT) FROM src LIMIT 1").collect().head
-    assert(-1200 == res.getInt(0))
+  createQueryTest("timestamp cast #4",
+    "SELECT CAST(TIMESTAMP_SECONDS(-1.2) AS DOUBLE) FROM src LIMIT 1")
+
+  test("timestamp cast #5") {
+    val res = sql("SELECT CAST(TIMESTAMP_SECONDS(1200) AS INT) FROM src LIMIT 1").collect().head
+    assert(1200 == res.getInt(0))
   }
 
-  createQueryTest("timestamp cast #8",
-    "SELECT CAST(CAST(-1.2 AS TIMESTAMP) AS DOUBLE) FROM src LIMIT 1")
+  test("timestamp cast #6") {
+    val res = sql("SELECT CAST(TIMESTAMP_SECONDS(-1200) AS INT) FROM src LIMIT 1").collect().head
+    assert(-1200 == res.getInt(0))
+  }
 
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
@@ -698,20 +688,22 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
   test("case sensitivity: created temporary view") {
-    val testData =
-      TestHive.sparkContext.parallelize(
-        TestData(1, "str1") ::
-        TestData(2, "str2") :: Nil)
-    testData.toDF().createOrReplaceTempView("REGisteredTABle")
+    withTempView("REGisteredTABle") {
+      val testData =
+        TestHive.sparkContext.parallelize(
+          TestData(1, "str1") ::
+          TestData(2, "str2") :: Nil)
+      testData.toDF().createOrReplaceTempView("REGisteredTABle")
 
-    assertResult(Array(Row(2, "str2"))) {
-      sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
-        "WHERE TableAliaS.a > 1").collect()
+      assertResult(Array(Row(2, "str2"))) {
+        sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
+          "WHERE TableAliaS.a > 1").collect()
+      }
     }
   }
 
   def isExplanation(result: DataFrame): Boolean = {
-    val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
+    val explanation = result.select("plan").collect().map { case Row(plan: String) => plan }
     explanation.head.startsWith("== Physical Plan ==")
   }
 
@@ -725,16 +717,18 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
-    val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
-      .zipWithIndex.map {case ((value, attr), key) => HavingRow(key, value, attr)}
-    TestHive.sparkContext.parallelize(fixture).toDF().createOrReplaceTempView("having_test")
-    val results =
-      sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
-      .collect()
-      .map(x => (x.getString(0), x.getInt(1)))
+    withTempView("having_test") {
+      val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
+        .zipWithIndex.map {case ((value, attr), key) => HavingRow(key, value, attr)}
+      TestHive.sparkContext.parallelize(fixture).toDF().createOrReplaceTempView("having_test")
+      val results =
+        sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
+        .collect()
+        .map(x => (x.getString(0), x.getInt(1)))
 
-    assert(results === Array(("foo", 4)))
-    TestHive.reset()
+      assert(results === Array(("foo", 4)))
+      TestHive.reset()
+    }
   }
 
   test("SPARK-2180: HAVING with non-boolean clause raises no exceptions") {
@@ -966,22 +960,24 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-3414 regression: should store analyzed logical plan when creating a temporary view") {
-    sparkContext.makeRDD(Seq.empty[LogEntry]).toDF().createOrReplaceTempView("rawLogs")
-    sparkContext.makeRDD(Seq.empty[LogFile]).toDF().createOrReplaceTempView("logFiles")
+    withTempView("rawLogs", "logFiles", "boom") {
+      sparkContext.makeRDD(Seq.empty[LogEntry]).toDF().createOrReplaceTempView("rawLogs")
+      sparkContext.makeRDD(Seq.empty[LogFile]).toDF().createOrReplaceTempView("logFiles")
 
-    sql(
-      """
-      SELECT name, message
-      FROM rawLogs
-      JOIN (
-        SELECT name
-        FROM logFiles
-      ) files
-      ON rawLogs.filename = files.name
-      """).createOrReplaceTempView("boom")
+      sql(
+        """
+        SELECT name, message
+        FROM rawLogs
+        JOIN (
+          SELECT name
+          FROM logFiles
+        ) files
+        ON rawLogs.filename = files.name
+        """).createOrReplaceTempView("boom")
 
-    // This should be successfully analyzed
-    sql("SELECT * FROM boom").queryExecution.analyzed
+      // This should be successfully analyzed
+      sql("SELECT * FROM boom").queryExecution.analyzed
+    }
   }
 
   test("SPARK-3810: PreprocessTableInsertion static partitioning support") {

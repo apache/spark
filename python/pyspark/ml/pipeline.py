@@ -16,17 +16,13 @@
 #
 
 import sys
-import os
 
-if sys.version > '3':
-    basestring = str
-
-from pyspark import since, keyword_only, SparkContext
+from pyspark import keyword_only
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaParams
-from pyspark.ml.common import inherit_doc
+from pyspark.ml.wrapper import JavaParams, JavaWrapper
+from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
 
 @inherit_doc
@@ -173,6 +169,55 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         _java_obj.setStages(java_stages)
 
         return _java_obj
+
+    def _make_java_param_pair(self, param, value):
+        """
+        Makes a Java param pair.
+        """
+        sc = SparkContext._active_spark_context
+        param = self._resolveParam(param)
+        java_param = sc._jvm.org.apache.spark.ml.param.Param(param.parent, param.name, param.doc)
+        if isinstance(value, Params) and hasattr(value, "_to_java"):
+            # Convert JavaEstimator/JavaTransformer object or Estimator/Transformer object which
+            # implements `_to_java` method (such as OneVsRest, Pipeline object) to java object.
+            # used in the case of an estimator having another estimator as a parameter
+            # the reason why this is not in _py2java in common.py is that importing
+            # Estimator and Model in common.py results in a circular import with inherit_doc
+            java_value = value._to_java()
+        else:
+            java_value = _py2java(sc, value)
+        return java_param.w(java_value)
+
+    def _transfer_param_map_to_java(self, pyParamMap):
+        """
+        Transforms a Python ParamMap into a Java ParamMap.
+        """
+        paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
+        for param in self.params:
+            if param in pyParamMap:
+                pair = self._make_java_param_pair(param, pyParamMap[param])
+                paramMap.put([pair])
+        return paramMap
+
+    def _transfer_param_map_from_java(self, javaParamMap):
+        """
+        Transforms a Java ParamMap into a Python ParamMap.
+        """
+        sc = SparkContext._active_spark_context
+        paramMap = dict()
+        for pair in javaParamMap.toList():
+            param = pair.param()
+            if self.hasParam(str(param.name())):
+                java_obj = pair.value()
+                if sc._jvm.Class.forName("org.apache.spark.ml.PipelineStage").isInstance(java_obj):
+                    # Note: JavaParams._from_java support both JavaEstimator/JavaTransformer class
+                    # and Estimator/Transformer class which implements `_from_java` static method
+                    # (such as OneVsRest, Pipeline class).
+                    py_obj = JavaParams._from_java(java_obj)
+                else:
+                    py_obj = _java2py(sc, java_obj)
+                paramMap[self.getParam(param.name())] = py_obj
+        return paramMap
 
 
 @inherit_doc
@@ -324,8 +369,6 @@ class PipelineModel(Model, MLReadable, MLWritable):
 @inherit_doc
 class PipelineSharedReadWrite():
     """
-    .. note:: DeveloperApi
-
     Functions for :py:class:`MLReader` and :py:class:`MLWriter` shared between
     :py:class:`Pipeline` and :py:class:`PipelineModel`
 

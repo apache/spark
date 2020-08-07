@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.Matchers.the
+import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.Exchange
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -31,7 +32,9 @@ import org.apache.spark.sql.types._
 /**
  * Window function testing for DataFrame API.
  */
-class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
+class DataFrameWindowFunctionsSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper{
 
   import testImplicits._
 
@@ -58,26 +61,28 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("rank functions in unspecific window") {
-    val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        $"key",
-        max("key").over(Window.partitionBy("value").orderBy("key")),
-        min("key").over(Window.partitionBy("value").orderBy("key")),
-        mean("key").over(Window.partitionBy("value").orderBy("key")),
-        count("key").over(Window.partitionBy("value").orderBy("key")),
-        sum("key").over(Window.partitionBy("value").orderBy("key")),
-        ntile(2).over(Window.partitionBy("value").orderBy("key")),
-        row_number().over(Window.partitionBy("value").orderBy("key")),
-        dense_rank().over(Window.partitionBy("value").orderBy("key")),
-        rank().over(Window.partitionBy("value").orderBy("key")),
-        cume_dist().over(Window.partitionBy("value").orderBy("key")),
-        percent_rank().over(Window.partitionBy("value").orderBy("key"))),
-      Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d) ::
-        Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
-        Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
-        Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
+    withTempView("window_table") {
+      val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      checkAnswer(
+        df.select(
+          $"key",
+          max("key").over(Window.partitionBy("value").orderBy("key")),
+          min("key").over(Window.partitionBy("value").orderBy("key")),
+          mean("key").over(Window.partitionBy("value").orderBy("key")),
+          count("key").over(Window.partitionBy("value").orderBy("key")),
+          sum("key").over(Window.partitionBy("value").orderBy("key")),
+          ntile(2).over(Window.partitionBy("value").orderBy("key")),
+          row_number().over(Window.partitionBy("value").orderBy("key")),
+          dense_rank().over(Window.partitionBy("value").orderBy("key")),
+          rank().over(Window.partitionBy("value").orderBy("key")),
+          cume_dist().over(Window.partitionBy("value").orderBy("key")),
+          percent_rank().over(Window.partitionBy("value").orderBy("key"))),
+        Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d) ::
+          Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
+          Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
+          Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
+    }
   }
 
   test("window function should fail if order by clause is not specified") {
@@ -345,15 +350,17 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-16195 empty over spec") {
-    val df = Seq(("a", 1), ("a", 1), ("a", 2), ("b", 2)).
-      toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select($"key", $"value", sum($"value").over(), avg($"value").over()),
-      Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
-    checkAnswer(
-      sql("select key, value, sum(value) over(), avg(value) over() from window_table"),
-      Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+    withTempView("window_table") {
+      val df = Seq(("a", 1), ("a", 1), ("a", 2), ("b", 2)).
+        toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      checkAnswer(
+        df.select($"key", $"value", sum($"value").over(), avg($"value").over()),
+        Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+      checkAnswer(
+        sql("select key, value, sum(value) over(), avg(value) over() from window_table"),
+        Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+    }
   }
 
   test("window function with udaf") {
@@ -402,6 +409,42 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
         $"a",
         $"b",
         udaf($"a", $"b").over(window)),
+      Seq(
+        Row("a", 1, 1, 6),
+        Row("a", 1, 5, 6),
+        Row("a", 2, 10, 24),
+        Row("a", 2, -1, 24),
+        Row("b", 4, 7, 60),
+        Row("b", 3, 8, 32),
+        Row("b", 2, 4, 8)))
+  }
+
+  test("window function with aggregator") {
+    val agg = udaf(new Aggregator[(Long, Long), Long, Long] {
+      def zero: Long = 0L
+      def reduce(b: Long, a: (Long, Long)): Long = b + (a._1 * a._2)
+      def merge(b1: Long, b2: Long): Long = b1 + b2
+      def finish(r: Long): Long = r
+      def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+      def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    })
+
+    val df = Seq(
+      ("a", 1, 1),
+      ("a", 1, 5),
+      ("a", 2, 10),
+      ("a", 2, -1),
+      ("b", 4, 7),
+      ("b", 3, 8),
+      ("b", 2, 4))
+      .toDF("key", "a", "b")
+    val window = Window.partitionBy($"key").orderBy($"a").rangeBetween(Long.MinValue, 0L)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"a",
+        $"b",
+        agg($"a", $"b").over(window)),
       Seq(
         Row("a", 1, 1, 6),
         Row("a", 1, 5, 6),
@@ -509,37 +552,41 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("aggregation and rows between with unbounded + predicate pushdown") {
-    val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    val selectList = Seq($"key", $"value",
-      last("key").over(
-        Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
-      last("key").over(
-        Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
-      last("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1)))
+    withTempView("window_table") {
+      val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      val selectList = Seq($"key", $"value",
+        last("key").over(
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
+        last("key").over(
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
+        last("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1)))
 
-    checkAnswer(
-      df.select(selectList: _*).where($"value" < "3"),
-      Seq(Row(1, "1", 1, 1, 1), Row(2, "2", 3, 2, 3), Row(3, "2", 3, 3, 3)))
+      checkAnswer(
+        df.select(selectList: _*).where($"value" < "3"),
+        Seq(Row(1, "1", 1, 1, 1), Row(2, "2", 3, 2, 3), Row(3, "2", 3, 3, 3)))
+    }
   }
 
   test("aggregation and range between with unbounded + predicate pushdown") {
-    val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    val selectList = Seq($"key", $"value",
-      last("value").over(
-        Window.partitionBy($"value").orderBy($"key").rangeBetween(-2, -1)).equalTo("2")
-        .as("last_v"),
-      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))
-        .as("avg_key1"),
-      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, Long.MaxValue))
-        .as("avg_key2"),
-      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 1))
-        .as("avg_key3"))
+    withTempView("window_table") {
+      val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      val selectList = Seq($"key", $"value",
+        last("value").over(
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(-2, -1)).equalTo("2")
+          .as("last_v"),
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))
+          .as("avg_key1"),
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, Long.MaxValue))
+          .as("avg_key2"),
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 1))
+          .as("avg_key3"))
 
-    checkAnswer(
-      df.select(selectList: _*).where($"value" < 2),
-      Seq(Row(3, "1", null, 3.0, 4.0, 3.0), Row(5, "1", false, 4.0, 5.0, 5.0)))
+      checkAnswer(
+        df.select(selectList: _*).where($"value" < 2),
+        Seq(Row(3, "1", null, 3.0, 4.0, 3.0), Row(5, "1", false, 4.0, 5.0, 5.0)))
+    }
   }
 
   test("Window spill with less than the inMemoryThreshold") {
@@ -626,40 +673,46 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-24575: Window functions inside WHERE and HAVING clauses") {
-    def checkAnalysisError(df: => DataFrame): Unit = {
+    def checkAnalysisError(df: => DataFrame, clause: String): Unit = {
       val thrownException = the[AnalysisException] thrownBy {
         df.queryExecution.analyzed
       }
-      assert(thrownException.message.contains("window functions inside WHERE and HAVING clauses"))
+      assert(thrownException.message.contains(s"window functions inside $clause clause"))
     }
 
-    checkAnalysisError(testData2.select('a).where(rank().over(Window.orderBy('b)) === 1))
-    checkAnalysisError(testData2.where('b === 2 && rank().over(Window.orderBy('b)) === 1))
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(avg('b).as("avgb"))
-        .where('a > 'avgb && rank().over(Window.orderBy('a)) === 1))
+      testData2.select("a").where(rank().over(Window.orderBy($"b")) === 1), "WHERE")
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(max('b).as("maxb"), sum('b).as("sumb"))
-        .where(rank().over(Window.orderBy('a)) === 1))
+      testData2.where($"b" === 2 && rank().over(Window.orderBy($"b")) === 1), "WHERE")
     checkAnalysisError(
-      testData2.groupBy('a)
-        .agg(max('b).as("maxb"), sum('b).as("sumb"))
-        .where('sumb === 5 && rank().over(Window.orderBy('a)) === 1))
+      testData2.groupBy($"a")
+        .agg(avg($"b").as("avgb"))
+        .where($"a" > $"avgb" && rank().over(Window.orderBy($"a")) === 1), "WHERE")
+    checkAnalysisError(
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where(rank().over(Window.orderBy($"a")) === 1), "WHERE")
+    checkAnalysisError(
+      testData2.groupBy($"a")
+        .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
+        .where($"sumb" === 5 && rank().over(Window.orderBy($"a")) === 1), "WHERE")
 
-    checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"))
-    checkAnalysisError(sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"))
+    checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"), "WHERE")
     checkAnalysisError(
-      sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"))
+      sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"), "WHERE")
     checkAnalysisError(
-      sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"))
+      sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"),
+      "HAVING")
+    checkAnalysisError(
+      sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"),
+      "HAVING")
     checkAnalysisError(
       sql(
         s"""SELECT a, MAX(b)
            |FROM testData2
            |GROUP BY a
-           |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin))
+           |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin),
+      "HAVING")
   }
 
   test("window functions in multiple selects") {
@@ -680,7 +733,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
           .select($"sno", $"pno", $"qty", col("sum_qty_2"), sum("qty").over(w1).alias("sum_qty_1"))
 
         val expectedNumExchanges = if (transposeWindowEnabled) 1 else 2
-        val actualNumExchanges = select.queryExecution.executedPlan.collect {
+        val actualNumExchanges = stripAQEPlan(select.queryExecution.executedPlan).collect {
           case e: Exchange => e
         }.length
         assert(actualNumExchanges == expectedNumExchanges)

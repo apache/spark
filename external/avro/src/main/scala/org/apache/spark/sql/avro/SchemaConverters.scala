@@ -85,7 +85,7 @@ object SchemaConverters {
           StructField(f.name, schemaType.dataType, schemaType.nullable)
         }
 
-        SchemaType(StructType(fields), nullable = false)
+        SchemaType(StructType(fields.toSeq), nullable = false)
 
       case ARRAY =>
         val schemaType = toSqlTypeHelper(avroSchema.getElementType, existingRecordNames)
@@ -126,7 +126,7 @@ object SchemaConverters {
                 StructField(s"member$i", schemaType.dataType, nullable = true)
             }
 
-            SchemaType(StructType(fields), nullable = false)
+            SchemaType(StructType(fields.toSeq), nullable = false)
         }
 
       case other => throw new IncompatibleSchemaException(s"Unsupported type $other")

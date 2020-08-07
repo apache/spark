@@ -21,6 +21,7 @@ import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.{Iterable => JIterable}
 import java.lang.reflect.Type
 import java.util.{Iterator => JIterator, List => JList, Map => JMap}
+import javax.annotation.Nonnull
 
 import scala.language.existentials
 
@@ -46,6 +47,17 @@ object JavaTypeInference {
   private val nextReturnType = classOf[JIterator[_]].getMethod("next").getGenericReturnType
   private val keySetReturnType = classOf[JMap[_, _]].getMethod("keySet").getGenericReturnType
   private val valuesReturnType = classOf[JMap[_, _]].getMethod("values").getGenericReturnType
+
+  // Guava changed the name of this method; this tries to stay compatible with both
+  // TODO replace with isSupertypeOf when Guava 14 support no longer needed for Hadoop
+  private val ttIsAssignableFrom: (TypeToken[_], TypeToken[_]) => Boolean = {
+    val ttMethods = classOf[TypeToken[_]].getMethods.
+      filter(_.getParameterCount == 1).
+      filter(_.getParameterTypes.head == classOf[TypeToken[_]])
+    val isAssignableFromMethod = ttMethods.find(_.getName == "isSupertypeOf").getOrElse(
+      ttMethods.find(_.getName == "isAssignableFrom").get)
+    (a: TypeToken[_], b: TypeToken[_]) => isAssignableFromMethod.invoke(a, b).asInstanceOf[Boolean]
+  }
 
   /**
    * Infers the corresponding SQL data type of a JavaBean class.
@@ -111,11 +123,11 @@ object JavaTypeInference {
         val (dataType, nullable) = inferDataType(typeToken.getComponentType, seenTypeSet)
         (ArrayType(dataType, nullable), true)
 
-      case _ if iterableType.isAssignableFrom(typeToken) =>
+      case _ if ttIsAssignableFrom(iterableType, typeToken) =>
         val (dataType, nullable) = inferDataType(elementType(typeToken), seenTypeSet)
         (ArrayType(dataType, nullable), true)
 
-      case _ if mapType.isAssignableFrom(typeToken) =>
+      case _ if ttIsAssignableFrom(mapType, typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
         val (keyDataType, _) = inferDataType(keyType, seenTypeSet)
         val (valueDataType, nullable) = inferDataType(valueType, seenTypeSet)
@@ -137,7 +149,9 @@ object JavaTypeInference {
         val fields = properties.map { property =>
           val returnType = typeToken.method(property.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
-          new StructField(property.getName, dataType, nullable)
+          // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
+          val hasNonNull = property.getReadMethod.isAnnotationPresent(classOf[Nonnull])
+          new StructField(property.getName, dataType, nullable && !hasNonNull)
         }
         (new StructType(fields), true)
     }
@@ -273,7 +287,7 @@ object JavaTypeInference {
         }
         Invoke(arrayData, methodName, ObjectType(c))
 
-      case c if listType.isAssignableFrom(typeToken) =>
+      case c if ttIsAssignableFrom(listType, typeToken) =>
         val et = elementType(typeToken)
         val newTypePath = walkedTypePath.recordArray(et.getType.getTypeName)
         val (dataType, elementNullable) = inferDataType(et)
@@ -289,7 +303,7 @@ object JavaTypeInference {
 
         UnresolvedMapObjects(mapFunction, path, customCollectionCls = Some(c))
 
-      case _ if mapType.isAssignableFrom(typeToken) =>
+      case _ if ttIsAssignableFrom(mapType, typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
         val newTypePath = walkedTypePath.recordMap(keyType.getType.getTypeName,
           valueType.getType.getTypeName)
@@ -329,10 +343,12 @@ object JavaTypeInference {
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(fieldType)
           val newTypePath = walkedTypePath.recordField(fieldType.getType.getTypeName, fieldName)
+          // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
+          val hasNonNull = p.getReadMethod.isAnnotationPresent(classOf[Nonnull])
           val setter = expressionWithNullSafety(
             deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePath),
               newTypePath),
-            nullable = nullable,
+            nullable = nullable && !hasNonNull,
             newTypePath)
           p.getWriteMethod.getName -> setter
         }.toMap
@@ -404,10 +420,10 @@ object JavaTypeInference {
         case _ if typeToken.isArray =>
           toCatalystArray(inputObject, typeToken.getComponentType)
 
-        case _ if listType.isAssignableFrom(typeToken) =>
+        case _ if ttIsAssignableFrom(listType, typeToken) =>
           toCatalystArray(inputObject, elementType(typeToken))
 
-        case _ if mapType.isAssignableFrom(typeToken) =>
+        case _ if ttIsAssignableFrom(mapType, typeToken) =>
           val (keyType, valueType) = mapKeyValueType(typeToken)
 
           createSerializerForMap(
@@ -431,10 +447,13 @@ object JavaTypeInference {
           val fields = properties.map { p =>
             val fieldName = p.getName
             val fieldType = typeToken.method(p.getReadMethod).getReturnType
+            val hasNonNull = p.getReadMethod.isAnnotationPresent(classOf[Nonnull])
             val fieldValue = Invoke(
               inputObject,
               p.getReadMethod.getName,
-              inferExternalType(fieldType.getRawType))
+              inferExternalType(fieldType.getRawType),
+              propagateNull = !hasNonNull,
+              returnNullable = !hasNonNull)
             (fieldName, serializerFor(fieldValue, fieldType))
           }
           createSerializerForObject(inputObject, fields)

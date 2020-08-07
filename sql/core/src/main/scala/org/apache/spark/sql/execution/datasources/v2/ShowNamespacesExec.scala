@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchem
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
+import org.apache.spark.sql.execution.LeafExecNode
 
 /**
  * Physical plan node for showing namespaces.
@@ -32,31 +33,25 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 case class ShowNamespacesExec(
     output: Seq[Attribute],
     catalog: SupportsNamespaces,
-    namespace: Option[Seq[String]],
-    pattern: Option[String])
-    extends V2CommandExec {
+    namespace: Seq[String],
+    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
 
   override protected def run(): Seq[InternalRow] = {
-    val namespaces = namespace.map { ns =>
-        if (ns.nonEmpty) {
-          catalog.listNamespaces(ns.toArray)
-        } else {
-          catalog.listNamespaces()
-        }
-      }
-      .getOrElse(catalog.listNamespaces())
+    val namespaces = if (namespace.nonEmpty) {
+      catalog.listNamespaces(namespace.toArray)
+    } else {
+      catalog.listNamespaces()
+    }
 
     val rows = new ArrayBuffer[InternalRow]()
-    val encoder = RowEncoder(schema).resolveAndBind()
+    val toRow = RowEncoder(schema).resolveAndBind().createSerializer()
 
     namespaces.map(_.quoted).map { ns =>
       if (pattern.map(StringUtils.filterPattern(Seq(ns), _).nonEmpty).getOrElse(true)) {
-        rows += encoder
-          .toRow(new GenericRowWithSchema(Array(ns), schema))
-          .copy()
+        rows += toRow(new GenericRowWithSchema(Array(ns), schema)).copy()
       }
     }
 
-    rows
+    rows.toSeq
   }
 }

@@ -75,7 +75,7 @@ The `FPGrowthModel` provides:
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.fpm.FPGrowth) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/fpm/FPGrowth.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/FPGrowthExample.scala %}
 </div>
@@ -128,7 +128,7 @@ pattern mining problem.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.fpm.PrefixSpan) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/fpm/PrefixSpan.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/PrefixSpanExample.scala %}
 </div>

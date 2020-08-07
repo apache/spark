@@ -2,83 +2,83 @@
 -- Number of queries: 10
 
 
--- !query 0
+-- !query
 SELECT rand(0)
--- !query 0 schema
+-- !query schema
 struct<rand(0):double>
--- !query 0 output
+-- !query output
 0.7604953758285915
 
 
--- !query 1
+-- !query
 SELECT rand(cast(3 / 7 AS int))
--- !query 1 schema
+-- !query schema
 struct<rand(CAST((CAST(3 AS DOUBLE) / CAST(7 AS DOUBLE)) AS INT)):double>
--- !query 1 output
+-- !query output
 0.7604953758285915
 
 
--- !query 2
+-- !query
 SELECT rand(NULL)
--- !query 2 schema
+-- !query schema
 struct<rand(CAST(NULL AS INT)):double>
--- !query 2 output
+-- !query output
 0.7604953758285915
 
 
--- !query 3
+-- !query
 SELECT rand(cast(NULL AS int))
--- !query 3 schema
+-- !query schema
 struct<rand(CAST(NULL AS INT)):double>
--- !query 3 output
+-- !query output
 0.7604953758285915
 
 
--- !query 4
+-- !query
 SELECT rand(1.0)
--- !query 4 schema
+-- !query schema
 struct<>
--- !query 4 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'rand(1.0BD)' due to data type mismatch: argument 1 requires (int or bigint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
 
 
--- !query 5
+-- !query
 SELECT randn(0L)
--- !query 5 schema
+-- !query schema
 struct<randn(0):double>
--- !query 5 output
+-- !query output
 1.6034991609278433
 
 
--- !query 6
+-- !query
 SELECT randn(cast(3 / 7 AS long))
--- !query 6 schema
+-- !query schema
 struct<randn(CAST((CAST(3 AS DOUBLE) / CAST(7 AS DOUBLE)) AS BIGINT)):double>
--- !query 6 output
+-- !query output
 1.6034991609278433
 
 
--- !query 7
+-- !query
 SELECT randn(NULL)
--- !query 7 schema
+-- !query schema
 struct<randn(CAST(NULL AS INT)):double>
--- !query 7 output
+-- !query output
 1.6034991609278433
 
 
--- !query 8
+-- !query
 SELECT randn(cast(NULL AS long))
--- !query 8 schema
+-- !query schema
 struct<randn(CAST(NULL AS BIGINT)):double>
--- !query 8 output
+-- !query output
 1.6034991609278433
 
 
--- !query 9
+-- !query
 SELECT rand('1')
--- !query 9 schema
+-- !query schema
 struct<>
--- !query 9 output
+-- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'rand('1')' due to data type mismatch: argument 1 requires (int or bigint) type, however, ''1'' is of string type.; line 1 pos 7

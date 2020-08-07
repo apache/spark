@@ -55,6 +55,8 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.driver.bindAddress",
       "spark.driver.port",
       "spark.master",
+      "spark.ui.port",
+      "spark.blockManager.port",
       "spark.kubernetes.driver.pod.name",
       "spark.kubernetes.executor.podNamePrefix",
       "spark.yarn.jars",
@@ -69,6 +71,8 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       .remove("spark.driver.host")
       .remove("spark.driver.bindAddress")
       .remove("spark.driver.port")
+      .remove("spark.ui.port")
+      .remove("spark.blockManager.port")
       .remove("spark.kubernetes.driver.pod.name")
       .remove("spark.kubernetes.executor.podNamePrefix")
     val newReloadConf = new SparkConf(loadDefaults = true)

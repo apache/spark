@@ -41,7 +41,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
 
     val queuedHeaders = driverHeader ++ submissionHeader
     val driverHeaders = driverHeader ++ historyHeader ++ submissionHeader ++
-      Seq("Start Date", "Mesos Slave ID", "State") ++ sandboxHeader
+      Seq("Start Date", "Mesos Agent ID", "State") ++ sandboxHeader
     val retryHeaders = Seq("Driver ID", "Submit Date", "Description") ++
       Seq("Last Failed Status", "Next Retry Time", "Attempt Count")
     val queuedTable = UIUtils.listingTable(queuedHeaders, queuedRow, state.queuedDrivers)
@@ -50,8 +50,8 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
     val retryTable = UIUtils.listingTable(retryHeaders, retryRow, state.pendingRetryDrivers)
     val content =
       <p>Mesos Framework ID: {state.frameworkId}</p>
-      <div class="row-fluid">
-        <div class="span12">
+      <div class="row">
+        <div class="col-12">
           <h4>Queued Drivers:</h4>
           {queuedTable}
           <h4>Launched Drivers:</h4>
@@ -81,7 +81,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
 
     val sandboxCol = if (proxy.isDefined) {
       val clusterSchedulerId = parent.scheduler.getSchedulerState().frameworkId
-      val sandBoxUri = s"${proxy.get}/#/agents/${state.slaveId.getValue}/frameworks/" +
+      val sandBoxUri = s"${proxy.get}/#/agents/${state.agentId.getValue}/frameworks/" +
         s"${clusterSchedulerId}/executors/${id}/browse"
       <a href={sandBoxUri}>Sandbox</a>
     } else {
@@ -103,7 +103,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
       <td>{state.driverDescription.command.mainClass}</td>
       <td>cpus: {state.driverDescription.cores}, mem: {state.driverDescription.mem}</td>
       <td>{UIUtils.formatDate(state.startDate)}</td>
-      <td>{state.slaveId.getValue}</td>
+      <td>{state.agentId.getValue}</td>
       <td>{stateString(state.mesosTaskStatus)}</td>
       <td>{sandboxCol}</td>
     </tr>

@@ -77,7 +77,7 @@ passes, $O(n)$ storage on each executor, and $O(n k)$ storage on the driver.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`SingularValueDecomposition` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.SingularValueDecomposition) for details on the API.
+Refer to the [`SingularValueDecomposition` Scala docs](api/scala/org/apache/spark/mllib/linalg/SingularValueDecomposition.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/SVDExample.scala %}
 
@@ -117,14 +117,14 @@ the rotation matrix are called principal components. PCA is used widely in dimen
 The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
 
-Refer to the [`RowMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) for details on the API.
+Refer to the [`RowMatrix` Scala docs](api/scala/org/apache/spark/mllib/linalg/distributed/RowMatrix.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/PCAOnRowMatrixExample.scala %}
 
 The following code demonstrates how to compute principal components on source vectors
 and use them to project the vectors into a low-dimensional space while keeping associated labels:
 
-Refer to the [`PCA` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.PCA) for details on the API.
+Refer to the [`PCA` Scala docs](api/scala/org/apache/spark/mllib/feature/PCA.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/PCAOnSourceVectorExample.scala %}
 

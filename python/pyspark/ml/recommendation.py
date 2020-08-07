@@ -28,7 +28,7 @@ __all__ = ['ALS', 'ALSModel']
 
 
 @inherit_doc
-class _ALSModelParams(HasPredictionCol):
+class _ALSModelParams(HasPredictionCol, HasBlockSize):
     """
     Params for :py:class:`ALS` and :py:class:`ALSModel`.
 
@@ -45,6 +45,10 @@ class _ALSModelParams(HasPredictionCol):
                               "user/item ids the model has not seen in the training data. " +
                               "Supported values: 'nan', 'drop'.",
                               typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_ALSModelParams, self).__init__(*args)
+        self._setDefault(blockSize=4096)
 
     @since("1.4.0")
     def getUserCol(self):
@@ -98,6 +102,14 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
     finalStorageLevel = Param(Params._dummy(), "finalStorageLevel",
                               "StorageLevel for ALS model factors.",
                               typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_ALSParams, self).__init__(*args)
+        self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
+                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
+                         ratingCol="rating", nonnegative=False, checkpointInterval=10,
+                         intermediateStorageLevel="MEMORY_AND_DISK",
+                         finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
 
     @since("1.4.0")
     def getRank(self):
@@ -223,6 +235,8 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     0.1
     >>> als.clear(als.regParam)
     >>> model = als.fit(df)
+    >>> model.getBlockSize()
+    4096
     >>> model.getUserCol()
     'user'
     >>> model.setUserCol("user")
@@ -273,6 +287,8 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     True
     >>> sorted(model.itemFactors.collect()) == sorted(model2.itemFactors.collect())
     True
+    >>> model.transform(test).take(1) == model2.transform(test).take(1)
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -282,21 +298,16 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                  ratingCol="rating", nonnegative=False, checkpointInterval=10,
                  intermediateStorageLevel="MEMORY_AND_DISK",
-                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan"):
+                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096):
         """
         __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=None, \
                  ratingCol="rating", nonnegative=false, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
-                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
+                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
-        self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
-                         ratingCol="rating", nonnegative=False, checkpointInterval=10,
-                         intermediateStorageLevel="MEMORY_AND_DISK",
-                         finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -306,13 +317,13 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
                   implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                   ratingCol="rating", nonnegative=False, checkpointInterval=10,
                   intermediateStorageLevel="MEMORY_AND_DISK",
-                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan"):
+                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096):
         """
         setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None, \
                  ratingCol="rating", nonnegative=False, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
-                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
+                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         Sets params for ALS.
         """
         kwargs = self._input_kwargs
@@ -443,6 +454,13 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
         """
         return self._set(seed=value)
 
+    @since("3.0.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
+
 
 class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
     """
@@ -478,6 +496,13 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
+
+    @since("3.0.0")
+    def setBlockSize(self, value):
+        """
+        Sets the value of :py:attr:`blockSize`.
+        """
+        return self._set(blockSize=value)
 
     @property
     @since("1.4.0")

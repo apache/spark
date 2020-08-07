@@ -21,7 +21,7 @@ import java.io.File
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.time.{ZoneId, ZoneOffset}
-import java.util.{Calendar, Locale, TimeZone}
+import java.util.{Calendar, Locale}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
@@ -59,7 +60,8 @@ abstract class ParquetPartitionDiscoverySuite
 
   val timeZoneId = ZoneId.systemDefault()
   val df = DateFormatter(timeZoneId)
-  val tf = TimestampFormatter(timestampPartitionPattern, timeZoneId)
+  val tf = TimestampFormatter(
+    timestampPartitionPattern, timeZoneId, isParsing = true)
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -87,7 +89,7 @@ abstract class ParquetPartitionDiscoverySuite
     check("1990-02-24 12:00:30",
       Literal.create(Timestamp.valueOf("1990-02-24 12:00:30"), TimestampType))
 
-    val c = Calendar.getInstance(TimeZone.getTimeZone("GMT"))
+    val c = Calendar.getInstance(TimeZoneUTC)
     c.set(1990, 1, 24, 12, 0, 30)
     c.set(Calendar.MILLISECOND, 0)
     check("1990-02-24 12:00:30",
@@ -215,14 +217,14 @@ abstract class ParquetPartitionDiscoverySuite
 
     check("file://path/a=10", Some {
       PartitionValues(
-        ArrayBuffer("a"),
-        ArrayBuffer(Literal.create(10, IntegerType)))
+        Seq("a"),
+        Seq(Literal.create(10, IntegerType)))
     })
 
     check("file://path/a=10/b=hello/c=1.5", Some {
       PartitionValues(
-        ArrayBuffer("a", "b", "c"),
-        ArrayBuffer(
+        Seq("a", "b", "c"),
+        Seq(
           Literal.create(10, IntegerType),
           Literal.create("hello", StringType),
           Literal.create(1.5, DoubleType)))
@@ -230,8 +232,8 @@ abstract class ParquetPartitionDiscoverySuite
 
     check("file://path/a=10/b_hello/c=1.5", Some {
       PartitionValues(
-        ArrayBuffer("c"),
-        ArrayBuffer(Literal.create(1.5, DoubleType)))
+        Seq("c"),
+        Seq(Literal.create(1.5, DoubleType)))
     })
 
     check("file:///", None)
@@ -272,8 +274,8 @@ abstract class ParquetPartitionDiscoverySuite
 
     assert(partitionSpec2 ==
       Option(PartitionValues(
-        ArrayBuffer("a"),
-        ArrayBuffer(Literal.create(10, IntegerType)))))
+        Seq("a"),
+        Seq(Literal.create(10, IntegerType)))))
   }
 
   test("parse partitions") {
@@ -691,10 +693,10 @@ abstract class ParquetPartitionDiscoverySuite
     }
 
     withTempPath { dir =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .load(dir.toString).select(fields: _*), row)
     }
   }
@@ -733,10 +735,10 @@ abstract class ParquetPartitionDiscoverySuite
     }
 
     withTempPath { dir =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name))
-      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
         .load(dir.toString).select(fields: _*), row)
     }
   }
@@ -1281,7 +1283,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case DataSourceV2Relation(fileTable: FileTable, _, _) =>
+        case DataSourceV2Relation(fileTable: FileTable, _, _, _, _) =>
           assert(fileTable.fileIndex.partitionSpec() === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a matching DataSourceV2Relation, but got:\n$queryExecution")

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.{array, struct}
+import org.apache.spark.sql.functions.{array, struct, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -128,15 +128,15 @@ object InExpressionBenchmark extends SqlBasedBenchmark {
 
   private def runTimestampBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems timestamps"
-    val values = (1 to numItems).map(m => s"CAST('1970-01-01 01:00:00.$m' AS timestamp)")
-    val df = spark.range(0, numRows).select($"id".cast(TimestampType))
+    val values = (1 to numItems).map(m => s"timestamp'1970-01-01 01:00:00.$m'")
+    val df = spark.range(0, numRows).select(timestamp_seconds($"id").as("id"))
     runBenchmark(name, df, values, numRows, minNumIters)
   }
 
   private def runDateBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems dates"
-    val values = (1 to numItems).map(n => 1970 + n).map(y => s"CAST('$y-01-01' AS date)")
-    val df = spark.range(0, numRows).select($"id".cast(TimestampType).cast(DateType))
+    val values = (1 to numItems).map(n => 1970 + n).map(y => s"date'$y-01-01'")
+    val df = spark.range(0, numRows).select(timestamp_seconds($"id").cast(DateType).as("id"))
     runBenchmark(name, df, values, numRows, minNumIters)
   }
 
@@ -167,7 +167,7 @@ object InExpressionBenchmark extends SqlBasedBenchmark {
 
     def testClosure(): Unit = {
       val df = spark.sql(s"SELECT * FROM t WHERE id IN (${values.mkString(",")})")
-      df.queryExecution.toRdd.foreach(_ => ())
+      df.noop()
     }
 
     benchmark.addCase("In expression") { _ =>

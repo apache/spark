@@ -72,7 +72,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
       }
     }
     // There is no Python UDF over aggregate expression
-    Project(projList, agg.copy(aggregateExpressions = aggExpr))
+    Project(projList.toSeq, agg.copy(aggregateExpressions = aggExpr.toSeq))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -134,9 +134,9 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
       }.asInstanceOf[NamedExpression]
     }
     agg.copy(
-      groupingExpressions = groupingExpr,
+      groupingExpressions = groupingExpr.toSeq,
       aggregateExpressions = aggExpr,
-      child = Project(projList ++ agg.child.output, agg.child))
+      child = Project((projList ++ agg.child.output).toSeq, agg.child))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -205,7 +205,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // SPARK-26293: A subquery will be rewritten into join later, and will go through this rule
     // eventually. Here we skip subquery, as Python UDF only needs to be extracted once.
-    case _: Subquery => plan
+    case s: Subquery if s.correlated => plan
 
     case _ => plan transformUp {
       // A safe guard. `ExtractPythonUDFs` only runs once, so we will not hit `BatchEvalPython` and

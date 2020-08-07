@@ -26,6 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -270,6 +271,55 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       "INSERT OVERWRITE to a table while querying it should not be allowed.")
   }
 
+  test("SPARK-30112: it is allowed to write to a table while querying it for " +
+    "dynamic partition overwrite.") {
+    Seq(PartitionOverwriteMode.DYNAMIC.toString,
+        PartitionOverwriteMode.STATIC.toString).foreach { mode =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode) {
+        withTable("insertTable") {
+          sql(
+            """
+              |CREATE TABLE insertTable(i int, part1 int, part2 int) USING PARQUET
+              |PARTITIONED BY (part1, part2)
+            """.stripMargin)
+
+          sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2=1) SELECT 1")
+          checkAnswer(spark.table("insertTable"), Row(1, 1, 1))
+          sql("INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2=2) SELECT 2")
+          checkAnswer(spark.table("insertTable"), Row(1, 1, 1) :: Row(2, 1, 2) :: Nil)
+
+          if (mode == PartitionOverwriteMode.DYNAMIC.toString) {
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                |SELECT i + 1, part2 FROM insertTable
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"), Row(2, 1, 1) :: Row(3, 1, 2) :: Nil)
+
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                |SELECT i + 1, part2 + 1 FROM insertTable
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"),
+              Row(2, 1, 1) :: Row(3, 1, 2) :: Row(4, 1, 3) :: Nil)
+          } else {
+            val message = intercept[AnalysisException] {
+              sql(
+                """
+                  |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                  |SELECT i + 1, part2 FROM insertTable
+                """.stripMargin)
+            }.getMessage
+            assert(
+              message.contains("Cannot overwrite a path that is also being read from."),
+              "INSERT OVERWRITE to a table while querying it should not be allowed.")
+          }
+        }
+      }
+    }
+  }
+
   test("Caching")  {
     // write something to the jsonTable
     sql(
@@ -472,6 +522,22 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("new partitions should be added to catalog after writing to catalog table") {
+    val table = "partitioned_catalog_table"
+    val tempTable = "partitioned_catalog_temp_table"
+    val numParts = 210
+    withTable(table) {
+      withTempView(tempTable) {
+        val df = (1 to numParts).map(i => (i, i)).toDF("part", "col1")
+        df.createOrReplaceTempView(tempTable)
+        sql(s"CREATE TABLE $table (part Int, col1 Int) USING parquet PARTITIONED BY (part)")
+        sql(s"INSERT INTO TABLE $table SELECT * from $tempTable")
+        val partitions = spark.sessionState.catalog.listPartitionNames(TableIdentifier(table))
+        assert(partitions.size == numParts)
+      }
+    }
+  }
+
   test("SPARK-20236: dynamic partition overwrite without catalog table") {
     withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       withTempPath { path =>
@@ -557,12 +623,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[AnalysisException] {
           sql("insert into t select 1L, 2")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
 
         msg = intercept[AnalysisException] {
           sql("insert into t select 1, 2.0")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'd': DecimalType(2,1) to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'd': decimal(2,1) to double"))
 
         msg = intercept[AnalysisException] {
           sql("insert into t select 1, 2.0D, 3")
@@ -594,18 +660,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[AnalysisException] {
           sql("insert into t values('a', 'b')")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': string to int") &&
+          msg.contains("Cannot safely cast 'd': string to double"))
         msg = intercept[AnalysisException] {
           sql("insert into t values(now(), now())")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': TimestampType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': TimestampType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': timestamp to int") &&
+          msg.contains("Cannot safely cast 'd': timestamp to double"))
         msg = intercept[AnalysisException] {
           sql("insert into t values(true, false)")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
+          msg.contains("Cannot safely cast 'd': boolean to double"))
       }
     }
   }
@@ -690,6 +756,27 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-30844: static partition should also follow StoreAssignmentPolicy") {
+    SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
+      withSQLConf(
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
+        withTable("t") {
+          sql("create table t(a int, b string) using parquet partitioned by (a)")
+          policy match {
+            case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+              val errorMsg = intercept[NumberFormatException] {
+                sql("insert into t partition(a='ansi') values('ansi')")
+              }.getMessage
+              assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
+            case SQLConf.StoreAssignmentPolicy.LEGACY =>
+              sql("insert into t partition(a='ansi') values('ansi')")
+              checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
     withTempPath { path =>
       Seq((1, 1), (2, 2)).toDF("i", "part")
@@ -756,6 +843,28 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "org.apache.hadoop.fs.FileAlreadyExistsException"))
       }
     }
+  }
+
+  test("SPARK-29174 Support LOCAL in INSERT OVERWRITE DIRECTORY to data source") {
+    withTempPath { dir =>
+      val path = dir.toURI.getPath
+      sql(s"""create table tab1 ( a int) using parquet location '$path'""")
+      sql("insert into tab1 values(1)")
+      checkAnswer(sql("select * from tab1"), Seq(1).map(i => Row(i)))
+      sql("create table tab2 ( a int) using parquet")
+      sql("insert into tab2 values(2)")
+      checkAnswer(sql("select * from tab2"), Seq(2).map(i => Row(i)))
+      sql(s"""insert overwrite local directory '$path' using parquet select * from tab2""")
+      sql("refresh table tab1")
+      checkAnswer(sql("select * from tab1"), Seq(2).map(i => Row(i)))
+    }
+  }
+
+  test("SPARK-29174 fail LOCAL in INSERT OVERWRITE DIRECT remote path") {
+    val message = intercept[ParseException] {
+      sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
+    }.getMessage
+    assert(message.contains("LOCAL is supported only with file: scheme"))
   }
 }
 

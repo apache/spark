@@ -367,7 +367,7 @@ The following configurations are optional:
   <td>json string
   """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
   </td>
-  <td>none (the value of <code>startingOffsets<code/> will apply)</td>
+  <td>none (the value of <code>startingOffsets</code> will apply)</td>
   <td>streaming and batch</td>
   <td>The start point of timestamp when a query is started, a json string specifying a starting timestamp for
   each TopicPartition. The returned offset for each partition is the earliest offset whose timestamp is greater than or
@@ -405,7 +405,7 @@ The following configurations are optional:
   </td>
   <td>latest</td>
   <td>batch query</td>
-  <td>The end point when a batch query is ended, a json string specifying an ending timesamp for each TopicPartition.
+  <td>The end point when a batch query is ended, a json string specifying an ending timestamp for each TopicPartition.
   The returned offset for each partition is the earliest offset whose timestamp is greater than or equal to
   the given timestamp in the corresponding partition. If the matched offset doesn't exist, the offset will
   be set to latest.<p/>
@@ -440,9 +440,10 @@ The following configurations are optional:
 <tr>
   <td>kafkaConsumer.pollTimeoutMs</td>
   <td>long</td>
-  <td>512</td>
+  <td>120000</td>
   <td>streaming and batch</td>
-  <td>The timeout in milliseconds to poll data from Kafka in executors.</td>
+  <td>The timeout in milliseconds to poll data from Kafka in executors. When not defined it falls
+  back to <code>spark.network.timeout</code>.</td>
 </tr>
 <tr>
   <td>fetchOffset.numRetries</td>
@@ -525,28 +526,32 @@ The caching key is built up from the following information:
 The following properties are available to configure the consumer pool:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td>spark.kafka.consumer.cache.capacity</td>
-  <td>The maximum number of consumers cached. Please note that it's a soft limit.</td>
   <td>64</td>
+  <td>The maximum number of consumers cached. Please note that it's a soft limit.</td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td>spark.kafka.consumer.cache.timeout</td>
-  <td>The minimum amount of time a consumer may sit idle in the pool before it is eligible for eviction by the evictor.</td>
   <td>5m (5 minutes)</td>
+  <td>The minimum amount of time a consumer may sit idle in the pool before it is eligible for eviction by the evictor.</td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td>spark.kafka.consumer.cache.evictorThreadRunInterval</td>
+  <td>1m (1 minute)</td>
   <td>The interval of time between runs of the idle evictor thread for consumer pool. When non-positive, no idle evictor thread will be run.</td>
-  <td>1m (1 minutes)</td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td>spark.kafka.consumer.cache.jmx.enable</td>
+  <td>false</td>
   <td>Enable or disable JMX for pools created with this configuration instance. Statistics of the pool are available via JMX instance.
   The prefix of JMX name is set to "kafka010-cached-simple-kafka-consumer-pool".
   </td>
-  <td>false</td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
@@ -571,16 +576,18 @@ Note that it doesn't leverage Apache Commons Pool due to the difference of chara
 The following properties are available to configure the fetched data pool:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td>spark.kafka.consumer.fetchedData.cache.timeout</td>
-  <td>The minimum amount of time a fetched data may sit idle in the pool before it is eligible for eviction by the evictor.</td>
   <td>5m (5 minutes)</td>
+  <td>The minimum amount of time a fetched data may sit idle in the pool before it is eligible for eviction by the evictor.</td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td>spark.kafka.consumer.fetchedData.cache.evictorThreadRunInterval</td>
+  <td>1m (1 minute)</td>
   <td>The interval of time between runs of the idle evictor thread for fetched data pool. When non-positive, no idle evictor thread will be run.</td>
-  <td>1m (1 minutes)</td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
@@ -802,6 +809,36 @@ df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
 </div>
 </div>
 
+### Producer Caching
+
+Given Kafka producer instance is designed to be thread-safe, Spark initializes a Kafka producer instance and co-use across tasks for same caching key.
+
+The caching key is built up from the following information:
+
+* Kafka producer configuration
+
+This includes configuration for authorization, which Spark will automatically include when delegation token is being used. Even we take authorization into account, you can expect same Kafka producer instance will be used among same Kafka producer configuration.
+It will use different Kafka producer when delegation token is renewed; Kafka producer instance for old delegation token will be evicted according to the cache policy.
+
+The following properties are available to configure the producer pool:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<tr>
+  <td>spark.kafka.producer.cache.timeout</td>
+  <td>10m (10 minutes)</td>
+  <td>The minimum amount of time a producer may sit idle in the pool before it is eligible for eviction by the evictor.</td>
+  <td>2.2.1</td>
+</tr>
+<tr>
+  <td>spark.kafka.producer.cache.evictorThreadRunInterval</td>
+  <td>1m (1 minute)</td>
+  <td>The interval of time between runs of the idle evictor thread for producer pool. When non-positive, no idle evictor thread will be run.</td>
+  <td>3.0.0</td>
+</tr>
+</table>
+
+Idle eviction thread periodically removes producers which are not used longer than given timeout. Note that the producer is shared and used concurrently, so the last used timestamp is determined by the moment the producer instance is returned and reference count is 0.
 
 ## Kafka Specific Configurations
 
@@ -907,7 +944,7 @@ When none of the above applies then unsecure connection assumed.
 Delegation tokens can be obtained from multiple clusters and <code>${cluster}</code> is an arbitrary unique identifier which helps to group different configurations.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.auth.bootstrap.servers</code></td>
     <td>None</td>
@@ -915,6 +952,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       A list of coma separated host/port pairs to use for establishing the initial connection
       to the Kafka cluster. For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code></td>
@@ -925,6 +963,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       If multiple clusters match the address, an exception will be thrown and the query won't be started.
       Kafka's secure and unsecure listeners are bound to different ports. When both used the secure listener port has to be part of the regular expression.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.security.protocol</code></td>
@@ -934,6 +973,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       <code>bootstrap.servers</code> config matches (for further details please see <code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code>),
       and can be overridden by setting <code>kafka.security.protocol</code> on the source or sink.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.sasl.kerberos.service.name</code></td>
@@ -942,6 +982,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       The Kerberos principal name that Kafka runs as. This can be defined either in Kafka's JAAS config or in Kafka's config.
       For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.location</code></td>
@@ -949,6 +990,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>
       The location of the trust store file. For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.password</code></td>
@@ -957,6 +999,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       The store password for the trust store file. This is optional and only needed if <code>spark.kafka.clusters.${cluster}.ssl.truststore.location</code> is configured.
       For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.ssl.keystore.location</code></td>
@@ -965,6 +1008,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       The location of the key store file. This is optional for client and can be used for two-way authentication for client.
       For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.ssl.keystore.password</code></td>
@@ -973,6 +1017,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       The store password for the key store file. This is optional and only needed if <code>spark.kafka.clusters.${cluster}.ssl.keystore.location</code> is configured.
       For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.ssl.key.password</code></td>
@@ -981,6 +1026,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       The password of the private key in the key store file. This is optional for client.
       For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
+    <td>3.0.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.sasl.token.mechanism</code></td>
@@ -989,6 +1035,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       SASL mechanism used for client connections with delegation token. Because SCRAM login module used for authentication a compatible mechanism has to be set here.
       For further details please see Kafka documentation (<code>sasl.mechanism</code>). Only used to authenticate against Kafka broker with delegation token.
     </td>
+    <td>3.0.0</td>
   </tr>
 </table>
 

@@ -23,9 +23,11 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.optimizer.BuildSide
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -39,22 +41,25 @@ case class ShuffledHashJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan)
-  extends BinaryExecNode with HashJoin {
+  extends HashJoin with ShuffledJoin {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "buildDataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size of build side"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"))
 
-  override def requiredChildDistribution: Seq[Distribution] =
-    HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+  override def outputPartitioning: Partitioning = super[ShuffledJoin].outputPartitioning
 
-  private def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
+  /**
+   * This is called by generated Java class, should be public.
+   */
+  def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
     val buildDataSize = longMetric("buildDataSize")
     val buildTime = longMetric("buildTime")
     val start = System.nanoTime()
     val context = TaskContext.get()
-    val relation = HashedRelation(iter, buildKeys, taskMemoryManager = context.taskMemoryManager())
+    val relation = HashedRelation(
+      iter, buildBoundKeys, taskMemoryManager = context.taskMemoryManager())
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.
@@ -68,5 +73,21 @@ case class ShuffledHashJoinExec(
       val hashed = buildHashedRelation(buildIter)
       join(streamIter, hashed, numOutputRows)
     }
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    streamedPlan.execute() :: buildPlan.execute() :: Nil
+  }
+
+  override def needCopyResult: Boolean = true
+
+  protected override def prepareRelation(ctx: CodegenContext): (String, Boolean) = {
+    val thisPlan = ctx.addReferenceObj("plan", this)
+    val clsName = classOf[HashedRelation].getName
+
+    // Inline mutable state since not many join operations in a task
+    val relationTerm = ctx.addMutableState(clsName, "relation",
+      v => s"$v = $thisPlan.buildHashedRelation(inputs[1]);", forceInline = true)
+    (relationTerm, false)
   }
 }

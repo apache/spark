@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf.MAX_NESTED_VIEW_DEPTH
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -79,16 +80,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           var e = intercept[AnalysisException] {
             sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
           }.getMessage
-          assert(e.contains("Not allowed to create a permanent view `jtv1` by " +
-            "referencing a temporary view `temp_jtv1`"))
+          assert(e.contains("Not allowed to create a permanent view `default`.`jtv1` by " +
+            "referencing a temporary view temp_jtv1. " +
+            "Please create a temp view instead by CREATE TEMP VIEW"))
 
           val globalTempDB = spark.sharedState.globalTempViewManager.database
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
           e = intercept[AnalysisException] {
             sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
           }.getMessage
-          assert(e.contains(s"Not allowed to create a permanent view `jtv1` by referencing " +
-            s"a temporary view `global_temp`.`global_temp_jtv1`"))
+          assert(e.contains("Not allowed to create a permanent view `default`.`jtv1` by " +
+            "referencing a temporary view global_temp.global_temp_jtv1"))
         }
       }
     }
@@ -265,6 +267,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-32374: disallow setting properties for CREATE TEMPORARY VIEW") {
+    withTempView("myabcdview") {
+      val e = intercept[ParseException] {
+        sql("CREATE TEMPORARY VIEW myabcdview TBLPROPERTIES ('a' = 'b') AS SELECT * FROM jt")
+      }
+      assert(e.message.contains(
+        "Operation not allowed: TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
+    }
+  }
+
   test("correctly parse CREATE VIEW statement") {
     withView("testView") {
       sql(
@@ -300,7 +312,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       sql(
         """CREATE TEMPORARY VIEW
           |testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
-          |TBLPROPERTIES ('a' = 'b')
           |AS SELECT * FROM jt
           |""".stripMargin)
       checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))

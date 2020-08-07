@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import datetime
 import os
 import random
 import shutil
@@ -22,10 +21,6 @@ import sys
 import tempfile
 import time
 import unittest
-
-if sys.version >= '3':
-    unicode = str
-
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -319,7 +314,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             StructField('str', StringType())])
 
         def scalar_func(id):
-            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+            return pd.DataFrame({'id': id, 'str': id.apply(str)})
 
         def iter_func(it):
             for id in it:
@@ -381,7 +376,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(
                         Exception,
-                        'Invalid returnType with scalar Pandas UDFs'):
+                        'Invalid return type with scalar Pandas UDFs'):
                     pandas_udf(lambda x: x, returnType=nested_type, functionType=udf_type)
 
     def test_vectorized_udf_complex(self):
@@ -445,8 +440,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     Exception,
-                    "The number of output rows of pandas iterator UDF should be "
-                    "the same with input rows"):
+                    "The length of output in Scalar iterator.*"
+                    "the length of output was 1"):
                 df.select(iter_udf_wong_output_size(col('id'))).collect()
 
         @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
@@ -461,7 +456,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(
                         Exception,
-                        "SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator"):
+                        "pandas iterator UDF should exhaust"):
                     df1.select(iter_udf_not_reading_all_input(col('id'))).collect()
 
     def test_vectorized_udf_chained(self):
@@ -486,14 +481,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         @pandas_udf(return_type)
         def scalar_f(id):
-            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+            return pd.DataFrame({'id': id, 'str': id.apply(str)})
 
         scalar_g = pandas_udf(lambda x: x, return_type)
 
         @pandas_udf(return_type, PandasUDFType.SCALAR_ITER)
         def iter_f(it):
             for id in it:
-                yield pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+                yield pd.DataFrame({'id': id, 'str': id.apply(str)})
 
         iter_g = pandas_udf(lambda x: x, return_type, PandasUDFType.SCALAR_ITER)
 
@@ -509,7 +504,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
                 with self.assertRaisesRegexp(
                         NotImplementedError,
-                        'Invalid returnType.*scalar Pandas UDF.*MapType'):
+                        'Invalid return type.*scalar Pandas UDF.*MapType'):
                     pandas_udf(lambda x: x, MapType(LongType(), LongType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
@@ -582,11 +577,11 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
                 with self.assertRaisesRegexp(
                         NotImplementedError,
-                        'Invalid returnType.*scalar Pandas UDF.*MapType'):
+                        'Invalid return type.*scalar Pandas UDF.*MapType'):
                     pandas_udf(lambda x: x, MapType(StringType(), IntegerType()), udf_type)
                 with self.assertRaisesRegexp(
                         NotImplementedError,
-                        'Invalid returnType.*scalar Pandas UDF.*ArrayType.StructType'):
+                        'Invalid return type.*scalar Pandas UDF.*ArrayType.StructType'):
                     pandas_udf(lambda x: x,
                                ArrayType(StructType([StructField('a', IntegerType())])), udf_type)
 
@@ -745,10 +740,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for internal_value, udf_type in [(scalar_internal_value, PandasUDFType.SCALAR),
                                          (iter_internal_value, PandasUDFType.SCALAR_ITER)]:
             f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType(), udf_type)
-            timezone = "America/New_York"
-            with self.sql_conf({
-                    "spark.sql.execution.pandas.respectSessionTimeZone": False,
-                    "spark.sql.session.timeZone": timezone}):
+            timezone = "America/Los_Angeles"
+            with self.sql_conf({"spark.sql.session.timeZone": timezone}):
                 df_la = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
                     .withColumn("internal_value", internal_value(col("timestamp")))
                 result_la = df_la.select(col("idx"), col("internal_value")).collect()
@@ -757,9 +750,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 result_la_corrected = \
                     df_la.select(col("idx"), col("tscopy"), col("internal_value") + diff).collect()
 
-            with self.sql_conf({
-                    "spark.sql.execution.pandas.respectSessionTimeZone": True,
-                    "spark.sql.session.timeZone": timezone}):
+            timezone = "America/New_York"
+            with self.sql_conf({"spark.sql.session.timeZone": timezone}):
                 df_ny = df.withColumn("tscopy", f_timestamp_copy(col("timestamp"))) \
                     .withColumn("internal_value", internal_value(col("timestamp")))
                 result_ny = df_ny.select(col("idx"), col("tscopy"), col("internal_value")).collect()
@@ -871,7 +863,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
             with QuietTest(self.sc):
                 with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1,
-                                    "spark.sql.pandas.udf.buffer.size": 4}):
+                                    "spark.sql.execution.pandas.udf.buffer.size": 4}):
                     self.spark.range(10).repartition(1) \
                         .select(test_close(col("id"))).limit(2).collect()
                     # wait here because python udf worker will take some time to detect
@@ -900,21 +892,30 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             result = df.withColumn('time', foo_udf(df.time))
             self.assertEquals(df.collect(), result.collect())
 
-    @unittest.skipIf(sys.version_info[:2] < (3, 5), "Type hints are supported from Python 3.5.")
+    def test_udf_category_type(self):
+
+        @pandas_udf('string')
+        def to_category_func(x):
+            return x.astype('category')
+
+        pdf = pd.DataFrame({"A": [u"a", u"b", u"c", u"a"]})
+        df = self.spark.createDataFrame(pdf)
+        df = df.withColumn("B", to_category_func(df['A']))
+        result_spark = df.toPandas()
+
+        spark_type = df.dtypes[1][1]
+        # spark data frame and arrow execution mode enabled data frame type must match pandas
+        self.assertEqual(spark_type, 'string')
+
+        # Check result of column 'B' must be equal to column 'A' in type and values
+        pd.testing.assert_series_equal(result_spark["A"], result_spark["B"], check_names=False)
+
     def test_type_annotation(self):
         # Regression test to check if type hints can be used. See SPARK-23569.
-        # Note that it throws an error during compilation in lower Python versions if 'exec'
-        # is not used. Also, note that we explicitly use another dictionary to avoid modifications
-        # in the current 'locals()'.
-        #
-        # Hyukjin: I think it's an ugly way to test issues about syntax specific in
-        # higher versions of Python, which we shouldn't encourage. This was the last resort
-        # I could come up with at that time.
-        _locals = {}
-        exec(
-            "import pandas as pd\ndef noop(col: pd.Series) -> pd.Series: return col",
-            _locals)
-        df = self.spark.range(1).select(pandas_udf(f=_locals['noop'], returnType='bigint')('id'))
+        def noop(col: pd.Series) -> pd.Series:
+            return col
+
+        df = self.spark.range(1).select(pandas_udf(f=noop, returnType='bigint')('id'))
         self.assertEqual(df.first()[0], 0)
 
     def test_mixed_udf(self):

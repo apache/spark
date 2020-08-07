@@ -235,8 +235,6 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
  */
 object ReassignLambdaVariableID extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!SQLConf.get.getConf(SQLConf.OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID)) return plan
-
     // The original LambdaVariable IDs are all positive. To avoid conflicts, the new IDs are all
     // negative and starts from -1.
     var newId = 0L

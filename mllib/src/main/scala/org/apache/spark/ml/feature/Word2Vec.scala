@@ -47,7 +47,6 @@ private[feature] trait Word2VecBase extends Params
   final val vectorSize = new IntParam(
     this, "vectorSize", "the dimension of codes after transforming from words (> 0)",
     ParamValidators.gt(0))
-  setDefault(vectorSize -> 100)
 
   /** @group getParam */
   def getVectorSize: Int = $(vectorSize)
@@ -60,7 +59,6 @@ private[feature] trait Word2VecBase extends Params
   final val windowSize = new IntParam(
     this, "windowSize", "the window size (context words from [-window, window]) (> 0)",
     ParamValidators.gt(0))
-  setDefault(windowSize -> 5)
 
   /** @group expertGetParam */
   def getWindowSize: Int = $(windowSize)
@@ -73,7 +71,6 @@ private[feature] trait Word2VecBase extends Params
   final val numPartitions = new IntParam(
     this, "numPartitions", "number of partitions for sentences of words (> 0)",
     ParamValidators.gt(0))
-  setDefault(numPartitions -> 1)
 
   /** @group getParam */
   def getNumPartitions: Int = $(numPartitions)
@@ -86,7 +83,6 @@ private[feature] trait Word2VecBase extends Params
    */
   final val minCount = new IntParam(this, "minCount", "the minimum number of times a token must " +
     "appear to be included in the word2vec model's vocabulary (>= 0)", ParamValidators.gtEq(0))
-  setDefault(minCount -> 5)
 
   /** @group getParam */
   def getMinCount: Int = $(minCount)
@@ -101,13 +97,12 @@ private[feature] trait Word2VecBase extends Params
   final val maxSentenceLength = new IntParam(this, "maxSentenceLength", "Maximum length " +
     "(in words) of each sentence in the input data. Any sentence longer than this threshold will " +
     "be divided into chunks up to the size (> 0)", ParamValidators.gt(0))
-  setDefault(maxSentenceLength -> 1000)
 
   /** @group getParam */
   def getMaxSentenceLength: Int = $(maxSentenceLength)
 
-  setDefault(stepSize -> 0.025)
-  setDefault(maxIter -> 1)
+  setDefault(vectorSize -> 100, windowSize -> 5, numPartitions -> 1, minCount -> 5,
+    maxSentenceLength -> 1000, stepSize -> 0.025, maxIter -> 1)
 
   /**
    * Validate and transform the input schema.
@@ -288,15 +283,16 @@ class Word2VecModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val vectors = wordVectors.getVectors
       .mapValues(vv => Vectors.dense(vv.map(_.toDouble)))
-      .map(identity) // mapValues doesn't return a serializable map (SI-7005)
+      .map(identity).toMap // mapValues doesn't return a serializable map (SI-7005)
     val bVectors = dataset.sparkSession.sparkContext.broadcast(vectors)
     val d = $(vectorSize)
+    val emptyVec = Vectors.sparse(d, Array.emptyIntArray, Array.emptyDoubleArray)
     val word2Vec = udf { sentence: Seq[String] =>
       if (sentence.isEmpty) {
-        Vectors.sparse(d, Array.empty[Int], Array.empty[Double])
+        emptyVec
       } else {
         val sum = Vectors.zeros(d)
         sentence.foreach { word =>
@@ -308,12 +304,18 @@ class Word2VecModel private[ml] (
         sum
       }
     }
-    dataset.withColumn($(outputCol), word2Vec(col($(inputCol))))
+    dataset.withColumn($(outputCol), word2Vec(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), $(vectorSize))
+    }
+    outputSchema
   }
 
   @Since("1.4.1")

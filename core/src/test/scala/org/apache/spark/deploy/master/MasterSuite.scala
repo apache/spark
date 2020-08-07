@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master
 
 import java.util.Date
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
@@ -31,8 +31,10 @@ import scala.reflect.ClassTag
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfter, Matchers, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -97,13 +99,40 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   }
 }
 
-class MockExecutorLaunchFailWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf)
-  extends MockWorker(master, conf) {
+// This class is designed to handle the lifecycle of only one application.
+class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkConf)
+  extends MockWorker(master.self, conf) with Eventually {
+
+  val appRegistered = new CountDownLatch(1)
+  val launchExecutorReceived = new CountDownLatch(1)
+  val appIdsToLaunchExecutor = new mutable.HashSet[String]
   var failedCnt = 0
+
   override def receive: PartialFunction[Any, Unit] = {
+    case LaunchDriver(driverId, _, _) =>
+      master.self.send(RegisterApplication(appDesc, newDriver(driverId)))
+
+      // Below code doesn't make driver stuck, as newDriver opens another rpc endpoint for
+      // handling driver related messages. To simplify logic, we will block handling
+      // LaunchExecutor message until we validate registering app succeeds.
+      eventually(timeout(5.seconds)) {
+        // an app would be registered with Master once Driver set up
+        assert(apps.nonEmpty)
+        assert(master.idToApp.keySet.intersect(apps.keySet) == apps.keySet)
+      }
+
+      appRegistered.countDown()
     case LaunchExecutor(_, appId, execId, _, _, _, _) =>
+      assert(appRegistered.await(10, TimeUnit.SECONDS))
+
+      if (failedCnt == 0) {
+        launchExecutorReceived.countDown()
+      }
+      assert(master.idToApp.contains(appId))
+      appIdsToLaunchExecutor += appId
       failedCnt += 1
-      master.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
+      master.self.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
+
     case otherMsg => super.receive(otherMsg)
   }
 }
@@ -658,11 +687,12 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
-  test("SPARK-27510: Master should avoid dead loop while launching executor failed in Worker") {
+  // TODO(SPARK-32250): Enable the test back. It is flaky in GitHub Actions.
+  ignore("SPARK-27510: Master should avoid dead loop while launching executor failed in Worker") {
     val master = makeAliveMaster()
     var worker: MockExecutorLaunchFailWorker = null
     try {
-      worker = new MockExecutorLaunchFailWorker(master.self)
+      worker = new MockExecutorLaunchFailWorker(master)
       worker.rpcEnv.setupEndpoint("worker", worker)
       val workerRegMsg = RegisterWorker(
         worker.id,
@@ -677,19 +707,16 @@ class MasterSuite extends SparkFunSuite
       val driver = DeployTestUtils.createDriverDesc()
       // mimic DriverClient to send RequestSubmitDriver to master
       master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
-      var appId: String = null
-      eventually(timeout(10.seconds)) {
-        // an app would be registered with Master once Driver set up
-        assert(worker.apps.nonEmpty)
-        appId = worker.apps.head._1
-        assert(master.idToApp.contains(appId))
-      }
+
+      // LaunchExecutor message should have been received in worker side
+      assert(worker.launchExecutorReceived.await(10, TimeUnit.SECONDS))
 
       eventually(timeout(10.seconds)) {
+        val appIds = worker.appIdsToLaunchExecutor
         // Master would continually launch executors until reach MAX_EXECUTOR_RETRIES
         assert(worker.failedCnt == master.conf.get(MAX_EXECUTOR_RETRIES))
         // Master would remove the app if no executor could be launched for it
-        assert(!master.idToApp.contains(appId))
+        assert(master.idToApp.keySet.intersect(appIds).isEmpty)
       }
     } finally {
       if (worker != null) {
@@ -699,6 +726,65 @@ class MasterSuite extends SparkFunSuite
         master.rpcEnv.shutdown()
       }
     }
+  }
+
+  def testWorkerDecommissioning(
+      numWorkers: Int,
+      numWorkersExpectedToDecom: Int,
+      hostnames: Seq[String]): Unit = {
+    val conf = new SparkConf()
+    val master = makeAliveMaster(conf)
+    val workerRegs = (1 to numWorkers).map{idx =>
+      val worker = new MockWorker(master.self, conf)
+      worker.rpcEnv.setupEndpoint("worker", worker)
+      val workerReg = RegisterWorker(
+        worker.id,
+        "localhost",
+        worker.self.address.port,
+        worker.self,
+        10,
+        1024,
+        "http://localhost:8080",
+        RpcAddress("localhost", 10000))
+      master.self.send(workerReg)
+      workerReg
+    }
+
+    eventually(timeout(10.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.workers.length === numWorkers)
+      assert(masterState.workers.forall(_.state == WorkerState.ALIVE))
+      assert(masterState.workers.map(_.id).toSet == workerRegs.map(_.id).toSet)
+    }
+
+    val decomWorkersCount = master.self.askSync[Integer](DecommissionWorkersOnHosts(hostnames))
+    assert(decomWorkersCount === numWorkersExpectedToDecom)
+
+    // Decommissioning is actually async ... wait for the workers to actually be decommissioned by
+    // polling the master's state.
+    eventually(timeout(30.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.workers.length === numWorkers)
+      val workersActuallyDecomed = masterState.workers.count(_.state == WorkerState.DECOMMISSIONED)
+      assert(workersActuallyDecomed === numWorkersExpectedToDecom)
+    }
+
+    // Decommissioning a worker again should return the same answer since we want this call to be
+    // idempotent.
+    val decomWorkersCountAgain = master.self.askSync[Integer](DecommissionWorkersOnHosts(hostnames))
+    assert(decomWorkersCountAgain === numWorkersExpectedToDecom)
+  }
+
+  test("All workers on a host should be decommissioned") {
+    testWorkerDecommissioning(2, 2, Seq("LoCalHost", "localHOST"))
+  }
+
+  test("No workers should be decommissioned with invalid host") {
+    testWorkerDecommissioning(2, 0, Seq("NoSuchHost1", "NoSuchHost2"))
+  }
+
+  test("Only worker on host should be decommissioned") {
+    testWorkerDecommissioning(1, 1, Seq("lOcalHost", "NoSuchHost"))
   }
 
   test("SPARK-19900: there should be a corresponding driver for the app after relaunching driver") {

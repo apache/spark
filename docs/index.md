@@ -42,17 +42,15 @@ If you'd like to build Spark from
 source, visit [Building Spark](building-spark.html).
 
 
-Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy to run
-locally on one machine --- all you need is to have `java` installed on your system `PATH`,
-or the `JAVA_HOME` environment variable pointing to a Java installation.
+Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS), and it should run on any platform that runs a supported version of Java. This should include JVMs on x86_64 and ARM64. It's easy to run locally on one machine --- all you need is to have `java` installed on your system `PATH`, or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 8/11, Scala 2.12, Python 2.7+/3.4+ and R 3.1+.
+Spark runs on Java 8/11, Scala 2.12, Python 3.6+ and R 3.5+.
 Java 8 prior to version 8u92 support is deprecated as of Spark 3.0.0.
-Python 2 and Python 3 prior to version 3.6 support is deprecated as of Spark 3.0.0.
-R prior to version 3.4 support is deprecated as of Spark 3.0.0.
 For the Scala API, Spark {{site.SPARK_VERSION}}
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).
+
+For Java 11, `-Dio.netty.tryReflectionSetAccessible=true` is required additionally for Apache Arrow library. This prevents `java.lang.UnsupportedOperationException: sun.misc.Unsafe or java.nio.DirectByteBuffer.(long, int) not available` when Apache Arrow uses Netty internally.
 
 # Running the Examples and Shell
 
@@ -118,7 +116,7 @@ options for deployment:
 
 **API Docs:**
 
-* [Spark Scala API (Scaladoc)](api/scala/index.html#org.apache.spark.package)
+* [Spark Scala API (Scaladoc)](api/scala/org/apache/spark/index.html)
 * [Spark Java API (Javadoc)](api/java/index.html)
 * [Spark Python API (Sphinx)](api/python/index.html)
 * [Spark R API (Roxygen2)](api/R/index.html)

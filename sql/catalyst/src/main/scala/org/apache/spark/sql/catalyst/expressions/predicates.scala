@@ -18,7 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.TreeSet
+import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
@@ -94,7 +97,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 }
 
-trait PredicateHelper {
+trait PredicateHelper extends Logging {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -196,6 +199,53 @@ trait PredicateHelper {
     case _: PythonUDF => true
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
+  }
+
+  /**
+   * Returns a filter that its reference is a subset of `outputSet` and it contains the maximum
+   * constraints from `condition`. This is used for predicate pushdown.
+   * When there is no such filter, `None` is returned.
+   */
+  protected def extractPredicatesWithinOutputSet(
+      condition: Expression,
+      outputSet: AttributeSet): Option[Expression] = condition match {
+    case And(left, right) =>
+      val leftResultOptional = extractPredicatesWithinOutputSet(left, outputSet)
+      val rightResultOptional = extractPredicatesWithinOutputSet(right, outputSet)
+      (leftResultOptional, rightResultOptional) match {
+        case (Some(leftResult), Some(rightResult)) => Some(And(leftResult, rightResult))
+        case (Some(leftResult), None) => Some(leftResult)
+        case (None, Some(rightResult)) => Some(rightResult)
+        case _ => None
+      }
+
+    // The Or predicate is convertible when both of its children can be pushed down.
+    // That is to say, if one/both of the children can be partially pushed down, the Or
+    // predicate can be partially pushed down as well.
+    //
+    // Here is an example used to explain the reason.
+    // Let's say we have
+    // condition: (a1 AND a2) OR (b1 AND b2),
+    // outputSet: AttributeSet(a1, b1)
+    // a1 and b1 is convertible, while a2 and b2 is not.
+    // The predicate can be converted as
+    // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
+    // As per the logical in And predicate, we can push down (a1 OR b1).
+    case Or(left, right) =>
+      for {
+        lhs <- extractPredicatesWithinOutputSet(left, outputSet)
+        rhs <- extractPredicatesWithinOutputSet(right, outputSet)
+      } yield Or(lhs, rhs)
+
+    // Here we assume all the `Not` operators is already below all the `And` and `Or` operators
+    // after the optimization rule `BooleanSimplification`, so that we don't need to handle the
+    // `Not` operators here.
+    case other =>
+      if (other.references.subsetOf(outputSet)) {
+        Some(other)
+      } else {
+        None
+      }
   }
 }
 
@@ -519,7 +569,9 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   override def sql: String = {
     val valueSQL = child.sql
-    val listSQL = hset.toSeq.map(Literal(_).sql).mkString(", ")
+    val listSQL = hset.toSeq
+      .map(elem => Literal(elem, child.dataType).sql)
+      .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
 }
@@ -925,66 +977,6 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override def symbol: String = ">="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
-}
-
-trait BooleanTest extends UnaryExpression with Predicate with ExpectsInputTypes {
-
-  def boolValueForComparison: Boolean
-  def boolValueWhenNull: Boolean
-
-  override def nullable: Boolean = false
-  override def inputTypes: Seq[DataType] = Seq(BooleanType)
-
-  override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    Option(value) match {
-      case None => boolValueWhenNull
-      case other => if (boolValueWhenNull) {
-        value == !boolValueForComparison
-      } else {
-        value == boolValueForComparison
-      }
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
-    ev.copy(code = code"""
-      ${eval.code}
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      if (${eval.isNull}) {
-        ${ev.value} = $boolValueWhenNull;
-      } else if ($boolValueWhenNull) {
-        ${ev.value} = ${eval.value} == !$boolValueForComparison;
-      } else {
-        ${ev.value} = ${eval.value} == $boolValueForComparison;
-      }
-      """, isNull = FalseLiteral)
-  }
-}
-
-case class IsTrue(child: Expression) extends BooleanTest {
-  override def boolValueForComparison: Boolean = true
-  override def boolValueWhenNull: Boolean = false
-  override def sql: String = s"(${child.sql} IS TRUE)"
-}
-
-case class IsNotTrue(child: Expression) extends BooleanTest {
-  override def boolValueForComparison: Boolean = true
-  override def boolValueWhenNull: Boolean = true
-  override def sql: String = s"(${child.sql} IS NOT TRUE)"
-}
-
-case class IsFalse(child: Expression) extends BooleanTest {
-  override def boolValueForComparison: Boolean = false
-  override def boolValueWhenNull: Boolean = false
-  override def sql: String = s"(${child.sql} IS FALSE)"
-}
-
-case class IsNotFalse(child: Expression) extends BooleanTest {
-  override def boolValueForComparison: Boolean = false
-  override def boolValueWhenNull: Boolean = true
-  override def sql: String = s"(${child.sql} IS NOT FALSE)"
 }
 
 /**

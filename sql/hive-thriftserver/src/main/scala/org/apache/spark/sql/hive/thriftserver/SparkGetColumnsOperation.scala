@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.UUID
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
 import org.apache.hive.service.cli._
@@ -34,8 +32,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.toJavaSQLType
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{Utils => SparkUtils}
+import org.apache.spark.sql.types._
 
 /**
  * Spark's own SparkGetColumnsOperation
@@ -48,26 +45,19 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param columnName column name
  */
 private[hive] class SparkGetColumnsOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
     tableName: String,
     columnName: String)
   extends GetColumnsOperation(parentSession, catalogName, schemaName, tableName, columnName)
-    with Logging {
+  with SparkOperation
+  with Logging {
 
   val catalog: SessionCatalog = sqlContext.sessionState.catalog
 
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.listener.onOperationClosed(statementId)
-  }
-
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
@@ -78,7 +68,7 @@ private[hive] class SparkGetColumnsOperation(
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-    HiveThriftServer2.listener.onStatementStart(
+    HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -129,23 +119,49 @@ private[hive] class SparkGetColumnsOperation(
         }
       }
       setState(OperationState.FINISHED)
-    } catch {
-      case e: Throwable =>
-        logError(s"Error executing get columns operation with $statementId", e)
-        setState(OperationState.ERROR)
-        e match {
-          case hiveException: HiveSQLException =>
-            HiveThriftServer2.listener.onStatementError(
-              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
-            throw hiveException
-          case _ =>
-            val root = ExceptionUtils.getRootCause(e)
-            HiveThriftServer2.listener.onStatementError(
-              statementId, root.getMessage, SparkUtils.exceptionString(root))
-            throw new HiveSQLException("Error getting columns: " + root.toString, root)
-        }
-    }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    } catch onError()
+
+    HiveThriftServer2.eventManager.onStatementFinish(statementId)
+  }
+
+  /**
+   * For boolean, numeric and datetime types, it returns the default size of its catalyst type
+   * For struct type, when its elements are fixed-size, the summation of all element sizes will be
+   * returned.
+   * For array, map, string, and binaries, the column size is variable, return null as unknown.
+   */
+  private def getColumnSize(typ: DataType): Option[Int] = typ match {
+    case dt @ (BooleanType | _: NumericType | DateType | TimestampType) => Some(dt.defaultSize)
+    case StructType(fields) =>
+      val sizeArr = fields.map(f => getColumnSize(f.dataType))
+      if (sizeArr.contains(None)) {
+        None
+      } else {
+        Some(sizeArr.map(_.get).sum)
+      }
+    case other => None
+  }
+
+  /**
+   * The number of fractional digits for this type.
+   * Null is returned for data types where this is not applicable.
+   * For boolean and integrals, the decimal digits is 0
+   * For floating types, we follow the IEEE Standard for Floating-Point Arithmetic (IEEE 754)
+   * For timestamp values, we support microseconds
+   * For decimals, it returns the scale
+   */
+  private def getDecimalDigits(typ: DataType) = typ match {
+    case BooleanType | _: IntegerType => Some(0)
+    case FloatType => Some(7)
+    case DoubleType => Some(15)
+    case d: DecimalType => Some(d.scale)
+    case TimestampType => Some(6)
+    case _ => None
+  }
+
+  private def getNumPrecRadix(typ: DataType): Option[Int] = typ match {
+    case _: NumericType => Some(10)
+    case _ => None
   }
 
   private def addToRowSet(
@@ -153,7 +169,7 @@ private[hive] class SparkGetColumnsOperation(
       dbName: String,
       tableName: String,
       schema: StructType): Unit = {
-    schema.foreach { column =>
+    schema.zipWithIndex.foreach { case (column, pos) =>
       if (columnPattern != null && !columnPattern.matcher(column.name).matches()) {
       } else {
         val rowData = Array[AnyRef](
@@ -163,17 +179,17 @@ private[hive] class SparkGetColumnsOperation(
           column.name, // COLUMN_NAME
           toJavaSQLType(column.dataType.sql).asInstanceOf[AnyRef], // DATA_TYPE
           column.dataType.sql, // TYPE_NAME
-          null, // COLUMN_SIZE
+          getColumnSize(column.dataType).map(_.asInstanceOf[AnyRef]).orNull, // COLUMN_SIZE
           null, // BUFFER_LENGTH, unused
-          null, // DECIMAL_DIGITS
-          null, // NUM_PREC_RADIX
+          getDecimalDigits(column.dataType).map(_.asInstanceOf[AnyRef]).orNull, // DECIMAL_DIGITS
+          getNumPrecRadix(column.dataType).map(_.asInstanceOf[AnyRef]).orNull, // NUM_PREC_RADIX
           (if (column.nullable) 1 else 0).asInstanceOf[AnyRef], // NULLABLE
           column.getComment().getOrElse(""), // REMARKS
           null, // COLUMN_DEF
           null, // SQL_DATA_TYPE
           null, // SQL_DATETIME_SUB
           null, // CHAR_OCTET_LENGTH
-          null, // ORDINAL_POSITION
+          pos.asInstanceOf[AnyRef], // ORDINAL_POSITION
           "YES", // IS_NULLABLE
           null, // SCOPE_CATALOG
           null, // SCOPE_SCHEMA

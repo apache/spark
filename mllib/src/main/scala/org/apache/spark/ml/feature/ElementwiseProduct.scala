@@ -21,10 +21,10 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Param
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature.{ElementwiseProduct => OldElementwiseProduct}
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 
 /**
  * Outputs the Hadamard product (i.e., the element-wise product) of each input vector with a
@@ -81,6 +81,15 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
+
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), $(scalingVec).size)
+    }
+    outputSchema
+  }
 
   @Since("3.0.0")
   override def toString: String = {

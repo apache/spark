@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.io.{InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
@@ -37,13 +37,14 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
-import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
-import org.apache.spark.sql.connector.write.SupportsTruncate
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdate
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
@@ -206,7 +207,7 @@ abstract class StreamExecution(
   /**
    * A list of unique sources in the query plan. This will be set when generating logical plan.
    */
-  @volatile protected var uniqueSources: Seq[SparkDataStream] = Seq.empty
+  @volatile protected var uniqueSources: Map[SparkDataStream, ReadLimit] = Map.empty
 
   /** Defines the internal state of execution */
   protected val state = new AtomicReference[State](INITIALIZING)
@@ -307,7 +308,8 @@ abstract class StreamExecution(
       }
 
       // `postEvent` does not throw non fatal exception.
-      postEvent(new QueryStartedEvent(id, runId, name))
+      val startTimestamp = triggerClock.getTimeMillis()
+      postEvent(new QueryStartedEvent(id, runId, name, formatTimestamp(startTimestamp)))
 
       // Unblock starting thread
       startLatch.countDown()
@@ -424,13 +426,37 @@ abstract class StreamExecution(
 
   /** Stops all streaming sources safely. */
   protected def stopSources(): Unit = {
-    uniqueSources.foreach { source =>
+    uniqueSources.foreach { case (source, _) =>
       try {
         source.stop()
       } catch {
         case NonFatal(e) =>
           logWarning(s"Failed to stop streaming source: $source. Resources may have leaked.", e)
       }
+    }
+  }
+
+  /**
+   * Interrupts the query execution thread and awaits its termination until until it exceeds the
+   * timeout. The timeout can be set on "spark.sql.streaming.stopTimeout".
+   *
+   * @throws TimeoutException If the thread cannot be stopped within the timeout
+   */
+  @throws[TimeoutException]
+  protected def interruptAndAwaitExecutionThreadTermination(): Unit = {
+    val timeout = math.max(
+      sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_STOP_TIMEOUT), 0)
+    queryExecutionThread.interrupt()
+    queryExecutionThread.join(timeout)
+    if (queryExecutionThread.isAlive) {
+      val stackTraceException = new SparkException("The stream thread was last executing:")
+      stackTraceException.setStackTrace(queryExecutionThread.getStackTrace)
+      val timeoutException = new TimeoutException(
+        s"Stream Execution thread for stream $prettyIdString failed to stop within $timeout " +
+        s"milliseconds (specified by ${SQLConf.STREAMING_STOP_TIMEOUT.key}). See the cause on " +
+        s"what was being executed in the streaming query thread.")
+      timeoutException.initCause(stackTraceException)
+      throw timeoutException
     }
   }
 
@@ -588,9 +614,11 @@ abstract class StreamExecution(
       table: SupportsWrite,
       options: Map[String, String],
       inputPlan: LogicalPlan): StreamingWrite = {
-    val writeBuilder = table.newWriteBuilder(new CaseInsensitiveStringMap(options.asJava))
-      .withQueryId(id.toString)
-      .withInputDataSchema(inputPlan.schema)
+    val info = LogicalWriteInfoImpl(
+      queryId = id.toString,
+      inputPlan.schema,
+      new CaseInsensitiveStringMap(options.asJava))
+    val writeBuilder = table.newWriteBuilder(info)
     outputMode match {
       case Append =>
         writeBuilder.buildForStreaming()
@@ -602,14 +630,9 @@ abstract class StreamExecution(
         writeBuilder.asInstanceOf[SupportsTruncate].truncate().buildForStreaming()
 
       case Update =>
-        // Although no v2 sinks really support Update mode now, but during tests we do want them
-        // to pretend to support Update mode, and treat Update mode same as Append mode.
-        if (Utils.isTesting) {
-          writeBuilder.buildForStreaming()
-        } else {
-          throw new IllegalArgumentException(
-            "Data source v2 streaming sinks does not support Update mode.")
-        }
+        require(writeBuilder.isInstanceOf[SupportsStreamingUpdate],
+          table.name + " does not support Update mode.")
+        writeBuilder.asInstanceOf[SupportsStreamingUpdate].update().buildForStreaming()
     }
   }
 

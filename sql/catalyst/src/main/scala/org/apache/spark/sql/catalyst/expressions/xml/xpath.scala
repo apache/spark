@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.xml
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -30,7 +30,8 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * This is not the world's most efficient implementation due to type conversion, but works.
  */
-abstract class XPathExtract extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+abstract class XPathExtract
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback with NullIntolerant {
   override def left: Expression = xml
   override def right: Expression = path
 
@@ -160,7 +161,8 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
   """)
 // scalastyle:on line.size.limit
 case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
-  override def prettyName: String = "xpath_double"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("xpath_double")
   override def dataType: DataType = DoubleType
 
   override def nullSafeEval(xml: Any, path: Any): Any = {

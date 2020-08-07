@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.internal.VariableSubstitution
 
 
 private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlContext)
@@ -59,9 +60,10 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
   override def run(command: String): CommandProcessorResponse = {
     // TODO unify the error code
     try {
-      context.sparkContext.setJobDescription(command)
+      val substitutorCommand = new VariableSubstitution(context.conf).substitute(command)
+      context.sparkContext.setJobDescription(substitutorCommand)
       val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
-      hiveResponse = SQLExecution.withNewExecutionId(context.sparkSession, execution) {
+      hiveResponse = SQLExecution.withNewExecutionId(execution) {
         hiveResultString(execution.executedPlan)
       }
       tableSchema = getResultSetSchema(execution)

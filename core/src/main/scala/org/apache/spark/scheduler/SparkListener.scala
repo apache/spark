@@ -27,6 +27,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo
 import org.apache.spark.TaskEndReason
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 
@@ -157,6 +158,16 @@ case class SparkListenerNodeUnblacklisted(time: Long, hostId: String)
   extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerUnschedulableTaskSetAdded(
+  stageId: Int,
+  stageAttemptId: Int) extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerUnschedulableTaskSetRemoved(
+  stageId: Int,
+  stageAttemptId: Int) extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
 
 /**
@@ -206,6 +217,10 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
  */
 @DeveloperApi
 case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerResourceProfileAdded(resourceProfile: ResourceProfile)
+  extends SparkListenerEvent
 
 /**
  * Interface for listening to events from the Spark scheduler. Most applications should probably
@@ -335,6 +350,20 @@ private[spark] trait SparkListenerInterface {
   def onNodeUnblacklisted(nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit
 
   /**
+   * Called when a taskset becomes unschedulable due to blacklisting and dynamic allocation
+   * is enabled.
+   */
+  def onUnschedulableTaskSetAdded(
+      unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded): Unit
+
+  /**
+   * Called when an unschedulable taskset becomes schedulable and dynamic allocation
+   * is enabled.
+   */
+  def onUnschedulableTaskSetRemoved(
+      unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved): Unit
+
+  /**
    * Called when the driver receives a block update info.
    */
   def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit
@@ -348,6 +377,11 @@ private[spark] trait SparkListenerInterface {
    * Called when other events like SQL-specific events are posted.
    */
   def onOtherEvent(event: SparkListenerEvent): Unit
+
+  /**
+   * Called when a Resource Profile is added to the manager.
+   */
+  def onResourceProfileAdded(event: SparkListenerResourceProfileAdded): Unit
 }
 
 
@@ -415,10 +449,18 @@ abstract class SparkListener extends SparkListenerInterface {
   override def onNodeUnblacklisted(
       nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit = { }
 
+  override def onUnschedulableTaskSetAdded(
+      unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded): Unit = { }
+
+  override def onUnschedulableTaskSetRemoved(
+      unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved): Unit = { }
+
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = { }
 
   override def onSpeculativeTaskSubmitted(
       speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit = { }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = { }
+
+  override def onResourceProfileAdded(event: SparkListenerResourceProfileAdded): Unit = { }
 }

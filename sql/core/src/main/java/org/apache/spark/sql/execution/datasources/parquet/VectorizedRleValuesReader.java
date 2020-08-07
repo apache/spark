@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import org.apache.parquet.Preconditions;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesUtils;
@@ -27,9 +30,6 @@ import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
 
 /**
  * A values reader for Parquet's run-length encoded data. This is based off of the version in
@@ -203,6 +203,44 @@ public final class VectorizedRleValuesReader extends ValuesReader
     }
   }
 
+  // A fork of `readIntegers`, which rebases the date int value (days) before filling
+  // the Spark column vector.
+  public void readIntegersWithRebase(
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      int level,
+      VectorizedValuesReader data,
+      final boolean failIfRebase) throws IOException {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readIntegersWithRebase(n, c, rowId, failIfRebase);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              int julianDays = data.readInteger();
+              c.putInt(rowId + i, VectorizedColumnReader.rebaseDays(julianDays, failIfRebase));
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
   // TODO: can this code duplication be removed without a perf penalty?
   public void readBooleans(
       int total,
@@ -330,6 +368,44 @@ public final class VectorizedRleValuesReader extends ValuesReader
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
               c.putLong(rowId + i, data.readLong());
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  // A fork of `readLongs`, which rebases the timestamp long value (microseconds) before filling
+  // the Spark column vector.
+  public void readLongsWithRebase(
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      int level,
+      VectorizedValuesReader data,
+      final boolean failIfRebase) throws IOException {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readLongsWithRebase(n, c, rowId, failIfRebase);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              long julianMicros = data.readLong();
+              c.putLong(rowId + i, VectorizedColumnReader.rebaseMicros(julianMicros, failIfRebase));
             } else {
               c.putNull(rowId + i);
             }
@@ -509,6 +585,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
+  public void readIntegersWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
   public byte readByte() {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
@@ -520,6 +602,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void readLongs(int total, WritableColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readLongsWithRebase(
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 

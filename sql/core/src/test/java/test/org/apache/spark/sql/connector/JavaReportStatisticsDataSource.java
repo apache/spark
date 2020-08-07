@@ -19,15 +19,15 @@ package test.org.apache.spark.sql.connector;
 
 import java.util.OptionalLong;
 
+import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.Table;
-import org.apache.spark.sql.connector.catalog.TableProvider;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.read.Statistics;
 import org.apache.spark.sql.connector.read.SupportsReportStatistics;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
-public class JavaReportStatisticsDataSource implements TableProvider {
+public class JavaReportStatisticsDataSource implements TestingV2Source {
   class MyScanBuilder extends JavaSimpleScanBuilder implements SupportsReportStatistics {
     @Override
     public Statistics estimateStatistics() {

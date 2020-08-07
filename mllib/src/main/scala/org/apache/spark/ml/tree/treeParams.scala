@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 /**
  * Parameters for Decision Tree-based algorithms.
  *
- * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait DecisionTreeParams extends PredictorParams
   with HasCheckpointInterval with HasSeed with HasWeightCol {
@@ -47,6 +47,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * (default = "")
    * @group param
    */
+  @Since("3.0.0")
   final val leafCol: Param[String] =
     new Param[String](this, "leafCol", "Leaf indices column name. " +
       "Predicted leaf index of each instance in each tree by preorder")
@@ -139,9 +140,11 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     cacheNodeIds -> false, checkpointInterval -> 10)
 
   /** @group setParam */
+  @Since("3.0.0")
   final def setLeafCol(value: String): this.type = set(leafCol, value)
 
   /** @group getParam */
+  @Since("3.0.0")
   final def getLeafCol: String = $(leafCol)
 
   /** @group getParam */
@@ -317,7 +320,7 @@ private[spark] object TreeEnsembleParams {
 /**
  * Parameters for Decision Tree-based ensemble algorithms.
  *
- * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
@@ -329,8 +332,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   final val subsamplingRate: DoubleParam = new DoubleParam(this, "subsamplingRate",
     "Fraction of the training data used for learning each decision tree, in range (0, 1].",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
-
-  setDefault(subsamplingRate -> 1.0)
 
   /** @group getParam */
   final def getSubsamplingRate: Double = $(subsamplingRate)
@@ -383,10 +384,10 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
       || Try(value.toInt).filter(_ > 0).isSuccess
       || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
 
-  setDefault(featureSubsetStrategy -> "auto")
-
   /** @group getParam */
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
+
+  setDefault(subsamplingRate -> 1.0, featureSubsetStrategy -> "auto")
 }
 
 /**
@@ -445,10 +446,22 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
     new IntParam(this, "numTrees", "Number of trees to train (at least 1)",
     ParamValidators.gtEq(1))
 
-  setDefault(numTrees -> 20)
-
   /** @group getParam */
   final def getNumTrees: Int = $(numTrees)
+
+  /**
+   * Whether bootstrap samples are used when building trees.
+   * @group expertParam
+   */
+  @Since("3.0.0")
+  final val bootstrap: BooleanParam = new BooleanParam(this, "bootstrap",
+    "Whether bootstrap samples are used when building trees.")
+
+  /** @group getParam */
+  @Since("3.0.0")
+  final def getBootstrap: Boolean = $(bootstrap)
+
+  setDefault(numTrees -> 20, bootstrap -> true)
 }
 
 private[ml] trait RandomForestClassifierParams
@@ -460,7 +473,7 @@ private[ml] trait RandomForestRegressorParams
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
  *
- * Note: Marked as private and DeveloperApi since this may be made public in the future.
+ * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize
   with HasValidationIndicatorCol {
@@ -501,9 +514,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
     "(a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator.",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
-  setDefault(maxIter -> 20, stepSize -> 0.1, validationTol -> 0.01)
-
-  setDefault(featureSubsetStrategy -> "all")
+  setDefault(maxIter -> 20, stepSize -> 0.1, validationTol -> 0.01, featureSubsetStrategy -> "all")
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(

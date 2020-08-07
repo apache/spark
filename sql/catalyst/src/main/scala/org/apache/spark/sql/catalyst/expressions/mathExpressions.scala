@@ -21,7 +21,7 @@ import java.{lang => jl}
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -57,13 +57,13 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(val f: Double => Double, name: String)
-  extends UnaryExpression with Serializable with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
   override def nullable: Boolean = true
-  override def toString: String = s"$name($child)"
-  override def prettyName: String = name
+  override def toString: String = s"$prettyName($child)"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
 
   protected override def nullSafeEval(input: Any): Any = {
     f(input.asInstanceOf[Double])
@@ -111,13 +111,13 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
-  override def toString: String = s"$name($left, $right)"
+  override def toString: String = s"$prettyName($left, $right)"
 
-  override def prettyName: String = name
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
 
   override def dataType: DataType = DoubleType
 
@@ -324,7 +324,7 @@ case class Acosh(child: Expression)
        -16
   """)
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
@@ -452,7 +452,8 @@ object Factorial {
       > SELECT _FUNC_(5);
        120
   """)
-case class Factorial(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Factorial(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
@@ -491,7 +492,9 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
       > SELECT _FUNC_(1);
        0.0
   """)
-case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LOG")
+case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LOG") {
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("ln")
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the logarithm of `expr` with base 2.",
@@ -546,6 +549,7 @@ case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p,
 // scalastyle:on line.size.limit
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("rint")
 }
 
 @ExpressionDescription(
@@ -732,7 +736,7 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
   """)
 // scalastyle:on line.size.limit
 case class Bin(child: Expression)
-  extends UnaryExpression with Serializable with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
@@ -831,7 +835,8 @@ object Hex {
       > SELECT _FUNC_('Spark SQL');
        537061726B2053514C
   """)
-case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Hex(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(LongType, BinaryType, StringType))
@@ -866,7 +871,8 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
       > SELECT decode(_FUNC_('537061726B2053514C'), 'UTF-8');
        Spark SQL
   """)
-case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class Unhex(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
@@ -952,7 +958,7 @@ case class Pow(left: Expression, right: Expression)
        4
   """)
 case class ShiftLeft(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -986,7 +992,7 @@ case class ShiftLeft(left: Expression, right: Expression)
        2
   """)
 case class ShiftRight(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -1020,7 +1026,7 @@ case class ShiftRight(left: Expression, right: Expression)
        2
   """)
 case class ShiftRightUnsigned(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -1318,4 +1324,101 @@ case class BRound(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
+}
+
+object WidthBucket {
+
+  def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
+    if (numBucket <= 0 || numBucket == Long.MaxValue || jl.Double.isNaN(value) || min == max ||
+        jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
+        jl.Double.isNaN(max) || jl.Double.isInfinite(max)) {
+      return null
+    }
+
+    val lower = Math.min(min, max)
+    val upper = Math.max(min, max)
+
+    if (min < max) {
+      if (value < lower) {
+        0L
+      } else if (value >= upper) {
+        numBucket + 1L
+      } else {
+        (numBucket.toDouble * (value - lower) / (upper - lower)).toLong + 1L
+      }
+    } else { // `min > max` case
+      if (value > upper) {
+        0L
+      } else if (value <= lower) {
+        numBucket + 1L
+      } else {
+        (numBucket.toDouble * (upper - value) / (upper - lower)).toLong + 1L
+      }
+    }
+  }
+}
+
+/**
+ * Returns the bucket number into which the value of this expression would fall
+ * after being evaluated. Note that input arguments must follow conditions listed below;
+ * otherwise, the method will return null.
+ *  - `numBucket` must be greater than zero and be less than Long.MaxValue
+ *  - `value`, `min`, and `max` cannot be NaN
+ *  - `min` bound cannot equal `max`
+ *  - `min` and `max` must be finite
+ *
+ * Note: If `minValue` > `maxValue`, a return value is as follows;
+ *  if `value` > `minValue`, it returns 0.
+ *  if `value` <= `maxValue`, it returns `numBucket` + 1.
+ *  otherwise, it returns (`numBucket` * (`minValue` - `value`) / (`minValue` - `maxValue`)) + 1
+ *
+ * @param value is the expression to compute a bucket number in the histogram
+ * @param minValue is the minimum value of the histogram
+ * @param maxValue is the maximum value of the histogram
+ * @param numBucket is the number of buckets
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(value, min_value, max_value, num_bucket) - Returns the bucket number to which
+      `value` would be assigned in an equiwidth histogram with `num_bucket` buckets,
+      in the range `min_value` to `max_value`."
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(5.3, 0.2, 10.6, 5);
+       3
+      > SELECT _FUNC_(-2.1, 1.3, 3.4, 3);
+       0
+      > SELECT _FUNC_(8.1, 0.0, 5.7, 4);
+       5
+      > SELECT _FUNC_(-0.9, 5.2, 0.5, 2);
+       3
+  """,
+  since = "3.1.0")
+case class WidthBucket(
+    value: Expression,
+    minValue: Expression,
+    maxValue: Expression,
+    numBucket: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def children: Seq[Expression] = Seq(value, minValue, maxValue, numBucket)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
+  override def dataType: DataType = LongType
+  override def nullable: Boolean = true
+  override def prettyName: String = "width_bucket"
+
+  override protected def nullSafeEval(input: Any, min: Any, max: Any, numBucket: Any): Any = {
+    WidthBucket.computeBucketNumber(
+      input.asInstanceOf[Double],
+      min.asInstanceOf[Double],
+      max.asInstanceOf[Double],
+      numBucket.asInstanceOf[Long])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (input, min, max, numBucket) =>
+      "org.apache.spark.sql.catalyst.expressions.WidthBucket" +
+        s".computeBucketNumber($input, $min, $max, $numBucket)")
+  }
 }

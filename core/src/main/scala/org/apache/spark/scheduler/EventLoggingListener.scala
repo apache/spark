@@ -40,7 +40,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  *   spark.eventLog.enabled - Whether event logging is enabled.
  *   spark.eventLog.dir - Path to the directory in which events are logged.
  *   spark.eventLog.logBlockUpdates.enabled - Whether to log block updates
- *   spark.eventLog.logStageExecutorMetrics.enabled - Whether to log stage executor metrics
+ *   spark.eventLog.logStageExecutorMetrics - Whether to log stage executor metrics
  *
  * Event log file writer maintains its own parameters: refer the doc of [[EventLogFileWriter]]
  * and its descendant for more details.
@@ -235,6 +235,10 @@ private[spark] class EventLoggingListener(
     }
   }
 
+  override def onResourceProfileAdded(event: SparkListenerResourceProfileAdded): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (event.logEvent) {
       logEvent(event, flushLogger = true)
@@ -255,8 +259,10 @@ private[spark] class EventLoggingListener(
     // ...
     // where jvmInformation, sparkProperties, etc. are sequence of tuples.
     // We go through the various  of properties and redact sensitive information from them.
-    val redactedProps = event.environmentDetails.map{ case (name, props) =>
-      name -> Utils.redact(sparkConf, props)
+    val noRedactProps = Seq("Classpath Entries")
+    val redactedProps = event.environmentDetails.map {
+      case (name, props) if noRedactProps.contains(name) => name -> props
+      case (name, props) => name -> Utils.redact(sparkConf, props)
     }
     SparkListenerEnvironmentUpdate(redactedProps)
   }

@@ -17,43 +17,17 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.{DriverManager, Statement}
+import java.sql.SQLException
 
-import scala.util.{Random, Try}
+import org.apache.hive.service.cli.HiveSQLException
 
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.types._
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.test.SharedSparkSession
+trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
-class ThriftServerWithSparkContextSuite extends QueryTest with SharedSparkSession {
-
-  private var hiveServer2: HiveThriftServer2 = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    // Chooses a random port between 10000 and 19999
-    var listeningPort = 10000 + Random.nextInt(10000)
-
-    // Retries up to 3 times with different port numbers if the server fails to start
-    (1 to 3).foldLeft(Try(startThriftServer(listeningPort, 0))) { case (started, attempt) =>
-      started.orElse {
-        listeningPort += 1
-        Try(startThriftServer(listeningPort, attempt))
-      }
-    }.recover {
-      case cause: Throwable =>
-        throw cause
-    }.get
-    logInfo("HiveThriftServer2 started successfully")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      hiveServer2.stop()
-    } finally {
-      super.afterAll()
-    }
+  test("the scratch dir will be deleted during server start but recreated with new operation") {
+    assert(tempScratchDir.exists())
   }
 
   test("SPARK-29911: Uncache cached tables when session closed") {
@@ -79,26 +53,62 @@ class ThriftServerWithSparkContextSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  private def startThriftServer(port: Int, attempt: Int): Unit = {
-    logInfo(s"Trying to start HiveThriftServer2: port=$port, attempt=$attempt")
-    val sqlContext = spark.newSession().sqlContext
-    sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname, port.toString)
-    hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
-  }
+  test("Full stack traces as error message for jdbc or thrift client") {
+    val sql = "select date_sub(date'2011-11-11', '1.2')"
+    val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
 
-  private def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
-    val user = System.getProperty("user.name")
+    withSQLConf((HiveUtils.HIVE_THRIFT_SERVER_ASYNC.key, "false")) {
+      withCLIServiceClient { client =>
+        val sessionHandle = client.openSession(user, "")
+        val e = intercept[HiveSQLException] {
+          client.executeStatement(sessionHandle, sql, confOverlay)
+        }
+        assert(e.getMessage
+          .contains("The second argument of 'date_sub' function needs to be an integer."))
+        assert(!e.getMessage
+          .contains("java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      }
+    }
 
-    val serverPort = hiveServer2.getHiveConf.get(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname)
-    val connections =
-      fs.map { _ => DriverManager.getConnection(s"jdbc:hive2://localhost:$serverPort", user, "") }
-    val statements = connections.map(_.createStatement())
+    withSQLConf((HiveUtils.HIVE_THRIFT_SERVER_ASYNC.key, "true")) {
+      withCLIServiceClient { client =>
+        val sessionHandle = client.openSession(user, "")
+        val opHandle = client.executeStatementAsync(sessionHandle, sql, confOverlay)
+        var status = client.getOperationStatus(opHandle)
+        while (!status.getState.isTerminal) {
+          Thread.sleep(10)
+          status = client.getOperationStatus(opHandle)
+        }
+        val e = status.getOperationException
 
-    try {
-      statements.zip(fs).foreach { case (s, f) => f(s) }
-    } finally {
-      statements.foreach(_.close())
-      connections.foreach(_.close())
+        assert(e.getMessage
+          .contains("The second argument of 'date_sub' function needs to be an integer."))
+        assert(e.getMessage
+          .contains("java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      }
+    }
+
+    Seq("true", "false").foreach { value =>
+      withSQLConf((HiveUtils.HIVE_THRIFT_SERVER_ASYNC.key, value)) {
+        withJdbcStatement { statement =>
+          val e = intercept[SQLException] {
+            statement.executeQuery(sql)
+          }
+          assert(e.getMessage.contains(
+            "The second argument of 'date_sub' function needs to be an integer."))
+          assert(e.getMessage.contains(
+            "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+        }
+      }
     }
   }
+}
+
+
+class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {
+  override def mode: ServerMode.Value = ServerMode.binary
+}
+
+class ThriftServerWithSparkContextInHttpSuite extends ThriftServerWithSparkContextSuite {
+  override def mode: ServerMode.Value = ServerMode.http
 }

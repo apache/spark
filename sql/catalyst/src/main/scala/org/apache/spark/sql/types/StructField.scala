@@ -22,6 +22,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
 /**
  * A field inside a StructType.
@@ -43,9 +44,14 @@ case class StructField(
   /** No-arg constructor for kryo. */
   protected def this() = this(null, null)
 
-  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
-    DataType.buildFormattedString(dataType, s"$prefix    |", builder)
+  private[sql] def buildFormattedString(
+      prefix: String,
+      stringConcat: StringConcat,
+      maxDepth: Int): Unit = {
+    if (maxDepth > 0) {
+      stringConcat.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
+      DataType.buildFormattedString(dataType, s"$prefix    |", stringConcat, maxDepth)
+    }
   }
 
   // override the default toString to be compatible with legacy parquet files.

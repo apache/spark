@@ -297,17 +297,16 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     // When generating expected results at here, we need to follow the implementation of
     // Rand expression.
-    def expected(df: DataFrame): Seq[Row] = {
+    def expected(df: DataFrame): Seq[Row] =
       df.rdd.collectPartitions().zipWithIndex.flatMap {
         case (data, index) =>
           val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
           data.filter(_.getInt(0) < rng.nextDouble() * 10)
-      }
-    }
+      }.toSeq
 
     val union = df1.union(df2)
     checkAnswer(
-      union.filter('i < rand(7) * 10),
+      union.filter($"i" < rand(7) * 10),
       expected(union)
     )
     checkAnswer(
@@ -321,13 +320,13 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     val intersect = df1.intersect(df2)
     checkAnswer(
-      intersect.filter('i < rand(7) * 10),
+      intersect.filter($"i" < rand(7) * 10),
       expected(intersect)
     )
 
     val except = df1.except(df2)
     checkAnswer(
-      except.filter('i < rand(7) * 10),
+      except.filter($"i" < rand(7) * 10),
       expected(except)
     )
   }
@@ -375,7 +374,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       case j: Union if j.children.size == 5 => j }.size === 1)
 
     checkAnswer(
-      unionDF.agg(avg('key), max('key), min('key), sum('key)),
+      unionDF.agg(avg("key"), max("key"), min("key"), sum("key")),
       Row(50.5, 100, 1, 25250) :: Nil
     )
 
@@ -505,5 +504,36 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     check(lit(2).cast("int"), $"c".isNotNull, Seq(Row(1, 1, 2, 0), Row(1, 1, 2, 1)))
     check(lit(2).cast("int"), $"c" === 2, Seq(Row(1, 1, 2, 0), Row(1, 1, 2, 1)))
     check(lit(2).cast("int"), $"c" =!= 2, Seq())
+  }
+
+  test("SPARK-29358: Make unionByName optionally fill missing columns with nulls") {
+    var df1 = Seq(1, 2, 3).toDF("a")
+    var df2 = Seq(3, 1, 2).toDF("b")
+    val df3 = Seq(2, 3, 1).toDF("c")
+    val unionDf = df1.unionByName(df2.unionByName(df3, true), true)
+    checkAnswer(unionDf,
+      Row(1, null, null) :: Row(2, null, null) :: Row(3, null, null) :: // df1
+        Row(null, 3, null) :: Row(null, 1, null) :: Row(null, 2, null) :: // df2
+        Row(null, null, 2) :: Row(null, null, 3) :: Row(null, null, 1) :: Nil // df3
+    )
+
+    df1 = Seq((1, 2)).toDF("a", "c")
+    df2 = Seq((3, 4, 5)).toDF("a", "b", "c")
+    checkAnswer(df1.unionByName(df2, true),
+      Row(1, 2, null) :: Row(3, 5, 4) :: Nil)
+    checkAnswer(df2.unionByName(df1, true),
+      Row(3, 4, 5) :: Row(1, null, 2) :: Nil)
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      df2 = Seq((3, 4, 5)).toDF("a", "B", "C")
+      val union1 = df1.unionByName(df2, true)
+      val union2 = df2.unionByName(df1, true)
+
+      checkAnswer(union1, Row(1, 2, null, null) :: Row(3, null, 4, 5) :: Nil)
+      checkAnswer(union2, Row(3, 4, 5, null) :: Row(1, null, null, 2) :: Nil)
+
+      assert(union1.schema.fieldNames === Array("a", "c", "B", "C"))
+      assert(union2.schema.fieldNames === Array("a", "B", "C", "c"))
+    }
   }
 }

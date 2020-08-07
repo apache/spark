@@ -28,10 +28,7 @@ import tempfile
 from threading import Thread, Lock
 import time
 import uuid
-if sys.version < '3':
-    import Queue
-else:
-    import queue as Queue
+import queue as Queue
 from multiprocessing import Manager
 
 
@@ -74,7 +71,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         'SPARK_TESTING': '1',
         'SPARK_PREPEND_CLASSES': '1',
         'PYSPARK_PYTHON': which(pyspark_python),
-        'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
+        'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
     })
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
@@ -160,7 +157,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python3.6", "python2.7", "pypy"] if which(x)]
+    python_execs = [x for x in ["python3.6", "python3.8", "pypy3"] if which(x)]
 
     if "python3.6" not in python_execs:
         p = which("python3")
@@ -266,12 +263,12 @@ def main():
         python_implementation = subprocess_check_output(
             [python_exec, "-c", "import platform; print(platform.python_implementation())"],
             universal_newlines=True).strip()
-        LOGGER.debug("%s python_implementation is %s", python_exec, python_implementation)
-        LOGGER.debug("%s version is: %s", python_exec, subprocess_check_output(
+        LOGGER.info("%s python_implementation is %s", python_exec, python_implementation)
+        LOGGER.info("%s version is: %s", python_exec, subprocess_check_output(
             [python_exec, "--version"], stderr=subprocess.STDOUT, universal_newlines=True).strip())
         if should_test_modules:
             for module in modules_to_test:
-                if python_implementation not in module.blacklisted_python_implementations:
+                if python_implementation not in module.excluded_python_implementations:
                     for test_goal in module.python_test_goals:
                         heavy_tests = ['pyspark.streaming.tests', 'pyspark.mllib.tests',
                                        'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests']

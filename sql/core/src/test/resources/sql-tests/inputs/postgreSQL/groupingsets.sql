@@ -336,9 +336,8 @@ order by 2,1;
 -- order by 2,1;
 
 -- FILTER queries
--- [SPARK-27986] Support Aggregate Expressions with filter
--- select ten, sum(distinct four) filter (where string(four) ~ '123') from onek a
--- group by rollup(ten);
+select ten, sum(distinct four) filter (where string(four) like '123') from onek a
+group by rollup(ten);
 
 -- More rescan tests
 -- [SPARK-27877] ANSI SQL: LATERAL derived table(T491)
@@ -385,7 +384,6 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
 --     from gstest1 group by cube(a,b);
 
 -- unsortable cases
--- [SPARK-29708] Different answers in aggregates of multiple grouping sets
 select unsortable_col, count(*)
   from gstest4 group by grouping sets ((unsortable_col),(unsortable_col))
   order by string(unsortable_col);

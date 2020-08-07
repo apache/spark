@@ -169,6 +169,8 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
 }
 
 class OrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSparkSession {
+  override protected def sparkConf: SparkConf = super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+
   test("read partitioned table - partition key included in orc file") {
     withTempDir { base =>
       for {

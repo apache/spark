@@ -21,6 +21,7 @@ import java.util.Properties
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.resource.ResourceProfile
 
 class FakeTask(
     stageId: Int,
@@ -42,7 +43,12 @@ object FakeTask {
    * locations for each task (given as varargs) if this sequence is not empty.
    */
   def createTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
-    createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0, prefLocs: _*)
+    createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
+  }
+
+  def createTaskSet(numTasks: Int, rpId: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
+    createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0, rpId, prefLocs: _*)
   }
 
   def createTaskSet(
@@ -50,7 +56,8 @@ object FakeTask {
       stageId: Int,
       stageAttemptId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
-    createTaskSet(numTasks, stageId, stageAttemptId, priority = 0, prefLocs: _*)
+    createTaskSet(numTasks, stageId, stageAttemptId, priority = 0,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
   }
 
   def createTaskSet(
@@ -58,6 +65,7 @@ object FakeTask {
       stageId: Int,
       stageAttemptId: Int,
       priority: Int,
+      rpId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
     if (prefLocs.size != 0 && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
@@ -65,7 +73,7 @@ object FakeTask {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil)
     }
-    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null, rpId)
   }
 
   def createShuffleMapTaskSet(
@@ -91,11 +99,21 @@ object FakeTask {
       }, prefLocs(i), new Properties,
         SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array())
     }
-    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   def createBarrierTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
-    createBarrierTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0, prefLocs: _*)
+    createBarrierTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
+      rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
+  }
+
+  def createBarrierTaskSet(
+      numTasks: Int,
+      rpId: Int,
+      prefLocs: Seq[TaskLocation]*): TaskSet = {
+    createBarrierTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
+      rpId = rpId, prefLocs: _*)
   }
 
   def createBarrierTaskSet(
@@ -103,6 +121,7 @@ object FakeTask {
       stageId: Int,
       stageAttemptId: Int,
       priority: Int,
+      rpId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
     if (prefLocs.size != 0 && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
@@ -110,6 +129,6 @@ object FakeTask {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil, isBarrier = true)
     }
-    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null, rpId)
   }
 }

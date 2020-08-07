@@ -18,10 +18,11 @@
 """
 Worker that receives input from Piped RDD.
 """
-from __future__ import print_function
 import os
 import sys
 import time
+from inspect import getfullargspec
+import importlib
 # 'resource' is a Unix specific module.
 has_resource_module = True
 try:
@@ -35,19 +36,16 @@ from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.files import SparkFiles
-from pyspark.resourceinformation import ResourceInformation
+from pyspark.resource import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer, ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
-from pyspark.sql.types import to_arrow_type, StructType
-from pyspark.util import _get_argspec, fail_on_stopiteration
+    BatchedSerializer
+from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
+from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.types import StructType
+from pyspark.util import fail_on_stopiteration
 from pyspark import shuffle
-
-if sys.version >= '3':
-    basestring = str
-else:
-    from itertools import imap as map  # use iterator map by default
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -269,10 +267,10 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return arg_offsets, wrap_pandas_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        argspec = _get_argspec(chained_func)  # signature was lost when wrapping it
+        argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-        argspec = _get_argspec(chained_func)  # signature was lost when wrapping it
+        argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
@@ -304,7 +302,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
-        safecheck = runner_conf.get("spark.sql.execution.pandas.arrowSafeTypeConversion",
+        safecheck = runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely",
                                     "false").lower() == 'true'
         # Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF when returning StructType
         assign_cols_by_name = runner_conf.get(
@@ -339,11 +337,13 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
 
         def func(_, iterator):
-            num_input_rows = [0]
+            num_input_rows = 0
 
             def map_batch(batch):
+                nonlocal num_input_rows
+
                 udf_args = [batch[offset] for offset in arg_offsets]
-                num_input_rows[0] += len(udf_args[0])
+                num_input_rows += len(udf_args[0])
                 if len(udf_args) == 1:
                     return udf_args[0]
                 else:
@@ -355,8 +355,13 @@ def read_udfs(pickleSer, infile, eval_type):
             num_output_rows = 0
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
-                assert is_map_iter or num_output_rows <= num_input_rows[0], \
-                    "Pandas MAP_ITER UDF outputted more rows than input rows."
+                # This assert is for Scalar Iterator UDF to fail fast.
+                # The length of the entire input can only be explicitly known
+                # by consuming the input iterator in user side. Therefore,
+                # it's very unlikely the output length is higher than
+                # input length.
+                assert is_map_iter or num_output_rows <= num_input_rows, \
+                    "Pandas SCALAR_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
 
             if is_scalar_iter:
@@ -365,14 +370,14 @@ def read_udfs(pickleSer, infile, eval_type):
                 except StopIteration:
                     pass
                 else:
-                    raise RuntimeError("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input "
+                    raise RuntimeError("pandas iterator UDF should exhaust the input "
                                        "iterator.")
 
-            if is_scalar_iter and num_output_rows != num_input_rows[0]:
-                raise RuntimeError("The number of output rows of pandas iterator UDF should be "
-                                   "the same with input rows. The input rows number is %d but the "
-                                   "output rows number is %d." %
-                                   (num_input_rows[0], num_output_rows))
+                if num_output_rows != num_input_rows:
+                    raise RuntimeError(
+                        "The length of output in Scalar iterator pandas UDF should be "
+                        "the same with the input's; however, the length of output was %d and the "
+                        "length of input was %d." % (num_output_rows, num_input_rows))
 
         # profiling is not supported for UDF
         return func, None, ser, ser
@@ -463,7 +468,7 @@ def main(infile, outfile):
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
             raise Exception(("Python in worker has different version %s than that in " +
-                             "driver %s, PySpark cannot run with different minor versions." +
+                             "driver %s, PySpark cannot run with different minor versions. " +
                              "Please check environment variables PYSPARK_PYTHON and " +
                              "PYSPARK_DRIVER_PYTHON are correctly set.") %
                             ("%d.%d" % sys.version_info[:2], version))
@@ -540,9 +545,8 @@ def main(infile, outfile):
         for _ in range(num_python_includes):
             filename = utf8_deserializer.loads(infile)
             add_path(os.path.join(spark_files_dir, filename))
-        if sys.version > '3':
-            import importlib
-            importlib.invalidate_caches()
+
+        importlib.invalidate_caches()
 
         # fetch names and values of broadcast variables
         needs_broadcast_decryption_server = read_bool(infile)

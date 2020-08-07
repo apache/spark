@@ -117,7 +117,7 @@ The following code snippets illustrate how to load a sample dataset, train a bin
 data, and evaluate the performance of the algorithm by several binary evaluation metrics.
 
 <div data-lang="scala" markdown="1">
-Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS) and [`BinaryClassificationMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.BinaryClassificationMetrics) for details on the API.
+Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html) and [`BinaryClassificationMetrics` Scala docs](api/scala/org/apache/spark/mllib/evaluation/BinaryClassificationMetrics.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/BinaryClassificationMetricsExample.scala %}
 
@@ -243,7 +243,7 @@ The following code snippets illustrate how to load a sample dataset, train a mul
 the data, and evaluate the performance of the algorithm by several multiclass classification evaluation metrics.
 
 <div data-lang="scala" markdown="1">
-Refer to the [`MulticlassMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.MulticlassMetrics) for details on the API.
+Refer to the [`MulticlassMetrics` Scala docs](api/scala/org/apache/spark/mllib/evaluation/MulticlassMetrics.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/MulticlassMetricsExample.scala %}
 
@@ -393,7 +393,7 @@ True classes:
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [`MultilabelMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.MultilabelMetrics) for details on the API.
+Refer to the [`MultilabelMetrics` Scala docs](api/scala/org/apache/spark/mllib/evaluation/MultilabelMetrics.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/MultiLabelMetricsExample.scala %}
 
@@ -521,7 +521,7 @@ expanded world of non-positive weights are "the same as never having interacted 
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) and [`RankingMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RankingMetrics) for details on the API.
+Refer to the [`RegressionMetrics` Scala docs](api/scala/org/apache/spark/mllib/evaluation/RegressionMetrics.html) and [`RankingMetrics` Scala docs](api/scala/org/apache/spark/mllib/evaluation/RankingMetrics.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/RankingMetricsExample.scala %}
 

@@ -28,9 +28,10 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
-import org.scalatest.Matchers
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 import org.apache.spark.SparkFunSuite
@@ -42,7 +43,10 @@ import org.apache.spark.internal.config._
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
   with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite with PVTestsSuite
-  with DepsTestsSuite with RTestsSuite with Logging with Eventually with Matchers {
+  // TODO(SPARK-32354): Fix and re-enable the R tests.
+  with DepsTestsSuite with DecommissionSuite /* with RTestsSuite */ with Logging with Eventually
+  with Matchers {
+
 
   import KubernetesSuite._
 
@@ -59,15 +63,15 @@ class KubernetesSuite extends SparkFunSuite
   protected var appLocator: String = _
 
   // Default memory limit is 1024M + 384M (minimum overhead constant)
-  private val baseMemory = s"${1024 + 384}Mi"
+  private val baseMemory = s"${1024 + 384}"
   protected val memOverheadConstant = 0.8
-  private val standardNonJVMMemory = s"${(1024 + 0.4*1024).toInt}Mi"
+  private val standardNonJVMMemory = s"${(1024 + 0.4*1024).toInt}"
   protected val additionalMemory = 200
   // 209715200 is 200Mi
   protected val additionalMemoryInBytes = 209715200
-  private val extraDriverTotalMemory = s"${(1024 + memOverheadConstant*1024).toInt}Mi"
+  private val extraDriverTotalMemory = s"${(1024 + memOverheadConstant*1024).toInt}"
   private val extraExecTotalMemory =
-    s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}Mi"
+    s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}"
 
   /**
    * Build the image ref for the given image name, taking the repo and tag from the
@@ -254,6 +258,7 @@ class KubernetesSuite extends SparkFunSuite
     }
   }
 
+  // scalastyle:off argcount
   protected def runSparkApplicationAndVerifyCompletion(
       appResource: String,
       mainClass: String,
@@ -264,11 +269,102 @@ class KubernetesSuite extends SparkFunSuite
       appLocator: String,
       isJVM: Boolean,
       pyFiles: Option[String] = None,
-      executorPatience: Option[(Option[Interval], Option[Timeout])] = None): Unit = {
+      executorPatience: Option[(Option[Interval], Option[Timeout])] = None,
+      decommissioningTest: Boolean = false): Unit = {
+
+  // scalastyle:on argcount
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
       mainClass = mainClass,
       appArgs = appArgs)
+
+    val execPods = scala.collection.mutable.Map[String, Pod]()
+    val (patienceInterval, patienceTimeout) = {
+      executorPatience match {
+        case Some(patience) => (patience._1.getOrElse(INTERVAL), patience._2.getOrElse(TIMEOUT))
+        case _ => (INTERVAL, TIMEOUT)
+      }
+    }
+    def checkPodReady(namespace: String, name: String) = {
+      val execPod = kubernetesTestComponents.kubernetesClient
+        .pods()
+        .inNamespace(namespace)
+        .withName(name)
+        .get()
+      val resourceStatus = execPod.getStatus
+      val conditions = resourceStatus.getConditions().asScala
+      val conditionTypes = conditions.map(_.getType())
+      val readyConditions = conditions.filter{cond => cond.getType() == "Ready"}
+      val result = readyConditions
+        .map(cond => cond.getStatus() == "True")
+        .headOption.getOrElse(false)
+      result
+    }
+
+    val execWatcher = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .withLabel("spark-app-locator", appLocator)
+      .withLabel("spark-role", "executor")
+      .watch(new Watcher[Pod] {
+        logDebug("Beginning watch of executors")
+        override def onClose(cause: KubernetesClientException): Unit =
+          logInfo("Ending watch of executors")
+        override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
+          val name = resource.getMetadata.getName
+          val namespace = resource.getMetadata().getNamespace()
+          action match {
+            case Action.MODIFIED =>
+              execPods(name) = resource
+            case Action.ADDED =>
+              logDebug(s"Add event received for $name.")
+              execPods(name) = resource
+              // If testing decommissioning start a thread to simulate
+              // decommissioning on the first exec pod.
+              if (decommissioningTest && execPods.size == 1) {
+                // Wait for all the containers in the pod to be running
+                logDebug("Waiting for pod to become OK prior to deletion")
+                Eventually.eventually(patienceTimeout, patienceInterval) {
+                  val result = checkPodReady(namespace, name)
+                  result shouldBe (true)
+                }
+                // Look for the string that indicates we're good to trigger decom on the driver
+                logDebug("Waiting for first collect...")
+                Eventually.eventually(TIMEOUT, INTERVAL) {
+                  assert(kubernetesTestComponents.kubernetesClient
+                    .pods()
+                    .withName(driverPodName)
+                    .getLog
+                    .contains("Waiting to give nodes time to finish migration, decom exec 1."),
+                    "Decommission test did not complete first collect.")
+                }
+                // Delete the pod to simulate cluster scale down/migration.
+                // This will allow the pod to remain up for the grace period
+                val pod = kubernetesTestComponents.kubernetesClient.pods()
+                  .withName(name)
+                pod.delete()
+                logDebug(s"Triggered pod decom/delete: $name deleted")
+                // Look for the string that indicates we should force kill the first
+                // Executor. This simulates the pod being fully lost.
+                logDebug("Waiting for second collect...")
+                Eventually.eventually(TIMEOUT, INTERVAL) {
+                  assert(kubernetesTestComponents.kubernetesClient
+                    .pods()
+                    .withName(driverPodName)
+                    .getLog
+                    .contains("Waiting some more, please kill exec 1."),
+                    "Decommission test did not complete second collect.")
+                }
+                logDebug("Force deleting")
+                val podNoGrace = pod.withGracePeriod(0)
+                podNoGrace.delete()
+              }
+            case Action.DELETED | Action.ERROR =>
+              execPods.remove(name)
+          }
+        }
+      })
+
+    logDebug("Starting Spark K8s job")
     SparkAppLauncher.launch(
       appArguments,
       sparkAppConf,
@@ -284,49 +380,28 @@ class KubernetesSuite extends SparkFunSuite
       .list()
       .getItems
       .get(0)
+
     driverPodChecker(driverPod)
-    val execPods = scala.collection.mutable.Map[String, Pod]()
-    val execWatcher = kubernetesTestComponents.kubernetesClient
-      .pods()
-      .withLabel("spark-app-locator", appLocator)
-      .withLabel("spark-role", "executor")
-      .watch(new Watcher[Pod] {
-        logInfo("Beginning watch of executors")
-        override def onClose(cause: KubernetesClientException): Unit =
-          logInfo("Ending watch of executors")
-        override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
-          val name = resource.getMetadata.getName
-          action match {
-            case Action.ADDED | Action.MODIFIED =>
-              execPods(name) = resource
-            case Action.DELETED | Action.ERROR =>
-              execPods.remove(name)
-          }
-        }
-      })
 
-    val (patienceInterval, patienceTimeout) = {
-      executorPatience match {
-        case Some(patience) => (patience._1.getOrElse(INTERVAL), patience._2.getOrElse(TIMEOUT))
-        case _ => (INTERVAL, TIMEOUT)
-      }
-    }
-
-    Eventually.eventually(patienceTimeout, patienceInterval) {
+    // If we're testing decommissioning we an executors, but we should have an executor
+    // at some point.
+    Eventually.eventually(TIMEOUT, patienceInterval) {
       execPods.values.nonEmpty should be (true)
     }
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
-    Eventually.eventually(TIMEOUT, patienceInterval) {
+    Eventually.eventually(patienceTimeout, patienceInterval) {
       expectedLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
           .withName(driverPod.getMetadata.getName)
           .getLog
-          .contains(e), "The application did not complete.")
+          .contains(e),
+          s"The application did not complete, did not find str ${e}")
       }
     }
   }
+
   protected def doBasicDriverPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
     assert(driverPod.getSpec.getContainers.get(0).getImage === image)
@@ -419,11 +494,12 @@ class KubernetesSuite extends SparkFunSuite
 
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
+  val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
   val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
-  val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
-  val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
+  val TIMEOUT = PatienceConfiguration.Timeout(Span(3, Minutes))
+  val INTERVAL = PatienceConfiguration.Interval(Span(1, Seconds))
 }

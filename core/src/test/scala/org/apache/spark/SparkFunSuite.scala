@@ -19,15 +19,19 @@ package org.apache.spark
 
 // scalastyle:off
 import java.io.File
+import java.util.{Locale, TimeZone}
+
+import org.apache.log4j.spi.LoggingEvent
 
 import scala.annotation.tailrec
-
-import org.apache.log4j.{Appender, Level, Logger}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, FunSuite, Outcome}
-
+import org.apache.log4j.{Appender, AppenderSkeleton, Level, Logger}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Outcome}
+import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{AccumulatorContext, Utils}
+
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
@@ -54,12 +58,23 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
  * }
  */
 abstract class SparkFunSuite
-  extends FunSuite
+  extends AnyFunSuite
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit
   with Logging {
 // scalastyle:on
+
+  // Initialize the logger forcibly to let the logger log timestamp
+  // based on the local time zone depending on environments.
+  // The default time zone will be set to America/Los_Angeles later
+  // so this initialization is necessary here.
+  log
+
+  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+  // Add Locale setting
+  Locale.setDefault(Locale.US)
 
   protected val enableAutoThreadAudit = true
 
@@ -185,5 +200,20 @@ abstract class SparkFunSuite
         logger.setLevel(restoreLevel)
       }
     }
+  }
+
+  class LogAppender(msg: String = "", maxEvents: Int = 1000) extends AppenderSkeleton {
+    val loggingEvents = new ArrayBuffer[LoggingEvent]()
+
+    override def append(loggingEvent: LoggingEvent): Unit = {
+      if (loggingEvents.size >= maxEvents) {
+        val loggingInfo = if (msg == "") "." else s" while logging $msg."
+        throw new IllegalStateException(
+          s"Number of events reached the limit of $maxEvents$loggingInfo")
+      }
+      loggingEvents.append(loggingEvent)
+    }
+    override def close(): Unit = {}
+    override def requiresLayout(): Boolean = false
   }
 }

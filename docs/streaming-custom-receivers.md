@@ -28,7 +28,7 @@ in Scala or Java.
 ## Implementing a Custom Receiver
 
 This starts with implementing a **Receiver**
-([Scala doc](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver),
+([Scala doc](api/scala/org/apache/spark/streaming/receiver/Receiver.html),
 [Java doc](api/java/org/apache/spark/streaming/receiver/Receiver.html)).
 A custom receiver must extend this abstract class by implementing two methods
 

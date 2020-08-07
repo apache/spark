@@ -50,7 +50,7 @@ Function InstallR {
 
 Function InstallRtools {
   $rtoolsver = $rToolsVer.Split('.')[0..1] -Join ''
-  $rtoolsurl = $CRAN + "/bin/windows/Rtools/Rtools$rtoolsver.exe"
+  $rtoolsurl = $CRAN + "/bin/windows/Rtools/rtools$rtoolsver-x86_64.exe"
 
   # Downloading Rtools
   Start-FileDownload $rtoolsurl "Rtools-current.exe"
@@ -67,8 +67,8 @@ Function InstallRtools {
   Else {
     $gccPath = $env:GCC_PATH
   }
-  $env:PATH = $RtoolsDrive + '\Rtools\bin;' + $RtoolsDrive + '\Rtools\MinGW\bin;' + $RtoolsDrive + '\Rtools\' + $gccPath + '\bin;' + $env:PATH
-  $env:BINPREF=$RtoolsDrive + '/Rtools/mingw_$(WIN)/bin/'
+  $env:PATH = $RtoolsDrive + '\Rtools40\bin;' + $RtoolsDrive + '\Rtools40\mingw64\bin;' + $RtoolsDrive + '\Rtools40\' + $gccPath + '\bin;' + $env:PATH
+  $env:BINPREF=$RtoolsDrive + '/Rtools40/mingw64/bin/'
 }
 
 # create tools directory outside of Spark directory
@@ -81,7 +81,7 @@ if (!(Test-Path $tools)) {
 # ========================== Maven
 Push-Location $tools
 
-$mavenVer = "3.6.2"
+$mavenVer = "3.6.3"
 Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
 
 # extract
@@ -95,28 +95,28 @@ $env:MAVEN_OPTS = "-Xmx2g -XX:ReservedCodeCacheSize=1g"
 Pop-Location
 
 # ========================== Hadoop bin package
-# This must match the version at https://github.com/steveloughran/winutils/tree/master/hadoop-2.7.1
-$hadoopVer = "2.7.1"
+# This must match the version at https://github.com/cdarlint/winutils/tree/master/hadoop-3.2.0
+$hadoopVer = "3.2.0"
 $hadoopPath = "$tools\hadoop"
 if (!(Test-Path $hadoopPath)) {
     New-Item -ItemType Directory -Force -Path $hadoopPath | Out-Null
 }
 Push-Location $hadoopPath
 
-Start-FileDownload "https://github.com/steveloughran/winutils/archive/master.zip" "winutils-master.zip"
+Start-FileDownload "https://codeload.github.com/cdarlint/winutils/zip/master" "winutils-master.zip"
 
 # extract
 Invoke-Expression "7z.exe x winutils-master.zip"
 
 # add hadoop bin to environment variables
-$env:HADOOP_HOME = "$hadoopPath/winutils-master/hadoop-$hadoopVer"
-$env:Path += ";$env:HADOOP_HOME\bin"
+$env:HADOOP_HOME = "$hadoopPath\winutils-master\hadoop-$hadoopVer"
+$env:PATH = "$env:HADOOP_HOME\bin;" + $env:PATH
 
 Pop-Location
 
 # ========================== R
-$rVer = "3.6.1"
-$rToolsVer = "3.5.1"
+$rVer = "4.0.2"
+$rToolsVer = "4.0.2"
 
 InstallR
 InstallRtools

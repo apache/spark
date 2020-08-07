@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.csv.CSVOptions
-import org.apache.spark.sql.connector.write.WriteBuilder
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.FileTable
@@ -49,8 +49,8 @@ case class CSVTable(
     CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
-    new CSVWriteBuilder(options, paths, formatName, supportsDataType)
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
+    new CSVWriteBuilder(paths, formatName, supportsDataType, info)
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: AtomicType => true

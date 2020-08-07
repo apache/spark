@@ -17,15 +17,23 @@
 
 package org.apache.spark.sql.avro
 
+import java.util
+import java.util.Collections
+
 import org.apache.avro.Schema
+import org.apache.avro.generic.{GenericData, GenericRecordBuilder}
+import org.apache.avro.message.{BinaryMessageDecoder, BinaryMessageEncoder}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.{EqualTo, Not}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class AvroCatalystDataConversionSuite extends SparkFunSuite
   with SharedSparkSession
@@ -120,6 +128,26 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     val rand = new scala.util.Random(seed)
     val schema = RandomDataGenerator.randomNestedSchema(rand, 10, testingTypes)
     test(s"nested schema ${schema.catalogString} with seed $seed") {
+      val data = RandomDataGenerator.randomRow(rand, schema)
+      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+      val input = Literal.create(converter(data), schema)
+      roundTripTest(input)
+    }
+  }
+
+  test("array of nested schema with seed") {
+    val seed = scala.util.Random.nextLong()
+    val rand = new scala.util.Random(seed)
+    val schema = StructType(
+      StructField("a",
+        ArrayType(
+          RandomDataGenerator.randomNestedSchema(rand, 10, testingTypes),
+          containsNull = false),
+        nullable = false
+      ) :: Nil
+    )
+
+    withClue(s"Schema: $schema\nseed: $seed") {
       val data = RandomDataGenerator.randomRow(rand, schema)
       val converter = CatalystTypeConverters.createToCatalystConverter(schema)
       val input = Literal.create(converter(data), schema)
@@ -245,5 +273,89 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       CatalystDataToAvro(Literal("SPADES"), Some("\"long\"")).eval()
     }.getMessage
     assert(message ==  "Cannot convert Catalyst type StringType to Avro type \"long\".")
+  }
+
+  private def checkDeserialization(
+      schema: Schema,
+      data: GenericData.Record,
+      expected: Option[Any],
+      filters: StructFilters = new NoopFilters): Unit = {
+    val dataType = SchemaConverters.toSqlType(schema).dataType
+    val deserializer = new AvroDeserializer(
+      schema,
+      dataType,
+      SQLConf.LegacyBehaviorPolicy.CORRECTED,
+      filters)
+    val deserialized = deserializer.deserialize(data)
+    expected match {
+      case None => assert(deserialized == None)
+      case Some(d) =>
+        assert(checkResult(d, deserialized.get, dataType, exprNullable = false))
+    }
+  }
+
+  test("avro array can be generic java collection") {
+    val jsonFormatSchema =
+      """
+        |{ "type": "record",
+        |  "name": "record",
+        |  "fields" : [{
+        |    "name": "array",
+        |    "type": {
+        |      "type": "array",
+        |      "items": ["null", "int"]
+        |    }
+        |  }]
+        |}
+      """.stripMargin
+    val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
+
+    def validateDeserialization(array: java.util.Collection[Integer]): Unit = {
+      val data = new GenericRecordBuilder(avroSchema)
+        .set("array", array)
+        .build()
+      val expected = InternalRow(new GenericArrayData(new util.ArrayList[Any](array)))
+      checkDeserialization(avroSchema, data, Some(expected))
+
+      val reEncoded = new BinaryMessageDecoder[GenericData.Record](new GenericData(), avroSchema)
+        .decode(new BinaryMessageEncoder(new GenericData(), avroSchema).encode(data))
+      checkDeserialization(avroSchema, reEncoded, Some(expected))
+    }
+
+    validateDeserialization(Collections.emptySet())
+    validateDeserialization(util.Arrays.asList(1, null, 3))
+  }
+
+  test("SPARK-32346: filter pushdown to Avro deserializer") {
+    val schema =
+      """
+        |{
+        |  "type" : "record",
+        |  "name" : "test_schema",
+        |  "fields" : [
+        |    {"name": "Age", "type": "int"},
+        |    {"name": "Name", "type": "string"}
+        |  ]
+        |}
+        """.stripMargin
+    val avroSchema = new Schema.Parser().parse(schema)
+    val sqlSchema = new StructType().add("Age", "int").add("Name", "string")
+    val data = new GenericRecordBuilder(avroSchema)
+      .set("Age", 39)
+      .set("Name", "Maxim")
+      .build()
+    val expectedRow = Some(InternalRow(39, UTF8String.fromString("Maxim")))
+
+    checkDeserialization(avroSchema, data, expectedRow)
+    checkDeserialization(
+      avroSchema,
+      data,
+      expectedRow,
+      new OrderedFilters(Seq(EqualTo("Age", 39)), sqlSchema))
+    checkDeserialization(
+      avroSchema,
+      data,
+      None,
+      new OrderedFilters(Seq(Not(EqualTo("Age", 39))), sqlSchema))
   }
 }

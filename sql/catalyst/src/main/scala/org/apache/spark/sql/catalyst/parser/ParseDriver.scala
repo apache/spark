@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.Dialect
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -39,6 +38,11 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
+  }
+
+  /** Similar to `parseDataType`, but without CHAR/VARCHAR replacement. */
+  override def parseRawDataType(sqlText: String): DataType = parse(sqlText) { parser =>
+    astBuilder.parseRawDataType(parser.singleDataType())
   }
 
   /** Creates Expression for a given SQL string. */
@@ -89,18 +93,9 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 
-    // When we use PostgreSQL dialect or use Spark dialect with setting
-    // `spark.sql.dialect.spark.ansi.enabled=true`, the parser will use ANSI SQL standard keywords.
-    val SQLStandardKeywordBehavior = conf.dialect match {
-      case Dialect.POSTGRESQL => true
-      case Dialect.SPARK => conf.dialectSparkAnsiEnabled
-    }
-
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
-    lexer.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    lexer.SQL_standard_keyword_behavior = SQLStandardKeywordBehavior
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -108,7 +103,8 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = conf.setOpsPrecedenceEnforced
-    parser.SQL_standard_keyword_behavior = SQLStandardKeywordBehavior
+    parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    parser.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     try {
       try {

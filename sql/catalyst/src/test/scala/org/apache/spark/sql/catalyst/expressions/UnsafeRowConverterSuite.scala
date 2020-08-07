@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -122,6 +123,36 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     unsafeRow.setLong(3, DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-06-22 08:10:25")))
     DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
     (Timestamp.valueOf("2015-06-22 08:10:25"))
+  }
+
+  testBothCodegenAndInterpreted(
+    "basic conversion with primitive, string and interval types") {
+    val factory = UnsafeProjection
+    val fieldTypes: Array[DataType] = Array(LongType, StringType, CalendarIntervalType)
+    val converter = factory.create(fieldTypes)
+
+    val row = new SpecificInternalRow(fieldTypes)
+    row.setLong(0, 0)
+    row.update(1, UTF8String.fromString("Hello"))
+    val interval1 = new CalendarInterval(3, 1, 1000L)
+    row.update(2, interval1)
+
+    val unsafeRow: UnsafeRow = converter.apply(row)
+    assert(unsafeRow.getSizeInBytes ===
+      8 + 8 * 3 + roundedSize("Hello".getBytes(StandardCharsets.UTF_8).length) + 16)
+
+    assert(unsafeRow.getLong(0) === 0)
+    assert(unsafeRow.getString(1) === "Hello")
+    assert(unsafeRow.getInterval(2) === interval1)
+
+    val interval2 = new CalendarInterval(1, 2, 3L)
+    unsafeRow.setInterval(2, interval2)
+    assert(unsafeRow.getInterval(2) === interval2)
+
+    val offset = unsafeRow.getLong(2) >>> 32
+    unsafeRow.setInterval(2, null)
+    assert(unsafeRow.getInterval(2) === null)
+    assert(unsafeRow.getLong(2) >>> 32 === offset)
   }
 
   testBothCodegenAndInterpreted("null handling") {

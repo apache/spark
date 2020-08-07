@@ -132,7 +132,9 @@ class HadoopTableReader(
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
       val hconf = broadcastedHadoopConf.value.value
       val deserializer = deserializerClass.getConstructor().newInstance()
-      deserializer.initialize(hconf, localTableDesc.getProperties)
+      DeserializerLock.synchronized {
+        deserializer.initialize(hconf, localTableDesc.getProperties)
+      }
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
     }
 
@@ -252,10 +254,14 @@ class HadoopTableReader(
         partProps.asScala.foreach {
           case (key, value) => props.setProperty(key, value)
         }
-        deserializer.initialize(hconf, props)
+        DeserializerLock.synchronized {
+          deserializer.initialize(hconf, props)
+        }
         // get the table deserializer
         val tableSerDe = localTableDesc.getDeserializerClass.getConstructor().newInstance()
-        tableSerDe.initialize(hconf, localTableDesc.getProperties)
+        DeserializerLock.synchronized {
+          tableSerDe.initialize(hconf, tableProperties)
+        }
 
         // fill the non partition key attributes
         HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs,
@@ -302,7 +308,7 @@ class HadoopTableReader(
 
   /**
    * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
-   * applied locally on each slave.
+   * applied locally on each executor.
    */
   private def createOldHadoopRDD(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
@@ -324,7 +330,7 @@ class HadoopTableReader(
 
   /**
    * Creates a NewHadoopRDD based on the broadcasted HiveConf and other job properties that will be
-   * applied locally on each slave.
+   * applied locally on each executor.
    */
   private def createNewHadoopRDD(tableDesc: TableDesc, path: String): RDD[Writable] = {
     val newJobConf = new JobConf(hadoopConf)
@@ -369,6 +375,17 @@ private[hive] object HiveTableUtil {
     }
   }
 }
+
+/**
+ * Object to synchronize on when calling org.apache.hadoop.hive.serde2.Deserializer#initialize.
+ *
+ * [SPARK-17398] org.apache.hive.hcatalog.data.JsonSerDe#initialize calls the non-thread-safe
+ * HCatRecordObjectInspectorFactory.getHCatRecordObjectInspector, the results of which are
+ * returned by JsonSerDe#getObjectInspector.
+ * To protect against this bug in Hive (HIVE-15773/HIVE-21752), we synchronize on this object
+ * when calling initialize on Deserializer instances that could be JsonSerDe instances.
+ */
+private[hive] object DeserializerLock
 
 private[hive] object HadoopTableReader extends HiveInspectors with Logging {
   /**
@@ -469,13 +486,19 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
       var i = 0
       val length = fieldRefs.length
       while (i < length) {
-        val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
-        if (fieldValue == null) {
-          mutableRow.setNullAt(fieldOrdinals(i))
-        } else {
-          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+        try {
+          val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
+          if (fieldValue == null) {
+            mutableRow.setNullAt(fieldOrdinals(i))
+          } else {
+            unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          }
+          i += 1
+        } catch {
+          case ex: Throwable =>
+            logError(s"Exception thrown in field <${fieldRefs(i).getFieldName}>")
+            throw ex
         }
-        i += 1
       }
 
       mutableRow: InternalRow

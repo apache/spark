@@ -80,7 +80,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
   test("Check NullType is incompatible with all other types") {
     allNonNullTypes.foreach { t =>
       assertSingleError(NullType, t, "nulls", s"Should not allow writing None to type $t") { err =>
-        assert(err.contains(s"incompatible with $t"))
+        assert(err.contains(s"incompatible with ${t.catalogString}"))
       }
     }
   }
@@ -145,12 +145,12 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
   test("Conversions between timestamp and long are not allowed") {
     assertSingleError(LongType, TimestampType, "longToTimestamp",
       "Should not allow long to timestamp") { err =>
-      assert(err.contains("Cannot safely cast 'longToTimestamp': LongType to TimestampType"))
+      assert(err.contains("Cannot safely cast 'longToTimestamp': bigint to timestamp"))
     }
 
     assertSingleError(TimestampType, LongType, "timestampToLong",
       "Should not allow timestamp to long") { err =>
-      assert(err.contains("Cannot safely cast 'timestampToLong': TimestampType to LongType"))
+      assert(err.contains("Cannot safely cast 'timestampToLong': timestamp to bigint"))
     }
   }
 
@@ -209,8 +209,8 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
             s"Should not allow writing $w to $r because cast is not safe") { err =>
             assert(err.contains("'t'"), "Should include the field name context")
             assert(err.contains("Cannot safely cast"), "Should identify unsafe cast")
-            assert(err.contains(s"$w"), "Should include write type")
-            assert(err.contains(s"$r"), "Should include read type")
+            assert(err.contains(s"${w.catalogString}"), "Should include write type")
+            assert(err.contains(s"${r.catalogString}"), "Should include read type")
           }
         }
       }
@@ -413,7 +413,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     assertNumErrors(writeType, readType, "top", "Should catch 14 errors", 14) { errs =>
       assert(errs(0).contains("'top.a.element'"), "Should identify bad type")
       assert(errs(0).contains("Cannot safely cast"))
-      assert(errs(0).contains("StringType to DoubleType"))
+      assert(errs(0).contains("string to double"))
 
       assert(errs(1).contains("'top.a'"), "Should identify bad type")
       assert(errs(1).contains("Cannot write nullable elements to array of non-nulls"))
@@ -430,11 +430,11 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
 
       assert(errs(5).contains("'top.m.key'"), "Should identify bad type")
       assert(errs(5).contains("Cannot safely cast"))
-      assert(errs(5).contains("StringType to LongType"))
+      assert(errs(5).contains("string to bigint"))
 
       assert(errs(6).contains("'top.m.value'"), "Should identify bad type")
       assert(errs(6).contains("Cannot safely cast"))
-      assert(errs(6).contains("BooleanType to FloatType"))
+      assert(errs(6).contains("boolean to float"))
 
       assert(errs(7).contains("'top.m'"), "Should identify bad type")
       assert(errs(7).contains("Cannot write nullable values to map of non-nulls"))
@@ -452,7 +452,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
 
       assert(errs(11).contains("'top.x'"), "Should identify bad type")
       assert(errs(11).contains("Cannot safely cast"))
-      assert(errs(11).contains("StringType to IntegerType"))
+      assert(errs(11).contains("string to int"))
 
       assert(errs(12).contains("'top'"), "Should identify bad type")
       assert(errs(12).contains("expected 'x', found 'y'"), "Should detect name mismatch")
@@ -502,6 +502,6 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
         storeAssignmentPolicy, errMsg => errs += errMsg) === false, desc)
     assert(errs.size === numErrs, s"Should produce $numErrs error messages")
-    checkErrors(errs)
+    checkErrors(errs.toSeq)
   }
 }

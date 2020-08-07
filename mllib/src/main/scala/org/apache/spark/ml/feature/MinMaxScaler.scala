@@ -58,6 +58,8 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
   /** @group getParam */
   def getMax: Double = $(max)
 
+  setDefault(min -> 0.0, max -> 1.0)
+
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
@@ -92,8 +94,6 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("minMaxScal"))
-
-  setDefault(min -> 0.0, max -> 1.0)
 
   /** @group setParam */
   @Since("1.5.0")
@@ -144,8 +144,6 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
  *
  * @param originalMin min value for each original column during fitting
  * @param originalMax max value for each original column during fitting
- *
- * TODO: The transformer does not yet set the metadata in the output column (SPARK-8529).
  */
 @Since("1.5.0")
 class MinMaxScalerModel private[ml] (
@@ -174,7 +172,7 @@ class MinMaxScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
     val numFeatures = originalMax.size
     val scale = $(max) - $(min)
@@ -210,12 +208,18 @@ class MinMaxScalerModel private[ml] (
       Vectors.dense(values).compressed
     }
 
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), originalMin.size)
+    }
+    outputSchema
   }
 
   @Since("1.5.0")

@@ -42,6 +42,7 @@ class CatalogManager(
     defaultSessionCatalog: CatalogPlugin,
     val v1SessionCatalog: SessionCatalog) extends Logging {
   import CatalogManager.SESSION_CATALOG_NAME
+  import CatalogV2Util._
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
@@ -50,6 +51,15 @@ class CatalogManager(
       v2SessionCatalog
     } else {
       catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
+    }
+  }
+
+  def isCatalogRegistered(name: String): Boolean = {
+    try {
+      catalog(name)
+      true
+    } catch {
+      case _: CatalogNotFoundException => false
     }
   }
 
@@ -84,11 +94,6 @@ class CatalogManager(
     }.getOrElse(defaultSessionCatalog)
   }
 
-  private def getDefaultNamespace(c: CatalogPlugin) = c match {
-    case c: SupportsNamespaces => c.defaultNamespace()
-    case _ => Array.empty[String]
-  }
-
   private var _currentNamespace: Option[Array[String]] = None
 
   def currentNamespace: Array[String] = synchronized {
@@ -96,19 +101,21 @@ class CatalogManager(
       if (currentCatalog.name() == SESSION_CATALOG_NAME) {
         Array(v1SessionCatalog.getCurrentDatabase)
       } else {
-        getDefaultNamespace(currentCatalog)
+        currentCatalog.defaultNamespace()
       }
     }
   }
 
   def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
-    if (currentCatalog.name() == SESSION_CATALOG_NAME) {
-      if (namespace.length != 1) {
+    currentCatalog match {
+      case _ if isSessionCatalog(currentCatalog) && namespace.length == 1 =>
+        v1SessionCatalog.setCurrentDatabase(namespace.head)
+      case _ if isSessionCatalog(currentCatalog) =>
         throw new NoSuchNamespaceException(namespace)
-      }
-      v1SessionCatalog.setCurrentDatabase(namespace.head)
-    } else {
-      _currentNamespace = Some(namespace)
+      case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
+        throw new NoSuchNamespaceException(namespace)
+      case _ =>
+        _currentNamespace = Some(namespace)
     }
   }
 

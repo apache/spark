@@ -96,8 +96,8 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     assert(Vectors.dense(model.pi.toArray.map(math.exp)) ~==
       Vectors.dense(piData.toArray.map(math.exp)) absTol 0.05, "pi mismatch")
     assert(model.theta.map(math.exp) ~== thetaData.map(math.exp) absTol 0.05, "theta mismatch")
-    if (sigmaData == null) {
-      assert(model.sigma == null, "sigma mismatch")
+    if (sigmaData === Matrices.zeros(0, 0)) {
+      assert(model.sigma === Matrices.zeros(0, 0), "sigma mismatch")
     } else {
       assert(model.sigma.map(math.exp) ~== sigmaData.map(math.exp) absTol 0.05,
         "sigma mismatch")
@@ -166,7 +166,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(new NaiveBayes)
     val model = new NaiveBayesModel("nb", pi = Vectors.dense(Array(0.2, 0.8)),
       theta = new DenseMatrix(2, 3, Array(0.1, 0.2, 0.3, 0.4, 0.6, 0.4)),
-      sigma = null)
+      sigma = Matrices.zeros(0, 0))
     ParamsSuite.checkParams(model)
   }
 
@@ -195,7 +195,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
     val model = nb.fit(testDataset)
 
-    validateModelFit(pi, theta, null, model)
+    validateModelFit(pi, theta, Matrices.zeros(0, 0), model)
     assert(model.hasParent)
     MLTestingUtils.checkCopyAndUids(nb, model)
 
@@ -234,6 +234,8 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
 
     testPredictionModelSinglePrediction(model, validationDataset)
+    testClassificationModelSingleRawPrediction(model, validationDataset)
+    testProbClassificationModelSingleProbPrediction(model, validationDataset)
   }
 
   test("Naive Bayes with weighted samples") {
@@ -281,7 +283,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("bernoulli")
     val model = nb.fit(testDataset)
 
-    validateModelFit(pi, theta, null, model)
+    validateModelFit(pi, theta, Matrices.zeros(0, 0), model)
     assert(model.hasParent)
 
     val validationDataset =
@@ -512,7 +514,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       if (model.getModelType == "gaussian") {
         assert(model.sigma === model2.sigma)
       } else {
-        assert(model.sigma === null && model2.sigma === null)
+        assert(model.sigma === Matrices.zeros(0, 0) && model2.sigma === Matrices.zeros(0, 0))
       }
     }
     val nb = new NaiveBayes()
@@ -531,7 +533,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       nb, spark) { (expected, actual) =>
         assert(expected.pi === actual.pi)
         assert(expected.theta === actual.theta)
-        assert(expected.sigma === null && actual.sigma === null)
+        assert(expected.sigma === Matrices.zeros(0, 0) && actual.sigma === Matrices.zeros(0, 0))
       }
   }
 }

@@ -60,6 +60,15 @@ private[deploy] object DeployMessages {
     assert (port > 0)
   }
 
+  /**
+   * @param id the worker id
+   * @param worker the worker endpoint ref
+   */
+  case class WorkerDecommission(
+      id: String,
+      worker: RpcEndpointRef)
+    extends DeployMessage
+
   case class ExecutorStateChanged(
       appId: String,
       execId: Int,
@@ -98,6 +107,13 @@ private[deploy] object DeployMessages {
       driverIds: Seq[String]) extends DeployMessage
 
   case class Heartbeat(workerId: String, worker: RpcEndpointRef) extends DeployMessage
+
+  /**
+   * Used by the MasterWebUI to request the master to decommission all workers that are active on
+   * any of the given hostnames.
+   * @param hostnames: A list of hostnames without the ports. Like "localhost", "foo.bar.com" etc
+   */
+  case class DecommissionWorkersOnHosts(hostnames: Seq[String])
 
   // Master to Worker
 

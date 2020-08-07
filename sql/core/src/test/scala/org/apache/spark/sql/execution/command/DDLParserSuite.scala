@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan, Project, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -78,127 +79,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assertUnsupported(
       sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
-  }
-
-  test("create function") {
-    val sql1 =
-      """
-       |CREATE TEMPORARY FUNCTION helloworld as
-       |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-       |JAR '/path/to/jar2'
-     """.stripMargin
-    val sql2 =
-      """
-        |CREATE FUNCTION hello.world as
-        |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
-        |FILE '/path/to/file'
-      """.stripMargin
-    val sql3 =
-      """
-        |CREATE OR REPLACE TEMPORARY FUNCTION helloworld3 as
-        |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-        |JAR '/path/to/jar2'
-      """.stripMargin
-    val sql4 =
-      """
-        |CREATE OR REPLACE FUNCTION hello.world1 as
-        |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
-        |FILE '/path/to/file'
-      """.stripMargin
-    val sql5 =
-      """
-        |CREATE FUNCTION IF NOT EXISTS hello.world2 as
-        |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
-        |FILE '/path/to/file'
-      """.stripMargin
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val parsed3 = parser.parsePlan(sql3)
-    val parsed4 = parser.parsePlan(sql4)
-    val parsed5 = parser.parsePlan(sql5)
-    val expected1 = CreateFunctionCommand(
-      None,
-      "helloworld",
-      "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(
-        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
-        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
-      isTemp = true, ignoreIfExists = false, replace = false)
-    val expected2 = CreateFunctionCommand(
-      Some("hello"),
-      "world",
-      "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(
-        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
-        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false, ignoreIfExists = false, replace = false)
-    val expected3 = CreateFunctionCommand(
-      None,
-      "helloworld3",
-      "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(
-        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
-        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
-      isTemp = true, ignoreIfExists = false, replace = true)
-    val expected4 = CreateFunctionCommand(
-      Some("hello"),
-      "world1",
-      "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(
-        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
-        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false, ignoreIfExists = false, replace = true)
-    val expected5 = CreateFunctionCommand(
-      Some("hello"),
-      "world2",
-      "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(
-        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
-        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false, ignoreIfExists = true, replace = false)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-    comparePlans(parsed5, expected5)
-  }
-
-  test("drop function") {
-    val sql1 = "DROP TEMPORARY FUNCTION helloworld"
-    val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS helloworld"
-    val sql3 = "DROP FUNCTION hello.world"
-    val sql4 = "DROP FUNCTION IF EXISTS hello.world"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val parsed3 = parser.parsePlan(sql3)
-    val parsed4 = parser.parsePlan(sql4)
-
-    val expected1 = DropFunctionCommand(
-      None,
-      "helloworld",
-      ifExists = false,
-      isTemp = true)
-    val expected2 = DropFunctionCommand(
-      None,
-      "helloworld",
-      ifExists = true,
-      isTemp = true)
-    val expected3 = DropFunctionCommand(
-      Some("hello"),
-      "world",
-      ifExists = false,
-      isTemp = false)
-    val expected4 = DropFunctionCommand(
-      Some("hello"),
-      "world",
-      ifExists = true,
-      isTemp = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
   }
 
   test("create hive table - table file format") {
@@ -277,9 +157,9 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create hive external table - location must be specified") {
     assertUnsupported(
-      sql = "CREATE EXTERNAL TABLE my_tab",
+      sql = "CREATE EXTERNAL TABLE my_tab STORED AS parquet",
       containsThesePhrases = Seq("create external table", "location"))
-    val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
+    val query = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
     assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
@@ -287,7 +167,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create hive table - property values must be set") {
     assertUnsupported(
-      sql = "CREATE TABLE my_tab TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
+      sql = "CREATE TABLE my_tab STORED AS parquet " +
+        "TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
     assertUnsupported(
       sql = "CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
@@ -296,7 +177,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("create hive table - location implies external") {
-    val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
+    val query = "CREATE TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
     assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
@@ -534,7 +415,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       assert(desc.comment == Some("This is the staging page view table"))
       // TODO will be SQLText
       assert(desc.viewText.isEmpty)
-      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewCatalogAndNamespace.isEmpty)
       assert(desc.viewQueryColumnNames.isEmpty)
       assert(desc.partitionColumnNames.isEmpty)
       assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
@@ -586,7 +467,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       // TODO will be SQLText
       assert(desc.comment == Some("This is the staging page view table"))
       assert(desc.viewText.isEmpty)
-      assert(desc.viewDefaultDatabase.isEmpty)
+      assert(desc.viewCatalogAndNamespace.isEmpty)
       assert(desc.viewQueryColumnNames.isEmpty)
       assert(desc.partitionColumnNames.isEmpty)
       assert(desc.storage.properties == Map())
@@ -607,7 +488,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc.storage.locationUri == None)
     assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewDefaultDatabase.isEmpty)
     assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
@@ -644,7 +524,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc.storage.locationUri == None)
     assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewCatalogAndNamespace.isEmpty)
     assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.properties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
@@ -783,7 +663,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
-    assert(desc.viewDefaultDatabase.isEmpty)
     assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.locationUri.isEmpty)
     assert(desc.storage.inputFormat ==
@@ -867,7 +746,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(bucketSpec2.sortColumnNames.head.equals(sortColumn))
   }
 
-  test("create table - skewed by") {
+  test("create table(hive) - skewed by") {
     val baseQuery = "CREATE TABLE my_table (id int, name string) SKEWED BY"
     val query1 = s"$baseQuery(id) ON (1, 10, 100)"
     val query2 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z'))"
@@ -880,7 +759,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(e3.getMessage.contains("Operation not allowed"))
   }
 
-  test("create table - row format") {
+  test("create table(hive) - row format") {
     val baseQuery = "CREATE TABLE my_table (id int, name string) ROW FORMAT"
     val query1 = s"$baseQuery SERDE 'org.apache.poof.serde.Baff'"
     val query2 = s"$baseQuery SERDE 'org.apache.poof.serde.Baff' WITH SERDEPROPERTIES ('k1'='v1')"
@@ -908,7 +787,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       "mapkey.delim" -> "b"))
   }
 
-  test("create table - file format") {
+  test("create table(hive) - file format") {
     val baseQuery = "CREATE TABLE my_table (id int, name string) STORED AS"
     val query1 = s"$baseQuery INPUTFORMAT 'winput' OUTPUTFORMAT 'wowput'"
     val query2 = s"$baseQuery ORC"
@@ -922,7 +801,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc2.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
   }
 
-  test("create table - storage handler") {
+  test("create table(hive) - storage handler") {
     val baseQuery = "CREATE TABLE my_table (id int, name string) STORED BY"
     val query1 = s"$baseQuery 'org.papachi.StorageHandler'"
     val query2 = s"$baseQuery 'org.mamachi.StorageHandler' WITH SERDEPROPERTIES ('k1'='v1')"
@@ -938,7 +817,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
   }
 
-  test("create table - everything!") {
+  test("create table(hive) - everything!") {
     val query =
       """
         |CREATE EXTERNAL TABLE IF NOT EXISTS dbx.my_table (id int, name string)
@@ -961,7 +840,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(desc.partitionColumnNames == Seq("month"))
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
-    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewCatalogAndNamespace.isEmpty)
     assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.locationUri == Some(new URI("/path/to/mercury")))
     assert(desc.storage.inputFormat == Some("winput"))
@@ -974,75 +853,81 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
-    val (target, source, provider, location, exists) = parser.parsePlan(v1).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target, source, fileFormat, provider, properties, exists) =
+      parser.parsePlan(v1).collect {
+        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+      }.head
     assert(exists == false)
     assert(target.database.isEmpty)
     assert(target.table == "table1")
     assert(source.database.isEmpty)
     assert(source.table == "table2")
-    assert(location.isEmpty)
+    assert(fileFormat.locationUri.isEmpty)
     assert(provider.isEmpty)
 
     val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
-    val (target2, source2, provider2, location2, exists2) = parser.parsePlan(v2).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target2, source2, fileFormat2, provider2, properties2, exists2) =
+      parser.parsePlan(v2).collect {
+        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+      }.head
     assert(exists2)
     assert(target2.database.isEmpty)
     assert(target2.table == "table1")
     assert(source2.database.isEmpty)
     assert(source2.table == "table2")
-    assert(location2.isEmpty)
+    assert(fileFormat2.locationUri.isEmpty)
     assert(provider2.isEmpty)
 
     val v3 = "CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'"
-    val (target3, source3, provider3, location3, exists3) = parser.parsePlan(v3).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target3, source3, fileFormat3, provider3, properties3, exists3) =
+      parser.parsePlan(v3).collect {
+        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+      }.head
     assert(!exists3)
     assert(target3.database.isEmpty)
     assert(target3.table == "table1")
     assert(source3.database.isEmpty)
     assert(source3.table == "table2")
-    assert(location3 == Some("/spark/warehouse"))
+    assert(fileFormat3.locationUri.map(_.toString) == Some("/spark/warehouse"))
     assert(provider3.isEmpty)
 
     val v4 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 LOCATION '/spark/warehouse'"
-    val (target4, source4, provider4, location4, exists4) = parser.parsePlan(v4).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target4, source4, fileFormat4, provider4, properties4, exists4) =
+      parser.parsePlan(v4).collect {
+        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+      }.head
     assert(exists4)
     assert(target4.database.isEmpty)
     assert(target4.table == "table1")
     assert(source4.database.isEmpty)
     assert(source4.table == "table2")
-    assert(location4 == Some("/spark/warehouse"))
+    assert(fileFormat4.locationUri.map(_.toString) == Some("/spark/warehouse"))
     assert(provider4.isEmpty)
 
     val v5 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING parquet"
-    val (target5, source5, provider5, location5, exists5) = parser.parsePlan(v5).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target5, source5, fileFormat5, provider5, properties5, exists5) =
+      parser.parsePlan(v5).collect {
+        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+      }.head
     assert(exists5)
     assert(target5.database.isEmpty)
     assert(target5.table == "table1")
     assert(source5.database.isEmpty)
     assert(source5.table == "table2")
-    assert(location5.isEmpty)
+    assert(fileFormat5.locationUri.isEmpty)
     assert(provider5 == Some("parquet"))
 
     val v6 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING ORC"
-    val (target6, source6, provider6, location6, exists6) = parser.parsePlan(v6).collect {
-      case CreateTableLikeCommand(t, s, p, l, allowExisting) => (t, s, p, l, allowExisting)
-    }.head
+    val (target6, source6, fileFormat6, provider6, properties6, exists6) =
+      parser.parsePlan(v6).collect {
+        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+      }.head
     assert(exists6)
     assert(target6.database.isEmpty)
     assert(target6.table == "table1")
     assert(source6.database.isEmpty)
     assert(source6.table == "table2")
-    assert(location6.isEmpty)
+    assert(fileFormat6.locationUri.isEmpty)
     assert(provider6 == Some("ORC"))
   }
 }

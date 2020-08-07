@@ -75,14 +75,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   import scala.sys.process._
 
   private lazy val pythonPath = sys.env.getOrElse("PYTHONPATH", "")
-  private lazy val sparkHome = if (sys.props.contains(Tests.IS_TESTING.key)) {
-    assert(sys.props.contains("spark.test.home") ||
-      sys.env.contains("SPARK_HOME"), "spark.test.home or SPARK_HOME is not set.")
-    sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
-  } else {
-    assert(sys.env.contains("SPARK_HOME"), "SPARK_HOME is not set.")
-    sys.env("SPARK_HOME")
-  }
+
   // Note that we will directly refer pyspark's source, not the zip from a regular build.
   // It is possible the test is being ran without the build.
   private lazy val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
@@ -105,7 +98,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       Seq(
         pythonExec,
         "-c",
-        "from pyspark.sql.utils import require_minimum_pandas_version;" +
+        "from pyspark.sql.pandas.utils import require_minimum_pandas_version;" +
           "require_minimum_pandas_version()"),
       None,
       "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
@@ -117,7 +110,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       Seq(
         pythonExec,
         "-c",
-        "from pyspark.sql.utils import require_minimum_pyarrow_version;" +
+        "from pyspark.sql.pandas.utils import require_minimum_pyarrow_version;" +
           "require_minimum_pyarrow_version()"),
       None,
       "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
@@ -204,7 +197,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   lazy val pythonExec: String = {
     val pythonExec = sys.env.getOrElse(
-      "PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python3.6"))
+      "PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python3"))
     if (TestUtils.testCommandAvailable(pythonExec)) {
       pythonExec
     } else {
@@ -337,7 +330,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         input.toString
       },
       StringType,
-      inputSchemas = Seq.fill(1)(None),
+      inputEncoders = Seq.fill(1)(None),
       name = Some(name)) {
 
       override def apply(exprs: Column*): Column = {

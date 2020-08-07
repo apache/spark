@@ -26,6 +26,8 @@ import org.apache.spark.sql.connector.read.partitioning.Partitioning;
  *
  * Note that, when a {@link Scan} implementation creates exactly one {@link InputPartition},
  * Spark may avoid adding a shuffle even if the reader does not implement this interface.
+ *
+ * @since 3.0.0
  */
 @Evolving
 public interface SupportsReportPartitioning extends Scan {

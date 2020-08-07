@@ -420,6 +420,33 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
     assert(restoredConf1.get("spark.driver.port") !== "9999")
   }
 
+  test("SPARK-30199 get ui port and blockmanager port") {
+    val conf = Map("spark.ui.port" -> "30001", "spark.blockManager.port" -> "30002")
+    conf.foreach { case (k, v) => System.setProperty(k, v) }
+    ssc = new StreamingContext(master, framework, batchDuration)
+    conf.foreach { case (k, v) => assert(ssc.conf.get(k) === v) }
+
+    val cp = new Checkpoint(ssc, Time(1000))
+    ssc.stop()
+
+    // Serialize/deserialize to simulate write to storage and reading it back
+    val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
+
+    val newCpConf = newCp.createSparkConf()
+    conf.foreach { case (k, v) => assert(newCpConf.contains(k) && newCpConf.get(k) === v) }
+
+    // Check if all the parameters have been restored
+    ssc = new StreamingContext(null, newCp, null)
+    conf.foreach { case (k, v) => assert(ssc.conf.get(k) === v) }
+    ssc.stop()
+
+    // If port numbers are not set in system property, these parameters should not be presented
+    // in the newly recovered conf.
+    conf.foreach(kv => System.clearProperty(kv._1))
+    val newCpConf1 = newCp.createSparkConf()
+    conf.foreach { case (k, _) => assert(!newCpConf1.contains(k)) }
+  }
+
   // This tests whether the system can recover from a master failure with simple
   // non-stateful operations. This assumes as reliable, replayable input
   // source - TestInputDStream.

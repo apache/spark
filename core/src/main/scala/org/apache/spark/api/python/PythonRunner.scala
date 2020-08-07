@@ -24,12 +24,18 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
+
+import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
+import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
@@ -80,9 +86,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   private val conf = SparkEnv.get.conf
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
-  // each python worker gets an equal part of the allocation. the worker pool will grow to the
-  // number of concurrent tasks, which is determined by the number of cores in this executor.
-  private val memoryMb = conf.get(PYSPARK_EXECUTOR_MEMORY).map(_ / conf.get(EXECUTOR_CORES))
 
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars
@@ -101,26 +104,41 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   // Authentication helper used when serving method calls via socket from Python side.
   private lazy val authHelper = new SocketAuthHelper(conf)
 
+  // each python worker gets an equal part of the allocation. the worker pool will grow to the
+  // number of concurrent tasks, which is determined by the number of cores in this executor.
+  private def getWorkerMemoryMb(mem: Option[Long], cores: Int): Option[Long] = {
+    mem.map(_ / cores)
+  }
+
   def compute(
       inputIterator: Iterator[IN],
       partitionIndex: Int,
       context: TaskContext): Iterator[OUT] = {
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
+
+    // Get the executor cores and pyspark memory, they are passed via the local properties when
+    // the user specified them in a ResourceProfile.
+    val execCoresProp = Option(context.getLocalProperty(EXECUTOR_CORES_LOCAL_PROPERTY))
+    val memoryMb = Option(context.getLocalProperty(PYSPARK_MEMORY_LOCAL_PROPERTY)).map(_.toLong)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     // if OMP_NUM_THREADS is not explicitly set, override it with the number of cores
     if (conf.getOption("spark.executorEnv.OMP_NUM_THREADS").isEmpty) {
       // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to this executor
       // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
       // see https://github.com/numpy/numpy/issues/10455
-      conf.getOption("spark.executor.cores").foreach(envVars.put("OMP_NUM_THREADS", _))
+      execCoresProp.foreach(envVars.put("OMP_NUM_THREADS", _))
     }
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
-    if (memoryMb.isDefined) {
-      envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", memoryMb.get.toString)
+    // SPARK-30299 this could be wrong with standalone mode when executor
+    // cores might not be correct because it defaults to all cores on the box.
+    val execCores = execCoresProp.map(_.toInt).getOrElse(conf.get(EXECUTOR_CORES))
+    val workerMemoryMb = getWorkerMemoryMb(memoryMb, execCores)
+    if (workerMemoryMb.isDefined) {
+      envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", workerMemoryMb.get.toString)
     }
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
@@ -238,13 +256,18 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                   sock.setSoTimeout(10000)
                   authHelper.authClient(sock)
                   val input = new DataInputStream(sock.getInputStream())
-                  input.readInt() match {
+                  val requestMethod = input.readInt()
+                  // The BarrierTaskContext function may wait infinitely, socket shall not timeout
+                  // before the function finishes.
+                  sock.setSoTimeout(0)
+                  requestMethod match {
                     case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
-                      // The barrier() function may wait infinitely, socket shall not timeout
-                      // before the function finishes.
-                      sock.setSoTimeout(0)
-                      barrierAndServe(sock)
-
+                      barrierAndServe(requestMethod, sock)
+                    case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
+                      val length = input.readInt()
+                      val message = new Array[Byte](length)
+                      input.readFully(message)
+                      barrierAndServe(requestMethod, sock, new String(message, UTF_8))
                     case _ =>
                       val out = new DataOutputStream(new BufferedOutputStream(
                         sock.getOutputStream))
@@ -395,15 +418,24 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     /**
-     * Gateway to call BarrierTaskContext.barrier().
+     * Gateway to call BarrierTaskContext methods.
      */
-    def barrierAndServe(sock: Socket): Unit = {
-      require(serverSocket.isDefined, "No available ServerSocket to redirect the barrier() call.")
-
+    def barrierAndServe(requestMethod: Int, sock: Socket, message: String = ""): Unit = {
+      require(
+        serverSocket.isDefined,
+        "No available ServerSocket to redirect the BarrierTaskContext method call."
+      )
       val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
       try {
-        context.asInstanceOf[BarrierTaskContext].barrier()
-        writeUTF(BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS, out)
+        val messages = requestMethod match {
+          case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
+            context.asInstanceOf[BarrierTaskContext].barrier()
+            Array(BarrierTaskContextMessageProtocol.BARRIER_RESULT_SUCCESS)
+          case BarrierTaskContextMessageProtocol.ALL_GATHER_FUNCTION =>
+            context.asInstanceOf[BarrierTaskContext].allGather(message)
+        }
+        out.writeInt(messages.length)
+        messages.foreach(writeUTF(_, out))
       } catch {
         case e: SparkException =>
           writeUTF(e.getMessage, out)
@@ -581,7 +613,7 @@ private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         val command = funcs.head.funcs.head.command
         dataOut.writeInt(command.length)
-        dataOut.write(command)
+        dataOut.write(command.toArray)
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
@@ -611,7 +643,7 @@ private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
               val obj = new Array[Byte](length)
               stream.readFully(obj)
               obj
-            case 0 => Array.empty[Byte]
+            case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
@@ -638,6 +670,7 @@ private[spark] object SpecialLengths {
 
 private[spark] object BarrierTaskContextMessageProtocol {
   val BARRIER_FUNCTION = 1
+  val ALL_GATHER_FUNCTION = 2
   val BARRIER_RESULT_SUCCESS = "success"
   val ERROR_UNRECOGNIZED_FUNCTION = "Not recognized function call from python side."
 }

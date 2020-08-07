@@ -54,13 +54,13 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  * probably be using sorting instead of hashing for better cache locality.
  *
  * The key and values under the hood are stored together, in the following format:
- *   Bytes 0 to 4: len(k) (key length in bytes) + len(v) (value length in bytes) + 4
- *   Bytes 4 to 8: len(k)
- *   Bytes 8 to 8 + len(k): key data
- *   Bytes 8 + len(k) to 8 + len(k) + len(v): value data
- *   Bytes 8 + len(k) + len(v) to 8 + len(k) + len(v) + 8: pointer to next pair
+ *   First uaoSize bytes: len(k) (key length in bytes) + len(v) (value length in bytes) + uaoSize
+ *   Next uaoSize bytes: len(k)
+ *   Next len(k) bytes: key data
+ *   Next len(v) bytes: value data
+ *   Last 8 bytes: pointer to next pair
  *
- * This means that the first four bytes store the entire record (key + value) length. This format
+ * It means first uaoSize bytes store the entire record (key + value + uaoSize) length. This format
  * is compatible with {@link org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter},
  * so we can pass records from this map directly into the sorter to sort records in place.
  */
@@ -96,8 +96,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * since that's the largest power-of-2 that's less than Integer.MAX_VALUE. We need two long array
    * entries per key, giving us a maximum capacity of (1 &lt;&lt; 29).
    */
-  @VisibleForTesting
-  static final int MAX_CAPACITY = (1 << 29);
+  public static final int MAX_CAPACITY = (1 << 29);
 
   // This choice of page table size and page size means that we can address up to 500 gigabytes
   // of memory.
@@ -407,17 +406,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * For efficiency, all calls to `next()` will return the same {@link Location} object.
    *
-   * If any other lookups or operations are performed on this map while iterating over it, including
-   * `lookup()`, the behavior of the returned iterator is undefined.
+   * The returned iterator is thread-safe. However if the map is modified while iterating over it,
+   * the behavior of the returned iterator is undefined.
    */
   public MapIterator iterator() {
-    return new MapIterator(numValues, loc, false);
-  }
-
-  /**
-   * Returns a thread safe iterator that iterates of the entries of this map.
-   */
-  public MapIterator safeIterator() {
     return new MapIterator(numValues, new Location(), false);
   }
 
@@ -428,19 +420,20 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * For efficiency, all calls to `next()` will return the same {@link Location} object.
    *
-   * If any other lookups or operations are performed on this map while iterating over it, including
-   * `lookup()`, the behavior of the returned iterator is undefined.
+   * The returned iterator is thread-safe. However if the map is modified while iterating over it,
+   * the behavior of the returned iterator is undefined.
    */
   public MapIterator destructiveIterator() {
     updatePeakMemoryUsed();
-    return new MapIterator(numValues, loc, true);
+    return new MapIterator(numValues, new Location(), true);
   }
 
   /**
    * Looks up a key, and return a {@link Location} handle that can be used to test existence
    * and read/write values.
    *
-   * This function always return the same {@link Location} instance to avoid object allocation.
+   * This function always returns the same {@link Location} instance to avoid object allocation.
+   * This function is not thread-safe.
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
     safeLookup(keyBase, keyOffset, keyLength, loc,
@@ -452,7 +445,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Looks up a key, and return a {@link Location} handle that can be used to test existence
    * and read/write values.
    *
-   * This function always return the same {@link Location} instance to avoid object allocation.
+   * This function always returns the same {@link Location} instance to avoid object allocation.
+   * This function is not thread-safe.
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
     safeLookup(keyBase, keyOffset, keyLength, loc, hash);
@@ -694,7 +688,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
       assert (vlen % 8 == 0);
       assert (longArray != null);
 
-      if (numKeys == MAX_CAPACITY
+      // We should not increase number of keys to be MAX_CAPACITY. The usage pattern of this map is
+      // lookup + append. If we append key until the number of keys to be MAX_CAPACITY, next time
+      // the call of lookup will hang forever because it cannot find an empty slot.
+      if (numKeys == MAX_CAPACITY - 1
         // The map could be reused from last spill (because of no enough memory to grow),
         // then we don't try to grow again if hit the `growthThreshold`.
         || !canGrowArray && numKeys >= growthThreshold) {
@@ -704,7 +701,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
       // the key address instead of storing the absolute address of the value, the key and value
       // must be stored in the same memory page.
-      // (8 byte key length) (key) (value) (8 byte pointer to next value)
+      // (total length) (key length) (key) (value) (8 byte pointer to next value)
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
       final long recordLength = (2L * uaoSize) + klen + vlen + 8;
       if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
@@ -741,7 +738,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
         longArray.set(pos * 2 + 1, keyHashcode);
         isDefined = true;
 
-        if (numKeys >= growthThreshold && longArray.size() < MAX_CAPACITY) {
+        // We use two array entries per key, so the array size is twice the capacity.
+        // We should compare the current capacity of the array, instead of its size.
+        if (numKeys >= growthThreshold && longArray.size() / 2 < MAX_CAPACITY) {
           try {
             growAndRehash();
           } catch (SparkOutOfMemoryError oom) {

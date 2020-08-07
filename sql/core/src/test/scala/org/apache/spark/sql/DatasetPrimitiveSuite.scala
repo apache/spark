@@ -171,7 +171,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
   test("groupBy function, map") {
     val ds = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11).toDS()
     val grouped = ds.groupByKey(_ % 2)
-    val agged = grouped.mapGroups { case (g, iter) =>
+    val agged = grouped.mapGroups { (g, iter) =>
       val name = if (g == 0) "even" else "odd"
       (name, iter.size)
     }
@@ -184,7 +184,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
   test("groupBy function, flatMap") {
     val ds = Seq("a", "b", "c", "xyz", "hello").toDS()
     val grouped = ds.groupByKey(_.length)
-    val agged = grouped.flatMapGroups { case (g, iter) => Iterator(g.toString, iter.mkString) }
+    val agged = grouped.flatMapGroups { (g, iter) => Iterator(g.toString, iter.mkString) }
 
     checkDatasetUnorderly(
       agged,
@@ -223,16 +223,6 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
     checkDataset(Seq(Queue(true)).toDS(), Queue(true))
     checkDataset(Seq(Queue("test")).toDS(), Queue("test"))
     checkDataset(Seq(Queue(Tuple1(1))).toDS(), Queue(Tuple1(1)))
-
-    checkDataset(Seq(ArrayBuffer(1)).toDS(), ArrayBuffer(1))
-    checkDataset(Seq(ArrayBuffer(1.toLong)).toDS(), ArrayBuffer(1.toLong))
-    checkDataset(Seq(ArrayBuffer(1.toDouble)).toDS(), ArrayBuffer(1.toDouble))
-    checkDataset(Seq(ArrayBuffer(1.toFloat)).toDS(), ArrayBuffer(1.toFloat))
-    checkDataset(Seq(ArrayBuffer(1.toByte)).toDS(), ArrayBuffer(1.toByte))
-    checkDataset(Seq(ArrayBuffer(1.toShort)).toDS(), ArrayBuffer(1.toShort))
-    checkDataset(Seq(ArrayBuffer(true)).toDS(), ArrayBuffer(true))
-    checkDataset(Seq(ArrayBuffer("test")).toDS(), ArrayBuffer("test"))
-    checkDataset(Seq(ArrayBuffer(Tuple1(1))).toDS(), ArrayBuffer(Tuple1(1)))
   }
 
   test("sequence and product combinations") {

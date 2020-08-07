@@ -224,6 +224,28 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(LastOptions.parameters("opt3") == "3")
   }
 
+  test("SPARK-32364: path argument of load function should override all existing options") {
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .load("5")
+    assert(LastOptions.parameters("path") == "5")
+  }
+
+  test("SPARK-32364: path argument of save function should override all existing options") {
+    Seq(1).toDF.write
+      .format("org.apache.spark.sql.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .save("5")
+    assert(LastOptions.parameters("path") == "5")
+  }
+
   test("pass partitionBy as options") {
     Seq(1).toDF.write
       .format("org.apache.spark.sql.test")
@@ -232,6 +254,21 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
     val partColumns = LastOptions.parameters(DataSourceUtils.PARTITIONING_COLUMNS_KEY)
     assert(DataSourceUtils.decodePartitioningColumns(partColumns) === Seq("col1", "col2"))
+  }
+
+  test ("SPARK-29537: throw exception when user defined a wrong base path") {
+    withTempPath { p =>
+      val path = new Path(p.toURI).toString
+      Seq((1, 1), (2, 2)).toDF("c1", "c2")
+        .write.partitionBy("c1").mode(SaveMode.Overwrite).parquet(path)
+      val wrongBasePath = new File(p, "unknown")
+      // basePath must be a directory
+      wrongBasePath.mkdir()
+      val msg = intercept[IllegalArgumentException] {
+        spark.read.option("basePath", wrongBasePath.getCanonicalPath).parquet(path)
+      }.getMessage
+      assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+    }
   }
 
   test("save mode") {
@@ -267,7 +304,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         plan = qe.analyzed
 
       }
-      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
 
     spark.listenerManager.register(listener)
@@ -318,7 +355,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         var msg = intercept[AnalysisException] {
           Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
 
         // Insert into table successfully.
         Seq((1, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
@@ -339,14 +376,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         var msg = intercept[AnalysisException] {
           Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': string to int") &&
+          msg.contains("Cannot safely cast 'd': string to double"))
 
         msg = intercept[AnalysisException] {
           Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
+          msg.contains("Cannot safely cast 'd': boolean to double"))
       }
     }
   }
@@ -474,11 +511,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     // when users do not specify the schema
     checkAnswer(dfReader.load(), spark.range(1, 11).toDF())
 
-    // when users specify the schema
+    // when users specify a wrong schema
     val inputSchema = new StructType().add("s", IntegerType, nullable = false)
     val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
-    assert(e.getMessage.contains(
-      "org.apache.spark.sql.sources.SimpleScanSource does not allow user-specified schemas"))
+    assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
   }
 
   test("read a data source that does not extend RelationProvider") {

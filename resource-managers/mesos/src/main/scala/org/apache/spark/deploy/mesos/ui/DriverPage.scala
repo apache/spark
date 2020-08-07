@@ -68,8 +68,8 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
     val content =
       <p>Driver state information for driver id {driverId}</p>
         <a href={UIUtils.prependBaseUri(request, "/")}>Back to Drivers</a>
-        <div class="row-fluid">
-          <div class="span12">
+        <div class="row">
+          <div class="col-12">
             <h4>Driver state: {driverState.state}</h4>
             <h4>Driver properties</h4>
             {driverTable}
@@ -92,8 +92,8 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
   private def launchedRow(submissionState: Option[MesosClusterSubmissionState]): Seq[Node] = {
     submissionState.map { state =>
       <tr>
-        <td>Mesos Slave ID</td>
-        <td>{state.slaveId.getValue}</td>
+        <td>Mesos Agent ID</td>
+        <td>{state.agentId.getValue}</td>
       </tr>
       <tr>
         <td>Mesos Task ID</td>

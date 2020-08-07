@@ -20,6 +20,7 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.JavaConverters._
 import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable.HashMap
 
@@ -27,12 +28,12 @@ import com.google.common.collect.Interners
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.AccumulatorContext
+import org.apache.spark.util.{AccumulatorContext, Utils}
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -244,7 +245,22 @@ private class LiveTask(
 
 }
 
-private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveEntity {
+private class LiveResourceProfile(
+    val resourceProfileId: Int,
+    val executorResources: Map[String, ExecutorResourceRequest],
+    val taskResources: Map[String, TaskResourceRequest],
+    val maxTasksPerExecutor: Option[Int]) extends LiveEntity {
+
+  def toApi(): v1.ResourceProfileInfo = {
+    new v1.ResourceProfileInfo(resourceProfileId, executorResources, taskResources)
+  }
+
+  override protected def doUpdate(): Any = {
+    new ResourceProfileWrapper(toApi())
+  }
+}
+
+private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extends LiveEntity {
 
   var hostPort: String = null
   var host: String = null
@@ -284,12 +300,14 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
   var usedOnHeap = 0L
   var usedOffHeap = 0L
 
+  var resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+
   def hasMemoryInfo: Boolean = totalOnHeap >= 0L
 
   // peak values for executor level metrics
   val peakExecutorMetrics = new ExecutorMetrics()
 
-  def hostname: String = if (host != null) host else hostPort.split(":")(0)
+  def hostname: String = if (host != null) host else Utils.parseHostPort(hostPort)._1
 
   override protected def doUpdate(): Any = {
     val memoryMetrics = if (totalOnHeap >= 0) {
@@ -326,7 +344,8 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       blacklistedInStages,
       Some(peakExecutorMetrics).filter(_.isSet),
       attributes,
-      resources)
+      resources,
+      resourceProfileId)
     new ExecutorSummaryWrapper(info)
   }
 }
@@ -346,6 +365,8 @@ private class LiveExecutorStageSummary(
 
   var metrics = createMetrics(default = 0L)
 
+  val peakExecutorMetrics = new ExecutorMetrics()
+
   override protected def doUpdate(): Any = {
     val info = new v1.ExecutorStageSummary(
       taskTime,
@@ -362,7 +383,8 @@ private class LiveExecutorStageSummary(
       metrics.shuffleWriteMetrics.recordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
-      isBlacklisted)
+      isBlacklisted,
+      Some(peakExecutorMetrics).filter(_.isSet))
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
 
@@ -400,6 +422,8 @@ private class LiveStage extends LiveEntity {
   val activeTasksPerExecutor = new HashMap[String, Int]().withDefaultValue(0)
 
   var blackListedExecutors = new HashSet[String]()
+
+  val peakExecutorMetrics = new ExecutorMetrics()
 
   // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
   @volatile var cleaning = false
@@ -464,7 +488,9 @@ private class LiveStage extends LiveEntity {
       accumulatorUpdates = newAccumulatorInfos(info.accumulables.values),
       tasks = None,
       executorSummary = None,
-      killedTasksSummary = killedSummary)
+      killedTasksSummary = killedSummary,
+      resourceProfileId = info.resourceProfileId,
+      Some(peakExecutorMetrics).filter(_.isSet))
   }
 
   override protected def doUpdate(): Any = {
@@ -625,10 +651,22 @@ private class SchedulerPool(name: String) extends LiveEntity {
 
 }
 
-private object LiveEntityHelpers {
+private[spark] object LiveEntityHelpers {
 
   private val stringInterner = Interners.newWeakInterner[String]()
 
+  private def accuValuetoString(value: Any): String = value match {
+    case list: java.util.List[_] =>
+      // SPARK-30379: For collection accumulator, string representation might
+      // takes much more memory (e.g. long => string of it) and cause OOM.
+      // So we only show first few elements.
+      if (list.size() > 5) {
+        list.asScala.take(5).mkString("[", ",", "," + "... " + (list.size() - 5) + " more items]")
+      } else {
+        list.toString
+      }
+    case _ => value.toString
+  }
 
   def newAccumulatorInfos(accums: Iterable[AccumulableInfo]): Seq[v1.AccumulableInfo] = {
     accums
@@ -641,8 +679,8 @@ private object LiveEntityHelpers {
         new v1.AccumulableInfo(
           acc.id,
           acc.name.map(weakIntern).orNull,
-          acc.update.map(_.toString()),
-          acc.value.map(_.toString()).orNull)
+          acc.update.map(accuValuetoString),
+          acc.value.map(accuValuetoString).orNull)
       }
       .toSeq
   }

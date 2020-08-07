@@ -23,7 +23,7 @@ import breeze.linalg.{all, normalize, sum, DenseMatrix => BDM, DenseVector => BD
 import breeze.numerics.{abs, exp, trigamma}
 import breeze.stats.distributions.{Gamma, RandBasis}
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.PeriodicGraphCheckpointer
 import org.apache.spark.internal.Logging
@@ -33,13 +33,10 @@ import org.apache.spark.storage.StorageLevel
 
 
 /**
- * :: DeveloperApi ::
- *
  * An LDAOptimizer specifies which optimization/learning/inference algorithm to use, and it can
  * hold optimizer-specific parameters for users to set.
  */
 @Since("1.4.0")
-@DeveloperApi
 trait LDAOptimizer {
 
   /*
@@ -62,8 +59,6 @@ trait LDAOptimizer {
 }
 
 /**
- * :: DeveloperApi ::
- *
  * Optimizer for EM algorithm which stores data + parameter graph, plus algorithm parameters.
  *
  * Currently, the underlying implementation uses Expectation-Maximization (EM), implemented
@@ -78,7 +73,6 @@ trait LDAOptimizer {
  *    "On Smoothing and Inference for Topic Models."  UAI, 2009.
  */
 @Since("1.4.0")
-@DeveloperApi
 final class EMLDAOptimizer extends LDAOptimizer {
 
   import LDA._
@@ -142,7 +136,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
     // For each document, create an edge (Document -> Term) for each unique term in the document.
     val edges: RDD[Edge[TokenCount]] = docs.flatMap { case (docID: Long, termCounts: Vector) =>
       // Add edges for terms with non-zero counts.
-      termCounts.asBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
+      termCounts.nonZeroIterator.map { case (term, cnt) =>
         Edge(docID, term2index(term), cnt)
       }
     }
@@ -211,11 +205,14 @@ final class EMLDAOptimizer extends LDAOptimizer {
     val docTopicDistributions: VertexRDD[TopicCounts] =
       graph.aggregateMessages[(Boolean, TopicCounts)](sendMsg, mergeMsg)
         .mapValues(_._2)
+    val prevGraph = graph
     // Update the vertex descriptors with the new counts.
     val newGraph = Graph(docTopicDistributions, graph.edges)
     graph = newGraph
     graphCheckpointer.update(newGraph)
     globalTopicTotals = computeGlobalTopicTotals()
+    prevGraph.unpersistVertices()
+    prevGraph.edges.unpersist()
     this
   }
 
@@ -250,8 +247,6 @@ final class EMLDAOptimizer extends LDAOptimizer {
 
 
 /**
- * :: DeveloperApi ::
- *
  * An online optimizer for LDA. The Optimizer implements the Online variational Bayes LDA
  * algorithm, which processes a subset of the corpus on each iteration, and updates the term-topic
  * distribution adaptively.
@@ -260,7 +255,6 @@ final class EMLDAOptimizer extends LDAOptimizer {
  *   Hoffman, Blei and Bach, "Online Learning for Latent Dirichlet Allocation." NIPS, 2010.
  */
 @Since("1.4.0")
-@DeveloperApi
 final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
 
   // LDA common parameters

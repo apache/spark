@@ -215,8 +215,8 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
         wc.changeValue(w, 1L, _ + 1L)
       }
       wc.map { case (word, count) => (word, (count, 1)) }
-    }.reduceByKey { case ((wc1, df1), (wc2, df2)) =>
-      (wc1 + wc2, df1 + df2)
+    }.reduceByKey { (wcdf1, wcdf2) =>
+      (wcdf1._1 + wcdf2._1, wcdf1._2 + wcdf2._2)
     }
 
     val filteringRequired = isSet(minDF) || isSet(maxDF)
@@ -300,7 +300,7 @@ class CountVectorizerModel(
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
       val dict = vocabulary.zipWithIndex.toMap
       broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
@@ -326,14 +326,19 @@ class CountVectorizerModel(
 
       Vectors.sparse(dictBr.value.size, effectiveCounts)
     }
-    val attrs = vocabulary.map(_ => new NumericAttribute).asInstanceOf[Array[Attribute]]
-    val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
-    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))), metadata)
+    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      val attrs: Array[Attribute] = vocabulary.map(_ => new NumericAttribute)
+      val field = new AttributeGroup($(outputCol), attrs).toStructField()
+      outputSchema = SchemaUtils.updateField(outputSchema, field)
+    }
+    outputSchema
   }
 
   @Since("1.5.0")

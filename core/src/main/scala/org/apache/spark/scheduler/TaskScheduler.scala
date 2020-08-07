@@ -45,7 +45,7 @@ private[spark] trait TaskScheduler {
 
   // Invoked after system has successfully initialized (typically in spark context).
   // Yarn uses this to bootstrap allocation of resources based on preferred locations,
-  // wait for slave registrations, etc.
+  // wait for executor registrations, etc.
   def postStartHook(): Unit = { }
 
   // Disconnect from the cluster.
@@ -97,6 +97,16 @@ private[spark] trait TaskScheduler {
    * @return An application ID
    */
   def applicationId(): String = appId
+
+  /**
+   * Process a decommissioning executor.
+   */
+  def executorDecommission(executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit
+
+  /**
+   * If an executor is decommissioned, return its corresponding decommission info
+   */
+  def getExecutorDecommissionInfo(executorId: String): Option[ExecutorDecommissionInfo]
 
   /**
    * Process a lost executor

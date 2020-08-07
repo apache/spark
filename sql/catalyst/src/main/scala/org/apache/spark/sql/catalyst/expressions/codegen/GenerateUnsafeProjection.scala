@@ -111,6 +111,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
             // Can't call setNullAt() for DecimalType with precision larger than 18.
             s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
+          case CalendarIntervalType => s"$rowWriter.write($index, (CalendarInterval) null);"
           case _ => s"$rowWriter.setNullAt($index);"
         }
 

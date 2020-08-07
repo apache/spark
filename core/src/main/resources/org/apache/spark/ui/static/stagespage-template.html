@@ -18,30 +18,28 @@ limitations under the License.
 <script id="stages-summary-template" type="text/html">
     <h4 id="summaryMetricsTitle" class="title-table"></h4>
     <div class="container-fluid">
-        <div class="container-fluid">
-            <table id="summary-metrics-table" class="table table-striped compact table-dataTable cell-border">
-                <thead>
-                <th>Metric</th>
-                <th>Min</th>
-                <th>25th percentile</th>
-                <th>Median</th>
-                <th>75th percentile</th>
-                <th>Max</th>
-                </thead>
-                <tbody>
-                </tbody>
-            </table>
-        </div>
+        <table id="summary-metrics-table" class="table table-striped compact table-dataTable cell-border">
+            <thead>
+            <th>Metric</th>
+            <th>Min</th>
+            <th>25th percentile</th>
+            <th>Median</th>
+            <th>75th percentile</th>
+            <th>Max</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
     </div>
-    <a id="aggregatedMetrics">
+    <a id="aggregatedMetrics" class="collapse-table">
         <span class="expand-input-rate-arrow arrow-closed" id="arrowtoggle2"></span>
         <h4 class="title-table">Aggregated Metrics by Executor</h4>
     </a>
     <br>
-    <div class="container-fluid" id="toggle-aggregatedMetrics" hidden>
-        <div class="container-fluid">
-            <table id="summary-executor-table" class="table table-striped compact table-dataTable cell-border">
-                <thead>
+    <div class="container-fluid d-none" id="toggle-aggregatedMetrics">
+        <table id="summary-executor-table" class="table table-striped compact table-dataTable cell-border">
+            <thead>
+	        <tr>
                 <th>Executor ID</th>
                 <th>Logs</th>
                 <th>Address</th>
@@ -61,13 +59,13 @@ limitations under the License.
                 <th><span id="executor-summary-shuffle-write">Shuffle Write Size / Records</span></th>
                 <th>Spill (Memory) </th>
                 <th>Spill (Disk) </th>
-                </thead>
-                <tbody>
-                </tbody>
-            </table>
-        </div>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
     </div>
-    <div class="container-fluid" id="accumulator-update-table">
+    <div id="accumulator-update-table">
         <h4 class="title-table">Accumulators</h4>
         <div class="container-fluid">
             <table id="accumulator-table" class="table table-striped compact table-dataTable cell-border">
@@ -83,7 +81,6 @@ limitations under the License.
     </div>
     <h4 id="tasksTitle" class="title-table"></h4>
     <div class="container-fluid">
-        <div class="container-fluid">
             <table id="active-tasks-table" class="table table-striped compact table-dataTable cell-border">
                 <thead>
                 <tr>
@@ -108,7 +105,7 @@ limitations under the License.
                     <th>Accumulators</th>
                     <th>Input Size / Records</th>
                     <th>Output Size / Records</th>
-                    <th>Write Time</th>
+                    <th>Shuffle Write Time</th>
                     <th>Shuffle Write Size / Records</th>
                     <th>Shuffle Read Size / Records</th>
                     <th>Spill (Memory)</th>
@@ -119,6 +116,5 @@ limitations under the License.
                 <tbody>
                 </tbody>
             </table>
-        </div>
     </div>
 </script>

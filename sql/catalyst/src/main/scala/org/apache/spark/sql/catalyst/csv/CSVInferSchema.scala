@@ -24,6 +24,7 @@ import scala.util.control.Exception.allCatch
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.types._
 
@@ -32,7 +33,9 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   private val timestampParser = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
-    options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
   private val decimalParser = if (options.locale == Locale.US) {
     // Special handling the default locale for backward compatibility
@@ -99,13 +102,11 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
     } else {
-      typeSoFar match {
+      val typeElemInfer = typeSoFar match {
         case NullType => tryParseInteger(field)
         case IntegerType => tryParseInteger(field)
         case LongType => tryParseLong(field)
-        case _: DecimalType =>
-          // DecimalTypes have different precisions and scales, so we try to find the common type.
-          compatibleType(typeSoFar, tryParseDecimal(field)).getOrElse(StringType)
+        case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
@@ -113,6 +114,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case other: DataType =>
           throw new UnsupportedOperationException(s"Unexpected data type $other")
       }
+      compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }
   }
 

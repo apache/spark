@@ -36,8 +36,10 @@ import org.apache.spark.deploy.history.{EventLogFileReader, SingleEventLogFileWr
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{EVENT_LOG_DIR, EVENT_LOG_ENABLED}
 import org.apache.spark.io._
 import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -97,6 +99,49 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   test("Executor metrics update") {
     testStageExecutorMetricsEventLogging()
+  }
+
+  test("SPARK-31764: isBarrier should be logged in event log") {
+    val conf = new SparkConf()
+    conf.set(EVENT_LOG_ENABLED, true)
+    conf.set(EVENT_LOG_DIR, testDirPath.toString)
+    val sc = new SparkContext("local", "test-SPARK-31764", conf)
+    val appId = sc.applicationId
+
+    sc.parallelize(1 to 10)
+      .barrier()
+      .mapPartitions(_.map(elem => (elem, elem)))
+      .filter(elem => elem._1 % 2 == 0)
+      .reduceByKey(_ + _)
+      .collect
+    sc.stop()
+
+    val eventLogStream = EventLogFileReader.openEventLog(new Path(testDirPath, appId), fileSystem)
+    val events = readLines(eventLogStream).map(line => JsonProtocol.sparkEventFromJson(parse(line)))
+    val jobStartEvents = events
+      .filter(event => event.isInstanceOf[SparkListenerJobStart])
+      .map(_.asInstanceOf[SparkListenerJobStart])
+
+    assert(jobStartEvents.size === 1)
+    val stageInfos = jobStartEvents.head.stageInfos
+    assert(stageInfos.size === 2)
+
+    val stage0 = stageInfos(0)
+    val rddInfosInStage0 = stage0.rddInfos
+    assert(rddInfosInStage0.size === 3)
+    val sortedRddInfosInStage0 = rddInfosInStage0.sortBy(_.scope.get.name)
+    assert(sortedRddInfosInStage0(0).scope.get.name === "filter")
+    assert(sortedRddInfosInStage0(0).isBarrier === true)
+    assert(sortedRddInfosInStage0(1).scope.get.name === "mapPartitions")
+    assert(sortedRddInfosInStage0(1).isBarrier === true)
+    assert(sortedRddInfosInStage0(2).scope.get.name === "parallelize")
+    assert(sortedRddInfosInStage0(2).isBarrier === false)
+
+    val stage1 = stageInfos(1)
+    val rddInfosInStage1 = stage1.rddInfos
+    assert(rddInfosInStage1.size === 1)
+    assert(rddInfosInStage1(0).scope.get.name === "reduceByKey")
+    assert(rddInfosInStage1(0).isBarrier === false) // reduceByKey
   }
 
   /* ----------------- *
@@ -280,7 +325,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L)
 
     def max(a: Array[Long], b: Array[Long]): Array[Long] =
-      (a, b).zipped.map(Math.max)
+      (a, b).zipped.map(Math.max).toArray
 
     // calculated metric peaks per stage per executor
     // metrics sent during stage 0 for each executor
@@ -438,12 +483,14 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   private def createStageSubmittedEvent(stageId: Int) = {
     SparkListenerStageSubmitted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details"))
+      Seq.empty, Seq.empty, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
   }
 
   private def createStageCompletedEvent(stageId: Int) = {
     SparkListenerStageCompleted(new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details"))
+      Seq.empty, Seq.empty, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
   }
 
   private def createExecutorAddedEvent(executorId: Int) = {

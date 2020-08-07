@@ -21,18 +21,18 @@ A collections of builtin avro functions
 
 
 from pyspark import since, SparkContext
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.util import _print_missing_jar
 
 
-@ignore_unicode_prefix
 @since(3.0)
 def from_avro(data, jsonFormatSchema, options={}):
     """
-    Converts a binary column of avro format into its corresponding catalyst value. The specified
-    schema must match the read data, otherwise the behavior is undefined: it may fail or return
-    arbitrary result.
+    Converts a binary column of Avro format into its corresponding catalyst value.
+    The specified schema must match the read data, otherwise the behavior is undefined:
+    it may fail or return arbitrary result.
+    To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
+    set via the option avroSchema.
 
     Note: Avro is built-in but external data source module since Spark 2.4. Please deploy the
     application as per the deployment section of "Apache Avro Data Source Guide".
@@ -43,7 +43,7 @@ def from_avro(data, jsonFormatSchema, options={}):
 
     >>> from pyspark.sql import Row
     >>> from pyspark.sql.avro.functions import from_avro, to_avro
-    >>> data = [(1, Row(name='Alice', age=2))]
+    >>> data = [(1, Row(age=2, name='Alice'))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> avroDf = df.select(to_avro(df.value).alias("avro"))
     >>> avroDf.collect()
@@ -53,7 +53,7 @@ def from_avro(data, jsonFormatSchema, options={}):
     ...     "fields":[{"name":"age","type":["long","null"]},
     ...     {"name":"name","type":["string","null"]}]},"null"]}]}'''
     >>> avroDf.select(from_avro(avroDf.avro, jsonFormatSchema).alias("value")).collect()
-    [Row(value=Row(avro=Row(age=2, name=u'Alice')))]
+    [Row(value=Row(avro=Row(age=2, name='Alice')))]
     """
 
     sc = SparkContext._active_spark_context
@@ -67,7 +67,6 @@ def from_avro(data, jsonFormatSchema, options={}):
     return Column(jc)
 
 
-@ignore_unicode_prefix
 @since(3.0)
 def to_avro(data, jsonFormatSchema=""):
     """

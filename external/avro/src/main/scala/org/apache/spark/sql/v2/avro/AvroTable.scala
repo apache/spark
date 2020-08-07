@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroUtils
-import org.apache.spark.sql.connector.write.WriteBuilder
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileTable
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -42,8 +42,8 @@ case class AvroTable(
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     AvroUtils.inferSchema(sparkSession, options.asScala.toMap, files)
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
-    new AvroWriteBuilder(options, paths, formatName, supportsDataType)
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
+    new AvroWriteBuilder(paths, formatName, supportsDataType, info)
 
   override def supportsDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
 

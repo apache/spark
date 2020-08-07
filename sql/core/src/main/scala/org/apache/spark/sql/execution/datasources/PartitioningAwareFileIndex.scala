@@ -56,14 +56,17 @@ abstract class PartitioningAwareFileIndex(
 
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
-  protected lazy val pathGlobFilter = parameters.get("pathGlobFilter").map(new GlobFilter(_))
+  private val caseInsensitiveMap = CaseInsensitiveMap(parameters)
+
+  protected lazy val pathGlobFilter: Option[GlobFilter] =
+    caseInsensitiveMap.get("pathGlobFilter").map(new GlobFilter(_))
 
   protected def matchGlobPattern(file: FileStatus): Boolean = {
     pathGlobFilter.forall(_.accept(file.getPath))
   }
 
-  protected lazy val recursiveFileLookup = {
-    parameters.getOrElse("recursiveFileLookup", "false").toBoolean
+  protected lazy val recursiveFileLookup: Boolean = {
+    caseInsensitiveMap.getOrElse("recursiveFileLookup", "false").toBoolean
   }
 
   override def listFiles(
@@ -215,13 +218,21 @@ abstract class PartitioningAwareFileIndex(
    * and the returned DataFrame will have the column of `something`.
    */
   private def basePaths: Set[Path] = {
-    parameters.get(BASE_PATH_PARAM).map(new Path(_)) match {
+    caseInsensitiveMap.get(BASE_PATH_PARAM).map(new Path(_)) match {
       case Some(userDefinedBasePath) =>
         val fs = userDefinedBasePath.getFileSystem(hadoopConf)
         if (!fs.isDirectory(userDefinedBasePath)) {
           throw new IllegalArgumentException(s"Option '$BASE_PATH_PARAM' must be a directory")
         }
-        Set(fs.makeQualified(userDefinedBasePath))
+        val qualifiedBasePath = fs.makeQualified(userDefinedBasePath)
+        val qualifiedBasePathStr = qualifiedBasePath.toString
+        rootPaths
+          .find(!fs.makeQualified(_).toString.startsWith(qualifiedBasePathStr))
+          .foreach { rp =>
+            throw new IllegalArgumentException(
+              s"Wrong basePath $userDefinedBasePath for the root path: $rp")
+          }
+        Set(qualifiedBasePath)
 
       case None =>
         rootPaths.map { path =>

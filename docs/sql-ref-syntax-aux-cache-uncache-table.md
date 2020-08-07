@@ -20,21 +20,34 @@ license: |
 ---
 
 ### Description
+
 `UNCACHE TABLE` removes the entries and associated data from the in-memory and/or on-disk cache for a given table or view. The
-underlying entries should already have been brought to cache by previous `CACHE TABLE` operation. `UNCACHE TABLE` on a non-existent table throws Exception if `IF EXISTS` is not specified.
+underlying entries should already have been brought to cache by previous `CACHE TABLE` operation. `UNCACHE TABLE` on a non-existent table throws an exception if `IF EXISTS` is not specified.
+
 ### Syntax
-{% highlight sql %}
-UNCACHE TABLE [ IF EXISTS ] table_name
-{% endhighlight %}
+
+```sql
+UNCACHE TABLE [ IF EXISTS ] table_identifier
+```
+
 ### Parameters
-<dl>
- <dt><code><em>table_name</em></code></dt>
- <dd>The name of the table or view to be uncached.</dd>
-</dl>
+
+* **table_identifier**
+
+    Specifies the table or view name to be uncached. The table or view name may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] table_name`
+
 ### Examples
-{% highlight sql %}
+
+```sql
 UNCACHE TABLE t1;
-{% endhighlight %}
+```
+
 ### Related Statements
- * [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
- * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
+
+* [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+* [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
+* [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
+* [REFRESH](sql-ref-syntax-aux-cache-refresh.html)
+* [REFRESH FUNCTION](sql-ref-syntax-aux-cache-refresh-function.html)

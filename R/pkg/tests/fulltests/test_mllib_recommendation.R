@@ -31,7 +31,8 @@ test_that("spark.als", {
   stats <- summary(model)
   expect_equal(stats$rank, 10)
   test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
-  predictions <- collect(predict(model, test))
+  result <- predict(model, test)
+  predictions <- collect(arrange(result, desc(result$item), result$user))
 
   expect_equal(predictions$prediction, c(0.6324540, 3.6218479, -0.4568263),
   tolerance = 1e-4)

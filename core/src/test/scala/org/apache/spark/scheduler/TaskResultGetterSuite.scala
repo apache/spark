@@ -25,7 +25,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import com.google.common.util.concurrent.MoreExecutors
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, anyLong}
 import org.mockito.Mockito.{spy, times, verify}
@@ -38,7 +37,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.storage.TaskResultBlockId
-import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, Utils}
+import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, ThreadUtils, Utils}
 
 
 /**
@@ -99,12 +98,12 @@ private class MyTaskResultGetter(env: SparkEnv, scheduler: TaskSchedulerImpl)
   extends TaskResultGetter(env, scheduler) {
 
   // Use the current thread so we can access its results synchronously
-  protected override val getTaskResultExecutor = MoreExecutors.sameThreadExecutor()
+  protected override val getTaskResultExecutor = ThreadUtils.sameThreadExecutorService
 
   // DirectTaskResults that we receive from the executors
   private val _taskResults = new ArrayBuffer[DirectTaskResult[_]]
 
-  def taskResults: Seq[DirectTaskResult[_]] = _taskResults
+  def taskResults: Seq[DirectTaskResult[_]] = _taskResults.toSeq
 
   override def enqueueSuccessfulTask(tsm: TaskSetManager, tid: Long, data: ByteBuffer): Unit = {
     // work on a copy since the super class still needs to use the buffer

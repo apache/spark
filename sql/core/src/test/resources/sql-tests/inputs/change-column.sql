@@ -15,29 +15,34 @@ ALTER TABLE test_change CHANGE a TYPE STRING;
 DESC test_change;
 
 -- Change column position (not supported yet)
-ALTER TABLE test_change CHANGE a TYPE INT AFTER b;
-ALTER TABLE test_change CHANGE b TYPE STRING FIRST;
+ALTER TABLE test_change CHANGE a AFTER b;
+ALTER TABLE test_change CHANGE b FIRST;
 DESC test_change;
 
 -- Change column comment
-ALTER TABLE test_change CHANGE a TYPE INT COMMENT 'this is column a';
-ALTER TABLE test_change CHANGE b TYPE STRING COMMENT '#*02?`';
-ALTER TABLE test_change CHANGE c TYPE INT COMMENT '';
+ALTER TABLE test_change CHANGE a COMMENT 'this is column a';
+ALTER TABLE test_change CHANGE b COMMENT '#*02?`';
+ALTER TABLE test_change CHANGE c COMMENT '';
 DESC test_change;
 
 -- Don't change anything.
-ALTER TABLE test_change CHANGE a TYPE INT COMMENT 'this is column a';
+ALTER TABLE test_change CHANGE a TYPE INT;
+ALTER TABLE test_change CHANGE a COMMENT 'this is column a';
 DESC test_change;
 
 -- Change a invalid column
 ALTER TABLE test_change CHANGE invalid_col TYPE INT;
 DESC test_change;
 
+-- Check case insensitivity.
+ALTER TABLE test_change CHANGE A COMMENT 'case insensitivity';
+DESC test_change;
+
 -- Change column can't apply to a temporary/global_temporary view
 CREATE TEMPORARY VIEW temp_view(a, b) AS SELECT 1, "one";
-ALTER TABLE temp_view CHANGE a TYPE INT COMMENT 'this is column a';
+ALTER TABLE temp_view CHANGE a TYPE INT;
 CREATE GLOBAL TEMPORARY VIEW global_temp_view(a, b) AS SELECT 1, "one";
-ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT COMMENT 'this is column a';
+ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT;
 
 -- DROP TEST TABLE
 DROP TABLE test_change;

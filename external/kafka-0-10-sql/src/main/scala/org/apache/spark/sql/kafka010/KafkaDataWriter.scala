@@ -22,6 +22,7 @@ import java.{util => ju}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.kafka010.producer.{CachedKafkaProducer, InternalKafkaProducerPool}
 
 /**
  * Dummy commit message. The DataSourceV2 framework requires a commit message implementation but we
@@ -44,47 +45,30 @@ private[kafka010] class KafkaDataWriter(
     inputSchema: Seq[Attribute])
   extends KafkaRowWriter(inputSchema, targetTopic) with DataWriter[InternalRow] {
 
-  private var producer = CachedKafkaProducer.acquire(producerParams)
+  private var producer: Option[CachedKafkaProducer] = None
 
   def write(row: InternalRow): Unit = {
     checkForErrors()
-    sendRow(row, producer)
+    if (producer.isEmpty) {
+      producer = Some(InternalKafkaProducerPool.acquire(producerParams))
+    }
+    producer.foreach { p => sendRow(row, p.producer) }
   }
 
   def commit(): WriterCommitMessage = {
     // Send is asynchronous, but we can't commit until all rows are actually in Kafka.
     // This requires flushing and then checking that no callbacks produced errors.
     // We also check for errors before to fail as soon as possible - the check is cheap.
-    try {
-      checkForErrors()
-      producer.flush()
-      checkForErrors()
-    } finally {
-      releaseProducer()
-    }
+    checkForErrors()
+    producer.foreach(_.producer.flush())
+    checkForErrors()
     KafkaDataWriterCommitMessage
   }
 
-  def abort(): Unit = {
-    close()
-  }
+  def abort(): Unit = {}
 
   def close(): Unit = {
-    try {
-      checkForErrors()
-      if (producer != null) {
-        producer.flush()
-        checkForErrors()
-      }
-    } finally {
-      releaseProducer()
-    }
-  }
-
-  private def releaseProducer(): Unit = {
-    if (producer != null) {
-      CachedKafkaProducer.release(producer)
-      producer = null
-    }
+    producer.foreach(InternalKafkaProducerPool.release)
+    producer = None
   }
 }

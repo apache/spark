@@ -18,7 +18,7 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
 
 /**
@@ -39,8 +39,8 @@ private[ml] class HingeAggregator(
     fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[Instance, HingeAggregator] {
 
-  private val numFeatures: Int = bcFeaturesStd.value.length
-  private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
+  private val numFeatures = bcFeaturesStd.value.length
+  private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   @transient private lazy val coefficientsArray = bcCoefficients.value match {
     case DenseVector(values) => values
     case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
@@ -68,8 +68,8 @@ private[ml] class HingeAggregator(
 
       val dotProduct = {
         var sum = 0.0
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        features.foreachNonZero { (index, value) =>
+          if (localFeaturesStd(index) != 0.0) {
             sum += localCoefficients(index) * value / localFeaturesStd(index)
           }
         }
@@ -87,8 +87,8 @@ private[ml] class HingeAggregator(
 
       if (1.0 > labelScaled * dotProduct) {
         val gradientScale = -labelScaled * weight
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        features.foreachNonZero { (index, value) =>
+          if (localFeaturesStd(index) != 0.0) {
             localGradientSumArray(index) += value * gradientScale / localFeaturesStd(index)
           }
         }
@@ -101,5 +101,107 @@ private[ml] class HingeAggregator(
       weightSum += weight
       this
     }
+  }
+}
+
+
+/**
+ * BlockHingeAggregator computes the gradient and loss for Hinge loss function as used in
+ * binary classification for blocks in sparse or dense matrix in an online fashion.
+ *
+ * Two BlockHingeAggregators can be merged together to have a summary of loss and gradient of
+ * the corresponding joint dataset.
+ *
+ * NOTE: The feature values are expected to be standardized before computation.
+ *
+ * @param bcCoefficients The coefficients corresponding to the features.
+ * @param fitIntercept Whether to fit an intercept term.
+ */
+private[ml] class BlockHingeAggregator(
+    fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
+  extends DifferentiableLossAggregator[InstanceBlock, BlockHingeAggregator] {
+
+  protected override val dim: Int = bcCoefficients.value.size
+  private val numFeatures = if (fitIntercept) dim - 1 else dim
+
+  @transient private lazy val coefficientsArray = bcCoefficients.value match {
+    case DenseVector(values) => values
+    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
+      s" but got type ${bcCoefficients.value.getClass}.")
+  }
+
+  @transient private lazy val linear = {
+    val linear = if (fitIntercept) coefficientsArray.take(numFeatures) else coefficientsArray
+    Vectors.dense(linear)
+  }
+
+  /**
+   * Add a new training instance block to this BlockHingeAggregator, and update the loss and
+   * gradient of the objective function.
+   *
+   * @param block The InstanceBlock to be added.
+   * @return This BlockHingeAggregator object.
+   */
+  def add(block: InstanceBlock): this.type = {
+    require(block.matrix.isTransposed)
+    require(numFeatures == block.numFeatures, s"Dimensions mismatch when adding new " +
+      s"instance. Expecting $numFeatures but got ${block.numFeatures}.")
+    require(block.weightIter.forall(_ >= 0),
+      s"instance weights ${block.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
+
+    if (block.weightIter.forall(_ == 0)) return this
+    val size = block.size
+
+    // vec here represents dotProducts
+    val vec = if (fitIntercept) {
+      Vectors.dense(Array.fill(size)(coefficientsArray.last)).toDense
+    } else {
+      Vectors.zeros(size).toDense
+    }
+    BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
+
+    // in-place convert dotProducts to gradient scales
+    // then, vec represents gradient scales
+    var i = 0
+    while (i < size) {
+      val weight = block.getWeight(i)
+      if (weight > 0) {
+        weightSum += weight
+        // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
+        // Therefore the gradient is -(2y - 1)*x
+        val label = block.getLabel(i)
+        val labelScaled = label + label - 1.0
+        val loss = (1.0 - labelScaled * vec(i)) * weight
+        if (loss > 0) {
+          lossSum += loss
+          val gradScale = -labelScaled * weight
+          vec.values(i) = gradScale
+        } else { vec.values(i) = 0.0 }
+      } else { vec.values(i) = 0.0 }
+      i += 1
+    }
+
+    // predictions are all correct, no gradient signal
+    if (vec.values.forall(_ == 0)) return this
+
+    block.matrix match {
+      case dm: DenseMatrix =>
+        BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
+          vec.values, 1, 1.0, gradientSumArray, 1)
+
+      case sm: SparseMatrix if fitIntercept =>
+        val linearGradSumVec = Vectors.zeros(numFeatures).toDense
+        BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
+        BLAS.getBLAS(numFeatures).daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
+          gradientSumArray, 1)
+
+      case sm: SparseMatrix if !fitIntercept =>
+        val gradSumVec = new DenseVector(gradientSumArray)
+        BLAS.gemv(1.0, sm.transpose, vec, 1.0, gradSumVec)
+    }
+
+    if (fitIntercept) gradientSumArray(numFeatures) += vec.values.sum
+
+    this
   }
 }

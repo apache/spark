@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import org.apache.commons.io.FileUtils
 import test.custom.listener.{DummyQueryExecutionListener, DummyStreamingQueryListener}
 
 import org.apache.spark.SparkFunSuite
@@ -25,10 +26,19 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils.{HIVE_METASTORE_JARS, HIVE_METASTORE_VERSION}
 import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.internal.StaticSQLConf.{QUERY_EXECUTION_LISTENERS, STREAMING_QUERY_LISTENERS, WAREHOUSE_PATH}
+import org.apache.spark.util.Utils
 
 class SparkSQLEnvSuite extends SparkFunSuite {
   test("SPARK-29604 external listeners should be initialized with Spark classloader") {
+    val metastorePath = Utils.createTempDir("spark_derby")
+    FileUtils.forceDelete(metastorePath)
+
+    val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
+
     withSystemProperties(
+      "javax.jdo.option.ConnectionURL" -> jdbcUrl,
+      "derby.system.durability" -> "test",
+      "spark.ui.enabled" -> "false",
       QUERY_EXECUTION_LISTENERS.key -> classOf[DummyQueryExecutionListener].getCanonicalName,
       STREAMING_QUERY_LISTENERS.key -> classOf[DummyStreamingQueryListener].getCanonicalName,
       WAREHOUSE_PATH.key -> TestHiveContext.makeWarehouseDir().toURI.getPath,

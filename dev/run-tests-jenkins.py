@@ -22,15 +22,9 @@ import sys
 import json
 import functools
 import subprocess
-if sys.version < '3':
-    from urllib2 import urlopen
-    from urllib2 import Request
-    from urllib2 import HTTPError, URLError
-else:
-    from urllib.request import urlopen
-    from urllib.request import Request
-    from urllib.error import HTTPError, URLError
-
+from urllib.request import urlopen
+from urllib.request import Request
+from urllib.error import HTTPError, URLError
 
 from sparktestsupport import SPARK_HOME, ERROR_CODES
 from sparktestsupport.shellutils import run_cmd
@@ -176,12 +170,15 @@ def main():
     if "test-maven" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_TOOL"] = "maven"
     # Switch the Hadoop profile based on the PR title:
-    if "test-hadoop2.6" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.6"
     if "test-hadoop2.7" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.7"
     if "test-hadoop3.2" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop3.2"
+    # Switch the Hive profile based on the PR title:
+    if "test-hive1.2" in ghprb_pull_title:
+        os.environ["AMPLAB_JENKINS_BUILD_HIVE_PROFILE"] = "hive1.2"
+    if "test-hive2.3" in ghprb_pull_title:
+        os.environ["AMPLAB_JENKINS_BUILD_HIVE_PROFILE"] = "hive2.3"
 
     build_display_name = os.environ["BUILD_DISPLAY_NAME"]
     build_url = os.environ["BUILD_URL"]
@@ -195,7 +192,7 @@ def main():
     # format: http://linux.die.net/man/1/timeout
     # must be less than the timeout configured on Jenkins. Usually Jenkins's timeout is higher
     # then this. Please consult with the build manager or a committer when it should be increased.
-    tests_timeout = "400m"
+    tests_timeout = "500m"
 
     # Array to capture all test names to run on the pull request. These tests are represented
     # by their file equivalents in the dev/tests/ directory.

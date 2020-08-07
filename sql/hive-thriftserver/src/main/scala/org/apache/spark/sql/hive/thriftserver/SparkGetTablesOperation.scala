@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.{List => JList, UUID}
+import java.util.{List => JList}
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
 
-import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObjectUtils
+import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetTablesOperation
 import org.apache.hive.service.cli.session.HiveSession
@@ -33,7 +31,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Spark's own GetTablesOperation
@@ -46,24 +43,17 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param tableTypes list of allowed table types, e.g. "TABLE", "VIEW"
  */
 private[hive] class SparkGetTablesOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
     tableName: String,
     tableTypes: JList[String])
   extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
-    with SparkMetadataOperationUtils with Logging {
-
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.listener.onOperationClosed(statementId)
-  }
+  with SparkOperation
+  with Logging {
 
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
@@ -85,7 +75,7 @@ private[hive] class SparkGetTablesOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr)
     }
 
-    HiveThriftServer2.listener.onStatementStart(
+    HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -118,23 +108,9 @@ private[hive] class SparkGetTablesOperation(
         }
       }
       setState(OperationState.FINISHED)
-    } catch {
-      case e: Throwable =>
-        logError(s"Error executing get tables operation with $statementId", e)
-        setState(OperationState.ERROR)
-        e match {
-          case hiveException: HiveSQLException =>
-            HiveThriftServer2.listener.onStatementError(
-              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
-            throw hiveException
-          case _ =>
-            val root = ExceptionUtils.getRootCause(e)
-            HiveThriftServer2.listener.onStatementError(
-              statementId, root.getMessage, SparkUtils.exceptionString(root))
-            throw new HiveSQLException("Error getting tables: " + root.toString, root)
-        }
-    }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    } catch onError()
+
+    HiveThriftServer2.eventManager.onStatementFinish(statementId)
   }
 
   private def addToRowSet(

@@ -17,32 +17,78 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, With}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, With}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_ENABLED
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_CTE_PRECEDENCE_POLICY, LegacyBehaviorPolicy}
 
 /**
  * Analyze WITH nodes and substitute child plan with CTE definitions.
  */
 object CTESubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_ENABLED)) {
-      legacyTraverseAndSubstituteCTE(plan)
-    } else {
-      traverseAndSubstituteCTE(plan, false)
+    LegacyBehaviorPolicy.withName(SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {
+      case LegacyBehaviorPolicy.EXCEPTION =>
+        assertNoNameConflictsInCTE(plan)
+        traverseAndSubstituteCTE(plan)
+      case LegacyBehaviorPolicy.LEGACY =>
+        legacyTraverseAndSubstituteCTE(plan)
+      case LegacyBehaviorPolicy.CORRECTED =>
+        traverseAndSubstituteCTE(plan)
+    }
+  }
+
+  /**
+   * Spark 3.0 changes the CTE relations resolution, and inner relations take precedence. This is
+   * correct but we need to warn users about this behavior change under EXCEPTION mode, when we see
+   * CTE relations with conflicting names.
+   *
+   * Note that, before Spark 3.0 the parser didn't support CTE in the FROM clause. For example,
+   * `WITH ... SELECT * FROM (WITH ... SELECT ...)` was not supported. We should not fail for this
+   * case, as Spark versions before 3.0 can't run it anyway. The parameter `startOfQuery` is used
+   * to indicate where we can define CTE relations before Spark 3.0, and we should only check
+   * name conflicts when `startOfQuery` is true.
+   */
+  private def assertNoNameConflictsInCTE(
+      plan: LogicalPlan,
+      outerCTERelationNames: Seq[String] = Nil,
+      startOfQuery: Boolean = true): Unit = {
+    val resolver = SQLConf.get.resolver
+    plan match {
+      case With(child, relations) =>
+        val newNames = mutable.ArrayBuffer.empty[String]
+        newNames ++= outerCTERelationNames
+        relations.foreach {
+          case (name, relation) =>
+            if (startOfQuery && outerCTERelationNames.exists(resolver(_, name))) {
+              throw new AnalysisException(s"Name $name is ambiguous in nested CTE. " +
+                s"Please set ${LEGACY_CTE_PRECEDENCE_POLICY.key} to CORRECTED so that name " +
+                "defined in inner CTE takes precedence. If set it to LEGACY, outer CTE " +
+                "definitions will take precedence. See more details in SPARK-28228.")
+            }
+            // CTE relation is defined as `SubqueryAlias`. Here we skip it and check the child
+            // directly, so that `startOfQuery` is set correctly.
+            assertNoNameConflictsInCTE(relation.child, newNames.toSeq)
+            newNames += name
+        }
+        assertNoNameConflictsInCTE(child, newNames.toSeq, startOfQuery = false)
+
+      case other =>
+        other.subqueries.foreach(assertNoNameConflictsInCTE(_, outerCTERelationNames))
+        other.children.foreach(
+          assertNoNameConflictsInCTE(_, outerCTERelationNames, startOfQuery = false))
     }
   }
 
   private def legacyTraverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
       case With(child, relations) =>
-        // substitute CTE expressions right-to-left to resolve references to previous CTEs:
-        // with a as (select * from t), b as (select * from a) select * from b
-        relations.foldRight(child) {
-          case ((cteName, ctePlan), currentPlan) => substituteCTE(currentPlan, cteName, ctePlan)
-        }
+        val resolvedCTERelations = resolveCTERelations(relations, isLegacy = true)
+        substituteCTE(child, resolvedCTERelations)
     }
   }
 
@@ -85,52 +131,53 @@ object CTESubstitution extends Rule[LogicalPlan] {
    *     SELECT * FROM t
    *   )
    * @param plan the plan to be traversed
-   * @param inTraverse whether the current traverse is called from another traverse, only in this
-   *                   case name collision can occur
    * @return the plan where CTE substitution is applied
    */
-  private def traverseAndSubstituteCTE(plan: LogicalPlan, inTraverse: Boolean): LogicalPlan = {
+  private def traverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
       case With(child: LogicalPlan, relations) =>
-        // child might contain an inner CTE that has priority so traverse and substitute inner CTEs
-        // in child first
-        val traversedChild: LogicalPlan = child transformExpressions {
-          case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan, true))
-        }
+        val resolvedCTERelations = resolveCTERelations(relations, isLegacy = false)
+        substituteCTE(child, resolvedCTERelations)
 
-        // Substitute CTE definitions from last to first as a CTE definition can reference a
-        // previous one
-        relations.foldRight(traversedChild) {
-          case ((cteName, ctePlan), currentPlan) =>
-            // A CTE definition might contain an inner CTE that has priority, so traverse and
-            // substitute CTE defined in ctePlan.
-            // A CTE definition might not be used at all or might be used multiple times. To avoid
-            // computation if it is not used and to avoid multiple recomputation if it is used
-            // multiple times we use a lazy construct with call-by-name parameter passing.
-            lazy val substitutedCTEPlan = traverseAndSubstituteCTE(ctePlan, true)
-            substituteCTE(currentPlan, cteName, substitutedCTEPlan)
-        }
-
-      // CTE name collision can occur only when inTraverse is true, it helps to avoid eager CTE
-      // substitution in a subquery expression.
-      case other if inTraverse =>
+      case other =>
         other.transformExpressions {
-          case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan, true))
+          case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan))
         }
     }
   }
 
+  private def resolveCTERelations(
+      relations: Seq[(String, SubqueryAlias)],
+      isLegacy: Boolean): Seq[(String, LogicalPlan)] = {
+    val resolvedCTERelations = new mutable.ArrayBuffer[(String, LogicalPlan)](relations.size)
+    for ((name, relation) <- relations) {
+      val innerCTEResolved = if (isLegacy) {
+        // In legacy mode, outer CTE relations take precedence. Here we don't resolve the inner
+        // `With` nodes, later we will substitute `UnresolvedRelation`s with outer CTE relations.
+        // Analyzer will run this rule multiple times until all `With` nodes are resolved.
+        relation
+      } else {
+        // A CTE definition might contain an inner CTE that has a higher priority, so traverse and
+        // substitute CTE defined in `relation` first.
+        traverseAndSubstituteCTE(relation)
+      }
+      // CTE definition can reference a previous one
+      resolvedCTERelations += (name -> substituteCTE(innerCTEResolved, resolvedCTERelations.toSeq))
+    }
+    resolvedCTERelations.toSeq
+  }
+
   private def substituteCTE(
       plan: LogicalPlan,
-      cteName: String,
-      ctePlan: => LogicalPlan): LogicalPlan =
+      cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan =
     plan resolveOperatorsUp {
-      case UnresolvedRelation(Seq(table)) if plan.conf.resolver(cteName, table) => ctePlan
+      case u @ UnresolvedRelation(Seq(table)) =>
+        cteRelations.find(r => plan.conf.resolver(r._1, table)).map(_._2).getOrElse(u)
 
       case other =>
         // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
         other transformExpressions {
-          case e: SubqueryExpression => e.withNewPlan(substituteCTE(e.plan, cteName, ctePlan))
+          case e: SubqueryExpression => e.withNewPlan(substituteCTE(e.plan, cteRelations))
         }
     }
 }

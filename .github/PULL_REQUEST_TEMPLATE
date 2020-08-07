@@ -6,6 +6,8 @@ Thanks for sending a pull request!  Here are some tips for you:
   4. Be sure to keep the PR description updated to reflect all changes.
   5. Please write your PR title to summarize what this PR proposes.
   6. If possible, provide a concise example to reproduce the issue for a faster review.
+  7. If you want to add a new configuration, please read the guideline first for naming configurations in
+     'core/src/main/scala/org/apache/spark/internal/config/ConfigEntry.scala'.
 -->
 
 ### What changes were proposed in this pull request?
@@ -27,9 +29,11 @@ Please clarify why the changes are needed. For instance,
 -->
 
 
-### Does this PR introduce any user-facing change?
+### Does this PR introduce _any_ user-facing change?
 <!--
+Note that it means *any* user-facing change including all aspects such as the documentation fix.
 If yes, please clarify the previous behavior and the change this PR proposes - provide the console output, description and/or an example to show the behavior difference if possible.
+If possible, please also clarify if this is a user-facing change compared to the released Spark versions or within the unreleased branches such as master.
 If no, write 'No'.
 -->
 

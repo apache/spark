@@ -31,9 +31,10 @@ import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.StreamingConf.STREAMING_UNPERSIST
 import org.apache.spark.streaming.StreamingContext.rddToFileName
 import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.streaming.ui.UIUtils
+import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 import org.apache.spark.util.{CallSite, Utils}
 
 /**
@@ -138,7 +139,7 @@ abstract class DStream[T: ClassTag] (
    */
   private def makeScope(time: Time): Option[RDDOperationScope] = {
     baseScope.map { bsJson =>
-      val formattedBatchTime = UIUtils.formatBatchTime(
+      val formattedBatchTime = SparkUIUtils.formatBatchTime(
         time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
       val bs = RDDOperationScope.fromJson(bsJson)
       val baseName = bs.name // e.g. countByWindow, "kafka stream [0]"
@@ -447,7 +448,7 @@ abstract class DStream[T: ClassTag] (
    * this to clear their own metadata along with the generated RDDs.
    */
   private[streaming] def clearMetadata(time: Time): Unit = {
-    val unpersistData = ssc.conf.getBoolean("spark.streaming.unpersist", true)
+    val unpersistData = ssc.conf.get(STREAMING_UNPERSIST)
     val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
     logDebug("Clearing references to old RDDs: [" +
       oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]")

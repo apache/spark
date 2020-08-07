@@ -50,7 +50,7 @@ correlation methods are currently Pearson's and Spearman's correlation.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`Correlation`](api/scala/index.html#org.apache.spark.ml.stat.Correlation$)
+[`Correlation`](api/scala/org/apache/spark/ml/stat/Correlation$.html)
 computes the correlation matrix for the input Dataset of Vectors using the specified method.
 The output will be a DataFrame that contains the correlation matrix of the column of vectors.
 
@@ -79,7 +79,35 @@ The output will be a DataFrame that contains the correlation matrix of the colum
 
 Hypothesis testing is a powerful tool in statistics to determine whether a result is statistically
 significant, whether this result occurred by chance or not. `spark.ml` currently supports Pearson's
-Chi-squared ( $\chi^2$) tests for independence.
+Chi-squared ( $\chi^2$) tests for independence, as well as ANOVA test for classification tasks and
+F-value test for regression tasks.
+
+### ANOVATest
+
+`ANOVATest` computes ANOVA F-values between labels and features for classification tasks. The labels should be categorical
+and features should be continuous.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+Refer to the [`ANOVATest` Scala docs](api/scala/org/apache/spark/ml/stat/ANOVATest$.html) for details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/ANOVATestExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+Refer to the [`ANOVATest` Java docs](api/java/org/apache/spark/ml/stat/ANOVATest.html) for details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaANOVATestExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+Refer to the [`ANOVATest` Python docs](api/python/index.html#pyspark.ml.stat.ANOVATest$) for details on the API.
+
+{% include_example python/ml/anova_test_example.py %}
+</div>
+</div>
+
+### ChiSquareTest
 
 `ChiSquareTest` conducts Pearson's independence test for every feature against the label.
 For each feature, the (feature, label) pairs are converted into a contingency matrix for which
@@ -87,7 +115,7 @@ the Chi-squared statistic is computed. All label and feature values must be cate
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`ChiSquareTest` Scala docs](api/scala/index.html#org.apache.spark.ml.stat.ChiSquareTest$) for details on the API.
+Refer to the [`ChiSquareTest` Scala docs](api/scala/org/apache/spark/ml/stat/ChiSquareTest$.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ChiSquareTestExample.scala %}
 </div>
@@ -106,14 +134,41 @@ Refer to the [`ChiSquareTest` Python docs](api/python/index.html#pyspark.ml.stat
 
 </div>
 
+### FValueTest
+
+`FValueTest` computes F-values between labels and features for regression tasks. Both the labels
+ and features should be continuous.
+
+ <div class="codetabs">
+ <div data-lang="scala" markdown="1">
+ Refer to the [`FValueTest` Scala docs](api/scala/org/apache/spark/ml/stat/FValueTest$.html) for details on the API.
+
+ {% include_example scala/org/apache/spark/examples/ml/FValueTestExample.scala %}
+ </div>
+
+ <div data-lang="java" markdown="1">
+ Refer to the [`FValueTest` Java docs](api/java/org/apache/spark/ml/stat/FValueTest.html) for details on the API.
+
+ {% include_example java/org/apache/spark/examples/ml/JavaFValueTestExample.java %}
+ </div>
+
+ <div data-lang="python" markdown="1">
+ Refer to the [`FValueTest` Python docs](api/python/index.html#pyspark.ml.stat.FValueTest$) for details on the API.
+
+ {% include_example python/ml/fvalue_test_example.py %}
+ </div>
+
+ </div>
+
 ## Summarizer
 
 We provide vector column summary statistics for `Dataframe` through `Summarizer`.
-Available metrics are the column-wise max, min, mean, variance, and number of nonzeros, as well as the total count.
+Available metrics are the column-wise max, min, mean, sum, variance, std, and number of nonzeros,
+as well as the total count.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-The following example demonstrates using [`Summarizer`](api/scala/index.html#org.apache.spark.ml.stat.Summarizer$)
+The following example demonstrates using [`Summarizer`](api/scala/org/apache/spark/ml/stat/Summarizer$.html)
 to compute the mean and variance for a vector column of the input dataframe, with and without a weight column.
 
 {% include_example scala/org/apache/spark/examples/ml/SummarizerExample.scala %}

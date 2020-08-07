@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import javax.lang.model.SourceVersion
+
 import org.apache.commons.lang3.reflect.ConstructorUtils
 
 import org.apache.spark.internal.Logging
@@ -124,10 +126,13 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, definitions.ShortTpe) => classOf[Array[Short]]
       case t if isSubtype(t, definitions.ByteTpe) => classOf[Array[Byte]]
       case t if isSubtype(t, definitions.BooleanTpe) => classOf[Array[Boolean]]
+      case t if isSubtype(t, localTypeOf[Array[Byte]]) => classOf[Array[Array[Byte]]]
+      case t if isSubtype(t, localTypeOf[CalendarInterval]) => classOf[Array[CalendarInterval]]
+      case t if isSubtype(t, localTypeOf[Decimal]) => classOf[Array[Decimal]]
       case other =>
         // There is probably a better way to do this, but I couldn't find it...
         val elementType = dataTypeFor(other).asInstanceOf[ObjectType].cls
-        java.lang.reflect.Array.newInstance(elementType, 1).getClass
+        java.lang.reflect.Array.newInstance(elementType, 0).getClass
 
     }
     ObjectType(cls)
@@ -539,9 +544,10 @@ object ScalaReflection extends ScalaReflection {
 
         val params = getConstructorParameters(t)
         val fields = params.map { case (fieldName, fieldType) =>
-          if (javaKeywords.contains(fieldName)) {
-            throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
-              "cannot be used as field name\n" + walkedTypePath)
+          if (SourceVersion.isKeyword(fieldName) ||
+              !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
+            throw new UnsupportedOperationException(s"`$fieldName` is not a valid identifier of " +
+              "Java and cannot be used as field name\n" + walkedTypePath)
           }
 
           // SPARK-26730 inputObject won't be null with If's guard below. And KnownNotNul
@@ -611,10 +617,39 @@ object ScalaReflection extends ScalaReflection {
     }
   }
 
+  private def erasure(tpe: Type): Type = {
+    // For user-defined AnyVal classes, we should not erasure it. Otherwise, it will
+    // resolve to underlying type which wrapped by this class, e.g erasure
+    // `case class Foo(i: Int) extends AnyVal` will return type `Int` instead of `Foo`.
+    // But, for other types, we do need to erasure it. For example, we need to erasure
+    // `scala.Any` to `java.lang.Object` in order to load it from Java ClassLoader.
+    // Please see SPARK-17368 & SPARK-31190 for more details.
+    if (isSubtype(tpe, localTypeOf[AnyVal]) && !tpe.toString.startsWith("scala")) {
+      tpe
+    } else {
+      tpe.erasure
+    }
+  }
+
+  /**
+   * Returns the full class name for a type. The returned name is the canonical
+   * Scala name, where each component is separated by a period. It is NOT the
+   * Java-equivalent runtime name (no dollar signs).
+   *
+   * In simple cases, both the Scala and Java names are the same, however when Scala
+   * generates constructs that do not map to a Java equivalent, such as singleton objects
+   * or nested classes in package objects, it uses the dollar sign ($) to create
+   * synthetic classes, emulating behaviour in Java bytecode.
+   */
+  def getClassNameFromType(tpe: `Type`): String = {
+    erasure(tpe).dealias.typeSymbol.asClass.fullName
+  }
+
   /*
    * Retrieves the runtime class corresponding to the provided type.
    */
-  def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.dealias.typeSymbol.asClass)
+  def getClassFromType(tpe: Type): Class[_] =
+    mirror.runtimeClass(erasure(tpe).dealias.typeSymbol.asClass)
 
   case class Schema(dataType: DataType, nullable: Boolean)
 
@@ -671,6 +706,8 @@ object ScalaReflection extends ScalaReflection {
         Schema(TimestampType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.LocalDate]) => Schema(DateType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.sql.Date]) => Schema(DateType, nullable = true)
+      case t if isSubtype(t, localTypeOf[CalendarInterval]) =>
+        Schema(CalendarIntervalType, nullable = true)
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
@@ -753,13 +790,6 @@ object ScalaReflection extends ScalaReflection {
     }
   }
 
-  private val javaKeywords = Set("abstract", "assert", "boolean", "break", "byte", "case", "catch",
-    "char", "class", "const", "continue", "default", "do", "double", "else", "extends", "false",
-    "final", "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int",
-    "interface", "long", "native", "new", "null", "package", "private", "protected", "public",
-    "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this", "throw",
-    "throws", "transient", "true", "try", "void", "volatile", "while")
-
   val typeJavaMapping = Map[DataType, Class[_]](
     BooleanType -> classOf[Boolean],
     ByteType -> classOf[Byte],
@@ -818,6 +848,10 @@ object ScalaReflection extends ScalaReflection {
       Seq.empty
     }
   }
+
+  def encodeFieldNameToIdentifier(fieldName: String): String = {
+    TermName(fieldName).encodedName.toString
+  }
 }
 
 /**
@@ -861,20 +895,6 @@ trait ScalaReflection extends Logging {
   def localTypeOf[T: TypeTag]: `Type` = {
     val tag = implicitly[TypeTag[T]]
     tag.in(mirror).tpe.dealias
-  }
-
-  /**
-   * Returns the full class name for a type. The returned name is the canonical
-   * Scala name, where each component is separated by a period. It is NOT the
-   * Java-equivalent runtime name (no dollar signs).
-   *
-   * In simple cases, both the Scala and Java names are the same, however when Scala
-   * generates constructs that do not map to a Java equivalent, such as singleton objects
-   * or nested classes in package objects, it uses the dollar sign ($) to create
-   * synthetic classes, emulating behaviour in Java bytecode.
-   */
-  def getClassNameFromType(tpe: `Type`): String = {
-    tpe.dealias.erasure.typeSymbol.asClass.fullName
   }
 
   /**

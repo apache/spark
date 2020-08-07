@@ -18,13 +18,11 @@
 package org.apache.spark.status
 
 import java.util.Collection
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
-
-import com.google.common.util.concurrent.MoreExecutors
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config.Status._
@@ -72,10 +70,10 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
 
   private val triggers = new HashMap[Class[_], LatchedTriggers]()
   private val flushTriggers = new ListBuffer[() => Unit]()
-  private val executor = if (conf.get(ASYNC_TRACKING_ENABLED)) {
+  private val executor: ExecutorService = if (conf.get(ASYNC_TRACKING_ENABLED)) {
     ThreadUtils.newDaemonSingleThreadExecutor("element-tracking-store-worker")
   } else {
-    MoreExecutors.sameThreadExecutor()
+    ThreadUtils.sameThreadExecutorService
   }
 
   @volatile private var stopped = false

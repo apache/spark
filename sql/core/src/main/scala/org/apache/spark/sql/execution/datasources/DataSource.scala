@@ -26,6 +26,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -50,7 +51,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -108,6 +109,9 @@ case class DataSource(
   }
 
   private def providingInstance() = providingClass.getConstructor().newInstance()
+
+  private def newHadoopConfiguration(): Configuration =
+    sparkSession.sessionState.newHadoopConfWithOptions(options)
 
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
@@ -230,7 +234,7 @@ case class DataSource(
         // once the streaming job starts and some upstream source starts dropping data.
         val hdfsPath = new Path(path)
         if (!SparkHadoopUtil.get.isGlobPath(hdfsPath)) {
-          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+          val fs = hdfsPath.getFileSystem(newHadoopConfiguration())
           if (!fs.exists(hdfsPath)) {
             throw new AnalysisException(s"Path does not exist: $path")
           }
@@ -343,7 +347,12 @@ case class DataSource(
         val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
         if (baseRelation.schema != schema) {
-          throw new AnalysisException(s"$className does not allow user-specified schemas.")
+          throw new AnalysisException(
+            "The user-specified schema doesn't match the actual schema: " +
+            s"user-specified: ${schema.toDDL}, actual: ${baseRelation.schema.toDDL}. If " +
+            "you're using DataFrameReader.schema API or creating a table, please do not " +
+            "specify the schema. Or if you're scanning an existed table, please drop " +
+            "it and re-create it.")
         }
         baseRelation
 
@@ -352,7 +361,7 @@ case class DataSource(
       case (format: FileFormat, _)
           if FileStreamSink.hasMetadata(
             caseInsensitiveOptions.get("path").toSeq ++ paths,
-            sparkSession.sessionState.newHadoopConf(),
+            newHadoopConfiguration(),
             sparkSession.sessionState.conf) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath,
@@ -412,18 +421,18 @@ case class DataSource(
 
     relation match {
       case hs: HadoopFsRelation =>
-        SchemaUtils.checkColumnNameDuplication(
-          hs.dataSchema.map(_.name),
+        SchemaUtils.checkSchemaColumnNameDuplication(
+          hs.dataSchema,
           "in the data schema",
           equality)
-        SchemaUtils.checkColumnNameDuplication(
-          hs.partitionSchema.map(_.name),
+        SchemaUtils.checkSchemaColumnNameDuplication(
+          hs.partitionSchema,
           "in the partition schema",
           equality)
         DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema)
       case _ =>
-        SchemaUtils.checkColumnNameDuplication(
-          relation.schema.map(_.name),
+        SchemaUtils.checkSchemaColumnNameDuplication(
+          relation.schema,
           "in the data schema",
           equality)
     }
@@ -444,7 +453,7 @@ case class DataSource(
     val allPaths = paths ++ caseInsensitiveOptions.get("path")
     val outputPath = if (allPaths.length == 1) {
       val path = new Path(allPaths.head)
-      val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+      val fs = path.getFileSystem(newHadoopConfiguration())
       path.makeQualified(fs.getUri, fs.getWorkingDirectory)
     } else {
       throw new IllegalArgumentException("Expected exactly one path to be specified, but " +
@@ -564,9 +573,7 @@ case class DataSource(
       checkEmptyGlobPath: Boolean,
       checkFilesExist: Boolean): Seq[Path] = {
     val allPaths = caseInsensitiveOptions.get("path") ++ paths
-    val hadoopConf = sparkSession.sessionState.newHadoopConf()
-
-    DataSource.checkAndGlobPathIfNecessary(allPaths.toSeq, hadoopConf,
+    DataSource.checkAndGlobPathIfNecessary(allPaths.toSeq, newHadoopConfiguration(),
       checkEmptyGlobPath, checkFilesExist)
   }
 }
@@ -734,30 +741,53 @@ object DataSource extends Logging {
    * Checks and returns files in all the paths.
    */
   private[sql] def checkAndGlobPathIfNecessary(
-      paths: Seq[String],
+      pathStrings: Seq[String],
       hadoopConf: Configuration,
       checkEmptyGlobPath: Boolean,
-      checkFilesExist: Boolean): Seq[Path] = {
-    val allGlobPath = paths.flatMap { path =>
-      val hdfsPath = new Path(path)
-      val fs = hdfsPath.getFileSystem(hadoopConf)
-      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      val globPath = SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
-
-      if (checkEmptyGlobPath && globPath.isEmpty) {
-        throw new AnalysisException(s"Path does not exist: $qualified")
-      }
-
-      // Sufficient to check head of the globPath seq for non-glob scenario
-      // Don't need to check once again if files exist in streaming mode
-      if (checkFilesExist && !fs.exists(globPath.head)) {
-        throw new AnalysisException(s"Path does not exist: ${globPath.head}")
-      }
-      globPath
+      checkFilesExist: Boolean,
+      numThreads: Integer = 40): Seq[Path] = {
+    val qualifiedPaths = pathStrings.map { pathString =>
+      val path = new Path(pathString)
+      val fs = path.getFileSystem(hadoopConf)
+      path.makeQualified(fs.getUri, fs.getWorkingDirectory)
     }
 
+    // Split the paths into glob and non glob paths, because we don't need to do an existence check
+    // for globbed paths.
+    val (globPaths, nonGlobPaths) = qualifiedPaths.partition(SparkHadoopUtil.get.isGlobPath)
+
+    val globbedPaths =
+      try {
+        ThreadUtils.parmap(globPaths, "globPath", numThreads) { globPath =>
+          val fs = globPath.getFileSystem(hadoopConf)
+          val globResult = SparkHadoopUtil.get.globPath(fs, globPath)
+
+          if (checkEmptyGlobPath && globResult.isEmpty) {
+            throw new AnalysisException(s"Path does not exist: $globPath")
+          }
+
+          globResult
+        }.flatten
+      } catch {
+        case e: SparkException => throw e.getCause
+      }
+
     if (checkFilesExist) {
-      val (filteredOut, filteredIn) = allGlobPath.partition { path =>
+      try {
+        ThreadUtils.parmap(nonGlobPaths, "checkPathsExist", numThreads) { path =>
+          val fs = path.getFileSystem(hadoopConf)
+          if (!fs.exists(path)) {
+            throw new AnalysisException(s"Path does not exist: $path")
+          }
+        }
+      } catch {
+        case e: SparkException => throw e.getCause
+      }
+    }
+
+    val allPaths = globbedPaths ++ nonGlobPaths
+    if (checkFilesExist) {
+      val (filteredOut, filteredIn) = allPaths.partition { path =>
         InMemoryFileIndex.shouldFilterOut(path.getName)
       }
       if (filteredIn.isEmpty) {
@@ -769,7 +799,7 @@ object DataSource extends Logging {
       }
     }
 
-    allGlobPath
+    allPaths.toSeq
   }
 
   /**
@@ -781,7 +811,7 @@ object DataSource extends Logging {
     val path = CaseInsensitiveMap(options).get("path")
     val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
     CatalogStorageFormat.empty.copy(
-      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath)
+      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath.toMap)
   }
 
   /**

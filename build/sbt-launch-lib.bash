@@ -17,6 +17,7 @@ declare -a java_args
 declare -a scalac_args
 declare -a sbt_commands
 declare -a maven_profiles
+declare sbt_default_mem=2048
 
 if test -x "$JAVA_HOME/bin/java"; then
     echo -e "Using $JAVA_HOME as default JAVA_HOME."
@@ -111,11 +112,10 @@ addDebugger () {
 # a ham-fisted attempt to move some memory settings in concert
 # so they need not be dicked around with individually.
 get_mem_opts () {
-  local mem=${1:-2048}
-  local perm=$(( $mem / 4 ))
-  (( $perm > 256 )) || perm=256
-  (( $perm < 4096 )) || perm=4096
-  local codecache=$(( $perm / 2 ))
+  local mem=${1:-$sbt_default_mem}
+  local codecache=$(( $mem / 8 ))
+  (( $codecache > 128 )) || codecache=128
+  (( $codecache < 2048 )) || codecache=2048
 
   echo "-Xms${mem}m -Xmx${mem}m -XX:ReservedCodeCacheSize=${codecache}m"
 }

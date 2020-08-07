@@ -170,7 +170,7 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
       val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
       val manager = new SymmetricHashJoinStateManager(
         LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
-        stateFormatVersion)
+        partitionId = 0, stateFormatVersion)
       try {
         f(manager)
       } finally {

@@ -24,15 +24,18 @@ import com.codahale.metrics.MetricRegistry
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ui.JettyUtils._
 
 /**
+ * :: Experimental ::
  * This exposes the metrics of the given registry with Prometheus format.
  *
  * The output is consistent with /metrics/json result in terms of item ordering
  * and with the previous result of Spark JMX Sink + Prometheus JMX Converter combination
  * in terms of key string format.
  */
+@Experimental
 private[spark] class PrometheusServlet(
     val property: Properties,
     val registry: MetricRegistry,
@@ -53,58 +56,65 @@ private[spark] class PrometheusServlet(
   def getMetricsSnapshot(request: HttpServletRequest): String = {
     import scala.collection.JavaConverters._
 
+    val guagesLabel = """{type="gauges"}"""
+    val countersLabel = """{type="counters"}"""
+    val metersLabel = countersLabel
+    val histogramslabels = """{type="histograms"}"""
+    val timersLabels = """{type="timers"}"""
+
     val sb = new StringBuilder()
     registry.getGauges.asScala.foreach { case (k, v) =>
       if (!v.getValue.isInstanceOf[String]) {
-        sb.append(s"${normalizeKey(k)}Value ${v.getValue}\n")
+        sb.append(s"${normalizeKey(k)}Number$guagesLabel ${v.getValue}\n")
+        sb.append(s"${normalizeKey(k)}Value$guagesLabel ${v.getValue}\n")
       }
     }
     registry.getCounters.asScala.foreach { case (k, v) =>
-      sb.append(s"${normalizeKey(k)}Count ${v.getCount}\n")
+      sb.append(s"${normalizeKey(k)}Count$countersLabel ${v.getCount}\n")
     }
     registry.getHistograms.asScala.foreach { case (k, h) =>
       val snapshot = h.getSnapshot
       val prefix = normalizeKey(k)
-      sb.append(s"${prefix}Count ${h.getCount}\n")
-      sb.append(s"${prefix}Max ${snapshot.getMax}\n")
-      sb.append(s"${prefix}Mean ${snapshot.getMean}\n")
-      sb.append(s"${prefix}Min ${snapshot.getMin}\n")
-      sb.append(s"${prefix}50thPercentile ${snapshot.getMedian}\n")
-      sb.append(s"${prefix}75thPercentile ${snapshot.get75thPercentile}\n")
-      sb.append(s"${prefix}95thPercentile ${snapshot.get95thPercentile}\n")
-      sb.append(s"${prefix}98thPercentile ${snapshot.get98thPercentile}\n")
-      sb.append(s"${prefix}99thPercentile ${snapshot.get99thPercentile}\n")
-      sb.append(s"${prefix}999thPercentile ${snapshot.get999thPercentile}\n")
-      sb.append(s"${prefix}StdDev ${snapshot.getStdDev}\n")
+      sb.append(s"${prefix}Count$histogramslabels ${h.getCount}\n")
+      sb.append(s"${prefix}Max$histogramslabels ${snapshot.getMax}\n")
+      sb.append(s"${prefix}Mean$histogramslabels ${snapshot.getMean}\n")
+      sb.append(s"${prefix}Min$histogramslabels ${snapshot.getMin}\n")
+      sb.append(s"${prefix}50thPercentile$histogramslabels ${snapshot.getMedian}\n")
+      sb.append(s"${prefix}75thPercentile$histogramslabels ${snapshot.get75thPercentile}\n")
+      sb.append(s"${prefix}95thPercentile$histogramslabels ${snapshot.get95thPercentile}\n")
+      sb.append(s"${prefix}98thPercentile$histogramslabels ${snapshot.get98thPercentile}\n")
+      sb.append(s"${prefix}99thPercentile$histogramslabels ${snapshot.get99thPercentile}\n")
+      sb.append(s"${prefix}999thPercentile$histogramslabels ${snapshot.get999thPercentile}\n")
+      sb.append(s"${prefix}StdDev$histogramslabels ${snapshot.getStdDev}\n")
     }
     registry.getMeters.entrySet.iterator.asScala.foreach { kv =>
       val prefix = normalizeKey(kv.getKey)
       val meter = kv.getValue
-      sb.append(s"${prefix}Count ${meter.getCount}\n")
-      sb.append(s"${prefix}MeanRate ${meter.getMeanRate}\n")
-      sb.append(s"${prefix}OneMinuteRate ${meter.getOneMinuteRate}\n")
-      sb.append(s"${prefix}FiveMinuteRate ${meter.getFiveMinuteRate}\n")
-      sb.append(s"${prefix}FifteenMinuteRate ${meter.getFifteenMinuteRate}\n")
+      sb.append(s"${prefix}Count$metersLabel ${meter.getCount}\n")
+      sb.append(s"${prefix}MeanRate$metersLabel ${meter.getMeanRate}\n")
+      sb.append(s"${prefix}OneMinuteRate$metersLabel ${meter.getOneMinuteRate}\n")
+      sb.append(s"${prefix}FiveMinuteRate$metersLabel ${meter.getFiveMinuteRate}\n")
+      sb.append(s"${prefix}FifteenMinuteRate$metersLabel ${meter.getFifteenMinuteRate}\n")
     }
     registry.getTimers.entrySet.iterator.asScala.foreach { kv =>
       val prefix = normalizeKey(kv.getKey)
       val timer = kv.getValue
       val snapshot = timer.getSnapshot
-      sb.append(s"${prefix}Count ${timer.getCount}\n")
-      sb.append(s"${prefix}Max ${snapshot.getMax}\n")
-      sb.append(s"${prefix}Mean ${snapshot.getMax}\n")
-      sb.append(s"${prefix}Min ${snapshot.getMin}\n")
-      sb.append(s"${prefix}50thPercentile ${snapshot.getMedian}\n")
-      sb.append(s"${prefix}75thPercentile ${snapshot.get75thPercentile}\n")
-      sb.append(s"${prefix}95thPercentile ${snapshot.get95thPercentile}\n")
-      sb.append(s"${prefix}98thPercentile ${snapshot.get98thPercentile}\n")
-      sb.append(s"${prefix}99thPercentile ${snapshot.get99thPercentile}\n")
-      sb.append(s"${prefix}999thPercentile ${snapshot.get999thPercentile}\n")
-      sb.append(s"${prefix}StdDev ${snapshot.getStdDev}\n")
-      sb.append(s"${prefix}FifteenMinuteRate ${timer.getFifteenMinuteRate}\n")
-      sb.append(s"${prefix}FiveMinuteRate ${timer.getFiveMinuteRate}\n")
-      sb.append(s"${prefix}OneMinuteRate ${timer.getOneMinuteRate}\n")
-      sb.append(s"${prefix}MeanRate ${timer.getMeanRate}\n")
+      sb.append(s"${prefix}Count$timersLabels ${timer.getCount}\n")
+      sb.append(s"${prefix}Max$timersLabels ${snapshot.getMax}\n")
+      sb.append(s"${prefix}Mean$timersLabels ${snapshot.getMax}\n")
+      sb.append(s"${prefix}Min$timersLabels ${snapshot.getMin}\n")
+      sb.append(s"${prefix}50thPercentile$timersLabels ${snapshot.getMedian}\n")
+      sb.append(s"${prefix}75thPercentile$timersLabels ${snapshot.get75thPercentile}\n")
+      sb.append(s"${prefix}95thPercentile$timersLabels ${snapshot.get95thPercentile}\n")
+      sb.append(s"${prefix}98thPercentile$timersLabels ${snapshot.get98thPercentile}\n")
+      sb.append(s"${prefix}99thPercentile$timersLabels ${snapshot.get99thPercentile}\n")
+      sb.append(s"${prefix}999thPercentile$timersLabels ${snapshot.get999thPercentile}\n")
+      sb.append(s"${prefix}StdDev$timersLabels ${snapshot.getStdDev}\n")
+      sb.append(s"${prefix}FifteenMinuteRate$timersLabels ${timer.getFifteenMinuteRate}\n")
+      sb.append(s"${prefix}FiveMinuteRate$timersLabels ${timer.getFiveMinuteRate}\n")
+      sb.append(s"${prefix}OneMinuteRate$timersLabels ${timer.getOneMinuteRate}\n")
+      sb.append(s"${prefix}MeanRate$timersLabels ${timer.getMeanRate}\n")
     }
     sb.toString()
   }

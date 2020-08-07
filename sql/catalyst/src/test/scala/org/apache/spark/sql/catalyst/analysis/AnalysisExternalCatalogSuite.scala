@@ -21,7 +21,7 @@ import java.io.File
 import java.net.URI
 
 import org.mockito.Mockito._
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, ExternalCatalog, InMemoryCatalog, SessionCatalog}
@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
   private def getAnalyzer(externCatalog: ExternalCatalog, databasePath: File): Analyzer = {
@@ -59,7 +58,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
         Alias(UnresolvedFunction("sum", Seq(UnresolvedAttribute("a")), isDistinct = false), "s")()
       val plan = Project(Seq(func), testRelation)
       analyzer.execute(plan)
-      verifyZeroInteractions(catalog)
+      verifyNoInteractions(catalog)
     }
   }
 
@@ -73,7 +72,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
         ignoreIfExists = false)
       reset(externCatalog)
       catalog.functionExists(FunctionIdentifier("sum"))
-      verifyZeroInteractions(externCatalog)
+      verifyNoInteractions(externCatalog)
     }
   }
 

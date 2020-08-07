@@ -158,23 +158,29 @@ public class InMemoryStoreSuite {
 
     assertEquals(9, store.count(ArrayKeyIndexType.class));
 
-
-    store.removeAllByIndexValues(
+    // Try removing non-existing keys
+    assert(!store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       KVIndex.NATURAL_INDEX_NAME,
-      ImmutableSet.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 }));
+      ImmutableSet.of(new int[] {10, 10, 10}, new int[] { 3, 3, 3 })));
+    assertEquals(9, store.count(ArrayKeyIndexType.class));
+
+    assert(store.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      KVIndex.NATURAL_INDEX_NAME,
+      ImmutableSet.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 })));
     assertEquals(7, store.count(ArrayKeyIndexType.class));
 
-    store.removeAllByIndexValues(
+    assert(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      ImmutableSet.of(new String [] { "things" }));
+      ImmutableSet.of(new String [] { "things" })));
     assertEquals(4, store.count(ArrayKeyIndexType.class));
 
-    store.removeAllByIndexValues(
+    assert(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      ImmutableSet.of(new String [] { "more things" }));
+      ImmutableSet.of(new String [] { "more things" })));
     assertEquals(0, store.count(ArrayKeyIndexType.class));
   }
 
@@ -204,4 +210,46 @@ public class InMemoryStoreSuite {
     assertFalse(store.view(t1.getClass()).first(t2.id).skip(1).iterator().hasNext());
   }
 
+  @Test
+  public void testDeleteParentIndex() throws Exception {
+    KVStore store = new InMemoryStore();
+
+    CustomType2 t1 = new CustomType2();
+    t1.key = "key1";
+    t1.id = "id1";
+    t1.parentId = "parentId1";
+    store.write(t1);
+
+    CustomType2 t2 = new CustomType2();
+    t2.key = "key2";
+    t2.id = "id2";
+    t2.parentId = "parentId1";
+    store.write(t2);
+
+    CustomType2 t3 = new CustomType2();
+    t3.key = "key3";
+    t3.id = "id1";
+    t3.parentId = "parentId2";
+    store.write(t3);
+
+    CustomType2 t4 = new CustomType2();
+    t4.key = "key4";
+    t4.id = "id2";
+    t4.parentId = "parentId2";
+    store.write(t4);
+
+    assertEquals(4, store.count(CustomType2.class));
+
+    store.delete(t1.getClass(), t1.key);
+    assertEquals(3, store.count(CustomType2.class));
+
+    store.delete(t2.getClass(), t2.key);
+    assertEquals(2, store.count(CustomType2.class));
+
+    store.delete(t3.getClass(), t3.key);
+    assertEquals(1, store.count(CustomType2.class));
+
+    store.delete(t4.getClass(), t4.key);
+    assertEquals(0, store.count(CustomType2.class));
+  }
 }

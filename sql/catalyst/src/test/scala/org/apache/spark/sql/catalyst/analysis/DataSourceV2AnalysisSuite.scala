@@ -21,7 +21,7 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, AttributeReference, Cast, Expression, LessThanOrEqual, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, AttributeReference, Cast, LessThanOrEqual, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -143,7 +143,7 @@ abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseS
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write", "'table-name'",
-      "Cannot safely cast", "'x'", "'y'", "DoubleType to FloatType"))
+      "Cannot safely cast", "'x'", "'y'", "double to float"))
   }
 
   test("byName: multiple field errors are reported") {
@@ -160,7 +160,7 @@ abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseS
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
-      "Cannot safely cast", "'x'", "DoubleType to FloatType",
+      "Cannot safely cast", "'x'", "double to float",
       "Cannot write nullable values to non-null column", "'x'",
       "Cannot find data for output column", "'y'"))
   }
@@ -176,7 +176,7 @@ abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseS
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write", "'table-name'",
-      "Cannot safely cast", "'x'", "'y'", "DoubleType to FloatType"))
+      "Cannot safely cast", "'x'", "'y'", "double to float"))
   }
 
   test("byPosition: multiple field errors are reported") {
@@ -194,7 +194,7 @@ abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseS
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
       "Cannot write nullable values to non-null column", "'x'",
-      "Cannot safely cast", "'x'", "DoubleType to FloatType"))
+      "Cannot safely cast", "'x'", "double to float"))
   }
 }
 

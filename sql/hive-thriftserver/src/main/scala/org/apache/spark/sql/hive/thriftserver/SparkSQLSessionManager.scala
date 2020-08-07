@@ -30,6 +30,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
+import org.apache.spark.sql.internal.SQLConf
 
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
@@ -55,7 +56,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       super.openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
           delegationToken)
     val session = super.getSession(sessionHandle)
-    HiveThriftServer2.listener.onSessionCreated(
+    HiveThriftServer2.eventManager.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
     val ctx = if (sqlContext.conf.hiveThriftServerSingleSession) {
       sqlContext
@@ -63,6 +64,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       sqlContext.newSession()
     }
     ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+    ctx.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, true)
     val hiveSessionState = session.getSessionState
     setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
     setConfMap(ctx, hiveSessionState.getHiveVariables)
@@ -74,11 +76,10 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
   }
 
   override def closeSession(sessionHandle: SessionHandle): Unit = {
-    HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
+    HiveThriftServer2.eventManager.onSessionClosed(sessionHandle.getSessionId.toString)
     val ctx = sparkSqlOperationManager.sessionToContexts.getOrDefault(sessionHandle, sqlContext)
     ctx.sparkSession.sessionState.catalog.getTempViewNames().foreach(ctx.uncacheTable)
     super.closeSession(sessionHandle)
-    sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
   }
 

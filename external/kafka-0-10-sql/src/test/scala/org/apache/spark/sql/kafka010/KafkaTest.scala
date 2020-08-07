@@ -20,17 +20,14 @@ package org.apache.spark.sql.kafka010
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.kafka010.producer.InternalKafkaProducerPool
 
-/** A trait to clean cached Kafka connector in `afterAll` */
+/** A trait to clean cached Kafka producers in `afterAll` */
 trait KafkaTest extends BeforeAndAfterAll {
   self: SparkFunSuite =>
 
   override def afterAll(): Unit = {
-    try {
-      KafkaDataConsumer.clear()
-      CachedKafkaProducer.clear()
-    } finally {
-      super.afterAll()
-    }
+    super.afterAll()
+    InternalKafkaProducerPool.reset()
   }
 }

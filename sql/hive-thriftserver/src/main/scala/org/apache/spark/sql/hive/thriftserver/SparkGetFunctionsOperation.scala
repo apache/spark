@@ -43,22 +43,16 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param functionName function name pattern
  */
 private[hive] class SparkGetFunctionsOperation(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
     functionName: String)
-  extends GetFunctionsOperation(parentSession, catalogName, schemaName, functionName) with Logging {
-
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    super.close()
-    HiveThriftServer2.listener.onOperationClosed(statementId)
-  }
+  extends GetFunctionsOperation(parentSession, catalogName, schemaName, functionName)
+  with SparkOperation
+  with Logging {
 
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing functions '$cmdStr, functionName : $functionName'"
@@ -81,7 +75,7 @@ private[hive] class SparkGetFunctionsOperation(
       authorizeMetaGets(HiveOperationType.GET_FUNCTIONS, privObjs, cmdStr)
     }
 
-    HiveThriftServer2.listener.onStatementStart(
+    HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -104,22 +98,8 @@ private[hive] class SparkGetFunctionsOperation(
         }
       }
       setState(OperationState.FINISHED)
-    } catch {
-      case e: Throwable =>
-        logError(s"Error executing get functions operation with $statementId", e)
-        setState(OperationState.ERROR)
-        e match {
-          case hiveException: HiveSQLException =>
-            HiveThriftServer2.listener.onStatementError(
-              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
-            throw hiveException
-          case _ =>
-            val root = ExceptionUtils.getRootCause(e)
-            HiveThriftServer2.listener.onStatementError(
-              statementId, root.getMessage, SparkUtils.exceptionString(root))
-            throw new HiveSQLException("Error getting functions: " + root.toString, root)
-        }
-    }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    } catch onError()
+
+    HiveThriftServer2.eventManager.onStatementFinish(statementId)
   }
 }

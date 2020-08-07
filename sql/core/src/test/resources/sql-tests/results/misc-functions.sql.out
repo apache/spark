@@ -2,57 +2,57 @@
 -- Number of queries: 7
 
 
--- !query 0
+-- !query
 select typeof(null)
--- !query 0 schema
+-- !query schema
 struct<typeof(NULL):string>
--- !query 0 output
+-- !query output
 null
 
 
--- !query 1
+-- !query
 select typeof(true)
--- !query 1 schema
+-- !query schema
 struct<typeof(true):string>
--- !query 1 output
+-- !query output
 boolean
 
 
--- !query 2
+-- !query
 select typeof(1Y), typeof(1S), typeof(1), typeof(1L)
--- !query 2 schema
+-- !query schema
 struct<typeof(1):string,typeof(1):string,typeof(1):string,typeof(1):string>
--- !query 2 output
+-- !query output
 tinyint	smallint	int	bigint
 
 
--- !query 3
+-- !query
 select typeof(cast(1.0 as float)), typeof(1.0D), typeof(1.2)
--- !query 3 schema
+-- !query schema
 struct<typeof(CAST(1.0 AS FLOAT)):string,typeof(1.0):string,typeof(1.2):string>
--- !query 3 output
+-- !query output
 float	double	decimal(2,1)
 
 
--- !query 4
+-- !query
 select typeof(date '1986-05-23'),  typeof(timestamp '1986-05-23'), typeof(interval '23 days')
--- !query 4 schema
+-- !query schema
 struct<typeof(DATE '1986-05-23'):string,typeof(TIMESTAMP '1986-05-23 00:00:00'):string,typeof(INTERVAL '23 days'):string>
--- !query 4 output
+-- !query output
 date	timestamp	interval
 
 
--- !query 5
+-- !query
 select typeof(x'ABCD'), typeof('SPARK')
--- !query 5 schema
+-- !query schema
 struct<typeof(X'ABCD'):string,typeof(SPARK):string>
--- !query 5 output
+-- !query output
 binary	string
 
 
--- !query 6
+-- !query
 select typeof(array(1, 2)), typeof(map(1, 2)), typeof(named_struct('a', 1, 'b', 'spark'))
--- !query 6 schema
+-- !query schema
 struct<typeof(array(1, 2)):string,typeof(map(1, 2)):string,typeof(named_struct(a, 1, b, spark)):string>
--- !query 6 output
+-- !query output
 array<int>	map<int,int>	struct<a:int,b:string>

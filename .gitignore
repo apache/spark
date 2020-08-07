@@ -45,7 +45,7 @@ dev/create-release/*final
 dev/create-release/*txt
 dev/pr-deps/
 dist/
-docs/_site
+docs/_site/
 docs/api
 sql/docs
 sql/site
@@ -63,6 +63,8 @@ project/plugins/target/
 python/lib/pyspark.zip
 python/.eggs/
 python/deps
+python/docs/_site/
+python/docs/source/reference/api/
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
@@ -71,7 +73,6 @@ scalastyle-on-compile.generated.xml
 scalastyle-output.xml
 scalastyle.txt
 spark-*-bin-*.tgz
-spark-resources/
 spark-tests.log
 src_managed/
 streaming-tests.log

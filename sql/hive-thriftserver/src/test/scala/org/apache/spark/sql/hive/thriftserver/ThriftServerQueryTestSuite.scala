@@ -18,20 +18,19 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.sql.{DriverManager, SQLException, Statement, Timestamp}
+import java.sql.{SQLException, Statement, Timestamp}
 import java.util.{Locale, MissingFormatArgumentException}
 
-import scala.util.{Random, Try}
 import scala.util.control.NonFatal
 
+import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
-import org.apache.spark.sql.execution.HiveResult
+import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -53,38 +52,22 @@ import org.apache.spark.sql.types._
  *   2. Support DESC command.
  *   3. Support SHOW command.
  */
-class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
+class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
 
-  private var hiveServer2: HiveThriftServer2 = _
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    // Chooses a random port between 10000 and 19999
-    var listeningPort = 10000 + Random.nextInt(10000)
+  override def mode: ServerMode.Value = ServerMode.binary
 
-    // Retries up to 3 times with different port numbers if the server fails to start
-    (1 to 3).foldLeft(Try(startThriftServer(listeningPort, 0))) { case (started, attempt) =>
-      started.orElse {
-        listeningPort += 1
-        Try(startThriftServer(listeningPort, attempt))
-      }
-    }.recover {
-      case cause: Throwable =>
-        throw cause
-    }.get
-    logInfo("HiveThriftServer2 started successfully")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      hiveServer2.stop()
-    } finally {
-      super.afterAll()
-    }
+  override protected def testFile(fileName: String): String = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
+    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
+    val file = File.createTempFile("thriftserver-test", ".data")
+    file.deleteOnExit()
+    FileUtils.copyURLToFile(url, file)
+    file.getAbsolutePath
   }
 
   /** List of test cases to ignore, in lower cases. */
-  override def blackList: Set[String] = super.blackList ++ Set(
+  override def ignoreList: Set[String] = super.ignoreList ++ Set(
     // Missing UDF
     "postgreSQL/boolean.sql",
     "postgreSQL/case.sql",
@@ -110,21 +93,15 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     // We do not test with configSet.
     withJdbcStatement { statement =>
 
-      loadTestData(statement)
-
       configSet.foreach { case (k, v) =>
         statement.execute(s"SET $k = $v")
       }
 
       testCase match {
-        case _: PgSQLTest =>
-          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
-        case _: AnsiTest =>
-          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
-          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = true")
+        case _: PgSQLTest | _: AnsiTest =>
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
         case _ =>
-          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.SPARK.toString}")
-          statement.execute(s"SET ${SQLConf.DIALECT_SPARK_ANSI_ENABLED.key} = false")
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
       }
 
       // Run the SQL queries preparing them for comparison.
@@ -140,7 +117,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
       // Read back the golden file.
       val expectedOutputs: Seq[QueryOutput] = {
         val goldenOutput = fileToString(new File(testCase.resultFile))
-        val segments = goldenOutput.split("-- !query.+\n")
+        val segments = goldenOutput.split("-- !query.*\n")
 
         // each query has 3 segments, plus the header
         assert(segments.size == outputs.size * 3 + 1,
@@ -231,7 +208,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   }
 
   override def createScalaTestCase(testCase: TestCase): Unit = {
-    if (blackList.exists(t =>
+    if (ignoreList.exists(t =>
       testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
@@ -283,8 +260,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   private def getNormalizedResult(statement: Statement, sql: String): (String, Seq[String]) = {
     val rs = statement.executeQuery(sql)
     val cols = rs.getMetaData.getColumnCount
+    val timeFormatters = getTimeFormatters
     val buildStr = () => (for (i <- 1 to cols) yield {
-      getHiveResult(rs.getObject(i))
+      getHiveResult(rs.getObject(i), timeFormatters)
     }).mkString("\t")
 
     val answer = Iterator.continually(rs.next()).takeWhile(identity).map(_ => buildStr()).toSeq
@@ -294,84 +272,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     } else {
       ("", answer)
     }
-  }
-
-  private def startThriftServer(port: Int, attempt: Int): Unit = {
-    logInfo(s"Trying to start HiveThriftServer2: port=$port, attempt=$attempt")
-    val sqlContext = spark.newSession().sqlContext
-    sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname, port.toString)
-    hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
-  }
-
-  private def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
-    val user = System.getProperty("user.name")
-
-    val serverPort = hiveServer2.getHiveConf.get(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname)
-    val connections =
-      fs.map { _ => DriverManager.getConnection(s"jdbc:hive2://localhost:$serverPort", user, "") }
-    val statements = connections.map(_.createStatement())
-
-    try {
-      statements.zip(fs).foreach { case (s, f) => f(s) }
-    } finally {
-      statements.foreach(_.close())
-      connections.foreach(_.close())
-    }
-  }
-
-  /** Load built-in test tables. */
-  private def loadTestData(statement: Statement): Unit = {
-    // Prepare the data
-    statement.execute(
-      """
-        |CREATE OR REPLACE TEMPORARY VIEW testdata as
-        |SELECT id AS key, CAST(id AS string) AS value FROM range(1, 101)
-      """.stripMargin)
-    statement.execute(
-      """
-        |CREATE OR REPLACE TEMPORARY VIEW arraydata as
-        |SELECT * FROM VALUES
-        |(ARRAY(1, 2, 3), ARRAY(ARRAY(1, 2, 3))),
-        |(ARRAY(2, 3, 4), ARRAY(ARRAY(2, 3, 4))) AS v(arraycol, nestedarraycol)
-      """.stripMargin)
-    statement.execute(
-      """
-        |CREATE OR REPLACE TEMPORARY VIEW mapdata as
-        |SELECT * FROM VALUES
-        |MAP(1, 'a1', 2, 'b1', 3, 'c1', 4, 'd1', 5, 'e1'),
-        |MAP(1, 'a2', 2, 'b2', 3, 'c2', 4, 'd2'),
-        |MAP(1, 'a3', 2, 'b3', 3, 'c3'),
-        |MAP(1, 'a4', 2, 'b4'),
-        |MAP(1, 'a5') AS v(mapcol)
-      """.stripMargin)
-    statement.execute(
-      s"""
-         |CREATE TEMPORARY VIEW aggtest
-         |  (a int, b float)
-         |USING csv
-         |OPTIONS (path '${baseResourcePath.getParent}/test-data/postgresql/agg.data',
-         |  header 'false', delimiter '\t')
-      """.stripMargin)
-    statement.execute(
-      s"""
-         |CREATE OR REPLACE TEMPORARY VIEW onek
-         |  (unique1 int, unique2 int, two int, four int, ten int, twenty int, hundred int,
-         |    thousand int, twothousand int, fivethous int, tenthous int, odd int, even int,
-         |    stringu1 string, stringu2 string, string4 string)
-         |USING csv
-         |OPTIONS (path '${baseResourcePath.getParent}/test-data/postgresql/onek.data',
-         |  header 'false', delimiter '\t')
-      """.stripMargin)
-    statement.execute(
-      s"""
-         |CREATE OR REPLACE TEMPORARY VIEW tenk1
-         |  (unique1 int, unique2 int, two int, four int, ten int, twenty int, hundred int,
-         |    thousand int, twothousand int, fivethous int, tenthous int, odd int, even int,
-         |    stringu1 string, stringu2 string, string4 string)
-         |USING csv
-         |  OPTIONS (path '${baseResourcePath.getParent}/test-data/postgresql/tenk.data',
-         |  header 'false', delimiter '\t')
-      """.stripMargin)
   }
 
   // Returns true if sql is retrieving data.
@@ -384,18 +284,18 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
       upperCase.startsWith("(")
   }
 
-  private def getHiveResult(obj: Object): String = {
+  private def getHiveResult(obj: Object, timeFormatters: TimeFormatters): String = {
     obj match {
       case null =>
-        HiveResult.toHiveString((null, StringType))
+        toHiveString((null, StringType), false, timeFormatters)
       case d: java.sql.Date =>
-        HiveResult.toHiveString((d, DateType))
+        toHiveString((d, DateType), false, timeFormatters)
       case t: Timestamp =>
-        HiveResult.toHiveString((t, TimestampType))
+        toHiveString((t, TimestampType), false, timeFormatters)
       case d: java.math.BigDecimal =>
-        HiveResult.toHiveString((d, DecimalType.fromBigDecimal(d)))
+        toHiveString((d, DecimalType.fromDecimal(Decimal(d))), false, timeFormatters)
       case bin: Array[Byte] =>
-        HiveResult.toHiveString((bin, BinaryType))
+        toHiveString((bin, BinaryType), false, timeFormatters)
       case other =>
         other.toString
     }

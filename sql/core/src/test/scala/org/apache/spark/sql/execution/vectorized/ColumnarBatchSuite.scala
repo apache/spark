@@ -647,29 +647,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(days.dataType() == IntegerType)
       assert(microseconds.dataType() == LongType)
 
-      months.putInt(0, 1)
-      days.putInt(0, 10)
-      microseconds.putLong(0, 100)
-      reference += new CalendarInterval(1, 10, 100)
-
-      months.putInt(1, 0)
-      days.putInt(1, 0)
-      microseconds.putLong(1, 2000)
-      reference += new CalendarInterval(0, 0, 2000)
-
-      column.putNull(2)
-      assert(column.getInterval(2) == null)
-      reference += null
-
-      months.putInt(3, 20)
-      days.putInt(3, 0)
-      microseconds.putLong(3, 0)
-      reference += new CalendarInterval(20, 0, 0)
-
-      months.putInt(4, 0)
-      days.putInt(4, 200)
-      microseconds.putLong(4, 0)
-      reference += new CalendarInterval(0, 200, 0)
+      Seq(new CalendarInterval(1, 10, 100),
+        new CalendarInterval(0, 0, 2000),
+        new CalendarInterval(20, 0, 0),
+        new CalendarInterval(0, 200, 0)).zipWithIndex.foreach { case (v, i) =>
+          column.putInterval(i, v)
+          reference += v
+      }
 
       reference.zipWithIndex.foreach { case (v, i) =>
         val errMsg = "VectorType=" + column.getClass.getSimpleName

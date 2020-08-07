@@ -19,6 +19,8 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.Buffer
 
+import org.apache.spark.resource.ResourceProfile
+
 /**
  * Represents free resources available on an executor.
  */
@@ -30,4 +32,5 @@ case class WorkerOffer(
     // `address` is an optional hostPort string, it provide more useful information than `host`
     // when multiple executors are launched on the same host.
     address: Option[String] = None,
-    resources: Map[String, Buffer[String]] = Map.empty)
+    resources: Map[String, Buffer[String]] = Map.empty,
+    resourceProfileId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)

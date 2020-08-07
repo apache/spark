@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.types.StructType
 
 object PushDownUtils extends PredicateHelper {
   /**
@@ -32,7 +34,7 @@ object PushDownUtils extends PredicateHelper {
    */
   def pushFilters(
       scanBuilder: ScanBuilder,
-      filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+      filters: Seq[Expression]): (Seq[sources.Filter], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -46,7 +48,8 @@ object PushDownUtils extends PredicateHelper {
 
         for (filterExpr <- filters) {
           val translated =
-            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr))
+            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
+              nestedPredicatePushdownEnabled = true)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {
@@ -60,11 +63,7 @@ object PushDownUtils extends PredicateHelper {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        // The filters which are marked as pushed to this data source
-        val pushedFilters = r.pushedFilters().map { filter =>
-          DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
-        }
-        (pushedFilters, untranslatableExprs ++ postScanFilters)
+        (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
 
       case _ => (Nil, filters)
     }
@@ -73,31 +72,49 @@ object PushDownUtils extends PredicateHelper {
   /**
    * Applies column pruning to the data source, w.r.t. the references of the given expressions.
    *
-   * @return the created `ScanConfig`(since column pruning is the last step of operator pushdown),
+   * @return the `Scan` instance (since column pruning is the last step of operator pushdown),
    *         and new output attributes after column pruning.
    */
-  // TODO: nested column pruning.
   def pruneColumns(
       scanBuilder: ScanBuilder,
       relation: DataSourceV2Relation,
-      exprs: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
+      projects: Seq[NamedExpression],
+      filters: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
     scanBuilder match {
+      case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
+        val rootFields = SchemaPruning.identifyRootFields(projects, filters)
+        val prunedSchema = if (rootFields.nonEmpty) {
+          SchemaPruning.pruneDataSchema(relation.schema, rootFields)
+        } else {
+          new StructType()
+        }
+        r.pruneColumns(prunedSchema)
+        val scan = r.build()
+        scan -> toOutputAttrs(scan.readSchema(), relation)
+
       case r: SupportsPushDownRequiredColumns =>
+        val exprs = projects ++ filters
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
         if (neededOutput != relation.output) {
           r.pruneColumns(neededOutput.toStructType)
           val scan = r.build()
-          val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
-          scan -> scan.readSchema().toAttributes.map {
-            // We have to keep the attribute id during transformation.
-            a => a.withExprId(nameToAttr(a.name).exprId)
-          }
+          scan -> toOutputAttrs(scan.readSchema(), relation)
         } else {
           r.build() -> relation.output
         }
 
       case _ => scanBuilder.build() -> relation.output
+    }
+  }
+
+  private def toOutputAttrs(
+      schema: StructType,
+      relation: DataSourceV2Relation): Seq[AttributeReference] = {
+    val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
+    schema.toAttributes.map {
+      // we have to keep the attribute id during transformation
+      a => a.withExprId(nameToAttr(a.name).exprId)
     }
   }
 }

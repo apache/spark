@@ -27,6 +27,7 @@ import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -370,6 +371,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       BigInteger bigInteger = value.toJavaBigDecimal().unscaledValue();
       putByteArray(rowId, bigInteger.toByteArray());
     }
+  }
+
+  public void putInterval(int rowId, CalendarInterval value) {
+    getChild(0).putInt(rowId, value.months);
+    getChild(1).putInt(rowId, value.days);
+    getChild(2).putLong(rowId, value.microseconds);
   }
 
   @Override

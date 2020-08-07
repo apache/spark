@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -27,8 +27,9 @@ import org.apache.spark.sql.types.DataType;
  * the literal's {@link DataType SQL data type}.
  *
  * @param <T> the JVM type of a value held by the literal
+ * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface Literal<T> extends Expression {
   /**
    * Returns the literal value.

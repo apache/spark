@@ -84,7 +84,7 @@ object LegacyTypeStringParser extends RegexParsers {
   /**
    * Parses a string representation of a DataType.
    */
-  def parse(asString: String): DataType = parseAll(dataType, asString) match {
+  def parseString(asString: String): DataType = parseAll(dataType, asString) match {
     case Success(result, _) => result
     case failure: NoSuccess =>
       throw new IllegalArgumentException(s"Unsupported dataType: $asString, $failure")

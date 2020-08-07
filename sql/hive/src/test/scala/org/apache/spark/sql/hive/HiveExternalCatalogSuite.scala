@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URI
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.types.StructType
 
@@ -108,6 +111,32 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     assert(bucketString.contains("10"))
   }
 
+  test("SPARK-30050: analyze/rename table should not erase the bucketing metadata at hive side") {
+    val catalog = newBasicCatalog()
+    externalCatalog.client.runSqlHive(
+      """
+        |CREATE TABLE db1.t(a string, b string)
+        |CLUSTERED BY (a, b) SORTED BY (a, b) INTO 10 BUCKETS
+        |STORED AS PARQUET
+      """.stripMargin)
+
+    val bucketString1 = externalCatalog.client.runSqlHive("DESC FORMATTED db1.t")
+      .filter(_.contains("Num Buckets")).head
+    assert(bucketString1.contains("10"))
+
+    catalog.alterTableStats("db1", "t", None)
+
+    val bucketString2 = externalCatalog.client.runSqlHive("DESC FORMATTED db1.t")
+      .filter(_.contains("Num Buckets")).head
+    assert(bucketString2.contains("10"))
+
+    catalog.renameTable("db1", "t", "t2")
+
+    val bucketString3 = externalCatalog.client.runSqlHive("DESC FORMATTED db1.t2")
+      .filter(_.contains("Num Buckets")).head
+    assert(bucketString3.contains("10"))
+  }
+
   test("SPARK-23001: NullPointerException when running desc database") {
     val catalog = newBasicCatalog()
     catalog.createDatabase(newDb("dbWithNullDesc").copy(description = null), ignoreIfExists = false)
@@ -127,5 +156,50 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     catalog.createTable(hiveTable, ignoreIfExists = false)
     assert(catalog.getTable("db1", "spark_29498").owner === owner)
+  }
+
+  test("SPARK-30868 throw an exception if HiveClient#runSqlHive fails") {
+    val client = externalCatalog.client
+    // test add jars which doesn't exists
+    val jarPath = "file:///tmp/not_exists.jar"
+    assertThrows[QueryExecutionException](client.runSqlHive(s"ADD JAR $jarPath"))
+
+    // test change to the database which doesn't exists
+    assertThrows[QueryExecutionException](client.runSqlHive(
+      s"use db_not_exists"))
+
+    // test create hive table failed with unsupported into type
+    assertThrows[QueryExecutionException](client.runSqlHive(
+      s"CREATE TABLE t(n into)"))
+
+    // test desc table failed with wrong `FORMATED` keyword
+    assertThrows[QueryExecutionException](client.runSqlHive(
+      s"DESC FORMATED t"))
+
+    // test wrong insert query
+    assertThrows[QueryExecutionException](client.runSqlHive(
+      "INSERT overwrite directory \"fs://localhost/tmp\" select 1 as a"))
+  }
+
+  test("SPARK-31061: alterTable should be able to change table provider/hive") {
+    val catalog = newBasicCatalog()
+    Seq("parquet", "hive").foreach( provider => {
+      val tableDDL = CatalogTable(
+        identifier = TableIdentifier("parq_tbl", Some("db1")),
+        tableType = CatalogTableType.MANAGED,
+        storage = storageFormat,
+        schema = new StructType().add("col1", "int"),
+        provider = Some(provider))
+      catalog.dropTable("db1", "parq_tbl", true, true)
+      catalog.createTable(tableDDL, ignoreIfExists = false)
+
+      val rawTable = externalCatalog.getTable("db1", "parq_tbl")
+      assert(rawTable.provider === Some(provider))
+
+      val fooTable = rawTable.copy(provider = Some("foo"))
+      catalog.alterTable(fooTable)
+      val alteredTable = externalCatalog.getTable("db1", "parq_tbl")
+      assert(alteredTable.provider === Some("foo"))
+    })
   }
 }

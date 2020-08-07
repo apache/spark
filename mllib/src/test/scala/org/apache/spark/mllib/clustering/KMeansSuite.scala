@@ -34,7 +34,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   private val seed = 42
 
   test("single cluster") {
-    val data = sc.parallelize(Array(
+    val data = sc.parallelize(Seq(
       Vectors.dense(1.0, 2.0, 6.0),
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0)
@@ -64,7 +64,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("fewer distinct points than clusters") {
     val data = sc.parallelize(
-      Array(
+      Seq(
         Vectors.dense(1.0, 2.0, 3.0),
         Vectors.dense(1.0, 2.0, 3.0),
         Vectors.dense(1.0, 2.0, 3.0)),

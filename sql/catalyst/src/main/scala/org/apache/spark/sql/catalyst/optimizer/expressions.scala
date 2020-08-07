@@ -71,7 +71,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
 object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f: Filter =>
-      val (newCondition, _) = traverse(f.condition, replaceChildren = true)
+      val (newCondition, _) = traverse(f.condition, replaceChildren = true, nullIsFalse = true)
       if (newCondition.isDefined) {
         f.copy(condition = newCondition.get)
       } else {
@@ -92,22 +92,33 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * - Otherwise, stop traversal and propagate empty mapping.
    * @param condition condition to be traversed
    * @param replaceChildren whether to replace attributes with constant values in children
+   * @param nullIsFalse whether a boolean expression result can be considered to false e.g. in the
+   *                    case of `WHERE e`, null result of expression `e` means the same as if it
+   *                    resulted false
    * @return A tuple including:
    *         1. Option[Expression]: optional changed condition after traversal
    *         2. EqualityPredicates: propagated mapping of attribute => constant
    */
-  private def traverse(condition: Expression, replaceChildren: Boolean)
+  private def traverse(condition: Expression, replaceChildren: Boolean, nullIsFalse: Boolean)
     : (Option[Expression], EqualityPredicates) =
     condition match {
-      case e @ EqualTo(left: AttributeReference, right: Literal) => (None, Seq(((left, right), e)))
-      case e @ EqualTo(left: Literal, right: AttributeReference) => (None, Seq(((right, left), e)))
-      case e @ EqualNullSafe(left: AttributeReference, right: Literal) =>
+      case e @ EqualTo(left: AttributeReference, right: Literal)
+        if safeToReplace(left, nullIsFalse) =>
         (None, Seq(((left, right), e)))
-      case e @ EqualNullSafe(left: Literal, right: AttributeReference) =>
+      case e @ EqualTo(left: Literal, right: AttributeReference)
+        if safeToReplace(right, nullIsFalse) =>
+        (None, Seq(((right, left), e)))
+      case e @ EqualNullSafe(left: AttributeReference, right: Literal)
+        if safeToReplace(left, nullIsFalse) =>
+        (None, Seq(((left, right), e)))
+      case e @ EqualNullSafe(left: Literal, right: AttributeReference)
+        if safeToReplace(right, nullIsFalse) =>
         (None, Seq(((right, left), e)))
       case a: And =>
-        val (newLeft, equalityPredicatesLeft) = traverse(a.left, replaceChildren = false)
-        val (newRight, equalityPredicatesRight) = traverse(a.right, replaceChildren = false)
+        val (newLeft, equalityPredicatesLeft) =
+          traverse(a.left, replaceChildren = false, nullIsFalse)
+        val (newRight, equalityPredicatesRight) =
+          traverse(a.right, replaceChildren = false, nullIsFalse)
         val equalityPredicates = equalityPredicatesLeft ++ equalityPredicatesRight
         val newSelf = if (equalityPredicates.nonEmpty && replaceChildren) {
           Some(And(replaceConstants(newLeft.getOrElse(a.left), equalityPredicates),
@@ -122,8 +133,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         (newSelf, equalityPredicates)
       case o: Or =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
-        val (newLeft, _) = traverse(o.left, replaceChildren = true)
-        val (newRight, _) = traverse(o.right, replaceChildren = true)
+        val (newLeft, _) = traverse(o.left, replaceChildren = true, nullIsFalse)
+        val (newRight, _) = traverse(o.right, replaceChildren = true, nullIsFalse)
         val newSelf = if (newLeft.isDefined || newRight.isDefined) {
           Some(Or(left = newLeft.getOrElse(o.left), right = newRight.getOrElse((o.right))))
         } else {
@@ -132,10 +143,18 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         (newSelf, Seq.empty)
       case n: Not =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
-        val (newChild, _) = traverse(n.child, replaceChildren = true)
+        val (newChild, _) = traverse(n.child, replaceChildren = true, nullIsFalse = false)
         (newChild.map(Not), Seq.empty)
       case _ => (None, Seq.empty)
     }
+
+  // We need to take into account if an attribute is nullable and the context of the conjunctive
+  // expression. E.g. `SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)` where attribute `c` can be
+  // substituted into `1 + 1 = 1` if 'c' isn't nullable. If 'c' is nullable then the enclosing
+  // NOT prevents us to do the substitution as NOT flips the context (`nullIsFalse`) of what a
+  // null result of the enclosed expression means.
+  private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean) =
+    !ar.nullable || nullIsFalse
 
   private def replaceConstants(condition: Expression, equalityPredicates: EqualityPredicates)
     : Expression = {
@@ -387,20 +406,42 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
  * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
  */
-object SimplifyBinaryComparison extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsUp {
-      // True with equality
-      case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
-      case a EqualTo b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral
-      case a GreaterThanOrEqual b if !a.nullable && !b.nullable && a.semanticEquals(b) =>
-        TrueLiteral
-      case a LessThanOrEqual b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral
+object SimplifyBinaryComparison
+  extends Rule[LogicalPlan] with PredicateHelper with ConstraintHelper {
 
-      // False with inequality
-      case a GreaterThan b if !a.nullable && !b.nullable && a.semanticEquals(b) => FalseLiteral
-      case a LessThan b if !a.nullable && !b.nullable && a.semanticEquals(b) => FalseLiteral
+  private def canSimplifyComparison(
+      left: Expression,
+      right: Expression,
+      notNullExpressions: => ExpressionSet): Boolean = {
+    if (left.semanticEquals(right)) {
+      (!left.nullable && !right.nullable) || notNullExpressions.contains(left)
+    } else {
+      false
     }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case l: LogicalPlan =>
+      lazy val notNullExpressions = ExpressionSet(l match {
+        case Filter(fc, _) =>
+          splitConjunctivePredicates(fc).collect {
+            case i: IsNotNull => i.child
+          }
+        case _ => Seq.empty
+      })
+
+      l transformExpressionsUp {
+        // True with equality
+        case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
+        case a EqualTo b if canSimplifyComparison(a, b, notNullExpressions) => TrueLiteral
+        case a GreaterThanOrEqual b if canSimplifyComparison(a, b, notNullExpressions) =>
+          TrueLiteral
+        case a LessThanOrEqual b if canSimplifyComparison(a, b, notNullExpressions) => TrueLiteral
+
+        // False with inequality
+        case a GreaterThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
+        case a LessThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
+      }
   }
 }
 
@@ -484,27 +525,27 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Like(input, Literal(pattern, StringType)) =>
+    case Like(input, Literal(pattern, StringType), escapeChar) =>
       if (pattern == null) {
         // If pattern is null, return null value directly, since "col like null" == null.
         Literal(null, BooleanType)
       } else {
+        val escapeStr = String.valueOf(escapeChar)
         pattern.toString match {
-          case startsWith(prefix) if !prefix.endsWith("\\") =>
+          case startsWith(prefix) if !prefix.endsWith(escapeStr) =>
             StartsWith(input, Literal(prefix))
           case endsWith(postfix) =>
             EndsWith(input, Literal(postfix))
           // 'a%a' pattern is basically same with 'a%' && '%a'.
           // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
-          case startsAndEndsWith(prefix, postfix) if !prefix.endsWith("\\") =>
+          case startsAndEndsWith(prefix, postfix) if !prefix.endsWith(escapeStr) =>
             And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
               And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
-          case contains(infix) if !infix.endsWith("\\") =>
+          case contains(infix) if !infix.endsWith(escapeStr) =>
             Contains(input, Literal(infix))
           case equalTo(str) =>
             EqualTo(input, Literal(str))
-          case _ =>
-            Like(input, Literal.create(pattern, StringType))
+          case _ => Like(input, Literal.create(pattern, StringType), escapeChar)
         }
       }
   }
@@ -526,9 +567,9 @@ object NullPropagation extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
         Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
-      case e @ AggregateExpression(Count(exprs), _, _, _) if exprs.forall(isNullLiteral) =>
+      case e @ AggregateExpression(Count(exprs), _, _, _, _) if exprs.forall(isNullLiteral) =>
         Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
-      case ae @ AggregateExpression(Count(exprs), _, false, _) if !exprs.exists(_.nullable) =>
+      case ae @ AggregateExpression(Count(exprs), _, false, _, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         ae.copy(aggregateFunction = Count(Literal(1)))
 
@@ -636,7 +677,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whitelist of all [[UnaryNode]]s for which allow foldable propagation.
+   * List of all [[UnaryNode]]s which allow foldable propagation.
    */
   private def canPropagateFoldables(u: UnaryNode): Boolean = u match {
     case _: Project => true
@@ -724,7 +765,7 @@ object CombineConcats extends Rule[LogicalPlan] {
           flattened += child
       }
     }
-    Concat(flattened)
+    Concat(flattened.toSeq)
   }
 
   private def hasNestedConcats(concat: Concat): Boolean = concat.children.exists {

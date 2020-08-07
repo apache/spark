@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToMillis
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.unsafe.types.UTF8String
@@ -36,7 +37,8 @@ private object Triggers {
     if (cal.months != 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }
-    TimeUnit.MICROSECONDS.toMillis(cal.microseconds + cal.days * MICROS_PER_DAY)
+    val microsInDays = Math.multiplyExact(cal.days, MICROS_PER_DAY)
+    microsToMillis(Math.addExact(cal.microseconds, microsInDays))
   }
 
   def convert(interval: Duration): Long = interval.toMillis
@@ -48,17 +50,17 @@ private object Triggers {
  * A [[Trigger]] that processes only one batch of data in a streaming query then terminates
  * the query.
  */
-private[sql] case object OneTimeTrigger extends Trigger
+case object OneTimeTrigger extends Trigger
 
 /**
  * A [[Trigger]] that runs a query periodically based on the processing time. If `interval` is 0,
  * the query will run as fast as possible.
  */
-private[sql] case class ProcessingTimeTrigger(intervalMs: Long) extends Trigger {
+case class ProcessingTimeTrigger(intervalMs: Long) extends Trigger {
   Triggers.validate(intervalMs)
 }
 
-private[sql] object ProcessingTimeTrigger {
+object ProcessingTimeTrigger {
   import Triggers._
 
   def apply(interval: String): ProcessingTimeTrigger = {
@@ -82,11 +84,11 @@ private[sql] object ProcessingTimeTrigger {
  * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at
  * the specified interval.
  */
-private[sql] case class ContinuousTrigger(intervalMs: Long) extends Trigger {
+case class ContinuousTrigger(intervalMs: Long) extends Trigger {
   Triggers.validate(intervalMs)
 }
 
-private[sql] object ContinuousTrigger {
+object ContinuousTrigger {
   import Triggers._
 
   def apply(interval: String): ContinuousTrigger = {

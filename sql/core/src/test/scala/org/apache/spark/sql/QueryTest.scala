@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, TimeZone}
+import java.util.TimeZone
 
 import scala.collection.JavaConverters._
+
+import org.junit.Assert
+import org.scalatest.Assertions
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
@@ -31,11 +34,6 @@ import org.apache.spark.storage.StorageLevel
 abstract class QueryTest extends PlanTest {
 
   protected def spark: SparkSession
-
-  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-  // Add Locale setting
-  Locale.setDefault(Locale.US)
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords.
@@ -150,10 +148,7 @@ abstract class QueryTest extends PlanTest {
 
     assertEmptyMissingInput(analyzedDF)
 
-    QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
-    }
+    QueryTest.checkAnswer(analyzedDF, expectedAnswer)
   }
 
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
@@ -235,18 +230,32 @@ abstract class QueryTest extends PlanTest {
   }
 }
 
-object QueryTest {
+object QueryTest extends Assertions {
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   *
+   * @param df the DataFrame to be executed
+   * @param expectedAnswer the expected result in a Seq of Rows.
+   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
+   */
+  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row], checkToRDD: Boolean = true): Unit = {
+    getErrorMessageInCheckAnswer(df, expectedAnswer, checkToRDD) match {
+      case Some(errorMessage) => fail(errorMessage)
+      case None =>
+    }
+  }
+
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * If there was exception during the execution or the contents of the DataFrame does not
-   * match the expected result, an error message will be returned. Otherwise, a [[None]] will
+   * match the expected result, an error message will be returned. Otherwise, a None will
    * be returned.
    *
-   * @param df the [[DataFrame]] to be executed
-   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param df the DataFrame to be executed
+   * @param expectedAnswer the expected result in a Seq of Rows.
    * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
-  def checkAnswer(
+  def getErrorMessageInCheckAnswer(
       df: DataFrame,
       expectedAnswer: Seq[Row],
       checkToRDD: Boolean = true): Option[String] = {
@@ -408,10 +417,10 @@ object QueryTest {
     }
   }
 
-  def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): String = {
-    checkAnswer(df, expectedAnswer.asScala) match {
-      case Some(errorMessage) => errorMessage
-      case None => null
+  def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
+    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala.toSeq) match {
+      case Some(errorMessage) => Assert.fail(errorMessage)
+      case None =>
     }
   }
 }

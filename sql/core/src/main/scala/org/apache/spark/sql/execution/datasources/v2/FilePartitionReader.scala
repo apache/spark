@@ -42,9 +42,8 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
           currentReader = getNextReader()
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
-            logWarning(s"Skipped missing file: $currentReader", e)
+            logWarning(s"Skipped missing file.", e)
             currentReader = null
-            return false
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles =>
             throw new FileNotFoundException(
@@ -54,10 +53,8 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
                 "recreating the Dataset/DataFrame involved.")
           case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
             logWarning(
-              s"Skipped the rest of the content in the corrupted file: $currentReader", e)
+              s"Skipped the rest of the content in the corrupted file.", e)
             currentReader = null
-            InputFileBlockHolder.unset()
-            return false
         }
       } else {
         return false
@@ -67,7 +64,7 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
     // In PartitionReader.next(), the current reader proceeds to next record.
     // It might throw RuntimeException/IOException and Spark should handle these exceptions.
     val hasNext = try {
-      currentReader.next()
+      currentReader != null && currentReader.next()
     } catch {
       case e: SchemaColumnConvertNotSupportedException =>
         val message = "Parquet column cannot be converted in " +

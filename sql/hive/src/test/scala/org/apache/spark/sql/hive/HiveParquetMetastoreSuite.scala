@@ -440,7 +440,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
     def checkCached(tableIdentifier: TableIdentifier): Unit = {
       // Converted test_parquet should be cached.
       getCachedDataSourceTable(tableIdentifier) match {
-        case null => fail("Converted test_parquet should be cached in the cache.")
+        case null => fail(s"Converted ${tableIdentifier.table} should be cached in the cache.")
         case LogicalRelation(_: HadoopFsRelation, _, _, _) => // OK
         case other =>
           fail(
@@ -480,7 +480,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
         |INSERT INTO TABLE test_insert_parquet
         |select a, b from jt
       """.stripMargin)
-    checkCached(tableIdentifier)
+    assert(getCachedDataSourceTable(tableIdentifier) === null)
     // Make sure we can read the data.
     checkAnswer(
       sql("select * from test_insert_parquet"),
@@ -512,14 +512,16 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
         |PARTITION (`date`='2015-04-01')
         |select a, b from jt
       """.stripMargin)
-    checkCached(tableIdentifier)
+    // Right now, insert into a partitioned data source Parquet table. We refreshed the table.
+    // So, we expect it is not cached.
+    assert(getCachedDataSourceTable(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
         |PARTITION (`date`='2015-04-02')
         |select a, b from jt
       """.stripMargin)
-    checkCached(tableIdentifier)
+    assert(getCachedDataSourceTable(tableIdentifier) === null)
 
     // Make sure we can cache the partitioned table.
     table("test_parquet_partitioned_cache_test")

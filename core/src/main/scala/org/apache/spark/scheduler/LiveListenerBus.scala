@@ -226,15 +226,13 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
       return
     }
 
-    synchronized {
-      queues.asScala.foreach(_.stop())
-      queues.clear()
-    }
+    queues.asScala.foreach(_.stop())
+    queues.clear()
   }
 
   // For testing only.
   private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag](): Seq[T] = {
-    queues.asScala.flatMap { queue => queue.findListenersByClass[T]() }
+    queues.asScala.flatMap { queue => queue.findListenersByClass[T]() }.toSeq
   }
 
   // For testing only.

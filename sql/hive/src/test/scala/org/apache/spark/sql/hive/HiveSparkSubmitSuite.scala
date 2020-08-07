@@ -23,8 +23,9 @@ import scala.util.Properties
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
-import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.Assertions._
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -38,12 +39,13 @@ import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveContext}
 import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types.{DecimalType, StructType}
-import org.apache.spark.tags.ExtendedHiveTest
+import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
  * This suite tests spark-submit with applications using HiveContext.
  */
+@SlowHiveTest
 @ExtendedHiveTest
 class HiveSparkSubmitSuite
   extends SparkSubmitTestUtils
@@ -700,7 +702,7 @@ object SPARK_9757 extends QueryTest {
         val df =
           hiveContext
             .range(10)
-            .select(('id + 0.1) cast DecimalType(10, 3) as 'dec)
+            .select(($"id" + 0.1) cast DecimalType(10, 3) as "dec")
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
       }
@@ -709,7 +711,7 @@ object SPARK_9757 extends QueryTest {
         val df =
           hiveContext
             .range(10)
-            .select(callUDF("struct", ('id + 0.2) cast DecimalType(10, 3)) as 'dec_struct)
+            .select(callUDF("struct", ($"id" + 0.2) cast DecimalType(10, 3)) as "dec_struct")
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
       }
@@ -771,8 +773,8 @@ object SPARK_14244 extends QueryTest {
     import hiveContext.implicits._
 
     try {
-      val window = Window.orderBy('id)
-      val df = spark.range(2).select(cume_dist().over(window).as('cdist)).orderBy('cdist)
+      val window = Window.orderBy("id")
+      val df = spark.range(2).select(cume_dist().over(window).as("cdist")).orderBy("cdist")
       checkAnswer(df, Seq(Row(0.5D), Row(1.0D)))
     } finally {
       sparkContext.stop()
@@ -787,7 +789,7 @@ object SPARK_18360 {
       .enableHiveSupport().getOrCreate()
 
     val defaultDbLocation = spark.catalog.getDatabase("default").locationUri
-    assert(new Path(defaultDbLocation) == new Path(spark.sharedState.warehousePath))
+    assert(new Path(defaultDbLocation) == new Path(spark.conf.get(WAREHOUSE_PATH)))
 
     val hiveClient =
       spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client

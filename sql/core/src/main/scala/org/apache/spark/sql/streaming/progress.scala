@@ -24,12 +24,15 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
 /**
@@ -40,6 +43,7 @@ class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
     val memoryUsedBytes: Long,
+    val numRowsDroppedByWatermark: Long,
     val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
 
@@ -49,13 +53,17 @@ class StateOperatorProgress private[sql](
   /** The pretty (i.e. indented) JSON representation of this progress. */
   def prettyJson: String = pretty(render(jsonValue))
 
-  private[sql] def copy(newNumRowsUpdated: Long): StateOperatorProgress =
-    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes, customMetrics)
+  private[sql] def copy(
+      newNumRowsUpdated: Long,
+      newNumRowsDroppedByWatermark: Long): StateOperatorProgress =
+    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes,
+      newNumRowsDroppedByWatermark, customMetrics)
 
   private[sql] def jsonValue: JValue = {
     ("numRowsTotal" -> JInt(numRowsTotal)) ~
     ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
     ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
+    ("numRowsDroppedByWatermark" -> JInt(numRowsDroppedByWatermark)) ~
     ("customMetrics" -> {
       if (!customMetrics.isEmpty) {
         val keys = customMetrics.keySet.asScala.toSeq.sorted
@@ -82,6 +90,7 @@ class StateOperatorProgress private[sql](
  *                case of retries after a failure a given batchId my be executed more than once.
  *                Similarly, when there is no data to be processed, the batchId will not be
  *                incremented.
+ * @param batchDuration The process duration of each batch.
  * @param durationMs The amount of time taken to perform various operations in milliseconds.
  * @param eventTime Statistics of event time seen in this batch. It may contain the following keys:
  *                 {{{
@@ -102,11 +111,14 @@ class StreamingQueryProgress private[sql](
   val name: String,
   val timestamp: String,
   val batchId: Long,
+  val batchDuration: Long,
   val durationMs: ju.Map[String, JLong],
   val eventTime: ju.Map[String, String],
   val stateOperators: Array[StateOperatorProgress],
   val sources: Array[SourceProgress],
-  val sink: SinkProgress) extends Serializable {
+  val sink: SinkProgress,
+  @JsonDeserialize(contentAs = classOf[GenericRowWithSchema])
+  val observedMetrics: ju.Map[String, Row]) extends Serializable {
 
   /** The aggregate (across all sources) number of records processed in a trigger. */
   def numInputRows: Long = sources.map(_.numInputRows).sum
@@ -149,7 +161,8 @@ class StreamingQueryProgress private[sql](
     ("eventTime" -> safeMapToJValue[String](eventTime, s => JString(s))) ~
     ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
     ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
-    ("sink" -> sink.jsonValue)
+    ("sink" -> sink.jsonValue) ~
+    ("observedMetrics" -> safeMapToJValue[Row](observedMetrics, row => row.jsonValue))
   }
 }
 

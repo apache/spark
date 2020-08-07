@@ -44,7 +44,7 @@ the master's web UI, which is [http://localhost:8080](http://localhost:8080) by 
 
 Similarly, you can start one or more workers and connect them to the master via:
 
-    ./sbin/start-slave.sh <master-spark-URL>
+    ./sbin/start-worker.sh <master-spark-URL>
 
 Once you have started a worker, look at the master's web UI ([http://localhost:8080](http://localhost:8080) by default).
 You should see the new node listed there, along with its number of CPUs and memory (minus one gigabyte left for the OS).
@@ -90,9 +90,9 @@ Finally, the following configuration options can be passed to the master and wor
 
 # Cluster Launch Scripts
 
-To launch a Spark standalone cluster with the launch scripts, you should create a file called conf/slaves in your Spark directory,
+To launch a Spark standalone cluster with the launch scripts, you should create a file called conf/workers in your Spark directory,
 which must contain the hostnames of all the machines where you intend to start Spark workers, one per line.
-If conf/slaves does not exist, the launch scripts defaults to a single machine (localhost), which is useful for testing.
+If conf/workers does not exist, the launch scripts defaults to a single machine (localhost), which is useful for testing.
 Note, the master machine accesses each of the worker machines via ssh. By default, ssh is run in parallel and requires password-less (using a private key) access to be setup.
 If you do not have a password-less setup, you can set the environment variable SPARK_SSH_FOREGROUND and serially provide a password for each worker.
 
@@ -100,12 +100,12 @@ If you do not have a password-less setup, you can set the environment variable S
 Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/sbin`:
 
 - `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
-- `sbin/start-slaves.sh` - Starts a worker instance on each machine specified in the `conf/slaves` file.
-- `sbin/start-slave.sh` - Starts a worker instance on the machine the script is executed on.
+- `sbin/start-workers.sh` - Starts a worker instance on each machine specified in the `conf/workers` file.
+- `sbin/start-worker.sh` - Starts a worker instance on the machine the script is executed on.
 - `sbin/start-all.sh` - Starts both a master and a number of workers as described above.
 - `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
-- `sbin/stop-slave.sh` - Stops all worker instances on the machine the script is executed on.
-- `sbin/stop-slaves.sh` - Stops all worker instances on the machines specified in the `conf/slaves` file.
+- `sbin/stop-worker.sh` - Stops all worker instances on the machine the script is executed on.
+- `sbin/stop-workers.sh` - Stops all worker instances on the machines specified in the `conf/workers` file.
 - `sbin/stop-all.sh` - Stops both the master and the workers as described above.
 
 Note that these scripts must be executed on the machine you want to run the Spark master on, not your local machine.
@@ -185,13 +185,14 @@ You can optionally configure the cluster further by setting environment variable
 SPARK_MASTER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.deploy.retainedApplications</code></td>
   <td>200</td>
   <td>
     The maximum number of completed applications to display. Older applications will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.retainedDrivers</code></td>
@@ -199,6 +200,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
    The maximum number of completed drivers to display. Older drivers will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.spreadOut</code></td>
@@ -208,6 +210,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     to consolidate them onto as few nodes as possible. Spreading out is usually better for
     data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
   </td>
+  <td>0.6.1</td>
 </tr>
 <tr>
   <td><code>spark.deploy.defaultCores</code></td>
@@ -219,6 +222,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     Set this lower on a shared cluster to prevent users from grabbing
     the whole cluster by default. <br/>
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.maxExecutorRetries</code></td>
@@ -234,6 +238,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     <code>-1</code>.
     <br/>
   </td>
+  <td>1.6.3</td>
 </tr>
 <tr>
   <td><code>spark.worker.timeout</code></td>
@@ -242,6 +247,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     Number of seconds after which the standalone deploy master considers a worker lost if it
     receives no heartbeats.
   </td>
+  <td>0.6.2</td>
 </tr>
 <tr>
   <td><code>spark.worker.resource.{resourceName}.amount</code></td>
@@ -249,6 +255,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Amount of a particular resource to use on the worker.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
@@ -256,9 +263,8 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Path to resource discovery script, which is used to find a particular resource while worker starting up.
     And the output of the script should be formatted like the <code>ResourceInformation</code> class.
-    When <code>spark.resources.coordinate.enable</code> is off, the discovery script must assign different
-    resources for workers and drivers in client mode that run on the same host to avoid resource conflict.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.resourcesFile</code></td>
@@ -266,20 +272,19 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Path to resources file which is used to find various resources while worker starting up.
     The content of resources file should be formatted like <code>
-    [[{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]]</code>.
-    When <code>spark.resources.coordinate.enable</code> is off, resources file must assign different
-    resources for workers and drivers in client mode that run on the same host to avoid resource conflict.
+    [{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]</code>.
     If a particular resource is not found in the resources file, the discovery script would be used to
     find that resource. If the discovery script also does not find the resources, the worker will fail
     to start up.
   </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
 SPARK_WORKER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
@@ -288,6 +293,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
     This should be enabled if spark.shuffle.service.db.enabled is "true"
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.interval</code></td>
@@ -296,6 +302,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     Controls the interval, in seconds, at which the worker cleans up old application work dirs
     on the local machine.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.appDataTtl</code></td>
@@ -306,6 +313,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
     especially if you run jobs very frequently.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.enabled</code></td>
@@ -316,6 +324,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
     eventually gets cleaned up.  This config may be removed in the future.
   </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
@@ -326,8 +335,9 @@ SPARK_WORKER_OPTS supports the following system properties:
     overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
     local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
     all files/subdirectories of a stopped and timeout application.
-    This only affects Standalone mode, support of other cluster manangers can be added in the future.
+    This only affects Standalone mode, support of other cluster managers can be added in the future.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
@@ -337,6 +347,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     Spark caches the uncompressed file size of compressed log files. This property controls the cache
     size.
   </td>
+  <td>2.0.2</td>
 </tr>
 </table>
 
@@ -346,9 +357,9 @@ Please make sure to have read the Custom Resource Scheduling and Configuration O
 
 Spark Standalone has 2 parts, the first is configuring the resources for the Worker, the second is the resource allocation for a specific application.
 
-The user must configure the Workers to have a set of resources available so that it can assign them out to Executors. The <code>spark.worker.resource.{resourceName}.amount</code> is used to control the amount of each resource the worker has allocated. The user must also specify either <code>spark.worker.resourcesFile</code> or <code>spark.worker.resource.{resourceName}.discoveryScript</code> to specify how the Worker discovers the resources its assigned. See the descriptions above for each of those to see which method works best for your setup. Please take note of <code>spark.resources.coordinate.enable</code> as it indicates whether Spark should handle coordinating resources or if the user has made sure each Worker has separate resources. Also note that if using the resources coordination <code>spark.resources.dir</code> can be used to specify the directory used to do that coordination.
+The user must configure the Workers to have a set of resources available so that it can assign them out to Executors. The <code>spark.worker.resource.{resourceName}.amount</code> is used to control the amount of each resource the worker has allocated. The user must also specify either <code>spark.worker.resourcesFile</code> or <code>spark.worker.resource.{resourceName}.discoveryScript</code> to specify how the Worker discovers the resources its assigned. See the descriptions above for each of those to see which method works best for your setup.
 
-The second part is running an application on Spark Standalone. The only special case from the standard Spark resource configs is when you are running the Driver in client mode. For a Driver in client mode, the user can specify the resources it uses via <code>spark.driver.resourcesfile</code> or <code>spark.driver.resources.{resourceName}.discoveryScript</code>. If the Driver is running on the same host as other Drivers or Workers there are 2 ways to make sure the they don't use the same resources. The user can either configure <code>spark.resources.coordinate.enable</code> on and give all the Driver/Workers the same set or resources and Spark will handle make sure each Driver/Worker has separate resources, or the user can make sure the resources file or discovery script only returns resources the do not conflict with other Drivers or Workers running on the same node.
+The second part is running an application on Spark Standalone. The only special case from the standard Spark resource configs is when you are running the Driver in client mode. For a Driver in client mode, the user can specify the resources it uses via <code>spark.driver.resourcesFile</code> or <code>spark.driver.resource.{resourceName}.discoveryScript</code>. If the Driver is running on the same host as other Drivers, please make sure the resources file or discovery script only returns resources that do not conflict with other Drivers running on the same node.
 
 Note, the user does not need to specify a discovery script when submitting an application as the Worker will start each Executor with the resources it allocates to it.
 
@@ -362,6 +373,25 @@ To run an interactive Spark shell against the cluster, run the following command
     ./bin/spark-shell --master spark://IP:PORT
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
+
+# Client Properties
+
+Spark applications supports the following configuration properties specific to standalone mode: 
+
+<table class="table">
+  <tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr>
+  <tr>
+  <td><code>spark.standalone.submit.waitAppCompletion</code></td>
+  <td><code>false</code></td>
+  <td>
+  In standalone cluster mode, controls whether the client waits to exit until the application completes.
+  If set to <code>true</code>, the client process will stay alive polling the driver's status.
+  Otherwise, the client process will exit after submission.
+  </td>
+  <td>3.1.0</td>
+  </tr>
+</table>
+
 
 # Launching Spark Applications
 
@@ -427,7 +457,7 @@ worker during one single schedule iteration.
 
 Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default, you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
 
-In addition, detailed log output for each job is also written to the work directory of each slave node (`SPARK_HOME/work` by default). You will see two files for each job, `stdout` and `stderr`, with all output it wrote to its console.
+In addition, detailed log output for each job is also written to the work directory of each worker node (`SPARK_HOME/work` by default). You will see two files for each job, `stdout` and `stderr`, with all output it wrote to its console.
 
 
 # Running Alongside Hadoop
@@ -488,14 +518,16 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
 <table class="table">
-  <tr><th style="width:21%">System property</th><th>Meaning</th></tr>
+  <tr><th style="width:21%">System property</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>Set to FILESYSTEM to enable single-node recovery mode (default: NONE).</td>
+    <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.</td>
+    <td>0.8.1</td>
   </tr>
 </table>
 

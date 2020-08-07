@@ -15,25 +15,19 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
 import sys
 import warnings
 from functools import reduce
 from threading import RLock
 
-if sys.version >= '3':
-    basestring = unicode = str
-    xrange = range
-else:
-    from itertools import izip as zip, imap as map
-
 from pyspark import since
-from pyspark.rdd import RDD, ignore_unicode_prefix
+from pyspark.rdd import RDD
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.pandas.conversion import SparkConversionMixin
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import Row, DataType, StringType, StructType, TimestampType, \
+from pyspark.sql.types import Row, DataType, StringType, StructType, \
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
     _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
@@ -53,14 +47,14 @@ def _monkey_patch_RDD(sparkSession):
         :return: a DataFrame
 
         >>> rdd.toDF().collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
         """
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
     RDD.toDF = toDF
 
 
-class SparkSession(object):
+class SparkSession(SparkConversionMixin):
     """The entry point to programming Spark with the Dataset and DataFrame API.
 
     A SparkSession can be used create :class:`DataFrame`, register :class:`DataFrame` as
@@ -194,7 +188,6 @@ class SparkSession(object):
     _instantiatedSession = None
     _activeSession = None
 
-    @ignore_unicode_prefix
     def __init__(self, sparkContext, jsparkSession=None):
         """Creates a new SparkSession.
 
@@ -210,7 +203,7 @@ class SparkSession(object):
         [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
             dict[s]=0, time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
         >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
-        [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
+        [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
         from pyspark.sql.context import SQLContext
         self._sc = sparkContext
@@ -262,7 +255,10 @@ class SparkSession(object):
     @since(3.0)
     def getActiveSession(cls):
         """
-        Returns the active SparkSession for the current thread, returned by the builder.
+        Returns the active SparkSession for the current thread, returned by the builder
+
+        :return: :class:`SparkSession` if an active session exists for the current thread
+
         >>> s = SparkSession.getActiveSession()
         >>> l = [('Alice', 1)]
         >>> rdd = s.sparkContext.parallelize(l)
@@ -458,135 +454,6 @@ class SparkSession(object):
         data = [schema.toInternal(row) for row in data]
         return self._sc.parallelize(data), schema
 
-    def _get_numpy_record_dtype(self, rec):
-        """
-        Used when converting a pandas.DataFrame to Spark using to_records(), this will correct
-        the dtypes of fields in a record so they can be properly loaded into Spark.
-        :param rec: a numpy record to check field dtypes
-        :return corrected dtype for a numpy.record or None if no correction needed
-        """
-        import numpy as np
-        cur_dtypes = rec.dtype
-        col_names = cur_dtypes.names
-        record_type_list = []
-        has_rec_fix = False
-        for i in xrange(len(cur_dtypes)):
-            curr_type = cur_dtypes[i]
-            # If type is a datetime64 timestamp, convert to microseconds
-            # NOTE: if dtype is datetime[ns] then np.record.tolist() will output values as longs,
-            # conversion from [us] or lower will lead to py datetime objects, see SPARK-22417
-            if curr_type == np.dtype('datetime64[ns]'):
-                curr_type = 'datetime64[us]'
-                has_rec_fix = True
-            record_type_list.append((str(col_names[i]), curr_type))
-        return np.dtype(record_type_list) if has_rec_fix else None
-
-    def _convert_from_pandas(self, pdf, schema, timezone):
-        """
-         Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
-         :return list of records
-        """
-        if timezone is not None:
-            from pyspark.sql.types import _check_series_convert_timestamps_tz_local
-            copied = False
-            if isinstance(schema, StructType):
-                for field in schema:
-                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-                    if isinstance(field.dataType, TimestampType):
-                        s = _check_series_convert_timestamps_tz_local(pdf[field.name], timezone)
-                        if s is not pdf[field.name]:
-                            if not copied:
-                                # Copy once if the series is modified to prevent the original
-                                # Pandas DataFrame from being updated
-                                pdf = pdf.copy()
-                                copied = True
-                            pdf[field.name] = s
-            else:
-                for column, series in pdf.iteritems():
-                    s = _check_series_convert_timestamps_tz_local(series, timezone)
-                    if s is not series:
-                        if not copied:
-                            # Copy once if the series is modified to prevent the original
-                            # Pandas DataFrame from being updated
-                            pdf = pdf.copy()
-                            copied = True
-                        pdf[column] = s
-
-        # Convert pandas.DataFrame to list of numpy records
-        np_records = pdf.to_records(index=False)
-
-        # Check if any columns need to be fixed for Spark to infer properly
-        if len(np_records) > 0:
-            record_dtype = self._get_numpy_record_dtype(np_records[0])
-            if record_dtype is not None:
-                return [r.astype(record_dtype).tolist() for r in np_records]
-
-        # Convert list of numpy records to python lists
-        return [r.tolist() for r in np_records]
-
-    def _create_from_pandas_with_arrow(self, pdf, schema, timezone):
-        """
-        Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
-        to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
-        data types will be used to coerce the data in Pandas to Arrow conversion.
-        """
-        from pyspark.serializers import ArrowStreamPandasSerializer
-        from pyspark.sql.types import from_arrow_type, to_arrow_type, TimestampType
-        from pyspark.sql.utils import require_minimum_pandas_version, \
-            require_minimum_pyarrow_version
-
-        require_minimum_pandas_version()
-        require_minimum_pyarrow_version()
-
-        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
-        import pyarrow as pa
-
-        # Create the Spark schema from list of names passed in with Arrow types
-        if isinstance(schema, (list, tuple)):
-            arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
-            struct = StructType()
-            for name, field in zip(schema, arrow_schema):
-                struct.add(name, from_arrow_type(field.type), nullable=field.nullable)
-            schema = struct
-
-        # Determine arrow types to coerce data when creating batches
-        if isinstance(schema, StructType):
-            arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
-        elif isinstance(schema, DataType):
-            raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
-        else:
-            # Any timestamps must be coerced to be compatible with Spark
-            arrow_types = [to_arrow_type(TimestampType())
-                           if is_datetime64_dtype(t) or is_datetime64tz_dtype(t) else None
-                           for t in pdf.dtypes]
-
-        # Slice the DataFrame to be batched
-        step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
-        pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
-
-        # Create list of Arrow (columns, type) for serializer dump_stream
-        arrow_data = [[(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)]
-                      for pdf_slice in pdf_slices]
-
-        jsqlContext = self._wrapped._jsqlContext
-
-        safecheck = self._wrapped._conf.arrowSafeTypeConversion()
-        col_by_name = True  # col by name only applies to StructType columns, can't happen here
-        ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
-
-        def reader_func(temp_filename):
-            return self._jvm.PythonSQLUtils.readArrowStreamFromFile(jsqlContext, temp_filename)
-
-        def create_RDD_server():
-            return self._jvm.ArrowRDDServer(jsqlContext)
-
-        # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jrdd = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_RDD_server)
-        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
-        df = DataFrame(jdf, self._wrapped)
-        df._schema = schema
-        return df
-
     @staticmethod
     def _create_shell_session():
         """
@@ -615,7 +482,6 @@ class SparkSession(object):
         return SparkSession.builder.getOrCreate()
 
     @since(2.0)
-    @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
@@ -653,34 +519,29 @@ class SparkSession(object):
 
         .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
 
-        .. note:: When Arrow optimization is enabled, strings inside Pandas DataFrame in Python
-            2 are converted into bytes as they are bytes in Python 2 whereas regular strings are
-            left as strings. When using strings in Python 2, use unicode `u""` as Python standard
-            practice.
-
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
-        [Row(_1=u'Alice', _2=1)]
+        [Row(_1='Alice', _2=1)]
         >>> spark.createDataFrame(l, ['name', 'age']).collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> d = [{'name': 'Alice', 'age': 1}]
         >>> spark.createDataFrame(d).collect()
-        [Row(age=1, name=u'Alice')]
+        [Row(age=1, name='Alice')]
 
         >>> rdd = sc.parallelize(l)
         >>> spark.createDataFrame(rdd).collect()
-        [Row(_1=u'Alice', _2=1)]
+        [Row(_1='Alice', _2=1)]
         >>> df = spark.createDataFrame(rdd, ['name', 'age'])
         >>> df.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> from pyspark.sql import Row
         >>> Person = Row('name', 'age')
         >>> person = rdd.map(lambda r: Person(*r))
         >>> df2 = spark.createDataFrame(person)
         >>> df2.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> from pyspark.sql.types import *
         >>> schema = StructType([
@@ -688,15 +549,15 @@ class SparkSession(object):
         ...    StructField("age", IntegerType(), True)])
         >>> df3 = spark.createDataFrame(rdd, schema)
         >>> df3.collect()
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
 
         >>> spark.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
-        [Row(name=u'Alice', age=1)]
+        [Row(name='Alice', age=1)]
         >>> spark.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
         [Row(0=1, 1=2)]
 
         >>> spark.createDataFrame(rdd, "a: string, b: int").collect()
-        [Row(a=u'Alice', b=1)]
+        [Row(a='Alice', b=1)]
         >>> rdd = rdd.map(lambda row: row[1])
         >>> spark.createDataFrame(rdd, "int").collect()
         [Row(value=1)]
@@ -710,7 +571,7 @@ class SparkSession(object):
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
-        if isinstance(schema, basestring):
+        if isinstance(schema, str):
             schema = _parse_datatype_string(schema)
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
@@ -722,46 +583,12 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
-            from pyspark.sql.utils import require_minimum_pandas_version
-            require_minimum_pandas_version()
+            # Create a DataFrame from pandas DataFrame.
+            return super(SparkSession, self).createDataFrame(
+                data, schema, samplingRatio, verifySchema)
+        return self._create_dataframe(data, schema, samplingRatio, verifySchema)
 
-            if self._wrapped._conf.pandasRespectSessionTimeZone():
-                timezone = self._wrapped._conf.sessionLocalTimeZone()
-            else:
-                timezone = None
-
-            # If no schema supplied by user then get the names of columns only
-            if schema is None:
-                schema = [str(x) if not isinstance(x, basestring) else
-                          (x.encode('utf-8') if not isinstance(x, str) else x)
-                          for x in data.columns]
-
-            if self._wrapped._conf.arrowPySparkEnabled() and len(data) > 0:
-                try:
-                    return self._create_from_pandas_with_arrow(data, schema, timezone)
-                except Exception as e:
-                    from pyspark.util import _exception_message
-
-                    if self._wrapped._conf.arrowPySparkFallbackEnabled():
-                        msg = (
-                            "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
-                            "failed by the reason below:\n  %s\n"
-                            "Attempting non-optimization as "
-                            "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
-                            "true." % _exception_message(e))
-                        warnings.warn(msg)
-                    else:
-                        msg = (
-                            "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
-                            "reached the error below and will not continue because automatic "
-                            "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
-                            "has been set to false.\n  %s" % _exception_message(e))
-                        warnings.warn(msg)
-                        raise
-            data = self._convert_from_pandas(data, schema, timezone)
-
+    def _create_dataframe(self, data, schema, samplingRatio, verifySchema):
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 
@@ -791,7 +618,6 @@ class SparkSession(object):
         df._schema = schema
         return df
 
-    @ignore_unicode_prefix
     @since(2.0)
     def sql(self, sqlQuery):
         """Returns a :class:`DataFrame` representing the result of the given query.
@@ -801,7 +627,7 @@ class SparkSession(object):
         >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
-        [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
+        [Row(f1=1, f2='row1'), Row(f1=2, f2='row2'), Row(f1=3, f2='row3')]
         """
         return DataFrame(self._jsparkSession.sql(sqlQuery), self._wrapped)
 
@@ -859,12 +685,14 @@ class SparkSession(object):
     def stop(self):
         """Stop the underlying :class:`SparkContext`.
         """
+        from pyspark.sql.context import SQLContext
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         self._jvm.SparkSession.clearDefaultSession()
         self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
+        SQLContext._instantiatedContext = None
 
     @since(2.0)
     def __enter__(self):

@@ -71,11 +71,13 @@ class DetectAmbiguousSelfJoin(conf: SQLConf) extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN)) return plan
+    if (!conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) return plan
 
     // We always remove the special metadata from `AttributeReference` at the end of this rule, so
     // Dataset column reference only exists in the root node via Dataset transformations like
     // `Dataset#select`.
+    if (plan.find(_.isInstanceOf[Join]).isEmpty) return stripColumnReferenceMetadataInPlan(plan)
+
     val colRefAttrs = plan.expressions.flatMap(_.collect {
       case a: AttributeReference if isColumnReference(a) => a
     })
@@ -149,10 +151,14 @@ class DetectAmbiguousSelfJoin(conf: SQLConf) extends Rule[LogicalPlan] {
           "to figure out which one. Please alias the Datasets with different names via " +
           "`Dataset.as` before joining them, and specify the column using qualified name, e.g. " +
           """`df.as("a").join(df.as("b"), $"a.id" > $"b.id")`. You can also set """ +
-          s"${SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key} to false to disable this check.")
+          s"${SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key} to false to disable this check.")
       }
     }
 
+    stripColumnReferenceMetadataInPlan(plan)
+  }
+
+  private def stripColumnReferenceMetadataInPlan(plan: LogicalPlan): LogicalPlan = {
     plan.transformExpressions {
       case a: AttributeReference if isColumnReference(a) =>
         // Remove the special metadata from this `AttributeReference`, as the detection is done.

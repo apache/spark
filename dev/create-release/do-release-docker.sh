@@ -54,7 +54,7 @@ WORKDIR=
 IMGTAG=latest
 JAVA=
 RELEASE_STEP=
-while getopts "d:hj:ns:t:" opt; do
+while getopts ":d:hj:ns:t:" opt; do
   case $opt in
     d) WORKDIR="$OPTARG" ;;
     n) DRY_RUN=1 ;;
@@ -62,7 +62,7 @@ while getopts "d:hj:ns:t:" opt; do
     j) JAVA="$OPTARG" ;;
     s) RELEASE_STEP="$OPTARG" ;;
     h) usage ;;
-    ?) error "Invalid option. Run with -h for help." ;;
+    \?) error "Invalid option. Run with -h for help." ;;
   esac
 done
 
@@ -93,7 +93,7 @@ done
 
 GPG_KEY_FILE="$WORKDIR/gpg.key"
 fcreate_secure "$GPG_KEY_FILE"
-$GPG --export-secret-key --armor "$GPG_KEY" > "$GPG_KEY_FILE"
+$GPG --export-secret-key --armor --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$GPG_KEY" > "$GPG_KEY_FILE"
 
 run_silent "Building spark-rm image with tag $IMGTAG..." "docker-build.log" \
   docker build -t "spark-rm:$IMGTAG" --build-arg UID=$UID "$SELF/spark-rm"
@@ -128,6 +128,7 @@ ASF_PASSWORD=$ASF_PASSWORD
 GPG_PASSPHRASE=$GPG_PASSPHRASE
 RELEASE_STEP=$RELEASE_STEP
 USER=$USER
+ZINC_OPTS=${RELEASE_ZINC_OPTS:-"-Xmx4g -XX:ReservedCodeCacheSize=2g"}
 EOF
 
 JAVA_VOL=
@@ -135,9 +136,6 @@ if [ -n "$JAVA" ]; then
   echo "JAVA_HOME=/opt/spark-java" >> $ENVFILE
   JAVA_VOL="--volume $JAVA:/opt/spark-java"
 fi
-
-# SPARK-24530: Sphinx must work with python 3 to generate doc correctly.
-echo "SPHINXPYTHON=/opt/p35/bin/python" >> $ENVFILE
 
 echo "Building $RELEASE_TAG; output will be at $WORKDIR/output"
 docker run -ti \

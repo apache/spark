@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.nio.file.{Files, Paths, StandardCopyOption}
+import java.sql.{Date, Timestamp}
+import java.time._
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -39,14 +42,15 @@ import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, SparkUpgradeException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -204,6 +208,42 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  testStandardAndLegacyModes("array of struct") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Seq(
+          Tuple1(s"1st_val_$i"),
+          Tuple1(s"2nd_val_$i")
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map(struct => Row(struct.productIterator.toSeq: _*)))
+      })
+    }
+  }
+
+  testStandardAndLegacyModes("array of nested struct") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Seq(
+          Tuple1(
+            Tuple1(s"1st_val_$i")),
+          Tuple1(
+            Tuple1(s"2nd_val_$i"))
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map { case Tuple1(Tuple1(str)) => Row(Row(str))})
+      })
+    }
+  }
+
   testStandardAndLegacyModes("nested struct with array of array as field") {
     val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
     withParquetDataFrame(data) { df =>
@@ -214,9 +254,34 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  testStandardAndLegacyModes("nested map with struct as value type") {
-    val data = (1 to 4).map(i => Tuple1(Map(i -> ((i, s"val_$i")))))
+  testStandardAndLegacyModes("nested map with struct as key type") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Map(
+          (i, s"kA_$i") -> s"vA_$i",
+          (i, s"kB_$i") -> s"vB_$i"
+        )
+      )
+    }
     withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(m) =>
+        Row(m.map { case (k, v) => Row(k.productIterator.toSeq: _*) -> v })
+      })
+    }
+  }
+
+  testStandardAndLegacyModes("nested map with struct as value type") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Map(
+          s"kA_$i" -> ((i, s"vA_$i")),
+          s"kB_$i" -> ((i, s"vB_$i"))
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(m) =>
         Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
       })
@@ -583,47 +648,39 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("read dictionary encoded decimals written as INT32") {
-    ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-        checkAnswer(
-          // Decimal column in this file is encoded using plain dictionary
-          readResourceParquetFile("test-data/dec-in-i32.parquet"),
-          spark.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
-      }
+    withAllParquetReaders {
+      checkAnswer(
+        // Decimal column in this file is encoded using plain dictionary
+        readResourceParquetFile("test-data/dec-in-i32.parquet"),
+        spark.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
     }
   }
 
   test("read dictionary encoded decimals written as INT64") {
-    ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-        checkAnswer(
-          // Decimal column in this file is encoded using plain dictionary
-          readResourceParquetFile("test-data/dec-in-i64.parquet"),
-          spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
-      }
+    withAllParquetReaders {
+      checkAnswer(
+        // Decimal column in this file is encoded using plain dictionary
+        readResourceParquetFile("test-data/dec-in-i64.parquet"),
+        spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
     }
   }
 
   test("read dictionary encoded decimals written as FIXED_LEN_BYTE_ARRAY") {
-    ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-        checkAnswer(
-          // Decimal column in this file is encoded using plain dictionary
-          readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
-          spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
-      }
+    withAllParquetReaders {
+      checkAnswer(
+        // Decimal column in this file is encoded using plain dictionary
+        readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
+        spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
     }
   }
 
   test("read dictionary and plain encoded timestamp_millis written as INT64") {
-    ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-        checkAnswer(
-          // timestamp column in this file is encoded using combination of plain
-          // and dictionary encodings.
-          readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
-          (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
-      }
+    withAllParquetReaders {
+      checkAnswer(
+        // timestamp column in this file is encoded using combination of plain
+        // and dictionary encodings.
+        readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
+        (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
     }
   }
 
@@ -658,7 +715,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
@@ -677,7 +734,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
@@ -695,7 +752,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
@@ -714,7 +771,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, List[String]().asJava)
           var result = 0
@@ -755,7 +812,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val schema = StructType(StructField("pcol", dt) :: Nil)
         val conf = sqlContext.conf
         val vectorizedReader = new VectorizedParquetRecordReader(
-          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         val partitionValues = new GenericInternalRow(Array(v))
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
 
@@ -816,6 +873,240 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       m.close()
 
       assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
+    }
+  }
+
+  // It generates input files for the test below:
+  // "SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps"
+  ignore("SPARK-31806: generate test files for checking compatibility with Spark 2.4") {
+    val resourceDir = "sql/core/src/test/resources/test-data"
+    val version = "2_4_5"
+    val N = 8
+    def save(
+        in: Seq[(String, String)],
+        t: String,
+        dstFile: String,
+        options: Map[String, String] = Map.empty): Unit = {
+      withTempDir { dir =>
+        in.toDF("dict", "plain")
+          .select($"dict".cast(t), $"plain".cast(t))
+          .repartition(1)
+          .write
+          .mode("overwrite")
+          .options(options)
+          .parquet(dir.getCanonicalPath)
+        Files.copy(
+          dir.listFiles().filter(_.getName.endsWith(".snappy.parquet")).head.toPath,
+          Paths.get(resourceDir, dstFile),
+          StandardCopyOption.REPLACE_EXISTING)
+      }
+    }
+    DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId) {
+        save(
+          (1 to N).map(i => ("1001-01-01", s"1001-01-0$i")),
+          "date",
+          s"before_1582_date_v$version.snappy.parquet")
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MILLIS") {
+          save(
+            (1 to N).map(i => ("1001-01-01 01:02:03.123", s"1001-01-0$i 01:02:03.123")),
+            "timestamp",
+            s"before_1582_timestamp_millis_v$version.snappy.parquet")
+        }
+        val usTs = (1 to N).map(i => ("1001-01-01 01:02:03.123456", s"1001-01-0$i 01:02:03.123456"))
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
+          save(usTs, "timestamp", s"before_1582_timestamp_micros_v$version.snappy.parquet")
+        }
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "INT96") {
+          // Comparing to other logical types, Parquet-MR chooses dictionary encoding for the
+          // INT96 logical type because it consumes less memory for small column cardinality.
+          // Huge parquet files doesn't make sense to place to the resource folder. That's why
+          // we explicitly set `parquet.enable.dictionary` and generate two files w/ and w/o
+          // dictionary encoding.
+          save(
+            usTs,
+            "timestamp",
+            s"before_1582_timestamp_int96_plain_v$version.snappy.parquet",
+            Map("parquet.enable.dictionary" -> "false"))
+          save(
+            usTs,
+            "timestamp",
+            s"before_1582_timestamp_int96_dict_v$version.snappy.parquet",
+            Map("parquet.enable.dictionary" -> "true"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
+    val N = 8
+    // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
+    def checkReadMixedFiles[T](
+        fileName: String,
+        catalystType: String,
+        rowFunc: Int => (String, String),
+        toJavaType: String => T,
+        checkDefaultLegacyRead: String => Unit,
+        tsOutputType: String = "TIMESTAMP_MICROS"): Unit = {
+      withTempPaths(2) { paths =>
+        paths.foreach(_.delete())
+        val path2_4 = getResourceParquetFilePath("test-data/" + fileName)
+        val path3_0 = paths(0).getCanonicalPath
+        val path3_0_rebase = paths(1).getCanonicalPath
+        val df = Seq.tabulate(N)(rowFunc).toDF("dict", "plain")
+          .select($"dict".cast(catalystType), $"plain".cast(catalystType))
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsOutputType) {
+          checkDefaultLegacyRead(path2_4)
+          // By default we should fail to write ancient datetime values.
+          val e = intercept[SparkException](df.write.parquet(path3_0))
+          assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
+          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+            df.write.mode("overwrite").parquet(path3_0)
+          }
+          withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+            df.write.parquet(path3_0_rebase)
+          }
+        }
+        // For Parquet files written by Spark 3.0, we know the writer info and don't need the
+        // config to guide the rebase behavior.
+        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key -> LEGACY.toString) {
+          checkAnswer(
+            spark.read.format("parquet").load(path2_4, path3_0, path3_0_rebase),
+            (0 until N).flatMap { i =>
+              val (dictS, plainS) = rowFunc(i)
+              Seq.tabulate(3) { _ =>
+                Row(toJavaType(dictS), toJavaType(plainS))
+              }
+            })
+        }
+      }
+    }
+    def failInRead(path: String): Unit = {
+      val e = intercept[SparkException](spark.read.parquet(path).collect())
+      assert(e.getCause.isInstanceOf[SparkUpgradeException])
+    }
+    def successInRead(path: String): Unit = spark.read.parquet(path).collect()
+    Seq(
+      // By default we should fail to read ancient datetime values when parquet files don't
+      // contain Spark version.
+      "2_4_5" -> failInRead _,
+      "2_4_6" -> successInRead _).foreach { case (version, checkDefaultRead) =>
+      withAllParquetReaders {
+        checkReadMixedFiles(
+          s"before_1582_date_v$version.snappy.parquet",
+          "date",
+          (i: Int) => ("1001-01-01", s"1001-01-0${i + 1}"),
+          java.sql.Date.valueOf,
+          checkDefaultRead)
+        checkReadMixedFiles(
+          s"before_1582_timestamp_micros_v$version.snappy.parquet",
+          "timestamp",
+          (i: Int) => ("1001-01-01 01:02:03.123456", s"1001-01-0${i + 1} 01:02:03.123456"),
+          java.sql.Timestamp.valueOf,
+          checkDefaultRead)
+        checkReadMixedFiles(
+          s"before_1582_timestamp_millis_v$version.snappy.parquet",
+          "timestamp",
+          (i: Int) => ("1001-01-01 01:02:03.123", s"1001-01-0${i + 1} 01:02:03.123"),
+          java.sql.Timestamp.valueOf,
+          checkDefaultRead,
+          tsOutputType = "TIMESTAMP_MILLIS")
+        // INT96 is a legacy timestamp format and we always rebase the seconds for it.
+        Seq("plain", "dict").foreach { enc =>
+          checkAnswer(readResourceParquetFile(
+            s"test-data/before_1582_timestamp_int96_${enc}_v$version.snappy.parquet"),
+            Seq.tabulate(N) { i =>
+              Row(
+                java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456"),
+                java.sql.Timestamp.valueOf(s"1001-01-0${i + 1} 01:02:03.123456"))
+            })
+        }
+      }
+    }
+  }
+
+  test("SPARK-31159: rebasing timestamps in write") {
+    val N = 8
+    Seq(false, true).foreach { dictionaryEncoding =>
+      Seq(
+        ("TIMESTAMP_MILLIS", "1001-01-01 01:02:03.123", "1001-01-07 01:09:05.123"),
+        ("TIMESTAMP_MICROS", "1001-01-01 01:02:03.123456", "1001-01-07 01:09:05.123456"),
+        ("INT96", "1001-01-01 01:02:03.123456", "1001-01-01 01:02:03.123456")
+      ).foreach { case (outType, tsStr, nonRebased) =>
+        withClue(s"output type $outType") {
+          withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
+            withTempPath { dir =>
+              val path = dir.getAbsolutePath
+              withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+                Seq.tabulate(N)(_ => tsStr).toDF("tsS")
+                  .select($"tsS".cast("timestamp").as("ts"))
+                  .repartition(1)
+                  .write
+                  .option("parquet.enable.dictionary", dictionaryEncoding)
+                  .parquet(path)
+              }
+
+              withAllParquetReaders {
+                // The file metadata indicates if it needs rebase or not, so we can always get the
+                // correct result regardless of the "rebase mode" config.
+                Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
+                  withSQLConf(
+                    SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key -> mode.toString) {
+                    checkAnswer(
+                      spark.read.parquet(path),
+                      Seq.tabulate(N)(_ => Row(Timestamp.valueOf(tsStr))))
+                  }
+                }
+
+                // Force to not rebase to prove the written datetime values are rebased
+                // and we will get wrong result if we don't rebase while reading.
+                withSQLConf("spark.test.forceNoRebase" -> "true") {
+                  checkAnswer(
+                    spark.read.parquet(path),
+                    Seq.tabulate(N)(_ => Row(Timestamp.valueOf(nonRebased))))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-31159: rebasing dates in write") {
+    val N = 8
+    Seq(false, true).foreach { dictionaryEncoding =>
+      withTempPath { dir =>
+        val path = dir.getAbsolutePath
+        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+          Seq.tabulate(N)(_ => "1001-01-01").toDF("dateS")
+            .select($"dateS".cast("date").as("date"))
+            .repartition(1)
+            .write
+            .option("parquet.enable.dictionary", dictionaryEncoding)
+            .parquet(path)
+        }
+
+        withAllParquetReaders {
+          // The file metadata indicates if it needs rebase or not, so we can always get the
+          // correct result regardless of the "rebase mode" config.
+          Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
+            withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
+              checkAnswer(
+                spark.read.parquet(path),
+                Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-01"))))
+            }
+          }
+
+          // Force to not rebase to prove the written datetime values are rebased and we will get
+          // wrong result if we don't rebase while reading.
+          withSQLConf("spark.test.forceNoRebase" -> "true") {
+            checkAnswer(
+              spark.read.parquet(path),
+              Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-07"))))
+          }
+        }
+      }
     }
   }
 }

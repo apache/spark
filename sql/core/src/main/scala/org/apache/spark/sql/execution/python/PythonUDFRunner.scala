@@ -73,7 +73,7 @@ class PythonUDFRunner(
               val obj = new Array[Byte](length)
               stream.readFully(obj)
               obj
-            case 0 => Array.empty[Byte]
+            case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
@@ -104,7 +104,7 @@ object PythonUDFRunner {
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
         dataOut.writeInt(f.command.length)
-        dataOut.write(f.command)
+        dataOut.write(f.command.toArray)
       }
     }
   }

@@ -42,12 +42,14 @@ import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Streaming.STREAMING_DYN_ALLOCATION_MAX_EXECUTORS
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -209,9 +211,13 @@ private[spark] class ApplicationMaster(
   final def run(): Int = {
     try {
       val attemptID = if (isClusterMode) {
-        // Set the web ui port to be ephemeral for yarn so we don't conflict with
-        // other spark processes running on the same box
-        System.setProperty(UI_PORT.key, "0")
+        // Set the web ui port to be ephemeral for yarn if not set explicitly
+        // so we don't conflict with other spark processes running on the same box
+        // If set explicitly, Web UI will attempt to run on UI_PORT and try
+        // incrementally until UI_PORT + `spark.port.maxRetries`
+        if (System.getProperty(UI_PORT.key) == null) {
+          System.setProperty(UI_PORT.key, "0")
+        }
 
         // Set the master and deploy mode property to match the requested mode.
         System.setProperty("spark.master", "yarn")
@@ -455,7 +461,8 @@ private[spark] class ApplicationMaster(
       val executorMemory = _sparkConf.get(EXECUTOR_MEMORY).toInt
       val executorCores = _sparkConf.get(EXECUTOR_CORES)
       val dummyRunner = new ExecutorRunnable(None, yarnConf, _sparkConf, driverUrl, "<executorId>",
-        "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources)
+        "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       dummyRunner.launchContextDebugInfo()
     }
 
@@ -591,7 +598,7 @@ private[spark] class ApplicationMaster(
           }
       }
       try {
-        val numPendingAllocate = allocator.getPendingAllocate.size
+        val numPendingAllocate = allocator.getNumContainersPendingAllocate
         var sleepStartNs = 0L
         var sleepInterval = 200L // ms
         allocatorLock.synchronized {
@@ -776,8 +783,11 @@ private[spark] class ApplicationMaster(
       case r: RequestExecutors =>
         Option(allocator) match {
           case Some(a) =>
-            if (a.requestTotalExecutorsWithPreferredLocalities(r.requestedTotal,
-              r.localityAwareTasks, r.hostToLocalTaskCount, r.nodeBlacklist)) {
+            if (a.requestTotalExecutorsWithPreferredLocalities(
+              r.resourceProfileToTotalExecs,
+              r.numLocalityAwareTasksPerResourceProfileId,
+              r.hostToLocalTaskCount,
+              r.nodeBlacklist)) {
               resetAllocatorInterval()
             }
             context.reply(true)
@@ -858,10 +868,22 @@ object ApplicationMaster extends Logging {
     val ugi = sparkConf.get(PRINCIPAL) match {
       // We only need to log in with the keytab in cluster mode. In client mode, the driver
       // handles the user keytab.
-      case Some(principal) if amArgs.userClass != null =>
+      case Some(principal) if master.isClusterMode =>
         val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()
+
+        if (master.appAttemptId == null || master.appAttemptId.getAttemptId > 1) {
+          // Re-obtain delegation tokens if this is not a first attempt, as they might be outdated
+          // as of now. Add the fresh tokens on top of the original user's credentials (overwrite).
+          // Set the context class loader so that the token manager has access to jars
+          // distributed by the user.
+          Utils.withContextClassLoader(master.userClassLoader) {
+            val credentialManager = new HadoopDelegationTokenManager(sparkConf, yarnConf, null)
+            credentialManager.obtainDelegationTokens(originalCreds)
+          }
+        }
+
         // Transfer the original user's tokens to the new user, since it may contain needed tokens
         // (such as those user to connect to YARN).
         newUGI.addCredentials(originalCreds)

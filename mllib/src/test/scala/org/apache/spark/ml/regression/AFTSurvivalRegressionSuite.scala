@@ -428,6 +428,22 @@ class AFTSurvivalRegressionSuite extends MLTest with DefaultReadWriteTest {
     val trainer = new AFTSurvivalRegression()
     trainer.fit(dataset)
   }
+
+  test("AFTSurvivalRegression on blocks") {
+    val quantileProbabilities = Array(0.1, 0.5, 0.9)
+    for (dataset <- Seq(datasetUnivariate, datasetUnivariateScaled, datasetMultivariate)) {
+      val aft = new AFTSurvivalRegression()
+        .setQuantileProbabilities(quantileProbabilities)
+        .setQuantilesCol("quantiles")
+      val model = aft.fit(dataset)
+      Seq(4, 16, 64).foreach { blockSize =>
+        val model2 = aft.setBlockSize(blockSize).fit(dataset)
+        assert(model.coefficients ~== model2.coefficients relTol 1e-9)
+        assert(model.intercept ~== model2.intercept relTol 1e-9)
+        assert(model.scale ~== model2.scale relTol 1e-9)
+      }
+    }
+  }
 }
 
 object AFTSurvivalRegressionSuite {

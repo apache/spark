@@ -30,9 +30,9 @@ set -e
 # If there is no passwd entry for the container UID, attempt to create one
 if [ -z "$uidentry" ] ; then
     if [ -w /etc/passwd ] ; then
-        echo "$myuid:x:$myuid:$mygid:${SPARK_USER_NAME:-anonymous uid}:$SPARK_HOME:/bin/false" >> /etc/passwd
+	echo "$myuid:x:$myuid:$mygid:${SPARK_USER_NAME:-anonymous uid}:$SPARK_HOME:/bin/false" >> /etc/passwd
     else
-        echo "Container ENTRYPOINT failed to add passwd entry for anonymous UID"
+	echo "Container ENTRYPOINT failed to add passwd entry for anonymous UID"
     fi
 fi
 
@@ -56,6 +56,12 @@ elif [ "$PYSPARK_MAJOR_PYTHON_VERSION" == "3" ]; then
     export PYSPARK_DRIVER_PYTHON="python3"
 fi
 
+# If HADOOP_HOME is set and SPARK_DIST_CLASSPATH is not set, set it here so Hadoop jars are available to the executor.
+# It does not set SPARK_DIST_CLASSPATH if already set, to avoid overriding customizations of this value from elsewhere e.g. Docker/K8s.
+if [ -n "${HADOOP_HOME}"  ] && [ -z "${SPARK_DIST_CLASSPATH}"  ]; then
+  export SPARK_DIST_CLASSPATH="$($HADOOP_HOME/bin/hadoop classpath)"
+fi
+
 if ! [ -z ${HADOOP_CONF_DIR+x} ]; then
   SPARK_CLASSPATH="$HADOOP_CONF_DIR:$SPARK_CLASSPATH";
 fi
@@ -77,7 +83,7 @@ case "$1" in
       "${SPARK_EXECUTOR_JAVA_OPTS[@]}"
       -Xms$SPARK_EXECUTOR_MEMORY
       -Xmx$SPARK_EXECUTOR_MEMORY
-      -cp "$SPARK_CLASSPATH"
+      -cp "$SPARK_CLASSPATH:$SPARK_DIST_CLASSPATH"
       org.apache.spark.executor.CoarseGrainedExecutorBackend
       --driver-url $SPARK_DRIVER_URL
       --executor-id $SPARK_EXECUTOR_ID

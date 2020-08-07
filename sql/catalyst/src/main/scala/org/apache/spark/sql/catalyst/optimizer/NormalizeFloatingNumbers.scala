@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CreateArray, CreateMap, CreateNamedStruct, CreateStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, KnownFloatingPointNormalized, LambdaFunction, NamedLambdaVariable, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, CreateStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery, Window}
@@ -56,10 +56,6 @@ import org.apache.spark.sql.types._
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    // A subquery will be rewritten into join later, and will go through this rule
-    // eventually. Here we skip subquery, as we only need to run this rule once.
-    case _: Subquery => plan
-
     case _ => plan transform {
       case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
         // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need
@@ -114,20 +110,30 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case CreateNamedStruct(children) =>
       CreateNamedStruct(children.map(normalize))
 
-    case CreateArray(children) =>
-      CreateArray(children.map(normalize))
+    case CreateArray(children, useStringTypeWhenEmpty) =>
+      CreateArray(children.map(normalize), useStringTypeWhenEmpty)
 
-    case CreateMap(children) =>
-      CreateMap(children.map(normalize))
+    case CreateMap(children, useStringTypeWhenEmpty) =>
+      CreateMap(children.map(normalize), useStringTypeWhenEmpty)
 
     case _ if expr.dataType == FloatType || expr.dataType == DoubleType =>
       KnownFloatingPointNormalized(NormalizeNaNAndZero(expr))
+
+    case If(cond, trueValue, falseValue) =>
+      If(cond, normalize(trueValue), normalize(falseValue))
+
+    case CaseWhen(branches, elseVale) =>
+      CaseWhen(branches.map(br => (br._1, normalize(br._2))), elseVale.map(normalize))
+
+    case Coalesce(children) =>
+      Coalesce(children.map(normalize))
 
     case _ if expr.dataType.isInstanceOf[StructType] =>
       val fields = expr.dataType.asInstanceOf[StructType].fields.indices.map { i =>
         normalize(GetStructField(expr, i))
       }
-      CreateStruct(fields)
+      val struct = CreateStruct(fields)
+      KnownFloatingPointNormalized(If(IsNull(expr), Literal(null, struct.dataType), struct))
 
     case _ if expr.dataType.isInstanceOf[ArrayType] =>
       val ArrayType(et, containsNull) = expr.dataType

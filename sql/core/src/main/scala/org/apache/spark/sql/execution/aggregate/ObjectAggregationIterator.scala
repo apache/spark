@@ -61,9 +61,9 @@ class ObjectAggregationIterator(
   // Hacking the aggregation mode to call AggregateFunction.merge to merge two aggregation buffers
   private val mergeAggregationBuffers: (InternalRow, InternalRow) => Unit = {
     val newExpressions = aggregateExpressions.map {
-      case agg @ AggregateExpression(_, Partial, _, _) =>
+      case agg @ AggregateExpression(_, Partial, _, _, _) =>
         agg.copy(mode = PartialMerge)
-      case agg @ AggregateExpression(_, Complete, _, _) =>
+      case agg @ AggregateExpression(_, Complete, _, _, _) =>
         agg.copy(mode = Final)
       case other => other
     }
@@ -158,7 +158,7 @@ class ObjectAggregationIterator(
         val buffer: InternalRow = getAggregationBufferByKey(hashMap, groupingKey)
         processRow(buffer, newInput)
 
-        // The the hash map gets too large, makes a sorted spill and clear the map.
+        // The hash map gets too large, makes a sorted spill and clear the map.
         if (hashMap.size >= fallbackCountThreshold) {
           logInfo(
             s"Aggregation hash map size ${hashMap.size} reaches threshold " +

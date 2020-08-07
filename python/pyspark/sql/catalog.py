@@ -20,10 +20,8 @@ import warnings
 from collections import namedtuple
 
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.udf import UserDefinedFunction
-from pyspark.sql.types import IntegerType, StringType, StructType
+from pyspark.sql.types import StructType
 
 
 Database = namedtuple("Database", "name description locationUri")
@@ -44,19 +42,16 @@ class Catalog(object):
         self._jsparkSession = sparkSession._jsparkSession
         self._jcatalog = sparkSession._jsparkSession.catalog()
 
-    @ignore_unicode_prefix
     @since(2.0)
     def currentDatabase(self):
         """Returns the current default database in this session."""
         return self._jcatalog.currentDatabase()
 
-    @ignore_unicode_prefix
     @since(2.0)
     def setCurrentDatabase(self, dbName):
         """Sets the current default database in this session."""
         return self._jcatalog.setCurrentDatabase(dbName)
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listDatabases(self):
         """Returns a list of databases available across all sessions."""
@@ -70,7 +65,6 @@ class Catalog(object):
                 locationUri=jdb.locationUri()))
         return databases
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listTables(self, dbName=None):
         """Returns a list of tables/views in the specified database.
@@ -92,7 +86,6 @@ class Catalog(object):
                 isTemporary=jtable.isTemporary()))
         return tables
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listFunctions(self, dbName=None):
         """Returns a list of functions registered in the specified database.
@@ -113,7 +106,6 @@ class Catalog(object):
                 isTemporary=jfunction.isTemporary()))
         return functions
 
-    @ignore_unicode_prefix
     @since(2.0)
     def listColumns(self, tableName, dbName=None):
         """Returns a list of columns for the given table/view in the specified database.
@@ -137,6 +129,26 @@ class Catalog(object):
                 isPartition=jcolumn.isPartition(),
                 isBucket=jcolumn.isBucket()))
         return columns
+
+    @since(2.0)
+    def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
+        """Creates a table based on the dataset in a data source.
+
+        It returns the DataFrame associated with the external table.
+
+        The data source is specified by the ``source`` and a set of ``options``.
+        If ``source`` is not specified, the default data source configured by
+        ``spark.sql.sources.default`` will be used.
+
+        Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
+        created external table.
+
+        :return: :class:`DataFrame`
+        """
+        warnings.warn(
+            "createExternalTable is deprecated since Spark 2.2, please use createTable instead.",
+            DeprecationWarning)
+        return self.createTable(tableName, path, source, schema, **options)
 
     @since(2.2)
     def createTable(self, tableName, path=None, source=None, schema=None, **options):

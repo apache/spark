@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.time.ZoneOffset
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
@@ -118,21 +119,16 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       ).map { s => java.sql.Timestamp.valueOf(s) }
       import testImplicits._
       // match the column names of the file from impala
-      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-        SQLConf.ParquetOutputTimestampType.INT96.toString) {
-        val df = spark.createDataset(ts).toDF().repartition(1)
-          .withColumnRenamed("value", "ts")
-        df.write.parquet(tableDir.getAbsolutePath)
-      }
+      val df = spark.createDataset(ts).toDF().repartition(1).withColumnRenamed("value", "ts")
+      df.write.parquet(tableDir.getAbsolutePath)
       FileUtils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
 
       Seq(false, true).foreach { int96TimestampConversion =>
-        Seq(false, true).foreach { vectorized =>
+        withAllParquetReaders {
           withSQLConf(
               (SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
                 SQLConf.ParquetOutputTimestampType.INT96.toString),
-              (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString()),
-              (SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString())
+              (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString())
           ) {
             val readBack = spark.read.parquet(tableDir.getAbsolutePath).collect()
             assert(readBack.size === 6)
@@ -145,14 +141,15 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               impalaFileData.map { ts =>
                 DateTimeUtils.toJavaTimestamp(DateTimeUtils.convertTz(
                   DateTimeUtils.fromJavaTimestamp(ts),
-                  DateTimeUtils.TimeZoneUTC,
-                  DateTimeUtils.getTimeZone(conf.sessionLocalTimeZone)))
+                  ZoneOffset.UTC,
+                  DateTimeUtils.getZoneId(conf.sessionLocalTimeZone)))
               }
             }
             val fullExpectations = (ts ++ impalaExpectations).map(_.toString).sorted.toArray
             val actual = readBack.map(_.getTimestamp(0).toString).sorted
             withClue(
-              s"int96TimestampConversion = $int96TimestampConversion; vectorized = $vectorized") {
+              s"int96TimestampConversion = $int96TimestampConversion; " +
+              s"vectorized = ${SQLConf.get.parquetVectorizedReaderEnabled}") {
               assert(fullExpectations === actual)
 
               // Now test that the behavior is still correct even with a filter which could get
@@ -168,7 +165,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // the assumption on column stats, and also the end-to-end behavior.
 
               val hadoopConf = spark.sessionState.newHadoopConf()
-              val fs = FileSystem.get(hadoopConf)
+              val fs = new Path(tableDir.getAbsolutePath).getFileSystem(hadoopConf)
               val parts = fs.listStatus(new Path(tableDir.getAbsolutePath), new PathFilter {
                 override def accept(path: Path): Boolean = !path.getName.startsWith("_")
               })

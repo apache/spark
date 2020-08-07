@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{count, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -34,8 +35,8 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("join - self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
+    val df1 = testData.select(testData("key")).as("df1")
+    val df2 = testData.select(testData("key")).as("df2")
 
     checkAnswer(
       df1.join(df2, $"df1.key" === $"df2.key"),
@@ -57,11 +58,11 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
   test("join - using aliases after self join") {
     val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
     checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
+      df.as("x").join(df.as("y"), $"x.str" === $"y.str").groupBy("x.str").count(),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
 
     checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
+      df.as("x").join(df.as("y"), $"x.str" === $"y.str").groupBy("y.str").count(),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
@@ -96,7 +97,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val df2 = df1.filter($"id" > 0)
 
     withSQLConf(
-      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "false",
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "false",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       // `df1("id") > df2("id")` is always false.
       checkAnswer(df1.join(df2, df1("id") > df2("id")), Nil)
@@ -110,7 +111,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
 
     withSQLConf(
-      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "true",
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       assertAmbiguousSelfJoin(df1.join(df2, df1("id") > df2("id")))
     }
@@ -121,7 +122,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val df2 = df1.filter($"id" > 0)
 
     withSQLConf(
-      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "true",
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       assertAmbiguousSelfJoin(df1.join(df2, df1.colRegex("id") > df2.colRegex("id")))
     }
@@ -132,7 +133,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val df2 = df1.filter($"a.b" > 0)
 
     withSQLConf(
-      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "true",
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       assertAmbiguousSelfJoin(df1.join(df2, df1("a.b") > df2("a.c")))
     }
@@ -143,7 +144,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val df2 = df1.filter($"id" > 0)
 
     withSQLConf(
-      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "false",
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "false",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       // `df2("id")` actually points to the column of `df1`.
       checkAnswer(df1.join(df2).select(df2("id")), Seq(0, 0, 1, 1, 2, 2).map(Row(_)))
@@ -157,7 +158,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
 
     withSQLConf(
-      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "true",
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       assertAmbiguousSelfJoin(df1.join(df2).select(df2("id")))
     }
@@ -170,7 +171,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val df4 = spark.range(1)
 
     withSQLConf(
-      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "false",
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "false",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       // `df2("id") < df3("id")` is always false
       checkAnswer(df1.join(df2).join(df3, df2("id") < df3("id")), Nil)
@@ -196,10 +197,26 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
 
     withSQLConf(
-      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "true",
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       assertAmbiguousSelfJoin(df1.join(df2).join(df3, df2("id") < df3("id")))
       assertAmbiguousSelfJoin(df1.join(df4).join(df2).select(df2("id")))
+    }
+  }
+
+  test("SPARK-28344: don't fail if there is no ambiguous self join") {
+    withSQLConf(
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true") {
+      val df = Seq(1, 1, 2, 2).toDF("a")
+      val w = Window.partitionBy(df("a"))
+      checkAnswer(
+        df.select(df("a").alias("x"), sum(df("a")).over(w)),
+        Seq((1, 2), (1, 2), (2, 4), (2, 4)).map(Row.fromTuple))
+
+      val joined = df.join(spark.range(1)).select($"a")
+      checkAnswer(
+        joined.select(joined("a").alias("x"), sum(joined("a")).over(w)),
+        Seq((1, 2), (1, 2), (2, 4), (2, 4)).map(Row.fromTuple))
     }
   }
 }

@@ -21,7 +21,7 @@ import unittest
 
 import numpy as np
 
-from pyspark.ml.classification import DecisionTreeClassifier, LogisticRegression, \
+from pyspark.ml.classification import FMClassifier, LogisticRegression, \
     MultilayerPerceptronClassifier, OneVsRest
 from pyspark.ml.clustering import DistributedLDAModel, KMeans, LocalLDAModel, LDA, LDAModel
 from pyspark.ml.fpm import FPGrowth
@@ -140,7 +140,7 @@ class OneVsRestTests(SparkSessionTestCase):
         ovr = OneVsRest(classifier=lr, weightCol="weight")
         self.assertIsNotNone(ovr.fit(df))
         # classifier doesn't inherit hasWeightCol
-        dt = DecisionTreeClassifier()
+        dt = FMClassifier()
         ovr2 = OneVsRest(classifier=dt, weightCol="weight")
         self.assertIsNotNone(ovr2.fit(df))
 
@@ -226,8 +226,8 @@ class FPGrowthTests(SparkSessionTestCase):
         fpm = fp.fit(self.data)
 
         expected_association_rules = self.spark.createDataFrame(
-            [([3], [1], 1.0, 1.0), ([2], [1], 1.0, 1.0)],
-            ["antecedent", "consequent", "confidence", "lift"]
+            [([3], [1], 1.0, 1.0, 0.5), ([2], [1], 1.0, 1.0, 0.75)],
+            ["antecedent", "consequent", "confidence", "lift", "support"]
         )
         actual_association_rules = fpm.associationRules
 

@@ -29,8 +29,8 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.IMetaStoreClient
-import org.apache.hadoop.hive.metastore.api.{EnvironmentContext, Function => HiveFunction, FunctionType}
-import org.apache.hadoop.hive.metastore.api.{MetaException, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.metastore.TableType
+import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
@@ -90,6 +90,12 @@ private[client] sealed abstract class Shim {
   def alterTable(hive: Hive, tableName: String, table: Table): Unit
 
   def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit
+
+  def getTablesByType(
+      hive: Hive,
+      dbName: String,
+      pattern: String,
+      tableType: TableType): Seq[String]
 
   def createPartitions(
       hive: Hive,
@@ -153,6 +159,10 @@ private[client] sealed abstract class Shim {
       part: JList[String],
       deleteData: Boolean,
       purge: Boolean): Unit
+
+  def getDatabaseOwnerName(db: Database): String
+
+  def setDatabaseOwnerName(db: Database, owner: String): Unit
 
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
@@ -353,11 +363,20 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getDriverResults(driver: Driver): Seq[String] = {
     val res = new JArrayList[String]()
     getDriverResultsMethod.invoke(driver, res)
-    res.asScala
+    res.asScala.toSeq
   }
 
   override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
     conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000L
+  }
+
+  override def getTablesByType(
+      hive: Hive,
+      dbName: String,
+      pattern: String,
+      tableType: TableType): Seq[String] = {
+    throw new UnsupportedOperationException("Hive 2.2 and lower versions don't support " +
+      "getTablesByType. Please use Hive 2.3 or higher version.")
   }
 
   override def loadPartition(
@@ -456,6 +475,10 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   def listFunctions(hive: Hive, db: String, pattern: String): Seq[String] = {
     Seq.empty[String]
   }
+
+  override def getDatabaseOwnerName(db: Database): String = ""
+
+  override def setDatabaseOwnerName(db: Database, owner: String): Unit = {}
 }
 
 private[client] class Shim_v0_13 extends Shim_v0_12 {
@@ -492,6 +515,17 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       classOf[Driver],
       "getResults",
       classOf[JList[Object]])
+
+  private lazy val getDatabaseOwnerNameMethod =
+    findMethod(
+      classOf[Database],
+      "getOwnerName")
+
+  private lazy val setDatabaseOwnerNameMethod =
+    findMethod(
+      classOf[Database],
+      "setOwnerName",
+      classOf[String])
 
   override def setCurrentSessionState(state: SessionState): Unit =
     setCurrentSessionStateMethod.invoke(null, state)
@@ -566,7 +600,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
       FunctionResource(FunctionResourceType.fromString(resourceType), uri.getUri())
     }
-    CatalogFunction(name, hf.getClassName, resources)
+    CatalogFunction(name, hf.getClassName, resources.toSeq)
   }
 
   override def getFunctionOption(hive: Hive, db: String, name: String): Option[CatalogFunction] = {
@@ -589,7 +623,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   }
 
   override def listFunctions(hive: Hive, db: String, pattern: String): Seq[String] = {
-    hive.getFunctions(db, pattern).asScala
+    hive.getFunctions(db, pattern).asScala.toSeq
   }
 
   /**
@@ -666,7 +700,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
     }
 
-    object NonVarcharAttribute {
+    object SupportedAttribute {
       // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
       private val varcharKeys = table.getPartitionKeys.asScala
         .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
@@ -674,10 +708,13 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         .map(col => col.getName).toSet
 
       def unapply(attr: Attribute): Option[String] = {
-        if (varcharKeys.contains(attr.name)) {
+        val resolver = SQLConf.get.resolver
+        if (varcharKeys.exists(c => resolver(c, attr.name))) {
           None
-        } else {
+        } else if (attr.dataType.isInstanceOf[IntegralType] || attr.dataType == StringType) {
           Some(attr.name)
+        } else {
+          None
         }
       }
     }
@@ -700,20 +737,20 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     def convert(expr: Expression): Option[String] = expr match {
-      case In(ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiterals(values))
+      case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case InSet(ExtractAttribute(NonVarcharAttribute(name)), ExtractableValues(values))
+      case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
       case op @ SpecialBinaryComparison(
-          ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiteral(value)) =>
+          ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
         Some(s"$name ${op.symbol} $value")
 
       case op @ SpecialBinaryComparison(
-          ExtractableLiteral(value), ExtractAttribute(NonVarcharAttribute(name))) =>
+          ExtractableLiteral(value), ExtractAttribute(SupportedAttribute(name))) =>
         Some(s"$value ${op.symbol} $name")
 
       case And(expr1, expr2) if useAdvanced =>
@@ -806,9 +843,16 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         case s: String => s
         case a: Array[Object] => a(0).asInstanceOf[String]
       }
-    }
+    }.toSeq
   }
 
+  override def getDatabaseOwnerName(db: Database): String = {
+    Option(getDatabaseOwnerNameMethod.invoke(db)).map(_.asInstanceOf[String]).getOrElse("")
+  }
+
+  override def setDatabaseOwnerName(db: Database, owner: String): Unit = {
+    setDatabaseOwnerNameMethod.invoke(db, owner)
+  }
 }
 
 private[client] class Shim_v0_14 extends Shim_v0_13 {
@@ -1193,7 +1237,24 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
 
 private[client] class Shim_v2_2 extends Shim_v2_1
 
-private[client] class Shim_v2_3 extends Shim_v2_1
+private[client] class Shim_v2_3 extends Shim_v2_1 {
+  private lazy val getTablesByTypeMethod =
+    findMethod(
+      classOf[Hive],
+      "getTablesByType",
+      classOf[String],
+      classOf[String],
+      classOf[TableType])
+
+  override def getTablesByType(
+      hive: Hive,
+      dbName: String,
+      pattern: String,
+      tableType: TableType): Seq[String] = {
+    getTablesByTypeMethod.invoke(hive, dbName, pattern, tableType)
+      .asInstanceOf[JList[String]].asScala.toSeq
+  }
+}
 
 private[client] class Shim_v3_0 extends Shim_v2_3 {
   // Spark supports only non-ACID operations

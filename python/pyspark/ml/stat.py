@@ -19,6 +19,7 @@ import sys
 
 from pyspark import since, SparkContext
 from pyspark.ml.common import _java2py, _py2java
+from pyspark.ml.linalg import DenseMatrix, Vectors
 from pyspark.ml.wrapper import JavaWrapper, _jvm
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.functions import lit
@@ -37,7 +38,7 @@ class ChiSquareTest(object):
     """
     @staticmethod
     @since("2.2.0")
-    def test(dataset, featuresCol, labelCol):
+    def test(dataset, featuresCol, labelCol, flatten=False):
         """
         Perform a Pearson's independence test using dataset.
 
@@ -48,13 +49,23 @@ class ChiSquareTest(object):
           Name of features column in dataset, of type `Vector` (`VectorUDT`).
         :param labelCol:
           Name of label column in dataset, of any numerical type.
+        :param flatten: if True, flattens the returned dataframe.
         :return:
           DataFrame containing the test result for every feature against the label.
-          This DataFrame will contain a single Row with the following fields:
+          If flatten is True, this DataFrame will contain one row per feature with the following
+          fields:
+          - `featureIndex: int`
+          - `pValue: float`
+          - `degreesOfFreedom: int`
+          - `statistic: float`
+          If flatten is False, this DataFrame will contain a single Row with the following fields:
           - `pValues: Vector`
-          - `degreesOfFreedom: Array[Int]`
+          - `degreesOfFreedom: Array[int]`
           - `statistics: Vector`
           Each of these fields has one value per feature.
+
+        .. versionchanged:: 3.1.0
+           Added optional ``flatten`` argument.
 
         >>> from pyspark.ml.linalg import Vectors
         >>> from pyspark.ml.stat import ChiSquareTest
@@ -66,10 +77,14 @@ class ChiSquareTest(object):
         >>> chiSqResult = ChiSquareTest.test(dataset, 'features', 'label')
         >>> chiSqResult.select("degreesOfFreedom").collect()[0]
         Row(degreesOfFreedom=[3, 1, 0])
+        >>> chiSqResult = ChiSquareTest.test(dataset, 'features', 'label', True)
+        >>> row = chiSqResult.orderBy("featureIndex").collect()
+        >>> row[0].statistic
+        4.0
         """
         sc = SparkContext._active_spark_context
         javaTestObj = _jvm().org.apache.spark.ml.stat.ChiSquareTest
-        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol)]
+        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol, flatten)]
         return _java2py(sc, javaTestObj.test(*args))
 
 
@@ -207,14 +222,14 @@ class Summarizer(object):
     +-----------------------------------+
     |aggregate_metrics(features, weight)|
     +-----------------------------------+
-    |[[1.0,1.0,1.0], 1]                 |
+    |{[1.0,1.0,1.0], 1}                 |
     +-----------------------------------+
     <BLANKLINE>
     >>> df.select(summarizer.summary(df.features)).show(truncate=False)
     +--------------------------------+
     |aggregate_metrics(features, 1.0)|
     +--------------------------------+
-    |[[1.0,1.5,2.0], 2]              |
+    |{[1.0,1.5,2.0], 2}              |
     +--------------------------------+
     <BLANKLINE>
     >>> df.select(Summarizer.mean(df.features, df.weight)).show(truncate=False)
@@ -244,12 +259,28 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "mean")
 
     @staticmethod
+    @since("3.0.0")
+    def sum(col, weightCol=None):
+        """
+        return a column of sum summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "sum")
+
+    @staticmethod
     @since("2.4.0")
     def variance(col, weightCol=None):
         """
         return a column of variance summary
         """
         return Summarizer._get_single_metric(col, weightCol, "variance")
+
+    @staticmethod
+    @since("3.0.0")
+    def std(col, weightCol=None):
+        """
+        return a column of std summary
+        """
+        return Summarizer._get_single_metric(col, weightCol, "std")
 
     @staticmethod
     @since("2.4.0")
@@ -323,7 +354,9 @@ class Summarizer(object):
 
         The following metrics are accepted (case sensitive):
          - mean: a vector that contains the coefficient-wise mean.
+         - sum: a vector that contains the coefficient-wise sum.
          - variance: a vector tha contains the coefficient-wise variance.
+         - std: a vector tha contains the coefficient-wise standard deviation.
          - count: the count of all vectors seen.
          - numNonzeros: a vector with the number of non-zeros for each coefficients
          - max: the maximum for each coefficient.
@@ -374,6 +407,144 @@ class SummaryBuilder(JavaWrapper):
         """
         featuresCol, weightCol = Summarizer._check_param(featuresCol, weightCol)
         return Column(self._java_obj.summary(featuresCol._jc, weightCol._jc))
+
+
+class MultivariateGaussian(object):
+    """Represents a (mean, cov) tuple
+
+    >>> m = MultivariateGaussian(Vectors.dense([11,12]), DenseMatrix(2, 2, (1.0, 3.0, 5.0, 2.0)))
+    >>> (m.mean, m.cov.toArray())
+    (DenseVector([11.0, 12.0]), array([[ 1.,  5.],
+           [ 3.,  2.]]))
+
+    .. versionadded:: 3.0.0
+
+    """
+    def __init__(self, mean, cov):
+        self.mean = mean
+        self.cov = cov
+
+
+class ANOVATest(object):
+    """
+    Conduct ANOVA Classification Test for continuous features against categorical labels.
+
+    .. versionadded:: 3.1.0
+    """
+    @staticmethod
+    @since("3.1.0")
+    def test(dataset, featuresCol, labelCol, flatten=False):
+        """
+        Perform an ANOVA test using dataset.
+
+        :param dataset:
+          DataFrame of categorical labels and continuous features.
+        :param featuresCol:
+          Name of features column in dataset, of type `Vector` (`VectorUDT`).
+        :param labelCol:
+          Name of label column in dataset, of any numerical type.
+        :param flatten: if True, flattens the returned dataframe.
+        :return:
+          DataFrame containing the test result for every feature against the label.
+          If flatten is True, this DataFrame will contain one row per feature with the following
+          fields:
+          - `featureIndex: int`
+          - `pValue: float`
+          - `degreesOfFreedom: int`
+          - `fValue: float`
+          If flatten is False, this DataFrame will contain a single Row with the following fields:
+          - `pValues: Vector`
+          - `degreesOfFreedom: Array[int]`
+          - `fValues: Vector`
+          Each of these fields has one value per feature.
+
+        >>> from pyspark.ml.linalg import Vectors
+        >>> from pyspark.ml.stat import ANOVATest
+        >>> dataset = [[2.0, Vectors.dense([0.43486404, 0.57153633, 0.43175686,
+        ...                                 0.51418671, 0.61632374, 0.96565515])],
+        ...            [1.0, Vectors.dense([0.49162732, 0.6785187, 0.85460572,
+        ...                                 0.59784822, 0.12394819, 0.53783355])],
+        ...            [2.0, Vectors.dense([0.30879653, 0.54904515, 0.17103889,
+        ...                                 0.40492506, 0.18957493, 0.5440016])],
+        ...            [3.0, Vectors.dense([0.68114391, 0.60549825, 0.69094651,
+        ...                                 0.62102109, 0.05471483, 0.96449167])]]
+        >>> dataset = spark.createDataFrame(dataset, ["label", "features"])
+        >>> anovaResult = ANOVATest.test(dataset, 'features', 'label')
+        >>> row = anovaResult.select("fValues", "pValues").collect()
+        >>> row[0].fValues
+        DenseVector([4.0264, 18.4713, 3.4659, 1.9042, 0.5532, 0.512])
+        >>> row[0].pValues
+        DenseVector([0.3324, 0.1623, 0.3551, 0.456, 0.689, 0.7029])
+        >>> anovaResult = ANOVATest.test(dataset, 'features', 'label', True)
+        >>> row = anovaResult.orderBy("featureIndex").collect()
+        >>> row[0].fValue
+        4.026438671875297
+        """
+        sc = SparkContext._active_spark_context
+        javaTestObj = _jvm().org.apache.spark.ml.stat.ANOVATest
+        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol, flatten)]
+        return _java2py(sc, javaTestObj.test(*args))
+
+
+class FValueTest(object):
+    """
+    Conduct F Regression test for continuous features against continuous labels.
+
+    .. versionadded:: 3.1.0
+    """
+    @staticmethod
+    @since("3.1.0")
+    def test(dataset, featuresCol, labelCol, flatten=False):
+        """
+        Perform a F Regression test using dataset.
+
+        :param dataset:
+          DataFrame of continuous labels and continuous features.
+        :param featuresCol:
+          Name of features column in dataset, of type `Vector` (`VectorUDT`).
+        :param labelCol:
+          Name of label column in dataset, of any numerical type.
+        :param flatten: if True, flattens the returned dataframe.
+        :return:
+          DataFrame containing the test result for every feature against the label.
+          If flatten is True, this DataFrame will contain one row per feature with the following
+          fields:
+          - `featureIndex: int`
+          - `pValue: float`
+          - `degreesOfFreedom: int`
+          - `fValue: float`
+          If flatten is False, this DataFrame will contain a single Row with the following fields:
+          - `pValues: Vector`
+          - `degreesOfFreedom: Array[int]`
+          - `fValues: Vector`
+          Each of these fields has one value per feature.
+
+        >>> from pyspark.ml.linalg import Vectors
+        >>> from pyspark.ml.stat import FValueTest
+        >>> dataset = [[0.57495218, Vectors.dense([0.43486404, 0.57153633, 0.43175686,
+        ...                                        0.51418671, 0.61632374, 0.96565515])],
+        ...            [0.84619853, Vectors.dense([0.49162732, 0.6785187, 0.85460572,
+        ...                                        0.59784822, 0.12394819, 0.53783355])],
+        ...            [0.39777647, Vectors.dense([0.30879653, 0.54904515, 0.17103889,
+        ...                                        0.40492506, 0.18957493, 0.5440016])],
+        ...            [0.79201573, Vectors.dense([0.68114391, 0.60549825, 0.69094651,
+        ...                                        0.62102109, 0.05471483, 0.96449167])]]
+        >>> dataset = spark.createDataFrame(dataset, ["label", "features"])
+        >>> fValueResult = FValueTest.test(dataset, 'features', 'label')
+        >>> row = fValueResult.select("fValues", "pValues").collect()
+        >>> row[0].fValues
+        DenseVector([3.741, 7.5807, 142.0684, 34.9849, 0.4112, 0.0539])
+        >>> row[0].pValues
+        DenseVector([0.1928, 0.1105, 0.007, 0.0274, 0.5871, 0.838])
+        >>> fValueResult = FValueTest.test(dataset, 'features', 'label', True)
+        >>> row = fValueResult.orderBy("featureIndex").collect()
+        >>> row[0].fValue
+        3.7409548308350593
+        """
+        sc = SparkContext._active_spark_context
+        javaTestObj = _jvm().org.apache.spark.ml.stat.FValueTest
+        args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol, flatten)]
+        return _java2py(sc, javaTestObj.test(*args))
 
 
 if __name__ == "__main__":

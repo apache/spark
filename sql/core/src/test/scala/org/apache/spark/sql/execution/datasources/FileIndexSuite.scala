@@ -21,15 +21,20 @@ import java.io.{File, FileNotFoundException}
 import java.net.URI
 
 import scala.collection.mutable
+import scala.concurrent.duration._
 
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem, RemoteIterator}
+import org.apache.hadoop.fs.viewfs.ViewFileSystem
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.KnownSizeEstimation
@@ -352,6 +357,28 @@ class FileIndexSuite extends SharedSparkSession {
       "driver side must not be negative"))
   }
 
+  test ("SPARK-29537: throw exception when user defined a wrong base path") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val wrongBasePath = new File(dir, "unknown")
+      // basePath must be a directory
+      wrongBasePath.mkdir()
+      withClue("SPARK-32368: 'basePath' can be case insensitive") {
+        val parameters = Map("bAsepAtH" -> wrongBasePath.getCanonicalPath)
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
+        val msg = intercept[IllegalArgumentException] {
+          // trigger inferPartitioning()
+          fileIndex.partitionSpec()
+        }.getMessage
+        assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+      }
+    }
+  }
+
   test("refresh for InMemoryFileIndex with FileStatusCache") {
     withTempDir { dir =>
       val fileStatusCache = FileStatusCache.getOrCreate(spark)
@@ -443,6 +470,50 @@ class FileIndexSuite extends SharedSparkSession {
           assert(withoutBlockLocations.forall(withBlockLocations.contains))
         }
       }
+    }
+  }
+
+  test("SPARK-31047 - Improve file listing for ViewFileSystem") {
+    val path = mock(classOf[Path])
+    val dfs = mock(classOf[ViewFileSystem])
+    when(path.getFileSystem(any[Configuration])).thenReturn(dfs)
+    val statuses =
+      Seq(
+        new LocatedFileStatus(
+          new FileStatus(0, false, 0, 100, 0,
+            new Path("file")), Array(new BlockLocation()))
+      )
+    when(dfs.listLocatedStatus(path)).thenReturn(new RemoteIterator[LocatedFileStatus] {
+      val iter = statuses.toIterator
+      override def hasNext: Boolean = iter.hasNext
+      override def next(): LocatedFileStatus = iter.next
+    })
+    val fileIndex = new TestInMemoryFileIndex(spark, path)
+    assert(fileIndex.leafFileStatuses.toSeq == statuses)
+  }
+
+  test("expire FileStatusCache if TTL is configured") {
+    val previousValue = SQLConf.get.getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
+    try {
+      // using 'SQLConf.get.setConf' instead of 'withSQLConf' to set a static config at runtime
+      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
+
+      val path = new Path("/dummy_tmp", "abc")
+      val files = (1 to 3).map(_ => new FileStatus())
+
+      FileStatusCache.resetForTesting()
+      val fileStatusCache = FileStatusCache.getOrCreate(spark)
+      fileStatusCache.putLeafFiles(path, files.toArray)
+
+      // Exactly 3 files are cached.
+      assert(fileStatusCache.getLeafFiles(path).get.length === 3)
+      // Wait until the cache expiration.
+      eventually(timeout(3.seconds)) {
+        // And the cache is gone.
+        assert(fileStatusCache.getLeafFiles(path).isEmpty === true)
+      }
+    } finally {
+      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, previousValue)
     }
   }
 }

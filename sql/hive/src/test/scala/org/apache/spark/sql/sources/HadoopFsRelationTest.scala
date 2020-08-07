@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -73,22 +74,22 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
     // Simple filtering and partition pruning
     checkAnswer(
-      df.filter('a > 1 && 'p1 === 2),
+      df.filter($"a" > 1 && $"p1" === 2),
       for (i <- 2 to 3; p2 <- Seq("foo", "bar")) yield Row(i, s"val_$i", 2, p2))
 
     // Simple projection and filtering
     checkAnswer(
-      df.filter('a > 1).select('b, 'a + 1),
+      df.filter($"a" > 1).select($"b", $"a" + 1),
       for (i <- 2 to 3; _ <- 1 to 2; _ <- Seq("foo", "bar")) yield Row(s"val_$i", i + 1))
 
     // Simple projection and partition pruning
     checkAnswer(
-      df.filter('a > 1 && 'p1 < 2).select('b, 'p1),
+      df.filter($"a" > 1 && $"p1" < 2).select($"b", $"p1"),
       for (i <- 2 to 3; _ <- Seq("foo", "bar")) yield Row(s"val_$i", 1))
 
     // Project many copies of columns with different types (reproduction for SPARK-7858)
     checkAnswer(
-      df.filter('a > 1 && 'p1 < 2).select('b, 'b, 'b, 'b, 'p1, 'p1, 'p1, 'p1),
+      df.filter($"a" > 1 && $"p1" < 2).select($"b", $"b", $"b", $"b", $"p1", $"p1", $"p1", $"p1"),
       for (i <- 2 to 3; _ <- Seq("foo", "bar"))
         yield Row(s"val_$i", s"val_$i", s"val_$i", s"val_$i", 1, 1, 1, 1))
 
@@ -145,40 +146,52 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
           val seed = System.nanoTime()
           withClue(s"Random data generated with the seed: ${seed}") {
-            val dataGenerator = RandomDataGenerator.forType(
-              dataType = dataType,
-              nullable = true,
-              new Random(seed)
-            ).getOrElse {
-              fail(s"Failed to create data generator for schema $dataType")
+            val java8ApiConfValues = if (dataType == DateType || dataType == TimestampType) {
+              Seq(false, true)
+            } else {
+              Seq(false)
             }
+            java8ApiConfValues.foreach { java8Api =>
+              withSQLConf(
+                SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+                SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
+                SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+                val dataGenerator = RandomDataGenerator.forType(
+                  dataType = dataType,
+                  nullable = true,
+                  new Random(seed)
+                ).getOrElse {
+                  fail(s"Failed to create data generator for schema $dataType")
+                }
 
-            // Create a DF for the schema with random data. The index field is used to sort the
-            // DataFrame.  This is a workaround for SPARK-10591.
-            val schema = new StructType()
-              .add("index", IntegerType, nullable = false)
-              .add("col", dataType, nullable = true)
-            val rdd =
-              spark.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
-            val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+                // Create a DF for the schema with random data. The index field is used to sort the
+                // DataFrame.  This is a workaround for SPARK-10591.
+                val schema = new StructType()
+                  .add("index", IntegerType, nullable = false)
+                  .add("col", dataType, nullable = true)
+                val rdd =
+                  spark.sparkContext.parallelize((1 to 20).map(i => Row(i, dataGenerator())))
+                val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
 
-            df.write
-              .mode("overwrite")
-              .format(dataSourceName)
-              .option("dataSchema", df.schema.json)
-              .options(extraOptions)
-              .save(path)
+                df.write
+                  .mode("overwrite")
+                  .format(dataSourceName)
+                  .option("dataSchema", df.schema.json)
+                  .options(extraOptions)
+                  .save(path)
 
-            val loadedDF = spark
-              .read
-              .format(dataSourceName)
-              .option("dataSchema", df.schema.json)
-              .schema(df.schema)
-              .options(extraOptions)
-              .load(path)
-              .orderBy("index")
+                val loadedDF = spark
+                  .read
+                  .format(dataSourceName)
+                  .option("dataSchema", df.schema.json)
+                  .schema(df.schema)
+                  .options(extraOptions)
+                  .load(path)
+                  .orderBy("index")
 
-            checkAnswer(loadedDF, df)
+                checkAnswer(loadedDF, df)
+              }
+            }
           }
         }
       }
@@ -384,12 +397,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("saveAsTable()/load() - partitioned table - boolean type") {
     spark.range(2)
-      .select('id, ('id % 2 === 0).as("b"))
+      .select($"id", ($"id" % 2 === 0).as("b"))
       .write.partitionBy("b").saveAsTable("t")
 
     withTable("t") {
       checkAnswer(
-        spark.table("t").sort('id),
+        spark.table("t").sort($"id"),
         Row(0, true) :: Row(1, false) :: Nil
       )
     }
@@ -731,12 +744,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       } yield (i, s"val_$i", 1.0d, p2, 123, 123.123f)).toDF("a", "b", "p1", "p2", "p3", "f")
 
       val input = df.select(
-        'a,
-        'b,
-        'p1.cast(StringType).as('ps1),
-        'p2,
-        'p3.cast(FloatType).as('pf1),
-        'f)
+        $"a",
+        $"b",
+        $"p1".cast(StringType).as("ps1"),
+        $"p2",
+        $"p3".cast(FloatType).as("pf1"),
+        $"f")
 
       withTempView("t") {
         input
@@ -770,7 +783,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(spark.table("t").select('b, 'c, 'a), df.select('b, 'c, 'a).collect())
+      checkAnswer(spark.table("t").select("b", "c", "a"), df.select("b", "c", "a").collect())
     }
   }
 

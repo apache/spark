@@ -37,10 +37,13 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private def columns: Seq[Node] = {
     <th>Output Op Id</th>
       <th>Description</th>
-      <th>Output Op Duration</th>
+      <th>Output Op Duration {SparkUIUtils.tooltip("Time taken for all the jobs of this batch to" +
+        " finish processing from the time they were submitted.",
+        "top")}</th>
       <th>Status</th>
       <th>Job Id</th>
-      <th>Job Duration</th>
+      <th>Job Duration {SparkUIUtils.tooltip("Time taken from submission time to completion " +
+        "time of the job", "top")}</th>
       <th class="sorttable_nosort">Stages: Succeeded/Total</th>
       <th class="sorttable_nosort">Tasks (for all stages): Succeeded/Total</th>
       <th>Error</th>
@@ -302,7 +305,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         (outputOpData, sparkJobIds.map { jobId => SparkJobIdWithUIData(jobId, getJobData(jobId)) })
       }
 
-    <table id="batch-job-table" class="table table-bordered table-striped table-condensed">
+    <table id="batch-job-table" class="table table-bordered table-striped table-sm">
       <thead>
         {columns}
       </thead>
@@ -322,7 +325,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         throw new IllegalArgumentException(s"Missing id parameter")
       }
     val formattedBatchTime =
-      UIUtils.formatBatchTime(batchTime.milliseconds, streamingListener.batchDuration)
+      SparkUIUtils.formatBatchTime(batchTime.milliseconds, streamingListener.batchDuration)
 
     val batchUIData = streamingListener.getBatchUIData(batchTime).getOrElse {
       throw new IllegalArgumentException(s"Batch $formattedBatchTime does not exist")
@@ -339,7 +342,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     }.toSeq
     val summary: NodeSeq =
       <div>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           <li>
             <strong>Batch Duration: </strong>
             {SparkUIUtils.formatDuration(streamingListener.batchDuration)}
@@ -381,7 +384,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       <thead>
         <tr>
           <th>Input</th>
-          <th>Metadata</th>
+          <th>Metadata {SparkUIUtils.tooltip("Batch Input Details", "right")}</th>
         </tr>
       </thead>
       <tbody>

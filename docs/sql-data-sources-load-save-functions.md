@@ -102,27 +102,6 @@ To load a CSV file you can use:
 </div>
 </div>
 
-To load files with paths matching a given glob pattern while keeping the behavior of partition discovery,
-you can use:
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% include_example load_with_path_glob_filter scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-</div>
-
-<div data-lang="java"  markdown="1">
-{% include_example load_with_path_glob_filter java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example load_with_path_glob_filter python/sql/datasource.py %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example load_with_path_glob_filter r/RSparkSQLExample.R %}
-</div>
-</div>
-
 The extra options are also used during write operation.
 For example, you can control bloom filters and dictionary encodings for ORC data sources.
 The following ORC example will create bloom filter and use dictionary encoding only for `favorite_color`.
@@ -148,7 +127,7 @@ visit the official Apache ORC/Parquet websites.
 {% include_example manual_save_options_orc r/RSparkSQLExample.R %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 CREATE TABLE users_with_options (
@@ -278,7 +257,7 @@ Bucketing and sorting are applicable only to persistent tables:
 {% include_example write_sorting_and_bucketing python/sql/datasource.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 
@@ -312,7 +291,7 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 {% include_example write_partitioning python/sql/datasource.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 
@@ -344,7 +323,7 @@ It is possible to use both partitioning and bucketing for a single table:
 {% include_example write_partition_and_bucket python/sql/datasource.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 

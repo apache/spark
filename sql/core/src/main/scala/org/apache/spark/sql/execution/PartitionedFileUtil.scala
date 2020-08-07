@@ -64,13 +64,14 @@ object PartitionedFileUtil {
       offset: Long,
       length: Long): Array[String] = {
     val candidates = blockLocations.map {
-      // The fragment starts from a position within this block
+      // The fragment starts from a position within this block. It handles the case where the
+      // fragment is fully contained in the block.
       case b if b.getOffset <= offset && offset < b.getOffset + b.getLength =>
         b.getHosts -> (b.getOffset + b.getLength - offset).min(length)
 
       // The fragment ends at a position within this block
-      case b if offset <= b.getOffset && offset + length < b.getLength =>
-        b.getHosts -> (offset + length - b.getOffset).min(length)
+      case b if b.getOffset < offset + length && offset + length < b.getOffset + b.getLength =>
+        b.getHosts -> (offset + length - b.getOffset)
 
       // The fragment fully contains this block
       case b if offset <= b.getOffset && b.getOffset + b.getLength <= offset + length =>

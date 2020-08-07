@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Cache
-displayTitle: Cache
+title: Cache Statements
+displayTitle: Cache Statements
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,6 +19,9 @@ license: |
   limitations under the License.
 ---
 
-* [CACHE TABLE statement](sql-ref-syntax-aux-cache-cache-table.html)
-* [UNCACHE TABLE statement](sql-ref-syntax-aux-cache-uncache-table.html)
-* [CLEAR CACHE statement](sql-ref-syntax-aux-cache-clear-cache.html)
+ * [CACHE TABLE statement](sql-ref-syntax-aux-cache-cache-table.html)
+ * [UNCACHE TABLE statement](sql-ref-syntax-aux-cache-uncache-table.html)
+ * [CLEAR CACHE statement](sql-ref-syntax-aux-cache-clear-cache.html)
+ * [REFRESH TABLE statement](sql-ref-syntax-aux-cache-refresh-table.html)
+ * [REFRESH statement](sql-ref-syntax-aux-cache-refresh.html)
+ * [REFRESH FUNCTION statement](sql-ref-syntax-aux-cache-refresh-function.html)

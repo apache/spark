@@ -61,10 +61,11 @@ private[spark] object HiveUtils extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val builtinHiveVersion: String = if (isHive23) hiveVersion else "1.2.1"
 
-  val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
+  val HIVE_METASTORE_VERSION = buildStaticConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        "<code>0.12.0</code> through <code>2.3.6</code> and " +
+        "<code>0.12.0</code> through <code>2.3.7</code> and " +
         "<code>3.0.0</code> through <code>3.1.2</code>.")
+    .version("1.4.0")
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
@@ -73,10 +74,10 @@ private[spark] object HiveUtils extends Logging {
   // already rely on this config.
   val FAKE_HIVE_VERSION = buildConf("spark.sql.hive.version")
     .doc(s"deprecated, please use ${HIVE_METASTORE_VERSION.key} to get the Hive version in Spark.")
-    .stringConf
-    .createWithDefault(builtinHiveVersion)
+    .version("1.1.1")
+    .fallbackConf(HIVE_METASTORE_VERSION)
 
-  val HIVE_METASTORE_JARS = buildConf("spark.sql.hive.metastore.jars")
+  val HIVE_METASTORE_JARS = buildStaticConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
       | This property can be one of three options: "
@@ -89,12 +90,14 @@ private[spark] object HiveUtils extends Logging {
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. A classpath in the standard format for both Hive and Hadoop.
       """.stripMargin)
+    .version("1.4.0")
     .stringConf
     .createWithDefault("builtin")
 
   val CONVERT_METASTORE_PARQUET = buildConf("spark.sql.hive.convertMetastoreParquet")
     .doc("When set to true, the built-in Parquet reader and writer are used to process " +
       "parquet tables created by using the HiveQL syntax, instead of Hive serde.")
+    .version("1.1.1")
     .booleanConf
     .createWithDefault(true)
 
@@ -103,12 +106,14 @@ private[spark] object HiveUtils extends Logging {
       .doc("When true, also tries to merge possibly different but compatible Parquet schemas in " +
         "different Parquet data files. This configuration is only effective " +
         "when \"spark.sql.hive.convertMetastoreParquet\" is true.")
+      .version("1.3.1")
       .booleanConf
       .createWithDefault(false)
 
   val CONVERT_METASTORE_ORC = buildConf("spark.sql.hive.convertMetastoreOrc")
     .doc("When set to true, the built-in ORC reader and writer are used to process " +
       "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
+    .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -118,6 +123,7 @@ private[spark] object HiveUtils extends Logging {
         "`spark.sql.hive.convertMetastoreOrc` is true, the built-in ORC/Parquet writer is used" +
         "to process inserting into partitioned ORC/Parquet tables created by using the HiveSQL " +
         "syntax.")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -126,15 +132,17 @@ private[spark] object HiveUtils extends Logging {
       "instead of Hive serde in CTAS. This flag is effective only if " +
       "`spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is " +
       "enabled respectively for Parquet and ORC formats")
+    .version("3.0.0")
     .booleanConf
     .createWithDefault(true)
 
-  val HIVE_METASTORE_SHARED_PREFIXES = buildConf("spark.sql.hive.metastore.sharedPrefixes")
+  val HIVE_METASTORE_SHARED_PREFIXES = buildStaticConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
       "that should be shared is JDBC drivers that are needed to talk to the metastore. Other " +
       "classes that need to be shared are those that interact with classes that are already " +
       "shared. For example, custom appenders that are used by log4j.")
+    .version("1.4.0")
     .stringConf
     .toSequence
     .createWithDefault(jdbcPrefixes)
@@ -142,16 +150,18 @@ private[spark] object HiveUtils extends Logging {
   private def jdbcPrefixes = Seq(
     "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
 
-  val HIVE_METASTORE_BARRIER_PREFIXES = buildConf("spark.sql.hive.metastore.barrierPrefixes")
+  val HIVE_METASTORE_BARRIER_PREFIXES = buildStaticConf("spark.sql.hive.metastore.barrierPrefixes")
     .doc("A comma separated list of class prefixes that should explicitly be reloaded for each " +
       "version of Hive that Spark SQL is communicating with. For example, Hive UDFs that are " +
       "declared in a prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).")
+    .version("1.4.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   val HIVE_THRIFT_SERVER_ASYNC = buildConf("spark.sql.hive.thriftServer.async")
     .doc("When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
+    .version("1.5.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -398,7 +408,7 @@ private[spark] object HiveUtils extends Logging {
               logWarning(s"Hive jar path '$path' does not exist.")
               Nil
             } else {
-              files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar"))
+              files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).toSeq
             }
           case path =>
             new File(path) :: Nil
@@ -495,7 +505,7 @@ private[spark] object HiveUtils extends Logging {
       // partition columns are part of the schema
       val partCols = hiveTable.getPartCols.asScala.map(HiveClientImpl.fromHiveColumn)
       val dataCols = hiveTable.getCols.asScala.map(HiveClientImpl.fromHiveColumn)
-      table.copy(schema = StructType(dataCols ++ partCols))
+      table.copy(schema = StructType((dataCols ++ partCols).toSeq))
     }
   }
 }

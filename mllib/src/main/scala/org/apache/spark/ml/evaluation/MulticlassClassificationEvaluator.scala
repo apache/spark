@@ -18,6 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -63,8 +64,6 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("1.5.0")
   def setMetricName(value: String): this.type = set(metricName, value)
 
-  setDefault(metricName -> "f1")
-
   /** @group setParam */
   @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -81,6 +80,14 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("3.0.0")
   def setProbabilityCol(value: String): this.type = set(probabilityCol, value)
 
+  /**
+   * The class whose metric will be computed in `"truePositiveRateByLabel"`,
+   * `"falsePositiveRateByLabel"`, `"precisionByLabel"`, `"recallByLabel"`,
+   * `"fMeasureByLabel"`.
+   * Must be greater than or equal to 0. The default value is 0.
+   *
+   * @group param
+   */
   @Since("3.0.0")
   final val metricLabel: DoubleParam = new DoubleParam(this, "metricLabel",
     "The class whose metric will be computed in " +
@@ -96,8 +103,13 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("3.0.0")
   def setMetricLabel(value: Double): this.type = set(metricLabel, value)
 
-  setDefault(metricLabel -> 0.0)
-
+  /**
+   * The beta value, which controls precision vs recall weighting,
+   * used in `"weightedFMeasure"`, `"fMeasureByLabel"`.
+   * Must be greater than 0. The default value is 1.
+   *
+   * @group param
+   */
   @Since("3.0.0")
   final val beta: DoubleParam = new DoubleParam(this, "beta",
     "The beta value, which controls precision vs recall weighting, " +
@@ -112,8 +124,12 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("3.0.0")
   def setBeta(value: Double): this.type = set(beta, value)
 
-  setDefault(beta -> 1.0)
-
+  /**
+   * param for eps. log-loss is undefined for p=0 or p=1, so probabilities are clipped to
+   * max(eps, min(1 - eps, p)). Must be in range (0, 0.5). The default value is 1e-15.
+   *
+   * @group param
+   */
   @Since("3.0.0")
   final val eps: DoubleParam = new DoubleParam(this, "eps",
     "log-loss is undefined for p=0 or p=1, so probabilities are clipped to " +
@@ -128,37 +144,11 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("3.0.0")
   def setEps(value: Double): this.type = set(eps, value)
 
-  setDefault(eps -> 1e-15)
+  setDefault(metricName -> "f1", eps -> 1e-15, metricLabel -> 0.0, beta -> 1.0)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    val schema = dataset.schema
-    SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
-    SchemaUtils.checkNumericType(schema, $(labelCol))
-
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      col($(weightCol)).cast(DoubleType)
-    } else {
-      lit(1.0)
-    }
-
-    val rdd = if ($(metricName) == "logLoss") {
-      // probabilityCol is only needed to compute logloss
-      require(isDefined(probabilityCol) && $(probabilityCol).nonEmpty)
-      val p = DatasetUtils.columnToVector(dataset, $(probabilityCol))
-      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w, p)
-        .rdd.map {
-        case Row(prediction: Double, label: Double, weight: Double, probability: Vector) =>
-          (prediction, label, weight, probability.toArray)
-      }
-    } else {
-      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w)
-        .rdd.map {
-        case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
-      }
-    }
-
-    val metrics = new MulticlassMetrics(rdd)
+    val metrics = getMetrics(dataset)
     $(metricName) match {
       case "f1" => metrics.weightedFMeasure
       case "accuracy" => metrics.accuracy
@@ -175,6 +165,48 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       case "hammingLoss" => metrics.hammingLoss
       case "logLoss" => metrics.logLoss($(eps))
     }
+  }
+
+  /**
+   * Get a MulticlassMetrics, which can be used to get multiclass classification
+   * metrics such as accuracy, weightedPrecision, etc.
+   *
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @return MulticlassMetrics
+   */
+  @Since("3.1.0")
+  def getMetrics(dataset: Dataset[_]): MulticlassMetrics = {
+    val schema = dataset.schema
+    SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(labelCol))
+
+    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
+    } else {
+      lit(1.0)
+    }
+
+    if ($(metricName) == "logLoss") {
+      // probabilityCol is only needed to compute logloss
+      require(schema.fieldNames.contains($(probabilityCol)),
+        "probabilityCol is needed to compute logloss")
+    }
+
+    val rdd = if (schema.fieldNames.contains($(probabilityCol))) {
+      val p = DatasetUtils.columnToVector(dataset, $(probabilityCol))
+      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w, p)
+        .rdd.map {
+        case Row(prediction: Double, label: Double, weight: Double, probability: Vector) =>
+          (prediction, label, weight, probability.toArray)
+      }
+    } else {
+      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w)
+        .rdd.map {
+        case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
+      }
+    }
+
+    new MulticlassMetrics(rdd)
   }
 
   @Since("1.5.0")

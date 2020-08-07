@@ -19,6 +19,7 @@ license: |
   limitations under the License.
 ---
 
+### Supported Data Types
 
 Spark SQL and DataFrames support the following data types:
 
@@ -70,130 +71,24 @@ You can access them by doing
 
 {% include_example data_types scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 
-<table class="table">
-<tr>
-  <th style="width:20%">Data type</th>
-  <th style="width:40%">Value type in Scala</th>
-  <th>API to access or create a data type</th></tr>
-<tr>
-  <td> <b>ByteType</b> </td>
-  <td> Byte </td>
-  <td>
-  ByteType
-  </td>
-</tr>
-<tr>
-  <td> <b>ShortType</b> </td>
-  <td> Short </td>
-  <td>
-  ShortType
-  </td>
-</tr>
-<tr>
-  <td> <b>IntegerType</b> </td>
-  <td> Int </td>
-  <td>
-  IntegerType
-  </td>
-</tr>
-<tr>
-  <td> <b>LongType</b> </td>
-  <td> Long </td>
-  <td>
-  LongType
-  </td>
-</tr>
-<tr>
-  <td> <b>FloatType</b> </td>
-  <td> Float </td>
-  <td>
-  FloatType
-  </td>
-</tr>
-<tr>
-  <td> <b>DoubleType</b> </td>
-  <td> Double </td>
-  <td>
-  DoubleType
-  </td>
-</tr>
-<tr>
-  <td> <b>DecimalType</b> </td>
-  <td> java.math.BigDecimal </td>
-  <td>
-  DecimalType
-  </td>
-</tr>
-<tr>
-  <td> <b>StringType</b> </td>
-  <td> String </td>
-  <td>
-  StringType
-  </td>
-</tr>
-<tr>
-  <td> <b>BinaryType</b> </td>
-  <td> Array[Byte] </td>
-  <td>
-  BinaryType
-  </td>
-</tr>
-<tr>
-  <td> <b>BooleanType</b> </td>
-  <td> Boolean </td>
-  <td>
-  BooleanType
-  </td>
-</tr>
-<tr>
-  <td> <b>TimestampType</b> </td>
-  <td> java.sql.Timestamp </td>
-  <td>
-  TimestampType
-  </td>
-</tr>
-<tr>
-  <td> <b>DateType</b> </td>
-  <td> java.sql.Date </td>
-  <td>
-  DateType
-  </td>
-</tr>
-<tr>
-  <td> <b>ArrayType</b> </td>
-  <td> scala.collection.Seq </td>
-  <td>
-  ArrayType(<i>elementType</i>, [<i>containsNull</i>])<br />
-  <b>Note:</b> The default value of <i>containsNull</i> is <i>true</i>.
-  </td>
-</tr>
-<tr>
-  <td> <b>MapType</b> </td>
-  <td> scala.collection.Map </td>
-  <td>
-  MapType(<i>keyType</i>, <i>valueType</i>, [<i>valueContainsNull</i>])<br />
-  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>true</i>.
-  </td>
-</tr>
-<tr>
-  <td> <b>StructType</b> </td>
-  <td> org.apache.spark.sql.Row </td>
-  <td>
-  StructType(<i>fields</i>)<br />
-  <b>Note:</b> <i>fields</i> is a Seq of StructFields. Also, two fields with the same
-  name are not allowed.
-  </td>
-</tr>
-<tr>
-  <td> <b>StructField</b> </td>
-  <td> The value type in Scala of the data type of this field
-  (For example, Int for a StructField with the data type IntegerType) </td>
-  <td>
-  StructField(<i>name</i>, <i>dataType</i>, [<i>nullable</i>])<br />
-  <b>Note:</b> The default value of <i>nullable</i> is <i>true</i>.
-  </td>
-</tr>
-</table>
+|Data type|Value type in Scala|API to access or create a data type|
+|---------|-------------------|-----------------------------------|
+|**ByteType**|Byte|ByteType|
+|**ShortType**|Short|ShortType|
+|**IntegerType**|Int|IntegerType|
+|**LongType**|Long|LongType|
+|**FloatType**|Float|FloatType|
+|**DoubleType**|Double|DoubleType|
+|**DecimalType**|java.math.BigDecimal|DecimalType|
+|**StringType**|String|StringType|
+|**BinaryType**|Array[Byte]|BinaryType|
+|**BooleanType**|Boolean|BooleanType|
+|**TimestampType**|java.sql.Timestamp|TimestampType|
+|**DateType**|java.sql.Date|DateType|
+|**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
+|**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
+|**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in Scala of the data type of this field(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is true.|
 
 </div>
 
@@ -204,132 +99,24 @@ All data types of Spark SQL are located in the package of
 please use factory methods provided in
 `org.apache.spark.sql.types.DataTypes`.
 
-<table class="table">
-<tr>
-  <th style="width:20%">Data type</th>
-  <th style="width:40%">Value type in Java</th>
-  <th>API to access or create a data type</th></tr>
-<tr>
-  <td> <b>ByteType</b> </td>
-  <td> byte or Byte </td>
-  <td>
-  DataTypes.ByteType
-  </td>
-</tr>
-<tr>
-  <td> <b>ShortType</b> </td>
-  <td> short or Short </td>
-  <td>
-  DataTypes.ShortType
-  </td>
-</tr>
-<tr>
-  <td> <b>IntegerType</b> </td>
-  <td> int or Integer </td>
-  <td>
-  DataTypes.IntegerType
-  </td>
-</tr>
-<tr>
-  <td> <b>LongType</b> </td>
-  <td> long or Long </td>
-  <td>
-  DataTypes.LongType
-  </td>
-</tr>
-<tr>
-  <td> <b>FloatType</b> </td>
-  <td> float or Float </td>
-  <td>
-  DataTypes.FloatType
-  </td>
-</tr>
-<tr>
-  <td> <b>DoubleType</b> </td>
-  <td> double or Double </td>
-  <td>
-  DataTypes.DoubleType
-  </td>
-</tr>
-<tr>
-  <td> <b>DecimalType</b> </td>
-  <td> java.math.BigDecimal </td>
-  <td>
-  DataTypes.createDecimalType()<br />
-  DataTypes.createDecimalType(<i>precision</i>, <i>scale</i>).
-  </td>
-</tr>
-<tr>
-  <td> <b>StringType</b> </td>
-  <td> String </td>
-  <td>
-  DataTypes.StringType
-  </td>
-</tr>
-<tr>
-  <td> <b>BinaryType</b> </td>
-  <td> byte[] </td>
-  <td>
-  DataTypes.BinaryType
-  </td>
-</tr>
-<tr>
-  <td> <b>BooleanType</b> </td>
-  <td> boolean or Boolean </td>
-  <td>
-  DataTypes.BooleanType
-  </td>
-</tr>
-<tr>
-  <td> <b>TimestampType</b> </td>
-  <td> java.sql.Timestamp </td>
-  <td>
-  DataTypes.TimestampType
-  </td>
-</tr>
-<tr>
-  <td> <b>DateType</b> </td>
-  <td> java.sql.Date </td>
-  <td>
-  DataTypes.DateType
-  </td>
-</tr>
-<tr>
-  <td> <b>ArrayType</b> </td>
-  <td> java.util.List </td>
-  <td>
-  DataTypes.createArrayType(<i>elementType</i>)<br />
-  <b>Note:</b> The value of <i>containsNull</i> will be <i>true</i><br />
-  DataTypes.createArrayType(<i>elementType</i>, <i>containsNull</i>).
-  </td>
-</tr>
-<tr>
-  <td> <b>MapType</b> </td>
-  <td> java.util.Map </td>
-  <td>
-  DataTypes.createMapType(<i>keyType</i>, <i>valueType</i>)<br />
-  <b>Note:</b> The value of <i>valueContainsNull</i> will be <i>true</i>.<br />
-  DataTypes.createMapType(<i>keyType</i>, <i>valueType</i>, <i>valueContainsNull</i>)<br />
-  </td>
-</tr>
-<tr>
-  <td> <b>StructType</b> </td>
-  <td> org.apache.spark.sql.Row </td>
-  <td>
-  DataTypes.createStructType(<i>fields</i>)<br />
-  <b>Note:</b> <i>fields</i> is a List or an array of StructFields.
-  Also, two fields with the same name are not allowed.
-  </td>
-</tr>
-<tr>
-  <td> <b>StructField</b> </td>
-  <td> The value type in Java of the data type of this field
-  (For example, int for a StructField with the data type IntegerType) </td>
-  <td>
-  DataTypes.createStructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
-  </td>
-</tr>
-</table>
+|Data type|Value type in Java|API to access or create a data type|
+|---------|------------------|-----------------------------------|
+|**ByteType**|byte or Byte|DataTypes.ByteType|
+|**ShortType**|short or Short|DataTypes.ShortType|
+|**IntegerType**|int or Integer|DataTypes.IntegerType|
+|**LongType**|long or Long|DataTypes.LongType|
+|**FloatType**|float or Float|DataTypes.FloatType|
+|**DoubleType**|double or Double|DataTypes.DoubleType|
+|**DecimalType**|java.math.BigDecimal|DataTypes.createDecimalType()<br/>DataTypes.createDecimalType(*precision*, *scale*).|
+|**StringType**|String|DataTypes.StringType|
+|**BinaryType**|byte[]|DataTypes.BinaryType|
+|**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
+|**TimestampType**|java.sql.Timestamp|DataTypes.TimestampType|
+|**DateType**|java.sql.Date|DataTypes.DateType|
+|**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
+|**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br/>**Note:** The value of *valueContainsNull* will be true.<br/>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
+|**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br/>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in Java of the data type of this field (For example, int for a StructField with the data type IntegerType)|DataTypes.createStructField(*name*, *dataType*, *nullable*)| 
 
 </div>
 
@@ -341,294 +128,189 @@ You can access them by doing
 from pyspark.sql.types import *
 {% endhighlight %}
 
-<table class="table">
-<tr>
-  <th style="width:20%">Data type</th>
-  <th style="width:40%">Value type in Python</th>
-  <th>API to access or create a data type</th></tr>
-<tr>
-  <td> <b>ByteType</b> </td>
-  <td>
-  int or long <br />
-  <b>Note:</b> Numbers will be converted to 1-byte signed integer numbers at runtime.
-  Please make sure that numbers are within the range of -128 to 127.
-  </td>
-  <td>
-  ByteType()
-  </td>
-</tr>
-<tr>
-  <td> <b>ShortType</b> </td>
-  <td>
-  int or long <br />
-  <b>Note:</b> Numbers will be converted to 2-byte signed integer numbers at runtime.
-  Please make sure that numbers are within the range of -32768 to 32767.
-  </td>
-  <td>
-  ShortType()
-  </td>
-</tr>
-<tr>
-  <td> <b>IntegerType</b> </td>
-  <td> int or long </td>
-  <td>
-  IntegerType()
-  </td>
-</tr>
-<tr>
-  <td> <b>LongType</b> </td>
-  <td>
-  long <br />
-  <b>Note:</b> Numbers will be converted to 8-byte signed integer numbers at runtime.
-  Please make sure that numbers are within the range of
-  -9223372036854775808 to 9223372036854775807.
-  Otherwise, please convert data to decimal.Decimal and use DecimalType.
-  </td>
-  <td>
-  LongType()
-  </td>
-</tr>
-<tr>
-  <td> <b>FloatType</b> </td>
-  <td>
-  float <br />
-  <b>Note:</b> Numbers will be converted to 4-byte single-precision floating
-  point numbers at runtime.
-  </td>
-  <td>
-  FloatType()
-  </td>
-</tr>
-<tr>
-  <td> <b>DoubleType</b> </td>
-  <td> float </td>
-  <td>
-  DoubleType()
-  </td>
-</tr>
-<tr>
-  <td> <b>DecimalType</b> </td>
-  <td> decimal.Decimal </td>
-  <td>
-  DecimalType()
-  </td>
-</tr>
-<tr>
-  <td> <b>StringType</b> </td>
-  <td> string </td>
-  <td>
-  StringType()
-  </td>
-</tr>
-<tr>
-  <td> <b>BinaryType</b> </td>
-  <td> bytearray </td>
-  <td>
-  BinaryType()
-  </td>
-</tr>
-<tr>
-  <td> <b>BooleanType</b> </td>
-  <td> bool </td>
-  <td>
-  BooleanType()
-  </td>
-</tr>
-<tr>
-  <td> <b>TimestampType</b> </td>
-  <td> datetime.datetime </td>
-  <td>
-  TimestampType()
-  </td>
-</tr>
-<tr>
-  <td> <b>DateType</b> </td>
-  <td> datetime.date </td>
-  <td>
-  DateType()
-  </td>
-</tr>
-<tr>
-  <td> <b>ArrayType</b> </td>
-  <td> list, tuple, or array </td>
-  <td>
-  ArrayType(<i>elementType</i>, [<i>containsNull</i>])<br />
-  <b>Note:</b> The default value of <i>containsNull</i> is <i>True</i>.
-  </td>
-</tr>
-<tr>
-  <td> <b>MapType</b> </td>
-  <td> dict </td>
-  <td>
-  MapType(<i>keyType</i>, <i>valueType</i>, [<i>valueContainsNull</i>])<br />
-  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>True</i>.
-  </td>
-</tr>
-<tr>
-  <td> <b>StructType</b> </td>
-  <td> list or tuple </td>
-  <td>
-  StructType(<i>fields</i>)<br />
-  <b>Note:</b> <i>fields</i> is a Seq of StructFields. Also, two fields with the same
-  name are not allowed.
-  </td>
-</tr>
-<tr>
-  <td> <b>StructField</b> </td>
-  <td> The value type in Python of the data type of this field
-  (For example, Int for a StructField with the data type IntegerType) </td>
-  <td>
-  StructField(<i>name</i>, <i>dataType</i>, [<i>nullable</i>])<br />
-  <b>Note:</b> The default value of <i>nullable</i> is <i>True</i>.
-  </td>
-</tr>
-</table>
+|Data type|Value type in Python|API to access or create a data type|
+|---------|--------------------|-----------------------------------|
+|**ByteType**|int or long<br/>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.|ByteType()|
+|**ShortType**|int or long<br/>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.|ShortType()|
+|**IntegerType**|int or long|IntegerType()|
+|**LongType**|long<br/>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807.Otherwise, please convert data to decimal.Decimal and use DecimalType.|LongType()|
+|**FloatType**|float<br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|FloatType()|
+|**DoubleType**|float|DoubleType()|
+|**DecimalType**|decimal.Decimal|DecimalType()|
+|**StringType**|string|StringType()|
+|**BinaryType**|bytearray|BinaryType()|
+|**BooleanType**|bool|BooleanType()|
+|**TimestampType**|datetime.datetime|TimestampType()|
+|**DateType**|datetime.date|DateType()|
+|**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br/>**Note:**The default value of *containsNull* is True.|
+|**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:**The default value of *valueContainsNull* is True.|
+|**StructType**|list or tuple|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in Python of the data type of this field<br/>(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is True.|
 
 </div>
 
 <div data-lang="r"  markdown="1">
 
-<table class="table">
-<tr>
-  <th style="width:20%">Data type</th>
-  <th style="width:40%">Value type in R</th>
-  <th>API to access or create a data type</th></tr>
-<tr>
-  <td> <b>ByteType</b> </td>
-  <td>
-  integer <br />
-  <b>Note:</b> Numbers will be converted to 1-byte signed integer numbers at runtime.
-  Please make sure that numbers are within the range of -128 to 127.
-  </td>
-  <td>
-  "byte"
-  </td>
-</tr>
-<tr>
-  <td> <b>ShortType</b> </td>
-  <td>
-  integer <br />
-  <b>Note:</b> Numbers will be converted to 2-byte signed integer numbers at runtime.
-  Please make sure that numbers are within the range of -32768 to 32767.
-  </td>
-  <td>
-  "short"
-  </td>
-</tr>
-<tr>
-  <td> <b>IntegerType</b> </td>
-  <td> integer </td>
-  <td>
-  "integer"
-  </td>
-</tr>
-<tr>
-  <td> <b>LongType</b> </td>
-  <td>
-  integer <br />
-  <b>Note:</b> Numbers will be converted to 8-byte signed integer numbers at runtime.
-  Please make sure that numbers are within the range of
-  -9223372036854775808 to 9223372036854775807.
-  Otherwise, please convert data to decimal.Decimal and use DecimalType.
-  </td>
-  <td>
-  "long"
-  </td>
-</tr>
-<tr>
-  <td> <b>FloatType</b> </td>
-  <td>
-  numeric <br />
-  <b>Note:</b> Numbers will be converted to 4-byte single-precision floating
-  point numbers at runtime.
-  </td>
-  <td>
-  "float"
-  </td>
-</tr>
-<tr>
-  <td> <b>DoubleType</b> </td>
-  <td> numeric </td>
-  <td>
-  "double"
-  </td>
-</tr>
-<tr>
-  <td> <b>DecimalType</b> </td>
-  <td> Not supported </td>
-  <td>
-   Not supported
-  </td>
-</tr>
-<tr>
-  <td> <b>StringType</b> </td>
-  <td> character </td>
-  <td>
-  "string"
-  </td>
-</tr>
-<tr>
-  <td> <b>BinaryType</b> </td>
-  <td> raw </td>
-  <td>
-  "binary"
-  </td>
-</tr>
-<tr>
-  <td> <b>BooleanType</b> </td>
-  <td> logical </td>
-  <td>
-  "bool"
-  </td>
-</tr>
-<tr>
-  <td> <b>TimestampType</b> </td>
-  <td> POSIXct </td>
-  <td>
-  "timestamp"
-  </td>
-</tr>
-<tr>
-  <td> <b>DateType</b> </td>
-  <td> Date </td>
-  <td>
-  "date"
-  </td>
-</tr>
-<tr>
-  <td> <b>ArrayType</b> </td>
-  <td> vector or list </td>
-  <td>
-  list(type="array", elementType=<i>elementType</i>, containsNull=[<i>containsNull</i>])<br />
-  <b>Note:</b> The default value of <i>containsNull</i> is <i>TRUE</i>.
-  </td>
-</tr>
-<tr>
-  <td> <b>MapType</b> </td>
-  <td> environment </td>
-  <td>
-  list(type="map", keyType=<i>keyType</i>, valueType=<i>valueType</i>, valueContainsNull=[<i>valueContainsNull</i>])<br />
-  <b>Note:</b> The default value of <i>valueContainsNull</i> is <i>TRUE</i>.
-  </td>
-</tr>
-<tr>
-  <td> <b>StructType</b> </td>
-  <td> named list</td>
-  <td>
-  list(type="struct", fields=<i>fields</i>)<br />
-  <b>Note:</b> <i>fields</i> is a Seq of StructFields. Also, two fields with the same
-  name are not allowed.
-  </td>
-</tr>
-<tr>
-  <td> <b>StructField</b> </td>
-  <td> The value type in R of the data type of this field
-  (For example, integer for a StructField with the data type IntegerType) </td>
-  <td>
-  list(name=<i>name</i>, type=<i>dataType</i>, nullable=[<i>nullable</i>])<br />
-  <b>Note:</b> The default value of <i>nullable</i> is <i>TRUE</i>.
-  </td>
-</tr>
-</table>
+|Data type|Value type in R|API to access or create a data type|
+|---------|---------------|-----------------------------------|
+|**ByteType**|integer <br/>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -128 to 127.|"byte"|
+|**ShortType**|integer <br/>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -32768 to 32767.|"short"|
+|**IntegerType**|integer|"integer"|
+|**LongType**|integer <br/>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime.  Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807.  Otherwise, please convert data to decimal.Decimal and use DecimalType.|"long"|
+|**FloatType**|numeric <br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|"float"|
+|**DoubleType**|numeric|"double"|
+|**DecimalType**|Not supported|Not supported|
+|**StringType**|character|"string"|
+|**BinaryType**|raw|"binary"|
+|**BooleanType**|logical|"bool"|
+|**TimestampType**|POSIXct|"timestamp"|
+|**DateType**|Date|"date"|
+|**ArrayType**|vector or list|list(type="array", elementType=*elementType*, containsNull=[*containsNull*])<br/>**Note:** The default value of *containsNull* is TRUE.|
+|**MapType**|environment|list(type="map", keyType=*keyType*, valueType=*valueType*, valueContainsNull=[*valueContainsNull*])<br/> **Note:** The default value of *valueContainsNull* is TRUE.|
+|**StructType**|named list|list(type="struct", fields=*fields*)<br/> **Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in R of the data type of this field (For example, integer for a StructField with the data type IntegerType)|list(name=*name*, type=*dataType*, nullable=[*nullable*])<br/> **Note:** The default value of *nullable* is TRUE.|
+
+</div>
+
+<div data-lang="SQL"  markdown="1">
+
+The following table shows the type names as well as aliases used in Spark SQL parser for each data type.
+
+|Data type|SQL name|
+|---------|--------|
+|**BooleanType**|BOOLEAN|
+|**ByteType**|BYTE, TINYINT|
+|**ShortType**|SHORT, SMALLINT|
+|**IntegerType**|INT, INTEGER|
+|**LongType**|LONG, BIGINT|
+|**FloatType**|FLOAT, REAL|
+|**DoubleType**|DOUBLE|
+|**DateType**|DATE|
+|**TimestampType**|TIMESTAMP|
+|**StringType**|STRING|
+|**BinaryType**|BINARY|
+|**DecimalType**|DECIMAL, DEC, NUMERIC|
+|**CalendarIntervalType**|INTERVAL|
+|**ArrayType**|ARRAY<element_type>|
+|**StructType**|STRUCT<field1_name: field1_type, field2_name: field2_type, ...>|
+|**MapType**|MAP<key_type, value_type>|
+
 </div>
 </div>
+
+### Floating Point Special Values
+
+Spark SQL supports several special floating point values in a case-insensitive manner:
+
+ * Inf/+Inf/Infinity/+Infinity: positive infinity
+   * ```FloatType```: equivalent to Scala <code>Float.PositiveInfinity</code>.
+   * ```DoubleType```: equivalent to Scala <code>Double.PositiveInfinity</code>.
+ * -Inf/-Infinity: negative infinity
+   * ```FloatType```: equivalent to Scala <code>Float.NegativeInfinity</code>.
+   * ```DoubleType```: equivalent to Scala <code>Double.NegativeInfinity</code>.
+ * NaN: not a number
+   * ```FloatType```: equivalent to Scala <code>Float.NaN</code>.
+   * ```DoubleType```:  equivalent to Scala <code>Double.NaN</code>.
+
+#### Positive/Negative Infinity Semantics
+
+There is special handling for positive and negative infinity. They have the following semantics:
+
+ * Positive infinity multiplied by any positive value returns positive infinity.
+ * Negative infinity multiplied by any positive value returns negative infinity.
+ * Positive infinity multiplied by any negative value returns negative infinity.
+ * Negative infinity multiplied by any negative value returns positive infinity.
+ * Positive/negative infinity multiplied by 0 returns NaN.
+ * Positive/negative infinity is equal to itself.
+ * In aggregations, all positive infinity values are grouped together. Similarly, all negative infinity values are grouped together.
+ * Positive infinity and negative infinity are treated as normal values in join keys.
+ * Positive infinity sorts lower than NaN and higher than any other values.
+ * Negative infinity sorts lower than any other values.
+
+#### NaN Semantics
+
+There is special handling for not-a-number (NaN) when dealing with `float` or `double` types that
+do not exactly match standard floating point semantics.
+Specifically:
+
+ * NaN = NaN returns true.
+ * In aggregations, all NaN values are grouped together.
+ * NaN is treated as a normal value in join keys.
+ * NaN values go last when in ascending order, larger than any other numeric value.
+
+#### Examples
+
+```sql
+SELECT double('infinity') AS col;
++--------+
+|     col|
++--------+
+|Infinity|
++--------+
+
+SELECT float('-inf') AS col;
++---------+
+|      col|
++---------+
+|-Infinity|
++---------+
+
+SELECT float('NaN') AS col;
++---+
+|col|
++---+
+|NaN|
++---+
+
+SELECT double('infinity') * 0 AS col;
++---+
+|col|
++---+
+|NaN|
++---+
+
+SELECT double('-infinity') * (-1234567) AS col;
++--------+
+|     col|
++--------+
+|Infinity|
++--------+
+
+SELECT double('infinity') < double('NaN') AS col;
++----+
+| col|
++----+
+|true|
++----+
+
+SELECT double('NaN') = double('NaN') AS col;
++----+
+| col|
++----+
+|true|
++----+
+
+SELECT double('inf') = double('infinity') AS col;
++----+
+| col|
++----+
+|true|
++----+
+
+CREATE TABLE test (c1 int, c2 double);
+INSERT INTO test VALUES (1, double('infinity'));
+INSERT INTO test VALUES (2, double('infinity'));
+INSERT INTO test VALUES (3, double('inf'));
+INSERT INTO test VALUES (4, double('-inf'));
+INSERT INTO test VALUES (5, double('NaN'));
+INSERT INTO test VALUES (6, double('NaN'));
+INSERT INTO test VALUES (7, double('-infinity'));
+SELECT COUNT(*), c2 FROM test GROUP BY c2;
++---------+---------+
+| count(1)|       c2|
++---------+---------+
+|        2|      NaN|
+|        2|-Infinity|
+|        3| Infinity|
++---------+---------+
+```

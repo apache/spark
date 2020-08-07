@@ -14,8 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.catalyst.analysis
+
+import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -24,7 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnType}
+import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -65,20 +67,20 @@ trait CheckAnalysis extends PredicateHelper {
     case _ => None
   }
 
-  private def checkLimitClause(limitExpr: Expression): Unit = {
+  private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => failAnalysis(
-        "The limit expression must evaluate to a constant value, but got " +
+        s"The $name expression must evaluate to a constant value, but got " +
           limitExpr.sql)
       case e if e.dataType != IntegerType => failAnalysis(
-        s"The limit expression must be integer type, but got " +
+        s"The $name expression must be integer type, but got " +
           e.dataType.catalogString)
       case e =>
         e.eval() match {
           case null => failAnalysis(
-            s"The evaluated limit expression must not be null, but got ${limitExpr.sql}")
+            s"The evaluated $name expression must not be null, but got ${limitExpr.sql}")
           case v: Int if v < 0 => failAnalysis(
-            s"The limit expression must be equal to or greater than 0, but got $v")
+            s"The $name expression must be equal to or greater than 0, but got $v")
           case _ => // OK
         }
     }
@@ -90,6 +92,15 @@ trait CheckAnalysis extends PredicateHelper {
     plan.foreachUp {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
+
+      case u: UnresolvedNamespace =>
+        u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedTable =>
+        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedTableOrView =>
+        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
@@ -109,13 +120,6 @@ trait CheckAnalysis extends PredicateHelper {
           s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
 
       case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
-      case DescribeTable(u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case DescribeTable(u: UnresolvedV2Relation, _) =>
         failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case operator: LogicalPlan =>
@@ -154,7 +158,12 @@ trait CheckAnalysis extends PredicateHelper {
           case g: GroupingID =>
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
-          case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
+          case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
+              !e.isInstanceOf[WindowExpression] =>
+            val w = e.children.find(_.isInstanceOf[WindowFunction]).get
+            failAnalysis(s"Window function $w requires an OVER clause.")
+
+          case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
           case w @ WindowExpression(_: OffsetWindowFunction,
@@ -195,10 +204,6 @@ trait CheckAnalysis extends PredicateHelper {
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.catalogString} is not a boolean.")
-
-          case Filter(condition, _) if hasNullAwarePredicateWithinNot(condition) =>
-            failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
-              s"conditions: $condition")
 
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             failAnalysis(
@@ -280,6 +285,44 @@ trait CheckAnalysis extends PredicateHelper {
             groupingExprs.foreach(checkValidGroupingExprs)
             aggregateExprs.foreach(checkValidAggregateExpression)
 
+          case CollectMetrics(name, metrics, _) =>
+            if (name == null || name.isEmpty) {
+              operator.failAnalysis(s"observed metrics should be named: $operator")
+            }
+            // Check if an expression is a valid metric. A metric must meet the following criteria:
+            // - Is not a window function;
+            // - Is not nested aggregate function;
+            // - Is not a distinct aggregate function;
+            // - Has only non-deterministic functions that are nested inside an aggregate function;
+            // - Has only attributes that are nested inside an aggregate function.
+            def checkMetric(s: Expression, e: Expression, seenAggregate: Boolean = false): Unit = {
+              e match {
+                case _: WindowExpression =>
+                  e.failAnalysis(
+                    "window expressions are not allowed in observed metrics, but found: " + s.sql)
+                case _ if !e.deterministic && !seenAggregate =>
+                  e.failAnalysis(s"non-deterministic expression ${s.sql} can only be used " +
+                    "as an argument to an aggregate function.")
+                case a: AggregateExpression if seenAggregate =>
+                  e.failAnalysis(
+                    "nested aggregates are not allowed in observed metrics, but found: " + s.sql)
+                case a: AggregateExpression if a.isDistinct =>
+                  e.failAnalysis(
+                    "distinct aggregates are not allowed in observed metrics, but found: " + s.sql)
+                case a: AggregateExpression if a.filter.isDefined =>
+                  e.failAnalysis("aggregates with filter predicate are not allowed in " +
+                    "observed metrics, but found: " + s.sql)
+                case _: Attribute if !seenAggregate =>
+                  e.failAnalysis (s"attribute ${s.sql} can only be used as an argument to an " +
+                    "aggregate function.")
+                case _: AggregateExpression =>
+                  e.children.foreach(checkMetric (s, _, seenAggregate = true))
+                case _ =>
+                  e.children.foreach(checkMetric (s, _, seenAggregate))
+              }
+            }
+            metrics.foreach(m => checkMetric(m, m))
+
           case Sort(orders, _, _) =>
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
@@ -288,16 +331,19 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
+          case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
-          case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
+          case LocalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
+
+          case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
             def ordinalNumber(i: Int): String = i match {
               case 0 => "first"
               case 1 => "second"
-              case i => s"${i}th"
+              case 2 => "third"
+              case i => s"${i + 1}th"
             }
             val ref = dataTypes(operator.children.head)
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
@@ -339,6 +385,11 @@ trait CheckAnalysis extends PredicateHelper {
               failAnalysis(s"Invalid partitioning: ${badReferences.mkString(", ")}")
             }
 
+            create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+
+          case write: V2WriteCommand if write.resolved =>
+            write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+
           // If the view output doesn't have the same number of columns neither with the child
           // output, nor with the query column names, throw an AnalysisException.
           // If the view's child output can't up cast to the view output,
@@ -379,55 +430,130 @@ trait CheckAnalysis extends PredicateHelper {
               case _ =>
             }
 
-          case alter: AlterTable if alter.childrenResolved =>
+          case alter: AlterTable if alter.table.resolved =>
             val table = alter.table
             def findField(operation: String, fieldName: Array[String]): StructField = {
               // include collections because structs nested in maps and arrays may be altered
               val field = table.schema.findNestedField(fieldName, includeCollections = true)
               if (field.isEmpty) {
-                throw new AnalysisException(
-                  s"Cannot $operation missing field in ${table.name} schema: ${fieldName.quoted}")
+                alter.failAnalysis(
+                  s"Cannot $operation missing field ${fieldName.quoted} in ${table.name} schema: " +
+                  table.schema.treeString)
               }
-              field.get
+              field.get._2
             }
+            def positionArgumentExists(
+                position: ColumnPosition,
+                struct: StructType,
+                fieldsAdded: Seq[String]): Unit = {
+              position match {
+                case after: After =>
+                  val allFields = struct.fieldNames ++ fieldsAdded
+                  if (!allFields.contains(after.column())) {
+                    alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
+                      s"${allFields.mkString("[", ", ", "]")}")
+                  }
+                case _ =>
+              }
+            }
+            def findParentStruct(operation: String, fieldNames: Array[String]): StructType = {
+              val parent = fieldNames.init
+              val field = if (parent.nonEmpty) {
+                findField(operation, parent).dataType
+              } else {
+                table.schema
+              }
+              field match {
+                case s: StructType => s
+                case o => alter.failAnalysis(s"Cannot $operation ${fieldNames.quoted}, because " +
+                  s"its parent is not a StructType. Found $o")
+              }
+            }
+            def checkColumnNotExists(
+                operation: String,
+                fieldNames: Array[String],
+                struct: StructType): Unit = {
+              if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
+                alter.failAnalysis(s"Cannot $operation column, because ${fieldNames.quoted} " +
+                  s"already exists in ${struct.treeString}")
+              }
+            }
+
+            val colsToDelete = mutable.Set.empty[Seq[String]]
+            // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a parent
+            // name of fields to field names that belong to the parent. For example, if we add
+            // columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
+            // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
+            val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
 
             alter.changes.foreach {
               case add: AddColumn =>
-                val parent = add.fieldNames.init
-                if (parent.nonEmpty) {
-                  findField("add to", parent)
+                // If a column to add is a part of columns to delete, we don't need to check
+                // if column already exists - applies to REPLACE COLUMNS scenario.
+                if (!colsToDelete.contains(add.fieldNames())) {
+                  checkColumnNotExists("add", add.fieldNames(), table.schema)
                 }
+                val parent = findParentStruct("add", add.fieldNames())
+                val parentName = add.fieldNames().init
+                val fieldsAdded = colsToAdd.getOrElse(parentName, Nil)
+                positionArgumentExists(add.position(), parent, fieldsAdded)
+                TypeUtils.failWithIntervalType(add.dataType())
+                colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
               case update: UpdateColumnType =>
                 val field = findField("update", update.fieldNames)
                 val fieldName = update.fieldNames.quoted
                 update.newDataType match {
                   case _: StructType =>
-                    throw new AnalysisException(
-                      s"Cannot update ${table.name} field $fieldName type: " +
-                          s"update a struct by adding, deleting, or updating its fields")
+                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                      s"update a struct by updating its fields")
                   case _: MapType =>
-                    throw new AnalysisException(
-                      s"Cannot update ${table.name} field $fieldName type: " +
-                          s"update a map by updating $fieldName.key or $fieldName.value")
+                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                      s"update a map by updating $fieldName.key or $fieldName.value")
                   case _: ArrayType =>
-                    throw new AnalysisException(
-                      s"Cannot update ${table.name} field $fieldName type: " +
-                          s"update the element by updating $fieldName.element")
-                  case _: AtomicType =>
+                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                      s"update the element by updating $fieldName.element")
+                  case u: UserDefinedType[_] =>
+                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                      s"update a UserDefinedType[${u.sql}] by updating its fields")
+                  case _: CalendarIntervalType =>
+                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to " +
+                      s"interval type")
+                  case _ =>
                     // update is okay
                 }
                 if (!Cast.canUpCast(field.dataType, update.newDataType)) {
-                  throw new AnalysisException(
+                  alter.failAnalysis(
                     s"Cannot update ${table.name} field $fieldName: " +
                         s"${field.dataType.simpleString} cannot be cast to " +
                         s"${update.newDataType.simpleString}")
                 }
+              case update: UpdateColumnNullability =>
+                val field = findField("update", update.fieldNames)
+                val fieldName = update.fieldNames.quoted
+                if (!update.nullable && field.nullable) {
+                  alter.failAnalysis(
+                    s"Cannot change nullable column to non-nullable: $fieldName")
+                }
+              case updatePos: UpdateColumnPosition =>
+                findField("update", updatePos.fieldNames)
+                val parent = findParentStruct("update", updatePos.fieldNames())
+                val parentName = updatePos.fieldNames().init
+                positionArgumentExists(
+                  updatePos.position(),
+                  parent,
+                  colsToAdd.getOrElse(parentName, Nil))
               case rename: RenameColumn =>
                 findField("rename", rename.fieldNames)
+                checkColumnNotExists(
+                  "rename", rename.fieldNames().init :+ rename.newName(), table.schema)
               case update: UpdateColumnComment =>
                 findField("update", update.fieldNames)
               case delete: DeleteColumn =>
                 findField("delete", delete.fieldNames)
+                // REPLACE COLUMNS has deletes followed by adds. Remember the deleted columns
+                // so that add operations do not fail when the columns to add exist and they
+                // are to be deleted.
+                colsToDelete += delete.fieldNames
               case _ =>
               // no validation needed for set and remove property
             }
@@ -534,6 +660,7 @@ trait CheckAnalysis extends PredicateHelper {
           case _ => // Analysis successful!
         }
     }
+    checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -628,6 +755,38 @@ trait CheckAnalysis extends PredicateHelper {
   }
 
   /**
+   * Validate that collected metrics names are unique. The same name cannot be used for metrics
+   * with different results. However multiple instances of metrics with with same result and name
+   * are allowed (e.g. self-joins).
+   */
+  private def checkCollectedMetrics(plan: LogicalPlan): Unit = {
+    val metricsMap = mutable.Map.empty[String, LogicalPlan]
+    def check(plan: LogicalPlan): Unit = plan.foreach { node =>
+      node match {
+        case metrics @ CollectMetrics(name, _, _) =>
+          metricsMap.get(name) match {
+            case Some(other) =>
+              // Exact duplicates are allowed. They can be the result
+              // of a CTE that is used multiple times or a self join.
+              if (!metrics.sameResult(other)) {
+                failAnalysis(
+                  s"Multiple definitions of observed metrics named '$name': $plan")
+              }
+            case None =>
+              metricsMap.put(name, metrics)
+          }
+        case _ =>
+      }
+      node.expressions.foreach(_.foreach {
+        case subquery: SubqueryExpression =>
+          check(subquery.plan)
+        case _ =>
+      })
+    }
+    check(plan)
+  }
+
+  /**
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
@@ -708,7 +867,7 @@ trait CheckAnalysis extends PredicateHelper {
 
     // Simplify the predicates before validating any unsupported correlation patterns in the plan.
     AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
-      // Whitelist operators allowed in a correlated subquery
+      // Approve operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,
       //    by definition of the operators, they either do not contain

@@ -251,7 +251,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // stage so that we can check the state of the output committer.
     val retriedStage = sc.parallelize(1 to 100, 10)
       .map { i => (i % 10, i) }
-      .reduceByKey { case (_, _) =>
+      .reduceByKey { (_, _) =>
         val ctx = TaskContext.get()
         if (ctx.stageAttemptNumber() == 0) {
           throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 1, 1L, 1, 1,

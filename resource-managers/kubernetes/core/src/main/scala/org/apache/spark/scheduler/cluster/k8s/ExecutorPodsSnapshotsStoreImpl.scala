@@ -16,14 +16,19 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.util.ArrayList
 import java.util.concurrent._
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.ReentrantLock
+import javax.annotation.concurrent.GuardedBy
+
+import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model.Pod
-import javax.annotation.concurrent.GuardedBy
-import scala.collection.JavaConverters._
-import scala.collection.mutable
 
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Controls the propagation of the Spark application's executor pods state to subscribers that
@@ -46,9 +51,11 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * subscriber's buffer. Subscribers receive blocks of snapshots produced by the producers in
  * time-windowed chunks. Each subscriber can choose to receive their snapshot chunks at different
  * time intervals.
+ * <br>
+ * The subcriber notification callback is guaranteed to be called from a single thread at a time.
  */
 private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: ScheduledExecutorService)
-  extends ExecutorPodsSnapshotsStore {
+  extends ExecutorPodsSnapshotsStore with Logging {
 
   private val SNAPSHOT_LOCK = new Object()
 
@@ -61,14 +68,13 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
   override def addSubscriber(
       processBatchIntervalMillis: Long)
       (onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit): Unit = {
-    val newSubscriber = SnapshotsSubscriber(
-        new LinkedBlockingQueue[ExecutorPodsSnapshot](), onNewSnapshots)
+    val newSubscriber = new SnapshotsSubscriber(onNewSnapshots)
     SNAPSHOT_LOCK.synchronized {
-      newSubscriber.snapshotsBuffer.add(currentSnapshot)
+      newSubscriber.addCurrentSnapshot()
     }
     subscribers.add(newSubscriber)
     pollingTasks.add(subscribersExecutor.scheduleWithFixedDelay(
-      () => callSubscriber(newSubscriber),
+      () => newSubscriber.processSnapshots(),
       0L,
       processBatchIntervalMillis,
       TimeUnit.MILLISECONDS))
@@ -77,7 +83,7 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
   override def notifySubscribers(): Unit = SNAPSHOT_LOCK.synchronized {
     subscribers.asScala.foreach { s =>
       subscribersExecutor.submit(new Runnable() {
-        override def run(): Unit = callSubscriber(s)
+        override def run(): Unit = s.processSnapshots()
       })
     }
   }
@@ -98,20 +104,57 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
   }
 
   private def addCurrentSnapshotToSubscribers(): Unit = {
-    subscribers.asScala.foreach { subscriber =>
-      subscriber.snapshotsBuffer.add(currentSnapshot)
-    }
+    subscribers.asScala.foreach(_.addCurrentSnapshot())
   }
 
-  private def callSubscriber(subscriber: SnapshotsSubscriber): Unit = {
-    Utils.tryLogNonFatalError {
-      val currentSnapshots = mutable.Buffer.empty[ExecutorPodsSnapshot].asJava
-      subscriber.snapshotsBuffer.drainTo(currentSnapshots)
-      subscriber.onNewSnapshots(currentSnapshots.asScala)
+  private class SnapshotsSubscriber(onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit) {
+
+    private val snapshotsBuffer = new LinkedBlockingQueue[ExecutorPodsSnapshot]()
+    private val lock = new ReentrantLock()
+    private val notificationCount = new AtomicInteger()
+
+    def addCurrentSnapshot(): Unit = {
+      snapshotsBuffer.add(currentSnapshot)
+    }
+
+    def processSnapshots(): Unit = {
+      notificationCount.incrementAndGet()
+      processSnapshotsInternal()
+    }
+
+    private def processSnapshotsInternal(): Unit = {
+      if (lock.tryLock()) {
+        // Check whether there are pending notifications before calling the subscriber. This
+        // is needed to avoid calling the subscriber spuriously when the race described in the
+        // comment below happens.
+        if (notificationCount.get() > 0) {
+          try {
+            val snapshots = new ArrayList[ExecutorPodsSnapshot]()
+            snapshotsBuffer.drainTo(snapshots)
+            onNewSnapshots(snapshots.asScala.toSeq)
+          } catch {
+            case NonFatal(e) => logWarning("Exception when notifying snapshot subscriber.", e)
+          } finally {
+            lock.unlock()
+          }
+
+          if (notificationCount.decrementAndGet() > 0) {
+            // There was another concurrent request for this subcriber. Schedule a task to
+            // immediately process snapshots again, so that the subscriber can pick up any
+            // changes that may have happened between the time it started looking at snapshots
+            // above, and the time the concurrent request arrived.
+            //
+            // This has to be done outside of the lock, otherwise we might miss a notification
+            // arriving after the above check, but before we've released the lock. Flip side is
+            // that we may schedule a useless task that will just fail to grab the lock.
+            subscribersExecutor.submit(new Runnable() {
+              override def run(): Unit = processSnapshotsInternal()
+            })
+          }
+        } else {
+          lock.unlock()
+        }
+      }
     }
   }
-
-  private case class SnapshotsSubscriber(
-      snapshotsBuffer: BlockingQueue[ExecutorPodsSnapshot],
-      onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit)
 }

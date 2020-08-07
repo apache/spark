@@ -96,7 +96,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Filter(condition, child) =>
       val (withSubquery, withoutSubquery) =
-        splitConjunctivePredicates(condition).partition(SubqueryExpression.hasInOrExistsSubquery)
+        splitConjunctivePredicates(condition)
+          .partition(SubqueryExpression.hasInOrCorrelatedExistsSubquery)
 
       // Construct the pruned filter condition.
       val newFilter: LogicalPlan = withoutSubquery match {
@@ -161,12 +162,33 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
     var newPlan = plan
     val newExprs = exprs.map { e =>
-      e transformUp {
+      e transformDown {
         case Exists(sub, conditions, _) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           newPlan =
             buildJoin(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
           exists
+        case Not(InSubquery(values, ListQuery(sub, conditions, _, _))) =>
+          val exists = AttributeReference("exists", BooleanType, nullable = false)()
+          // Deduplicate conflicting attributes if any.
+          val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
+          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
+          // To handle a null-aware predicate not-in-subquery in nested conditions
+          // (e.g., `v > 0 OR t1.id NOT IN (SELECT id FROM t2)`), we transform
+          // `inConditon` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.
+          //
+          // For example, `SELECT * FROM t1 WHERE v > 0 OR t1.id NOT IN (SELECT id FROM t2)`
+          // is transformed into a plan below;
+          // == Optimized Logical Plan ==
+          // Project [id#78, v#79]
+          // +- Filter ((v#79 > 0) OR NOT exists#83)
+          //   +- Join ExistenceJoin(exists#83), ((id#78 = id#80) OR isnull((id#78 = id#80)))
+          //     :- Relation[id#78,v#79] parquet
+          //     +- Relation[id#80] parquet
+          val nullAwareJoinConds = inConditions.map(c => Or(c, IsNull(c)))
+          val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
+          newPlan = Join(newPlan, newSub, ExistenceJoin(exists), Some(finalJoinCond), JoinHint.NONE)
+          Not(exists)
         case InSubquery(values, ListQuery(sub, conditions, _, _)) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           // Deduplicate conflicting attributes if any.
@@ -368,7 +390,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     // in the expression with the value they would return for zero input tuples.
     // Also replace attribute refs (for example, for grouping columns) with NULL.
     val rewrittenExpr = expr transform {
-      case a @ AggregateExpression(aggFunc, _, _, resultId) =>
+      case a @ AggregateExpression(aggFunc, _, _, resultId, _) =>
         aggFunc.defaultResult.getOrElse(Literal.default(NullType))
 
       case _: AttributeReference => Literal.default(NullType)
@@ -456,11 +478,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     while (true) {
       bottomPart match {
         case havingPart @ Filter(_, aggPart: Aggregate) =>
-          return (topPart, Option(havingPart), aggPart)
+          return (topPart.toSeq, Option(havingPart), aggPart)
 
         case aggPart: Aggregate =>
           // No HAVING clause
-          return (topPart, None, aggPart)
+          return (topPart.toSeq, None, aggPart)
 
         case p @ Project(_, child) =>
           topPart += p

@@ -17,9 +17,11 @@
 
 import datetime
 import sys
+from itertools import chain
+import re
 
 from pyspark.sql import Row
-from pyspark.sql.functions import udf, input_file_name
+from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, lit
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -165,10 +167,6 @@ class FunctionsTests(ReusedSQLTestCase):
             TypeError,
             "must be the same type",
             lambda: df.select(col('name').substr(0, lit(1))))
-        if sys.version_info.major == 2:
-            self.assertRaises(
-                TypeError,
-                lambda: df.select(col('name').substr(long(0), long(1))))
 
         for name in _string_functions.keys():
             self.assertEqual(
@@ -294,6 +292,16 @@ class FunctionsTests(ReusedSQLTestCase):
         for result in results:
             self.assertEqual(result[0], '')
 
+    def test_slice(self):
+        from pyspark.sql.functions import slice, lit
+
+        df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
+
+        self.assertEquals(
+            df.select(slice(df.x, 2, 2).alias("sliced")).collect(),
+            df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect(),
+        )
+
     def test_array_repeat(self):
         from pyspark.sql.functions import array_repeat, lit
 
@@ -309,6 +317,79 @@ class FunctionsTests(ReusedSQLTestCase):
         df = df.select(udf(lambda x: x)("value"), input_file_name().alias('file'))
         file_name = df.collect()[0].file
         self.assertTrue("python/test_support/hello/hello.txt" in file_name)
+
+    def test_overlay(self):
+        from pyspark.sql.functions import col, lit, overlay
+        from itertools import chain
+        import re
+
+        actual = list(chain.from_iterable([
+            re.findall("(overlay\\(.*\\))", str(x)) for x in [
+                overlay(col("foo"), col("bar"), 1),
+                overlay("x", "y", 3),
+                overlay(col("x"), col("y"), 1, 3),
+                overlay("x", "y", 2, 5),
+                overlay("x", "y", lit(11)),
+                overlay("x", "y", lit(2), lit(5)),
+            ]
+        ]))
+
+        expected = [
+            "overlay(foo, bar, 1, -1)",
+            "overlay(x, y, 3, -1)",
+            "overlay(x, y, 1, 3)",
+            "overlay(x, y, 2, 5)",
+            "overlay(x, y, 11, -1)",
+            "overlay(x, y, 2, 5)",
+        ]
+
+        self.assertListEqual(actual, expected)
+
+    def test_percentile_approx(self):
+        actual = list(chain.from_iterable([
+            re.findall("(percentile_approx\\(.*\\))", str(x)) for x in [
+                percentile_approx(col("foo"), lit(0.5)),
+                percentile_approx(col("bar"), 0.25, 42),
+                percentile_approx(col("bar"), [0.25, 0.5, 0.75]),
+                percentile_approx(col("foo"), (0.05, 0.95), 100),
+                percentile_approx("foo", 0.5),
+                percentile_approx("bar", [0.1, 0.9], lit(10)),
+            ]
+        ]))
+
+        expected = [
+            "percentile_approx(foo, 0.5, 10000)",
+            "percentile_approx(bar, 0.25, 42)",
+            "percentile_approx(bar, array(0.25, 0.5, 0.75), 10000)",
+            "percentile_approx(foo, array(0.05, 0.95), 100)",
+            "percentile_approx(foo, 0.5, 10000)",
+            "percentile_approx(bar, array(0.1, 0.9), 10)"
+        ]
+
+        self.assertListEqual(actual, expected)
+
+    def test_higher_order_function_failures(self):
+        from pyspark.sql.functions import col, exists, transform
+
+        # Should fail with varargs
+        with self.assertRaises(ValueError):
+            transform(col("foo"), lambda *x: lit(1))
+
+        # Should fail with kwargs
+        with self.assertRaises(ValueError):
+            transform(col("foo"), lambda **x: lit(1))
+
+        # Should fail with nullary function
+        with self.assertRaises(ValueError):
+            transform(col("foo"), lambda: lit(1))
+
+        # Should fail with quaternary function
+        with self.assertRaises(ValueError):
+            transform(col("foo"), lambda x1, x2, x3, x4: lit(1))
+
+        # Should fail if function doesn't return Column
+        with self.assertRaises(ValueError):
+            transform(col("foo"), lambda x: 1)
 
 
 if __name__ == "__main__":

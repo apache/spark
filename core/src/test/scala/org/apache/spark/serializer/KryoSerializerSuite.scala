@@ -34,6 +34,7 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
@@ -41,7 +42,7 @@ import org.apache.spark.util.ThreadUtils
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
-  conf.set(KRYO_USER_REGISTRATORS, classOf[MyRegistrator].getName)
+  conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[MyRegistrator].getName))
   conf.set(KRYO_USE_UNSAFE, false)
 
   test("SPARK-7392 configuration limits") {
@@ -312,7 +313,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     import org.apache.spark.SparkException
 
     val conf = new SparkConf(false)
-    conf.set(KRYO_USER_REGISTRATORS, "this.class.does.not.exist")
+    conf.set(KRYO_USER_REGISTRATORS, Seq("this.class.does.not.exist"))
 
     val thrown = intercept[SparkException](new KryoSerializer(conf).newInstance().serialize(1))
     assert(thrown.getMessage.contains("Failed to register classes with Kryo"))
@@ -358,6 +359,26 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("registration of TaskCommitMessage") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    // HadoopMapReduceCommitProtocol.commitTask() returns a TaskCommitMessage containing a complex
+    // structure.
+
+    val ser = new KryoSerializer(conf).newInstance()
+    val addedAbsPathFiles = Map("test1" -> "test1", "test2" -> "test2")
+    val partitionPaths = Set("test3")
+
+    val taskCommitMessage1 = new TaskCommitMessage(addedAbsPathFiles -> partitionPaths)
+    val taskCommitMessage2 = new TaskCommitMessage(Map.empty -> Set.empty)
+    Seq(taskCommitMessage1, taskCommitMessage2).foreach { taskCommitMessage =>
+      val obj1 = ser.deserialize[TaskCommitMessage](ser.serialize(taskCommitMessage)).obj
+      val obj2 = taskCommitMessage.obj
+      assert(obj1 == obj2)
+    }
+  }
+
   test("serialization buffer overflow reporting") {
     import org.apache.spark.SparkException
     val kryoBufferMaxProperty = KRYO_SERIALIZER_MAX_BUFFER_SIZE.key
@@ -391,7 +412,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val ser = new KryoSerializer(new SparkConf).newInstance().asInstanceOf[KryoSerializerInstance]
     assert(ser.getAutoReset)
     val conf = new SparkConf().set(KRYO_USER_REGISTRATORS,
-      classOf[RegistratorWithoutAutoReset].getName)
+      Seq(classOf[RegistratorWithoutAutoReset].getName))
     val ser2 = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
     assert(!ser2.getAutoReset)
   }
@@ -422,7 +443,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       .set(KRYO_REFERENCE_TRACKING, referenceTracking)
       .set(KRYO_USE_POOL, usePool)
     if (!autoReset) {
-      conf.set(KRYO_USER_REGISTRATORS, classOf[RegistratorWithoutAutoReset].getName)
+      conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[RegistratorWithoutAutoReset].getName))
     }
     val ser = new KryoSerializer(conf)
     val serInstance = ser.newInstance().asInstanceOf[KryoSerializerInstance]
@@ -509,7 +530,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
 class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSparkContext {
   conf.set(SERIALIZER, classOf[KryoSerializer].getName)
-  conf.set(KRYO_USER_REGISTRATORS, classOf[RegistratorWithoutAutoReset].getName)
+  conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[RegistratorWithoutAutoReset].getName))
   conf.set(KRYO_REFERENCE_TRACKING, true)
   conf.set(SHUFFLE_MANAGER, "sort")
   conf.set(SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD, 200)

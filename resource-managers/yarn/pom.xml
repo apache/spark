@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.1.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -30,7 +30,17 @@
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
     <jersey-1.version>1.19</jersey-1.version>
+    <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
   </properties>
+
+  <profiles>
+    <profile>
+      <id>hadoop-provided</id>
+      <properties>
+        <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
+      </properties>
+    </profile>
+  </profiles>
 
   <dependencies>
     <dependency>
@@ -201,6 +211,12 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+      </resource>
+    </resources>
   </build>
 
 </project>
