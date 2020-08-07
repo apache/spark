@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.hadoop.fs.Path
