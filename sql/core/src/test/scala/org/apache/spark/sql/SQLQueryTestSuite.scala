@@ -526,6 +526,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
+      .replaceAll("\\[|\\]","")
   }
 
   protected lazy val listTestCases: Seq[TestCase] = {
