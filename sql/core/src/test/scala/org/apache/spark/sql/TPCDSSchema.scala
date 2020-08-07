@@ -260,6 +260,6 @@ trait TPCDSSchema {
 
     // To simulate plan generation on actual TPCDS data, injects data stats here
     spark.sessionState.catalog.alterTableStats(
-      TableIdentifier(tableName), Some(TPCDSTableStats.sf1TableStats(tableName)))
+      TableIdentifier(tableName), Some(TPCDSTableStats.sf100TableStats(tableName)))
   }
 }
