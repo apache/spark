@@ -24,19 +24,21 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class CTEHintSuite extends QueryTest with SharedSparkSession {
 
-  def verifyCoalesceHint(df: DataFrame): Unit = {
-    def checkPlanContainsRepartition(plan: LogicalPlan): Unit = {
+  def verifyCoalesceOrRepartitionHint(df: DataFrame): Unit = {
+    def checkContainsRepartition(plan: LogicalPlan): Unit = {
       val repartitions = plan collect {
         case r: Repartition => r
         case r: RepartitionByExpression => r
-        case _: ResolvedHint => fail("ResolvedHint should not appear after optimize.")
       }
       assert(repartitions.nonEmpty)
     }
     val analyzed = df.queryExecution.analyzed
     val optimized = df.queryExecution.optimizedPlan
-    checkPlanContainsRepartition(analyzed)
-    checkPlanContainsRepartition(optimized)
+    checkContainsRepartition(analyzed)
+    checkContainsRepartition(optimized)
+    optimized collect {
+      case _: ResolvedHint => fail("ResolvedHint should not appear after optimize.")
+    }
   }
 
   def verifyJoinHint(df: DataFrame, expectedHints: Seq[JoinHint]): Unit = {
@@ -83,17 +85,17 @@ class CTEHintSuite extends QueryTest with SharedSparkSession {
     // REPARTITION_BY_RANGE
     withTable("t") {
       sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS id")
-      verifyCoalesceHint(
+      verifyCoalesceOrRepartitionHint(
         sql("WITH cte AS (SELECT /*+ COALESCE(1) */ * FROM t) SELECT * FROM cte"))
-      verifyCoalesceHint(
+      verifyCoalesceOrRepartitionHint(
         sql("WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM t) SELECT * FROM cte"))
-      verifyCoalesceHint(
+      verifyCoalesceOrRepartitionHint(
         sql("WITH cte AS (SELECT /*+ REPARTITION(id) */ * FROM t) SELECT * FROM cte"))
-      verifyCoalesceHint(
+      verifyCoalesceOrRepartitionHint(
         sql("WITH cte AS (SELECT /*+ REPARTITION(3, id) */ * FROM t) SELECT * FROM cte"))
-      verifyCoalesceHint(
+      verifyCoalesceOrRepartitionHint(
         sql("WITH cte AS (SELECT /*+ REPARTITION_BY_RANGE(id) */ * FROM t) SELECT * FROM cte"))
-      verifyCoalesceHint(
+      verifyCoalesceOrRepartitionHint(
         sql("WITH cte AS (SELECT /*+ REPARTITION_BY_RANGE(3, id) */ * FROM t) SELECT * FROM cte"))
     }
   }
@@ -168,10 +170,11 @@ class CTEHintSuite extends QueryTest with SharedSparkSession {
     withTable("t") {
       sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS id")
       checkAnswer(
-        sql(s"""
-               |WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM t)
-               |SELECT * FROM cte
-        """.stripMargin),
+        sql(
+          """
+            |WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM t)
+            |SELECT * FROM cte
+            |""".stripMargin),
         Row(1) :: Nil)
     }
   }
