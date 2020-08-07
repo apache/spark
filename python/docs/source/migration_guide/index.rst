@@ -20,3 +20,14 @@
 Migration Guide
 ===============
 
+Migration Guide: PySpark (Python on Spark)
+
+Note that this migration guide describes the items specific to PySpark.
+Many items of SQL migration can be applied when migrating PySpark to higher versions.
+Please refer `Migration Guide: SQL, Datasets and DataFrame <http://spark.apache.org/docs/latest/sql-migration-guide.html>`_.
+
+.. toctree::
+   :maxdepth: 2
+
+   pyspark_2.4_to_3.0
+
