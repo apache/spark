@@ -77,8 +77,7 @@ object HiveResult {
       // We need the types so we can output struct field names
       val types = executedPlan.output.map(_.dataType)
       // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)).sorted)
-        .map(_.mkString("\t"))
+      result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters))).map(_.mkString("\t"))
   }
 
   private def formatDescribeTableOutput(rows: Array[Row]): Seq[String] = {
