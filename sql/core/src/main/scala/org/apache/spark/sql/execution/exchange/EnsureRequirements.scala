@@ -176,7 +176,11 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       leftPartitioning: Partitioning,
       rightPartitioning: Partitioning): (Seq[Expression], Seq[Expression]) = {
     if (leftKeys.forall(_.deterministic) && rightKeys.forall(_.deterministic)) {
-      reorderJoinKeysRecursively(leftKeys, rightKeys, leftPartitioning, rightPartitioning)
+      reorderJoinKeysRecursively(
+        leftKeys,
+        rightKeys,
+        Some(leftPartitioning),
+        Some(rightPartitioning))
         .getOrElse((leftKeys, rightKeys))
     } else {
       (leftKeys, rightKeys)
@@ -190,27 +194,27 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   private def reorderJoinKeysRecursively(
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
-      leftPartitioning: Partitioning,
-      rightPartitioning: Partitioning): Option[(Seq[Expression], Seq[Expression])] = {
+      leftPartitioning: Option[Partitioning],
+      rightPartitioning: Option[Partitioning]): Option[(Seq[Expression], Seq[Expression])] = {
     (leftPartitioning, rightPartitioning) match {
-      case (HashPartitioning(leftExpressions, _), _) =>
+      case (Some(HashPartitioning(leftExpressions, _)), _) =>
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leftExpressions, leftKeys)
           .orElse(reorderJoinKeysRecursively(
-            leftKeys, rightKeys, UnknownPartitioning(0), rightPartitioning))
-      case (_, HashPartitioning(rightExpressions, _)) =>
+            leftKeys, rightKeys, None, rightPartitioning))
+      case (_, Some(HashPartitioning(rightExpressions, _))) =>
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
-            leftKeys, rightKeys, leftPartitioning, UnknownPartitioning(0)))
-      case (PartitioningCollection(partitionings), _) =>
+            leftKeys, rightKeys, leftPartitioning, None))
+      case (Some(PartitioningCollection(partitionings)), _) =>
         partitionings.foreach { p =>
-          reorderJoinKeysRecursively(leftKeys, rightKeys, p, rightPartitioning).map { k =>
+          reorderJoinKeysRecursively(leftKeys, rightKeys, Some(p), rightPartitioning).map { k =>
             return Some(k)
           }
         }
-        reorderJoinKeysRecursively(leftKeys, rightKeys, UnknownPartitioning(0), rightPartitioning)
-      case (_, PartitioningCollection(partitionings)) =>
+        reorderJoinKeysRecursively(leftKeys, rightKeys, None, rightPartitioning)
+      case (_, Some(PartitioningCollection(partitionings))) =>
         partitionings.foreach { p =>
-          reorderJoinKeysRecursively(leftKeys, rightKeys, leftPartitioning, p).map { k =>
+          reorderJoinKeysRecursively(leftKeys, rightKeys, leftPartitioning, Some(p)).map { k =>
             return Some(k)
           }
         }

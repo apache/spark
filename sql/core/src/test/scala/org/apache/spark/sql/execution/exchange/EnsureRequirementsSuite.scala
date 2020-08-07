@@ -29,7 +29,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprB = Literal(2)
   private val exprC = Literal(3)
 
-  test("EnsureRequirements.reorder should handle PartitioningCollection") {
+  test("reorder should handle PartitioningCollection") {
     val plan1 = DummySparkPlan(
       outputPartitioning = PartitioningCollection(Seq(
         HashPartitioning(exprA :: exprB :: Nil, 5),
@@ -86,7 +86,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("EnsureRequirements.reorder should fallback to the other side partitioning") {
+  test("reorder should fallback to the other side partitioning") {
     val plan1 = DummySparkPlan(
       outputPartitioning = HashPartitioning(exprA :: exprB :: exprC :: Nil, 5))
     val plan2 = DummySparkPlan(
