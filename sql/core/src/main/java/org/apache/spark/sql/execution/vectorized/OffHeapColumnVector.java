@@ -486,7 +486,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
         null, data + rowId * 8L, count * 8L);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.BIG_ENDIAN);
-      long offset = data + 8L * rowId
+      long offset = data + 8L * rowId;
       for (int i = 0; i < count; ++i, offset += 8) {
         Platform.putDouble(null, offset, bb.getDouble(srcIndex + (8 * i)));
       }
