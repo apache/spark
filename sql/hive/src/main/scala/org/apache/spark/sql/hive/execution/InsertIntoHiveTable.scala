@@ -245,7 +245,7 @@ case class InsertIntoHiveTable(
             if (fs.exists(partitionPath)) {
               if (!fs.delete(partitionPath, true)) {
                 throw new RuntimeException(
-                  s"Cannot remove partition directory ${partitionPath.toString}")
+                  "Cannot remove partition directory '" + partitionPath.toString + "'")
               }
             }
           }
@@ -311,7 +311,7 @@ case class InsertIntoHiveTable(
               if (fs.exists(path)) {
                 if (!fs.delete(path, true)) {
                   throw new RuntimeException(
-                    s"Cannot remove partition directory ${path.toString}")
+                    "Cannot remove partition directory '" + path.toString  + "'")
                 }
                 // Don't let Hive do overwrite operation since it is slower.
                 doHiveOverwrite = false
