@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{IntegerType, NullType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 
 class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
@@ -34,20 +35,18 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
       BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
   }
 
+  private val relation = LocalRelation('a.int, 'b.int, 'c.boolean)
+
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
-    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
-    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
+    val correctAnswer = Project(Alias(e2, "out")() :: Nil, relation).analyze
+    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, relation).analyze)
     comparePlans(actual, correctAnswer)
   }
 
   private val trueBranch = (TrueLiteral, Literal(5))
   private val normalBranch = (NonFoldableLiteral(true), Literal(10))
   private val unreachableBranch = (FalseLiteral, Literal(20))
-  private val nullBranch = (Literal.create(null, NullType), Literal(30))
-
-  val isNotNullCond = IsNotNull(UnresolvedAttribute(Seq("a")))
-  val isNullCond = IsNull(UnresolvedAttribute("b"))
-  val notCond = Not(UnresolvedAttribute("c"))
+  private val nullBranch = (Literal.create(null, BooleanType), Literal(30))
 
   test("simplify if") {
     assertEquivalent(
@@ -59,7 +58,7 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
       Literal(20))
 
     assertEquivalent(
-      If(Literal.create(null, NullType), Literal(10), Literal(20)),
+      If(Literal.create(null, BooleanType), Literal(10), Literal(20)),
       Literal(20))
   }
 
@@ -127,9 +126,9 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   test("simplify CaseWhen if all the outputs are semantic equivalence") {
     // When the conditions in `CaseWhen` are all deterministic, `CaseWhen` can be removed.
     assertEquivalent(
-      CaseWhen((isNotNullCond, Subtract(Literal(3), Literal(2))) ::
-        (isNullCond, Literal(1)) ::
-        (notCond, Add(Literal(6), Literal(-5))) ::
+      CaseWhen(('a.isNotNull, Subtract(Literal(3), Literal(2))) ::
+        ('b.isNull, Literal(1)) ::
+        (!'c, Add(Literal(6), Literal(-5))) ::
         Nil,
         Add(Literal(2), Literal(-1))),
       Literal(1)

@@ -418,8 +418,11 @@ package object dsl {
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
 
-      def analyze: LogicalPlan =
-        EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))
+      def analyze: LogicalPlan = {
+        val analyzed = analysis.SimpleAnalyzer.execute(logicalPlan)
+        analysis.SimpleAnalyzer.checkAnalysis(analyzed)
+        EliminateSubqueryAliases(analyzed)
+      }
 
       def hint(name: String, parameters: Any*): LogicalPlan =
         UnresolvedHint(name, parameters, logicalPlan)
