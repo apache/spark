@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
-import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.hadoop.fs.Path
 
@@ -54,7 +54,7 @@ class QueryExecution(
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker) extends Logging {
 
-  val id: UUID = UUID.randomUUID()
+  val id: Long = QueryExecution.nextExecutionId
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
@@ -321,6 +321,10 @@ class QueryExecution(
 }
 
 object QueryExecution {
+  private val _nextExecutionId = new AtomicLong(0)
+
+  private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
+
   /**
    * Construct a sequence of rules that are used to prepare a planned [[SparkPlan]] for execution.
    * These rules will make sure subqueries are planned, make use the data partitioning and ordering
