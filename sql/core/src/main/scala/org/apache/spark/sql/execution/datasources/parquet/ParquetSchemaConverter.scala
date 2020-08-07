@@ -79,7 +79,7 @@ class ParquetToSparkSchemaConverter(
       }
     }
 
-    StructType(fields)
+    StructType(fields.toSeq)
   }
 
   /**

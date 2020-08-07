@@ -45,9 +45,11 @@ import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
 // TODO(gatorsmile): combine HiveCatalogedDDLSuite and HiveDDLSuite
+@SlowHiveTest
 class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeAndAfterEach {
   override def afterEach(): Unit = {
     try {
@@ -126,7 +128,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       createTime = 0L,
       lastAccessTime = 0L,
       owner = "",
-      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
+      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
       // View texts are checked separately
       viewText = None
     )
@@ -405,6 +407,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   }
 }
 
+@SlowHiveTest
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
   import testImplicits._

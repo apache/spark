@@ -577,25 +577,20 @@ class ResolveSessionCatalog(
     case ShowTableProperties(r: ResolvedView, propertyKey) =>
       ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
-    case DescribeFunctionStatement(nameParts, extended) =>
-      val functionIdent =
-        parseSessionCatalogFunctionIdentifier(nameParts, "DESCRIBE FUNCTION")
-      DescribeFunctionCommand(functionIdent, extended)
+    case DescribeFunction(ResolvedFunc(identifier), extended) =>
+      DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)
 
-    case ShowFunctionsStatement(userScope, systemScope, pattern, fun) =>
-      val (database, function) = fun match {
-        case Some(nameParts) =>
-          val FunctionIdentifier(fn, db) =
-            parseSessionCatalogFunctionIdentifier(nameParts, "SHOW FUNCTIONS")
-          (db, Some(fn))
-        case None => (None, pattern)
-      }
-      ShowFunctionsCommand(database, function, userScope, systemScope)
+    case ShowFunctions(None, userScope, systemScope, pattern) =>
+      ShowFunctionsCommand(None, pattern, userScope, systemScope)
 
-    case DropFunctionStatement(nameParts, ifExists, isTemp) =>
-      val FunctionIdentifier(function, database) =
-        parseSessionCatalogFunctionIdentifier(nameParts, "DROP FUNCTION")
-      DropFunctionCommand(database, function, ifExists, isTemp)
+    case ShowFunctions(Some(ResolvedFunc(identifier)), userScope, systemScope, _) =>
+      val funcIdentifier = identifier.asFunctionIdentifier
+      ShowFunctionsCommand(
+        funcIdentifier.database, Some(funcIdentifier.funcName), userScope, systemScope)
+
+    case DropFunction(ResolvedFunc(identifier), ifExists, isTemp) =>
+      val funcIdentifier = identifier.asFunctionIdentifier
+      DropFunctionCommand(funcIdentifier.database, funcIdentifier.funcName, ifExists, isTemp)
 
     case CreateFunctionStatement(nameParts,
       className, resources, isTemp, ignoreIfExists, replace) =>
@@ -618,37 +613,15 @@ class ResolveSessionCatalog(
           replace)
       } else {
         val FunctionIdentifier(function, database) =
-          parseSessionCatalogFunctionIdentifier(nameParts, "CREATE FUNCTION")
+          parseSessionCatalogFunctionIdentifier(nameParts)
         CreateFunctionCommand(database, function, className, resources, isTemp, ignoreIfExists,
           replace)
       }
-  }
 
-  // TODO: move function related v2 statements to the new framework.
-  private def parseSessionCatalogFunctionIdentifier(
-      nameParts: Seq[String],
-      sql: String): FunctionIdentifier = {
-    if (nameParts.length == 1 && isTempFunction(nameParts.head)) {
-      return FunctionIdentifier(nameParts.head)
-    }
-
-    nameParts match {
-      case SessionCatalogAndIdentifier(_, ident) =>
-        if (nameParts.length == 1) {
-          // If there is only one name part, it means the current catalog is the session catalog.
-          // Here we don't fill the default database, to keep the error message unchanged for
-          // v1 commands.
-          FunctionIdentifier(nameParts.head, None)
-        } else {
-          ident.namespace match {
-            case Array(db) => FunctionIdentifier(ident.name, Some(db))
-            case _ =>
-              throw new AnalysisException(s"Unsupported function name '$ident'")
-          }
-        }
-
-      case _ => throw new AnalysisException(s"$sql is only supported in v1 catalog")
-    }
+    case RefreshFunction(ResolvedFunc(identifier)) =>
+      // Fallback to v1 command
+      val funcIdentifier = identifier.asFunctionIdentifier
+      RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = tableName match {

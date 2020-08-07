@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalo
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -217,18 +217,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
-
-    case Repartition(1, false, child) =>
-      val isContinuous = child.find {
-        case r: StreamingDataSourceV2Relation => r.stream.isInstanceOf[ContinuousStream]
-        case _ => false
-      }.isDefined
-
-      if (isContinuous) {
-        ContinuousCoalesceExec(1, planLater(child)) :: Nil
-      } else {
-        Nil
-      }
 
     case desc @ DescribeNamespace(ResolvedNamespace(catalog, ns), extended) =>
       DescribeNamespaceExec(desc.output, catalog.asNamespaceCatalog, ns, extended) :: Nil

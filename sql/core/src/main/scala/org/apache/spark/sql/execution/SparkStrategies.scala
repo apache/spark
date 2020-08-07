@@ -159,7 +159,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   4. Pick cartesian product if join type is inner like.
       //   5. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
       //      other choice.
-      case p @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, hint) =>
+      case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond, left, right, hint) =>
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
           getBroadcastBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf).map {
             buildSide =>
@@ -168,7 +168,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 rightKeys,
                 joinType,
                 buildSide,
-                condition,
+                nonEquiCond,
                 planLater(left),
                 planLater(right)))
           }
@@ -182,7 +182,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 rightKeys,
                 joinType,
                 buildSide,
-                condition,
+                nonEquiCond,
                 planLater(left),
                 planLater(right)))
           }
@@ -191,7 +191,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         def createSortMergeJoin() = {
           if (RowOrdering.isOrderable(leftKeys)) {
             Some(Seq(joins.SortMergeJoinExec(
-              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right))))
+              leftKeys, rightKeys, joinType, nonEquiCond, planLater(left), planLater(right))))
           } else {
             None
           }
@@ -199,7 +199,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         def createCartesianProduct() = {
           if (joinType.isInstanceOf[InnerLike]) {
-            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), p.condition)))
+            // `CartesianProductExec` can't implicitly evaluate equal join condition, here we should
+            // pass the original condition which includes both equal and non-equal conditions.
+            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), j.condition)))
           } else {
             None
           }
@@ -220,7 +222,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // This join could be very slow or OOM
               val buildSide = getSmallerSide(left, right)
               Seq(joins.BroadcastNestedLoopJoinExec(
-                planLater(left), planLater(right), buildSide, joinType, condition))
+                planLater(left), planLater(right), buildSide, joinType, nonEquiCond))
             }
         }
 
@@ -229,6 +231,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           .orElse(createShuffleHashJoin(true))
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
           .getOrElse(createJoinWithoutHint())
+
+      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
+        Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+          None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
       // If it is not an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast nested loop join. If both sides have the broadcast
@@ -659,7 +665,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
           ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
-            planLater(child), canChangeNumPartitions = false) :: Nil
+            planLater(child), noUserSpecifiedNumPartition = false) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -681,8 +687,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
-      case logical.Union(unionChildren) =>
-        execution.UnionExec(unionChildren.map(planLater)) :: Nil
+      case union: logical.Union =>
+        execution.UnionExec(union.children.map(planLater)) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>
         execution.GenerateExec(
           generator, g.requiredChildOutput, outer,
@@ -692,9 +698,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val canChangeNumParts = r.optNumPartitions.isEmpty
         exchange.ShuffleExchangeExec(
-          r.partitioning, planLater(r.child), canChangeNumParts) :: Nil
+          r.partitioning,
+          planLater(r.child),
+          noUserSpecifiedNumPartition = r.optNumPartitions.isEmpty) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

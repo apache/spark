@@ -21,20 +21,11 @@ Run with:
   ./bin/spark-submit examples/src/main/python/sql/arrow.py
 """
 
-from __future__ import print_function
-
-import sys
-
 from pyspark.sql import SparkSession
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 require_minimum_pandas_version()
 require_minimum_pyarrow_version()
-
-if sys.version_info < (3, 6):
-    raise Exception(
-        "Running this example file requires Python 3.6+; however, "
-        "your Python version was:\n %s" % sys.version)
 
 
 def dataframe_with_arrow_example(spark):

@@ -32,11 +32,6 @@ if have_pyarrow:
     import pyarrow as pa
 
 
-# Tests below use pd.DataFrame.assign that will infer mixed types (unicode/str) for column names
-# From kwargs w/ Python 2, so need to set check_column_type=False and avoid this check
-_check_column_type = sys.version >= '3'
-
-
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message)
@@ -109,7 +104,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             'v2': [90, 100, 110]
         })
 
-        assert_frame_equal(expected, result, check_column_type=_check_column_type)
+        assert_frame_equal(expected, result)
 
     def test_empty_group_by(self):
         left = self.data1
@@ -130,7 +125,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             .merge(left, right, on=['id', 'k']) \
             .sort_values(by=['id', 'k'])
 
-        assert_frame_equal(expected, result, check_column_type=_check_column_type)
+        assert_frame_equal(expected, result)
 
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF('v1')
@@ -173,7 +168,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         expected = self.data1.toPandas()
         expected = expected.assign(key=expected.id % 2 == 0)
 
-        assert_frame_equal(expected, result, check_column_type=_check_column_type)
+        assert_frame_equal(expected, result)
 
     def test_wrong_return_type(self):
         # Test that we get a sensible exception invalid values passed to apply
@@ -224,7 +219,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         expected = left.toPandas() if isLeft else right.toPandas()
         expected = expected.assign(key=expected.id)
 
-        assert_frame_equal(expected, result, check_column_type=_check_column_type)
+        assert_frame_equal(expected, result)
 
     @staticmethod
     def _test_merge(left, right, output_schema='id long, k int, v int, v2 int'):
@@ -246,7 +241,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             .merge(left, right, on=['id', 'k']) \
             .sort_values(by=['id', 'k'])
 
-        assert_frame_equal(expected, result, check_column_type=_check_column_type)
+        assert_frame_equal(expected, result)
 
 
 if __name__ == "__main__":

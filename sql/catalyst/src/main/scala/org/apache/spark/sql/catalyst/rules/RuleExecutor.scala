@@ -80,8 +80,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
   protected def batches: Seq[Batch]
 
-  /** Once batches that are blacklisted in the idempotence checker */
-  protected val blacklistedOnceBatches: Set[String] = Set.empty
+  /** Once batches that are excluded in the idempotence checker */
+  protected val excludedOnceBatches: Set[String] = Set.empty
 
   /**
    * Defines a check function that checks for structural integrity of the plan after the execution
@@ -189,7 +189,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           }
           // Check idempotence for Once batches.
           if (batch.strategy == Once &&
-            Utils.isTesting && !blacklistedOnceBatches.contains(batch.name)) {
+            Utils.isTesting && !excludedOnceBatches.contains(batch.name)) {
             checkBatchIdempotence(batch, curPlan)
           }
           continue = false
