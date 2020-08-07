@@ -419,8 +419,10 @@ case class HashAggregateExec(
   private var isFastHashMapEnabled: Boolean = false
 
   private var avoidSpillInPartialAggregateTerm: String = _
-  private val skipPartialAggregateEnabled = sqlContext.conf.skipPartialAggregate &&
-    !modes.exists(_ != Partial) && find(_.isInstanceOf[ExpandExec]).isEmpty
+  private val skipPartialAggregateEnabled = {
+    sqlContext.conf.skipPartialAggregate &&
+      modes.nonEmpty && modes.forall(_ == Partial) && find(_.isInstanceOf[ExpandExec]).isEmpty
+  }
   private var rowCountTerm: String = _
   private var outputFunc: String = _
 

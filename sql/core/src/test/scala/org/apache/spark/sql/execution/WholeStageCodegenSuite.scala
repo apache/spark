@@ -60,7 +60,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       val aggDF = data.toDF("name", "values").groupBy("name").sum("values")
       val partAggNode = aggDF.queryExecution.executedPlan.find {
         case h: HashAggregateExec =>
-          !h.aggregateExpressions.map(_.mode).exists(_ != Partial)
+          val modes = h.aggregateExpressions.map(_.mode)
+          modes.nonEmpty && modes.forall(_ == Partial)
         case _ => false
       }
 
