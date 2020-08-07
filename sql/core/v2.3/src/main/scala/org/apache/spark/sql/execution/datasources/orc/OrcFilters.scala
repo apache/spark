@@ -68,7 +68,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * Create ORC filter as a SearchArgument instance.
    */
   def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
-    val dataTypeMap = OrcFilters.isSearchableType(schema, SQLConf.get.caseSensitiveAnalysis)
+    val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
     // Combines all convertible filters using `And` to produce a single conjunction
     val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, filters))
     conjunctionOptional.map { conjunction =>

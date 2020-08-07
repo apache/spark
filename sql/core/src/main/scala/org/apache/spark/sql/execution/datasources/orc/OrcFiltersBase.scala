@@ -47,7 +47,7 @@ trait OrcFiltersBase {
    *
    * BinaryType, UserDefinedType, ArrayType and MapType are ignored.
    */
-  protected[sql] def isSearchableType(
+  protected[sql] def getSearchableTypeMap(
       schema: StructType,
       caseSensitive: Boolean): Map[String, DataType] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
