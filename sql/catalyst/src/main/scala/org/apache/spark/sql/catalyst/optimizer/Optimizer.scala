@@ -354,6 +354,7 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
       Literal.create(e.eval(EmptyRow), e.dataType) match {
         case Literal.TrueLiteral => ae.copy(filter = None)
         case Literal.FalseLiteral => rewrite(ae, af)
+        case _ => ae
       }
   }
 
