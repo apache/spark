@@ -60,9 +60,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       val aggDF = data.toDF("name", "values").groupBy("name").sum("values")
       val partAggNode = aggDF.queryExecution.executedPlan.find {
         case h: HashAggregateExec =>
-          h.aggregateExpressions.map(_.mode).forall(_ == Partial)
+          !h.aggregateExpressions.map(_.mode).exists(_ != Partial)
         case _ => false
       }
+
       checkAnswer(aggDF, Seq(Row("James", 2), Row("Phil", 1)))
       assert(partAggNode.isDefined,
       "No HashAggregate node with partial aggregate expression found")

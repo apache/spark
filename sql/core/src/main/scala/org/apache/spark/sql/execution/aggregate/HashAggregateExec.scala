@@ -420,7 +420,7 @@ case class HashAggregateExec(
 
   private var avoidSpillInPartialAggregateTerm: String = _
   private val skipPartialAggregateEnabled = sqlContext.conf.skipPartialAggregate &&
-    modes.forall(_ == Partial) && find(_.isInstanceOf[ExpandExec]).isEmpty
+    !modes.exists(_ != Partial) && find(_.isInstanceOf[ExpandExec]).isEmpty
   private var rowCountTerm: String = _
   private var outputFunc: String = _
 
