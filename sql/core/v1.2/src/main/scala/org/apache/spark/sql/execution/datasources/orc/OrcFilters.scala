@@ -68,7 +68,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * Create ORC filter as a SearchArgument instance.
    */
   def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
-    val dataTypeMap = OrcFilters.getNameToOrcFieldMap(schema, SQLConf.get.caseSensitiveAnalysis)
+    val dataTypeMap = OrcFilters.isSearchableType(schema, SQLConf.get.caseSensitiveAnalysis)
     // Combines all convertible filters using `And` to produce a single conjunction
     val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, filters))
     conjunctionOptional.map { conjunction =>
@@ -226,8 +226,6 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
-    // Since ORC 1.5.0 (ORC-323), we need to quote for column names with `.` characters
-    // in order to distinguish predicate pushdown for nested columns.
     expression match {
       case EqualTo(name, value) if dataTypeMap.contains(name) =>
         val castedValue = castLiteralValue(value, dataTypeMap(name))

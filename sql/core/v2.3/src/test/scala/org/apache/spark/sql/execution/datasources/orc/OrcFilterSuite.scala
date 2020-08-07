@@ -173,7 +173,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
   test("filter pushdown - double") {
     withNestedOrcDataFrame(
-      (1 to 4).map(i => Tuple1(Option(i.toDouble)))) { case (inputDF, colName, _) =>
+        (1 to 4).map(i => Tuple1(Option(i.toDouble)))) { case (inputDF, colName, _) =>
       implicit val df: DataFrame = inputDF
 
       val doubleAttr = df(colName).expr
@@ -254,8 +254,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
   }
 
   test("filter pushdown - decimal") {
-    withNestedOrcDataFrame((1 to 4)
-      .map(i => Tuple1.apply(BigDecimal.valueOf(i)))) { case (inputDF, colName, _) =>
+    withNestedOrcDataFrame(
+        (1 to 4).map(i => Tuple1.apply(BigDecimal.valueOf(i)))) { case (inputDF, colName, _) =>
       implicit val df: DataFrame = inputDF
 
       val decimalAttr = df(colName).expr

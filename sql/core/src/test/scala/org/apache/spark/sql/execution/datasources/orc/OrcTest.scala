@@ -78,7 +78,7 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
       (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
   /**
-   * Writes `date` dataframe to a Orc file and reads it back as a `DataFrame`,
+   * Writes `data` to a Orc file and reads it back as a `DataFrame`,
    * which is then passed to `f`. The Orc file will be deleted after `f` returns.
    */
   protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
@@ -149,7 +149,7 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
    * dataframes as new test data. It tests both non-nested and nested dataframes
    * which are written and read back with Orc datasource.
    *
-   * This is different from [[OrcTest.withOrcDataFrame]] which does not
+   * This is different from [[withOrcDataFrame]] which does not
    * test nested cases.
    */
   protected def withNestedOrcDataFrame[T <: Product: ClassTag: TypeTag](data: Seq[T])

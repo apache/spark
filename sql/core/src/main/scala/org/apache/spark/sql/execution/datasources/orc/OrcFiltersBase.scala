@@ -43,9 +43,11 @@ trait OrcFiltersBase {
    * This method returns a map which contains ORC field name and data type. Each key
    * represents a column; `dots` are used as separators for nested columns. If any part
    * of the names contains `dots`, it is quoted to avoid confusion. See
-   * `org.apache.spark.sql.connector.catalog.quote` for implementation details.
+   * `org.apache.spark.sql.connector.catalog.quoted` for implementation details.
+   *
+   * BinaryType, UserDefinedType, ArrayType and MapType are ignored.
    */
-  protected[sql] def getNameToOrcFieldMap(
+  protected[sql] def isSearchableType(
       schema: StructType,
       caseSensitive: Boolean): Map[String, DataType] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
@@ -69,11 +71,10 @@ trait OrcFiltersBase {
     if (caseSensitive) {
       primitiveFields.toMap
     } else {
-      // Don't consider ambiguity here, i.e. more than one field is matched in case insensitive
+      // Don't consider ambiguity here, i.e. more than one field are matched in case insensitive
       // mode, just skip pushdown for these fields, they will trigger Exception when reading,
       // See: SPARK-25175.
-      val dedupPrimitiveFields =
-      primitiveFields
+      val dedupPrimitiveFields = primitiveFields
         .groupBy(_._1.toLowerCase(Locale.ROOT))
         .filter(_._2.size == 1)
         .mapValues(_.head._2)
