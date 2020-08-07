@@ -67,7 +67,6 @@ public final class UnsafeFixedWidthAggregationMap {
    * Number of rows that were added to the map
    * This includes the elements that were passed on sorter
    * using {@link #destructAndCreateExternalSorter()}
-   *
    */
   private long numRowsAdded = 0L;
 
