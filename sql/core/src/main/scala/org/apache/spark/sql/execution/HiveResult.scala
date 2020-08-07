@@ -77,7 +77,8 @@ object HiveResult {
       // We need the types so we can output struct field names
       val types = executedPlan.output.map(_.dataType)
       // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters))).map(_.mkString("\t"))
+      result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
+        .map(_.mkString("\t"))
   }
 
   private def formatDescribeTableOutput(rows: Array[Row]): Seq[String] = {
@@ -103,10 +104,12 @@ object HiveResult {
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString
-    case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
+    case (s: String, StringType) => if (nested) "\"" + s + "\""
+    else if(!(s.contains("[") && s.contains("]"))) s.replaceAll("\\[|\\]")
+    else s
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
     case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters)).sorted
+      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters))
         .mkString("[", ",", "]")
     case (m: Map[_, _], MapType(kType, vType, _)) =>
       m.map { case (key, value) =>
