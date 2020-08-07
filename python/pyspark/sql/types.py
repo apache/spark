@@ -1032,7 +1032,12 @@ def _infer_schema(row, names=None):
     else:
         raise TypeError("Can not infer schema for type: %s" % type(row))
 
-    fields = [StructField(k, _infer_type(v), True) for k, v in items]
+    fields = []
+    for k, v in items:
+        try:
+            fields.append(StructField(k, _infer_type(v), True))
+        except TypeError as e:
+            raise TypeError("Unable to infer the type of the field {}.".format(k)) from e
     return StructType(fields)
 
 
