@@ -420,7 +420,7 @@ case class HashAggregateExec(
 
   private var avoidSpillInPartialAggregateTerm: String = _
   private val skipPartialAggregateEnabled = sqlContext.conf.skipPartialAggregate &&
-    AggUtils.areAggExpressionsPartial(modes) && find(_.isInstanceOf[ExpandExec]).isEmpty
+    modes.forall(_ == Partial) && find(_.isInstanceOf[ExpandExec]).isEmpty
   private var rowCountTerm: String = _
   private var outputFunc: String = _
 
@@ -695,16 +695,19 @@ case class HashAggregateExec(
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
+
+    var childrenConsumed: String = null
     if (skipPartialAggregateEnabled) {
       avoidSpillInPartialAggregateTerm = ctx.
         addMutableState(CodeGenerator.JAVA_BOOLEAN,
           "avoidPartialAggregate",
           term => s"$term = ${Utils.isTesting};")
+      rowCountTerm = ctx.
+        addMutableState(CodeGenerator.JAVA_LONG, "rowCount")
+      childrenConsumed = ctx.
+        addMutableState(CodeGenerator.JAVA_BOOLEAN, "childrenConsumed")
     }
-    val childrenConsumed = ctx.
-      addMutableState(CodeGenerator.JAVA_BOOLEAN, "childrenConsumed")
-    rowCountTerm = ctx.
-      addMutableState(CodeGenerator.JAVA_LONG, "rowCount")
+
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
     } else if (sqlContext.conf.enableVectorizedHashMap) {
@@ -776,11 +779,14 @@ case class HashAggregateExec(
     }
 
     outputFunc = generateResultFunction(ctx)
+    val genChildrenConsumedCode = if (skipPartialAggregateEnabled) {
+      s"${childrenConsumed} = true;"
+    } else ""
     val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
          |private void $doAgg() throws java.io.IOException {
          |  ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
-         |  $childrenConsumed = true;
+         |  $genChildrenConsumedCode
          |  $finishHashMap
          |}
        """.stripMargin)
@@ -855,6 +861,15 @@ case class HashAggregateExec(
 
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
+    val genCodePostInitCode =
+      if (skipPartialAggregateEnabled) {
+        s"""
+          |if (!$childrenConsumed) {
+          |  $doAggFuncName();
+          |  if (shouldStop()) return;
+          |}
+          """.stripMargin
+      } else ""
     s"""
        |if (!$initAgg) {
        |  $initAgg = true;
@@ -865,10 +880,7 @@ case class HashAggregateExec(
        |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
        |  if (shouldStop()) return;
        |}
-       |if (!$childrenConsumed) {
-       |  $doAggFuncName();
-       |  if (shouldStop()) return;
-       |}
+       |$genCodePostInitCode
        |// output the result
        |$outputFromFastHashMap
        |$outputFromRegularHashMap
@@ -1199,6 +1211,7 @@ case class HashAggregateExec(
              |if ($avoidSpillInPartialAggregateTerm) {
              |  $outputFunc(${unsafeRowKeyCode.value}, $unsafeRowBuffer);
              |}
+             |$rowCountTerm = $rowCountTerm + 1;
              |""".stripMargin
         } else ""
       }
@@ -1206,7 +1219,6 @@ case class HashAggregateExec(
       s"""
          |$updateRowInMap
          |$outputRow
-         |$rowCountTerm = $rowCountTerm + 1;
          |""".stripMargin
     }
 

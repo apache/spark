@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
@@ -59,7 +60,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       val aggDF = data.toDF("name", "values").groupBy("name").sum("values")
       val partAggNode = aggDF.queryExecution.executedPlan.find {
         case h: HashAggregateExec =>
-          AggUtils.areAggExpressionsPartial(h.aggregateExpressions.map(_.mode))
+          h.aggregateExpressions.map(_.mode).forall(_ == Partial)
         case _ => false
       }
       checkAnswer(aggDF, Seq(Row("James", 2), Row("Phil", 1)))
@@ -67,18 +68,6 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       "No HashAggregate node with partial aggregate expression found")
       assert(partAggNode.get.metrics("partialAggSkipped").value == data.size,
       "Partial aggregation got triggered in partial hash aggregate node")
-    }
-  }
-
-  test(s"Partial aggregation should not happen when no Aggregate expr" ) {
-    withSQLConf((SQLConf.SKIP_PARTIAL_AGGREGATE_ENABLED.key, "true")) {
-      val aggDF = testData2.select(sumDistinct($"a"))
-      val aggNodes = aggDF.queryExecution.executedPlan.collect {
-        case h: HashAggregateExec => h
-      }
-      checkAnswer(aggDF, Row(6))
-      assert(aggNodes.nonEmpty)
-      assert(aggNodes.forall(_.metrics("partialAggSkipped").value == 0))
     }
   }
 
@@ -93,7 +82,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       checkAnswer(aggDF, Row(6, 9))
       assert(baseNodes.size == 1 )
       assert(baseNodes.head.metrics("partialAggSkipped").value == testData2.count())
-      assert(other.forall(_.metrics("partialAggSkipped").value == 0))
+      assert(other.forall(!_.metrics.contains("partialAggSkipped")))
     }
   }
 
