@@ -185,6 +185,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public synchronized void close() throws IOException {
+    db.notifyIteratorClosed(this);
     if (!closed) {
       it.close();
       closed = true;

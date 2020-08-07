@@ -191,9 +191,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
         removeExecutor(executorId, reason)
 
-      case DecommissionExecutor(executorId) =>
-        logError(s"Received decommission executor message ${executorId}.")
-        decommissionExecutor(executorId)
+      case DecommissionExecutor(executorId, decommissionInfo) =>
+        logError(s"Received decommission executor message ${executorId}: $decommissionInfo")
+        decommissionExecutor(executorId, decommissionInfo)
 
       case RemoveWorker(workerId, host, message) =>
         removeWorker(workerId, host, message)
@@ -272,9 +272,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeWorker(workerId, host, message)
         context.reply(true)
 
-      case DecommissionExecutor(executorId) =>
-        logError(s"Received decommission executor message ${executorId}.")
-        decommissionExecutor(executorId)
+      case DecommissionExecutor(executorId, decommissionInfo) =>
+        logError(s"Received decommission executor message ${executorId}: ${decommissionInfo}.")
+        decommissionExecutor(executorId, decommissionInfo)
         context.reply(true)
 
       case RetrieveSparkAppConfig(resourceProfileId) =>
@@ -285,6 +285,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           Option(delegationTokens.get()),
           rp)
         context.reply(reply)
+
+      case IsExecutorAlive(executorId) => context.reply(isExecutorActive(executorId))
+
       case e =>
         logError(s"Received unexpected ask ${e}")
     }
@@ -313,9 +316,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       addressToExecutorId
         .get(remoteAddress)
-        .foreach(removeExecutor(_, SlaveLost("Remote RPC client disassociated. Likely due to " +
-          "containers exceeding thresholds, or network issues. Check driver logs for WARN " +
-          "messages.")))
+        .foreach(removeExecutor(_,
+          ExecutorProcessLost("Remote RPC client disassociated. Likely due to " +
+            "containers exceeding thresholds, or network issues. Check driver logs for WARN " +
+            "messages.")))
     }
 
     // Make fake resource offers on just one executor
@@ -379,7 +383,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
-    // Remove a disconnected slave from the cluster
+    // Remove a disconnected executor from the cluster
     private def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
       logDebug(s"Asked to remove executor $executorId with reason $reason")
       executorDataMap.get(executorId) match {
@@ -418,7 +422,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     /**
      * Mark a given executor as decommissioned and stop making resource offers for it.
      */
-    private def decommissionExecutor(executorId: String): Boolean = {
+    private def decommissionExecutor(
+        executorId: String, decommissionInfo: ExecutorDecommissionInfo): Boolean = {
       val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
         // Only bother decommissioning executors which are alive.
         if (isExecutorActive(executorId)) {
@@ -432,10 +437,20 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       if (shouldDisable) {
         logInfo(s"Starting decommissioning executor $executorId.")
         try {
-          scheduler.executorDecommission(executorId)
+          scheduler.executorDecommission(executorId, decommissionInfo)
         } catch {
           case e: Exception =>
             logError(s"Unexpected error during decommissioning ${e.toString}", e)
+        }
+        // Send decommission message to the executor, this may be a duplicate since the executor
+        // could have been the one to notify us. But it's also possible the notification came from
+        // elsewhere and the executor does not yet know.
+        executorDataMap.get(executorId) match {
+          case Some(executorInfo) =>
+            executorInfo.executorEndpoint.send(DecommissionSelf)
+          case None =>
+            // Ignoring the executor since it is not registered.
+            logWarning(s"Attempted to decommission unknown executor $executorId.")
         }
         logInfo(s"Finished decommissioning executor $executorId.")
 
@@ -553,11 +568,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Remove all the lingering executors that should be removed but not yet. The reason might be
     // because (1) disconnected event is not yet received; (2) executors die silently.
     executors.foreach { eid =>
-      removeExecutor(eid, SlaveLost("Stale executor after cluster manager re-registered."))
+      removeExecutor(eid,
+        ExecutorProcessLost("Stale executor after cluster manager re-registered."))
     }
   }
 
-  override def reviveOffers(): Unit = {
+  override def reviveOffers(): Unit = Utils.tryLogNonFatalError {
     driverEndpoint.send(ReviveOffers)
   }
 
@@ -585,10 +601,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   /**
    * Called by subclasses when notified of a decommissioning executor.
    */
-  private[spark] def decommissionExecutor(executorId: String): Unit = {
+  private[spark] def decommissionExecutor(
+      executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
     if (driverEndpoint != null) {
       logInfo("Propagating executor decommission to driver.")
-      driverEndpoint.send(DecommissionExecutor(executorId))
+      driverEndpoint.send(DecommissionExecutor(executorId, decommissionInfo))
     }
   }
 
@@ -625,10 +642,28 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   }
 
+  /**
+   * Get the max number of tasks that can be concurrent launched based on the ResourceProfile
+   * could be used, even if some of them are being used at the moment.
+   * Note that please don't cache the value returned by this method, because the number can change
+   * due to add/remove executors.
+   *
+   * @param rp ResourceProfile which to use to calculate max concurrent tasks.
+   * @return The max number of tasks that can be concurrent launched currently.
+   */
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
-    val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, conf)
-    val executorsWithResourceProfile = executorDataMap.values.filter(_.resourceProfileId == rp.id)
-    executorsWithResourceProfile.map(_.totalCores / cpusPerTask).sum
+    val (rpIds, cpus, resources) = {
+      executorDataMap
+        .filter { case (id, _) => isExecutorActive(id) }
+        .values.toArray.map { executor =>
+          (
+            executor.resourceProfileId,
+            executor.totalCores,
+            executor.resourcesInfo.map { case (name, rInfo) => (name, rInfo.totalAddressAmount) }
+          )
+        }.unzip3
+    }
+    TaskSchedulerImpl.calculateAvailableSlots(scheduler, conf, rp.id, rpIds, cpus, resources)
   }
 
   // this function is for testing only

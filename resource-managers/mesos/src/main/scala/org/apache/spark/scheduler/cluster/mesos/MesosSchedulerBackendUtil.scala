@@ -17,22 +17,23 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.Protos.{ContainerInfo, Environment, Image, NetworkInfo, Parameter, Secret, Volume}
+import org.apache.mesos.Protos.{ContainerInfo, Environment, Image, NetworkInfo, Parameter, Secret,
+  TaskState => MesosTaskState, Volume}
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
 import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.protobuf.ByteString
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, TaskState}
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.mesos.config.MesosSecretConfig
 import org.apache.spark.internal.Logging
 
 /**
- * A collection of utility functions which can be used by both the
- * MesosSchedulerBackend and the [[MesosFineGrainedSchedulerBackend]].
+ * A collection of utility functions which can be used by the
+ * MesosSchedulerBackend, [[MesosFineGrainedSchedulerBackend]] and the MesosExecutorBackend.
  */
-private[mesos] object MesosSchedulerBackendUtil extends Logging {
+private[spark] object MesosSchedulerBackendUtil extends Logging {
   /**
    * Parse a list of volume specs, each of which
    * takes the form [host-dir:]container-dir[:rw|:ro].
@@ -293,5 +294,14 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     ContainerInfo.MesosInfo.newBuilder()
       .setImage(imageProto)
       .build
+  }
+
+  def taskStateToMesos(state: TaskState.TaskState): MesosTaskState = state match {
+    case TaskState.LAUNCHING => MesosTaskState.TASK_STARTING
+    case TaskState.RUNNING => MesosTaskState.TASK_RUNNING
+    case TaskState.FINISHED => MesosTaskState.TASK_FINISHED
+    case TaskState.FAILED => MesosTaskState.TASK_FAILED
+    case TaskState.KILLED => MesosTaskState.TASK_KILLED
+    case TaskState.LOST => MesosTaskState.TASK_LOST
   }
 }

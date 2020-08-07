@@ -98,7 +98,10 @@ case class AvroDataToCatalyst(
     try {
       decoder = DecoderFactory.get().binaryDecoder(binary, 0, binary.length, decoder)
       result = reader.read(result, decoder)
-      deserializer.deserialize(result)
+      val deserialized = deserializer.deserialize(result)
+      assert(deserialized.isDefined,
+        "Avro deserializer cannot return an empty result because filters are not pushed down")
+      deserialized.get
     } catch {
       // There could be multiple possible exceptions here, e.g. java.io.IOException,
       // AvroRuntimeException, ArrayIndexOutOfBoundsException, etc.

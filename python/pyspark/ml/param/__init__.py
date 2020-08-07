@@ -16,15 +16,10 @@
 #
 import array
 import sys
-if sys.version > '3':
-    basestring = str
-    xrange = range
-    unicode = str
-
 from abc import ABCMeta
 import copy
-import numpy as np
 
+import numpy as np
 from py4j.java_gateway import JavaObject
 
 from pyspark.ml.linalg import DenseVector, Vector, Matrix
@@ -93,12 +88,12 @@ class TypeConverters(object):
     @staticmethod
     def _can_convert_to_list(value):
         vtype = type(value)
-        return vtype in [list, np.ndarray, tuple, xrange, array.array] or isinstance(value, Vector)
+        return vtype in [list, np.ndarray, tuple, range, array.array] or isinstance(value, Vector)
 
     @staticmethod
     def _can_convert_to_string(value):
         vtype = type(value)
-        return isinstance(value, basestring) or vtype in [np.unicode_, np.string_, np.str_]
+        return isinstance(value, str) or vtype in [np.unicode_, np.string_, np.str_]
 
     @staticmethod
     def identity(value):
@@ -114,7 +109,7 @@ class TypeConverters(object):
         """
         if type(value) == list:
             return value
-        elif type(value) in [np.ndarray, tuple, xrange, array.array]:
+        elif type(value) in [np.ndarray, tuple, range, array.array]:
             return list(value)
         elif isinstance(value, Vector):
             return list(value.toArray())
@@ -211,12 +206,10 @@ class TypeConverters(object):
         """
         Convert a value to a string, if possible.
         """
-        if isinstance(value, basestring):
+        if isinstance(value, str):
             return value
-        elif type(value) in [np.string_, np.str_]:
+        elif type(value) in [np.string_, np.str_, np.unicode_]:
             return str(value)
-        elif type(value) == np.unicode_:
-            return unicode(value)
         else:
             raise TypeError("Could not convert %s to string type" % type(value))
 
@@ -338,7 +331,7 @@ class Params(Identifiable):
         Tests whether this instance contains a param with a given
         (string) name.
         """
-        if isinstance(paramName, basestring):
+        if isinstance(paramName, str):
             p = getattr(self, paramName, None)
             return isinstance(p, Param)
         else:
@@ -421,7 +414,7 @@ class Params(Identifiable):
         if isinstance(param, Param):
             self._shouldOwn(param)
             return param
-        elif isinstance(param, basestring):
+        elif isinstance(param, str):
             return self.getParam(param)
         else:
             raise ValueError("Cannot resolve %r as a param." % param)
@@ -510,7 +503,7 @@ class Params(Identifiable):
         :return: same instance, but with the uid and Param.parent values
                  updated, including within param maps
         """
-        newUid = unicode(newUid)
+        newUid = str(newUid)
         self.uid = newUid
         newDefaultParamMap = dict()
         newParamMap = dict()

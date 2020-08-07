@@ -91,6 +91,7 @@ class ExecutorResourceRequests(object):
     _MEMORY = "memory"
     _OVERHEAD_MEM = "memoryOverhead"
     _PYSPARK_MEM = "pyspark.memory"
+    _OFFHEAP_MEM = "offHeap"
 
     def __init__(self, _jvm=None, _requests=None):
         from pyspark import SparkContext
@@ -137,6 +138,14 @@ class ExecutorResourceRequests(object):
         else:
             self._executor_resources[self._PYSPARK_MEM] = \
                 ExecutorResourceRequest(self._PYSPARK_MEM, _parse_memory(amount))
+        return self
+
+    def offheapMemory(self, amount):
+        if self._java_executor_resource_requests is not None:
+            self._java_executor_resource_requests.offHeapMemory(amount)
+        else:
+            self._executor_resources[self._OFFHEAP_MEM] = \
+                ExecutorResourceRequest(self._OFFHEAP_MEM, _parse_memory(amount))
         return self
 
     def cores(self, amount):

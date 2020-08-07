@@ -2,13 +2,18 @@
 
 -- [SPARK-31710] TIMESTAMP_SECONDS, TIMESTAMP_MILLISECONDS and TIMESTAMP_MICROSECONDS to timestamp transfer
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null);
+select TIMESTAMP_SECONDS(1.23), TIMESTAMP_SECONDS(1.23d), TIMESTAMP_SECONDS(FLOAT(1.23));
 select TIMESTAMP_MILLIS(1230219000123),TIMESTAMP_MILLIS(-1230219000123),TIMESTAMP_MILLIS(null);
 select TIMESTAMP_MICROS(1230219000123123),TIMESTAMP_MICROS(-1230219000123123),TIMESTAMP_MICROS(null);
--- overflow exception:
+-- overflow exception
 select TIMESTAMP_SECONDS(1230219000123123);
 select TIMESTAMP_SECONDS(-1230219000123123);
 select TIMESTAMP_MILLIS(92233720368547758);
 select TIMESTAMP_MILLIS(-92233720368547758);
+-- truncate exception
+select TIMESTAMP_SECONDS(0.1234567);
+-- truncation is OK for float/double
+select TIMESTAMP_SECONDS(0.1234567d), TIMESTAMP_SECONDS(FLOAT(0.1234567));
 
 -- [SPARK-16836] current_date and current_timestamp literals
 select current_date = current_date(), current_timestamp = current_timestamp();
@@ -43,6 +48,8 @@ select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01');
 
 select date '2019-01-01\t';
 select timestamp '2019-01-01\t';
+select date '2020-01-01中文';
+select timestamp '2019-01-01中文';
 
 -- time add/sub
 select timestamp'2011-11-11 11:11:11' + interval '2' day;
