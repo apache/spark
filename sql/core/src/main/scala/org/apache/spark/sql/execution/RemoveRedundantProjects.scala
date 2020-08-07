@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, PartialMerge}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -68,6 +69,13 @@ case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
     }
   }
 
+  /**
+   * Check if the nullability change is positive. It catches the case when the project output
+   * attribute is not nullable, but the child output attribute is nullable.
+   */
+  private def checkNullability(output: Seq[Attribute], childOutput: Seq[Attribute]): Boolean =
+    output.zip(childOutput).forall { case (attr1, attr2) => attr1.nullable || !attr2.nullable }
+
   private def isRedundant(
       project: ProjectExec,
       child: SparkPlan,
@@ -78,9 +86,11 @@ case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
       case d: DataSourceV2ScanExecBase if !d.supportsColumnar => false
       case _ =>
         if (requireOrdering) {
-          project.output.map(_.exprId.id) == child.output.map(_.exprId.id)
+          project.output.map(_.exprId.id) == child.output.map(_.exprId.id) &&
+            checkNullability(project.output, child.output)
         } else {
-          project.output.map(_.exprId.id).sorted == child.output.map(_.exprId.id).sorted
+          project.output.map(_.exprId.id).sorted == child.output.map(_.exprId.id).sorted &&
+            checkNullability(project.output, child.output)
         }
     }
   }
