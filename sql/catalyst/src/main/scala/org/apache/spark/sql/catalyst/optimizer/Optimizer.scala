@@ -128,7 +128,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
 
     val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
-    Batch("Eliminate Filter Clause", Once, ConstantFolding, EliminateAggregateFilter) ::
+    Batch("Eliminate Filter Clause", Once, EliminateAggregateFilter) ::
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
     // However, because we also use the analyzer to canonicalized queries (for view definition),

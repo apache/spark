@@ -27,9 +27,7 @@ import org.apache.spark.sql.types.LongType
 class EliminateAggregateFilterSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Operator Optimizations", Once,
-        ConstantFolding,
-        EliminateAggregateFilter) :: Nil
+      Batch("Operator Optimizations", Once, EliminateAggregateFilter) :: Nil
   }
 
   val testRelation = LocalRelation('a.int)
@@ -45,34 +43,12 @@ class EliminateAggregateFilterSuite extends PlanTest {
     comparePlans(Optimize.execute(query), answer)
   }
 
-  test("Eliminate Filter is foldable and always is true") {
-    val query = testRelation
-      .select(countDistinctWithFilter(GreaterThan(Literal(2), Literal(1)), 'a).as('result))
-      .analyze
-    val answer = testRelation
-      .select(countDistinct('a).as('result))
-      .analyze
-    assert(query != answer)
-    comparePlans(Optimize.execute(query), answer)
-  }
-
   test("Eliminate Filter always is false") {
     val query = testRelation
       .select(sumDistinct('a, Some(Literal.FalseLiteral)).as('result))
       .analyze
     val answer = testRelation
       .groupBy()(Literal.create(null, LongType).as('result))
-      .analyze
-    assert(query != answer)
-    comparePlans(Optimize.execute(query), answer)
-  }
-
-  test("Eliminate Filter is foldable and always is false") {
-    val query = testRelation
-      .select(countDistinctWithFilter(GreaterThan(Literal(1), Literal(2)), 'a).as('result))
-      .analyze
-    val answer = testRelation
-      .groupBy()(Literal.create(0L, LongType).as('result))
       .analyze
     assert(query != answer)
     comparePlans(Optimize.execute(query), answer)
