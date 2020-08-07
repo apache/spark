@@ -104,9 +104,7 @@ object HiveResult {
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString
-    case (s: String, StringType) => if (nested) "\"" + s + "\""
-    else if (!(s.contains("[") && s.contains("]"))) s.replaceAll("\\[|\\]")
-    else s
+    case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters))
