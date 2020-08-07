@@ -58,7 +58,7 @@ trait ShuffledJoin extends BaseJoinExec {
         left.output
       case x =>
         throw new IllegalArgumentException(
-          s"ShuffledJoin not take $x as the JoinType")
+          s"${getClass.getSimpleName} not take $x as the JoinType")
     }
   }
 }

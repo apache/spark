@@ -96,6 +96,9 @@ private[execution] object HashedRelation {
 
   /**
    * Create a HashedRelation from an Iterator of InternalRow.
+   *
+   * @param isLookupAware reserve one extra boolean in value to track if value being looked up
+   * @param value the expressions for value inserted into HashedRelation
    */
   def apply(
       input: Iterator[InternalRow],
@@ -118,6 +121,8 @@ private[execution] object HashedRelation {
     if (!input.hasNext) {
       EmptyHashedRelation
     } else if (key.length == 1 && key.head.dataType == LongType && !isLookupAware) {
+      // NOTE: LongHashedRelation cannot support isLookupAware as it cannot
+      // handle NULL key
       LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     } else {
       UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware, isLookupAware, value)
@@ -148,7 +153,7 @@ private[joins] class UnsafeHashedRelation(
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
 
-  // re-used in get()/getValue()
+  // re-used in get()/getValue()/values()
   var resultRow = new UnsafeRow(numFields)
 
   override def get(key: InternalRow): Iterator[InternalRow] = {
@@ -183,6 +188,23 @@ private[joins] class UnsafeHashedRelation(
       resultRow
     } else {
       null
+    }
+  }
+
+  override def values(): Iterator[InternalRow] = {
+    val iter = binaryMap.iterator()
+
+    new Iterator[InternalRow] {
+      override def hasNext: Boolean = iter.hasNext
+
+      override def next(): InternalRow = {
+        if (!hasNext) {
+          throw new NoSuchElementException("End of the iterator")
+        }
+        val loc = iter.next()
+        resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
+        resultRow
+      }
     }
   }
 
@@ -312,23 +334,6 @@ private[joins] class UnsafeHashedRelation(
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
     read(() => in.readInt(), () => in.readLong(), in.readBytes)
   }
-
-  override def values(): Iterator[InternalRow] = {
-    val iter = binaryMap.iterator()
-
-    new Iterator[InternalRow] {
-      override def hasNext: Boolean = iter.hasNext
-
-      override def next(): InternalRow = {
-        if (!hasNext) {
-          throw new NoSuchElementException("End of the iterator")
-        }
-        val loc = iter.next()
-        resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
-        resultRow
-      }
-    }
-  }
 }
 
 private[joins] object UnsafeHashedRelation {
@@ -341,6 +346,10 @@ private[joins] object UnsafeHashedRelation {
       isNullAware: Boolean = false,
       isLookupAware: Boolean = false,
       value: Option[Seq[Expression]] = None): HashedRelation = {
+    if (isNullAware && isLookupAware) {
+      throw new SparkException(
+        "isLookupAware and isNullAware cannot be enabled at same time for UnsafeHashedRelation")
+    }
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
@@ -354,27 +363,28 @@ private[joins] object UnsafeHashedRelation {
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
 
+    val append = (key: UnsafeRow, value: UnsafeRow) => {
+      val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
+      val success = loc.append(
+        key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+        value.getBaseObject, value.getBaseOffset, value.getSizeInBytes)
+      if (!success) {
+        binaryMap.free()
+        // scalastyle:off throwerror
+        throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
+        // scalastyle:on throwerror
+      }
+    }
+
     if (isLookupAware) {
       // Add one extra boolean value at the end as part of the row,
       // to track the information that whether the corresponding key
       // has been looked up or not. See `ShuffledHashJoin.fullOuterJoin` for example of usage.
       val valueGenerator = UnsafeProjection.create(value.get :+ Literal(false))
-
       while (input.hasNext) {
         val row = input.next().asInstanceOf[UnsafeRow]
         numFields = row.numFields() + 1
-        val key = keyGenerator(row)
-        val value = valueGenerator(row)
-        val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
-        val success = loc.append(
-          key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-          value.getBaseObject, value.getBaseOffset, value.getSizeInBytes)
-        if (!success) {
-          binaryMap.free()
-          // scalastyle:off throwerror
-          throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
-          // scalastyle:on throwerror
-        }
+        append(keyGenerator(row), valueGenerator(row))
       }
     } else {
       while (input.hasNext) {
@@ -382,16 +392,7 @@ private[joins] object UnsafeHashedRelation {
         numFields = row.numFields()
         val key = keyGenerator(row)
         if (!key.anyNull) {
-          val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
-          val success = loc.append(
-            key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-            row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
-          if (!success) {
-            binaryMap.free()
-            // scalastyle:off throwerror
-            throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
-            // scalastyle:on throwerror
-          }
+          append(key, row)
         } else if (isNullAware) {
           return EmptyHashedRelationWithAllNullKeys
         }

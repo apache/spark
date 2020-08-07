@@ -66,12 +66,11 @@ case class ShuffledHashJoinExec(
     val start = System.nanoTime()
     val context = TaskContext.get()
 
-    val (isLookupAware, value) =
-      if (joinType == FullOuter) {
-        (true, Some(BindReferences.bindReferences(buildOutput, buildOutput)))
-      } else {
-        (false, None)
-      }
+    val (isLookupAware, value) = if (joinType == FullOuter) {
+      (true, Some(BindReferences.bindReferences(buildOutput, buildOutput)))
+    } else {
+      (false, None)
+    }
     val relation = HashedRelation(
       iter,
       buildBoundKeys,
@@ -110,24 +109,12 @@ case class ShuffledHashJoinExec(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       numOutputRows: SQLMetric): Iterator[InternalRow] = {
-    abstract class HashJoinedRow extends JoinedRow {
-      /** Updates this JoinedRow by updating its stream side row. Returns itself. */
-      def withStream(newStream: InternalRow): JoinedRow
-
-      /** Updates this JoinedRow by updating its build side row. Returns itself. */
-      def withBuild(newBuild: InternalRow): JoinedRow
-    }
-    val joinRow: HashJoinedRow = buildSide match {
-      case BuildLeft =>
-        new HashJoinedRow {
-          override def withStream(newStream: InternalRow): JoinedRow = withRight(newStream)
-          override def withBuild(newBuild: InternalRow): JoinedRow = withLeft(newBuild)
-        }
-      case BuildRight =>
-        new HashJoinedRow {
-          override def withStream(newStream: InternalRow): JoinedRow = withLeft(newStream)
-          override def withBuild(newBuild: InternalRow): JoinedRow = withRight(newBuild)
-        }
+    val joinRow = new JoinedRow
+    val (joinRowWithStream, joinRowWithBuild) = {
+      buildSide match {
+        case BuildLeft => (joinRow.withRight _, joinRow.withLeft _)
+        case BuildRight => (joinRow.withLeft _, joinRow.withRight _)
+      }
     }
     val joinKeys = streamSideKeyGenerator()
     val buildRowGenerator = UnsafeProjection.create(buildOutput, buildOutput)
@@ -141,31 +128,31 @@ case class ShuffledHashJoinExec(
     val streamResultIter =
       if (hashedRelation.keyIsUnique) {
         streamIter.map { srow =>
-          joinRow.withStream(srow)
+          joinRowWithStream(srow)
           val keys = joinKeys(srow)
           if (keys.anyNull) {
-            joinRow.withBuild(buildNullRow)
+            joinRowWithBuild(buildNullRow)
           } else {
             val matched = hashedRelation.getValue(keys)
             if (matched != null) {
               val buildRow = buildRowGenerator(matched)
-              if (boundCondition(joinRow.withBuild(buildRow))) {
+              if (boundCondition(joinRowWithBuild(buildRow))) {
                 markRowLookedUp(matched.asInstanceOf[UnsafeRow])
                 joinRow
               } else {
-                joinRow.withBuild(buildNullRow)
+                joinRowWithBuild(buildNullRow)
               }
             } else {
-              joinRow.withBuild(buildNullRow)
+              joinRowWithBuild(buildNullRow)
             }
           }
         }
       } else {
         streamIter.flatMap { srow =>
-          joinRow.withStream(srow)
+          joinRowWithStream(srow)
           val keys = joinKeys(srow)
           if (keys.anyNull) {
-            Iterator.single(joinRow.withBuild(buildNullRow))
+            Iterator.single(joinRowWithBuild(buildNullRow))
           } else {
             val buildIter = hashedRelation.get(keys)
             new RowIterator {
@@ -174,14 +161,14 @@ case class ShuffledHashJoinExec(
                 while (buildIter != null && buildIter.hasNext) {
                   val matched = buildIter.next()
                   val buildRow = buildRowGenerator(matched)
-                  if (boundCondition(joinRow.withBuild(buildRow))) {
+                  if (boundCondition(joinRowWithBuild(buildRow))) {
                     markRowLookedUp(matched.asInstanceOf[UnsafeRow])
                     found = true
                     return true
                   }
                 }
                 if (!found) {
-                  joinRow.withBuild(buildNullRow)
+                  joinRowWithBuild(buildNullRow)
                   found = true
                   return true
                 }
@@ -199,8 +186,8 @@ case class ShuffledHashJoinExec(
       val isLookup = unsafebrow.getBoolean(unsafebrow.numFields() - 1)
       if (!isLookup) {
         val buildRow = buildRowGenerator(unsafebrow)
-        joinRow.withBuild(buildRow)
-        joinRow.withStream(streamNullRow)
+        joinRowWithBuild(buildRow)
+        joinRowWithStream(streamNullRow)
         Some(joinRow)
       } else {
         None
@@ -214,7 +201,7 @@ case class ShuffledHashJoinExec(
     }
   }
 
-  // TODO: support full outer shuffled hash join code-gen
+  // TODO(SPARK-32567): support full outer shuffled hash join code-gen
   override def supportCodegen: Boolean = {
     joinType != FullOuter
   }
