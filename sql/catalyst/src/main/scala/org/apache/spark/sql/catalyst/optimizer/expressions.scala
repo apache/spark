@@ -49,13 +49,8 @@ object ConstantFolding extends Rule[LogicalPlan] {
       case l: Literal => l
 
       // Fold expressions that are foldable.
-      case e if e.foldable && !hasUnevaluableExpr(e) =>
-        Literal.create(e.eval(EmptyRow), e.dataType)
+      case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
     }
-  }
-
-  private def hasUnevaluableExpr(expr: Expression): Boolean = {
-    expr.find(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference]).isDefined
   }
 }
 
