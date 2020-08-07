@@ -77,7 +77,7 @@ object HiveResult {
       // We need the types so we can output struct field names
       val types = executedPlan.output.map(_.dataType)
       // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
+      result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)).sorted)
         .map(_.mkString("\t"))
   }
 
@@ -107,7 +107,7 @@ object HiveResult {
     case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
     case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters)).mkString("[", ",", "]")
+      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters)).sorted.mkString("[", ",", "]")
     case (m: Map[_, _], MapType(kType, vType, _)) =>
       m.map { case (key, value) =>
         toHiveString((key, kType), true, formatters) + ":" +
