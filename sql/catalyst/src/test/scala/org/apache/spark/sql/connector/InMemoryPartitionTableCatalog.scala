@@ -37,7 +37,7 @@ class InMemoryPartitionTableCatalog extends InMemoryTableCatalog {
 
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
-    val table = new InMemoryPartitionTable(
+    val table = new InMemoryAtomicPartitionTable(
       s"$name.${ident.quoted}", schema, partitions, properties)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
