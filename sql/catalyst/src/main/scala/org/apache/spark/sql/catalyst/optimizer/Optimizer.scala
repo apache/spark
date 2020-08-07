@@ -350,7 +350,8 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
       ae.copy(filter = None)
     case ae @ AggregateExpression(af, _, _, Some(Literal.FalseLiteral), _) =>
       rewrite(ae, af)
-    case ae @ AggregateExpression(af, _, _, Some(e), _) if e.foldable =>
+    case ae @ AggregateExpression(af, _, _, Some(e), _)
+      if e.foldable && !ConvertToLocalRelation.hasUnevaluableExpr(e) =>
       Literal.create(e.eval(EmptyRow), e.dataType) match {
         case Literal.TrueLiteral => ae.copy(filter = None)
         case Literal.FalseLiteral => rewrite(ae, af)
@@ -1569,7 +1570,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming)
   }
 
-  private def hasUnevaluableExpr(expr: Expression): Boolean = {
+  private[sql] def hasUnevaluableExpr(expr: Expression): Boolean = {
     expr.find(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference]).isDefined
   }
 }
