@@ -24,7 +24,8 @@ Spark can run on clusters managed by [Kubernetes](https://kubernetes.io). This f
 Kubernetes scheduler that has been added to Spark.
 
 **The Kubernetes scheduler is currently experimental.
-The most basic parts are stable, but Dynamic Resource Allocation needs to be available
+The most basic parts are stable, but some more features (e.g., external shuffle service)
+in Dynamic Resource Allocation needs to be available
 before we officially announce GA for it.**
 
 # Security
