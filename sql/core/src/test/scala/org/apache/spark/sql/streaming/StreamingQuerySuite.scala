@@ -1107,7 +1107,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("union in streaming query of append mode without watermark") {
+  test("SPARK-32456: SQL union in streaming query of append mode without watermark") {
     val inputData1 = MemoryStream[Int]
     val inputData2 = MemoryStream[Int]
     withTempView("s1", "s2") {
@@ -1119,7 +1119,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("distinct in streaming query of append mode without watermark") {
+  test("SPARK-32456: distinct in streaming query of append mode without watermark") {
     val inputData = MemoryStream[Int]
     withTempView("deduptest") {
       inputData.toDF().toDF("value").createOrReplaceTempView("deduptest")
@@ -1128,7 +1128,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("distinct in streaming query of complete mode") {
+  test("SPARK-32456: distinct in streaming query of complete mode") {
     val inputData = MemoryStream[Int]
     withTempView("deduptest") {
       inputData.toDF().toDF("value").createOrReplaceTempView("deduptest")
