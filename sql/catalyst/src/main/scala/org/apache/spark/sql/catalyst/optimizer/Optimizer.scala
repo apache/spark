@@ -128,7 +128,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
 
     val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
-    Batch("Eliminate Filter Clause", Once, ConstantFolding, EliminateAggregateFilter) ::
+    Batch("Eliminate Filter Clause", Once, EliminateAggregateFilter) ::
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
     // However, because we also use the analyzer to canonicalized queries (for view definition),
@@ -349,16 +349,25 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
     case ae @ AggregateExpression(_, _, _, Some(Literal.TrueLiteral), _) =>
       ae.copy(filter = None)
     case ae @ AggregateExpression(af, _, _, Some(Literal.FalseLiteral), _) =>
-      af match {
-        case _: Average | _: Corr | _: CovPopulation | _: CovSample | _: First |
-             _: Kurtosis | _: Last | _: Max | _: MaxBy | _: Min | _: MinBy | _: Percentile |
-             _: Skewness | _: ApproximatePercentile | _: StddevPop | _: StddevSamp | _: Sum |
-             _: VariancePop | _: VarianceSamp | _: BoolAnd | _: BoolOr =>
-          Literal.create(null, af.dataType)
-        case _: CollectList | _: CollectSet => Literal.create(Array.empty, af.dataType)
-        case _: HyperLogLogPlusPlus | _: Count | _: CountIf => Literal.create(0L, LongType)
-        case _ => ae
+      rewrite(ae, af)
+    case ae @ AggregateExpression(af, _, _, Some(e), _) if e.foldable =>
+      Literal.create(e.eval(EmptyRow), e.dataType) match {
+        case Literal.TrueLiteral => ae.copy(filter = None)
+        case Literal.FalseLiteral => rewrite(ae, af)
       }
+  }
+
+  private def rewrite(ae: AggregateExpression, af: AggregateFunction): Expression = {
+    af match {
+      case _: Average | _: Corr | _: CovPopulation | _: CovSample | _: First |
+           _: Kurtosis | _: Last | _: Max | _: MaxBy | _: Min | _: MinBy | _: Percentile |
+           _: Skewness | _: ApproximatePercentile | _: StddevPop | _: StddevSamp | _: Sum |
+           _: VariancePop | _: VarianceSamp | _: BoolAnd | _: BoolOr =>
+        Literal.create(null, af.dataType)
+      case _: CollectList | _: CollectSet => Literal.create(Array.empty, af.dataType)
+      case _: HyperLogLogPlusPlus | _: Count | _: CountIf => Literal.create(0L, LongType)
+      case _ => ae
+    }
   }
 }
 
