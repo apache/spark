@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.TableIdentifier
-
 trait TPCDSSchema {
 
   private val tableColumns = Map(
@@ -257,9 +255,5 @@ trait TPCDSSchema {
          |USING $format
          |${options.mkString("\n")}
        """.stripMargin)
-
-    // To simulate plan generation on actual TPCDS data, injects data stats here
-    spark.sessionState.catalog.alterTableStats(
-      TableIdentifier(tableName), Some(TPCDSTableStats.sf100TableStats(tableName)))
   }
 }
