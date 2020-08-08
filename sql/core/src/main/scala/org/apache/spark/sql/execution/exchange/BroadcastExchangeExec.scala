@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.joins.HashedRelation
+import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation, LongHashedRelation, UnsafeHashedRelation}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -82,6 +82,8 @@ case class BroadcastExchangeExec(
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
     "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
 
+  var zeroNumRows: Boolean = false
+
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
   override def doCanonicalize(): SparkPlan = {
@@ -90,7 +92,7 @@ case class BroadcastExchangeExec(
 
   override def runtimeStatistics: Statistics = {
     val dataSize = metrics("dataSize").value
-    Statistics(dataSize)
+    Statistics(dataSize, rowCount = if (zeroNumRows) Some(0L) else None)
   }
 
   @transient
@@ -134,6 +136,8 @@ case class BroadcastExchangeExec(
                 throw new SparkException("[BUG] BroadcastMode.transform returned unexpected " +
                   s"type: ${relation.getClass.getName}")
             }
+
+            zeroNumRows = relation == EmptyHashedRelation
 
             longMetric("dataSize") += dataSize
             if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {

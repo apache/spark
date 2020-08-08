@@ -79,7 +79,8 @@ case class AdaptiveSparkPlanExec(
   @transient private val optimizer = new RuleExecutor[LogicalPlan] {
     // TODO add more optimization rules
     override protected def batches: Seq[Batch] = Seq(
-      Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin(conf))
+      Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin(conf)),
+      Batch("Eliminate AntiJoin", Once, EliminateAntiJoin(conf))
     )
   }
 

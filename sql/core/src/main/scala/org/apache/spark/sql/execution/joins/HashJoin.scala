@@ -270,6 +270,11 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   private def antiJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    // If the right side is empty, AntiJoin simply returns the left side.
+    if (hashedRelation == EmptyHashedRelation) {
+      return streamIter
+    }
+
     val joinKeys = streamSideKeyGenerator()
     val joinedRow = new JoinedRow
 
