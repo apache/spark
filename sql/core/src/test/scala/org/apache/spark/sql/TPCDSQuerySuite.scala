@@ -46,11 +46,17 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSSchema {
     "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
     "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
+  val sqlConfgs = Seq(
+    SQLConf.CBO_ENABLED.key -> "true",
+    SQLConf.PLAN_STATS_ENABLED.key -> "true",
+    SQLConf.JOIN_REORDER_ENABLED.key -> "true"
+  )
+
   tpcdsQueries.foreach { name =>
     val queryString = resourceToString(s"tpcds/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
-      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      withSQLConf(sqlConfgs: _*) {
         // check the plans can be properly generated
         val plan = sql(queryString).queryExecution.executedPlan
         checkGeneratedCode(plan)
@@ -69,7 +75,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSSchema {
     val queryString = resourceToString(s"tpcds-v2.7.0/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(s"$name-v2.7") {
-      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      withSQLConf(sqlConfgs: _*) {
         // check the plans can be properly generated
         val plan = sql(queryString).queryExecution.executedPlan
         checkGeneratedCode(plan)
