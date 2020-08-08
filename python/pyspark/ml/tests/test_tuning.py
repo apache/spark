@@ -424,8 +424,6 @@ class CrossValidatorTests(SparkSessionTestCase):
         self.assertEqual(loadedCV.getFoldCol(), cv_with_user_folds.getFoldCol())
 
     def test_invalid_user_specified_folds(self):
-        from pyspark.sql import functions as F
-
         dataset_with_folds = self.spark.createDataFrame(
             [(Vectors.dense([0.0]), 0.0, 0),
              (Vectors.dense([0.4]), 1.0, 1),
@@ -754,7 +752,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_tuning import *
+    from pyspark.ml.tests.test_tuning import *  # noqa: F401
 
     try:
         import xmlrunner
