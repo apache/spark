@@ -146,6 +146,8 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
           checkExampleSyntax(example)
           example.split("  > ").toList.foreach {
             case exampleRe(sql, output) =>
+              print(sql)
+              print("\n")
               val df = clonedSpark.sql(sql)
               val actual = unindentAndTrim(
                 hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
