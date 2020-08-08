@@ -104,7 +104,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSSchema {
 
 class TPCDSQueryWithStatsSuite extends TPCDSQuerySuite {
 
-   override def beforeAll(): Unit = {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     for (tableName <- tableNames) {
       // To simulate plan generation on actual TPCDS data, injects data stats here
