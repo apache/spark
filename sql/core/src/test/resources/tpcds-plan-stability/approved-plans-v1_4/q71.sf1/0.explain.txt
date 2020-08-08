@@ -1,0 +1,148 @@
+== Parsed Logical Plan ==
+'Sort ['ext_price DESC NULLS LAST, 'brand_id ASC NULLS FIRST], true
++- 'Aggregate ['i_brand, 'i_brand_id, 't_hour, 't_minute], ['i_brand_id AS brand_id#1, 'i_brand AS brand#2, 't_hour, 't_minute, 'sum('ext_price) AS ext_price#3]
+   +- 'Filter ((('sold_item_sk = 'i_item_sk) AND ('i_manager_id = 1)) AND (('time_sk = 't_time_sk) AND (('t_meal_time = breakfast) OR ('t_meal_time = dinner))))
+      +- 'Join Inner
+         :- 'Join Inner
+         :  :- 'UnresolvedRelation [item]
+         :  +- 'SubqueryAlias tmp
+         :     +- 'Union false, false
+         :        :- 'Union false, false
+         :        :  :- 'Project ['ws_ext_sales_price AS ext_price#4, 'ws_sold_date_sk AS sold_date_sk#5, 'ws_item_sk AS sold_item_sk#6, 'ws_sold_time_sk AS time_sk#7]
+         :        :  :  +- 'Filter ((('d_date_sk = 'ws_sold_date_sk) AND ('d_moy = 11)) AND ('d_year = 1999))
+         :        :  :     +- 'Join Inner
+         :        :  :        :- 'UnresolvedRelation [web_sales]
+         :        :  :        +- 'UnresolvedRelation [date_dim]
+         :        :  +- 'Project ['cs_ext_sales_price AS ext_price#8, 'cs_sold_date_sk AS sold_date_sk#9, 'cs_item_sk AS sold_item_sk#10, 'cs_sold_time_sk AS time_sk#11]
+         :        :     +- 'Filter ((('d_date_sk = 'cs_sold_date_sk) AND ('d_moy = 11)) AND ('d_year = 1999))
+         :        :        +- 'Join Inner
+         :        :           :- 'UnresolvedRelation [catalog_sales]
+         :        :           +- 'UnresolvedRelation [date_dim]
+         :        +- 'Project ['ss_ext_sales_price AS ext_price#12, 'ss_sold_date_sk AS sold_date_sk#13, 'ss_item_sk AS sold_item_sk#14, 'ss_sold_time_sk AS time_sk#15]
+         :           +- 'Filter ((('d_date_sk = 'ss_sold_date_sk) AND ('d_moy = 11)) AND ('d_year = 1999))
+         :              +- 'Join Inner
+         :                 :- 'UnresolvedRelation [store_sales]
+         :                 +- 'UnresolvedRelation [date_dim]
+         +- 'UnresolvedRelation [time_dim]
+
+== Analyzed Logical Plan ==
+brand_id: int, brand: string, t_hour: int, t_minute: int, ext_price: decimal(17,2)
+Sort [ext_price#3 DESC NULLS LAST, brand_id#1 ASC NULLS FIRST], true
++- Aggregate [i_brand#16, i_brand_id#17, t_hour#18, t_minute#19], [i_brand_id#17 AS brand_id#1, i_brand#16 AS brand#2, t_hour#18, t_minute#19, sum(ext_price#4) AS ext_price#3]
+   +- Filter (((sold_item_sk#6 = i_item_sk#20) AND (i_manager_id#21 = 1)) AND ((time_sk#7 = t_time_sk#22) AND ((t_meal_time#23 = breakfast) OR (t_meal_time#23 = dinner))))
+      +- Join Inner
+         :- Join Inner
+         :  :- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.item
+         :  :  +- Relation[i_item_sk#20,i_item_id#24,i_rec_start_date#25,i_rec_end_date#26,i_item_desc#27,i_current_price#28,i_wholesale_cost#29,i_brand_id#17,i_brand#16,i_class_id#30,i_class#31,i_category_id#32,i_category#33,i_manufact_id#34,i_manufact#35,i_size#36,i_formulation#37,i_color#38,i_units#39,i_container#40,i_manager_id#21,i_product_name#41] parquet
+         :  +- SubqueryAlias tmp
+         :     +- Union false, false
+         :        :- Union false, false
+         :        :  :- Project [ws_ext_sales_price#42 AS ext_price#4, ws_sold_date_sk#43 AS sold_date_sk#5, ws_item_sk#44 AS sold_item_sk#6, ws_sold_time_sk#45 AS time_sk#7]
+         :        :  :  +- Filter (((d_date_sk#46 = ws_sold_date_sk#43) AND (d_moy#47 = 11)) AND (d_year#48 = 1999))
+         :        :  :     +- Join Inner
+         :        :  :        :- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.web_sales
+         :        :  :        :  +- Relation[ws_sold_date_sk#43,ws_sold_time_sk#45,ws_ship_date_sk#49,ws_item_sk#44,ws_bill_customer_sk#50,ws_bill_cdemo_sk#51,ws_bill_hdemo_sk#52,ws_bill_addr_sk#53,ws_ship_customer_sk#54,ws_ship_cdemo_sk#55,ws_ship_hdemo_sk#56,ws_ship_addr_sk#57,ws_web_page_sk#58,ws_web_site_sk#59,ws_ship_mode_sk#60,ws_warehouse_sk#61,ws_promo_sk#62,ws_order_number#63,ws_quantity#64,ws_wholesale_cost#65,ws_list_price#66,ws_sales_price#67,ws_ext_discount_amt#68,ws_ext_sales_price#42,... 10 more fields] parquet
+         :        :  :        +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.date_dim
+         :        :  :           +- Relation[d_date_sk#46,d_date_id#69,d_date#70,d_month_seq#71,d_week_seq#72,d_quarter_seq#73,d_year#48,d_dow#74,d_moy#47,d_dom#75,d_qoy#76,d_fy_year#77,d_fy_quarter_seq#78,d_fy_week_seq#79,d_day_name#80,d_quarter_name#81,d_holiday#82,d_weekend#83,d_following_holiday#84,d_first_dom#85,d_last_dom#86,d_same_day_ly#87,d_same_day_lq#88,d_current_day#89,... 4 more fields] parquet
+         :        :  +- Project [cs_ext_sales_price#90 AS ext_price#8, cs_sold_date_sk#91 AS sold_date_sk#9, cs_item_sk#92 AS sold_item_sk#10, cs_sold_time_sk#93 AS time_sk#11]
+         :        :     +- Filter (((d_date_sk#46 = cs_sold_date_sk#91) AND (d_moy#47 = 11)) AND (d_year#48 = 1999))
+         :        :        +- Join Inner
+         :        :           :- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.catalog_sales
+         :        :           :  +- Relation[cs_sold_date_sk#91,cs_sold_time_sk#93,cs_ship_date_sk#94,cs_bill_customer_sk#95,cs_bill_cdemo_sk#96,cs_bill_hdemo_sk#97,cs_bill_addr_sk#98,cs_ship_customer_sk#99,cs_ship_cdemo_sk#100,cs_ship_hdemo_sk#101,cs_ship_addr_sk#102,cs_call_center_sk#103,cs_catalog_page_sk#104,cs_ship_mode_sk#105,cs_warehouse_sk#106,cs_item_sk#92,cs_promo_sk#107,cs_order_number#108,cs_quantity#109,cs_wholesale_cost#110,cs_list_price#111,cs_sales_price#112,cs_ext_discount_amt#113,cs_ext_sales_price#90,... 10 more fields] parquet
+         :        :           +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.date_dim
+         :        :              +- Relation[d_date_sk#46,d_date_id#69,d_date#70,d_month_seq#71,d_week_seq#72,d_quarter_seq#73,d_year#48,d_dow#74,d_moy#47,d_dom#75,d_qoy#76,d_fy_year#77,d_fy_quarter_seq#78,d_fy_week_seq#79,d_day_name#80,d_quarter_name#81,d_holiday#82,d_weekend#83,d_following_holiday#84,d_first_dom#85,d_last_dom#86,d_same_day_ly#87,d_same_day_lq#88,d_current_day#89,... 4 more fields] parquet
+         :        +- Project [ss_ext_sales_price#114 AS ext_price#12, ss_sold_date_sk#115 AS sold_date_sk#13, ss_item_sk#116 AS sold_item_sk#14, ss_sold_time_sk#117 AS time_sk#15]
+         :           +- Filter (((d_date_sk#46 = ss_sold_date_sk#115) AND (d_moy#47 = 11)) AND (d_year#48 = 1999))
+         :              +- Join Inner
+         :                 :- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.store_sales
+         :                 :  +- Relation[ss_sold_date_sk#115,ss_sold_time_sk#117,ss_item_sk#116,ss_customer_sk#118,ss_cdemo_sk#119,ss_hdemo_sk#120,ss_addr_sk#121,ss_store_sk#122,ss_promo_sk#123,ss_ticket_number#124,ss_quantity#125,ss_wholesale_cost#126,ss_list_price#127,ss_sales_price#128,ss_ext_discount_amt#129,ss_ext_sales_price#114,ss_ext_wholesale_cost#130,ss_ext_list_price#131,ss_ext_tax#132,ss_coupon_amt#133,ss_net_paid#134,ss_net_paid_inc_tax#135,ss_net_profit#136] parquet
+         :                 +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.date_dim
+         :                    +- Relation[d_date_sk#46,d_date_id#69,d_date#70,d_month_seq#71,d_week_seq#72,d_quarter_seq#73,d_year#48,d_dow#74,d_moy#47,d_dom#75,d_qoy#76,d_fy_year#77,d_fy_quarter_seq#78,d_fy_week_seq#79,d_day_name#80,d_quarter_name#81,d_holiday#82,d_weekend#83,d_following_holiday#84,d_first_dom#85,d_last_dom#86,d_same_day_ly#87,d_same_day_lq#88,d_current_day#89,... 4 more fields] parquet
+         +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.time_dim
+            +- Relation[t_time_sk#22,t_time_id#137,t_time#138,t_hour#18,t_minute#19,t_second#139,t_am_pm#140,t_shift#141,t_sub_shift#142,t_meal_time#23] parquet
+
+== Optimized Logical Plan ==
+Sort [ext_price#3 DESC NULLS LAST, brand_id#1 ASC NULLS FIRST], true
++- Aggregate [i_brand#16, i_brand_id#17, t_hour#18, t_minute#19], [i_brand_id#17 AS brand_id#1, i_brand#16 AS brand#2, t_hour#18, t_minute#19, MakeDecimal(sum(UnscaledValue(ext_price#4)),17,2) AS ext_price#3]
+   +- Project [i_brand_id#17, i_brand#16, ext_price#4, t_hour#18, t_minute#19]
+      +- Join Inner, (time_sk#7 = t_time_sk#22)
+         :- Project [i_brand_id#17, i_brand#16, ext_price#4, time_sk#7]
+         :  +- Join Inner, (sold_item_sk#6 = i_item_sk#20)
+         :     :- Project [i_item_sk#20, i_brand_id#17, i_brand#16]
+         :     :  +- Filter ((isnotnull(i_manager_id#21) AND (i_manager_id#21 = 1)) AND isnotnull(i_item_sk#20))
+         :     :     +- Relation[i_item_sk#20,i_item_id#24,i_rec_start_date#25,i_rec_end_date#26,i_item_desc#27,i_current_price#28,i_wholesale_cost#29,i_brand_id#17,i_brand#16,i_class_id#30,i_class#31,i_category_id#32,i_category#33,i_manufact_id#34,i_manufact#35,i_size#36,i_formulation#37,i_color#38,i_units#39,i_container#40,i_manager_id#21,i_product_name#41] parquet
+         :     +- Union false, false
+         :        :- Project [ws_ext_sales_price#42 AS ext_price#4, ws_item_sk#44 AS sold_item_sk#6, ws_sold_time_sk#45 AS time_sk#7]
+         :        :  +- Join Inner, (d_date_sk#46 = ws_sold_date_sk#43)
+         :        :     :- Project [ws_sold_date_sk#43, ws_sold_time_sk#45, ws_item_sk#44, ws_ext_sales_price#42]
+         :        :     :  +- Filter ((isnotnull(ws_sold_date_sk#43) AND isnotnull(ws_item_sk#44)) AND isnotnull(ws_sold_time_sk#45))
+         :        :     :     +- Relation[ws_sold_date_sk#43,ws_sold_time_sk#45,ws_ship_date_sk#49,ws_item_sk#44,ws_bill_customer_sk#50,ws_bill_cdemo_sk#51,ws_bill_hdemo_sk#52,ws_bill_addr_sk#53,ws_ship_customer_sk#54,ws_ship_cdemo_sk#55,ws_ship_hdemo_sk#56,ws_ship_addr_sk#57,ws_web_page_sk#58,ws_web_site_sk#59,ws_ship_mode_sk#60,ws_warehouse_sk#61,ws_promo_sk#62,ws_order_number#63,ws_quantity#64,ws_wholesale_cost#65,ws_list_price#66,ws_sales_price#67,ws_ext_discount_amt#68,ws_ext_sales_price#42,... 10 more fields] parquet
+         :        :     +- Project [d_date_sk#46]
+         :        :        +- Filter ((((isnotnull(d_moy#47) AND isnotnull(d_year#48)) AND (d_moy#47 = 11)) AND (d_year#48 = 1999)) AND isnotnull(d_date_sk#46))
+         :        :           +- Relation[d_date_sk#46,d_date_id#69,d_date#70,d_month_seq#71,d_week_seq#72,d_quarter_seq#73,d_year#48,d_dow#74,d_moy#47,d_dom#75,d_qoy#76,d_fy_year#77,d_fy_quarter_seq#78,d_fy_week_seq#79,d_day_name#80,d_quarter_name#81,d_holiday#82,d_weekend#83,d_following_holiday#84,d_first_dom#85,d_last_dom#86,d_same_day_ly#87,d_same_day_lq#88,d_current_day#89,... 4 more fields] parquet
+         :        :- Project [cs_ext_sales_price#90 AS ext_price#8, cs_item_sk#92 AS sold_item_sk#10, cs_sold_time_sk#93 AS time_sk#11]
+         :        :  +- Join Inner, (d_date_sk#46 = cs_sold_date_sk#91)
+         :        :     :- Project [cs_sold_date_sk#91, cs_sold_time_sk#93, cs_item_sk#92, cs_ext_sales_price#90]
+         :        :     :  +- Filter ((isnotnull(cs_sold_date_sk#91) AND isnotnull(cs_item_sk#92)) AND isnotnull(cs_sold_time_sk#93))
+         :        :     :     +- Relation[cs_sold_date_sk#91,cs_sold_time_sk#93,cs_ship_date_sk#94,cs_bill_customer_sk#95,cs_bill_cdemo_sk#96,cs_bill_hdemo_sk#97,cs_bill_addr_sk#98,cs_ship_customer_sk#99,cs_ship_cdemo_sk#100,cs_ship_hdemo_sk#101,cs_ship_addr_sk#102,cs_call_center_sk#103,cs_catalog_page_sk#104,cs_ship_mode_sk#105,cs_warehouse_sk#106,cs_item_sk#92,cs_promo_sk#107,cs_order_number#108,cs_quantity#109,cs_wholesale_cost#110,cs_list_price#111,cs_sales_price#112,cs_ext_discount_amt#113,cs_ext_sales_price#90,... 10 more fields] parquet
+         :        :     +- Project [d_date_sk#46]
+         :        :        +- Filter ((((isnotnull(d_moy#47) AND isnotnull(d_year#48)) AND (d_moy#47 = 11)) AND (d_year#48 = 1999)) AND isnotnull(d_date_sk#46))
+         :        :           +- Relation[d_date_sk#46,d_date_id#69,d_date#70,d_month_seq#71,d_week_seq#72,d_quarter_seq#73,d_year#48,d_dow#74,d_moy#47,d_dom#75,d_qoy#76,d_fy_year#77,d_fy_quarter_seq#78,d_fy_week_seq#79,d_day_name#80,d_quarter_name#81,d_holiday#82,d_weekend#83,d_following_holiday#84,d_first_dom#85,d_last_dom#86,d_same_day_ly#87,d_same_day_lq#88,d_current_day#89,... 4 more fields] parquet
+         :        +- Project [ss_ext_sales_price#114 AS ext_price#12, ss_item_sk#116 AS sold_item_sk#14, ss_sold_time_sk#117 AS time_sk#15]
+         :           +- Join Inner, (d_date_sk#46 = ss_sold_date_sk#115)
+         :              :- Project [ss_sold_date_sk#115, ss_sold_time_sk#117, ss_item_sk#116, ss_ext_sales_price#114]
+         :              :  +- Filter ((isnotnull(ss_sold_date_sk#115) AND isnotnull(ss_item_sk#116)) AND isnotnull(ss_sold_time_sk#117))
+         :              :     +- Relation[ss_sold_date_sk#115,ss_sold_time_sk#117,ss_item_sk#116,ss_customer_sk#118,ss_cdemo_sk#119,ss_hdemo_sk#120,ss_addr_sk#121,ss_store_sk#122,ss_promo_sk#123,ss_ticket_number#124,ss_quantity#125,ss_wholesale_cost#126,ss_list_price#127,ss_sales_price#128,ss_ext_discount_amt#129,ss_ext_sales_price#114,ss_ext_wholesale_cost#130,ss_ext_list_price#131,ss_ext_tax#132,ss_coupon_amt#133,ss_net_paid#134,ss_net_paid_inc_tax#135,ss_net_profit#136] parquet
+         :              +- Project [d_date_sk#46]
+         :                 +- Filter ((((isnotnull(d_moy#47) AND isnotnull(d_year#48)) AND (d_moy#47 = 11)) AND (d_year#48 = 1999)) AND isnotnull(d_date_sk#46))
+         :                    +- Relation[d_date_sk#46,d_date_id#69,d_date#70,d_month_seq#71,d_week_seq#72,d_quarter_seq#73,d_year#48,d_dow#74,d_moy#47,d_dom#75,d_qoy#76,d_fy_year#77,d_fy_quarter_seq#78,d_fy_week_seq#79,d_day_name#80,d_quarter_name#81,d_holiday#82,d_weekend#83,d_following_holiday#84,d_first_dom#85,d_last_dom#86,d_same_day_ly#87,d_same_day_lq#88,d_current_day#89,... 4 more fields] parquet
+         +- Project [t_time_sk#22, t_hour#18, t_minute#19]
+            +- Filter (((t_meal_time#23 = breakfast) OR (t_meal_time#23 = dinner)) AND isnotnull(t_time_sk#22))
+               +- Relation[t_time_sk#22,t_time_id#137,t_time#138,t_hour#18,t_minute#19,t_second#139,t_am_pm#140,t_shift#141,t_sub_shift#142,t_meal_time#23] parquet
+
+== Physical Plan ==
+*(11) Sort [ext_price#3 DESC NULLS LAST, brand_id#1 ASC NULLS FIRST], true, 0
++- Exchange rangepartitioning(ext_price#3 DESC NULLS LAST, brand_id#1 ASC NULLS FIRST, 5), true, [id=#143]
+   +- *(10) HashAggregate(keys=[i_brand#16, i_brand_id#17, t_hour#18, t_minute#19], functions=[sum(UnscaledValue(ext_price#4))], output=[brand_id#1, brand#2, t_hour#18, t_minute#19, ext_price#3])
+      +- Exchange hashpartitioning(i_brand#16, i_brand_id#17, t_hour#18, t_minute#19, 5), true, [id=#144]
+         +- *(9) HashAggregate(keys=[i_brand#16, i_brand_id#17, t_hour#18, t_minute#19], functions=[partial_sum(UnscaledValue(ext_price#4))], output=[i_brand#16, i_brand_id#17, t_hour#18, t_minute#19, sum#145])
+            +- *(9) Project [i_brand_id#17, i_brand#16, ext_price#4, t_hour#18, t_minute#19]
+               +- *(9) BroadcastHashJoin [time_sk#7], [t_time_sk#22], Inner, BuildRight, false
+                  :- *(9) Project [i_brand_id#17, i_brand#16, ext_price#4, time_sk#7]
+                  :  +- *(9) BroadcastHashJoin [i_item_sk#20], [sold_item_sk#6], Inner, BuildLeft, false
+                  :     :- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#146]
+                  :     :  +- *(1) Project [i_item_sk#20, i_brand_id#17, i_brand#16]
+                  :     :     +- *(1) Filter ((isnotnull(i_manager_id#21) AND (i_manager_id#21 = 1)) AND isnotnull(i_item_sk#20))
+                  :     :        +- *(1) ColumnarToRow
+                  :     :           +- FileScan parquet tpcds_sf1_parquet_stats.item[i_item_sk#20,i_brand_id#17,i_brand#16,i_manager_id#21] Batched: true, DataFilters: [isnotnull(i_manager_id#21), (i_manager_id#21 = 1), isnotnull(i_item_sk#20)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,1), IsNotNull(i_item_sk)], ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_brand:string,i_manager_id:int>
+                  :     +- Union
+                  :        :- *(3) Project [ws_ext_sales_price#42 AS ext_price#4, ws_item_sk#44 AS sold_item_sk#6, ws_sold_time_sk#45 AS time_sk#7]
+                  :        :  +- *(3) BroadcastHashJoin [ws_sold_date_sk#43], [d_date_sk#46], Inner, BuildRight, false
+                  :        :     :- *(3) Project [ws_sold_date_sk#43, ws_sold_time_sk#45, ws_item_sk#44, ws_ext_sales_price#42]
+                  :        :     :  +- *(3) Filter ((isnotnull(ws_sold_date_sk#43) AND isnotnull(ws_item_sk#44)) AND isnotnull(ws_sold_time_sk#45))
+                  :        :     :     +- *(3) ColumnarToRow
+                  :        :     :        +- FileScan parquet tpcds_sf1_parquet_stats.web_sales[ws_sold_date_sk#43,ws_sold_time_sk#45,ws_item_sk#44,ws_ext_sales_price#42] Batched: true, DataFilters: [isnotnull(ws_sold_date_sk#43), isnotnull(ws_item_sk#44), isnotnull(ws_sold_time_sk#45)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_sold_date_sk), IsNotNull(ws_item_sk), IsNotNull(ws_sold_time_sk)], ReadSchema: struct<ws_sold_date_sk:int,ws_sold_time_sk:int,ws_item_sk:int,ws_ext_sales_price:decimal(7,2)>
+                  :        :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#147]
+                  :        :        +- *(2) Project [d_date_sk#46]
+                  :        :           +- *(2) Filter ((((isnotnull(d_moy#47) AND isnotnull(d_year#48)) AND (d_moy#47 = 11)) AND (d_year#48 = 1999)) AND isnotnull(d_date_sk#46))
+                  :        :              +- *(2) ColumnarToRow
+                  :        :                 +- FileScan parquet tpcds_sf1_parquet_stats.date_dim[d_date_sk#46,d_year#48,d_moy#47] Batched: true, DataFilters: [isnotnull(d_moy#47), isnotnull(d_year#48), (d_moy#47 = 11), (d_year#48 = 1999), isnotnull(d_date..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,11), EqualTo(d_year,1999), IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+                  :        :- *(5) Project [cs_ext_sales_price#90 AS ext_price#8, cs_item_sk#92 AS sold_item_sk#10, cs_sold_time_sk#93 AS time_sk#11]
+                  :        :  +- *(5) BroadcastHashJoin [cs_sold_date_sk#91], [d_date_sk#46], Inner, BuildRight, false
+                  :        :     :- *(5) Project [cs_sold_date_sk#91, cs_sold_time_sk#93, cs_item_sk#92, cs_ext_sales_price#90]
+                  :        :     :  +- *(5) Filter ((isnotnull(cs_sold_date_sk#91) AND isnotnull(cs_item_sk#92)) AND isnotnull(cs_sold_time_sk#93))
+                  :        :     :     +- *(5) ColumnarToRow
+                  :        :     :        +- FileScan parquet tpcds_sf1_parquet_stats.catalog_sales[cs_sold_date_sk#91,cs_sold_time_sk#93,cs_item_sk#92,cs_ext_sales_price#90] Batched: true, DataFilters: [isnotnull(cs_sold_date_sk#91), isnotnull(cs_item_sk#92), isnotnull(cs_sold_time_sk#93)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_sold_date_sk), IsNotNull(cs_item_sk), IsNotNull(cs_sold_time_sk)], ReadSchema: struct<cs_sold_date_sk:int,cs_sold_time_sk:int,cs_item_sk:int,cs_ext_sales_price:decimal(7,2)>
+                  :        :     +- ReusedExchange [d_date_sk#46], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#147]
+                  :        +- *(7) Project [ss_ext_sales_price#114 AS ext_price#12, ss_item_sk#116 AS sold_item_sk#14, ss_sold_time_sk#117 AS time_sk#15]
+                  :           +- *(7) BroadcastHashJoin [ss_sold_date_sk#115], [d_date_sk#46], Inner, BuildRight, false
+                  :              :- *(7) Project [ss_sold_date_sk#115, ss_sold_time_sk#117, ss_item_sk#116, ss_ext_sales_price#114]
+                  :              :  +- *(7) Filter ((isnotnull(ss_sold_date_sk#115) AND isnotnull(ss_item_sk#116)) AND isnotnull(ss_sold_time_sk#117))
+                  :              :     +- *(7) ColumnarToRow
+                  :              :        +- FileScan parquet tpcds_sf1_parquet_stats.store_sales[ss_sold_date_sk#115,ss_sold_time_sk#117,ss_item_sk#116,ss_ext_sales_price#114] Batched: true, DataFilters: [isnotnull(ss_sold_date_sk#115), isnotnull(ss_item_sk#116), isnotnull(ss_sold_time_sk#117)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_item_sk), IsNotNull(ss_sold_time_sk)], ReadSchema: struct<ss_sold_date_sk:int,ss_sold_time_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
+                  :              +- ReusedExchange [d_date_sk#46], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#147]
+                  +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#148]
+                     +- *(8) Project [t_time_sk#22, t_hour#18, t_minute#19]
+                        +- *(8) Filter (((t_meal_time#23 = breakfast) OR (t_meal_time#23 = dinner)) AND isnotnull(t_time_sk#22))
+                           +- *(8) ColumnarToRow
+                              +- FileScan parquet tpcds_sf1_parquet_stats.time_dim[t_time_sk#22,t_hour#18,t_minute#19,t_meal_time#23] Batched: true, DataFilters: [((t_meal_time#23 = breakfast) OR (t_meal_time#23 = dinner)), isnotnull(t_time_sk#22)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [Or(EqualTo(t_meal_time,breakfast),EqualTo(t_meal_time,dinner)), IsNotNull(t_time_sk)], ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int,t_meal_time:string>

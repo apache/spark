@@ -284,11 +284,11 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
       }
     }
 
-    test(s"check simplified sf100 (tpcds-v1.4/$q)") {
-      activateDatabase(DB_TPCDS_SF100) {
-        testQuery("tpcds", q, "sf100")
-      }
-    }
+//    test(s"check simplified sf100 (tpcds-v1.4/$q)") {
+//      activateDatabase(DB_TPCDS_SF100) {
+//        testQuery("tpcds", q, "sf100")
+//      }
+//    }
   }
 }
 
@@ -303,11 +303,11 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
       }
     }
 
-    test(s"check simplified sf100 (tpcds-v2.7.0/$q)") {
-      activateDatabase(DB_TPCDS_SF100) {
-        testQuery("tpcds-v2.7.0", q, "sf10")
-      }
-    }
+//    test(s"check simplified sf100 (tpcds-v2.7.0/$q)") {
+//      activateDatabase(DB_TPCDS_SF100) {
+//        testQuery("tpcds-v2.7.0", q, "sf10")
+//      }
+//    }
   }
 }
 
@@ -322,10 +322,10 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
       }
     }
 
-    test(s"check simplified sf100 (tpcds-modifiedQueries/$q)") {
-      activateDatabase(DB_TPCDS_SF100) {
-        testQuery("tpcds-modifiedQueries", q, "sf100")
-      }
-    }
+//    test(s"check simplified sf100 (tpcds-modifiedQueries/$q)") {
+//      activateDatabase(DB_TPCDS_SF100) {
+//        testQuery("tpcds-modifiedQueries", q, "sf100")
+//      }
+//    }
   }
 }

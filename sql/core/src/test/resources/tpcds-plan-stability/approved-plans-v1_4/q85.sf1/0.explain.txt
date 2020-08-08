@@ -1,0 +1,161 @@
+== Parsed Logical Plan ==
+'GlobalLimit 100
++- 'LocalLimit 100
+   +- 'Sort ['substr('r_reason_desc, 1, 20) ASC NULLS FIRST, 'avg('ws_quantity) ASC NULLS FIRST, 'avg('wr_refunded_cash) ASC NULLS FIRST, 'avg('wr_fee) ASC NULLS FIRST], true
+      +- 'Aggregate ['r_reason_desc], [unresolvedalias('substr('r_reason_desc, 1, 20), None), unresolvedalias('avg('ws_quantity), None), unresolvedalias('avg('wr_refunded_cash), None), unresolvedalias('avg('wr_fee), None)]
+         +- 'Filter ((((('ws_web_page_sk = 'wp_web_page_sk) AND ('ws_item_sk = 'wr_item_sk)) AND ('ws_order_number = 'wr_order_number)) AND ((('ws_sold_date_sk = 'd_date_sk) AND ('d_year = 2000)) AND ('cd1.cd_demo_sk = 'wr_refunded_cdemo_sk))) AND (((('cd2.cd_demo_sk = 'wr_returning_cdemo_sk) AND ('ca_address_sk = 'wr_refunded_addr_sk)) AND ('r_reason_sk = 'wr_reason_sk)) AND ((((((('cd1.cd_marital_status = M) AND ('cd1.cd_marital_status = 'cd2.cd_marital_status)) AND ('cd1.cd_education_status = Advanced Degree)) AND (('cd1.cd_education_status = 'cd2.cd_education_status) AND (('ws_sales_price >= 100.00) AND ('ws_sales_price <= 150.00)))) OR (((('cd1.cd_marital_status = S) AND ('cd1.cd_marital_status = 'cd2.cd_marital_status)) AND ('cd1.cd_education_status = College)) AND (('cd1.cd_education_status = 'cd2.cd_education_status) AND (('ws_sales_price >= 50.00) AND ('ws_sales_price <= 100.00))))) OR (((('cd1.cd_marital_status = W) AND ('cd1.cd_marital_status = 'cd2.cd_marital_status)) AND ('cd1.cd_education_status = 2 yr Degree)) AND (('cd1.cd_education_status = 'cd2.cd_education_status) AND (('ws_sales_price >= 150.00) AND ('ws_sales_price <= 200.00))))) AND ((((('ca_country = United States) AND 'ca_state IN (IN,OH,NJ)) AND (('ws_net_profit >= 100) AND ('ws_net_profit <= 200))) OR ((('ca_country = United States) AND 'ca_state IN (WI,CT,KY)) AND (('ws_net_profit >= 150) AND ('ws_net_profit <= 300)))) OR ((('ca_country = United States) AND 'ca_state IN (LA,IA,AR)) AND (('ws_net_profit >= 50) AND ('ws_net_profit <= 250)))))))
+            +- 'Join Inner
+               :- 'Join Inner
+               :  :- 'Join Inner
+               :  :  :- 'Join Inner
+               :  :  :  :- 'Join Inner
+               :  :  :  :  :- 'Join Inner
+               :  :  :  :  :  :- 'Join Inner
+               :  :  :  :  :  :  :- 'UnresolvedRelation [web_sales]
+               :  :  :  :  :  :  +- 'UnresolvedRelation [web_returns]
+               :  :  :  :  :  +- 'UnresolvedRelation [web_page]
+               :  :  :  :  +- 'SubqueryAlias cd1
+               :  :  :  :     +- 'UnresolvedRelation [customer_demographics]
+               :  :  :  +- 'SubqueryAlias cd2
+               :  :  :     +- 'UnresolvedRelation [customer_demographics]
+               :  :  +- 'UnresolvedRelation [customer_address]
+               :  +- 'UnresolvedRelation [date_dim]
+               +- 'UnresolvedRelation [reason]
+
+== Analyzed Logical Plan ==
+substr(r_reason_desc, 1, 20): string, avg(ws_quantity): double, avg(wr_refunded_cash): decimal(11,6), avg(wr_fee): decimal(11,6)
+GlobalLimit 100
++- LocalLimit 100
+   +- Project [substr(r_reason_desc, 1, 20)#1, avg(ws_quantity)#2, avg(wr_refunded_cash)#3, avg(wr_fee)#4]
+      +- Sort [substr(r_reason_desc, 1, 20)#1 ASC NULLS FIRST, aggOrder#5 ASC NULLS FIRST, avg(wr_refunded_cash)#3 ASC NULLS FIRST, avg(wr_fee)#4 ASC NULLS FIRST], true
+         +- Aggregate [r_reason_desc#6], [substr(r_reason_desc#6, 1, 20) AS substr(r_reason_desc, 1, 20)#1, avg(cast(ws_quantity#7 as bigint)) AS avg(ws_quantity)#2, avg(wr_refunded_cash#8) AS avg(wr_refunded_cash)#3, avg(wr_fee#9) AS avg(wr_fee)#4, avg(cast(ws_quantity#7 as bigint)) AS aggOrder#5]
+            +- Filter (((((ws_web_page_sk#10 = wp_web_page_sk#11) AND (cast(ws_item_sk#12 as bigint) = wr_item_sk#13)) AND (cast(ws_order_number#14 as bigint) = wr_order_number#15)) AND (((ws_sold_date_sk#16 = d_date_sk#17) AND (d_year#18 = 2000)) AND (cast(cd_demo_sk#19 as bigint) = wr_refunded_cdemo_sk#20))) AND ((((cast(cd_demo_sk#21 as bigint) = wr_returning_cdemo_sk#22) AND (cast(ca_address_sk#23 as bigint) = wr_refunded_addr_sk#24)) AND (cast(r_reason_sk#25 as bigint) = wr_reason_sk#26)) AND (((((((cd_marital_status#27 = M) AND (cd_marital_status#27 = cd_marital_status#28)) AND (cd_education_status#29 = Advanced Degree)) AND ((cd_education_status#29 = cd_education_status#30) AND ((cast(ws_sales_price#31 as decimal(7,2)) >= cast(100.00 as decimal(7,2))) AND (cast(ws_sales_price#31 as decimal(7,2)) <= cast(150.00 as decimal(7,2)))))) OR ((((cd_marital_status#27 = S) AND (cd_marital_status#27 = cd_marital_status#28)) AND (cd_education_status#29 = College)) AND ((cd_education_status#29 = cd_education_status#30) AND ((cast(ws_sales_price#31 as decimal(7,2)) >= cast(50.00 as decimal(7,2))) AND (cast(ws_sales_price#31 as decimal(7,2)) <= cast(100.00 as decimal(7,2))))))) OR ((((cd_marital_status#27 = W) AND (cd_marital_status#27 = cd_marital_status#28)) AND (cd_education_status#29 = 2 yr Degree)) AND ((cd_education_status#29 = cd_education_status#30) AND ((cast(ws_sales_price#31 as decimal(7,2)) >= cast(150.00 as decimal(7,2))) AND (cast(ws_sales_price#31 as decimal(7,2)) <= cast(200.00 as decimal(7,2))))))) AND (((((ca_country#32 = United States) AND ca_state#33 IN (IN,OH,NJ)) AND ((cast(ws_net_profit#34 as decimal(7,2)) >= cast(cast(100 as decimal(3,0)) as decimal(7,2))) AND (cast(ws_net_profit#34 as decimal(7,2)) <= cast(cast(200 as decimal(3,0)) as decimal(7,2))))) OR (((ca_country#32 = United States) AND ca_state#33 IN (WI,CT,KY)) AND ((cast(ws_net_profit#34 as decimal(7,2)) >= cast(cast(150 as decimal(3,0)) as decimal(7,2))) AND (cast(ws_net_profit#34 as decimal(7,2)) <= cast(cast(300 as decimal(3,0)) as decimal(7,2)))))) OR (((ca_country#32 = United States) AND ca_state#33 IN (LA,IA,AR)) AND ((cast(ws_net_profit#34 as decimal(7,2)) >= cast(cast(50 as decimal(2,0)) as decimal(7,2))) AND (cast(ws_net_profit#34 as decimal(7,2)) <= cast(cast(250 as decimal(3,0)) as decimal(7,2)))))))))
+               +- Join Inner
+                  :- Join Inner
+                  :  :- Join Inner
+                  :  :  :- Join Inner
+                  :  :  :  :- Join Inner
+                  :  :  :  :  :- Join Inner
+                  :  :  :  :  :  :- Join Inner
+                  :  :  :  :  :  :  :- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.web_sales
+                  :  :  :  :  :  :  :  +- Relation[ws_sold_date_sk#16,ws_sold_time_sk#35,ws_ship_date_sk#36,ws_item_sk#12,ws_bill_customer_sk#37,ws_bill_cdemo_sk#38,ws_bill_hdemo_sk#39,ws_bill_addr_sk#40,ws_ship_customer_sk#41,ws_ship_cdemo_sk#42,ws_ship_hdemo_sk#43,ws_ship_addr_sk#44,ws_web_page_sk#10,ws_web_site_sk#45,ws_ship_mode_sk#46,ws_warehouse_sk#47,ws_promo_sk#48,ws_order_number#14,ws_quantity#7,ws_wholesale_cost#49,ws_list_price#50,ws_sales_price#31,ws_ext_discount_amt#51,ws_ext_sales_price#52,... 10 more fields] parquet
+                  :  :  :  :  :  :  +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.web_returns
+                  :  :  :  :  :  :     +- Relation[wr_returned_date_sk#53,wr_returned_time_sk#54,wr_item_sk#13,wr_refunded_customer_sk#55,wr_refunded_cdemo_sk#20,wr_refunded_hdemo_sk#56,wr_refunded_addr_sk#24,wr_returning_customer_sk#57,wr_returning_cdemo_sk#22,wr_returning_hdemo_sk#58,wr_returning_addr_sk#59,wr_web_page_sk#60,wr_reason_sk#26,wr_order_number#15,wr_return_quantity#61,wr_return_amt#62,wr_return_tax#63,wr_return_amt_inc_tax#64,wr_fee#9,wr_return_ship_cost#65,wr_refunded_cash#8,wr_reversed_charge#66,wr_account_credit#67,wr_net_loss#68] parquet
+                  :  :  :  :  :  +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.web_page
+                  :  :  :  :  :     +- Relation[wp_web_page_sk#11,wp_web_page_id#69,wp_rec_start_date#70,wp_rec_end_date#71,wp_creation_date_sk#72,wp_access_date_sk#73,wp_autogen_flag#74,wp_customer_sk#75,wp_url#76,wp_type#77,wp_char_count#78,wp_link_count#79,wp_image_count#80,wp_max_ad_count#81] parquet
+                  :  :  :  :  +- SubqueryAlias cd1
+                  :  :  :  :     +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.customer_demographics
+                  :  :  :  :        +- Relation[cd_demo_sk#19,cd_gender#82,cd_marital_status#27,cd_education_status#29,cd_purchase_estimate#83,cd_credit_rating#84,cd_dep_count#85,cd_dep_employed_count#86,cd_dep_college_count#87] parquet
+                  :  :  :  +- SubqueryAlias cd2
+                  :  :  :     +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.customer_demographics
+                  :  :  :        +- Relation[cd_demo_sk#21,cd_gender#88,cd_marital_status#28,cd_education_status#30,cd_purchase_estimate#89,cd_credit_rating#90,cd_dep_count#91,cd_dep_employed_count#92,cd_dep_college_count#93] parquet
+                  :  :  +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.customer_address
+                  :  :     +- Relation[ca_address_sk#23,ca_address_id#94,ca_street_number#95,ca_street_name#96,ca_street_type#97,ca_suite_number#98,ca_city#99,ca_county#100,ca_state#33,ca_zip#101,ca_country#32,ca_gmt_offset#102,ca_location_type#103] parquet
+                  :  +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.date_dim
+                  :     +- Relation[d_date_sk#17,d_date_id#104,d_date#105,d_month_seq#106,d_week_seq#107,d_quarter_seq#108,d_year#18,d_dow#109,d_moy#110,d_dom#111,d_qoy#112,d_fy_year#113,d_fy_quarter_seq#114,d_fy_week_seq#115,d_day_name#116,d_quarter_name#117,d_holiday#118,d_weekend#119,d_following_holiday#120,d_first_dom#121,d_last_dom#122,d_same_day_ly#123,d_same_day_lq#124,d_current_day#125,... 4 more fields] parquet
+                  +- SubqueryAlias spark_catalog.tpcds_sf1_parquet_stats.reason
+                     +- Relation[r_reason_sk#25,r_reason_id#126,r_reason_desc#6] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Project [substr(r_reason_desc, 1, 20)#1, avg(ws_quantity)#2, avg(wr_refunded_cash)#3, avg(wr_fee)#4]
+      +- Sort [substr(r_reason_desc, 1, 20)#1 ASC NULLS FIRST, aggOrder#5 ASC NULLS FIRST, avg(wr_refunded_cash)#3 ASC NULLS FIRST, avg(wr_fee)#4 ASC NULLS FIRST], true
+         +- Aggregate [r_reason_desc#6], [substr(r_reason_desc#6, 1, 20) AS substr(r_reason_desc, 1, 20)#1, avg(cast(ws_quantity#7 as bigint)) AS avg(ws_quantity)#2, cast((avg(UnscaledValue(wr_refunded_cash#8)) / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#3, cast((avg(UnscaledValue(wr_fee#9)) / 100.0) as decimal(11,6)) AS avg(wr_fee)#4, avg(cast(ws_quantity#7 as bigint)) AS aggOrder#5]
+            +- Project [ws_quantity#7, wr_fee#9, wr_refunded_cash#8, r_reason_desc#6]
+               +- Join Inner, (cast(r_reason_sk#25 as bigint) = wr_reason_sk#26)
+                  :- Project [ws_quantity#7, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8]
+                  :  +- Join Inner, (ws_sold_date_sk#16 = d_date_sk#17)
+                  :     :- Project [ws_sold_date_sk#16, ws_quantity#7, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8]
+                  :     :  +- Join Inner, ((cast(ca_address_sk#23 as bigint) = wr_refunded_addr_sk#24) AND ((((ca_state#33 IN (IN,OH,NJ) AND (ws_net_profit#34 >= 100.00)) AND (ws_net_profit#34 <= 200.00)) OR ((ca_state#33 IN (WI,CT,KY) AND (ws_net_profit#34 >= 150.00)) AND (ws_net_profit#34 <= 300.00))) OR ((ca_state#33 IN (LA,IA,AR) AND (ws_net_profit#34 >= 50.00)) AND (ws_net_profit#34 <= 250.00))))
+                  :     :     :- Project [ws_sold_date_sk#16, ws_quantity#7, ws_net_profit#34, wr_refunded_addr_sk#24, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8]
+                  :     :     :  +- Join Inner, (((cast(cd_demo_sk#21 as bigint) = wr_returning_cdemo_sk#22) AND (cd_marital_status#27 = cd_marital_status#28)) AND (cd_education_status#29 = cd_education_status#30))
+                  :     :     :     :- Project [ws_sold_date_sk#16, ws_quantity#7, ws_net_profit#34, wr_refunded_addr_sk#24, wr_returning_cdemo_sk#22, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8, cd_marital_status#27, cd_education_status#29]
+                  :     :     :     :  +- Join Inner, (((((((cd_marital_status#27 = M) AND (cd_education_status#29 = Advanced Degree)) AND (ws_sales_price#31 >= 100.00)) AND (ws_sales_price#31 <= 150.00)) OR ((((cd_marital_status#27 = S) AND (cd_education_status#29 = College)) AND (ws_sales_price#31 >= 50.00)) AND (ws_sales_price#31 <= 100.00))) OR ((((cd_marital_status#27 = W) AND (cd_education_status#29 = 2 yr Degree)) AND (ws_sales_price#31 >= 150.00)) AND (ws_sales_price#31 <= 200.00))) AND (cast(cd_demo_sk#19 as bigint) = wr_refunded_cdemo_sk#20))
+                  :     :     :     :     :- Project [ws_sold_date_sk#16, ws_quantity#7, ws_sales_price#31, ws_net_profit#34, wr_refunded_cdemo_sk#20, wr_refunded_addr_sk#24, wr_returning_cdemo_sk#22, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8]
+                  :     :     :     :     :  +- Join Inner, (ws_web_page_sk#10 = wp_web_page_sk#11)
+                  :     :     :     :     :     :- Project [ws_sold_date_sk#16, ws_web_page_sk#10, ws_quantity#7, ws_sales_price#31, ws_net_profit#34, wr_refunded_cdemo_sk#20, wr_refunded_addr_sk#24, wr_returning_cdemo_sk#22, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8]
+                  :     :     :     :     :     :  +- Join Inner, ((cast(ws_item_sk#12 as bigint) = wr_item_sk#13) AND (cast(ws_order_number#14 as bigint) = wr_order_number#15))
+                  :     :     :     :     :     :     :- Project [ws_sold_date_sk#16, ws_item_sk#12, ws_web_page_sk#10, ws_order_number#14, ws_quantity#7, ws_sales_price#31, ws_net_profit#34]
+                  :     :     :     :     :     :     :  +- Filter ((((isnotnull(ws_item_sk#12) AND isnotnull(ws_order_number#14)) AND isnotnull(ws_web_page_sk#10)) AND isnotnull(ws_sold_date_sk#16)) AND (((((ws_sales_price#31 >= 100.00) AND (ws_sales_price#31 <= 150.00)) OR ((ws_sales_price#31 >= 50.00) AND (ws_sales_price#31 <= 100.00))) OR ((ws_sales_price#31 >= 150.00) AND (ws_sales_price#31 <= 200.00))) AND ((((ws_net_profit#34 >= 100.00) AND (ws_net_profit#34 <= 200.00)) OR ((ws_net_profit#34 >= 150.00) AND (ws_net_profit#34 <= 300.00))) OR ((ws_net_profit#34 >= 50.00) AND (ws_net_profit#34 <= 250.00)))))
+                  :     :     :     :     :     :     :     +- Relation[ws_sold_date_sk#16,ws_sold_time_sk#35,ws_ship_date_sk#36,ws_item_sk#12,ws_bill_customer_sk#37,ws_bill_cdemo_sk#38,ws_bill_hdemo_sk#39,ws_bill_addr_sk#40,ws_ship_customer_sk#41,ws_ship_cdemo_sk#42,ws_ship_hdemo_sk#43,ws_ship_addr_sk#44,ws_web_page_sk#10,ws_web_site_sk#45,ws_ship_mode_sk#46,ws_warehouse_sk#47,ws_promo_sk#48,ws_order_number#14,ws_quantity#7,ws_wholesale_cost#49,ws_list_price#50,ws_sales_price#31,ws_ext_discount_amt#51,ws_ext_sales_price#52,... 10 more fields] parquet
+                  :     :     :     :     :     :     +- Project [wr_item_sk#13, wr_refunded_cdemo_sk#20, wr_refunded_addr_sk#24, wr_returning_cdemo_sk#22, wr_reason_sk#26, wr_order_number#15, wr_fee#9, wr_refunded_cash#8]
+                  :     :     :     :     :     :        +- Filter (((((isnotnull(wr_item_sk#13) AND isnotnull(wr_order_number#15)) AND isnotnull(wr_refunded_cdemo_sk#20)) AND isnotnull(wr_returning_cdemo_sk#22)) AND isnotnull(wr_refunded_addr_sk#24)) AND isnotnull(wr_reason_sk#26))
+                  :     :     :     :     :     :           +- Relation[wr_returned_date_sk#53,wr_returned_time_sk#54,wr_item_sk#13,wr_refunded_customer_sk#55,wr_refunded_cdemo_sk#20,wr_refunded_hdemo_sk#56,wr_refunded_addr_sk#24,wr_returning_customer_sk#57,wr_returning_cdemo_sk#22,wr_returning_hdemo_sk#58,wr_returning_addr_sk#59,wr_web_page_sk#60,wr_reason_sk#26,wr_order_number#15,wr_return_quantity#61,wr_return_amt#62,wr_return_tax#63,wr_return_amt_inc_tax#64,wr_fee#9,wr_return_ship_cost#65,wr_refunded_cash#8,wr_reversed_charge#66,wr_account_credit#67,wr_net_loss#68] parquet
+                  :     :     :     :     :     +- Project [wp_web_page_sk#11]
+                  :     :     :     :     :        +- Filter isnotnull(wp_web_page_sk#11)
+                  :     :     :     :     :           +- Relation[wp_web_page_sk#11,wp_web_page_id#69,wp_rec_start_date#70,wp_rec_end_date#71,wp_creation_date_sk#72,wp_access_date_sk#73,wp_autogen_flag#74,wp_customer_sk#75,wp_url#76,wp_type#77,wp_char_count#78,wp_link_count#79,wp_image_count#80,wp_max_ad_count#81] parquet
+                  :     :     :     :     +- Project [cd_demo_sk#19, cd_marital_status#27, cd_education_status#29]
+                  :     :     :     :        +- Filter (((isnotnull(cd_demo_sk#19) AND isnotnull(cd_marital_status#27)) AND isnotnull(cd_education_status#29)) AND ((((cd_marital_status#27 = M) AND (cd_education_status#29 = Advanced Degree)) OR ((cd_marital_status#27 = S) AND (cd_education_status#29 = College))) OR ((cd_marital_status#27 = W) AND (cd_education_status#29 = 2 yr Degree))))
+                  :     :     :     :           +- Relation[cd_demo_sk#19,cd_gender#82,cd_marital_status#27,cd_education_status#29,cd_purchase_estimate#83,cd_credit_rating#84,cd_dep_count#85,cd_dep_employed_count#86,cd_dep_college_count#87] parquet
+                  :     :     :     +- Project [cd_demo_sk#21, cd_marital_status#28, cd_education_status#30]
+                  :     :     :        +- Filter ((isnotnull(cd_marital_status#28) AND isnotnull(cd_education_status#30)) AND isnotnull(cd_demo_sk#21))
+                  :     :     :           +- Relation[cd_demo_sk#21,cd_gender#88,cd_marital_status#28,cd_education_status#30,cd_purchase_estimate#89,cd_credit_rating#90,cd_dep_count#91,cd_dep_employed_count#92,cd_dep_college_count#93] parquet
+                  :     :     +- Project [ca_address_sk#23, ca_state#33]
+                  :     :        +- Filter (((isnotnull(ca_country#32) AND (ca_country#32 = United States)) AND isnotnull(ca_address_sk#23)) AND ((ca_state#33 IN (IN,OH,NJ) OR ca_state#33 IN (WI,CT,KY)) OR ca_state#33 IN (LA,IA,AR)))
+                  :     :           +- Relation[ca_address_sk#23,ca_address_id#94,ca_street_number#95,ca_street_name#96,ca_street_type#97,ca_suite_number#98,ca_city#99,ca_county#100,ca_state#33,ca_zip#101,ca_country#32,ca_gmt_offset#102,ca_location_type#103] parquet
+                  :     +- Project [d_date_sk#17]
+                  :        +- Filter ((isnotnull(d_year#18) AND (d_year#18 = 2000)) AND isnotnull(d_date_sk#17))
+                  :           +- Relation[d_date_sk#17,d_date_id#104,d_date#105,d_month_seq#106,d_week_seq#107,d_quarter_seq#108,d_year#18,d_dow#109,d_moy#110,d_dom#111,d_qoy#112,d_fy_year#113,d_fy_quarter_seq#114,d_fy_week_seq#115,d_day_name#116,d_quarter_name#117,d_holiday#118,d_weekend#119,d_following_holiday#120,d_first_dom#121,d_last_dom#122,d_same_day_ly#123,d_same_day_lq#124,d_current_day#125,... 4 more fields] parquet
+                  +- Project [r_reason_sk#25, r_reason_desc#6]
+                     +- Filter isnotnull(r_reason_sk#25)
+                        +- Relation[r_reason_sk#25,r_reason_id#126,r_reason_desc#6] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[substr(r_reason_desc, 1, 20)#1 ASC NULLS FIRST,aggOrder#5 ASC NULLS FIRST,avg(wr_refunded_cash)#3 ASC NULLS FIRST,avg(wr_fee)#4 ASC NULLS FIRST], output=[substr(r_reason_desc, 1, 20)#1,avg(ws_quantity)#2,avg(wr_refunded_cash)#3,avg(wr_fee)#4])
++- *(9) HashAggregate(keys=[r_reason_desc#6], functions=[avg(cast(ws_quantity#7 as bigint)), avg(UnscaledValue(wr_refunded_cash#8)), avg(UnscaledValue(wr_fee#9))], output=[substr(r_reason_desc, 1, 20)#1, avg(ws_quantity)#2, avg(wr_refunded_cash)#3, avg(wr_fee)#4, aggOrder#5])
+   +- Exchange hashpartitioning(r_reason_desc#6, 5), true, [id=#127]
+      +- *(8) HashAggregate(keys=[r_reason_desc#6], functions=[partial_avg(cast(ws_quantity#7 as bigint)), partial_avg(UnscaledValue(wr_refunded_cash#8)), partial_avg(UnscaledValue(wr_fee#9))], output=[r_reason_desc#6, sum#128, count#129, sum#130, count#131, sum#132, count#133])
+         +- *(8) Project [ws_quantity#7, wr_fee#9, wr_refunded_cash#8, r_reason_desc#6]
+            +- *(8) BroadcastHashJoin [wr_reason_sk#26], [cast(r_reason_sk#25 as bigint)], Inner, BuildRight, false
+               :- *(8) Project [ws_quantity#7, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8]
+               :  +- *(8) BroadcastHashJoin [ws_sold_date_sk#16], [d_date_sk#17], Inner, BuildRight, false
+               :     :- *(8) Project [ws_sold_date_sk#16, ws_quantity#7, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8]
+               :     :  +- *(8) BroadcastHashJoin [wr_refunded_addr_sk#24], [cast(ca_address_sk#23 as bigint)], Inner, BuildRight, ((((ca_state#33 IN (IN,OH,NJ) AND (ws_net_profit#34 >= 100.00)) AND (ws_net_profit#34 <= 200.00)) OR ((ca_state#33 IN (WI,CT,KY) AND (ws_net_profit#34 >= 150.00)) AND (ws_net_profit#34 <= 300.00))) OR ((ca_state#33 IN (LA,IA,AR) AND (ws_net_profit#34 >= 50.00)) AND (ws_net_profit#34 <= 250.00))), false
+               :     :     :- *(8) Project [ws_sold_date_sk#16, ws_quantity#7, ws_net_profit#34, wr_refunded_addr_sk#24, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8]
+               :     :     :  +- *(8) BroadcastHashJoin [wr_returning_cdemo_sk#22, cd_marital_status#27, cd_education_status#29], [cast(cd_demo_sk#21 as bigint), cd_marital_status#28, cd_education_status#30], Inner, BuildRight, false
+               :     :     :     :- *(8) Project [ws_sold_date_sk#16, ws_quantity#7, ws_net_profit#34, wr_refunded_addr_sk#24, wr_returning_cdemo_sk#22, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8, cd_marital_status#27, cd_education_status#29]
+               :     :     :     :  +- *(8) BroadcastHashJoin [wr_refunded_cdemo_sk#20], [cast(cd_demo_sk#19 as bigint)], Inner, BuildRight, ((((((cd_marital_status#27 = M) AND (cd_education_status#29 = Advanced Degree)) AND (ws_sales_price#31 >= 100.00)) AND (ws_sales_price#31 <= 150.00)) OR ((((cd_marital_status#27 = S) AND (cd_education_status#29 = College)) AND (ws_sales_price#31 >= 50.00)) AND (ws_sales_price#31 <= 100.00))) OR ((((cd_marital_status#27 = W) AND (cd_education_status#29 = 2 yr Degree)) AND (ws_sales_price#31 >= 150.00)) AND (ws_sales_price#31 <= 200.00))), false
+               :     :     :     :     :- *(8) Project [ws_sold_date_sk#16, ws_quantity#7, ws_sales_price#31, ws_net_profit#34, wr_refunded_cdemo_sk#20, wr_refunded_addr_sk#24, wr_returning_cdemo_sk#22, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8]
+               :     :     :     :     :  +- *(8) BroadcastHashJoin [ws_web_page_sk#10], [wp_web_page_sk#11], Inner, BuildRight, false
+               :     :     :     :     :     :- *(8) Project [ws_sold_date_sk#16, ws_web_page_sk#10, ws_quantity#7, ws_sales_price#31, ws_net_profit#34, wr_refunded_cdemo_sk#20, wr_refunded_addr_sk#24, wr_returning_cdemo_sk#22, wr_reason_sk#26, wr_fee#9, wr_refunded_cash#8]
+               :     :     :     :     :     :  +- *(8) BroadcastHashJoin [cast(ws_item_sk#12 as bigint), cast(ws_order_number#14 as bigint)], [wr_item_sk#13, wr_order_number#15], Inner, BuildRight, false
+               :     :     :     :     :     :     :- *(8) Project [ws_sold_date_sk#16, ws_item_sk#12, ws_web_page_sk#10, ws_order_number#14, ws_quantity#7, ws_sales_price#31, ws_net_profit#34]
+               :     :     :     :     :     :     :  +- *(8) Filter (((((isnotnull(ws_item_sk#12) AND isnotnull(ws_order_number#14)) AND isnotnull(ws_web_page_sk#10)) AND isnotnull(ws_sold_date_sk#16)) AND ((((ws_sales_price#31 >= 100.00) AND (ws_sales_price#31 <= 150.00)) OR ((ws_sales_price#31 >= 50.00) AND (ws_sales_price#31 <= 100.00))) OR ((ws_sales_price#31 >= 150.00) AND (ws_sales_price#31 <= 200.00)))) AND ((((ws_net_profit#34 >= 100.00) AND (ws_net_profit#34 <= 200.00)) OR ((ws_net_profit#34 >= 150.00) AND (ws_net_profit#34 <= 300.00))) OR ((ws_net_profit#34 >= 50.00) AND (ws_net_profit#34 <= 250.00))))
+               :     :     :     :     :     :     :     +- *(8) ColumnarToRow
+               :     :     :     :     :     :     :        +- FileScan parquet tpcds_sf1_parquet_stats.web_sales[ws_sold_date_sk#16,ws_item_sk#12,ws_web_page_sk#10,ws_order_number#14,ws_quantity#7,ws_sales_price#31,ws_net_profit#34] Batched: true, DataFilters: [isnotnull(ws_item_sk#12), isnotnull(ws_order_number#14), isnotnull(ws_web_page_sk#10), isnotn..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_order_number), IsNotNull(ws_web_page_sk), IsNotNull(ws_sold_..., ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_web_page_sk:int,ws_order_number:int,ws_quantity:int,...
+               :     :     :     :     :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, true], input[5, bigint, true]),false), [id=#134]
+               :     :     :     :     :     :        +- *(1) Project [wr_item_sk#13, wr_refunded_cdemo_sk#20, wr_refunded_addr_sk#24, wr_returning_cdemo_sk#22, wr_reason_sk#26, wr_order_number#15, wr_fee#9, wr_refunded_cash#8]
+               :     :     :     :     :     :           +- *(1) Filter (((((isnotnull(wr_item_sk#13) AND isnotnull(wr_order_number#15)) AND isnotnull(wr_refunded_cdemo_sk#20)) AND isnotnull(wr_returning_cdemo_sk#22)) AND isnotnull(wr_refunded_addr_sk#24)) AND isnotnull(wr_reason_sk#26))
+               :     :     :     :     :     :              +- *(1) ColumnarToRow
+               :     :     :     :     :     :                 +- FileScan parquet tpcds_sf1_parquet_stats.web_returns[wr_item_sk#13,wr_refunded_cdemo_sk#20,wr_refunded_addr_sk#24,wr_returning_cdemo_sk#22,wr_reason_sk#26,wr_order_number#15,wr_fee#9,wr_refunded_cash#8] Batched: true, DataFilters: [isnotnull(wr_item_sk#13), isnotnull(wr_order_number#15), isnotnull(wr_refunded_cdemo_sk#20..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(wr_item_sk), IsNotNull(wr_order_number), IsNotNull(wr_refunded_cdemo_sk), IsNotNull(wr..., ReadSchema: struct<wr_item_sk:bigint,wr_refunded_cdemo_sk:bigint,wr_refunded_addr_sk:bigint,wr_returning_cdem...
+               :     :     :     :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#135]
+               :     :     :     :     :        +- *(2) Project [wp_web_page_sk#11]
+               :     :     :     :     :           +- *(2) Filter isnotnull(wp_web_page_sk#11)
+               :     :     :     :     :              +- *(2) ColumnarToRow
+               :     :     :     :     :                 +- FileScan parquet tpcds_sf1_parquet_stats.web_page[wp_web_page_sk#11] Batched: true, DataFilters: [isnotnull(wp_web_page_sk#11)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(wp_web_page_sk)], ReadSchema: struct<wp_web_page_sk:int>
+               :     :     :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#136]
+               :     :     :     :        +- *(3) Project [cd_demo_sk#19, cd_marital_status#27, cd_education_status#29]
+               :     :     :     :           +- *(3) Filter (((isnotnull(cd_demo_sk#19) AND isnotnull(cd_marital_status#27)) AND isnotnull(cd_education_status#29)) AND ((((cd_marital_status#27 = M) AND (cd_education_status#29 = Advanced Degree)) OR ((cd_marital_status#27 = S) AND (cd_education_status#29 = College))) OR ((cd_marital_status#27 = W) AND (cd_education_status#29 = 2 yr Degree))))
+               :     :     :     :              +- *(3) ColumnarToRow
+               :     :     :     :                 +- FileScan parquet tpcds_sf1_parquet_stats.customer_demographics[cd_demo_sk#19,cd_marital_status#27,cd_education_status#29] Batched: true, DataFilters: [isnotnull(cd_demo_sk#19), isnotnull(cd_marital_status#27), isnotnull(cd_education_status#29),..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), Or(Or(And(E..., ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
+               :     :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint), input[1, string, true], input[2, string, true]),false), [id=#137]
+               :     :     :        +- *(4) Project [cd_demo_sk#21, cd_marital_status#28, cd_education_status#30]
+               :     :     :           +- *(4) Filter ((isnotnull(cd_marital_status#28) AND isnotnull(cd_education_status#30)) AND isnotnull(cd_demo_sk#21))
+               :     :     :              +- *(4) ColumnarToRow
+               :     :     :                 +- FileScan parquet tpcds_sf1_parquet_stats.customer_demographics[cd_demo_sk#21,cd_marital_status#28,cd_education_status#30] Batched: true, DataFilters: [isnotnull(cd_marital_status#28), isnotnull(cd_education_status#30), isnotnull(cd_demo_sk#21)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cd_marital_status), IsNotNull(cd_education_status), IsNotNull(cd_demo_sk)], ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
+               :     :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#138]
+               :     :        +- *(5) Project [ca_address_sk#23, ca_state#33]
+               :     :           +- *(5) Filter (((isnotnull(ca_country#32) AND (ca_country#32 = United States)) AND isnotnull(ca_address_sk#23)) AND ((ca_state#33 IN (IN,OH,NJ) OR ca_state#33 IN (WI,CT,KY)) OR ca_state#33 IN (LA,IA,AR)))
+               :     :              +- *(5) ColumnarToRow
+               :     :                 +- FileScan parquet tpcds_sf1_parquet_stats.customer_address[ca_address_sk#23,ca_state#33,ca_country#32] Batched: true, DataFilters: [isnotnull(ca_country#32), (ca_country#32 = United States), isnotnull(ca_address_sk#23), ((ca_..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ca_country), EqualTo(ca_country,United States), IsNotNull(ca_address_sk), Or(Or(In(ca_..., ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_country:string>
+               :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#139]
+               :        +- *(6) Project [d_date_sk#17]
+               :           +- *(6) Filter ((isnotnull(d_year#18) AND (d_year#18 = 2000)) AND isnotnull(d_date_sk#17))
+               :              +- *(6) ColumnarToRow
+               :                 +- FileScan parquet tpcds_sf1_parquet_stats.date_dim[d_date_sk#17,d_year#18] Batched: true, DataFilters: [isnotnull(d_year#18), (d_year#18 = 2000), isnotnull(d_date_sk#17)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_year:int>
+               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#140]
+                  +- *(7) Project [r_reason_sk#25, r_reason_desc#6]
+                     +- *(7) Filter isnotnull(r_reason_sk#25)
+                        +- *(7) ColumnarToRow
+                           +- FileScan parquet tpcds_sf1_parquet_stats.reason[r_reason_sk#25,r_reason_desc#6] Batched: true, DataFilters: [isnotnull(r_reason_sk#25)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(r_reason_sk)], ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>

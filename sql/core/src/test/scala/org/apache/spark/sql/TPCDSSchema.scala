@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql
 
-import java.io.{FileInputStream, ObjectInputStream}
+import java.io.{DataInputStream, FileInputStream}
 import java.nio.file.Paths
 
 import scala.collection.mutable
+
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
@@ -255,6 +258,8 @@ trait TPCDSSchema extends SharedSparkSession {
 
   val DB_TPCDS_SF1 = "tpcds_sf1_parquet_stats"
   val DB_TPCDS_SF100 = "tpcds_sf100_parquet_stats"
+  private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
+    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
   private def loadDB(dbName: String): Unit = {
     sql(s"DROP DATABASE IF EXISTS $dbName CASCADE")
@@ -264,14 +269,12 @@ trait TPCDSSchema extends SharedSparkSession {
     val tableStatsMap = new mutable.HashMap[String, CatalogStatistics]()
 
     // construct the table stats
-    val objIn = new ObjectInputStream(new FileInputStream(tableStatsFile))
-    try {
-      val tableNum = objIn.readInt()
-      (0 until tableNum).foreach { _ =>
-        val tableName = objIn.readUTF()
-        val tableStat = objIn.readObject().asInstanceOf[CatalogStatistics]
-        tableStatsMap(tableName) = tableStat
-      }
+    val dataIn = new DataInputStream(new FileInputStream(tableStatsFile))
+    val tableNum = dataIn.readInt()
+    (0 until tableNum).foreach { _ =>
+      val tableName = dataIn.readUTF()
+      val tableStat = mapper.readValue(dataIn.readUTF(), classOf[CatalogStatistics])
+      tableStatsMap(tableName) = tableStat
     }
 
     tableNames.foreach { tableName =>
@@ -300,6 +303,6 @@ trait TPCDSSchema extends SharedSparkSession {
   override def beforeAll(): Unit = {
     super.beforeAll()
     loadDB(DB_TPCDS_SF1)
-    loadDB(DB_TPCDS_SF100)
+//    loadDB(DB_TPCDS_SF100)
   }
 }
