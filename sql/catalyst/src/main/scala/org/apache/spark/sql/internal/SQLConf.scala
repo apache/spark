@@ -2693,14 +2693,14 @@ object SQLConf {
   val GROUPING_WITH_UNION = buildConf("spark.sql.optimizer.grouping")
     .doc("When true,enable grouping with union.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val GROUPING_EXPAND_PROJECTIONS = buildConf("spark.sql.optimizer.projections.size")
     .doc("Split a expand into several smallExpand,which contains the size of projections.It can" +
       "reduce the shuffle pressure and improve performance in multidimensional analysis " +
       "when data is huge.")
     .intConf
-    .createWithDefault(1)
+    .createWithDefault(4)
 
   val LEGACY_COMPLEX_TYPES_TO_STRING =
     buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
