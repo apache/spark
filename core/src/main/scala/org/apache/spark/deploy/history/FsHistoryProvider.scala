@@ -563,11 +563,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       //
       // Only entries with valid applications are cleaned up here. Cleaning up invalid log
       // files is done by the periodic cleaner task.
-      val stale = listing.view(classOf[LogInfo])
-        .index("lastProcessed")
-        .last(newLastScanTime - 1)
-        .asScala
-        .toList
+      val stale = listing.synchronized {
+        listing.view(classOf[LogInfo])
+          .index("lastProcessed")
+          .last(newLastScanTime - 1)
+          .asScala
+          .toList
+      }
+
       stale.filterNot(isProcessing).foreach { log =>
         log.appId.foreach { appId =>
           cleanAppData(appId, log.attemptId, log.logPath)
@@ -913,12 +916,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
     val maxNum = conf.get(MAX_LOG_NUM)
 
-    val expired = listing.view(classOf[ApplicationInfoWrapper])
-      .index("oldestAttempt")
-      .reverse()
-      .first(maxTime)
-      .asScala
-      .toList
+    val expired = listing.synchronized {
+      listing.view(classOf[ApplicationInfoWrapper])
+        .index("oldestAttempt")
+        .reverse()
+        .first(maxTime)
+        .asScala
+        .toList
+    }
+
     expired.foreach { app =>
       // Applications may have multiple attempts, some of which may not need to be deleted yet.
       val (remaining, toDelete) = app.attempts.partition { attempt =>
@@ -928,13 +934,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     // Delete log files that don't have a valid application and exceed the configured max age.
-    val stale = listing.view(classOf[LogInfo])
-      .index("lastProcessed")
-      .reverse()
-      .first(maxTime)
-      .asScala
-      .filter { l => l.logType == null || l.logType == LogType.EventLogs }
-      .toList
+    val stale = listing.synchronized {
+      listing.view(classOf[LogInfo])
+        .index("lastProcessed")
+        .reverse()
+        .first(maxTime)
+        .asScala
+        .filter { l => l.logType == null || l.logType == LogType.EventLogs }
+        .toList
+    }
+
     stale.filterNot(isProcessing).foreach { log =>
       if (log.appId.isEmpty) {
         logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
@@ -945,13 +954,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // If the number of files is bigger than MAX_LOG_NUM,
     // clean up all completed attempts per application one by one.
-    val num = listing.view(classOf[LogInfo]).index("lastProcessed").asScala.size
+    val num = listing.synchronized {
+      listing.view(classOf[LogInfo]).index("lastProcessed").asScala.size
+    }
+
     var count = num - maxNum
     if (count > 0) {
       logInfo(s"Try to delete $count old event logs to keep $maxNum logs in total.")
-      val oldAttempts = listing.view(classOf[ApplicationInfoWrapper])
-        .index("oldestAttempt")
-        .asScala
+      val oldAttempts = listing.synchronized {
+        listing.view(classOf[ApplicationInfoWrapper])
+          .index("oldestAttempt")
+          .asScala
+      }
+
       oldAttempts.foreach { app =>
         if (count > 0) {
           // Applications may have multiple attempts, some of which may not be completed yet.
@@ -1036,13 +1051,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // Delete driver log file entries that exceed the configured max age and
     // may have been deleted on filesystem externally.
-    val stale = listing.view(classOf[LogInfo])
-      .index("lastProcessed")
-      .reverse()
-      .first(maxTime)
-      .asScala
-      .filter { l => l.logType != null && l.logType == LogType.DriverLogs }
-      .toList
+    val stale = listing.synchronized {
+      listing.view(classOf[LogInfo])
+        .index("lastProcessed")
+        .reverse()
+        .first(maxTime)
+        .asScala
+        .filter { l => l.logType != null && l.logType == LogType.DriverLogs }
+        .toList
+    }
+
     stale.filterNot(isProcessing).foreach { log =>
       logInfo(s"Deleting invalid driver log ${log.logPath}")
       listing.delete(classOf[LogInfo], log.logPath)
