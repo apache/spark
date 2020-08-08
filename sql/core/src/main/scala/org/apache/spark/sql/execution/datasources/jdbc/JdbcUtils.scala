@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLFeatureNotSupportedException}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
@@ -94,13 +95,7 @@ object JdbcUtils extends Logging {
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
-    val statement = conn.createStatement
-    try {
-      statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(s"DROP TABLE $table")
-    } finally {
-      statement.close()
-    }
+    executeStatement(conn, options, s"DROP TABLE $table")
   }
 
   /**
@@ -184,7 +179,7 @@ object JdbcUtils extends Logging {
     }
   }
 
-  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
+  def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }
@@ -884,13 +879,7 @@ object JdbcUtils extends Logging {
     // table_options or partition_options.
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
     val sql = s"CREATE TABLE $tableName ($strSchema) $createTableOptions"
-    val statement = conn.createStatement
-    try {
-      statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(sql)
-    } finally {
-      statement.close()
-    }
+    executeStatement(conn, options, sql)
   }
 
   /**
@@ -902,10 +891,51 @@ object JdbcUtils extends Logging {
       newTable: String,
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.renameTable(oldTable, newTable))
+  }
+
+  /**
+   * Update a table from the JDBC database.
+   */
+  def alterTable(
+      conn: Connection,
+      tableName: String,
+      changes: Seq[TableChange],
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    if (changes.length == 1) {
+      executeStatement(conn, options, dialect.alterTable(tableName, changes)(0))
+    } else {
+      val metadata = conn.getMetaData
+      if (!metadata.supportsTransactions) {
+        throw new SQLFeatureNotSupportedException("The target JDBC server does not support " +
+          "transaction and can only support ALTER TABLE with a single action.")
+      } else {
+        conn.setAutoCommit(false)
+        val statement = conn.createStatement
+        try {
+          statement.setQueryTimeout(options.queryTimeout)
+          for (sql <- dialect.alterTable(tableName, changes)) {
+            statement.executeUpdate(sql)
+          }
+          conn.commit()
+        } catch {
+          case e: Exception =>
+            if (conn != null) conn.rollback()
+            throw e
+        } finally {
+          statement.close()
+          conn.setAutoCommit(true)
+        }
+      }
+    }
+  }
+
+  private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(dialect.renameTable(oldTable, newTable))
+      statement.executeUpdate(sql)
     } finally {
       statement.close()
     }

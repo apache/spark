@@ -2108,9 +2108,9 @@ object SQLConf {
       .doc("A comma-separated list of data source short names or fully qualified data source " +
         "implementation class names for which Spark tries to push down predicates for nested " +
         "columns and/or names containing `dots` to data sources. This configuration is only " +
-        "effective with file-based data source in DSv1. Currently, Parquet implements " +
-        "both optimizations while ORC only supports predicates for names containing `dots`. The " +
-        "other data sources don't support this feature yet. So the default value is 'parquet,orc'.")
+        "effective with file-based data sources in DSv1. Currently, Parquet and ORC implement " +
+        "both optimizations. The other data sources don't support this feature yet. So the " +
+        "default value is 'parquet,orc'.")
       .version("3.0.0")
       .stringConf
       .createWithDefault("parquet,orc")
@@ -2686,8 +2686,20 @@ object SQLConf {
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup." +
         "Only support for singleColumn NAAJ for now.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val LEGACY_COMPLEX_TYPES_TO_STRING =
+    buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
+      .internal()
+      .doc("When true, maps and structs are wrapped by [] in casting to strings, and " +
+        "NULL elements of structs/maps/arrays will be omitted while converting to strings. " +
+        "Otherwise, if this is false, which is the default, maps and structs are wrapped by {}, " +
+        "and NULL elements will be converted to \"null\".")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.

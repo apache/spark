@@ -668,7 +668,7 @@ private[deploy] class Worker(
       finishedApps += id
       maybeCleanupApplication(id)
 
-    case DecommissionSelf =>
+    case WorkerDecommission(_, _) =>
       decommissionSelf()
   }
 

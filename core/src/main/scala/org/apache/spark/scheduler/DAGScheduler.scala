@@ -480,10 +480,12 @@ private[spark] class DAGScheduler(
    * submission.
    */
   private def checkBarrierStageWithNumSlots(rdd: RDD[_], rp: ResourceProfile): Unit = {
-    val numPartitions = rdd.getNumPartitions
-    val maxNumConcurrentTasks = sc.maxNumConcurrentTasks(rp)
-    if (rdd.isBarrier() && numPartitions > maxNumConcurrentTasks) {
-      throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
+    if (rdd.isBarrier()) {
+      val numPartitions = rdd.getNumPartitions
+      val maxNumConcurrentTasks = sc.maxNumConcurrentTasks(rp)
+      if (numPartitions > maxNumConcurrentTasks) {
+        throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
+      }
     }
   }
 
