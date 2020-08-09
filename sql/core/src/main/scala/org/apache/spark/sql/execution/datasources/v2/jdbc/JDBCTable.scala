@@ -16,15 +16,19 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCapability}
-import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-import org.apache.spark.sql.types.StructType
+import scala.collection.JavaConverters._
 
-// TODO (SPARK-32396): Implement the `SupportsRead` interface
-// TODO (SPARK-32410): Implement the `SupportsWrite` interface
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+
+
 case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOptions)
-  extends Table {
+  extends Table with SupportsRead with SupportsWrite {
   assert(ident.namespace().length == 1)
 
   override def name(): String = ident.toString
@@ -33,5 +37,17 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
     val capabilities = new java.util.HashSet[TableCapability]
     capabilities.add(BATCH_READ)
     capabilities
+  }
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
+    val mergedOptions = new JDBCOptions(
+      jdbcOptions.parameters.originalMap ++ options.asCaseSensitiveMap().asScala)
+    new JDBCScanBuilder(SparkSession.active, schema, mergedOptions)
+  }
+
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    val mergedOptions = new JdbcOptionsInWrite(
+      jdbcOptions.parameters.originalMap ++ info.options.asCaseSensitiveMap().asScala)
+    new JDBCWriteBuilder(schema, mergedOptions)
   }
 }

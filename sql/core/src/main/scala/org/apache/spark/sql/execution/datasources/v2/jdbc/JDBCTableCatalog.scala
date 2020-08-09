@@ -30,7 +30,7 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class JDBCTableCatalog extends TableCatalog with Logging {
+class JDBCTableCatalog extends TableCatalog with Logging {JDBCTable
 
   private var catalogName: String = null
   private var options: JDBCOptions = _

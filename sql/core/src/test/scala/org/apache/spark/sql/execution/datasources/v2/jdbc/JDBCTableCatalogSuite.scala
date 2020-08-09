@@ -21,6 +21,8 @@ import java.util.Properties
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -53,6 +55,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       conn.prepareStatement(
         """CREATE TABLE "test"."people" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)""")
         .executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)").executeUpdate()
     }
   }
 
@@ -105,6 +109,41 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql("SHOW TABLES IN h2.test"),
         Seq(Row("test", "people"), Row("test", "new_table")))
     }
+  }
+
+  test("simple scan") {
+    checkAnswer(sql("SELECT name, id FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
+  }
+
+  test("scan with filter push-down") {
+    val df = spark.table("h2.test.people").filter("id > 1")
+    val filters = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filters.isEmpty)
+    checkAnswer(df, Row("mary", 2))
+  }
+
+  test("scan with column pruning") {
+    val df = spark.table("h2.test.people").select("id")
+    val scan = df.queryExecution.optimizedPlan.collectFirst {
+      case s: DataSourceV2ScanRelation => s
+    }.get
+    assert(scan.schema.names.sameElements(Seq("ID")))
+    checkAnswer(df, Seq(Row(1), Row(2)))
+  }
+
+  test("scan with filter push-down and column pruning") {
+    val df = spark.table("h2.test.people").filter("id > 1").select("name")
+    val filters = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filters.isEmpty)
+    val scan = df.queryExecution.optimizedPlan.collectFirst {
+      case s: DataSourceV2ScanRelation => s
+    }.get
+    assert(scan.schema.names.sameElements(Seq("NAME")))
+    checkAnswer(df, Row("mary"))
   }
 
   test("alter table ... add column") {
