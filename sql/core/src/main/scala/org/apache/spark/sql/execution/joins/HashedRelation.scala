@@ -125,7 +125,7 @@ private[execution] object HashedRelation {
  *  [number of keys]
  *  [size of key] [size of value] [key bytes] [bytes for value]
  */
-class UnsafeHashedRelation(
+private[joins] class UnsafeHashedRelation(
     private var numKeys: Int,
     private var numFields: Int,
     private var binaryMap: BytesToBytesMap)

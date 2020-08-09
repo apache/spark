@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 case class EliminateAntiJoin(conf: SQLConf) extends Rule[LogicalPlan] {
 
-  private def shouldEliminate(plan: LogicalPlan): Boolean = plan match {
+  private def canEliminate(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined
       && stage.getRuntimeStatistics.rowCount.isDefined
       && stage.getRuntimeStatistics.rowCount.get == 0L => true
@@ -38,7 +38,7 @@ case class EliminateAntiJoin(conf: SQLConf) extends Rule[LogicalPlan] {
     // If the right side is empty, LeftAntiJoin simply returns the left side.
     // Eliminate Join with left LogicalPlan instead.
     case Join(left, right, LeftAnti, _, _)
-        if shouldEliminate(right) =>
+        if canEliminate(right) =>
       left
   }
 }

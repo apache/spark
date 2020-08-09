@@ -82,7 +82,7 @@ case class BroadcastExchangeExec(
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
     "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
 
-  var zeroNumRows: Boolean = false
+  private var knownRowCount: Option[BigInt] = None
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
@@ -92,7 +92,7 @@ case class BroadcastExchangeExec(
 
   override def runtimeStatistics: Statistics = {
     val dataSize = metrics("dataSize").value
-    Statistics(dataSize, rowCount = if (zeroNumRows) Some(0L) else None)
+    Statistics(dataSize, rowCount = knownRowCount)
   }
 
   @transient
@@ -128,6 +128,9 @@ case class BroadcastExchangeExec(
             val relation = mode.transform(input, Some(numRows))
 
             val dataSize = relation match {
+              case EmptyHashedRelation =>
+                knownRowCount = Some(0L)
+                0L
               case map: HashedRelation =>
                 map.estimatedSize
               case arr: Array[InternalRow] =>
@@ -136,8 +139,6 @@ case class BroadcastExchangeExec(
                 throw new SparkException("[BUG] BroadcastMode.transform returned unexpected " +
                   s"type: ${relation.getClass.getName}")
             }
-
-            zeroNumRows = relation == EmptyHashedRelation
 
             longMetric("dataSize") += dataSize
             if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
