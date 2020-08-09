@@ -3079,9 +3079,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withTable("t1", "t2") {
         withCache("v1", "t1") {
           sql("cache table v1 as select 1")
-          sql("create table t1 (c int)")
+          sql("create table t1 (c int) using parquet")
           sql("cache table t1")
-          sql("create table t2 (c int)")
+          sql("create table t2 (c int) using parquet")
           checkAnswer(
             sql("show cached tables"),
             Row("default", "t1", false) :: Row("", "v1", true) :: Nil
