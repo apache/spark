@@ -2696,7 +2696,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val GROUPING_EXPAND_PROJECTIONS = buildConf("spark.sql.optimizer.projections.size")
-    .doc("Split a expand into several smallExpand, which contains the size of projections. It " +
+    .doc("Split a Expand into several small Expand, which contains the size of projections. It " +
       "can reduce the shuffle pressure and improve performance in multidimensional analysis " +
       "when data is huge.")
     .intConf
