@@ -574,7 +574,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       stale.filterNot(isProcessing).foreach { log =>
         log.appId.foreach { appId =>
           cleanAppData(appId, log.attemptId, log.logPath)
-          listing.delete(classOf[LogInfo], log.logPath)
+          listing.synchronized {
+            listing.delete(classOf[LogInfo], log.logPath)
+          }
         }
       }
 
@@ -637,7 +639,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val newAppInfo = new ApplicationInfoWrapper(app.info, others)
           listing.write(newAppInfo)
         } else {
-          listing.delete(classOf[ApplicationInfoWrapper], appId)
+          listing.synchronized {
+            listing.delete(classOf[ApplicationInfoWrapper], appId)
+          }
         }
       }
     } catch {
@@ -701,7 +705,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         markInaccessible(rootPath)
         // SPARK-28157 We should remove this inaccessible entry from the KVStore
         // to handle permission-only changes with the same file sizes later.
-        listing.delete(classOf[LogInfo], rootPath.toString)
+        listing.synchronized {
+          listing.delete(classOf[LogInfo], rootPath.toString)
+        }
       case e: Exception =>
         logError("Exception while merging application listings", e)
     } finally {
@@ -814,7 +820,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // Fetch the entry first to avoid an RPC when it's already removed.
             listing.read(classOf[LogInfo], inProgressLog)
             if (!fs.isFile(new Path(inProgressLog))) {
-              listing.delete(classOf[LogInfo], inProgressLog)
+              listing.synchronized {
+                listing.delete(classOf[LogInfo], inProgressLog)
+              }
             }
           } catch {
             case _: NoSuchElementException =>
@@ -895,7 +903,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     if (log.lastProcessed <= maxTime && log.appId.isEmpty) {
       logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
       deleteLog(fs, new Path(log.logPath))
-      listing.delete(classOf[LogInfo], log.logPath)
+      listing.synchronized {
+        listing.delete(classOf[LogInfo], log.logPath)
+      }
     }
 
     log.appId.foreach { appId =>
@@ -948,7 +958,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       if (log.appId.isEmpty) {
         logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
         deleteLog(fs, new Path(log.logPath))
-        listing.delete(classOf[LogInfo], log.logPath)
+        listing.synchronized {
+          listing.delete(classOf[LogInfo], log.logPath)
+        }
       }
     }
 
@@ -996,7 +1008,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     toDelete.foreach { attempt =>
       logInfo(s"Deleting expired event log for ${attempt.logPath}")
       val logPath = new Path(logDir, attempt.logPath)
-      listing.delete(classOf[LogInfo], logPath.toString())
+      listing.synchronized {
+        listing.delete(classOf[LogInfo], logPath.toString())
+      }
       cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
       if (deleteLog(fs, logPath)) {
         countDeleted += 1
@@ -1004,7 +1018,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     if (remaining.isEmpty) {
-      listing.delete(app.getClass(), app.id)
+      listing.synchronized {
+        listing.delete(app.getClass(), app.id)
+      }
     }
 
     countDeleted
@@ -1044,7 +1060,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       if (deleteFile) {
         logInfo(s"Deleting expired driver log for: ${f.getPath().getName()}")
-        listing.delete(classOf[LogInfo], f.getPath().toString())
+        listing.synchronized {
+          listing.delete(classOf[LogInfo], f.getPath().toString())
+        }
         deleteLog(driverLogFs, f.getPath())
       }
     }
@@ -1063,7 +1081,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     stale.filterNot(isProcessing).foreach { log =>
       logInfo(s"Deleting invalid driver log ${log.logPath}")
-      listing.delete(classOf[LogInfo], log.logPath)
+      listing.synchronized {
+        listing.delete(classOf[LogInfo], log.logPath)
+      }
       deleteLog(driverLogFs, new Path(log.logPath))
     }
   }
