@@ -224,7 +224,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(LastOptions.parameters("opt3") == "3")
   }
 
-  test("SPARK-32364: option key should be case insensitive") {
+  test("SPARK-32364: later option should override earlier options") {
     spark.read
       .format("org.apache.spark.sql.test")
       .option("paTh", "1")
@@ -395,7 +395,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       .load("/test")
 
     assert(LastOptions.parameters("intOpt") == "56")
-    assert(LastOptions.parameters("path") == "/test")
+    assert(!LastOptions.parameters.contains("path"))
 
     LastOptions.clear()
     spark.read
