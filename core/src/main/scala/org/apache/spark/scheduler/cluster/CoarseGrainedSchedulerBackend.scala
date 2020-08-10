@@ -513,7 +513,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @return the ids of the executors acknowledged by the cluster manager to be removed.
    */
   override def decommissionExecutors(
-      executorsAndDecomInfo: Seq[(String, ExecutorDecommissionInfo)],
+      executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
       adjustTargetNumExecutors: Boolean): Seq[String] = {
 
     val executorsToDecommission = executorsAndDecomInfo.filter { case (executorId, _) =>
@@ -530,21 +530,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // If we don't want to replace the executors we are decommissioning
     if (adjustTargetNumExecutors) {
-      executorsToDecommission.foreach { case (exec, _) =>
-        val rpId = withLock {
-          executorDataMap(exec).resourceProfileId
-        }
-        val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
-        if (requestedTotalExecutorsPerResourceProfile.isEmpty) {
-          // Assume that we are killing an executor that was started by default and
-          // not through the request api
-          requestedTotalExecutorsPerResourceProfile(rp) = 0
-        } else {
-          val requestedTotalForRp = requestedTotalExecutorsPerResourceProfile(rp)
-          requestedTotalExecutorsPerResourceProfile(rp) = math.max(requestedTotalForRp - 1, 0)
-        }
-      }
-      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+      adjustExecutors(executorsToDecommission.map(_._1))
     }
 
     val decommissioned = executorsToDecommission.filter { case (executorId, decomInfo) =>
@@ -847,6 +833,27 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     Future.successful(false)
 
   /**
+   * Adjust the number of executors being requested to no longer include the provided executors.
+   */
+  private def adjustExecutors(executorIds: Seq[String]) = {
+      executorIds.foreach { exec =>
+        withLock {
+          val rpId = executorDataMap(exec).resourceProfileId
+          val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
+          if (requestedTotalExecutorsPerResourceProfile.isEmpty) {
+            // Assume that we are killing an executor that was started by default and
+            // not through the request api
+            requestedTotalExecutorsPerResourceProfile(rp) = 0
+          } else {
+            val requestedTotalForRp = requestedTotalExecutorsPerResourceProfile(rp)
+            requestedTotalExecutorsPerResourceProfile(rp) = math.max(requestedTotalForRp - 1, 0)
+          }
+        }
+      }
+      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+  }
+
+  /**
    * Request that the cluster manager kill the specified executors.
    *
    * @param executorIds identifiers of executors to kill
@@ -884,19 +891,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // take into account executors that are pending to be added or removed.
       val adjustTotalExecutors =
         if (adjustTargetNumExecutors) {
-          executorsToKill.foreach { exec =>
-            val rpId = executorDataMap(exec).resourceProfileId
-            val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
-            if (requestedTotalExecutorsPerResourceProfile.isEmpty) {
-              // Assume that we are killing an executor that was started by default and
-              // not through the request api
-              requestedTotalExecutorsPerResourceProfile(rp) = 0
-            } else {
-              val requestedTotalForRp = requestedTotalExecutorsPerResourceProfile(rp)
-              requestedTotalExecutorsPerResourceProfile(rp) = math.max(requestedTotalForRp - 1, 0)
-            }
-          }
-          doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
+          adjustExecutors(executorsToKill)
         } else {
           Future.successful(true)
         }
