@@ -17,27 +17,26 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.plans.LeftAnti
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.joins.EmptyHashedRelationWithAllNullKeys
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This optimization rule detects and eliminate a LeftAntiJoin when buildSide is empty.
+ * This optimization rule detects and convert a NAAJ to an Empty LocalRelation
+ * when buildSide is EmptyHashedRelationWithAllNullKeys.
  */
 case class EliminateAntiJoin(conf: SQLConf) extends Rule[LogicalPlan] {
 
   private def canEliminate(plan: LogicalPlan): Boolean = plan match {
-    case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined
-      && stage.getRuntimeStatistics.rowCount.isDefined
-      && stage.getRuntimeStatistics.rowCount.get == 0L => true
+    case LogicalQueryStage(_, stage: BroadcastQueryStageExec) if stage.resultOption.get().isDefined
+      && stage.broadcast.relationFuture.get().value == EmptyHashedRelationWithAllNullKeys => true
     case _ => false
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    // If the right side is empty, LeftAntiJoin simply returns the left side.
-    // Eliminate Join with left LogicalPlan instead.
-    case Join(left, right, LeftAnti, _, _) if canEliminate(right) =>
-      left
+    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) if canEliminate(j.right) =>
+      LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
   }
 }

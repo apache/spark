@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation}
+import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -82,8 +82,6 @@ case class BroadcastExchangeExec(
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
     "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
 
-  private var knownRowCount: Option[BigInt] = None
-
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
   override def doCanonicalize(): SparkPlan = {
@@ -92,7 +90,7 @@ case class BroadcastExchangeExec(
 
   override def runtimeStatistics: Statistics = {
     val dataSize = metrics("dataSize").value
-    Statistics(dataSize, rowCount = knownRowCount)
+    Statistics(dataSize)
   }
 
   @transient
@@ -128,9 +126,6 @@ case class BroadcastExchangeExec(
             val relation = mode.transform(input, Some(numRows))
 
             val dataSize = relation match {
-              case EmptyHashedRelation =>
-                knownRowCount = Some(0L)
-                0L
               case map: HashedRelation =>
                 map.estimatedSize
               case arr: Array[InternalRow] =>

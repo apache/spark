@@ -1155,24 +1155,12 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-32573: Eliminate Anti Join when BuildSide is Empty") {
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
-        "SELECT * FROM testData a LEFT ANTI JOIN emptyTestData b ON a.key = b.key")
-      val smj = findTopLevelSortMergeJoin(plan)
-      assert(smj.size == 1)
-      val join = findTopLevelBaseJoin(adaptivePlan)
-      assert(join.isEmpty)
-      checkNumLocalShuffleReaders(adaptivePlan)
-    }
-
+  test("SPARK-32573: Eliminate NAAJ when BuildSide is EmptyHashedRelationWithAllNullKeys") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
-        "SELECT * FROM testData a LEFT ANTI JOIN emptyTestData b ON a.key = b.key")
+        "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
       val bhj = findTopLevelBroadcastHashJoin(plan)
       assert(bhj.size == 1)
       val join = findTopLevelBaseJoin(adaptivePlan)
