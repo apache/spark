@@ -20,8 +20,6 @@
 Upgrading from PySpark 1.4 to 1.5
 =================================
 
-.. currentmodule:: pyspark_1.4_to_1.5
-
 * Resolution of strings to columns in Python now supports using dots (.) to qualify the column or access nested values. For example ``df['table.column.nestedField']``. However, this means that if your column name contains any dots you must now escape them using backticks (e.g., ``table.`column.with.dots`.nested``).
 
 * DataFrame.withColumn method in PySpark supports adding a new column or replacing existing columns of the same name.

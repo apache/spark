@@ -20,6 +20,4 @@
 Upgrading from PySpark 2.3.0 to 2.3.1 and above
 ===============================================
 
-.. currentmodule:: pyspark_2.3.0_to_2.3.1_above
-
 * As of version 2.3.1 Arrow functionality, including ``pandas_udf`` and ``toPandas()``/``createDataFrame()`` with ``spark.sql.execution.arrow.enabled`` set to ``True``, has been marked as experimental. These are still evolving and not currently recommended for use in production.

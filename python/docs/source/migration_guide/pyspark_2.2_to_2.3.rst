@@ -20,8 +20,6 @@
 Upgrading from PySpark 2.2 to 2.3
 =================================
 
-.. currentmodule:: pyspark_2.2_to_2.3
-
 * In PySpark, now we need Pandas 0.19.2 or upper if you want to use Pandas related functionalities, such as ``toPandas``, ``createDataFrame`` from Pandas DataFrame, etc.
 
 * In PySpark, the behavior of timestamp values for Pandas related functionalities was changed to respect session timezone. If you want to use the old behavior, you need to set a configuration ``spark.sql.execution.pandas.respectSessionTimeZone`` to False. See `SPARK-22395 <https://issues.apache.org/jira/browse/SPARK-22395>`_ for details.

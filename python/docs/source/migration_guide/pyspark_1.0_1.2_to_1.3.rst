@@ -20,6 +20,4 @@
 Upgrading from PySpark 1.0-1.2 to 1.3
 =====================================
 
-.. currentmodule:: pyspark_1.0_1.2_to_1.3
-
 * When using DataTypes in Python you will need to construct them (i.e. ``StringType()``) instead of referencing a singleton.

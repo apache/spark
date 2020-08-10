@@ -20,8 +20,6 @@
 Upgrading from PySpark 2.4 to 3.0
 =================================
 
-.. currentmodule:: pyspark_2.4_to_3.0
-
 * In Spark 3.0, PySpark requires a pandas version of 0.23.2 or higher to use pandas related functionality, such as ``toPandas``, ``createDataFrame`` from pandas DataFrame, and so on.
 
 * In Spark 3.0, PySpark requires a PyArrow version of 0.12.1 or higher to use PyArrow related functionality, such as ``pandas_udf``, ``toPandas`` and ``createDataFrame`` with “spark.sql.execution.arrow.enabled=true”, etc.

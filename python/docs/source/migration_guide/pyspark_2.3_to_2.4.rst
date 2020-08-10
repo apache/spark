@@ -20,6 +20,4 @@
 Upgrading from PySpark 2.3 to 2.4
 =================================
 
-.. currentmodule:: pyspark_2.3_to_2.4
-
 * In PySpark, when Arrow optimization is enabled, previously ``toPandas`` just failed when Arrow optimization is unable to be used whereas ``createDataFrame`` from Pandas DataFrame allowed the fallback to non-optimization. Now, both ``toPandas`` and ``createDataFrame`` from Pandas DataFrame allow the fallback by default, which can be switched off by ``spark.sql.execution.arrow.fallback.enabled``.
