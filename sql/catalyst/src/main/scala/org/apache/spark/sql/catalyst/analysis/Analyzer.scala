@@ -240,6 +240,7 @@ class Analyzer(
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
       ExtractWindowExpressions ::
+      SplitAggregateWithExpand ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
@@ -249,7 +250,6 @@ class Analyzer(
       ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
-      SplitAggregateWithExpand ::
       ResolveUnion ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
