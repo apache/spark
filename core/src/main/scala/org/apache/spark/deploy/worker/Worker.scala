@@ -396,7 +396,7 @@ private[deploy] class Worker(
     registrationRetryTimer match {
       case None =>
         registered = false
-        registerMasterFutures = tryRegisterAllMasters()
+        reregisterWithMaster()
         connectionAttemptCount = 0
         registrationRetryTimer = Some(forwardMessageScheduler.scheduleAtFixedRate(
           () => Utils.tryLogNonFatalError { Option(self).foreach(_.send(ReregisterWithMaster)) },
