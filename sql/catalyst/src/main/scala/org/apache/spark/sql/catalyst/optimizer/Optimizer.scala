@@ -108,7 +108,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveNoopOperators,
         CombineWithFields,
         SimplifyExtractValueOps,
-        CombineConcats ++
+        CombineConcats) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
