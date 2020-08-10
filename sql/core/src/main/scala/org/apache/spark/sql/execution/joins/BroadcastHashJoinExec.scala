@@ -213,9 +213,11 @@ case class BroadcastHashJoinExec(
     (broadcastRelation, relationTerm)
   }
 
-  protected override def prepareRelation(ctx: CodegenContext): (String, Boolean) = {
+  protected override def prepareRelation(ctx: CodegenContext): HashedRelationInfo = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-    (relationTerm, broadcastRelation.value.keyIsUnique)
+    HashedRelationInfo(relationTerm,
+      broadcastRelation.value.keyIsUnique,
+      broadcastRelation.value == EmptyHashedRelation)
   }
 
   /**
@@ -223,19 +225,19 @@ case class BroadcastHashJoinExec(
    * Handles NULL-aware anti join (NAAJ) separately here.
    */
   protected override def codegenAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-    val numOutput = metricTerm(ctx, "numOutputRows")
-    if (broadcastRelation.value == EmptyHashedRelation) {
-      s"""
-         |// If the right side is empty, AntiJoin simply returns the left side.
-         |$numOutput.add(1);
-         |${consume(ctx, input)}
-       """.stripMargin
-    } else if (isNullAwareAntiJoin) {
+    if (isNullAwareAntiJoin) {
+      val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
       val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
       val (matched, _, _) = getJoinCondition(ctx, input)
+      val numOutput = metricTerm(ctx, "numOutputRows")
 
-      if (broadcastRelation.value == EmptyHashedRelationWithAllNullKeys) {
+      if (broadcastRelation.value == EmptyHashedRelation) {
+        s"""
+           |// If the right side is empty, NAAJ simply returns the left side.
+           |$numOutput.add(1);
+           |${consume(ctx, input)}
+         """.stripMargin
+      } else if (broadcastRelation.value == EmptyHashedRelationWithAllNullKeys) {
         s"""
            |// If the right side contains any all-null key, NAAJ simply returns Nothing.
          """.stripMargin
