@@ -830,6 +830,19 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("tree string output") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val df = sql("SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val planBefore = df.queryExecution.executedPlan
+      assert(planBefore.toString.contains("== Current Plan =="))
+      assert(planBefore.toString.contains("== Initial Plan =="))
+      df.collect()
+      val planAfter = df.queryExecution.executedPlan
+      assert(planAfter.toString.contains("== Final Plan =="))
+      assert(planAfter.toString.contains("== Initial Plan =="))
+    }
+  }
+
   test("SPARK-31384: avoid NPE in OptimizeSkewedJoin when there's 0 partition plan") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
