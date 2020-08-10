@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.resourceToString
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This test suite ensures all the TPC-DS queries can be successfully analyzed, optimized
