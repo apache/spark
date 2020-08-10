@@ -24,7 +24,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession with SQLTestUtils {
-  import testImplicits._
 
   private def assertProjectExecCount(df: DataFrame, expected: Int): Unit = {
     withClue(df.queryExecution) {

@@ -89,8 +89,10 @@ case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
           project.output.map(_.exprId.id) == child.output.map(_.exprId.id) &&
             checkNullability(project.output, child.output)
         } else {
-          project.output.map(_.exprId.id).sorted == child.output.map(_.exprId.id).sorted &&
-            checkNullability(project.output, child.output)
+          val orderedProjectOutput = project.output.sortBy(_.exprId.id)
+          val orderedChildOutput = child.output.sortBy(_.exprId.id)
+          orderedProjectOutput.map(_.exprId.id) == orderedChildOutput.map(_.exprId.id) &&
+            checkNullability(orderedProjectOutput, orderedChildOutput)
         }
     }
   }
