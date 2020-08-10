@@ -32,12 +32,12 @@ import org.apache.spark.sql.types.{BooleanType, IntegralType, LongType}
 /**
  * @param relationTerm variable name for HashedRelation
  * @param keyIsUnique  indicate whether keys of HashedRelation known to be unique in code-gen time
- * @param isEmptyHashedRelation indicate whether it known to be EmptyHashedRelation in code-gen time
+ * @param isEmpty indicate whether it known to be EmptyHashedRelation in code-gen time
  */
 private[joins] case class HashedRelationInfo(
     relationTerm: String,
     keyIsUnique: Boolean,
-    isEmptyHashedRelation: Boolean)
+    isEmpty: Boolean)
 
 trait HashJoin extends BaseJoinExec with CodegenSupport {
   def buildSide: BuildSide

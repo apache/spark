@@ -88,6 +88,6 @@ case class ShuffledHashJoinExec(
     // Inline mutable state since not many join operations in a task
     val relationTerm = ctx.addMutableState(clsName, "relation",
       v => s"$v = $thisPlan.buildHashedRelation(inputs[1]);", forceInline = true)
-    HashedRelationInfo(relationTerm, false, false)
+    HashedRelationInfo(relationTerm, keyIsUnique = false, isEmpty = false)
   }
 }
