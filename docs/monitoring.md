@@ -1082,7 +1082,7 @@ This is the component with the largest amount of instrumented metrics
   - memory.remainingOnHeapMem_MB
 
 - namespace=HiveExternalCatalog
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
@@ -1091,7 +1091,7 @@ This is the component with the largest amount of instrumented metrics
   - partitionsFetched.count
 
 - namespace=CodeGenerator
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
@@ -1254,7 +1254,7 @@ when running in local mode.
   - shuffle-server.usedHeapMemory
 
 - namespace=HiveExternalCatalog
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
@@ -1263,7 +1263,7 @@ when running in local mode.
   - partitionsFetched.count
 
 - namespace=CodeGenerator
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
@@ -1280,6 +1280,8 @@ when running in local mode.
 Notes: 
   - Activate this source by setting the relevant `metrics.properties` file entry or the 
   configuration parameter:`spark.metrics.conf.*.source.jvm.class=org.apache.spark.metrics.source.JvmSource`  
+  - These metrics are conditional to a configuration parameter:
+    `spark.metrics.staticSources.enabled` (default is true)
   - This source is available for driver and executor instances and is also available for other instances.  
   - This source provides information on JVM metrics using the 
   [Dropwizard/Codahale Metric Sets for JVM instrumentation](https://metrics.dropwizard.io/3.1.0/manual/jvm/)
