@@ -53,7 +53,6 @@ case class JDBCScanBuilder(
   }
 
   override def build(): Scan = {
-    session
     val resolver = session.sessionState.conf.resolver
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
