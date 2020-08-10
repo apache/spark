@@ -72,14 +72,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
 
 class TPCDSQueryWithStatsSuite extends TPCDSQuerySuite {
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    for (tableName <- tableNames) {
-      // To simulate plan generation on actual TPCDS data, injects data stats here
-      spark.sessionState.catalog.alterTableStats(
-        TableIdentifier(tableName), Some(TPCDSTableStats.sf100TableStats(tableName)))
-    }
-  }
+  override def injectStats: Boolean = true
 
   // Sets configurations for enabling the optimization rules that
   // exploit data statistics.

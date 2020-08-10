@@ -1,0 +1,294 @@
+== Parsed Logical Plan ==
+CTE [ss_items, cs_items, ws_items]
+:  :- 'SubqueryAlias ss_items
+:  :  +- 'Aggregate ['i_item_id], ['i_item_id AS item_id#1, 'sum('ss_ext_sales_price) AS ss_item_rev#2]
+:  :     +- 'Filter ((('ss_item_sk = 'i_item_sk) AND 'd_date IN (list#3 [])) AND ('ss_sold_date_sk = 'd_date_sk))
+:  :        :  +- 'Project ['d_date]
+:  :        :     +- 'Filter ('d_week_seq = scalar-subquery#4 [])
+:  :        :        :  +- 'Project ['d_week_seq]
+:  :        :        :     +- 'Filter ('d_date = 2000-01-03)
+:  :        :        :        +- 'UnresolvedRelation [date_dim]
+:  :        :        +- 'UnresolvedRelation [date_dim]
+:  :        +- 'Join Inner
+:  :           :- 'Join Inner
+:  :           :  :- 'UnresolvedRelation [store_sales]
+:  :           :  +- 'UnresolvedRelation [item]
+:  :           +- 'UnresolvedRelation [date_dim]
+:  :- 'SubqueryAlias cs_items
+:  :  +- 'Aggregate ['i_item_id], ['i_item_id AS item_id#5, 'sum('cs_ext_sales_price) AS cs_item_rev#6]
+:  :     +- 'Filter ((('cs_item_sk = 'i_item_sk) AND 'd_date IN (list#7 [])) AND ('cs_sold_date_sk = 'd_date_sk))
+:  :        :  +- 'Project ['d_date]
+:  :        :     +- 'Filter ('d_week_seq = scalar-subquery#8 [])
+:  :        :        :  +- 'Project ['d_week_seq]
+:  :        :        :     +- 'Filter ('d_date = 2000-01-03)
+:  :        :        :        +- 'UnresolvedRelation [date_dim]
+:  :        :        +- 'UnresolvedRelation [date_dim]
+:  :        +- 'Join Inner
+:  :           :- 'Join Inner
+:  :           :  :- 'UnresolvedRelation [catalog_sales]
+:  :           :  +- 'UnresolvedRelation [item]
+:  :           +- 'UnresolvedRelation [date_dim]
+:  +- 'SubqueryAlias ws_items
+:     +- 'Aggregate ['i_item_id], ['i_item_id AS item_id#9, 'sum('ws_ext_sales_price) AS ws_item_rev#10]
+:        +- 'Filter ((('ws_item_sk = 'i_item_sk) AND 'd_date IN (list#11 [])) AND ('ws_sold_date_sk = 'd_date_sk))
+:           :  +- 'Project ['d_date]
+:           :     +- 'Filter ('d_week_seq = scalar-subquery#12 [])
+:           :        :  +- 'Project ['d_week_seq]
+:           :        :     +- 'Filter ('d_date = 2000-01-03)
+:           :        :        +- 'UnresolvedRelation [date_dim]
+:           :        +- 'UnresolvedRelation [date_dim]
+:           +- 'Join Inner
+:              :- 'Join Inner
+:              :  :- 'UnresolvedRelation [web_sales]
+:              :  +- 'UnresolvedRelation [item]
+:              +- 'UnresolvedRelation [date_dim]
++- 'GlobalLimit 100
+   +- 'LocalLimit 100
+      +- 'Sort ['item_id ASC NULLS FIRST, 'ss_item_rev ASC NULLS FIRST], true
+         +- 'Project ['ss_items.item_id, 'ss_item_rev, ((('ss_item_rev / (('ss_item_rev + 'cs_item_rev) + 'ws_item_rev)) / 3) * 100) AS ss_dev#13, 'cs_item_rev, ((('cs_item_rev / (('ss_item_rev + 'cs_item_rev) + 'ws_item_rev)) / 3) * 100) AS cs_dev#14, 'ws_item_rev, ((('ws_item_rev / (('ss_item_rev + 'cs_item_rev) + 'ws_item_rev)) / 3) * 100) AS ws_dev#15, ((('ss_item_rev + 'cs_item_rev) + 'ws_item_rev) / 3) AS average#16]
+            +- 'Filter (((('ss_items.item_id = 'cs_items.item_id) AND ('ss_items.item_id = 'ws_items.item_id)) AND ((('ss_item_rev >= (0.9 * 'cs_item_rev)) AND ('ss_item_rev <= (1.1 * 'cs_item_rev))) AND (('ss_item_rev >= (0.9 * 'ws_item_rev)) AND ('ss_item_rev <= (1.1 * 'ws_item_rev))))) AND (((('cs_item_rev >= (0.9 * 'ss_item_rev)) AND ('cs_item_rev <= (1.1 * 'ss_item_rev))) AND (('cs_item_rev >= (0.9 * 'ws_item_rev)) AND ('cs_item_rev <= (1.1 * 'ws_item_rev)))) AND ((('ws_item_rev >= (0.9 * 'ss_item_rev)) AND ('ws_item_rev <= (1.1 * 'ss_item_rev))) AND (('ws_item_rev >= (0.9 * 'cs_item_rev)) AND ('ws_item_rev <= (1.1 * 'cs_item_rev))))))
+               +- 'Join Inner
+                  :- 'Join Inner
+                  :  :- 'UnresolvedRelation [ss_items]
+                  :  +- 'UnresolvedRelation [cs_items]
+                  +- 'UnresolvedRelation [ws_items]
+
+== Analyzed Logical Plan ==
+item_id: string, ss_item_rev: decimal(17,2), ss_dev: decimal(38,17), cs_item_rev: decimal(17,2), cs_dev: decimal(38,17), ws_item_rev: decimal(17,2), ws_dev: decimal(38,17), average: decimal(23,6)
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [item_id#1 ASC NULLS FIRST, ss_item_rev#2 ASC NULLS FIRST], true
+      +- Project [item_id#1, ss_item_rev#2, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(19,2))) / promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true) as decimal(19,2)))), DecimalType(38,21), true) as decimal(38,21))) / promote_precision(cast(cast(3 as decimal(1,0)) as decimal(38,21)))), DecimalType(38,21), true) as decimal(38,21))) * promote_precision(cast(cast(100 as decimal(3,0)) as decimal(38,21)))), DecimalType(38,17), true) AS ss_dev#13, cs_item_rev#6, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cs_item_rev#6 as decimal(19,2))) / promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true) as decimal(19,2)))), DecimalType(38,21), true) as decimal(38,21))) / promote_precision(cast(cast(3 as decimal(1,0)) as decimal(38,21)))), DecimalType(38,21), true) as decimal(38,21))) * promote_precision(cast(cast(100 as decimal(3,0)) as decimal(38,21)))), DecimalType(38,17), true) AS cs_dev#14, ws_item_rev#10, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ws_item_rev#10 as decimal(19,2))) / promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true) as decimal(19,2)))), DecimalType(38,21), true) as decimal(38,21))) / promote_precision(cast(cast(3 as decimal(1,0)) as decimal(38,21)))), DecimalType(38,21), true) as decimal(38,21))) * promote_precision(cast(cast(100 as decimal(3,0)) as decimal(38,21)))), DecimalType(38,17), true) AS ws_dev#15, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true) as decimal(19,2))) / promote_precision(cast(cast(3 as decimal(1,0)) as decimal(19,2)))), DecimalType(23,6), true) AS average#16]
+         +- Filter ((((item_id#1 = item_id#5) AND (item_id#1 = item_id#9)) AND (((cast(ss_item_rev#2 as decimal(19,3)) >= cast(CheckOverflow((promote_precision(cast(0.9 as decimal(17,2))) * promote_precision(cast(cs_item_rev#6 as decimal(17,2)))), DecimalType(19,3), true) as decimal(19,3))) AND (cast(ss_item_rev#2 as decimal(20,3)) <= cast(CheckOverflow((promote_precision(cast(1.1 as decimal(17,2))) * promote_precision(cast(cs_item_rev#6 as decimal(17,2)))), DecimalType(20,3), true) as decimal(20,3)))) AND ((cast(ss_item_rev#2 as decimal(19,3)) >= cast(CheckOverflow((promote_precision(cast(0.9 as decimal(17,2))) * promote_precision(cast(ws_item_rev#10 as decimal(17,2)))), DecimalType(19,3), true) as decimal(19,3))) AND (cast(ss_item_rev#2 as decimal(20,3)) <= cast(CheckOverflow((promote_precision(cast(1.1 as decimal(17,2))) * promote_precision(cast(ws_item_rev#10 as decimal(17,2)))), DecimalType(20,3), true) as decimal(20,3)))))) AND ((((cast(cs_item_rev#6 as decimal(19,3)) >= cast(CheckOverflow((promote_precision(cast(0.9 as decimal(17,2))) * promote_precision(cast(ss_item_rev#2 as decimal(17,2)))), DecimalType(19,3), true) as decimal(19,3))) AND (cast(cs_item_rev#6 as decimal(20,3)) <= cast(CheckOverflow((promote_precision(cast(1.1 as decimal(17,2))) * promote_precision(cast(ss_item_rev#2 as decimal(17,2)))), DecimalType(20,3), true) as decimal(20,3)))) AND ((cast(cs_item_rev#6 as decimal(19,3)) >= cast(CheckOverflow((promote_precision(cast(0.9 as decimal(17,2))) * promote_precision(cast(ws_item_rev#10 as decimal(17,2)))), DecimalType(19,3), true) as decimal(19,3))) AND (cast(cs_item_rev#6 as decimal(20,3)) <= cast(CheckOverflow((promote_precision(cast(1.1 as decimal(17,2))) * promote_precision(cast(ws_item_rev#10 as decimal(17,2)))), DecimalType(20,3), true) as decimal(20,3))))) AND (((cast(ws_item_rev#10 as decimal(19,3)) >= cast(CheckOverflow((promote_precision(cast(0.9 as decimal(17,2))) * promote_precision(cast(ss_item_rev#2 as decimal(17,2)))), DecimalType(19,3), true) as decimal(19,3))) AND (cast(ws_item_rev#10 as decimal(20,3)) <= cast(CheckOverflow((promote_precision(cast(1.1 as decimal(17,2))) * promote_precision(cast(ss_item_rev#2 as decimal(17,2)))), DecimalType(20,3), true) as decimal(20,3)))) AND ((cast(ws_item_rev#10 as decimal(19,3)) >= cast(CheckOverflow((promote_precision(cast(0.9 as decimal(17,2))) * promote_precision(cast(cs_item_rev#6 as decimal(17,2)))), DecimalType(19,3), true) as decimal(19,3))) AND (cast(ws_item_rev#10 as decimal(20,3)) <= cast(CheckOverflow((promote_precision(cast(1.1 as decimal(17,2))) * promote_precision(cast(cs_item_rev#6 as decimal(17,2)))), DecimalType(20,3), true) as decimal(20,3)))))))
+            +- Join Inner
+               :- Join Inner
+               :  :- SubqueryAlias ss_items
+               :  :  +- Aggregate [i_item_id#17], [i_item_id#17 AS item_id#1, sum(ss_ext_sales_price#18) AS ss_item_rev#2]
+               :  :     +- Filter (((ss_item_sk#19 = i_item_sk#20) AND d_date#21 IN (list#3 [])) AND (ss_sold_date_sk#22 = d_date_sk#23))
+               :  :        :  +- Project [d_date#21]
+               :  :        :     +- Filter (d_week_seq#24 = scalar-subquery#4 [])
+               :  :        :        :  +- Project [d_week_seq#24]
+               :  :        :        :     +- Filter (d_date#21 = cast(2000-01-03 as date))
+               :  :        :        :        +- SubqueryAlias spark_catalog.default.date_dim
+               :  :        :        :           +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+               :  :        :        +- SubqueryAlias spark_catalog.default.date_dim
+               :  :        :           +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+               :  :        +- Join Inner
+               :  :           :- Join Inner
+               :  :           :  :- SubqueryAlias spark_catalog.default.store_sales
+               :  :           :  :  +- Relation[ss_sold_date_sk#22,ss_sold_time_sk#46,ss_item_sk#19,ss_customer_sk#47,ss_cdemo_sk#48,ss_hdemo_sk#49,ss_addr_sk#50,ss_store_sk#51,ss_promo_sk#52,ss_ticket_number#53,ss_quantity#54,ss_wholesale_cost#55,ss_list_price#56,ss_sales_price#57,ss_ext_discount_amt#58,ss_ext_sales_price#18,ss_ext_wholesale_cost#59,ss_ext_list_price#60,ss_ext_tax#61,ss_coupon_amt#62,ss_net_paid#63,ss_net_paid_inc_tax#64,ss_net_profit#65] parquet
+               :  :           :  +- SubqueryAlias spark_catalog.default.item
+               :  :           :     +- Relation[i_item_sk#20,i_item_id#17,i_rec_start_date#66,i_rec_end_date#67,i_item_desc#68,i_current_price#69,i_wholesale_cost#70,i_brand_id#71,i_brand#72,i_class_id#73,i_class#74,i_category_id#75,i_category#76,i_manufact_id#77,i_manufact#78,i_size#79,i_formulation#80,i_color#81,i_units#82,i_container#83,i_manager_id#84,i_product_name#85] parquet
+               :  :           +- SubqueryAlias spark_catalog.default.date_dim
+               :  :              +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+               :  +- SubqueryAlias cs_items
+               :     +- Aggregate [i_item_id#17], [i_item_id#17 AS item_id#5, sum(cs_ext_sales_price#86) AS cs_item_rev#6]
+               :        +- Filter (((cs_item_sk#87 = i_item_sk#20) AND d_date#21 IN (list#7 [])) AND (cs_sold_date_sk#88 = d_date_sk#23))
+               :           :  +- Project [d_date#21]
+               :           :     +- Filter (d_week_seq#24 = scalar-subquery#8 [])
+               :           :        :  +- Project [d_week_seq#24]
+               :           :        :     +- Filter (d_date#21 = cast(2000-01-03 as date))
+               :           :        :        +- SubqueryAlias spark_catalog.default.date_dim
+               :           :        :           +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+               :           :        +- SubqueryAlias spark_catalog.default.date_dim
+               :           :           +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+               :           +- Join Inner
+               :              :- Join Inner
+               :              :  :- SubqueryAlias spark_catalog.default.catalog_sales
+               :              :  :  +- Relation[cs_sold_date_sk#88,cs_sold_time_sk#89,cs_ship_date_sk#90,cs_bill_customer_sk#91,cs_bill_cdemo_sk#92,cs_bill_hdemo_sk#93,cs_bill_addr_sk#94,cs_ship_customer_sk#95,cs_ship_cdemo_sk#96,cs_ship_hdemo_sk#97,cs_ship_addr_sk#98,cs_call_center_sk#99,cs_catalog_page_sk#100,cs_ship_mode_sk#101,cs_warehouse_sk#102,cs_item_sk#87,cs_promo_sk#103,cs_order_number#104,cs_quantity#105,cs_wholesale_cost#106,cs_list_price#107,cs_sales_price#108,cs_ext_discount_amt#109,cs_ext_sales_price#86,... 10 more fields] parquet
+               :              :  +- SubqueryAlias spark_catalog.default.item
+               :              :     +- Relation[i_item_sk#20,i_item_id#17,i_rec_start_date#66,i_rec_end_date#67,i_item_desc#68,i_current_price#69,i_wholesale_cost#70,i_brand_id#71,i_brand#72,i_class_id#73,i_class#74,i_category_id#75,i_category#76,i_manufact_id#77,i_manufact#78,i_size#79,i_formulation#80,i_color#81,i_units#82,i_container#83,i_manager_id#84,i_product_name#85] parquet
+               :              +- SubqueryAlias spark_catalog.default.date_dim
+               :                 +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+               +- SubqueryAlias ws_items
+                  +- Aggregate [i_item_id#17], [i_item_id#17 AS item_id#9, sum(ws_ext_sales_price#110) AS ws_item_rev#10]
+                     +- Filter (((ws_item_sk#111 = i_item_sk#20) AND d_date#21 IN (list#11 [])) AND (ws_sold_date_sk#112 = d_date_sk#23))
+                        :  +- Project [d_date#21]
+                        :     +- Filter (d_week_seq#24 = scalar-subquery#12 [])
+                        :        :  +- Project [d_week_seq#24]
+                        :        :     +- Filter (d_date#21 = cast(2000-01-03 as date))
+                        :        :        +- SubqueryAlias spark_catalog.default.date_dim
+                        :        :           +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+                        :        +- SubqueryAlias spark_catalog.default.date_dim
+                        :           +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+                        +- Join Inner
+                           :- Join Inner
+                           :  :- SubqueryAlias spark_catalog.default.web_sales
+                           :  :  +- Relation[ws_sold_date_sk#112,ws_sold_time_sk#113,ws_ship_date_sk#114,ws_item_sk#111,ws_bill_customer_sk#115,ws_bill_cdemo_sk#116,ws_bill_hdemo_sk#117,ws_bill_addr_sk#118,ws_ship_customer_sk#119,ws_ship_cdemo_sk#120,ws_ship_hdemo_sk#121,ws_ship_addr_sk#122,ws_web_page_sk#123,ws_web_site_sk#124,ws_ship_mode_sk#125,ws_warehouse_sk#126,ws_promo_sk#127,ws_order_number#128,ws_quantity#129,ws_wholesale_cost#130,ws_list_price#131,ws_sales_price#132,ws_ext_discount_amt#133,ws_ext_sales_price#110,... 10 more fields] parquet
+                           :  +- SubqueryAlias spark_catalog.default.item
+                           :     +- Relation[i_item_sk#20,i_item_id#17,i_rec_start_date#66,i_rec_end_date#67,i_item_desc#68,i_current_price#69,i_wholesale_cost#70,i_brand_id#71,i_brand#72,i_class_id#73,i_class#74,i_category_id#75,i_category#76,i_manufact_id#77,i_manufact#78,i_size#79,i_formulation#80,i_color#81,i_units#82,i_container#83,i_manager_id#84,i_product_name#85] parquet
+                           +- SubqueryAlias spark_catalog.default.date_dim
+                              +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+
+== Optimized Logical Plan ==
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [item_id#1 ASC NULLS FIRST, ss_item_rev#2 ASC NULLS FIRST], true
+      +- Project [item_id#1, ss_item_rev#2, CheckOverflow((promote_precision(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(19,2))) / promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true))), DecimalType(38,21), true)) / 3.000000000000000000000), DecimalType(38,21), true)) * 100.000000000000000000000), DecimalType(38,17), true) AS ss_dev#13, cs_item_rev#6, CheckOverflow((promote_precision(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(cs_item_rev#6 as decimal(19,2))) / promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true))), DecimalType(38,21), true)) / 3.000000000000000000000), DecimalType(38,21), true)) * 100.000000000000000000000), DecimalType(38,17), true) AS cs_dev#14, ws_item_rev#10, CheckOverflow((promote_precision(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(ws_item_rev#10 as decimal(19,2))) / promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true))), DecimalType(38,21), true)) / 3.000000000000000000000), DecimalType(38,21), true)) * 100.000000000000000000000), DecimalType(38,17), true) AS ws_dev#15, CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true)) / 3.00), DecimalType(23,6), true) AS average#16]
+         +- Join Inner, (((((((((item_id#1 = item_id#9) AND (cast(ws_item_rev#10 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(cs_item_rev#6)), DecimalType(20,3), true))) AND (cast(cs_item_rev#6 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(ws_item_rev#10)), DecimalType(20,3), true))) AND (cast(ws_item_rev#10 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(ss_item_rev#2)), DecimalType(19,3), true))) AND (cast(ws_item_rev#10 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(cs_item_rev#6)), DecimalType(19,3), true))) AND (cast(cs_item_rev#6 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(ws_item_rev#10)), DecimalType(19,3), true))) AND (cast(ss_item_rev#2 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(ws_item_rev#10)), DecimalType(20,3), true))) AND (cast(ws_item_rev#10 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(ss_item_rev#2)), DecimalType(20,3), true))) AND (cast(ss_item_rev#2 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(ws_item_rev#10)), DecimalType(19,3), true)))
+            :- Project [item_id#1, ss_item_rev#2, cs_item_rev#6]
+            :  +- Join Inner, (((((item_id#1 = item_id#5) AND (cast(ss_item_rev#2 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(cs_item_rev#6)), DecimalType(20,3), true))) AND (cast(cs_item_rev#6 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(ss_item_rev#2)), DecimalType(20,3), true))) AND (cast(ss_item_rev#2 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(cs_item_rev#6)), DecimalType(19,3), true))) AND (cast(cs_item_rev#6 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(ss_item_rev#2)), DecimalType(19,3), true)))
+            :     :- Filter isnotnull(ss_item_rev#2)
+            :     :  +- Aggregate [i_item_id#17], [i_item_id#17 AS item_id#1, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#18)),17,2) AS ss_item_rev#2]
+            :     :     +- Project [ss_ext_sales_price#18, i_item_id#17]
+            :     :        +- Join Inner, (ss_item_sk#19 = i_item_sk#20)
+            :     :           :- Project [ss_item_sk#19, ss_ext_sales_price#18]
+            :     :           :  +- Join Inner, (ss_sold_date_sk#22 = d_date_sk#23)
+            :     :           :     :- Project [ss_sold_date_sk#22, ss_item_sk#19, ss_ext_sales_price#18]
+            :     :           :     :  +- Filter (isnotnull(ss_item_sk#19) AND isnotnull(ss_sold_date_sk#22))
+            :     :           :     :     +- Relation[ss_sold_date_sk#22,ss_sold_time_sk#46,ss_item_sk#19,ss_customer_sk#47,ss_cdemo_sk#48,ss_hdemo_sk#49,ss_addr_sk#50,ss_store_sk#51,ss_promo_sk#52,ss_ticket_number#53,ss_quantity#54,ss_wholesale_cost#55,ss_list_price#56,ss_sales_price#57,ss_ext_discount_amt#58,ss_ext_sales_price#18,ss_ext_wholesale_cost#59,ss_ext_list_price#60,ss_ext_tax#61,ss_coupon_amt#62,ss_net_paid#63,ss_net_paid_inc_tax#64,ss_net_profit#65] parquet
+            :     :           :     +- Project [d_date_sk#23]
+            :     :           :        +- Join LeftSemi, (d_date#21 = d_date#21#134)
+            :     :           :           :- Project [d_date_sk#23, d_date#21]
+            :     :           :           :  +- Filter isnotnull(d_date_sk#23)
+            :     :           :           :     +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+            :     :           :           +- Project [d_date#21 AS d_date#21#134]
+            :     :           :              +- Filter (isnotnull(d_week_seq#24) AND (d_week_seq#24 = scalar-subquery#4 []))
+            :     :           :                 :  +- Project [d_week_seq#24]
+            :     :           :                 :     +- Filter (isnotnull(d_date#21) AND (d_date#21 = 10959))
+            :     :           :                 :        +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+            :     :           :                 +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+            :     :           +- Project [i_item_sk#20, i_item_id#17]
+            :     :              +- Filter (isnotnull(i_item_sk#20) AND isnotnull(i_item_id#17))
+            :     :                 +- Relation[i_item_sk#20,i_item_id#17,i_rec_start_date#66,i_rec_end_date#67,i_item_desc#68,i_current_price#69,i_wholesale_cost#70,i_brand_id#71,i_brand#72,i_class_id#73,i_class#74,i_category_id#75,i_category#76,i_manufact_id#77,i_manufact#78,i_size#79,i_formulation#80,i_color#81,i_units#82,i_container#83,i_manager_id#84,i_product_name#85] parquet
+            :     +- Filter isnotnull(cs_item_rev#6)
+            :        +- Aggregate [i_item_id#17], [i_item_id#17 AS item_id#5, MakeDecimal(sum(UnscaledValue(cs_ext_sales_price#86)),17,2) AS cs_item_rev#6]
+            :           +- Project [cs_ext_sales_price#86, i_item_id#17]
+            :              +- Join Inner, (cs_item_sk#87 = i_item_sk#20)
+            :                 :- Project [cs_item_sk#87, cs_ext_sales_price#86]
+            :                 :  +- Join Inner, (cs_sold_date_sk#88 = d_date_sk#23)
+            :                 :     :- Project [cs_sold_date_sk#88, cs_item_sk#87, cs_ext_sales_price#86]
+            :                 :     :  +- Filter (isnotnull(cs_item_sk#87) AND isnotnull(cs_sold_date_sk#88))
+            :                 :     :     +- Relation[cs_sold_date_sk#88,cs_sold_time_sk#89,cs_ship_date_sk#90,cs_bill_customer_sk#91,cs_bill_cdemo_sk#92,cs_bill_hdemo_sk#93,cs_bill_addr_sk#94,cs_ship_customer_sk#95,cs_ship_cdemo_sk#96,cs_ship_hdemo_sk#97,cs_ship_addr_sk#98,cs_call_center_sk#99,cs_catalog_page_sk#100,cs_ship_mode_sk#101,cs_warehouse_sk#102,cs_item_sk#87,cs_promo_sk#103,cs_order_number#104,cs_quantity#105,cs_wholesale_cost#106,cs_list_price#107,cs_sales_price#108,cs_ext_discount_amt#109,cs_ext_sales_price#86,... 10 more fields] parquet
+            :                 :     +- Project [d_date_sk#23]
+            :                 :        +- Join LeftSemi, (d_date#21 = d_date#21#135)
+            :                 :           :- Project [d_date_sk#23, d_date#21]
+            :                 :           :  +- Filter isnotnull(d_date_sk#23)
+            :                 :           :     +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+            :                 :           +- Project [d_date#21 AS d_date#21#135]
+            :                 :              +- Filter (isnotnull(d_week_seq#24) AND (d_week_seq#24 = scalar-subquery#8 []))
+            :                 :                 :  +- Project [d_week_seq#24]
+            :                 :                 :     +- Filter (isnotnull(d_date#21) AND (d_date#21 = 10959))
+            :                 :                 :        +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+            :                 :                 +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+            :                 +- Project [i_item_sk#20, i_item_id#17]
+            :                    +- Filter (isnotnull(i_item_sk#20) AND isnotnull(i_item_id#17))
+            :                       +- Relation[i_item_sk#20,i_item_id#17,i_rec_start_date#66,i_rec_end_date#67,i_item_desc#68,i_current_price#69,i_wholesale_cost#70,i_brand_id#71,i_brand#72,i_class_id#73,i_class#74,i_category_id#75,i_category#76,i_manufact_id#77,i_manufact#78,i_size#79,i_formulation#80,i_color#81,i_units#82,i_container#83,i_manager_id#84,i_product_name#85] parquet
+            +- Filter isnotnull(ws_item_rev#10)
+               +- Aggregate [i_item_id#17], [i_item_id#17 AS item_id#9, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#110)),17,2) AS ws_item_rev#10]
+                  +- Project [ws_ext_sales_price#110, i_item_id#17]
+                     +- Join Inner, (ws_item_sk#111 = i_item_sk#20)
+                        :- Project [ws_item_sk#111, ws_ext_sales_price#110]
+                        :  +- Join Inner, (ws_sold_date_sk#112 = d_date_sk#23)
+                        :     :- Project [ws_sold_date_sk#112, ws_item_sk#111, ws_ext_sales_price#110]
+                        :     :  +- Filter (isnotnull(ws_item_sk#111) AND isnotnull(ws_sold_date_sk#112))
+                        :     :     +- Relation[ws_sold_date_sk#112,ws_sold_time_sk#113,ws_ship_date_sk#114,ws_item_sk#111,ws_bill_customer_sk#115,ws_bill_cdemo_sk#116,ws_bill_hdemo_sk#117,ws_bill_addr_sk#118,ws_ship_customer_sk#119,ws_ship_cdemo_sk#120,ws_ship_hdemo_sk#121,ws_ship_addr_sk#122,ws_web_page_sk#123,ws_web_site_sk#124,ws_ship_mode_sk#125,ws_warehouse_sk#126,ws_promo_sk#127,ws_order_number#128,ws_quantity#129,ws_wholesale_cost#130,ws_list_price#131,ws_sales_price#132,ws_ext_discount_amt#133,ws_ext_sales_price#110,... 10 more fields] parquet
+                        :     +- Project [d_date_sk#23]
+                        :        +- Join LeftSemi, (d_date#21 = d_date#21#136)
+                        :           :- Project [d_date_sk#23, d_date#21]
+                        :           :  +- Filter isnotnull(d_date_sk#23)
+                        :           :     +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+                        :           +- Project [d_date#21 AS d_date#21#136]
+                        :              +- Filter (isnotnull(d_week_seq#24) AND (d_week_seq#24 = scalar-subquery#12 []))
+                        :                 :  +- Project [d_week_seq#24]
+                        :                 :     +- Filter (isnotnull(d_date#21) AND (d_date#21 = 10959))
+                        :                 :        +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+                        :                 +- Relation[d_date_sk#23,d_date_id#25,d_date#21,d_month_seq#26,d_week_seq#24,d_quarter_seq#27,d_year#28,d_dow#29,d_moy#30,d_dom#31,d_qoy#32,d_fy_year#33,d_fy_quarter_seq#34,d_fy_week_seq#35,d_day_name#36,d_quarter_name#37,d_holiday#38,d_weekend#39,d_following_holiday#40,d_first_dom#41,d_last_dom#42,d_same_day_ly#43,d_same_day_lq#44,d_current_day#45,... 4 more fields] parquet
+                        +- Project [i_item_sk#20, i_item_id#17]
+                           +- Filter (isnotnull(i_item_sk#20) AND isnotnull(i_item_id#17))
+                              +- Relation[i_item_sk#20,i_item_id#17,i_rec_start_date#66,i_rec_end_date#67,i_item_desc#68,i_current_price#69,i_wholesale_cost#70,i_brand_id#71,i_brand#72,i_class_id#73,i_class#74,i_category_id#75,i_category#76,i_manufact_id#77,i_manufact#78,i_size#79,i_formulation#80,i_color#81,i_units#82,i_container#83,i_manager_id#84,i_product_name#85] parquet
+
+== Physical Plan ==
+TakeOrderedAndProject(limit=100, orderBy=[item_id#1 ASC NULLS FIRST,ss_item_rev#2 ASC NULLS FIRST], output=[item_id#1,ss_item_rev#2,ss_dev#13,cs_item_rev#6,cs_dev#14,ws_item_rev#10,ws_dev#15,average#16])
++- *(15) Project [item_id#1, ss_item_rev#2, CheckOverflow((promote_precision(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(19,2))) / promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true))), DecimalType(38,21), true)) / 3.000000000000000000000), DecimalType(38,21), true)) * 100.000000000000000000000), DecimalType(38,17), true) AS ss_dev#13, cs_item_rev#6, CheckOverflow((promote_precision(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(cs_item_rev#6 as decimal(19,2))) / promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true))), DecimalType(38,21), true)) / 3.000000000000000000000), DecimalType(38,21), true)) * 100.000000000000000000000), DecimalType(38,17), true) AS cs_dev#14, ws_item_rev#10, CheckOverflow((promote_precision(CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(ws_item_rev#10 as decimal(19,2))) / promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true))), DecimalType(38,21), true)) / 3.000000000000000000000), DecimalType(38,21), true)) * 100.000000000000000000000), DecimalType(38,17), true) AS ws_dev#15, CheckOverflow((promote_precision(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(ss_item_rev#2 as decimal(18,2))) + promote_precision(cast(cs_item_rev#6 as decimal(18,2)))), DecimalType(18,2), true) as decimal(19,2))) + promote_precision(cast(ws_item_rev#10 as decimal(19,2)))), DecimalType(19,2), true)) / 3.00), DecimalType(23,6), true) AS average#16]
+   +- *(15) BroadcastHashJoin [item_id#1], [item_id#9], Inner, BuildRight, ((((((((cast(ws_item_rev#10 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(cs_item_rev#6)), DecimalType(20,3), true)) AND (cast(cs_item_rev#6 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(ws_item_rev#10)), DecimalType(20,3), true))) AND (cast(ws_item_rev#10 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(ss_item_rev#2)), DecimalType(19,3), true))) AND (cast(ws_item_rev#10 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(cs_item_rev#6)), DecimalType(19,3), true))) AND (cast(cs_item_rev#6 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(ws_item_rev#10)), DecimalType(19,3), true))) AND (cast(ss_item_rev#2 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(ws_item_rev#10)), DecimalType(20,3), true))) AND (cast(ws_item_rev#10 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(ss_item_rev#2)), DecimalType(20,3), true))) AND (cast(ss_item_rev#2 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(ws_item_rev#10)), DecimalType(19,3), true))), false
+      :- *(15) Project [item_id#1, ss_item_rev#2, cs_item_rev#6]
+      :  +- *(15) BroadcastHashJoin [item_id#1], [item_id#5], Inner, BuildRight, ((((cast(ss_item_rev#2 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(cs_item_rev#6)), DecimalType(20,3), true)) AND (cast(cs_item_rev#6 as decimal(20,3)) <= CheckOverflow((1.10 * promote_precision(ss_item_rev#2)), DecimalType(20,3), true))) AND (cast(ss_item_rev#2 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(cs_item_rev#6)), DecimalType(19,3), true))) AND (cast(cs_item_rev#6 as decimal(19,3)) >= CheckOverflow((0.90 * promote_precision(ss_item_rev#2)), DecimalType(19,3), true))), false
+      :     :- *(15) Filter isnotnull(ss_item_rev#2)
+      :     :  +- *(15) HashAggregate(keys=[i_item_id#17], functions=[sum(UnscaledValue(ss_ext_sales_price#18))], output=[item_id#1, ss_item_rev#2])
+      :     :     +- Exchange hashpartitioning(i_item_id#17, 5), true, [id=#137]
+      :     :        +- *(4) HashAggregate(keys=[i_item_id#17], functions=[partial_sum(UnscaledValue(ss_ext_sales_price#18))], output=[i_item_id#17, sum#138])
+      :     :           +- *(4) Project [ss_ext_sales_price#18, i_item_id#17]
+      :     :              +- *(4) BroadcastHashJoin [ss_item_sk#19], [i_item_sk#20], Inner, BuildRight, false
+      :     :                 :- *(4) Project [ss_item_sk#19, ss_ext_sales_price#18]
+      :     :                 :  +- *(4) BroadcastHashJoin [ss_sold_date_sk#22], [d_date_sk#23], Inner, BuildRight, false
+      :     :                 :     :- *(4) Project [ss_sold_date_sk#22, ss_item_sk#19, ss_ext_sales_price#18]
+      :     :                 :     :  +- *(4) Filter (isnotnull(ss_item_sk#19) AND isnotnull(ss_sold_date_sk#22))
+      :     :                 :     :     +- *(4) ColumnarToRow
+      :     :                 :     :        +- FileScan parquet default.store_sales[ss_sold_date_sk#22,ss_item_sk#19,ss_ext_sales_price#18] Batched: true, DataFilters: [isnotnull(ss_item_sk#19), isnotnull(ss_sold_date_sk#22)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)], ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
+      :     :                 :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#139]
+      :     :                 :        +- *(2) Project [d_date_sk#23]
+      :     :                 :           +- *(2) BroadcastHashJoin [d_date#21], [d_date#21#134], LeftSemi, BuildRight, false
+      :     :                 :              :- *(2) Project [d_date_sk#23, d_date#21]
+      :     :                 :              :  +- *(2) Filter isnotnull(d_date_sk#23)
+      :     :                 :              :     +- *(2) ColumnarToRow
+      :     :                 :              :        +- FileScan parquet default.date_dim[d_date_sk#23,d_date#21] Batched: true, DataFilters: [isnotnull(d_date_sk#23)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_date:date>
+      :     :                 :              +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, date, true]),false), [id=#140]
+      :     :                 :                 +- *(1) Project [d_date#21 AS d_date#21#134]
+      :     :                 :                    +- *(1) Filter (isnotnull(d_week_seq#24) AND (d_week_seq#24 = Subquery scalar-subquery#4, [id=#141]))
+      :     :                 :                       :  +- Subquery scalar-subquery#4, [id=#141]
+      :     :                 :                       :     +- *(1) Project [d_week_seq#24]
+      :     :                 :                       :        +- *(1) Filter (isnotnull(d_date#21) AND (d_date#21 = 10959))
+      :     :                 :                       :           +- *(1) ColumnarToRow
+      :     :                 :                       :              +- FileScan parquet default.date_dim[d_date#21,d_week_seq#24] Batched: true, DataFilters: [isnotnull(d_date#21), (d_date#21 = 10959)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date), EqualTo(d_date,2000-01-03)], ReadSchema: struct<d_date:date,d_week_seq:int>
+      :     :                 :                       +- *(1) ColumnarToRow
+      :     :                 :                          +- FileScan parquet default.date_dim[d_date#21,d_week_seq#24] Batched: true, DataFilters: [isnotnull(d_week_seq#24)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_week_seq)], ReadSchema: struct<d_date:date,d_week_seq:int>
+      :     :                 +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#142]
+      :     :                    +- *(3) Project [i_item_sk#20, i_item_id#17]
+      :     :                       +- *(3) Filter (isnotnull(i_item_sk#20) AND isnotnull(i_item_id#17))
+      :     :                          +- *(3) ColumnarToRow
+      :     :                             +- FileScan parquet default.item[i_item_sk#20,i_item_id#17] Batched: true, DataFilters: [isnotnull(i_item_sk#20), isnotnull(i_item_id#17)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_item_id)], ReadSchema: struct<i_item_sk:int,i_item_id:string>
+      :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#143]
+      :        +- *(9) Filter isnotnull(cs_item_rev#6)
+      :           +- *(9) HashAggregate(keys=[i_item_id#17], functions=[sum(UnscaledValue(cs_ext_sales_price#86))], output=[item_id#5, cs_item_rev#6])
+      :              +- Exchange hashpartitioning(i_item_id#17, 5), true, [id=#144]
+      :                 +- *(8) HashAggregate(keys=[i_item_id#17], functions=[partial_sum(UnscaledValue(cs_ext_sales_price#86))], output=[i_item_id#17, sum#145])
+      :                    +- *(8) Project [cs_ext_sales_price#86, i_item_id#17]
+      :                       +- *(8) BroadcastHashJoin [cs_item_sk#87], [i_item_sk#20], Inner, BuildRight, false
+      :                          :- *(8) Project [cs_item_sk#87, cs_ext_sales_price#86]
+      :                          :  +- *(8) BroadcastHashJoin [cs_sold_date_sk#88], [d_date_sk#23], Inner, BuildRight, false
+      :                          :     :- *(8) Project [cs_sold_date_sk#88, cs_item_sk#87, cs_ext_sales_price#86]
+      :                          :     :  +- *(8) Filter (isnotnull(cs_item_sk#87) AND isnotnull(cs_sold_date_sk#88))
+      :                          :     :     +- *(8) ColumnarToRow
+      :                          :     :        +- FileScan parquet default.catalog_sales[cs_sold_date_sk#88,cs_item_sk#87,cs_ext_sales_price#86] Batched: true, DataFilters: [isnotnull(cs_item_sk#87), isnotnull(cs_sold_date_sk#88)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)], ReadSchema: struct<cs_sold_date_sk:int,cs_item_sk:int,cs_ext_sales_price:decimal(7,2)>
+      :                          :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#146]
+      :                          :        +- *(6) Project [d_date_sk#23]
+      :                          :           +- *(6) BroadcastHashJoin [d_date#21], [d_date#21#135], LeftSemi, BuildRight, false
+      :                          :              :- *(6) Project [d_date_sk#23, d_date#21]
+      :                          :              :  +- *(6) Filter isnotnull(d_date_sk#23)
+      :                          :              :     +- *(6) ColumnarToRow
+      :                          :              :        +- FileScan parquet default.date_dim[d_date_sk#23,d_date#21] Batched: true, DataFilters: [isnotnull(d_date_sk#23)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_date:date>
+      :                          :              +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, date, true]),false), [id=#147]
+      :                          :                 +- *(5) Project [d_date#21 AS d_date#21#135]
+      :                          :                    +- *(5) Filter (isnotnull(d_week_seq#24) AND (d_week_seq#24 = ReusedSubquery Subquery scalar-subquery#4, [id=#141]))
+      :                          :                       :  +- ReusedSubquery Subquery scalar-subquery#4, [id=#141]
+      :                          :                       +- *(5) ColumnarToRow
+      :                          :                          +- FileScan parquet default.date_dim[d_date#21,d_week_seq#24] Batched: true, DataFilters: [isnotnull(d_week_seq#24)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_week_seq)], ReadSchema: struct<d_date:date,d_week_seq:int>
+      :                          +- ReusedExchange [i_item_sk#20, i_item_id#17], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#142]
+      +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#148]
+         +- *(14) Filter isnotnull(ws_item_rev#10)
+            +- *(14) HashAggregate(keys=[i_item_id#17], functions=[sum(UnscaledValue(ws_ext_sales_price#110))], output=[item_id#9, ws_item_rev#10])
+               +- Exchange hashpartitioning(i_item_id#17, 5), true, [id=#149]
+                  +- *(13) HashAggregate(keys=[i_item_id#17], functions=[partial_sum(UnscaledValue(ws_ext_sales_price#110))], output=[i_item_id#17, sum#150])
+                     +- *(13) Project [ws_ext_sales_price#110, i_item_id#17]
+                        +- *(13) BroadcastHashJoin [ws_item_sk#111], [i_item_sk#20], Inner, BuildRight, false
+                           :- *(13) Project [ws_item_sk#111, ws_ext_sales_price#110]
+                           :  +- *(13) BroadcastHashJoin [ws_sold_date_sk#112], [d_date_sk#23], Inner, BuildRight, false
+                           :     :- *(13) Project [ws_sold_date_sk#112, ws_item_sk#111, ws_ext_sales_price#110]
+                           :     :  +- *(13) Filter (isnotnull(ws_item_sk#111) AND isnotnull(ws_sold_date_sk#112))
+                           :     :     +- *(13) ColumnarToRow
+                           :     :        +- FileScan parquet default.web_sales[ws_sold_date_sk#112,ws_item_sk#111,ws_ext_sales_price#110] Batched: true, DataFilters: [isnotnull(ws_item_sk#111), isnotnull(ws_sold_date_sk#112)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_sold_date_sk)], ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_ext_sales_price:decimal(7,2)>
+                           :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#151]
+                           :        +- *(11) Project [d_date_sk#23]
+                           :           +- *(11) BroadcastHashJoin [d_date#21], [d_date#21#136], LeftSemi, BuildRight, false
+                           :              :- *(11) Project [d_date_sk#23, d_date#21]
+                           :              :  +- *(11) Filter isnotnull(d_date_sk#23)
+                           :              :     +- *(11) ColumnarToRow
+                           :              :        +- FileScan parquet default.date_dim[d_date_sk#23,d_date#21] Batched: true, DataFilters: [isnotnull(d_date_sk#23)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_date_sk)], ReadSchema: struct<d_date_sk:int,d_date:date>
+                           :              +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, date, true]),false), [id=#152]
+                           :                 +- *(10) Project [d_date#21 AS d_date#21#136]
+                           :                    +- *(10) Filter (isnotnull(d_week_seq#24) AND (d_week_seq#24 = ReusedSubquery Subquery scalar-subquery#4, [id=#141]))
+                           :                       :  +- ReusedSubquery Subquery scalar-subquery#4, [id=#141]
+                           :                       +- *(10) ColumnarToRow
+                           :                          +- FileScan parquet default.date_dim[d_date#21,d_week_seq#24] Batched: true, DataFilters: [isnotnull(d_week_seq#24)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_week_seq)], ReadSchema: struct<d_date:date,d_week_seq:int>
+                           +- ReusedExchange [i_item_sk#20, i_item_id#17], BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#142]

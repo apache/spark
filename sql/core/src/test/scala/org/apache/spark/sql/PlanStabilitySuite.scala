@@ -48,12 +48,8 @@ import org.apache.spark.sql.internal.SQLConf
  * with environ var SPARK_GENERATE_GOLDEN_FILES=1 will make the new plan canon.
  * This should be done only for the queries that need it, to avoid unnecessary diffs in the
  * other approved plans.
- * This can be done by running sbt test-only *PlanStabilitySuite* -- -z "(q31)"
+ * This can be done by running sbt test-only *PlanStabilitySuite* -- -z "q31"
  * The new plan files should be part of the PR and reviewed.
- *
- * Multiple approved plans:
- * It's possible that a query has multiple correct plans. This should be decided as part of the
- * review. In this case, change the call to approvePlans and set variant=true.
  */
 trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
 
@@ -62,7 +58,6 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   override def beforeAll(): Unit = {
     conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, 100)
     super.beforeAll()
-
   }
 
   override def afterAll(): Unit = {
@@ -79,37 +74,14 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
 
   def goldenFilePath: String
 
-  private def getExistingVariants(name: String): Array[Int] = {
-    val dir = new File(goldenFilePath, name)
-    // file paths are the form ../q3/2.simplified.txt
-    val rgx = """(\d+).simplified.txt""".r
-
-    dir.listFiles().filter(_.getName.contains("simplified")).map { file =>
-      val rgx(numStr) = file.getName
-      numStr.toInt
-    }
-  }
-
-  private def getNextVariantNumber(name: String): Int = {
-    val existingVariants = getExistingVariants(name)
-    if (existingVariants.isEmpty) {
-      0
-    } else {
-      existingVariants.max + 1
-    }
-  }
-
   private def getDirForTest(name: String): File = {
     new File(goldenFilePath, name)
   }
 
   private def isApproved(name: String, dir: File, actualSimplifiedPlan: String): Boolean = {
-    val existingVariants = getExistingVariants(name)
-    existingVariants.exists { variant =>
-      val file = new File(dir, s"$variant.simplified.txt")
-      val approved = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
-      approved == actualSimplifiedPlan
-    }
+    val file = new File(dir, "simplified.txt")
+    val approved = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
+    approved == actualSimplifiedPlan
   }
 
   /**
@@ -118,29 +90,24 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
    *
    * @param plan    the [[SparkPlan]]
    * @param name    the name of the query
-   * @param variant if false, this plan will become the only approved plan, otherwise
-   *                it will be added as an additional approved plan.
    * @param explain the full explain output; this is saved to help debug later as the simplified
    *                plan is not too useful for debugging
    */
   private def approvePlan(
       plan: SparkPlan,
       name: String,
-      variant: Boolean,
       explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
     val foundMatch = dir.exists() && isApproved(name, dir, simplified)
 
     if (!foundMatch) {
-      if (!variant) {
-        FileUtils.deleteDirectory(dir)
-        assert(dir.mkdirs())
-      }
-      val nextVariant = getNextVariantNumber(name)
-      val file = new File(dir, s"$nextVariant.simplified.txt")
+      FileUtils.deleteDirectory(dir)
+      assert(dir.mkdirs())
+
+      val file = new File(dir, "simplified.txt")
       FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
-      val fileOriginalPlan = new File(dir, s"$nextVariant.explain.txt")
+      val fileOriginalPlan = new File(dir, "explain.txt")
       FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
       logInfo(s"APPROVED: $file $fileOriginalPlan")
     }
@@ -149,14 +116,13 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   private def checkWithApproved(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val tempDir = FileUtils.getTempDirectory
-    val existingVariants = getExistingVariants(name)
     val actualSimplified = getSimplifiedPlan(plan)
     val foundMatch = isApproved(name, dir, actualSimplified)
 
     if (!foundMatch) {
       // show diff with last approved
-      val approvedSimplifiedFile = new File(dir, s"${existingVariants.max}.simplified.txt")
-      val approvedExplainFile = new File(dir, s"${existingVariants.max}.explain.txt")
+      val approvedSimplifiedFile = new File(dir, "simplified.txt")
+      val approvedExplainFile = new File(dir, "explain.txt")
 
       val actualSimplifiedFile = new File(tempDir, s"$name.actual.simplified.txt")
       val actualExplainFile = new File(tempDir, s"$name.actual.explain.txt")
@@ -258,7 +224,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
    * Test a TPC-DS query. Depending of the settings this test will either check if the plan matches
    * a golden file or it will create a new golden file.
    */
-  protected def testQuery(tpcdsGroup: String, query: String, scaleFactor: String): Unit = {
+  protected def testQuery(tpcdsGroup: String, query: String, suffix: String = ""): Unit = {
     val queryString = resourceToString(s"$tpcdsGroup/$query.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     val qe = sql(queryString).queryExecution
@@ -266,10 +232,21 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     val explain = normalizeIds(qe.toString)
 
     if (regenerateGoldenFiles) {
-      approvePlan(plan, s"$query.$scaleFactor", variant = false, explain)
+      approvePlan(plan, query + suffix, explain)
     } else {
-      checkWithApproved(plan, s"$query.$scaleFactor", explain)
+      checkWithApproved(plan, query + suffix, explain)
     }
+  }
+}
+
+trait PlanStabilityWithStatsSuite extends PlanStabilitySuite {
+  override def injectStats: Boolean = true
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.CBO_ENABLED, true)
+    conf.setConf(SQLConf.PLAN_STATS_ENABLED, true)
+    conf.setConf(SQLConf.JOIN_REORDER_ENABLED, true)
   }
 }
 
@@ -278,17 +255,20 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
 
   tpcdsQueries.foreach { q =>
-    test(s"check simplified sf1 (tpcds-v1.4/$q)") {
-      activateDatabase(DB_TPCDS_SF1) {
-        testQuery("tpcds", q, "sf1")
-      }
+    test(s"check simplified (tpcds-v1.4/$q)") {
+      testQuery("tpcds", q)
     }
+  }
+}
 
-//    test(s"check simplified sf100 (tpcds-v1.4/$q)") {
-//      activateDatabase(DB_TPCDS_SF100) {
-//        testQuery("tpcds", q, "sf100")
-//      }
-//    }
+class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilityWithStatsSuite {
+  override val goldenFilePath: String =
+    new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
+
+  tpcdsQueries.foreach { q =>
+    test(s"check simplified sf100 (tpcds-v1.4/$q)") {
+      testQuery("tpcds", q, ".sf100")
+    }
   }
 }
 
@@ -297,17 +277,20 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
     new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
 
   tpcdsQueriesV2_7_0.foreach { q =>
-    test(s"check simplified sf1 (tpcds-v2.7.0/$q)") {
-      activateDatabase(DB_TPCDS_SF1) {
-        testQuery("tpcds-v2.7.0", q, "sf1")
-      }
+    test(s"check simplified (tpcds-v2.7.0/$q)") {
+      testQuery("tpcds-v2.7.0", q)
     }
+  }
+}
 
-//    test(s"check simplified sf100 (tpcds-v2.7.0/$q)") {
-//      activateDatabase(DB_TPCDS_SF100) {
-//        testQuery("tpcds-v2.7.0", q, "sf10")
-//      }
-//    }
+class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilityWithStatsSuite {
+  override val goldenFilePath: String =
+    new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
+
+  tpcdsQueriesV2_7_0.foreach { q =>
+    test(s"check simplified sf100 (tpcds-v2.7.0/$q)") {
+      testQuery("tpcds-v2.7.0", q, ".sf100")
+    }
   }
 }
 
@@ -316,16 +299,19 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
     new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
 
   modifiedTPCDSQueries.foreach { q =>
-    test(s"check simplified sf1 (tpcds-modifiedQueries/$q)") {
-      activateDatabase(DB_TPCDS_SF1) {
-        testQuery("tpcds-modifiedQueries", q, "sf1")
-      }
+    test(s"check simplified (tpcds-modifiedQueries/$q)") {
+      testQuery("tpcds-modifiedQueries", q, "sf1")
     }
+  }
+}
 
-//    test(s"check simplified sf100 (tpcds-modifiedQueries/$q)") {
-//      activateDatabase(DB_TPCDS_SF100) {
-//        testQuery("tpcds-modifiedQueries", q, "sf100")
-//      }
-//    }
+class TPCDSModifiedPlanStabilityWithStasSuite extends PlanStabilityWithStatsSuite {
+  override val goldenFilePath: String =
+    new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
+
+  modifiedTPCDSQueries.foreach { q =>
+    test(s"check simplified sf100 (tpcds-modifiedQueries/$q)") {
+      testQuery("tpcds-modifiedQueries", q, ".sf100")
+    }
   }
 }
