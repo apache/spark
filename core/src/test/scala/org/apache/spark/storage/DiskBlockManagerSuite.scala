@@ -81,7 +81,8 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
   }
 
   test("SPARK-22227: non-block files are skipped") {
-    val file = diskBlockManager.getFile("unmanaged_file")
+    val unmanagedFile = new UnmanagedFile("file")
+    val file = diskBlockManager.getFile(unmanagedFile)
     writeToFile(file, 10)
     assert(diskBlockManager.getAllBlocks().isEmpty)
   }

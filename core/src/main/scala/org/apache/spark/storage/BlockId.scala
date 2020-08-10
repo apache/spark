@@ -112,6 +112,12 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
   override def name: String = "test_" + id
 }
 
+// Intended only for testing purposes
+// An UnmanagedFile isn't treated as a BlockId, we don't match it in BlockId.apply()
+private[spark] case class UnmanagedFile(id: String) extends BlockId {
+  override def name: String = "unmanaged_" + id
+}
+
 @DeveloperApi
 class UnrecognizedBlockId(name: String)
     extends SparkException(s"Failed to parse $name into a block ID")

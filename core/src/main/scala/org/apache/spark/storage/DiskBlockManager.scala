@@ -98,13 +98,6 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     new File(subDir, filename)
   }
 
-  /**
-   * Used only for testing.
-   * We should invoke getFile(blockId: BlockId) in production code.
-   */
-  private[spark] def getFile(filename: String): File =
-    getFile(localDirs, subDirs, subDirsPerLocalDir, filename)
-
   /** Looks up a file by hashing it into one of our local/container subdirectories. */
   def getFile(blockId: BlockId): File = {
     if (containerDirEnabled && blockId.isTemp) {
