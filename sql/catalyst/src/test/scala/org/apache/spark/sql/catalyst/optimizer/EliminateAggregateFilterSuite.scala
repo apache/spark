@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.LongType
 class EliminateAggregateFilterSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Operator Optimizations", Once, EliminateAggregateFilter) :: Nil
+      Batch("Operator Optimizations", Once, ConstantFolding, EliminateAggregateFilter) :: Nil
   }
 
   val testRelation = LocalRelation('a.int)

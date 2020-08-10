@@ -92,6 +92,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         FoldablePropagation,
         OptimizeIn,
         ConstantFolding,
+        EliminateAggregateFilter,
         ReorderAssociativeOperator,
         LikeSimplification,
         BooleanSimplification,
@@ -128,7 +129,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
 
     val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
-    Batch("Eliminate Filter Clause", Once, EliminateAggregateFilter) ::
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
     // However, because we also use the analyzer to canonicalized queries (for view definition),
@@ -350,13 +350,6 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
       ae.copy(filter = None)
     case ae @ AggregateExpression(af, _, _, Some(Literal.FalseLiteral), _) =>
       rewrite(ae, af)
-    case ae @ AggregateExpression(af, _, _, Some(e), _)
-      if e.foldable && !ConvertToLocalRelation.hasUnevaluableExpr(e) =>
-      Literal.create(e.eval(EmptyRow), e.dataType) match {
-        case Literal.TrueLiteral => ae.copy(filter = None)
-        case Literal.FalseLiteral => rewrite(ae, af)
-        case _ => ae
-      }
   }
 
   private def rewrite(ae: AggregateExpression, af: AggregateFunction): Expression = {
@@ -1570,7 +1563,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming)
   }
 
-  private[sql] def hasUnevaluableExpr(expr: Expression): Boolean = {
+  private def hasUnevaluableExpr(expr: Expression): Boolean = {
     expr.find(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference]).isDefined
   }
 }
