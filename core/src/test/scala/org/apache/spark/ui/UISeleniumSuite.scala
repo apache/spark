@@ -676,7 +676,13 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       parseDate(attempts(0) \ "startTime") should be (sc.startTime)
       parseDate(attempts(0) \ "endTime") should be (-1)
       val oneAppJsonAst = getJson(sc.ui.get, "")
-      oneAppJsonAst should be (appListJsonAst.children(0))
+      val attempts2 = (oneAppJsonAst \ "attempts").children
+      attempts2.size should be (1)
+      (attempts2(0) \ "completed").extract[Boolean] should be (false)
+      parseDate(attempts2(0) \ "startTime") should be (sc.startTime)
+      parseDate(attempts2(0) \ "endTime") should be (-1)
+      (attempts2(0) \ "duration").extract[Long] should be >=
+        (attempts(0) \ "duration").extract[Long]
     }
   }
 
