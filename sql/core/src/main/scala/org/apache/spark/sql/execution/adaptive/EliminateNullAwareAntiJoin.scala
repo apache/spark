@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
  * This optimization rule detects and convert a NAAJ to an Empty LocalRelation
  * when buildSide is EmptyHashedRelationWithAllNullKeys.
  */
-case class EliminateAntiJoin(conf: SQLConf) extends Rule[LogicalPlan] {
+case class EliminateNullAwareAntiJoin(conf: SQLConf) extends Rule[LogicalPlan] {
 
   private def canEliminate(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, stage: BroadcastQueryStageExec) if stage.resultOption.get().isDefined
