@@ -64,7 +64,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * the operation of dropPartitions need to be safely rolled back.
    *
    * @param idents an array of partition identifiers
-   * @throws NoSuchPartitionsException If the partition identifiers to drop doesn't exist
+   * @throws NoSuchPartitionsException If any partition identifier to drop doesn't exist
    */
   void dropPartitions(
       InternalRow[] idents) throws NoSuchPartitionsException;
@@ -77,7 +77,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    *
    * @param idents the partition identifier of the existing partitions
    * @param properties the new metadata of the partitions
-   * @throws NoSuchPartitionsException If the partition identifiers to alter doesn't exist
+   * @throws NoSuchPartitionsException If any partition identifier to alter doesn't exist
    * @throws UnsupportedOperationException If partition property is not supported
    */
   void replacePartitionMetadatas(
