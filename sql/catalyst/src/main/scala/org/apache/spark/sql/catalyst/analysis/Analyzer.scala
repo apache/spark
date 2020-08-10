@@ -224,7 +224,6 @@ class Analyzer(
       ResolveDeserializer ::
       ResolveNewInstance ::
       ResolveUpCast ::
-      SplitAggregateWithExpand ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveOrdinalInOrderByAndGroupBy ::
@@ -233,6 +232,7 @@ class Analyzer(
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
+      SplitAggregateWithExpand ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
