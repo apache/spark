@@ -71,6 +71,8 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   private val shutdownHook = addShutdownHook()
 
+  // This method should be kept in sync with
+  // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFile().
   private def getFile(localDirs: Array[File], subDirs: Array[Array[File]],
       subDirsPerLocalDir: Int, filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
@@ -96,12 +98,14 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     new File(subDir, filename)
   }
 
-  /** Looks up a file by hashing it into one of our local/container subdirectories. */
-  // This method should be kept in sync with
-  // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFile().
-  def getFile(filename: String): File =
+  /**
+   * Used only for testing.
+   * We should invoke getFile(blockId: BlockId) in production code.
+   */
+  private[spark] def getFile(filename: String): File =
     getFile(localDirs, subDirs, subDirsPerLocalDir, filename)
 
+  /** Looks up a file by hashing it into one of our local/container subdirectories. */
   def getFile(blockId: BlockId): File = {
     if (containerDirEnabled && blockId.isTemp) {
       getFile(containerDirs, subContainerDirs, subDirsPerLocalDir, blockId.name)
@@ -112,7 +116,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
-    getFile(blockId.name).exists()
+    getFile(blockId).exists()
   }
 
   /** List all the files currently stored on disk by the disk manager. */
