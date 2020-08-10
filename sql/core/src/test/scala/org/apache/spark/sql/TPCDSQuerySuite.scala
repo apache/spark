@@ -27,17 +27,13 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
 
-  val sqlConfgs: Seq[(String, String)] = Nil
-
   tpcdsQueries.foreach { name =>
     val queryString = resourceToString(s"tpcds/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
-      withSQLConf(sqlConfgs: _*) {
-        // check the plans can be properly generated
-        val plan = sql(queryString).queryExecution.executedPlan
-        checkGeneratedCode(plan)
-      }
+      // check the plans can be properly generated
+      val plan = sql(queryString).queryExecution.executedPlan
+      checkGeneratedCode(plan)
     }
   }
 
@@ -45,11 +41,9 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
     val queryString = resourceToString(s"tpcds-v2.7.0/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(s"$name-v2.7") {
-      withSQLConf(sqlConfgs: _*) {
-        // check the plans can be properly generated
-        val plan = sql(queryString).queryExecution.executedPlan
-        checkGeneratedCode(plan)
-      }
+      // check the plans can be properly generated
+      val plan = sql(queryString).queryExecution.executedPlan
+      checkGeneratedCode(plan)
     }
   }
 
