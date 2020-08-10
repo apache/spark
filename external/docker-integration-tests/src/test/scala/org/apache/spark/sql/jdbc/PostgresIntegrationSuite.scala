@@ -76,8 +76,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "'172.16.0.42']::inet[], ARRAY['192.168.0.0/24', '10.1.0.0/16']::cidr[], " +
       """ARRAY['{"a": "foo", "b": "bar"}', '{"a": 1, "b": 2}']::json[], """ +
       """ARRAY['{"a": 1, "b": 2, "c": 3}']::jsonb[])"""
-    )
-      .executeUpdate()
+    ).executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE char_types (" +
+      "c0 char(4), c1 character(4), c2 character varying(4), c3 varchar(4), c4 bpchar)"
+    ).executeUpdate()
+    conn.prepareStatement("INSERT INTO char_types VALUES " +
+      "('abcd', 'efgh', 'ijkl', 'mnop', 'q')").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -217,5 +222,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows.length === 1)
     assert(rows(0).getShort(0) === 1)
     assert(rows(0).getShort(1) === 2)
+  }
+
+  test("character type tests") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "char_types", new Properties)
+    val row = df.collect()
+    assert(row.length == 1)
+    assert(row(0).length === 5)
+    assert(row(0).getString(0) === "abcd")
+    assert(row(0).getString(1) === "efgh")
+    assert(row(0).getString(2) === "ijkl")
+    assert(row(0).getString(3) === "mnop")
+    assert(row(0).getString(4) === "q")
   }
 }
