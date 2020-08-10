@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 trait TPCDSBase extends SharedSparkSession {
@@ -287,6 +288,13 @@ trait TPCDSBase extends SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    if (injectStats) {
+      // Sets configurations for enabling the optimization rules that
+      // exploit data statistics.
+      conf.setConf(SQLConf.CBO_ENABLED, true)
+      conf.setConf(SQLConf.PLAN_STATS_ENABLED, true)
+      conf.setConf(SQLConf.JOIN_REORDER_ENABLED, true)
+    }
     tableNames.foreach { tableName =>
       createTable(spark, tableName)
       if (injectStats) {

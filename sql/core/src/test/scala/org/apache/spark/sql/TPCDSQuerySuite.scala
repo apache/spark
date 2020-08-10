@@ -71,14 +71,5 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
 }
 
 class TPCDSQueryWithStatsSuite extends TPCDSQuerySuite {
-
   override def injectStats: Boolean = true
-
-  // Sets configurations for enabling the optimization rules that
-  // exploit data statistics.
-  override val sqlConfgs = Seq(
-    SQLConf.CBO_ENABLED.key -> "true",
-    SQLConf.PLAN_STATS_ENABLED.key -> "true",
-    SQLConf.JOIN_REORDER_ENABLED.key -> "true"
-  )
 }

@@ -239,17 +239,6 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   }
 }
 
-trait PlanStabilityWithStatsSuite extends PlanStabilitySuite {
-  override def injectStats: Boolean = true
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    conf.setConf(SQLConf.CBO_ENABLED, true)
-    conf.setConf(SQLConf.PLAN_STATS_ENABLED, true)
-    conf.setConf(SQLConf.JOIN_REORDER_ENABLED, true)
-  }
-}
-
 class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
@@ -261,7 +250,9 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilityWithStatsSuite {
+class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
+  override def injectStats: Boolean = true
+
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
 
@@ -283,7 +274,9 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilityWithStatsSuite {
+class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
+  override def injectStats: Boolean = true
+
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
 
@@ -305,7 +298,9 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSModifiedPlanStabilityWithStasSuite extends PlanStabilityWithStatsSuite {
+class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite {
+  override def injectStats: Boolean = true
+
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
 
