@@ -165,17 +165,4 @@ class CTEHintSuite extends QueryTest with SharedSparkSession {
       )
     }
   }
-
-  test("SPARK-32237: Hint in CTE") {
-    withTable("t") {
-      sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS id")
-      checkAnswer(
-        sql(
-          """
-            |WITH cte AS (SELECT /*+ REPARTITION(3) */ * FROM t)
-            |SELECT * FROM cte
-            |""".stripMargin),
-        Row(1) :: Nil)
-    }
-  }
 }
