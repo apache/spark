@@ -35,8 +35,8 @@ import org.apache.spark.sql.internal.SQLConf
  * Check that TPCDS SparkPlans don't change.
  * If there are plan differences, the error message looks like this:
  *   Plans did not match:
- *   last approved plan: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/0.simplified.txt
- *   last explain: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/0.explain.txt
+ *   last approved plan: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/simplified.txt
+ *   last explain: /path/to/tpcds-plan-stability/approved-plans-xxx/q1/explain.txt
  *   actual plan: /path/to/tmp/q1.actual.simplified.txt
  *   actual explain: /path/to/tmp/q1.actual.explain.txt
  *   [side by side plan diff]
@@ -48,7 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
  * with environ var SPARK_GENERATE_GOLDEN_FILES=1 will make the new plan canon.
  * This should be done only for the queries that need it, to avoid unnecessary diffs in the
  * other approved plans.
- * This can be done by running sbt test-only *PlanStabilitySuite* -- -z "q31"
+ * This can be done by running sbt test-only *PlanStability[WithStats]Suite* -- -z "q31"
  * The new plan files should be part of the PR and reviewed.
  */
 trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
