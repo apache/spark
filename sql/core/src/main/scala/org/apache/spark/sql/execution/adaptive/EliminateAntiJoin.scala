@@ -37,8 +37,7 @@ case class EliminateAntiJoin(conf: SQLConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
     // If the right side is empty, LeftAntiJoin simply returns the left side.
     // Eliminate Join with left LogicalPlan instead.
-    case Join(left, right, LeftAnti, _, _)
-        if canEliminate(right) =>
+    case Join(left, right, LeftAnti, _, _) if canEliminate(right) =>
       left
   }
 }

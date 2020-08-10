@@ -230,7 +230,7 @@ case class BroadcastHashJoinExec(
          |// If the right side is empty, AntiJoin simply returns the left side.
          |$numOutput.add(1);
          |${consume(ctx, input)}
-         """.stripMargin
+       """.stripMargin
     } else if (isNullAwareAntiJoin) {
       val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
       val (matched, _, _) = getJoinCondition(ctx, input)

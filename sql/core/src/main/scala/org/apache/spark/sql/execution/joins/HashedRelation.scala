@@ -951,7 +951,7 @@ trait NullAwareHashedRelation extends HashedRelation with Externalizable {
 /**
  * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
  * get & getValue will return null just like
- * Empty LongHashedRelation or Empty UnsafeHashedRelation does.
+ * empty LongHashedRelation or empty UnsafeHashedRelation does.
  */
 object EmptyHashedRelation extends NullAwareHashedRelation {
   override def get(key: Long): Iterator[InternalRow] = null
