@@ -97,8 +97,9 @@ private[execution] object HashedRelation {
   /**
    * Create a HashedRelation from an Iterator of InternalRow.
    *
-   * @param isLookupAware reserve one extra boolean in value to track if value being looked up
-   * @param value the expressions for value inserted into HashedRelation
+   * @param canMarkRowLookedUp Reserve one extra boolean in value to track if value being looked up.
+   *                           This is only used for full outer shuffled hash join.
+   * @param valueExprs The expressions for value inserted into HashedRelation.
    */
   def apply(
       input: Iterator[InternalRow],
@@ -106,8 +107,8 @@ private[execution] object HashedRelation {
       sizeEstimate: Int = 64,
       taskMemoryManager: TaskMemoryManager = null,
       isNullAware: Boolean = false,
-      isLookupAware: Boolean = false,
-      value: Option[Seq[Expression]] = None): HashedRelation = {
+      canMarkRowLookedUp: Boolean = false,
+      valueExprs: Option[Seq[Expression]] = None): HashedRelation = {
     val mm = Option(taskMemoryManager).getOrElse {
       new TaskMemoryManager(
         new UnifiedMemoryManager(
@@ -120,12 +121,13 @@ private[execution] object HashedRelation {
 
     if (!input.hasNext) {
       EmptyHashedRelation
-    } else if (key.length == 1 && key.head.dataType == LongType && !isLookupAware) {
-      // NOTE: LongHashedRelation cannot support isLookupAware as it cannot
+    } else if (key.length == 1 && key.head.dataType == LongType && !canMarkRowLookedUp) {
+      // NOTE: LongHashedRelation cannot support canMarkRowLookedUp as it cannot
       // handle NULL key
       LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     } else {
-      UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware, isLookupAware, value)
+      UnsafeHashedRelation(
+        input, key, sizeEstimate, mm, isNullAware, canMarkRowLookedUp, valueExprs)
     }
   }
 }
@@ -344,12 +346,10 @@ private[joins] object UnsafeHashedRelation {
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager,
       isNullAware: Boolean = false,
-      isLookupAware: Boolean = false,
-      value: Option[Seq[Expression]] = None): HashedRelation = {
-    if (isNullAware && isLookupAware) {
-      throw new SparkException(
-        "isLookupAware and isNullAware cannot be enabled at same time for UnsafeHashedRelation")
-    }
+      canMarkRowLookedUp: Boolean = false,
+      valueExprs: Option[Seq[Expression]] = None): HashedRelation = {
+    require(!(isNullAware && canMarkRowLookedUp),
+      "isNullAware and canMarkRowLookedUp cannot be enabled at same time")
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
@@ -376,11 +376,11 @@ private[joins] object UnsafeHashedRelation {
       }
     }
 
-    if (isLookupAware) {
+    if (canMarkRowLookedUp) {
       // Add one extra boolean value at the end as part of the row,
       // to track the information that whether the corresponding key
       // has been looked up or not. See `ShuffledHashJoin.fullOuterJoin` for example of usage.
-      val valueGenerator = UnsafeProjection.create(value.get :+ Literal(false))
+      val valueGenerator = UnsafeProjection.create(valueExprs.get :+ Literal(false))
       while (input.hasNext) {
         val row = input.next().asInstanceOf[UnsafeRow]
         numFields = row.numFields() + 1

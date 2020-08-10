@@ -598,22 +598,23 @@ class HashedRelationSuite extends SharedSparkSession {
     val value = Seq(BoundReference(0, IntegerType, true))
     val unsafeProj = UnsafeProjection.create(value)
     val rows = (0 until 100).map(i => unsafeProj(InternalRow(i + 1)).copy())
+    val expectedValues = (0 until 100).map(i => i + 1)
 
     // test LongHashedRelation
     val longRelation = LongHashedRelation(rows.iterator, key, 10, mm)
     var values = longRelation.values()
-    assert(values.map(_.getInt(0)).toArray.sortWith(_ < _) === (0 until 100).map(i => i + 1))
+    assert(values.map(_.getInt(0)).toArray.sortWith(_ < _) === expectedValues)
 
     // test UnsafeHashedRelation
     val unsafeRelation = UnsafeHashedRelation(rows.iterator, key, 10, mm)
     values = unsafeRelation.values()
-    assert(values.map(_.getInt(0)).toArray.sortWith(_ < _) === (0 until 100).map(i => i + 1))
+    assert(values.map(_.getInt(0)).toArray.sortWith(_ < _) === expectedValues)
 
-    // test lookup-aware UnsafeHashedRelation
-    val lookupAwareUnsafeRelation = UnsafeHashedRelation(
-      rows.iterator, key, 10, mm, isLookupAware = true, value = Some(value))
-    values = lookupAwareUnsafeRelation.values()
+    // test UnsafeHashedRelation which can mark row looked up
+    val markRowUnsafeRelation = UnsafeHashedRelation(
+      rows.iterator, key, 10, mm, canMarkRowLookedUp = true, valueExprs = Some(value))
+    values = markRowUnsafeRelation.values()
     assert(values.map(v => (v.getInt(0), v.getBoolean(1))).toArray.sortWith(_._1 < _._1)
-      === (0 until 100).map(i => (i + 1, false)))
+      === expectedValues.map(i => (i, false)))
   }
 }

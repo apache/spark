@@ -1193,31 +1193,42 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val inputDFs = Seq(
       // Test unique join key
       (spark.range(10).selectExpr("id as k1"),
-        spark.range(30).selectExpr("id as k2")),
+        spark.range(30).selectExpr("id as k2"),
+        $"k1" === $"k2"),
       // Test non-unique join key
       (spark.range(10).selectExpr("id % 5 as k1"),
-        spark.range(30).selectExpr("id % 5 as k2")),
+        spark.range(30).selectExpr("id % 5 as k2"),
+        $"k1" === $"k2"),
       // Test string join key
       (spark.range(10).selectExpr("cast(id * 3 as string) as k1"),
-        spark.range(30).selectExpr("cast(id as string) as k2")),
+        spark.range(30).selectExpr("cast(id as string) as k2"),
+        $"k1" === $"k2"),
       // Test build side at right
       (spark.range(30).selectExpr("cast(id / 3 as string) as k1"),
-        spark.range(10).selectExpr("cast(id as string) as k2")),
+        spark.range(10).selectExpr("cast(id as string) as k2"),
+        $"k1" === $"k2"),
       // Test NULL join key
       (spark.range(10).map(i => if (i % 2 == 0) i else null).selectExpr("value as k1"),
-        spark.range(30).map(i => if (i % 4 == 0) i else null).selectExpr("value as k2"))
+        spark.range(30).map(i => if (i % 4 == 0) i else null).selectExpr("value as k2"),
+        $"k1" === $"k2"),
+      // Test multiple join keys
+      (spark.range(10).map(i => if (i % 2 == 0) i else null).selectExpr(
+        "value as k1", "cast(value % 5 as short) as k2", "cast(value * 3 as long) as k3"),
+        spark.range(30).map(i => if (i % 4 == 0) i else null).selectExpr(
+          "value as k4", "cast(value % 5 as short) as k5", "cast(value * 3 as long) as k6"),
+        $"k1" === $"k4" && $"k2" === $"k5" && $"k3" === $"k6")
     )
-    inputDFs.foreach { case (df1, df2) =>
+    inputDFs.foreach { case (df1, df2, joinExprs) =>
       withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
-        val smjDF = df1.join(df2, $"k1" === $"k2", "full")
+        val smjDF = df1.join(df2, joinExprs, "full")
         assert(smjDF.queryExecution.executedPlan.collect {
           case _: SortMergeJoinExec => true }.size === 1)
         val smjResult = smjDF.collect()
 
         withSQLConf(SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
-          val shjDF = df1.join(df2, $"k1" === $"k2", "full")
+          val shjDF = df1.join(df2, joinExprs, "full")
           assert(shjDF.queryExecution.executedPlan.collect {
             case _: ShuffledHashJoinExec => true }.size === 1)
           // Same result between shuffled hash join and sort merge join

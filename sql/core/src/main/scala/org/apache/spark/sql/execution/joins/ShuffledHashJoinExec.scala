@@ -66,7 +66,7 @@ case class ShuffledHashJoinExec(
     val start = System.nanoTime()
     val context = TaskContext.get()
 
-    val (isLookupAware, value) = if (joinType == FullOuter) {
+    val (canMarkRowLookedUp, valueExprs) = if (joinType == FullOuter) {
       (true, Some(BindReferences.bindReferences(buildOutput, buildOutput)))
     } else {
       (false, None)
@@ -75,8 +75,8 @@ case class ShuffledHashJoinExec(
       iter,
       buildBoundKeys,
       taskMemoryManager = context.taskMemoryManager(),
-      isLookupAware = isLookupAware,
-      value = value)
+      canMarkRowLookedUp = canMarkRowLookedUp,
+      valueExprs = valueExprs)
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.
@@ -103,7 +103,7 @@ case class ShuffledHashJoinExec(
    * 2. Process rows from stream side by looking up hash relation,
    *    and mark the matched rows from build side be looked up.
    * 3. Process rows from build side by iterating hash relation,
-   *    and filter out rows from build side being looked up already.
+   *    and filter out rows from build side being matched already.
    */
   private def fullOuterJoin(
       streamIter: Iterator[InternalRow],
@@ -180,15 +180,26 @@ case class ShuffledHashJoinExec(
         }
       }
 
-    // Process build side with filtering out rows looked up already
+    // Process build side with filtering out rows looked up and
+    // passed join condition already
+    val streamNullJoinRow = new JoinedRow
+    val streamNullJoinRowWithBuild = {
+      buildSide match {
+        case BuildLeft =>
+          streamNullJoinRow.withRight(streamNullRow)
+          streamNullJoinRow.withLeft _
+        case BuildRight =>
+          streamNullJoinRow.withLeft(streamNullRow)
+          streamNullJoinRow.withRight _
+      }
+    }
     val buildResultIter = hashedRelation.values().flatMap { brow =>
       val unsafebrow = brow.asInstanceOf[UnsafeRow]
       val isLookup = unsafebrow.getBoolean(unsafebrow.numFields() - 1)
       if (!isLookup) {
         val buildRow = buildRowGenerator(unsafebrow)
-        joinRowWithBuild(buildRow)
-        joinRowWithStream(streamNullRow)
-        Some(joinRow)
+        streamNullJoinRowWithBuild(buildRow)
+        Some(streamNullJoinRow)
       } else {
         None
       }
