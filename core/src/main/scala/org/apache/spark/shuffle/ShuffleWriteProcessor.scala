@@ -20,7 +20,7 @@ package org.apache.spark.shuffle
 import org.apache.spark.{Partition, ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{MapStatus, MapTaskResult}
+import org.apache.spark.scheduler.MapTaskResult
 
 /**
  * The interface for customizing shuffle write process. The driver create a ShuffleWriteProcessor

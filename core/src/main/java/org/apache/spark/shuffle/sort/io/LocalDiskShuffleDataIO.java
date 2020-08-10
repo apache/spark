@@ -37,13 +37,13 @@ public class LocalDiskShuffleDataIO implements ShuffleDataIO {
   }
 
   @Override
-  public ShuffleExecutorComponents initializeShuffleExecutorComponents(
-      String appId, String execId, Map<String, String> extraConfigs) {
-    return new LocalDiskShuffleExecutorComponents(sparkConf);
+  public ShuffleDriverComponents initializeShuffleDriverComponents() {
+    return new LocalDiskShuffleDriverComponents(sparkConf);
   }
 
   @Override
-  public ShuffleDriverComponents initializeShuffleDriverComponents() {
-    return new LocalDiskShuffleDriverComponents(sparkConf);
+  public ShuffleExecutorComponents initializeShuffleExecutorComponents(
+      String appId, String execId, Map<String, String> extraConfigs) {
+    return new LocalDiskShuffleExecutorComponents(sparkConf);
   }
 }
