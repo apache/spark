@@ -893,7 +893,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
     conf.set(RESOURCES_WARNING_TESTING, true)
 
-
     var error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
