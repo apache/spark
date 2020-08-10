@@ -3736,7 +3736,7 @@ object SplitAggregateWithExpand extends Rule[LogicalPlan] {
     expands
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators  {
     case a @ Aggregate(_, _, e @ Expand(projections, _, _)) =>
       if (SQLConf.get.groupingWithUnion && projections.length
         > SQLConf.get.groupingExpandProjections) {
