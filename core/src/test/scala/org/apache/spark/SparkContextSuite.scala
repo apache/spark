@@ -36,6 +36,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.RESOURCES_WARNING_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
@@ -890,6 +891,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .setAppName("test-cluster")
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
+    conf.set(RESOURCES_WARNING_TESTING, true)
+
 
     var error = intercept[SparkException] {
       sc = new SparkContext(conf)
