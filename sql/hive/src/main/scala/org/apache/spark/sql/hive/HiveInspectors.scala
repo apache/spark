@@ -1046,8 +1046,8 @@ private[hive] trait HiveInspectors {
         getListTypeInfo(elemType.toTypeInfo)
       case StructType(fields) =>
         getStructTypeInfo(
-          java.util.Arrays.asList(fields.map(_.name) : _*),
-          java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo) : _*))
+          java.util.Arrays.asList(fields.map(_.name): _*),
+          java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo): _*))
       case MapType(keyType, valueType, _) =>
         getMapTypeInfo(keyType.toTypeInfo, valueType.toTypeInfo)
       case BinaryType => binaryTypeInfo
