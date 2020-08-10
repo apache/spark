@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -348,8 +349,18 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
     case ae @ AggregateExpression(_, _, _, Some(Literal.TrueLiteral), _) =>
       ae.copy(filter = None)
-    case ae @ AggregateExpression(af, _, _, Some(Literal.FalseLiteral), _) =>
-      rewrite(ae, af)
+    case AggregateExpression(af: DeclarativeAggregate, _, _, Some(Literal.FalseLiteral), _) =>
+      val initializer = SafeProjection.create(af.initialValues)
+      val evaluator = SafeProjection.create(af.evaluateExpression :: Nil, af.aggBufferAttributes)
+      val buffer = new SpecificInternalRow(af.aggBufferAttributes.map(_.dataType))
+      val initBuffer = initializer(buffer).copy()
+      val internalRow = evaluator(initBuffer).copy()
+      Literal.create(internalRow.get(0, af.dataType), af.dataType)
+    case AggregateExpression(af: Collect[_], _, _, Some(Literal.FalseLiteral), _) =>
+      Literal.create(Array.empty, af.dataType)
+    case AggregateExpression(af: ImperativeAggregate, _, _, Some(Literal.FalseLiteral), _) =>
+      val buffer = new SpecificInternalRow(af.aggBufferAttributes.map(_.dataType))
+      Literal.create(af.eval(buffer), af.dataType)
   }
 
   private def rewrite(ae: AggregateExpression, af: AggregateFunction): Expression = {
