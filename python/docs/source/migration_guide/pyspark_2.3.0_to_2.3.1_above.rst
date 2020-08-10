@@ -16,22 +16,8 @@
     under the License.
 
 
-===============
-Migration Guide
-===============
+===============================================
+Upgrading from PySpark 2.3.0 to 2.3.1 and above
+===============================================
 
-Migration Guide: PySpark (Python on Spark)
-
-Note that this migration guide describes the items specific to PySpark.
-Many items of SQL migration can be applied when migrating PySpark to higher versions.
-Please refer `Migration Guide: SQL, Datasets and DataFrame <http://spark.apache.org/docs/latest/sql-migration-guide.html>`_.
-
-.. toctree::
-   :maxdepth: 2
-
-   pyspark_2.4_to_3.0
-   pyspark_2.3_to_2.4
-   pyspark_2.3.0_to_2.3.1_above
-   pyspark_2.2_to_2.3
-   pyspark_1.4_to_1.5
-   pyspark_1.0_1.2_to_1.3
+* As of version 2.3.1 Arrow functionality, including ``pandas_udf`` and ``toPandas()``/``createDataFrame()`` with ``spark.sql.execution.arrow.enabled`` set to ``True``, has been marked as experimental. These are still evolving and not currently recommended for use in production.

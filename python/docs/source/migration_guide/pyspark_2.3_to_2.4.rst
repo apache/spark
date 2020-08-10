@@ -16,22 +16,8 @@
     under the License.
 
 
-===============
-Migration Guide
-===============
+=================================
+Upgrading from PySpark 2.3 to 2.4
+=================================
 
-Migration Guide: PySpark (Python on Spark)
-
-Note that this migration guide describes the items specific to PySpark.
-Many items of SQL migration can be applied when migrating PySpark to higher versions.
-Please refer `Migration Guide: SQL, Datasets and DataFrame <http://spark.apache.org/docs/latest/sql-migration-guide.html>`_.
-
-.. toctree::
-   :maxdepth: 2
-
-   pyspark_2.4_to_3.0
-   pyspark_2.3_to_2.4
-   pyspark_2.3.0_to_2.3.1_above
-   pyspark_2.2_to_2.3
-   pyspark_1.4_to_1.5
-   pyspark_1.0_1.2_to_1.3
+* In PySpark, when Arrow optimization is enabled, previously ``toPandas`` just failed when Arrow optimization is unable to be used whereas ``createDataFrame`` from Pandas DataFrame allowed the fallback to non-optimization. Now, both ``toPandas`` and ``createDataFrame`` from Pandas DataFrame allow the fallback by default, which can be switched off by ``spark.sql.execution.arrow.fallback.enabled``.

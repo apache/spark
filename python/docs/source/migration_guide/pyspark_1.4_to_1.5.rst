@@ -16,22 +16,10 @@
     under the License.
 
 
-===============
-Migration Guide
-===============
+=================================
+Upgrading from PySpark 1.4 to 1.5
+=================================
 
-Migration Guide: PySpark (Python on Spark)
+* Resolution of strings to columns in Python now supports using dots (.) to qualify the column or access nested values. For example ``df['table.column.nestedField']``. However, this means that if your column name contains any dots you must now escape them using backticks (e.g., ``table.`column.with.dots`.nested``).
 
-Note that this migration guide describes the items specific to PySpark.
-Many items of SQL migration can be applied when migrating PySpark to higher versions.
-Please refer `Migration Guide: SQL, Datasets and DataFrame <http://spark.apache.org/docs/latest/sql-migration-guide.html>`_.
-
-.. toctree::
-   :maxdepth: 2
-
-   pyspark_2.4_to_3.0
-   pyspark_2.3_to_2.4
-   pyspark_2.3.0_to_2.3.1_above
-   pyspark_2.2_to_2.3
-   pyspark_1.4_to_1.5
-   pyspark_1.0_1.2_to_1.3
+* DataFrame.withColumn method in PySpark supports adding a new column or replacing existing columns of the same name.
