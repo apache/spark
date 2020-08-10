@@ -3155,7 +3155,7 @@ case class ArrayDistinct(child: Expression)
           }
         }
       }
-      new GenericArrayData(arrayBuffer)
+      new GenericArrayData(arrayBuffer.toSeq)
     }
   }
 
@@ -3313,7 +3313,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             i += 1
           }
         }
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     } else {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
@@ -3344,7 +3344,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             arrayBuffer += elem
           }
         }))
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     }
   }
 
@@ -3476,7 +3476,7 @@ object ArrayUnion {
         arrayBuffer += elem
       }
     }))
-    new GenericArrayData(arrayBuffer)
+    new GenericArrayData(arrayBuffer.toSeq)
   }
 }
 
@@ -3538,7 +3538,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
             }
             i += 1
           }
-          new GenericArrayData(arrayBuffer)
+          new GenericArrayData(arrayBuffer.toSeq)
         } else {
           new GenericArrayData(Array.emptyObjectArray)
         }
@@ -3586,7 +3586,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
             }
             i += 1
           }
-          new GenericArrayData(arrayBuffer)
+          new GenericArrayData(arrayBuffer.toSeq)
         } else {
           new GenericArrayData(Array.emptyObjectArray)
         }
@@ -3777,7 +3777,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
           i += 1
         }
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     } else {
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
@@ -3822,7 +3822,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
           }
           i += 1
         }
-        new GenericArrayData(arrayBuffer)
+        new GenericArrayData(arrayBuffer.toSeq)
     }
   }
 
