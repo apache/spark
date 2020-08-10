@@ -243,7 +243,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row(0).getString(4) === "q")
   }
 
-  test("character array type tests") {
+  test("SPARK-32576: character array type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "char_array_types", new Properties)
     val row = df.collect()
     assert(row.length == 1)
