@@ -1046,7 +1046,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(sql(queryTemplate("LAST")), Row(3))
   }
 
-  test("Throw exception on decimal overflow") {
+  test("SPARK-32018: Throw exception on decimal overflow") {
     val decimalString = "1" + "0" * 19
     val union = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
     val hashAgg = union
