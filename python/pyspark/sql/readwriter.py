@@ -115,11 +115,11 @@ class DataFrameReader(OptionUtils):
                 the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
                 It does not change the behavior of partition discovery.
             * ``modifiedBefore``: an optional timestamp to only include files with
-                modification times occurring before the specified time.  The provided timestamp
+                modification times occurring before the specified time. The provided timestamp
                 must be in the following format: YYYY-MM-DDTHH:mm:ss
                 Example: 2020-06-01T13:00:00
             * ``modifiedAfter``: an optional timestamp to only include files with
-                modification times occurring after the specified time.  The provided timestamp
+                modification times occurring after the specified time. The provided timestamp
                 must be in the following format: YYYY-MM-DDTHH:mm:ss
                 Example: 2020-06-01T13:00:00
         """
@@ -147,11 +147,11 @@ class DataFrameReader(OptionUtils):
                 the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
                 It does not change the behavior of partition discovery.
             * ``modifiedBefore``: an optional timestamp to only include files with
-                modification times occurring before the specified time.  The provided timestamp
+                modification times occurring before the specified time. The provided timestamp
                 must be in the following format: YYYY-MM-DDTHH:mm:ss
                 Example: 2020-06-01T13:00:00
             * ``modifiedAfter``: an optional timestamp to only include files with
-                modification times occurring after the specified time.  The provided timestamp
+                modification times occurring after the specified time. The provided timestamp
                 must be in the following format: YYYY-MM-DDTHH:mm:ss
                 Example: 2020-06-01T13:00:00
         """
@@ -280,11 +280,11 @@ class DataFrameReader(OptionUtils):
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
         :param modifiedBefore: an optional timestamp to only include files with
-                    modification times occurring before the specified time.  The provided timestamp
+                    modification times occurring before the specified time. The provided timestamp
                     must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param modifiedAfter: an optional timestamp to only include files with
-                    modification times occurring after the specified time.  The provided timestamp
+                    modification times occurring after the specified time. The provided timestamp
                     must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
@@ -368,11 +368,11 @@ class DataFrameReader(OptionUtils):
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
         :param modifiedBefore: an optional timestamp to only include files with
-                    modification times occurring before the specified time.  The provided timestamp
+                    modification times occurring before the specified time. The provided timestamp
                     must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param modifiedAfter: an optional timestamp to only include files with
-                    modification times occurring after the specified time.  The provided timestamp
+                    modification times occurring after the specified time. The provided timestamp
                     must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
@@ -414,11 +414,11 @@ class DataFrameReader(OptionUtils):
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
         :param modifiedBefore: an optional timestamp to only include files with
-                    modification times occurring before the specified time.  The provided timestamp
+                    modification times occurring before the specified time. The provided timestamp
                     must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param modifiedAfter: an optional timestamp to only include files with
-                    modification times occurring after the specified time.  The provided timestamp
+                    modification times occurring after the specified time. The provided timestamp
                     must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
@@ -561,11 +561,11 @@ class DataFrameReader(OptionUtils):
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
         :param modifiedBefore: an optional timestamp to only include files with
-                    modification times occurring before the specified time.  The provided timestamp
+                    modification times occurring before the specified time. The provided timestamp
                     must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param modifiedAfter: an optional timestamp to only include files with
-                    modification times occurring after the specified time.  The provided timestamp
+                    modification times occurring after the specified time. The provided timestamp
                     must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
@@ -634,11 +634,11 @@ class DataFrameReader(OptionUtils):
                                the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
                                It does not change the behavior of `partition discovery`_.
         :param modifiedBefore: an optional timestamp to only include files with
-                    modification times occurring before the specified time.  The provided timestamp
+                    modification times occurring before the specified time. The provided timestamp
                     must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param modifiedAfter: an optional timestamp to only include files with
-                    modification times occurring after the specified time.  The provided timestamp
+                    modification times occurring after the specified time. The provided timestamp
                     must be in the following format: YYYY-MM-DDTHH:mm:ss
                     Example: 2020-06-01T13:00:00
         :param recursiveFileLookup: recursively scan a directory for files. Using this option
