@@ -3582,27 +3582,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
       "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
   }
-
-  test("SPARK-32352") {
-    spark.sql(
-      s"""
-         |CREATE TABLE t(i INT, p STRING)
-         |USING parquet
-         |PARTITIONED BY (p)""".stripMargin)
-
-    spark.range(0, 1000).selectExpr("id as col").createOrReplaceTempView("temp")
-    for (part <- Seq(1, 2, 3, 4)) {
-      sql(
-        s"""
-           |INSERT OVERWRITE TABLE t PARTITION (p='$part')
-           |SELECT col FROM temp""".stripMargin)
-    }
-
-    spark.sql("SELECT * FROM t WHERE  WHERE (p = '1' AND i = 1) OR (p = '2' and i = 2)").explain()
-
-
-    spark.sql("SELECT * FROM t WHERE  WHERE (i = 1) OR (i = 2)").explain()
-  }
 }
 
 case class Foo(bar: Option[String])

@@ -176,13 +176,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
-      val nonPartCols = dataColumns
-        .filterNot(attr => partitionColumns.map(_.name).contains(attr.name))
-      val dataFilters = normalizedFiltersWithoutSubqueries.map(f =>
+      val dataFilters = normalizedFiltersWithoutSubqueries.flatMap(f =>
         if (f.references.intersect(partitionSet).nonEmpty) {
-          extractPredicatesWithinOutputSet(f, AttributeSet(nonPartCols)).getOrElse(f)
+          extractPredicatesWithinOutputSet(f, AttributeSet(dataColumns))
         } else {
-          f
+          Some(f)
         })
       val supportNestedPredicatePushdown =
         DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
