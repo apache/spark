@@ -1106,19 +1106,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
-  test("SPARK-32516: 'path' option cannot coexist with load()'s path parameters") {
-    withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      Seq(1).toDF.write.mode("overwrite").parquet(path)
-
-      def verifyLoadFails(f: () => DataFrame): Unit = {
-        val e = intercept[AnalysisException](f())
-        assert(e.getMessage.contains(
-          "Either remove the path option or put it into the load() parameters"))
-      }
-
-      verifyLoadFails(() => spark.read.option("path", path).parquet(path))
-      verifyLoadFails(() => spark.read.option("path", path).format("parquet").load(path))
+  test("SPARK-32516: 'path' or 'paths' option cannot coexist with load()'s path parameters") {
+    def verifyLoadFails(f: () => DataFrame): Unit = {
+      val e = intercept[AnalysisException](f())
+      assert(e.getMessage.contains(
+        "Either remove the option or put it into the load() parameters"))
     }
+
+    val path = "/tmp"
+    verifyLoadFails(() => spark.read.option("path", path).parquet(path))
+    verifyLoadFails(() => spark.read.option("path", path).format("parquet").load(path))
+    verifyLoadFails(() => spark.read.option("paths", path).parquet(path))
+    verifyLoadFails(() => spark.read.option("paths", path).format("parquet").load(path))
   }
 }
