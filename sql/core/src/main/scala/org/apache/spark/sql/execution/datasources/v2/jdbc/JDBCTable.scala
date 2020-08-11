@@ -48,6 +48,6 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     val mergedOptions = new JdbcOptionsInWrite(
       jdbcOptions.parameters.originalMap ++ info.options.asCaseSensitiveMap().asScala)
-    new JDBCWriteBuilder(schema, mergedOptions)
+    JDBCWriteBuilder(schema, mergedOptions)
   }
 }
