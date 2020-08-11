@@ -108,7 +108,7 @@ private[execution] object HashedRelation {
         0)
     }
 
-    if (isNullAware && !input.hasNext) {
+    if (!input.hasNext) {
       EmptyHashedRelation
     } else if (key.length == 1 && key.head.dataType == LongType) {
       LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
@@ -950,8 +950,18 @@ trait NullAwareHashedRelation extends HashedRelation with Externalizable {
 
 /**
  * A special HashedRelation indicates it built from a empty input:Iterator[InternalRow].
+ * get & getValue will return null just like
+ * empty LongHashedRelation or empty UnsafeHashedRelation does.
  */
 object EmptyHashedRelation extends NullAwareHashedRelation {
+  override def get(key: Long): Iterator[InternalRow] = null
+
+  override def get(key: InternalRow): Iterator[InternalRow] = null
+
+  override def getValue(key: Long): InternalRow = null
+
+  override def getValue(key: InternalRow): InternalRow = null
+
   override def asReadOnlyCopy(): EmptyHashedRelation.type = this
 }
 
