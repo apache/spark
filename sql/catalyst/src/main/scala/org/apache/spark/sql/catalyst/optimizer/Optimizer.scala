@@ -353,8 +353,8 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
       val initializer = SafeProjection.create(af.initialValues)
       val evaluator = SafeProjection.create(af.evaluateExpression :: Nil, af.aggBufferAttributes)
       val buffer = new SpecificInternalRow(af.aggBufferAttributes.map(_.dataType))
-      val initBuffer = initializer(buffer).copy()
-      val internalRow = evaluator(initBuffer).copy()
+      val initBuffer = initializer(buffer)
+      val internalRow = evaluator(initBuffer)
       Literal.create(internalRow.get(0, af.dataType), af.dataType)
     case AggregateExpression(af: ImperativeAggregate, _, _, Some(Literal.FalseLiteral), _) =>
       val buffer = new SpecificInternalRow(af.aggBufferAttributes.map(_.dataType))

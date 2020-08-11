@@ -39,7 +39,6 @@ class EliminateAggregateFilterSuite extends PlanTest {
     val answer = testRelation
       .select(sumDistinct('a).as('result))
       .analyze
-    assert(query != answer)
     comparePlans(Optimize.execute(query), answer)
   }
 
@@ -50,7 +49,6 @@ class EliminateAggregateFilterSuite extends PlanTest {
     val answer = testRelation
       .select(countDistinct('a).as('result))
       .analyze
-    assert(query != answer)
     comparePlans(Optimize.execute(query), answer)
   }
 
@@ -61,7 +59,6 @@ class EliminateAggregateFilterSuite extends PlanTest {
     val answer = testRelation
       .groupBy()(Literal.create(null, LongType).as('result))
       .analyze
-    assert(query != answer)
     comparePlans(Optimize.execute(query), answer)
   }
 
@@ -72,7 +69,6 @@ class EliminateAggregateFilterSuite extends PlanTest {
     val answer = testRelation
       .groupBy()(Literal.create(0L, LongType).as('result))
       .analyze
-    assert(query != answer)
     comparePlans(Optimize.execute(query), answer)
   }
 
