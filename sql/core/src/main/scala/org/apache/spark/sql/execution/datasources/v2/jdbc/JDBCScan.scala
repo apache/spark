@@ -42,7 +42,7 @@ case class JDBCScan(
   }
 
   override def description(): String = {
-    super.description()  + ", prunedSchema" + seqToString(prunedSchema) +
+    super.description()  + ", prunedSchema: " + seqToString(prunedSchema) +
       ", PushedFilters: " + seqToString(pushedFilters)
   }
 
