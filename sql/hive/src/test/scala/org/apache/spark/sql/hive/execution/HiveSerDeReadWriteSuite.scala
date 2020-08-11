@@ -188,8 +188,8 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
   test("SPARK-32594: insert dates to a Hive table") {
     withTable("table1") {
       sql("CREATE TABLE table1 (d date)")
-      sql("INSERT INTO table1 VALUES (date '2020-02-24')")
-      checkAnswer(spark.table("table1"), Row(Date.valueOf("2020-02-24")))
+      sql("INSERT INTO table1 VALUES (date '2020-08-11')")
+      checkAnswer(spark.table("table1"), Row(Date.valueOf("2020-08-11")))
     }
   }
 }
