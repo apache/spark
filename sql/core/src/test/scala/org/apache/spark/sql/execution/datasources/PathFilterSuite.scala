@@ -144,30 +144,8 @@ class PathFilterSuite
             }
         }
     }
-
-
-    test("SPARK-31962: when modifiedBefore specified with a past date, " +
-        "multiple files, one valid") {
-        withTempDir { dir =>
-            withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-                val path = new Path(dir.getCanonicalPath)
-                val file1 = new File(dir, "file1.csv")
-                val file2 = new File(dir, "file2.csv")
-                stringToFile(file1, "text")
-                stringToFile(file2, "text")
-                file1.setLastModified(DateTimeUtils.currentTimestamp())
-                val futureTimeInSeconds = 1746739460
-                file2.setLastModified(DateTimeUtils.millisToMicros(futureTimeInSeconds))
-                val df = spark.read
-                    .option("modifiedBefore", "2025-04-10T01:11:00")
-                    .format("csv")
-                    .load(path.toString)
-                assert(df.count() == 1)
-            }
-        }
-    }
-
-    test("SPARK-31962: when modifiedBefore specified with a past date," +
+  
+    test("SPARK-31962: when modifiedBefore specified with a future date," +
         " multiple files, both valid") {
         withTempDir { dir =>
             withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
@@ -187,7 +165,7 @@ class PathFilterSuite
         }
     }
 
-    test("SPARK-31962: when modifiedBefore specified with a past date," +
+    test("SPARK-31962: when modifiedBefore specified with a future date," +
         " multiple files, none valid") {
         withTempDir { dir =>
             withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
