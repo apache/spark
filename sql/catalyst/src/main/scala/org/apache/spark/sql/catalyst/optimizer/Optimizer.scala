@@ -356,24 +356,10 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
       val initBuffer = initializer(buffer).copy()
       val internalRow = evaluator(initBuffer).copy()
       Literal.create(internalRow.get(0, af.dataType), af.dataType)
-    case AggregateExpression(af: Collect[_], _, _, Some(Literal.FalseLiteral), _) =>
-      Literal.create(Array.empty, af.dataType)
     case AggregateExpression(af: ImperativeAggregate, _, _, Some(Literal.FalseLiteral), _) =>
       val buffer = new SpecificInternalRow(af.aggBufferAttributes.map(_.dataType))
+      af.initialize(buffer)
       Literal.create(af.eval(buffer), af.dataType)
-  }
-
-  private def rewrite(ae: AggregateExpression, af: AggregateFunction): Expression = {
-    af match {
-      case _: Average | _: Corr | _: CovPopulation | _: CovSample | _: First |
-           _: Kurtosis | _: Last | _: Max | _: MaxBy | _: Min | _: MinBy | _: Percentile |
-           _: Skewness | _: ApproximatePercentile | _: StddevPop | _: StddevSamp | _: Sum |
-           _: VariancePop | _: VarianceSamp | _: BoolAnd | _: BoolOr =>
-        Literal.create(null, af.dataType)
-      case _: CollectList | _: CollectSet => Literal.create(Array.empty, af.dataType)
-      case _: HyperLogLogPlusPlus | _: Count | _: CountIf => Literal.create(0L, LongType)
-      case _ => ae
-    }
   }
 }
 
