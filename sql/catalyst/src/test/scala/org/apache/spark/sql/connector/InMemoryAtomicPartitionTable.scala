@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, NoSuchPartitionsException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.catalog.SupportsAtomicPartitionManagement
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
@@ -38,16 +38,32 @@ class InMemoryAtomicPartitionTable (
 
   override def createPartition(
       ident: InternalRow,
-      properties: util.Map[String, String]): Unit =
-    super.createPartition(ident, properties)
+      properties: util.Map[String, String]): Unit = {
+    if (memoryTablePartitions.containsKey(ident)) {
+      throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
+    } else {
+      memoryTablePartitions.put(ident, properties)
+    }
+  }
 
-  override def dropPartition(ident: InternalRow): Boolean =
-    super.dropPartition(ident)
+  override def dropPartition(ident: InternalRow): Boolean = {
+    if (memoryTablePartitions.containsKey(ident)) {
+      memoryTablePartitions.remove(ident)
+      true
+    } else {
+      false
+    }
+  }
 
   override def replacePartitionMetadata(
       ident: InternalRow,
-      properties: util.Map[String, String]): Unit =
-    super.replacePartitionMetadata(ident, properties)
+      properties: util.Map[String, String]): Unit = {
+    if (memoryTablePartitions.containsKey(ident)) {
+      memoryTablePartitions.put(ident, properties)
+    } else {
+      throw new NoSuchPartitionException(name, ident, partitionSchema)
+    }
+  }
 
   override def createPartitions(
       idents: Array[InternalRow],

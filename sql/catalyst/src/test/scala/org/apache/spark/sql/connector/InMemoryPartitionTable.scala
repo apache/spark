@@ -39,7 +39,7 @@ class InMemoryPartitionTable(
   extends InMemoryTable(name, schema, partitioning, properties) with SupportsPartitionManagement {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  private val memoryTablePartitions: util.Map[InternalRow, util.Map[String, String]] =
+  protected val memoryTablePartitions: util.Map[InternalRow, util.Map[String, String]] =
     new ConcurrentHashMap[InternalRow, util.Map[String, String]]()
 
   def partitionSchema: StructType = {
