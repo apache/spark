@@ -1366,24 +1366,25 @@ class AnsiCastSuite extends CastSuiteBase {
       val array = Literal.create(Seq("123", "true", "f", null),
         ArrayType(StringType, containsNull = true))
       checkExceptionInExpression[NumberFormatException](
-        cast(array, ArrayType(dataType, containsNull = true)), "invalid input")
+        cast(array, ArrayType(dataType, containsNull = true)),
+        "invalid input syntax for type numeric: true")
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input")
+        cast("string", dataType), "invalid input syntax for type numeric: string")
       checkExceptionInExpression[NumberFormatException](
-        cast("123-string", dataType), "invalid input")
+        cast("123-string", dataType), "invalid input syntax for type numeric: 123-string")
       checkExceptionInExpression[NumberFormatException](
-        cast("2020-07-19", dataType), "invalid input")
+        cast("2020-07-19", dataType), "invalid input syntax for type numeric: 2020-07-19")
       checkExceptionInExpression[NumberFormatException](
-        cast("1.23", dataType), "invalid input")
+        cast("1.23", dataType), "invalid input syntax for type numeric: 1.23")
     }
 
     Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input")
+        cast("string", dataType), "invalid input syntax for type numeric: string")
       checkExceptionInExpression[NumberFormatException](
-        cast("123.000.00", dataType), "invalid input")
+        cast("123.000.00", dataType), "invalid input syntax for type numeric: 123.000.00")
       checkExceptionInExpression[NumberFormatException](
-        cast("abc.com", dataType), "invalid input")
+        cast("abc.com", dataType), "invalid input syntax for type numeric: abc.com")
     }
   }
 
