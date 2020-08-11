@@ -232,7 +232,6 @@ class Analyzer(
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
-      SplitAggregateWithExpand ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
