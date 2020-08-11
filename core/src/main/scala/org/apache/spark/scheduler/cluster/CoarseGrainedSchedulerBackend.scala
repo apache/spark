@@ -442,6 +442,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           case e: Exception =>
             logError(s"Unexpected error during decommissioning ${e.toString}", e)
         }
+        // Send decommission message to the executor, this may be a duplicate since the executor
+        // could have been the one to notify us. But it's also possible the notification came from
+        // elsewhere and the executor does not yet know.
+        executorDataMap.get(executorId) match {
+          case Some(executorInfo) =>
+            executorInfo.executorEndpoint.send(DecommissionSelf)
+          case None =>
+            // Ignoring the executor since it is not registered.
+            logWarning(s"Attempted to decommission unknown executor $executorId.")
+        }
         logInfo(s"Finished decommissioning executor $executorId.")
 
         if (conf.get(STORAGE_DECOMMISSION_ENABLED)) {
@@ -632,10 +642,28 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   }
 
+  /**
+   * Get the max number of tasks that can be concurrent launched based on the ResourceProfile
+   * could be used, even if some of them are being used at the moment.
+   * Note that please don't cache the value returned by this method, because the number can change
+   * due to add/remove executors.
+   *
+   * @param rp ResourceProfile which to use to calculate max concurrent tasks.
+   * @return The max number of tasks that can be concurrent launched currently.
+   */
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = synchronized {
-    val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, conf)
-    val executorsWithResourceProfile = executorDataMap.values.filter(_.resourceProfileId == rp.id)
-    executorsWithResourceProfile.map(_.totalCores / cpusPerTask).sum
+    val (rpIds, cpus, resources) = {
+      executorDataMap
+        .filter { case (id, _) => isExecutorActive(id) }
+        .values.toArray.map { executor =>
+          (
+            executor.resourceProfileId,
+            executor.totalCores,
+            executor.resourcesInfo.map { case (name, rInfo) => (name, rInfo.totalAddressAmount) }
+          )
+        }.unzip3
+    }
+    TaskSchedulerImpl.calculateAvailableSlots(scheduler, conf, rp.id, rpIds, cpus, resources)
   }
 
   // this function is for testing only

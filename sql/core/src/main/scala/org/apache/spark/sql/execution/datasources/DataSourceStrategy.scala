@@ -668,6 +668,8 @@ abstract class PushableColumnBase {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     def helper(e: Expression): Option[Seq[String]] = e match {
       case a: Attribute =>
+        // Attribute that contains dot "." in name is supported only when
+        // nested predicate pushdown is enabled.
         if (nestedPredicatePushdownEnabled || !a.name.contains(".")) {
           Some(Seq(a.name))
         } else {

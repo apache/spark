@@ -171,6 +171,7 @@ select interval '2-2\t' year to month;
 select interval '-\t2-2\t' year to month;
 select interval '\n0 12:34:46.789\t' day to second;
 select interval '\n-\t10\t 12:34:46.789\t' day to second;
+select interval '中文 interval 1 day';
 
 -- interval overflow if (ansi) exception else NULL
 select -(a) from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);

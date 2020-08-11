@@ -149,7 +149,7 @@ class StreamingListenerTests(PySparkStreamingTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.streaming.tests.test_listener import *
+    from pyspark.streaming.tests.test_listener import *  # noqa: F401
 
     try:
         import xmlrunner

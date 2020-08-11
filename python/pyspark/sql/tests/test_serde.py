@@ -139,7 +139,7 @@ class SerdeTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_serde import *
+    from pyspark.sql.tests.test_serde import *  # noqa: F401
 
     try:
         import xmlrunner

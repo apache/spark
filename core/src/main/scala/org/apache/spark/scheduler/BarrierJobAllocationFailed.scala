@@ -60,6 +60,6 @@ private[spark] object BarrierJobAllocationFailed {
   val ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER =
     "[SPARK-24819]: Barrier execution mode does not allow run a barrier stage that requires " +
       "more slots than the total number of slots in the cluster currently. Please init a new " +
-      "cluster with more CPU cores or repartition the input RDD(s) to reduce the number of " +
-      "slots required to run this barrier stage."
+      "cluster with more resources(e.g. CPU, GPU) or repartition the input RDD(s) to reduce " +
+      "the number of slots required to run this barrier stage."
 }
