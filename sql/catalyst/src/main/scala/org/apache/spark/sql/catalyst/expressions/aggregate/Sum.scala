@@ -92,9 +92,15 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   }
 
   override lazy val mergeExpressions: Seq[Expression] = {
+    val sumWithRight = resultType match {
+      case d: DecimalType =>
+        CheckOverflow(coalesce(sum.left, zero) + sum.right, d, nullOnOverflow = false)
+
+      case _ => coalesce(sum.left, zero) + sum.right
+    }
     Seq(
       /* sum = */
-      coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
+      coalesce(sumWithRight, sum.left)
     )
   }
 
