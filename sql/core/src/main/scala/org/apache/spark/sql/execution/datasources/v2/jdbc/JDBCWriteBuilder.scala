@@ -23,7 +23,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.StructType
 
-
 case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) extends V1WriteBuilder
   with SupportsTruncate {
 

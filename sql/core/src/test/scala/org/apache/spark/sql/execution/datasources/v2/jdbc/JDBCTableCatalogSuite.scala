@@ -111,41 +111,6 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("simple scan") {
-    checkAnswer(sql("SELECT name, id FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
-  }
-
-  test("scan with filter push-down") {
-    val df = spark.table("h2.test.people").filter("id > 1")
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
-    checkAnswer(df, Row("mary", 2))
-  }
-
-  test("scan with column pruning") {
-    val df = spark.table("h2.test.people").select("id")
-    val scan = df.queryExecution.optimizedPlan.collectFirst {
-      case s: DataSourceV2ScanRelation => s
-    }.get
-    assert(scan.schema.names.sameElements(Seq("ID")))
-    checkAnswer(df, Seq(Row(1), Row(2)))
-  }
-
-  test("scan with filter push-down and column pruning") {
-    val df = spark.table("h2.test.people").filter("id > 1").select("name")
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
-    val scan = df.queryExecution.optimizedPlan.collectFirst {
-      case s: DataSourceV2ScanRelation => s
-    }.get
-    assert(scan.schema.names.sameElements(Seq("NAME")))
-    checkAnswer(df, Row("mary"))
-  }
-
   test("alter table ... add column") {
     withTable("h2.test.alt_table") {
       sql("CREATE TABLE h2.test.alt_table (ID INTEGER) USING _")

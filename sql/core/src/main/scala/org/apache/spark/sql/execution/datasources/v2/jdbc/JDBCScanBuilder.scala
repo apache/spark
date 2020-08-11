@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.Filter
@@ -28,6 +29,8 @@ case class JDBCScanBuilder(
     schema: StructType,
     jdbcOptions: JDBCOptions)
   extends ScanBuilder with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
+
+  private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
 
   private var pushedFilter = Array.empty[Filter]
 
@@ -48,8 +51,12 @@ case class JDBCScanBuilder(
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
-    val requiredCols = requiredSchema.map(_.name)
-    prunedSchema = StructType(schema.fields.filter(f => requiredCols.contains(f.name)))
+    val requiredCols = requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
+    val fields = schema.fields.filter { field =>
+      val colName = PartitioningUtils.getColName(field, isCaseSensitive)
+      requiredCols.contains(colName)
+    }
+    prunedSchema = StructType(fields)
   }
 
   override def build(): Scan = {
