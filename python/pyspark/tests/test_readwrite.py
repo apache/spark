@@ -16,10 +16,8 @@
 #
 import os
 import shutil
-import sys
 import tempfile
 import unittest
-from array import array
 
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME
 
@@ -306,7 +304,7 @@ class OutputFormatTests(ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_readwrite import *
+    from pyspark.tests.test_readwrite import *  # noqa: F401
 
     try:
         import xmlrunner

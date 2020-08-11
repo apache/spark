@@ -297,6 +297,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private lazy val dateFormatter = DateFormatter(zoneId)
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
 
+  private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
+  // The brackets that are used in casting structs and maps to strings
+  private val (leftBracket, rightBracket) = if (legacyCastToStr) ("[", "]") else ("{", "}")
+
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
     case CalendarIntervalType =>
@@ -317,7 +321,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           var i = 1
           while (i < array.numElements) {
             builder.append(",")
-            if (!array.isNullAt(i)) {
+            if (array.isNullAt(i)) {
+              if (!legacyCastToStr) builder.append(" null")
+            } else {
               builder.append(" ")
               builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
             }
@@ -330,7 +336,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case MapType(kt, vt, _) =>
       buildCast[MapData](_, map => {
         val builder = new UTF8StringBuilder
-        builder.append("[")
+        builder.append(leftBracket)
         if (map.numElements > 0) {
           val keyArray = map.keyArray()
           val valueArray = map.valueArray()
@@ -338,7 +344,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           val valueToUTF8String = castToString(vt)
           builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
           builder.append(" ->")
-          if (!valueArray.isNullAt(0)) {
+          if (valueArray.isNullAt(0)) {
+            if (!legacyCastToStr) builder.append(" null")
+          } else {
             builder.append(" ")
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
           }
@@ -347,7 +355,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             builder.append(", ")
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
             builder.append(" ->")
-            if (!valueArray.isNullAt(i)) {
+            if (valueArray.isNullAt(i)) {
+              if (!legacyCastToStr) builder.append(" null")
+            } else {
               builder.append(" ")
               builder.append(valueToUTF8String(valueArray.get(i, vt))
                 .asInstanceOf[UTF8String])
@@ -355,30 +365,34 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
             i += 1
           }
         }
-        builder.append("]")
+        builder.append(rightBracket)
         builder.build()
       })
     case StructType(fields) =>
       buildCast[InternalRow](_, row => {
         val builder = new UTF8StringBuilder
-        builder.append("[")
+        builder.append(leftBracket)
         if (row.numFields > 0) {
           val st = fields.map(_.dataType)
           val toUTF8StringFuncs = st.map(castToString)
-          if (!row.isNullAt(0)) {
+          if (row.isNullAt(0)) {
+            if (!legacyCastToStr) builder.append(" null")
+          } else {
             builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
           }
           var i = 1
           while (i < row.numFields) {
             builder.append(",")
-            if (!row.isNullAt(i)) {
+            if (row.isNullAt(i)) {
+              if (!legacyCastToStr) builder.append(" null")
+            } else {
               builder.append(" ")
               builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
             }
             i += 1
           }
         }
-        builder.append("]")
+        builder.append(rightBracket)
         builder.build()
       })
     case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
@@ -891,6 +905,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     """
   }
 
+  private def outNullElem(buffer: ExprValue): Block = {
+    if (legacyCastToStr) code"" else code"""$buffer.append(" null");"""
+  }
+
   private def writeArrayToStringBuilder(
       et: DataType,
       array: ExprValue,
@@ -913,12 +931,16 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     code"""
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
-       |  if (!$array.isNullAt(0)) {
+       |  if ($array.isNullAt(0)) {
+       |    ${outNullElem(buffer)}
+       |  } else {
        |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
-       |    if (!$array.isNullAt($loopIndex)) {
+       |    if ($array.isNullAt($loopIndex)) {
+       |      ${outNullElem(buffer)}
+       |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
        |    }
@@ -962,11 +984,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     val getMapKeyArray = CodeGenerator.getValue(mapKeyArray, kt, loopIndex)
     val getMapValueArray = CodeGenerator.getValue(mapValueArray, vt, loopIndex)
     code"""
-       |$buffer.append("[");
+       |$buffer.append("$leftBracket");
        |if ($map.numElements() > 0) {
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
        |  $buffer.append(" ->");
-       |  if (!$map.valueArray().isNullAt(0)) {
+       |  if ($map.valueArray().isNullAt(0)) {
+       |    ${outNullElem(buffer)}
+       |  } else {
        |    $buffer.append(" ");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));
        |  }
@@ -974,13 +998,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |    $buffer.append(", ");
        |    $buffer.append($keyToStringFunc($getMapKeyArray));
        |    $buffer.append(" ->");
-       |    if (!$map.valueArray().isNullAt($loopIndex)) {
+       |    if ($map.valueArray().isNullAt($loopIndex)) {
+       |      ${outNullElem(buffer)}
+       |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($valueToStringFunc($getMapValueArray));
        |    }
        |  }
        |}
-       |$buffer.append("]");
+       |$buffer.append("$rightBracket");
      """.stripMargin
   }
 
@@ -996,7 +1022,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       val javaType = JavaCode.javaType(ft)
       code"""
          |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
-         |if (!$row.isNullAt($i)) {
+         |if ($row.isNullAt($i)) {
+         |  ${outNullElem(buffer)}
+         |} else {
          |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
          |
          |  // Append $i field into the string buffer
@@ -1015,9 +1043,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (classOf[UTF8StringBuilder].getName, buffer.code) :: Nil)
 
     code"""
-       |$buffer.append("[");
+       |$buffer.append("$leftBracket");
        |$writeStructCode
-       |$buffer.append("]");
+       |$buffer.append("$rightBracket");
      """.stripMargin
   }
 

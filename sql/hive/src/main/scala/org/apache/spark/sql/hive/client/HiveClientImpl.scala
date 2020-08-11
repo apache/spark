@@ -759,15 +759,17 @@ private[hive] class HiveClientImpl(
       dbName: String,
       pattern: String,
       tableType: CatalogTableType): Seq[String] = withHiveState {
+    val hiveTableType = toHiveTableType(tableType)
     try {
       // Try with Hive API getTablesByType first, it's supported from Hive 2.3+.
-      shim.getTablesByType(client, dbName, pattern, toHiveTableType(tableType))
+      shim.getTablesByType(client, dbName, pattern, hiveTableType)
     } catch {
       case _: UnsupportedOperationException =>
         // Fallback to filter logic if getTablesByType not supported.
         val tableNames = client.getTablesByPattern(dbName, pattern).asScala
-        val tables = getTablesByName(dbName, tableNames.toSeq).filter(_.tableType == tableType)
-        tables.map(_.identifier.table)
+        getRawTablesByName(dbName, tableNames.toSeq)
+          .filter(_.getTableType == hiveTableType)
+          .map(_.getTableName)
     }
   }
 

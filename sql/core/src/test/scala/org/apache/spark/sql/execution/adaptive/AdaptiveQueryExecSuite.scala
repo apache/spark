@@ -213,7 +213,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("Empty stage coalesced to 0-partition RDD") {
+  test("Empty stage coalesced to 1-partition RDD") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true") {
@@ -227,8 +227,8 @@ class AdaptiveQueryExecSuite
         val coalescedReaders = collect(plan) {
           case r: CustomShuffleReaderExec => r
         }
-        assert(coalescedReaders.length == 2)
-        coalescedReaders.foreach(r => assert(r.partitionSpecs.isEmpty))
+        assert(coalescedReaders.length == 3)
+        coalescedReaders.foreach(r => assert(r.partitionSpecs.length == 1))
       }
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
@@ -239,8 +239,8 @@ class AdaptiveQueryExecSuite
         val coalescedReaders = collect(plan) {
           case r: CustomShuffleReaderExec => r
         }
-        assert(coalescedReaders.length == 2, s"$plan")
-        coalescedReaders.foreach(r => assert(r.partitionSpecs.isEmpty))
+        assert(coalescedReaders.length == 3, s"$plan")
+        coalescedReaders.foreach(r => assert(r.isLocalReader || r.partitionSpecs.length == 1))
       }
     }
   }
@@ -827,6 +827,19 @@ class AdaptiveQueryExecSuite
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_LOG_LEVEL.key -> level._1) {
         verifyLog(level._2)
       }
+    }
+  }
+
+  test("tree string output") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val df = sql("SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val planBefore = df.queryExecution.executedPlan
+      assert(planBefore.toString.contains("== Current Plan =="))
+      assert(planBefore.toString.contains("== Initial Plan =="))
+      df.collect()
+      val planAfter = df.queryExecution.executedPlan
+      assert(planAfter.toString.contains("== Final Plan =="))
+      assert(planAfter.toString.contains("== Initial Plan =="))
     }
   }
 

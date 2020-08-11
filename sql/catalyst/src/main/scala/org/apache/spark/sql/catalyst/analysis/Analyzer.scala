@@ -1939,7 +1939,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Resolve functions with concrete relations from v2 catalog.
       case UnresolvedFunc(multipartIdent) =>
-        val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent, "function lookup")
+        val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent)
         ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
 
       case q: LogicalPlan =>
@@ -1973,15 +1973,9 @@ class Analyzer(
                   }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction =>
-                  // TODO: SPARK-30276 Support Filter expression allows simultaneous use of DISTINCT
-                  if (filter.isDefined) {
-                    if (isDistinct) {
-                      failAnalysis("DISTINCT and FILTER cannot be used in aggregate functions " +
-                        "at the same time")
-                    } else if (!filter.get.deterministic) {
-                      failAnalysis("FILTER expression is non-deterministic, " +
-                        "it cannot be used in aggregate functions")
-                    }
+                  if (filter.isDefined && !filter.get.deterministic) {
+                    failAnalysis("FILTER expression is non-deterministic, " +
+                      "it cannot be used in aggregate functions")
                   }
                   AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
