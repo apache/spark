@@ -17,14 +17,6 @@
 
 
 ===============
-Getting Started
+Installation
 ===============
 
-This page lists an overview of the basic steps required to setup PySpark.
-
-.. toctree::
-   :maxdepth: 2
-
-   Installation
-   Package Overview
-   Quickstart
