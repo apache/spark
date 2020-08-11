@@ -293,7 +293,7 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
 
   modifiedTPCDSQueries.foreach { q =>
     test(s"check simplified (tpcds-modifiedQueries/$q)") {
-      testQuery("tpcds-modifiedQueries", q, "sf1")
+      testQuery("tpcds-modifiedQueries", q)
     }
   }
 }

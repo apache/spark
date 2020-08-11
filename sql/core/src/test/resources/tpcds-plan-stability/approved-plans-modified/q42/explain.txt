@@ -39,7 +39,7 @@ GlobalLimit 100
                :- Project [d_year#1, ss_item_sk#8, ss_ext_sales_price#5]
                :  +- Join Inner, (d_date_sk#6 = ss_sold_date_sk#7)
                :     :- Project [d_date_sk#6, d_year#1]
-               :     :  +- Filter ((((((isnotnull(d_moy#11) AND isnotnull(d_year#1)) AND (d_moy#11 = 12)) AND (d_year#1 = 1998)) AND (d_date_sk#6 >= 2451149)) AND isnotnull(d_date_sk#6)) AND (d_date_sk#6 <= 2451179))
+               :     :  +- Filter ((((((isnotnull(d_moy#11) AND isnotnull(d_year#1)) AND (d_moy#11 = 12)) AND (d_year#1 = 1998)) AND isnotnull(d_date_sk#6)) AND (d_date_sk#6 >= 2451149)) AND (d_date_sk#6 <= 2451179))
                :     :     +- Relation[d_date_sk#6,d_date_id#12,d_date#13,d_month_seq#14,d_week_seq#15,d_quarter_seq#16,d_year#1,d_dow#17,d_moy#11,d_dom#18,d_qoy#19,d_fy_year#20,d_fy_quarter_seq#21,d_fy_week_seq#22,d_day_name#23,d_quarter_name#24,d_holiday#25,d_weekend#26,d_following_holiday#27,d_first_dom#28,d_last_dom#29,d_same_day_ly#30,d_same_day_lq#31,d_current_day#32,... 4 more fields] parquet
                :     +- Project [ss_sold_date_sk#7, ss_item_sk#8, ss_ext_sales_price#5]
                :        +- Filter (((isnotnull(ss_sold_date_sk#7) AND (ss_sold_date_sk#7 >= 2451149)) AND (ss_sold_date_sk#7 <= 2451179)) AND isnotnull(ss_item_sk#8))
@@ -56,17 +56,17 @@ TakeOrderedAndProject(limit=100, orderBy=[sum(ss_ext_sales_price)#4 DESC NULLS L
          +- *(3) Project [d_year#1, ss_ext_sales_price#5, i_category_id#2, i_category#3]
             +- *(3) BroadcastHashJoin [ss_item_sk#8], [i_item_sk#9], Inner, BuildRight, false
                :- *(3) Project [d_year#1, ss_item_sk#8, ss_ext_sales_price#5]
-               :  +- *(3) BroadcastHashJoin [d_date_sk#6], [ss_sold_date_sk#7], Inner, BuildLeft, false
-               :     :- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#73]
-               :     :  +- *(1) Project [d_date_sk#6, d_year#1]
-               :     :     +- *(1) Filter ((((((isnotnull(d_moy#11) AND isnotnull(d_year#1)) AND (d_moy#11 = 12)) AND (d_year#1 = 1998)) AND (d_date_sk#6 >= 2451149)) AND isnotnull(d_date_sk#6)) AND (d_date_sk#6 <= 2451179))
-               :     :        +- *(1) ColumnarToRow
-               :     :           +- FileScan parquet default.date_dim[d_date_sk#6,d_year#1,d_moy#11] Batched: true, DataFilters: [isnotnull(d_moy#11), isnotnull(d_year#1), (d_moy#11 = 12), (d_year#1 = 1998), (d_date_sk#74..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,12), EqualTo(d_year,1998), GreaterThanOrEqual..., ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
-               :     +- *(3) Project [ss_sold_date_sk#7, ss_item_sk#8, ss_ext_sales_price#5]
-               :        +- *(3) Filter (((isnotnull(ss_sold_date_sk#7) AND (ss_sold_date_sk#7 >= 2451149)) AND (ss_sold_date_sk#7 <= 2451179)) AND isnotnull(ss_item_sk#8))
-               :           +- *(3) ColumnarToRow
-               :              +- FileScan parquet default.store_sales[ss_sold_date_sk#7,ss_item_sk#8,ss_ext_sales_price#5] Batched: true, DataFilters: [isnotnull(ss_sold_date_sk#7), (ss_sold_date_sk#7 >= 2451149), (ss_sold_date_sk#7 <= 245117..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_sold_date_sk), GreaterThanOrEqual(ss_sold_date_sk,2451149), LessThanOrEqual(ss_sold..., ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
-               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#75]
+               :  +- *(3) BroadcastHashJoin [d_date_sk#6], [ss_sold_date_sk#7], Inner, BuildRight, false
+               :     :- *(3) Project [d_date_sk#6, d_year#1]
+               :     :  +- *(3) Filter ((((((isnotnull(d_moy#11) AND isnotnull(d_year#1)) AND (d_moy#11 = 12)) AND (d_year#1 = 1998)) AND isnotnull(d_date_sk#6)) AND (d_date_sk#6 >= 2451149)) AND (d_date_sk#6 <= 2451179))
+               :     :     +- *(3) ColumnarToRow
+               :     :        +- FileScan parquet default.date_dim[d_date_sk#6,d_year#1,d_moy#11] Batched: true, DataFilters: [isnotnull(d_moy#11), isnotnull(d_year#1), (d_moy#11 = 12), (d_year#1 = 1998), isnotnull(d_date_s..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,12), EqualTo(d_year,1998), IsNotNull(d_date_s..., ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+               :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#73]
+               :        +- *(1) Project [ss_sold_date_sk#7, ss_item_sk#8, ss_ext_sales_price#5]
+               :           +- *(1) Filter (((isnotnull(ss_sold_date_sk#7) AND (ss_sold_date_sk#7 >= 2451149)) AND (ss_sold_date_sk#7 <= 2451179)) AND isnotnull(ss_item_sk#8))
+               :              +- *(1) ColumnarToRow
+               :                 +- FileScan parquet default.store_sales[ss_sold_date_sk#7,ss_item_sk#8,ss_ext_sales_price#5] Batched: true, DataFilters: [isnotnull(ss_sold_date_sk#7), (ss_sold_date_sk#7 >= 2451149), (ss_sold_date_sk#7 <= 2451179),..., Format: Parquet, Location: InMemoryFileIndex[file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark...., PartitionFilters: [], PushedFilters: [IsNotNull(ss_sold_date_sk), GreaterThanOrEqual(ss_sold_date_sk,2451149), LessThanOrEqual(ss_sold..., ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
+               +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#74]
                   +- *(2) Project [i_item_sk#9, i_category_id#2, i_category#3]
                      +- *(2) Filter ((isnotnull(i_manager_id#10) AND (i_manager_id#10 = 1)) AND isnotnull(i_item_sk#9))
                         +- *(2) ColumnarToRow
